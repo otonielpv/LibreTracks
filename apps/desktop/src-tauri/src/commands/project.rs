@@ -46,8 +46,37 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
             .session
             .lock()
             .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        // The file-menu import inserts at the current playhead, matching the old
+        // behavior before insert_at_seconds was threaded through.
+        let insert_at = session.current_position();
         session
-            .import_song_from_path(worker_app, &state.audio, package_file)
+            .import_song_from_path(worker_app, &state.audio, package_file, insert_at)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
+}
+
+/// Path-based sibling of [`start_pick_and_import_song_from_dialog`] for the
+/// compact view, which resolves the `.ltpkg` path itself (its own picker or an
+/// OS drag) and computes the insert offset. Runs the SAME progress-emitting
+/// import flow on a worker thread so the compact import shows real progress
+/// (percent + source readiness) instead of a frozen "Aplicando cambios"
+/// overlay — the old `import_song_package` command emitted nothing.
+#[tauri::command]
+pub fn start_import_song_package_from_path(
+    app: AppHandle,
+    package_path: String,
+    insert_at_seconds: f64,
+) -> Result<bool, String> {
+    let package_file = std::path::PathBuf::from(package_path);
+    spawn_project_work(&app, move |worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .import_song_from_path(worker_app, &state.audio, package_file, insert_at_seconds)
             .map_err(|error| error.to_string())
     });
 

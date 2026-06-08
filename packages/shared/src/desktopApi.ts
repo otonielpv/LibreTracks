@@ -379,6 +379,7 @@ export async function deleteSongTimeSignatureMarker(markerId: string): Promise<T
 // so resolve to null without waiting. Otherwise we await the completion event.
 async function runProjectLoadCommand(
   startCommand: string,
+  args?: Record<string, unknown>,
 ): Promise<TransportSnapshot | null> {
   let dispose: (() => void) | null = null;
   const clearListener = () => {
@@ -402,7 +403,7 @@ async function runProjectLoadCommand(
   });
 
   try {
-    const started = await invokeCommand<boolean>(startCommand);
+    const started = await invokeCommand<boolean>(startCommand, args);
     if (!started) {
       clearListener();
       return null;
@@ -420,6 +421,22 @@ export async function openProject(): Promise<TransportSnapshot | null> {
 
 export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_pick_and_import_song_from_dialog");
+}
+
+// Path-based package import used by the compact view and the timeline drop of a
+// .ltpkg from the file explorer. Routes through the SAME progress-emitting
+// worker flow as pickAndImportSong (start_import_song_package_from_path →
+// import_song_from_path), so these entry points show real percent + source
+// progress instead of a frozen overlay. Returns the snapshot once the backend
+// has finished decoding; callers refresh the library separately.
+export async function importSongPackageFromPathWithProgress(
+  packagePath: string,
+  insertAtSeconds: number,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_import_song_package_from_path", {
+    packagePath,
+    insertAtSeconds,
+  });
 }
 
 // Mirrors `runProjectLoadCommand`: the native dialog opens on the macOS main

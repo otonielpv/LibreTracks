@@ -377,7 +377,12 @@ fn import_song_package_from_archive<R: Read + Seek>(
     fs::create_dir_all(&waveform_dir)?;
 
     let mut next_song = song.clone();
-    let mut track_ids_by_name = next_song
+    // Names that already exist in the destination session. A package track
+    // whose name matches one of these merges into the existing track (clips
+    // append there). This map must NOT grow as we create new tracks during the
+    // import — otherwise two package tracks that share a name would collapse
+    // into the first one, dumping both their clips onto a single track.
+    let existing_track_ids_by_name = next_song
         .tracks
         .iter()
         .map(|track| (track.name.clone(), track.id.clone()))
@@ -434,8 +439,21 @@ fn import_song_package_from_archive<R: Read + Seek>(
         fs::write(&destination_path, bytes)?;
     }
 
+    // Resolve every manifest track to a destination track, keyed by the
+    // manifest's own track id (unique within the package). This is what clips
+    // are reassigned through below — keying by name would collapse two distinct
+    // package tracks that happen to share a name into one, dumping both tracks'
+    // clips onto the same destination track (e.g. a click landing on the
+    // acoustic track). When a package track's name matches a track already in
+    // the destination session we reuse that existing track, so its clips append
+    // there; only genuinely new names create new tracks.
+    let mut target_track_id_by_manifest_id: HashMap<String, String> = HashMap::new();
     for track in &manifest.tracks {
-        if track_ids_by_name.contains_key(&track.name) {
+        // Merge into a track that already existed in the destination session,
+        // but only those — not tracks we created earlier in THIS loop, so two
+        // package tracks sharing a name stay separate.
+        if let Some(existing_id) = existing_track_ids_by_name.get(&track.name) {
+            target_track_id_by_manifest_id.insert(track.id.clone(), existing_id.clone());
             continue;
         }
         let track_id = unique_id("track", &track.id, &mut used_track_ids);
@@ -453,19 +471,14 @@ fn import_song_package_from_archive<R: Read + Seek>(
             color: track.color.clone(),
             auto_created: false,
         });
-        track_ids_by_name.insert(track.name.clone(), track_id);
+        target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
 
     for clip in &manifest.clips {
-        let source_track = manifest
-            .tracks
-            .iter()
-            .find(|track| track.id == clip.track_id)
-            .ok_or_else(|| ProjectError::AudioDecode("package track not found".into()))?;
-        let target_track_id = track_ids_by_name
-            .get(&source_track.name)
+        let target_track_id = target_track_id_by_manifest_id
+            .get(&clip.track_id)
             .cloned()
-            .ok_or_else(|| ProjectError::AudioDecode("merged track not found".into()))?;
+            .ok_or_else(|| ProjectError::AudioDecode("package track not found".into()))?;
         let clip_id = unique_id("clip", &clip.id, &mut used_clip_ids);
         next_song.clips.push(Clip {
             id: clip_id,
@@ -845,6 +858,100 @@ mod tests {
         // should now sit at 104s.
         assert!((result.song.clips[0].timeline_start_seconds - 104.0).abs() < 1e-6);
         assert!(result.song.regions[0].start_seconds >= 100.0);
+    }
+
+    #[test]
+    fn import_keeps_clips_on_their_own_track_when_names_collide() {
+        // Two distinct package tracks that happen to share a name (e.g. a click
+        // and an acoustic both humanized to the same label) must NOT collapse
+        // into one track on import — each track's clip has to stay put.
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        source.tracks = vec![track("t_click", "Audio"), track("t_acoustic", "Audio")];
+        source.clips = vec![
+            clip("c_click", "t_click", 4.0, 8.0),
+            clip("c_acoustic", "t_acoustic", 4.0, 8.0),
+        ];
+        source.regions = vec![region("r1", "Verse", 0.0, 30.0)];
+        let package_path = song_dir.join("verse.ltsong");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export");
+
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let result = import_song_package(song_dir, &empty, &package_path, 0.0)
+            .expect("import package");
+
+        // Both tracks survive as separate tracks...
+        assert_eq!(result.song.tracks.len(), 2);
+        assert_eq!(result.song.clips.len(), 2);
+        // ...and each clip sits on its own track (not both on the first one).
+        let clip_track_ids: HashSet<&str> = result
+            .song
+            .clips
+            .iter()
+            .map(|clip| clip.track_id.as_str())
+            .collect();
+        assert_eq!(clip_track_ids.len(), 2, "clips collapsed onto one track");
+        assert!(validate_song(&result.song).is_ok());
+    }
+
+    #[test]
+    fn import_appends_clips_to_an_existing_track_with_the_same_name() {
+        // When a package track name matches a track already in the session, the
+        // imported clips append to that existing track (the requested merge
+        // behavior) rather than creating a duplicate track.
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song(); // one "Drums" track + clip
+        let package_path = song_dir.join("verse.ltsong");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export");
+
+        // Destination already has a "Drums" track with its own clip.
+        let existing = Song {
+            tracks: vec![track("existing_drums", "Drums")],
+            clips: vec![clip("existing_clip", "existing_drums", 0.0, 4.0)],
+            regions: vec![region("r_dest", "Dest", 0.0, 200.0)],
+            section_markers: vec![],
+            ..song()
+        };
+        let result = import_song_package(song_dir, &existing, &package_path, 100.0)
+            .expect("import package");
+
+        // No duplicate "Drums" track was created.
+        assert_eq!(
+            result
+                .song
+                .tracks
+                .iter()
+                .filter(|track| track.name == "Drums")
+                .count(),
+            1
+        );
+        // Both clips live on the single existing Drums track.
+        let drums_id = &result
+            .song
+            .tracks
+            .iter()
+            .find(|track| track.name == "Drums")
+            .expect("drums track")
+            .id;
+        assert_eq!(
+            result
+                .song
+                .clips
+                .iter()
+                .filter(|clip| &clip.track_id == drums_id)
+                .count(),
+            2
+        );
     }
 
     #[test]

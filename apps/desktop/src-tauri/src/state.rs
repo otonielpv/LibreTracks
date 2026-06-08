@@ -837,6 +837,7 @@ impl DesktopSession {
         app: &AppHandle,
         audio: &AudioController,
         package_file: PathBuf,
+        insert_at_seconds: f64,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.song_dir.as_ref().ok_or(DesktopError::NoSongLoaded)?;
         self.engine
@@ -849,9 +850,13 @@ impl DesktopSession {
         // Import the package WITHOUT blocking on source decode — that's what
         // wait_for_project_audio_preparation does, with live progress events.
         // Otherwise the user only sees the loading bar at the very end, after
-        // sources have already been decoded silently.
+        // sources have already been decoded silently. The no_wait phase itself
+        // (unzip + persist) is also synchronous and used to emit nothing, so the
+        // overlay sat frozen on "Leyendo paquete..." until decode began; pass
+        // `app` through so it reports its sub-phases inside the reserved 5..18
+        // band (decode then continues from 18 in the wait loop below).
         let inserted =
-            self.import_song_package_no_wait(&package_path, self.current_position(), audio)?;
+            self.import_song_package_no_wait(app, &package_path, insert_at_seconds, audio)?;
         self.wait_for_project_audio_preparation(app, audio)?;
 
         Ok(inserted.snapshot)
@@ -3398,6 +3403,7 @@ impl DesktopSession {
     // per-source progress instead of freezing on a generic "syncing" overlay.
     fn import_song_package_no_wait(
         &mut self,
+        app: &AppHandle,
         package_path: &str,
         insert_at_seconds: f64,
         audio: &AudioController,
@@ -3408,13 +3414,24 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        emit_project_load_progress(app, 7, "Descomprimiendo paquete...".into(), 0, 0, 0, 0);
         let mut imported = import_song_package_into_project(
             &song_dir,
             &song,
             Path::new(package_path),
             insert_at_seconds,
         )?;
+        emit_project_load_progress(app, 10, "Copiando audio del paquete...".into(), 0, 0, 0, 0);
         place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
+        emit_project_load_progress(
+            app,
+            13,
+            "Actualizando libreria de la sesion...".into(),
+            0,
+            0,
+            0,
+            0,
+        );
         let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
         merge_package_library_meta(
             &song_dir,
@@ -3423,6 +3440,7 @@ impl DesktopSession {
             Some(&imported.package_title),
         )?;
         write_library_manifest_assets(&song_dir, &library_assets)?;
+        emit_project_load_progress(app, 16, "Aplicando cambios al proyecto...".into(), 0, 0, 0, 0);
         self.persist_song_update(
             imported.song,
             audio,
@@ -3434,6 +3452,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        emit_project_load_progress(app, 18, "Preparando formas de onda...".into(), 0, 0, 0, 0);
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
         Ok(SongPackageImportResponse {
             snapshot: self.snapshot(),
@@ -4742,7 +4761,7 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    fn current_position(&self) -> f64 {
+    pub(crate) fn current_position(&self) -> f64 {
         self.transport_clock
             .current_position(self.engine.playback_state())
     }

@@ -74,7 +74,7 @@ import {
   importLibraryAssetsFromDialog,
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
-  importSongPackage,
+  importSongPackageFromPathWithProgress,
   isTauriApp,
   listenToMidiRawMessage,
   listenToProjectLoadProgress,
@@ -528,6 +528,62 @@ export function TransportPanelContent() {
     percent?: number;
     detail?: string;
   } | null>(null);
+  // Smoothed value the overlay actually renders. Loading/import progress from
+  // the backend can jump (e.g. a fully-cached .ltpkg goes 18 -> 100 because
+  // there's no slow decode to report), which reads as a frozen-then-snap bar.
+  // We ease the displayed percent toward the real target each frame so the bar
+  // always glides, without slowing the actual work. Null = no bar yet.
+  const [displayPercent, setDisplayPercent] = useState<number | null>(null);
+  const displayPercentRef = useRef<number | null>(null);
+  const displayPercentRafRef = useRef<number | null>(null);
+  const targetPercent =
+    typeof busyFeedback?.percent === "number" ? busyFeedback.percent : null;
+  useEffect(() => {
+    // No bar requested: drop any in-flight animation and clear the display.
+    if (targetPercent === null) {
+      if (displayPercentRafRef.current !== null) {
+        cancelAnimationFrame(displayPercentRafRef.current);
+        displayPercentRafRef.current = null;
+      }
+      displayPercentRef.current = null;
+      setDisplayPercent(null);
+      return;
+    }
+    // First sample for this overlay: snap (don't ease up from 0, which would
+    // look like a stutter when the very first event already reports e.g. 18%).
+    if (displayPercentRef.current === null) {
+      displayPercentRef.current = targetPercent;
+      setDisplayPercent(targetPercent);
+      return;
+    }
+    const step = () => {
+      const current = displayPercentRef.current ?? targetPercent;
+      const delta = targetPercent - current;
+      // Close enough: settle exactly on the target and stop animating.
+      if (Math.abs(delta) < 0.5) {
+        displayPercentRef.current = targetPercent;
+        setDisplayPercent(targetPercent);
+        displayPercentRafRef.current = null;
+        return;
+      }
+      // Ease ~15% of the remaining gap per frame, with a small floor so big
+      // jumps (18 -> 100) still glide visibly instead of snapping.
+      const next = current + Math.sign(delta) * Math.max(Math.abs(delta) * 0.15, 0.75);
+      displayPercentRef.current = next;
+      setDisplayPercent(next);
+      displayPercentRafRef.current = requestAnimationFrame(step);
+    };
+    if (displayPercentRafRef.current !== null) {
+      cancelAnimationFrame(displayPercentRafRef.current);
+    }
+    displayPercentRafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (displayPercentRafRef.current !== null) {
+        cancelAnimationFrame(displayPercentRafRef.current);
+        displayPercentRafRef.current = null;
+      }
+    };
+  }, [targetPercent]);
   const [remoteServerInfo, setRemoteServerInfo] =
     useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
@@ -7813,16 +7869,55 @@ export function TransportPanelContent() {
     packagePath: string,
     dropSeconds: number,
   ) {
-    const result = await importSongPackage(packagePath, dropSeconds);
-    applyPlaybackSnapshot(result.snapshot);
-    mergeLibraryAssets(result.libraryAssets);
-    await refreshLibraryState({ preserveAssets: result.libraryAssets });
-    await refreshSongView();
-    setStatus(
-      t("transport.status.packageImportedAt", {
-        time: formatClock(dropSeconds),
+    // Route every path-based .ltpkg import (compact view picker, compact OS
+    // drag, and timeline drop from the file explorer) through the same
+    // progress-emitting flow the file-menu import uses, so the loading overlay
+    // shows real percent + source readiness instead of a bare "Aplicando
+    // cambios". The old importSongPackage command emitted nothing.
+    let unlistenProjectProgress: (() => void) | null = null;
+    setIsProjectViewHydrating(true);
+    setBusyFeedback({
+      message: t("transport.shell.importingProject", {
+        defaultValue: "Importing project...",
       }),
-    );
+      percent: 2,
+    });
+    try {
+      unlistenProjectProgress = await registerProjectLoadProgressListener();
+      await nextPaint();
+      const snapshot = await importSongPackageFromPathWithProgress(
+        packagePath,
+        dropSeconds,
+      );
+      if (!snapshot) {
+        setIsProjectViewHydrating(false);
+        setBusyFeedback(null);
+        return;
+      }
+      applyPlaybackSnapshot(snapshot);
+      const refreshedAssets = await refreshLibraryState();
+      mergeLibraryAssets(refreshedAssets);
+      await refreshSongView();
+      setStatus(
+        t("transport.status.packageImportedAt", {
+          time: formatClock(dropSeconds),
+        }),
+      );
+      setBusyFeedback({
+        message: t("transport.shell.projectReady", {
+          defaultValue: "Proyecto listo para reproducir.",
+        }),
+        percent: 100,
+      });
+      await nextPaint();
+      setIsProjectViewHydrating(false);
+    } catch (error) {
+      setIsProjectViewHydrating(false);
+      setBusyFeedback(null);
+      throw error;
+    } finally {
+      unlistenProjectProgress?.();
+    }
   }
 
   async function createRealTracksAndClipsForImportedAssets(args: {
@@ -8563,27 +8658,27 @@ export function TransportPanelContent() {
               <div className="busy-overlay-heading">
                 <span className="busy-overlay-spinner" aria-hidden="true" />
                 <strong>{t("transport.shell.busyTitle")}</strong>
-                {typeof busyFeedback?.percent === "number" ? (
+                {typeof displayPercent === "number" ? (
                   <span className="busy-overlay-percent">
-                    {Math.max(0, Math.min(100, Math.round(busyFeedback.percent)))}%
+                    {Math.max(0, Math.min(100, Math.round(displayPercent)))}%
                   </span>
                 ) : null}
               </div>
               <p>
                 {busyFeedback?.message ?? t("transport.shell.busyDescription")}
               </p>
-              {typeof busyFeedback?.percent === "number" ? (
+              {typeof displayPercent === "number" ? (
                 <div
                   className="busy-overlay-progress"
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-valuenow={Math.round(busyFeedback.percent)}
-                  aria-valuetext={busyFeedback.message}
+                  aria-valuenow={Math.round(displayPercent)}
+                  aria-valuetext={busyFeedback?.message}
                 >
                   <span
                     style={{
-                      width: `${Math.max(0, Math.min(100, busyFeedback.percent))}%`,
+                      width: `${Math.max(0, Math.min(100, displayPercent))}%`,
                     }}
                   />
                 </div>

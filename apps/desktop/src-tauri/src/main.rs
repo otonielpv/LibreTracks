@@ -159,6 +159,7 @@ fn main() {
             commands::project::open_project_from_dialog,
             commands::project::start_open_project_from_dialog,
             commands::project::start_pick_and_import_song_from_dialog,
+            commands::project::start_import_song_package_from_path,
             commands::transport::play_transport,
             commands::transport::pause_transport,
             commands::transport::stop_transport,
