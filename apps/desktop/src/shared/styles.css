@@ -3562,7 +3562,13 @@ textarea {
 
 .lt-bottom-controls {
   display: flex;
-  flex-wrap: nowrap;
+  /* This element also carries `.lt-timeline-controls`, which intentionally
+     sets `flex-wrap: wrap` so the control groups drop to a second row when
+     the toolbar is too narrow (e.g. at small window widths or with the
+     library panel open). `.lt-bottom-controls` is defined later in this
+     file, so a `nowrap` here would silently win the cascade and clip the
+     right-hand groups off-screen. Keep it `wrap` to preserve that intent. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
@@ -3940,7 +3946,11 @@ textarea {
 
 .lt-global-cancel-button {
   height: 2.45rem;
-  margin-left: auto;
+  /* No `margin-left: auto` here: when the toolbar wraps to a second row
+     this button is the last control and would otherwise be pushed away
+     from the group to its left, leaving it stranded with a large gap.
+     Letting it flow keeps it adjacent to the controls on every row. The
+     right-hand stats stay pinned via their own `margin-left: auto`. */
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
