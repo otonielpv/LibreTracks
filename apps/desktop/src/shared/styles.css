@@ -1727,9 +1727,106 @@ textarea {
 
 .lt-library-folder-summary.is-drag-target {
   background:
-    linear-gradient(135deg, rgb(87 241 219 / 0.18), rgb(45 212 191 / 0.08)),
+    linear-gradient(135deg, rgb(87 241 219 / 0.28), rgb(45 212 191 / 0.14)),
     rgb(28 34 33 / 0.98);
-  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.18);
+  box-shadow:
+    inset 0 0 0 2px rgb(87 241 219 / 0.6),
+    0 0 14px 1px rgb(87 241 219 / 0.3);
+}
+
+/* Cursor-following ghost shown while dragging library assets. Lives at the
+   viewport level (position: fixed) so it can never be clipped by the sidebar's
+   overflow. The teal accent flips on when the cursor is over a drop folder so
+   the user sees the assets "land" somewhere. */
+.lt-library-drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+  background: rgb(14 18 28 / 0.96);
+  border: 1px solid rgb(138 161 255 / 0.4);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.45);
+  color: #f5f7ff;
+  max-width: 17rem;
+}
+
+.lt-library-drag-ghost[data-folder-target="true"] {
+  border-color: rgb(87 241 219 / 0.75);
+  box-shadow:
+    0 16px 40px rgb(0 0 0 / 0.45),
+    0 0 0 1px rgb(87 241 219 / 0.45);
+}
+
+.lt-library-drag-ghost-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgb(138 161 255 / 0.18);
+}
+
+.lt-library-drag-ghost[data-folder-target="true"] .lt-library-drag-ghost-badge {
+  background: rgb(87 241 219 / 0.22);
+}
+
+.lt-library-drag-ghost-badge .material-symbols-outlined {
+  font-size: 18px;
+  color: #cdd7ff;
+}
+
+.lt-library-drag-ghost[data-folder-target="true"]
+  .lt-library-drag-ghost-badge
+  .material-symbols-outlined {
+  color: #57f1db;
+}
+
+.lt-library-drag-ghost-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #57f1db;
+  color: #06201c;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.lt-library-drag-ghost-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lt-library-drag-ghost-copy strong {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-library-drag-ghost-copy span {
+  font-size: 11px;
+  opacity: 0.78;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-library-drag-ghost[data-folder-target="true"] .lt-library-drag-ghost-copy span {
+  color: #57f1db;
+  opacity: 0.95;
 }
 
 .lt-library-folder-summary .material-symbols-outlined {

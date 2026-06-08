@@ -502,6 +502,11 @@ const en = {
     moveToRoot: "Move to root",
     moveToRootDisabled: "Move to root (already here)",
     assetsInFolder: "{{count}} asset(s)",
+    dragGhostSingle: "{{name}}",
+    dragGhostMultiple: "{{count}} assets",
+    dragHintFolder: "Move to {{folder}}",
+    dragHintTimeline: "Drop on timeline to place clip",
+    dragHintTimelineMultiple: "Drop on timeline to place clips",
   },
   trackHeader: {
     childrenCount: "{{count}} children",

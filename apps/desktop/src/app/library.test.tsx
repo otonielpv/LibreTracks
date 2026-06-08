@@ -85,7 +85,7 @@ describe("App / library", () => {
       });
     });
 
-    expect(screen.getByText("Drop on timeline to place clip")).toBeTruthy();
+    expect(screen.getByText(en.library.dragHintTimeline)).toBeTruthy();
 
     await act(async () => {
       fireEvent.mouseUp(window, {
@@ -123,7 +123,7 @@ describe("App / library", () => {
     });
 
     expect(screen.getByText("2 assets")).toBeTruthy();
-    expect(screen.getByText("Drop on timeline to place clips")).toBeTruthy();
+    expect(screen.getByText(en.library.dragHintTimelineMultiple)).toBeTruthy();
 
     await act(async () => {
       fireEvent.mouseUp(window, {

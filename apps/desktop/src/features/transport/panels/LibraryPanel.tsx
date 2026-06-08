@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import type { LibraryImportProgressEvent } from "../desktopApi";
 import { libraryAssetFileName } from "../helpers";
 import { LibrarySidebarPanel } from "../LibrarySidebarPanel";
@@ -47,10 +49,37 @@ export function LibraryPanel({
   onDeleteFolder,
   onDeleteRequested,
 }: LibraryPanelProps) {
+  const { t } = useTranslation();
   const dragTargetFolderPath =
     internalLibraryPointerDrag?.hover?.kind === "library-folder"
       ? internalLibraryPointerDrag.hover.folderPath
       : undefined;
+
+  const dragCount = internalLibraryPointerDrag?.payload.length ?? 0;
+  const dragTitle =
+    dragCount === 1 && internalLibraryPointerDrag
+      ? t("library.dragGhostSingle", {
+          name: libraryAssetFileName(
+            internalLibraryPointerDrag.payload[0].file_path,
+          ),
+        })
+      : t("library.dragGhostMultiple", { count: dragCount });
+  // Second line follows where the drop will land: a virtual folder (named, or
+  // "root/unfiled" when folderPath is null) vs. the timeline. This is the
+  // visual confirmation of *where the assets are going* while dragging.
+  const dragHint = (() => {
+    const hover = internalLibraryPointerDrag?.hover;
+    if (hover?.kind === "library-folder") {
+      return t("library.dragHintFolder", {
+        folder: hover.folderPath || t("library.rootFolder"),
+      });
+    }
+    return dragCount === 1
+      ? t("library.dragHintTimeline")
+      : t("library.dragHintTimelineMultiple");
+  })();
+  const isFolderTarget =
+    internalLibraryPointerDrag?.hover?.kind === "library-folder";
 
   return (
     <>
@@ -77,31 +106,22 @@ export function LibraryPanel({
       {internalLibraryPointerDrag?.isDragging ? (
         <div
           aria-hidden="true"
+          className="lt-library-drag-ghost"
+          data-folder-target={isFolderTarget ? "true" : undefined}
           style={{
-            position: "fixed",
-            left: internalLibraryPointerDrag.current.x + 18,
-            top: internalLibraryPointerDrag.current.y + 18,
-            zIndex: 9999,
-            pointerEvents: "none",
-            padding: "10px 12px",
-            borderRadius: 12,
-            background: "rgba(14, 18, 28, 0.92)",
-            border: "1px solid rgba(138, 161, 255, 0.35)",
-            boxShadow: "0 16px 40px rgba(0, 0, 0, 0.28)",
-            color: "#f5f7ff",
-            minWidth: 160,
+            left: internalLibraryPointerDrag.current.x + 16,
+            top: internalLibraryPointerDrag.current.y + 16,
           }}
         >
-          <strong style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
-            {internalLibraryPointerDrag.payload.length === 1
-              ? libraryAssetFileName(
-                  internalLibraryPointerDrag.payload[0].file_path,
-                )
-              : `${internalLibraryPointerDrag.payload.length} assets`}
-          </strong>
-          <span style={{ display: "block", fontSize: 11, opacity: 0.76 }}>
-            Drop on timeline to place clip
-            {internalLibraryPointerDrag.payload.length === 1 ? "" : "s"}
+          <span className="lt-library-drag-ghost-badge">
+            <span className="material-symbols-outlined">drag_pan</span>
+            {dragCount > 1 ? (
+              <span className="lt-library-drag-ghost-count">{dragCount}</span>
+            ) : null}
+          </span>
+          <span className="lt-library-drag-ghost-copy">
+            <strong>{dragTitle}</strong>
+            <span>{dragHint}</span>
           </span>
         </div>
       ) : null}

@@ -517,6 +517,11 @@ const es = {
     moveToRoot: "Mover a la raiz",
     moveToRootDisabled: "Mover a la raiz (ya esta aqui)",
     assetsInFolder: "{{count}} asset(s)",
+    dragGhostSingle: "{{name}}",
+    dragGhostMultiple: "{{count}} assets",
+    dragHintFolder: "Mover a {{folder}}",
+    dragHintTimeline: "Suelta en el timeline para crear un clip",
+    dragHintTimelineMultiple: "Suelta en el timeline para crear clips",
   },
   trackHeader: {
     childrenCount: "{{count}} hijos",
