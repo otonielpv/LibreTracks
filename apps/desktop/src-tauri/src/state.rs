@@ -5577,11 +5577,16 @@ fn allocate_library_audio_path(reserved_paths: &HashSet<String>, file_name: &str
 /// Place audio files bundled in a self-contained `.ltpkg` into the destination
 /// project's `audio/` folder and re-point the imported clips to those copies.
 ///
-/// `bundled_audio` maps each original audio file name to its bytes. We allocate
-/// a collision-free `audio/<name>` per file (reusing the library's allocator),
-/// write the bytes, then rewrite every imported clip whose `file_path` has that
-/// same file name to the new relative path. Clips whose audio wasn't bundled are
-/// left untouched (light packages reference audio by their original path).
+/// `bundled_audio` maps each original audio file name to its bytes.
+///
+/// For each clip whose audio is bundled we prefer to REUSE the clip's original
+/// absolute path when that file still exists on this machine: copying it into
+/// `audio/` would leave the same audio referenced twice (the original library
+/// entry plus the new copy), which shows up as duplicated assets. Only when the
+/// original is missing (e.g. the package was opened on another machine) do we
+/// materialise the bundled bytes into a collision-free `audio/<name>` and
+/// re-point the clip there. Clips whose audio wasn't bundled are left untouched
+/// (light packages reference audio by their original path).
 fn place_bundled_audio_and_repoint(
     song_dir: &Path,
     song: &mut Song,
@@ -5597,26 +5602,44 @@ fn place_bundled_audio_and_repoint(
         .into_iter()
         .collect::<HashSet<_>>();
 
-    // original file name -> new "audio/<final>" relative path
-    let mut remap: HashMap<String, String> = HashMap::new();
-    for (original_name, bytes) in bundled_audio {
-        let relative_path = allocate_library_audio_path(&reserved_paths, original_name);
-        reserved_paths.insert(relative_path.clone());
-        let destination = song_dir.join(&relative_path);
-        fs::write(&destination, bytes)?;
-        remap.insert(original_name.clone(), relative_path);
-    }
+    // Materialise bundled bytes lazily: only the first clip that actually needs
+    // a copy (original missing) writes the file, and the result is cached here
+    // by original file name so sibling clips of the same source reuse it.
+    // file name -> "audio/<final>" relative path of the written copy.
+    let mut copied: HashMap<String, String> = HashMap::new();
 
     for clip in &mut song.clips {
         let Some(file_name) = Path::new(&clip.file_path)
             .file_name()
             .and_then(|value| value.to_str())
+            .map(str::to_string)
         else {
             continue;
         };
-        if let Some(new_path) = remap.get(file_name) {
-            clip.file_path = new_path.clone();
+        let Some(bytes) = bundled_audio.get(&file_name) else {
+            // Audio for this clip isn't bundled (light package): leave as-is.
+            continue;
+        };
+
+        // Prefer the clip's original absolute path when it still resolves on
+        // disk — reuse it instead of copying, so the asset isn't duplicated.
+        let original = resolve_audio_file_path(song_dir, &clip.file_path);
+        if original.is_file() {
+            continue;
         }
+
+        // Original is gone: write the bundled copy (once per source) and
+        // re-point the clip to it.
+        let relative_path = if let Some(existing) = copied.get(&file_name) {
+            existing.clone()
+        } else {
+            let relative_path = allocate_library_audio_path(&reserved_paths, &file_name);
+            reserved_paths.insert(relative_path.clone());
+            fs::write(song_dir.join(&relative_path), bytes)?;
+            copied.insert(file_name.clone(), relative_path.clone());
+            relative_path
+        };
+        clip.file_path = relative_path;
     }
 
     Ok(())
@@ -7433,9 +7456,9 @@ mod tests {
 
     use super::{
         build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
-        realign_regions_after_warp_tempo_change, write_library_manifest,
-        write_library_manifest_assets, AudioFileImportPayload, ClipMoveRequest, CreateClipRequest,
-        DesktopSession, TransportClock, WaveformMemoryCache,
+        place_bundled_audio_and_repoint, realign_regions_after_warp_tempo_change,
+        write_library_manifest, write_library_manifest_assets, AudioFileImportPayload,
+        ClipMoveRequest, CreateClipRequest, DesktopSession, TransportClock, WaveformMemoryCache,
     };
 
     fn demo_song() -> Song {
@@ -11020,5 +11043,68 @@ mod tests {
         assert_eq!(diag.commit_model_only_count, 2, "two name updates");
         assert_eq!(diag.commit_mix_command_count, 1, "one mix commit");
         assert_eq!(diag.session_rebuild_count, 0);
+    }
+
+    #[test]
+    fn place_bundled_audio_reuses_existing_original_and_copies_missing_one() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+
+        // An original source that still exists on disk: the clip must keep
+        // pointing at it and NO copy should be written into audio/.
+        let original = song_dir.join("present.wav");
+        fs::write(&original, b"present-bytes").expect("write original");
+        let original_path = original.to_string_lossy().to_string();
+
+        let mut song = build_empty_song("song_pkg".into(), "Pkg".into());
+        song.clips.push(Clip {
+            id: "clip_present".into(),
+            track_id: "t".into(),
+            file_path: original_path.clone(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 1.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        });
+        // A clip whose original is GONE: it must be copied into audio/ and
+        // re-pointed there.
+        song.clips.push(Clip {
+            id: "clip_missing".into(),
+            track_id: "t".into(),
+            file_path: song_dir
+                .join("gone.wav")
+                .to_string_lossy()
+                .to_string(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 1.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        });
+
+        let mut bundled = std::collections::HashMap::new();
+        bundled.insert("present.wav".to_string(), b"present-bytes".to_vec());
+        bundled.insert("gone.wav".to_string(), b"gone-bytes".to_vec());
+
+        place_bundled_audio_and_repoint(song_dir, &mut song, &bundled).expect("place");
+
+        // Present original: clip untouched, no copy created.
+        assert_eq!(song.clips[0].file_path, original_path);
+        assert!(
+            !song_dir.join("audio").join("present.wav").exists(),
+            "existing original must not be copied into audio/"
+        );
+
+        // Missing original: copied and re-pointed under audio/.
+        assert_eq!(song.clips[1].file_path, "audio/gone.wav");
+        assert_eq!(
+            fs::read(song_dir.join("audio").join("gone.wav")).expect("copied"),
+            b"gone-bytes"
+        );
     }
 }
