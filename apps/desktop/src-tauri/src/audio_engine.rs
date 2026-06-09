@@ -1345,6 +1345,15 @@ impl AudioController {
                 subdivision_pitch: settings.metronome_subdivision_pitch,
                 subdivision_gain: settings.metronome_subdivision_gain,
             })?;
+            // Voice-guide config (the clip bank is loaded separately via the
+            // command layer, which knows the bundled resources path).
+            engine.send_command(&EngineCommand::SetVoiceGuideConfig {
+                enabled: settings.voice_guide_enabled,
+                volume: settings.voice_guide_volume as f32,
+                route: "monitor".to_string(),
+                lead_bars: settings.voice_guide_lead_bars,
+                count_in_enabled: settings.voice_guide_count_in_enabled,
+            })?;
             state.settings = settings;
             Ok(())
         })

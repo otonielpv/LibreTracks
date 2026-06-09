@@ -2738,6 +2738,14 @@ export function TransportPanelContent() {
     let active = true;
 
     void refreshAudioSettings()
+      .then((settings) => {
+        // If the voice guide was left enabled in a previous session, push the
+        // config + load the clip bank now so it works without re-opening the
+        // settings panel. set_voice_guide_config_realtime loads the bank.
+        if (active && settings?.voiceGuideEnabled) {
+          void setVoiceGuideConfigRealtime(settings).catch(() => {});
+        }
+      })
       .catch((error) => {
         if (!active) {
           return;
