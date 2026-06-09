@@ -975,6 +975,20 @@ export const testDesktopApiMock = {
       libraryAssets: state.libraryAssets,
     } satisfies SongPackageImportResponse);
   },
+  // Progress-emitting path-based import used by the timeline .ltpkg drop and
+  // the compact view. Returns just the snapshot (callers refresh the library
+  // separately), mirroring the real importSongPackageFromPathWithProgress.
+  importSongPackageFromPathWithProgress: async (
+    _packagePath: string,
+    _insertAtSeconds: number,
+  ) => {
+    addImportedPackageAsset();
+    replaceSong({
+      ...state.song,
+      projectRevision: state.projectRevision + 1,
+    });
+    return clone(buildSnapshot());
+  },
   resolveMissingFile: async (oldPath: string, newPath: string) => {
     state.libraryAssets = sortLibraryAssets(
       state.libraryAssets.map((asset) =>

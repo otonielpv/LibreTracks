@@ -235,7 +235,9 @@ describe("App / drag-drop", () => {
 
   it("drops a song package on the timeline", async () => {
     const desktopApi = await import("../features/transport/desktopApi");
-    const importSongPackageMock = vi.mocked(desktopApi.importSongPackage);
+    const importSongPackageMock = vi.mocked(
+      desktopApi.importSongPackageFromPathWithProgress,
+    );
     const { container } = await renderApp();
     mockRulerBounds(container);
     mockLaneBounds(container);

@@ -106,6 +106,9 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     importAudioFilesFromPaths: vi.fn(testDesktopApiMock.importAudioFilesFromPaths),
     importAudioFilesFromBytes: vi.fn(testDesktopApiMock.importAudioFilesFromBytes),
     importSongPackage: vi.fn(testDesktopApiMock.importSongPackage),
+    importSongPackageFromPathWithProgress: vi.fn(
+      testDesktopApiMock.importSongPackageFromPathWithProgress,
+    ),
     deleteLibraryAsset: vi.fn(testDesktopApiMock.deleteLibraryAsset),
     moveLibraryAsset: vi.fn(testDesktopApiMock.moveLibraryAsset),
     createLibraryFolder: vi.fn(testDesktopApiMock.createLibraryFolder),
