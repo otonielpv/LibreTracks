@@ -477,7 +477,7 @@ jobs:
         run: |
           set -euo pipefail
           # Guard against silent loss of the 10.13/10.14 compatibility shim
-          # (apps/desktop/src-tauri/macos-compat/highsierra_cookie_symbols.c).
+          # (apps/desktop/src-tauri/macos-compat/highsierra_cookie_symbols.m).
           # If a wry/Tauri bump or a build.rs change ever drops it, the binary
           # still builds and runs on the modern CI runner but crashes at launch
           # on High Sierra with "Symbol not found: _NSHTTPCookieSameSiteLax" —
@@ -495,7 +495,7 @@ jobs:
             # one shows 'U'. Fail if the symbol is missing entirely or only 'U'.
             line="$(nm "$BIN" 2>/dev/null | grep -E "[0-9a-fA-F]+ [^U] $symbol$" || true)"
             if [ -z "$line" ]; then
-              echo "::error::Symbol $symbol is not locally defined in the release binary. The High Sierra cookie shim was not linked — check build.rs and macos-compat/highsierra_cookie_symbols.c."
+              echo "::error::Symbol $symbol is not locally defined in the release binary. The High Sierra cookie shim was not linked — check build.rs and macos-compat/highsierra_cookie_symbols.m."
               nm "$BIN" 2>/dev/null | grep "$symbol" || echo "($symbol absent from symbol table entirely)"
               exit 1
             fi

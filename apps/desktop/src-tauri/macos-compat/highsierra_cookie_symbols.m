@@ -17,9 +17,23 @@
 // This lets us keep wry/Tauri on their current modern versions (no downgrade)
 // while still booting on High Sierra. The string values mirror Apple's
 // documented NSHTTPCookieStringPolicy constant values.
+//
+// Keeping these definitions in the final binary takes two cooperating guards;
+// neither alone is enough under a release build:
+//   * Here, `used` sets the object-level N_NO_DEAD_STRIP flag on each atom.
+//   * In build.rs, each symbol is passed to the linker as `-Wl,-u,<sym>` (a
+//     required root). This is the load-bearing one: rustc links macOS release
+//     binaries with `-dead_strip` by default, and because we build against a
+//     modern (10.15+) SDK whose Foundation already exports these symbols, wry's
+//     references bind to that strong dylib export, not to our weak definitions.
+//     With no local referrer, `-dead_strip` deletes the (force-loaded) atoms and
+//     the symbol vanishes entirely — the exact failure the CI "Verify High Sierra
+//     cookie shim linked" guard catches. Marking each as a `-u` root keeps it.
+// On 10.15+ the strong system symbol still wins, so the retained weak defs stay
+// inert; on 10.13/10.14 they are what dyld resolves so the app launches.
 
 #import <Foundation/Foundation.h>
 
-__attribute__((weak)) NSString *const NSHTTPCookieSameSiteLax = @"Lax";
-__attribute__((weak)) NSString *const NSHTTPCookieSameSiteStrict = @"Strict";
-__attribute__((weak)) NSString *const NSHTTPCookieSameSitePolicy = @"SameSite";
+__attribute__((weak, used)) NSString *const NSHTTPCookieSameSiteLax = @"Lax";
+__attribute__((weak, used)) NSString *const NSHTTPCookieSameSiteStrict = @"Strict";
+__attribute__((weak, used)) NSString *const NSHTTPCookieSameSitePolicy = @"SameSite";

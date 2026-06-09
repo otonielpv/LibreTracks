@@ -47,16 +47,25 @@ fn link_macos_highsierra_shim() {
         archive.display()
     );
 
-    // Belt-and-braces: also tell the linker these symbols may be undefined at
-    // link time so it never marks them as hard load-time requirements against
-    // Foundation. The weak shim above (force-loaded) is what actually satisfies
-    // them on 10.13.
+    // Pin each shim symbol as a required link root with `-u` (lowercase). This
+    // is what actually keeps them in the shipped binary: rustc links macOS
+    // release binaries with `-dead_strip` by default, and because we build
+    // against a modern SDK whose Foundation already exports these symbols, wry's
+    // references bind to that strong dylib export instead of our weak defs. With
+    // no local referrer, `-dead_strip` would delete even the force-loaded atoms
+    // and the symbol would vanish — the failure the CI "Verify High Sierra cookie
+    // shim linked" guard catches. `-u <sym>` marks each as an undefined that must
+    // be resolved, which both pulls our archive member and exempts it from dead-
+    // stripping. Our force-loaded weak definition satisfies the requirement, so
+    // the link still succeeds with no dependency on Foundation actually exporting
+    // them at run time. (Note: lowercase `-u` = "require symbol", not uppercase
+    // `-U` = "allow undefined", which did NOT survive dead-stripping.)
     for symbol in [
         "_NSHTTPCookieSameSiteLax",
         "_NSHTTPCookieSameSiteStrict",
         "_NSHTTPCookieSameSitePolicy",
     ] {
-        println!("cargo:rustc-link-arg=-Wl,-U,{symbol}");
+        println!("cargo:rustc-link-arg=-Wl,-u,{symbol}");
     }
 }
 
