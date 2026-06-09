@@ -15,8 +15,12 @@
 #  include <sndfile.h>
 #  define DR_MP3_IMPLEMENTATION
 #  include "dr_mp3.h"
+#  define DR_FLAC_IMPLEMENTATION
+#  include "dr_flac.h"
 
 // dr_mp3 — single-header MP3 decoder
+// dr_flac — single-header FLAC decoder (used when libsndfile is built without
+// the FLAC codec, i.e. ENABLE_EXTERNAL_LIBS=OFF, and FFmpeg is not available)
 #endif // LT_ENGINE_USE_LIBSNDFILE
 
 namespace lt {
@@ -137,6 +141,51 @@ private:
     bool open_ = false;
 };
 
+class DrFlacDecoder : public AudioDecoder {
+public:
+    ~DrFlacDecoder() override { close(); }
+
+    Result<void> open(const std::string& path, DecodeProgressCallback on_progress = {}) override {
+        (void)on_progress;
+        flac_ = drflac_open_file(path.c_str(), nullptr);
+        if (!flac_)
+            return Result<void>::err("dr_flac: failed to open " + path);
+
+        info_.file_path = path;
+        info_.channel_count = static_cast<int>(flac_->channels);
+        info_.original_sample_rate = static_cast<int>(flac_->sampleRate);
+        info_.duration_frames = static_cast<Frame>(flac_->totalPCMFrameCount);
+        info_.format = "flac";
+        return Result<void>::ok();
+    }
+
+    AudioFileInfo info() const override { return info_; }
+
+    int read_frames(float* out, int frame_count) override {
+        if (!flac_) return 0;
+        return static_cast<int>(drflac_read_pcm_frames_f32(
+            flac_, static_cast<drflac_uint64>(frame_count), out));
+    }
+
+    Result<void> seek(Frame frame) override {
+        if (!flac_) return Result<void>::err("not open");
+        if (!drflac_seek_to_pcm_frame(flac_, static_cast<drflac_uint64>(frame)))
+            return Result<void>::err("dr_flac: seek failed");
+        return Result<void>::ok();
+    }
+
+    void close() override {
+        if (flac_) {
+            drflac_close(flac_);
+            flac_ = nullptr;
+        }
+    }
+
+private:
+    drflac*       flac_ = nullptr;
+    AudioFileInfo info_;
+};
+
 #endif // LT_ENGINE_USE_LIBSNDFILE
 
 // ============================================================================
@@ -169,7 +218,11 @@ std::unique_ptr<AudioDecoder> make_decoder(const std::string& file_path) {
 
 #if LT_ENGINE_USE_FFMPEG
 #  if LT_ENGINE_USE_LIBSNDFILE
-    if (ext != "wav" && ext != "wave" && ext != "flac") {
+    // libsndfile is built with ENABLE_EXTERNAL_LIBS=OFF (see dependencies.cmake),
+    // so it only supports WAV/AIFF — it has NO FLAC/Ogg/Vorbis codec. Route FLAC
+    // (and everything except plain WAV) to the libav/FFmpeg decoder, which has
+    // full FLAC support. Sending FLAC to SndfileDecoder produces silence.
+    if (ext != "wav" && ext != "wave") {
         return make_libav_decoder();
     }
 #  else
@@ -182,7 +235,12 @@ std::unique_ptr<AudioDecoder> make_decoder(const std::string& file_path) {
     if (ext == "mp3") {
         return std::make_unique<DrMp3Decoder>();
     }
-    // libsndfile handles WAV/FLAC/OGG/AIFF when compiled with those backends.
+    if (ext == "flac") {
+        // libsndfile is built without the FLAC codec (ENABLE_EXTERNAL_LIBS=OFF),
+        // so it cannot decode FLAC. Use the bundled dr_flac decoder instead.
+        return std::make_unique<DrFlacDecoder>();
+    }
+    // libsndfile handles WAV/AIFF. (FLAC/OGG would need ENABLE_EXTERNAL_LIBS.)
     return std::make_unique<SndfileDecoder>();
 #else
     (void)ext;
