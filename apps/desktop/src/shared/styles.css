@@ -3634,9 +3634,14 @@ textarea {
 
 .lt-control-group {
   position: relative;
-  flex: 0 1 15.5rem;
-  min-width: 12.8rem;
-  max-width: 19rem;
+  /* Sized so all six groups + the icon/cancel buttons fit on one row on a
+     typical desktop (≥1920px). The summary text below truncates with an
+     ellipsis, so a narrow basis doesn't lose information — the full value
+     is still in the popover. min-width stays low enough that the row only
+     wraps on genuinely small screens (e.g. ~1280px laptops). */
+  flex: 1 1 11.5rem;
+  min-width: 8.5rem;
+  max-width: 16rem;
   min-height: 2.45rem;
   overflow: visible;
   display: flex;
