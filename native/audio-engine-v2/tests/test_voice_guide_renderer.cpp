@@ -225,3 +225,41 @@ TEST_CASE("a numbered variant falls back to the base clip when absent") {
     // Falls back to base amplitude 0.50.
     CHECK(section_onset_amplitude(ch[2]) == doctest::Approx(0.50f * 0.9f).epsilon(0.05));
 }
+
+TEST_CASE("choke prevents overlapping voices from summing") {
+    // A bank whose clips are LONG (1 s) so, without choke, the section clip
+    // would still be playing when the count clips fire and they would sum to
+    // ~2x amplitude. With choke the new clip silences the previous one, so the
+    // peak stays near a single voice (0.5 * gain 0.9 = 0.45), never ~0.9+.
+    auto bank = std::make_shared<VoiceGuideClipBank>();
+    bank->sample_rate = kSampleRate;
+    const int len = kSampleRate; // 1 s clips
+    for (int k = 0; k < VoiceGuideClipBank::kKindCount; ++k)
+        bank->sections[static_cast<std::size_t>(k)].base.samples.assign(len, 0.5f);
+    for (int n = 2; n < VoiceGuideClipBank::kMaxCount; ++n)
+        bank->counts[static_cast<std::size_t>(n)].samples.assign(len, 0.5f);
+
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // Fast tempo so beats are 0.25 s apart but clips are 1 s — heavy overlap
+    // territory without choke.
+    auto session = make_session(MarkerKind::Chorus, 4.0, 240.0, 4, 4);
+    auto ch = render_all(r, session, kSampleRate * 6);
+    // A single voice is 0.5 * gain 0.9 = 0.45. Two summed voices ~0.9. With the
+    // ~20 ms choke crossfade, samples above the single-voice level should only
+    // appear in those brief fade windows — never sustained for whole beats as
+    // they would without choke. Assert the overlap fraction is tiny.
+    int overlapping = 0;
+    int audible = 0;
+    for (float v : ch[2]) {
+        if (std::abs(v) > 0.02f) ++audible;
+        if (std::abs(v) > 0.55f) ++overlapping;
+    }
+    REQUIRE(audible > 0);
+    const double overlap_fraction =
+        static_cast<double>(overlapping) / static_cast<double>(audible);
+    // 20 ms fades across a handful of beats vs ~1 s of audible voice → well
+    // under 10% overlap. Without choke this would be the majority of the buffer.
+    CHECK(overlap_fraction < 0.1);
+}

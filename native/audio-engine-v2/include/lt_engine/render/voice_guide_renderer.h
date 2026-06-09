@@ -115,18 +115,25 @@ public:
 private:
     enum class RouteMode : int { Master = 0, Monitor = 1, Ext = 2 };
 
-    // One playing clip. The pool lets a count clip overlap a section clip's tail.
+    // One playing clip. Triggering a new clip "chokes" any still-playing voice
+    // with a short fade-out so section/count announcements never overlap and
+    // talk over each other (the Playback behaviour). The pool size lets the
+    // fading tail of the previous voice ring out under the new one.
     struct Voice {
         const float* samples = nullptr; // points into a clip bank vector (bank outlives the voice)
         int total = 0;
         int index = 0;                  // next sample to read; index >= total == done
         float gain = 0.0f;
+        // Choke fade: when >= 0, the voice is releasing — fade_remaining frames
+        // left of a `fade_total`-frame linear ramp to silence, then it stops.
+        int fade_remaining = -1;
+        int fade_total = 0;
         bool active() const noexcept { return samples != nullptr && index < total; }
     };
     static constexpr int kVoiceCount = 4;
 
-    Voice* free_voice() noexcept;
-    void trigger_clip(const VoiceGuideClip* clip, float gain) noexcept;
+    void trigger_clip(const VoiceGuideClip* clip, float gain, double sample_rate) noexcept;
+    void choke_active_voices(double sample_rate) noexcept;
     void reset_voices() noexcept;
 
     // Resolve the first marker at or after `frame` that has a non-Custom kind

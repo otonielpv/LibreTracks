@@ -143,24 +143,53 @@ const VoiceGuideClip* VoiceGuideClipBank::count_for(int beat_number) const noexc
 
 namespace {
 
-// Decode one file to mono at the target rate. Returns empty on any failure
-// (missing file, decode error) — a missing clip is a valid "silent slot".
+// Trim leading and trailing near-silence so a clip occupies only the spoken
+// part. The pack's WAVs are padded to a fixed length with silence tails; left
+// untrimmed those tails keep a voice "playing" and force later beats to overlap.
+// Keeps a small pad on each side so the consonants aren't clipped.
+void trim_silence(std::vector<float>& mono, int sample_rate) {
+    if (mono.empty()) return;
+    float peak = 0.0f;
+    for (float s : mono) peak = std::max(peak, std::abs(s));
+    if (peak <= 1.0e-5f) { mono.clear(); return; }   // wholly silent
+    const float thr = peak * 0.02f;                  // -34 dB relative gate
+    std::size_t first = 0;
+    while (first < mono.size() && std::abs(mono[first]) < thr) ++first;
+    std::size_t last = mono.size();
+    while (last > first && std::abs(mono[last - 1]) < thr) --last;
+    const std::size_t pad = static_cast<std::size_t>(std::max(1, sample_rate / 100)); // 10 ms
+    first = first > pad ? first - pad : 0;
+    last = std::min(mono.size(), last + pad);
+    if (first == 0 && last == mono.size()) return;
+    mono.assign(mono.begin() + static_cast<std::ptrdiff_t>(first),
+                mono.begin() + static_cast<std::ptrdiff_t>(last));
+}
+
+// Decode one file to mono at the target rate, trimming silence. Returns empty on
+// any failure (missing file, decode error) — a missing clip is a valid "silent
+// slot".
 std::vector<float> decode_mono(const std::string& path, int target_sample_rate) {
     int channels = 0;
     Frame duration = 0;
     auto decoded = decode_file_to_float32(path, target_sample_rate, &channels, &duration);
     if (!decoded.is_ok() || channels <= 0) return {};
     const std::vector<float>& interleaved = decoded.unwrap();
-    if (channels == 1) return interleaved;
-    // Downmix to mono by averaging channels.
-    const std::size_t frames = interleaved.size() / static_cast<std::size_t>(channels);
-    std::vector<float> mono(frames, 0.0f);
-    for (std::size_t f = 0; f < frames; ++f) {
-        float sum = 0.0f;
-        for (int c = 0; c < channels; ++c)
-            sum += interleaved[f * static_cast<std::size_t>(channels) + static_cast<std::size_t>(c)];
-        mono[f] = sum / static_cast<float>(channels);
+    std::vector<float> mono;
+    if (channels == 1) {
+        mono = interleaved;
+    } else {
+        // Downmix to mono by averaging channels.
+        const std::size_t frames = interleaved.size() / static_cast<std::size_t>(channels);
+        mono.assign(frames, 0.0f);
+        for (std::size_t f = 0; f < frames; ++f) {
+            float sum = 0.0f;
+            for (int c = 0; c < channels; ++c)
+                sum += interleaved[f * static_cast<std::size_t>(channels)
+                                   + static_cast<std::size_t>(c)];
+            mono[f] = sum / static_cast<float>(channels);
+        }
     }
+    trim_silence(mono, target_sample_rate);
     return mono;
 }
 
@@ -261,23 +290,41 @@ void VoiceGuideRenderer::set_clip_bank(std::shared_ptr<const VoiceGuideClipBank>
 
 // ── Voice pool ───────────────────────────────────────────────────────────────
 
-VoiceGuideRenderer::Voice* VoiceGuideRenderer::free_voice() noexcept {
-    Voice* best = &voices_[0];
+// Start a short fade-out on every voice that is still playing, so the next
+// announcement replaces them cleanly instead of talking over them.
+void VoiceGuideRenderer::choke_active_voices(double sample_rate) noexcept {
+    const int fade = std::max(1, static_cast<int>(sample_rate * 0.020)); // ~20 ms
     for (auto& v : voices_) {
-        if (!v.active()) return &v;
-        // Steal the voice with the fewest samples remaining.
-        if ((v.total - v.index) < (best->total - best->index)) best = &v;
+        if (!v.active() || v.fade_remaining >= 0) continue;
+        v.fade_remaining = fade;
+        v.fade_total = fade;
     }
-    return best;
 }
 
-void VoiceGuideRenderer::trigger_clip(const VoiceGuideClip* clip, float gain) noexcept {
+void VoiceGuideRenderer::trigger_clip(const VoiceGuideClip* clip, float gain,
+                                      double sample_rate) noexcept {
     if (!clip || clip->samples.empty()) return;
-    Voice* v = free_voice();
+    // Choke whatever is still playing so voices never overlap (Playback-style).
+    choke_active_voices(sample_rate);
+    // Pick a voice that is NOT mid-choke if possible, so we keep the fading tail.
+    Voice* v = nullptr;
+    for (std::size_t i = 0; i < voices_.size(); ++i) {
+        if (!voices_[i].active()) { v = &voices_[i]; break; }
+    }
+    if (!v) {
+        // All voices busy; steal the one with the fewest samples remaining.
+        v = &voices_[0];
+        for (std::size_t i = 0; i < voices_.size(); ++i) {
+            if ((voices_[i].total - voices_[i].index) < (v->total - v->index))
+                v = &voices_[i];
+        }
+    }
     v->samples = clip->samples.data();
     v->total = static_cast<int>(clip->samples.size());
     v->index = 0;
     v->gain = gain;
+    v->fade_remaining = -1;
+    v->fade_total = 0;
 }
 
 void VoiceGuideRenderer::reset_voices() noexcept {
@@ -285,6 +332,8 @@ void VoiceGuideRenderer::reset_voices() noexcept {
         v.samples = nullptr;
         v.index = 0;
         v.total = 0;
+        v.fade_remaining = -1;
+        v.fade_total = 0;
     }
     last_section_frame_ = -1;
     last_count_frame_ = -1;
@@ -390,7 +439,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                         if (b == 0) {
                             if (beat_frame != last_section_frame_) {
                                 trigger_clip(bank->section_for(marker->kind, marker->variant),
-                                             0.9f);
+                                             0.9f, sample_rate);
                                 last_section_frame_ = beat_frame;
                                 announcements_fired_.fetch_add(1, std::memory_order_relaxed);
                             }
@@ -400,7 +449,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                             // counts run 2..beats_per_bar.
                             const int beat_number = (b % beats_per_bar) + 1;
                             if (beat_number >= 2 && beat_frame != last_count_frame_) {
-                                trigger_clip(bank->count_for(beat_number), 0.9f);
+                                trigger_clip(bank->count_for(beat_number), 0.9f, sample_rate);
                                 last_count_frame_ = beat_frame;
                                 counts_fired_.fetch_add(1, std::memory_order_relaxed);
                             }
@@ -413,10 +462,24 @@ void VoiceGuideRenderer::render(float** output_channels,
             }
         }
 
-        // Mix all active voices into the output pair.
+        // Mix all active voices into the output pair, applying any choke fade.
         for (auto& v : voices_) {
             if (!v.active()) continue;
-            const float sample = v.samples[v.index] * v.gain * current_output_gain_;
+            float fade_gain = 1.0f;
+            if (v.fade_remaining >= 0) {
+                fade_gain = v.fade_total > 0
+                    ? static_cast<float>(v.fade_remaining) / static_cast<float>(v.fade_total)
+                    : 0.0f;
+                if (--v.fade_remaining < 0) {
+                    // Fade complete: stop this voice.
+                    v.samples = nullptr;
+                    v.index = 0;
+                    v.total = 0;
+                    continue;
+                }
+            }
+            const float sample =
+                v.samples[v.index] * v.gain * fade_gain * current_output_gain_;
             output_channels[left][f] += sample;
             if (right != left)
                 output_channels[right][f] += sample;
