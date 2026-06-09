@@ -513,6 +513,8 @@ void Mixer::render_timeline_span(float** output_channels,
     }
     metronome_.render(metronome_channels, num_channels, num_frames,
                       clock_->sample_rate(), timeline_frame, session.get());
+    voice_guide_.render(metronome_channels, num_channels, num_frames,
+                        clock_->sample_rate(), timeline_frame, session.get());
 
     const bool was_pending_start = clock_->pending_start();
     if (was_pending_start)
@@ -778,6 +780,8 @@ void Mixer::render(float** output_channels,
 
         metronome_.render(output_channels, num_channels, num_frames,
                           clock_->sample_rate(), timeline_frame, session.get());
+        voice_guide_.render(output_channels, num_channels, num_frames,
+                            clock_->sample_rate(), timeline_frame, session.get());
 
         const bool was_pending_start = clock_->pending_start();
         if (was_pending_start)
@@ -1062,6 +1066,22 @@ void Mixer::set_metronome_volume(float volume) {
 
 MetronomeDiagnostics Mixer::metronome_diagnostics() const {
     return metronome_.diagnostics();
+}
+
+void Mixer::set_voice_guide_config(const VoiceGuideConfig& config) {
+    voice_guide_.set_config(config);
+}
+
+void Mixer::set_voice_guide_enabled(bool enabled) {
+    voice_guide_.set_enabled(enabled);
+}
+
+void Mixer::set_voice_guide_clip_bank(std::shared_ptr<const VoiceGuideClipBank> bank) noexcept {
+    voice_guide_.set_clip_bank(std::move(bank));
+}
+
+VoiceGuideDiagnostics Mixer::voice_guide_diagnostics() const {
+    return voice_guide_.diagnostics();
 }
 
 MeterValues Mixer::meters() const noexcept {

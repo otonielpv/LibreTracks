@@ -104,6 +104,14 @@ struct CmdSetMetronomeConfig      {
     float subdivision_gain = 0.5f;
 };
 
+struct CmdSetVoiceGuideConfig {
+    bool enabled = false;
+    float volume = 1.0f;
+    std::string route = "monitor";
+    int lead_bars = 1;
+    bool count_in_enabled = true;
+};
+
 // ---------------------------------------------------------------------------
 // Pitch
 // ---------------------------------------------------------------------------
@@ -239,6 +247,7 @@ using EngineCommand = std::variant<
     CmdSetTrackTransposeEnabled, CmdStartMasterFade,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
+    CmdSetVoiceGuideConfig,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize

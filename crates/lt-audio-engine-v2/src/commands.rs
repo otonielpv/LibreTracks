@@ -105,6 +105,16 @@ pub enum EngineCommand {
         subdivision_gain: f32,
     },
 
+    SetVoiceGuideConfig {
+        enabled: bool,
+        volume: f32,
+        route: String,
+        /// Bars of announcement/count-in before a marker (1..4).
+        lead_bars: i32,
+        /// false = speak the section name only, no beat count.
+        count_in_enabled: bool,
+    },
+
     SetSongTranspose {
         song_id: String,
         semitones: i32,

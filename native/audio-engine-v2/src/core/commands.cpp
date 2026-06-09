@@ -143,6 +143,16 @@ EngineCommand command_from_json(const std::string& raw) {
         return c;
     }
 
+    if (type == "SetVoiceGuideConfig") {
+        CmdSetVoiceGuideConfig c;
+        c.enabled = j.at("enabled").get<bool>();
+        c.volume = j.at("volume").get<float>();
+        c.route = j.value("route", std::string{"monitor"});
+        c.lead_bars = j.value("lead_bars", 1);
+        c.count_in_enabled = j.value("count_in_enabled", true);
+        return c;
+    }
+
     if (type == "SetSongTranspose")
         return CmdSetSongTranspose{ j.at("song_id").get<Id>(), j.at("semitones").get<Semitones>() };
 
@@ -358,6 +368,14 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["subdivision_preset"] = c.subdivision_preset;
             j["subdivision_pitch"] = c.subdivision_pitch;
             j["subdivision_gain"] = c.subdivision_gain;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetVoiceGuideConfig>) {
+            j["type"] = "SetVoiceGuideConfig";
+            j["enabled"] = c.enabled;
+            j["volume"] = c.volume;
+            j["route"] = c.route;
+            j["lead_bars"] = c.lead_bars;
+            j["count_in_enabled"] = c.count_in_enabled;
         }
         // ... additional types follow the same pattern.
         // Omitted for brevity — expand as needed.

@@ -81,6 +81,7 @@ private:
     std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;
     MetronomeConfig                     metronome_config_;
+    VoiceGuideConfig                    voice_guide_config_;
     std::atomic<uint64_t>               session_generation_{0};
 
     // Cached snapshot string (rebuilt on snapshot request).
