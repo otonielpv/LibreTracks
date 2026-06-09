@@ -474,6 +474,7 @@ pub fn assign_section_marker_digit(
 pub fn set_section_marker_kind(
     section_id: String,
     kind: MarkerKind,
+    variant: Option<u8>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -482,7 +483,7 @@ pub fn set_section_marker_kind(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .set_section_marker_kind(&section_id, kind, &state.audio)
+        .set_section_marker_kind(&section_id, kind, variant, &state.audio)
         .map_err(|error| error.to_string())
 }
 

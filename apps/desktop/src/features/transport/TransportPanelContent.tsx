@@ -29,6 +29,7 @@ import {
   type JumpTriggerLabel,
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
+  type MarkerKind,
   type MidiBinding,
   type PendingJumpSummary,
   type PitchPrepareSummary,
@@ -99,6 +100,7 @@ import {
   setMetronomeEnabledRealtime,
   setMetronomeVolumeRealtime,
   setMetronomeSoundRealtime,
+  setVoiceGuideConfigRealtime,
   splitClip,
   splitClips,
   setSectionMarkerKind,
@@ -124,7 +126,12 @@ import {
   formatTransposeSemitones,
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
-import { MARKER_KINDS, markerKindColor, markerKindLabel } from "./markerKinds";
+import {
+  MARKER_KINDS,
+  markerKindColor,
+  markerKindLabel,
+  markerKindVariants,
+} from "./markerKinds";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./CompactView";
@@ -1666,6 +1673,7 @@ export function TransportPanelContent() {
         setMetronomeSoundRealtime,
         setMetronomeEnabledRealtime,
         setMetronomeVolumeRealtime,
+        setVoiceGuideConfigRealtime,
         saveSettings,
       }),
     [persistAudioSettings, runAction, setStatus, formatErrorStatus, t],
@@ -1673,6 +1681,7 @@ export function TransportPanelContent() {
   const {
     handleRefreshAudioDevices,
     handleMetronomeSoundChange,
+    handleVoiceGuideChange,
     handleMetronomeEnabledChange,
     handleMetronomeVolumeDraftChange,
     commitMetronomeVolumeDraft,
@@ -5790,34 +5799,75 @@ export function TransportPanelContent() {
     });
   }
 
+  function applyMarkerKind(
+    section: SectionMarkerSummary,
+    kind: MarkerKind,
+    variant: number | null,
+  ) {
+    void runAction(async () => {
+      const nextSnapshot = await setSectionMarkerKind(section.id, kind, variant);
+      applyPlaybackSnapshot(nextSnapshot);
+      const kindLabel = markerKindLabel(kind);
+      setStatus(
+        t("transport.status.markerKindSet", {
+          name: section.name,
+          kind: variant ? `${kindLabel} ${variant}` : kindLabel,
+        }),
+      );
+    });
+  }
+
+  function bumpContextMenuPosition() {
+    const position = contextMenuPositionRef.current;
+    const next = { x: position.x + 12, y: position.y + 12 };
+    contextMenuPositionRef.current = next;
+    return next;
+  }
+
+  // Variant chooser for kinds that ship numbered recordings (Verse 1-6, ...).
+  function openMarkerVariantMenu(section: SectionMarkerSummary, kind: MarkerKind) {
+    const variants = markerKindVariants(kind);
+    const current = section.kind === kind ? (section.variant ?? null) : null;
+    const next = bumpContextMenuPosition();
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: markerKindLabel(kind),
+      actions: [
+        {
+          label: `${markerKindLabel(kind)}${current == null ? " ✓" : ""}`,
+          swatch: markerKindColor(kind),
+          onSelect: () => applyMarkerKind(section, kind, null),
+        },
+        ...variants.map((n) => ({
+          label: `${markerKindLabel(kind)} ${n}${current === n ? " ✓" : ""}`,
+          swatch: markerKindColor(kind),
+          onSelect: () => applyMarkerKind(section, kind, n),
+        })),
+      ],
+    });
+  }
+
   function openMarkerKindMenu(section: SectionMarkerSummary) {
     const currentKind = section.kind ?? "custom";
-    const position = contextMenuPositionRef.current;
-    const nextPosition = {
-      x: position.x + 12,
-      y: position.y + 12,
-    };
-    contextMenuPositionRef.current = nextPosition;
+    const next = bumpContextMenuPosition();
     setContextMenu({
-      x: nextPosition.x,
-      y: nextPosition.y,
+      x: next.x,
+      y: next.y,
       title: t("transport.menu.markerKind"),
-      actions: MARKER_KINDS.map((kind) => ({
-        label: `${markerKindLabel(kind)}${kind === currentKind ? " ✓" : ""}`,
-        swatch: markerKindColor(kind),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await setSectionMarkerKind(section.id, kind);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              t("transport.status.markerKindSet", {
-                name: section.name,
-                kind: markerKindLabel(kind),
-              }),
-            );
-          });
-        },
-      })),
+      actions: MARKER_KINDS.map((kind) => {
+        const hasVariants = markerKindVariants(kind).length > 0;
+        return {
+          label: `${markerKindLabel(kind)}${hasVariants ? " ▸" : ""}${
+            kind === currentKind ? " ✓" : ""
+          }`,
+          swatch: markerKindColor(kind),
+          onSelect: () =>
+            hasVariants
+              ? openMarkerVariantMenu(section, kind)
+              : applyMarkerKind(section, kind, null),
+        };
+      }),
     });
   }
 
@@ -9797,6 +9847,7 @@ export function TransportPanelContent() {
               onMetronomeVolumeDraftChange={handleMetronomeVolumeDraftChange}
               onCommitMetronomeVolume={commitMetronomeVolumeDraft}
               onMetronomeSoundChange={handleMetronomeSoundChange}
+              onVoiceGuideChange={handleVoiceGuideChange}
               midiInputDevices={midiInputDevices}
               isMidiInputRefreshing={isMidiInputRefreshing}
               selectedMidiInputDevice={selectedMidiInputDevice}

@@ -851,8 +851,13 @@ export async function assignSectionMarkerDigit(
 export async function setSectionMarkerKind(
   sectionId: string,
   kind: MarkerKind,
+  variant?: number | null,
 ): Promise<TransportSnapshot> {
-  return invokeCommand<TransportSnapshot>("set_section_marker_kind", { sectionId, kind });
+  return invokeCommand<TransportSnapshot>("set_section_marker_kind", {
+    sectionId,
+    kind,
+    variant: variant ?? null,
+  });
 }
 
 export async function createTrack(args: {
@@ -973,6 +978,14 @@ export async function setMetronomeSoundRealtime(
   settings: AppSettings,
 ): Promise<AppSettings> {
   return invokeCommand<AppSettings>("set_metronome_sound_realtime", {
+    settings,
+  });
+}
+
+export async function setVoiceGuideConfigRealtime(
+  settings: AppSettings,
+): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("set_voice_guide_config_realtime", {
     settings,
   });
 }

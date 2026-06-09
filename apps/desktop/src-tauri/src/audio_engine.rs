@@ -1079,6 +1079,41 @@ impl AudioController {
         })
     }
 
+    /// Push the voice-guide config (enabled/volume/lead bars/count-in) to the
+    /// engine live, without reopening the device. Mirrors the metronome path.
+    pub fn set_voice_guide_config_realtime(
+        &self,
+        settings: &AppSettings,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("set_voice_guide_config_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetVoiceGuideConfig {
+                enabled: settings.voice_guide_enabled,
+                volume: settings.voice_guide_volume as f32,
+                route: "monitor".to_string(),
+                lead_bars: settings.voice_guide_lead_bars,
+                count_in_enabled: settings.voice_guide_count_in_enabled,
+            })?;
+            Ok(())
+        })
+    }
+
+    /// Decode and install the voice-guide clip bank for a language. `voices_dir`
+    /// is the bundled resources path (resolved by the command layer from the
+    /// Tauri app handle). Decoding happens on the engine command thread.
+    pub fn load_voice_guide_bank(
+        &self,
+        voices_dir: &str,
+        lang: &str,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("load_voice_guide_bank", None, |engine, _state| {
+            engine.send_command(&EngineCommand::LoadVoiceGuideBank {
+                voices_dir: voices_dir.to_string(),
+                lang: lang.to_string(),
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {
         RealtimeControlDiagnostics {
             live_mix_realtime_command_count: self

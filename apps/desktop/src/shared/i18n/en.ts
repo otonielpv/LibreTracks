@@ -355,6 +355,7 @@ const en = {
       midiMappingsReset: "MIDI mappings reset.",
       audioRoutingUpdated: "Audio routing updated.",
       metronomeSoundUpdated: "Metronome sound updated.",
+      voiceGuideUpdated: "Voice guide updated.",
       timelineNavigationSchemeUpdated: "Timeline navigation scheme updated.",
       trackRoutingUpdated: "Track routing updated.",
       importRequiresSession:

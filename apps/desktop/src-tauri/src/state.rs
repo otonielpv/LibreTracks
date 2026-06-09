@@ -3154,6 +3154,7 @@ impl DesktopSession {
         &mut self,
         section_id: &str,
         kind: MarkerKind,
+        variant: Option<u8>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -3168,8 +3169,11 @@ impl DesktopSession {
             .find(|section| section.id == section_id)
             .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
         marker.kind = kind;
+        marker.variant = variant;
 
-        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        // Section markers ARE read by the engine voice guide (kind+variant pick
+        // the announcement clip), so push them live as well as persisting.
+        audio.update_live_section_markers(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
@@ -10411,12 +10415,12 @@ mod tests {
         let audio = crate::audio_engine::AudioController::default();
 
         session
-            .set_section_marker_kind("section_1", MarkerKind::Chorus, &audio)
+            .set_section_marker_kind("section_1", MarkerKind::Chorus, Some(2), &audio)
             .expect("set kind should succeed");
 
-        // Section markers are Rust-model-only; this must not hit the audio engine.
+        // Changing kind/variant is a live marker update for the voice guide, not
+        // a full session rebuild (which would interrupt playback).
         let diagnostics = audio.realtime_control_diagnostics();
-        assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
         assert_eq!(diagnostics.session_rebuild_count, 0);
 
         let song_view = session
@@ -10424,6 +10428,7 @@ mod tests {
             .expect("song view should build")
             .expect("song view should exist");
         assert_eq!(song_view.section_markers[0].kind, MarkerKind::Chorus);
+        assert_eq!(song_view.section_markers[0].variant, Some(2));
     }
 
     #[test]
@@ -10431,7 +10436,7 @@ mod tests {
         let mut session = session_with_song_dir("section-kind-missing", demo_song_with_section());
         let audio = crate::audio_engine::AudioController::default();
 
-        let result = session.set_section_marker_kind("nope", MarkerKind::Verse, &audio);
+        let result = session.set_section_marker_kind("nope", MarkerKind::Verse, None, &audio);
         assert!(matches!(
             result,
             Err(crate::error::DesktopError::SectionNotFound(_))

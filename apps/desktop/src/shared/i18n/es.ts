@@ -366,6 +366,7 @@ const es = {
       midiMappingsReset: "Mapeos MIDI reseteados.",
       audioRoutingUpdated: "Ruteo de audio actualizado.",
       metronomeSoundUpdated: "Sonido del metrónomo actualizado.",
+      voiceGuideUpdated: "Voz guía actualizada.",
       timelineNavigationSchemeUpdated:
         "Navegación de la línea de tiempo actualizada.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",

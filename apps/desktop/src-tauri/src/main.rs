@@ -121,6 +121,7 @@ fn main() {
             commands::settings::set_metronome_enabled_realtime,
             commands::settings::set_metronome_volume_realtime,
             commands::settings::set_metronome_sound_realtime,
+            commands::settings::set_voice_guide_config_realtime,
             commands::settings::get_decoding_cache_info,
             commands::settings::set_decoding_cache_dir,
             commands::settings::set_decoding_cache_max_gb,

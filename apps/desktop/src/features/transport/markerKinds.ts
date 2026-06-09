@@ -92,3 +92,22 @@ export function markerKindColor(kind: MarkerKind | undefined): string {
 export function markerKindLabel(kind: MarkerKind | undefined): string {
   return MARKER_KIND_LABELS[kind ?? "custom"] ?? MARKER_KIND_LABELS.custom;
 }
+
+/** Highest numbered variant shipped in the bundled voice pack, per kind. The
+ * variant picker offers 1..N for these kinds and nothing for the rest, so the
+ * UI never presents a variant that has no recording (e.g. there is no Verse 8).
+ * Both bundled languages share the same coverage. */
+const MARKER_KIND_MAX_VARIANT: Partial<Record<MarkerKind, number>> = {
+  verse: 6,
+  chorus: 4,
+  bridge: 4,
+  pre_chorus: 4,
+};
+
+/** Available numbered variants for a kind, e.g. [1,2,3,4] for chorus, [] when
+ * the kind has no numbered recordings. */
+export function markerKindVariants(kind: MarkerKind | undefined): number[] {
+  const max = kind ? MARKER_KIND_MAX_VARIANT[kind] : undefined;
+  if (!max) return [];
+  return Array.from({ length: max }, (_, i) => i + 1);
+}

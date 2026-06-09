@@ -434,6 +434,11 @@ export type AppSettings = {
   metronomeSubdivisionPreset: number;
   metronomeSubdivisionPitch: number;
   metronomeSubdivisionGain: number;
+  voiceGuideEnabled: boolean;
+  voiceGuideVolume: number;
+  voiceGuideLeadBars: number;
+  voiceGuideCountInEnabled: boolean;
+  voiceGuideLanguage: string;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars";
@@ -471,6 +476,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   metronomeSubdivisionPreset: 0,
   metronomeSubdivisionPitch: 0,
   metronomeSubdivisionGain: 0.5,
+  voiceGuideEnabled: false,
+  voiceGuideVolume: 1.0,
+  voiceGuideLeadBars: 1,
+  voiceGuideCountInEnabled: true,
+  voiceGuideLanguage: "es",
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -643,6 +653,16 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     metronomeSubdivisionPreset,
     metronomeSubdivisionPitch,
     metronomeSubdivisionGain,
+    voiceGuideEnabled: Boolean(settings.voiceGuideEnabled),
+    voiceGuideVolume: Number.isFinite(settings.voiceGuideVolume)
+      ? Math.min(4, Math.max(0, settings.voiceGuideVolume))
+      : DEFAULT_APP_SETTINGS.voiceGuideVolume,
+    voiceGuideLeadBars: Number.isFinite(settings.voiceGuideLeadBars)
+      ? Math.min(4, Math.max(1, Math.round(settings.voiceGuideLeadBars)))
+      : DEFAULT_APP_SETTINGS.voiceGuideLeadBars,
+    voiceGuideCountInEnabled: settings.voiceGuideCountInEnabled ?? true,
+    voiceGuideLanguage:
+      settings.voiceGuideLanguage ?? DEFAULT_APP_SETTINGS.voiceGuideLanguage,
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,
