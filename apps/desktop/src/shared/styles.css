@@ -1,5 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+/* Self-hosted fonts (Inter, Space Grotesk, Material Symbols). Bundled
+   locally instead of pulling from fonts.googleapis.com at runtime: the
+   remote variable Material Symbols font failed to render on macOS Catalina
+   (Safari 13) and offline, showing icon names as raw text. See fonts.css. */
+@import url("./fonts.css");
 
 @tailwind base;
 @tailwind components;
@@ -46,9 +49,25 @@ textarea {
 }
 
 .material-symbols-outlined {
+  /* font-family must be declared explicitly now that we self-host the
+     font (Google's hosted CSS used to provide it). Without this the
+     glyph names render as plain text. */
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  /* The bundled font is a static instance, so font-variation-settings is
+     a no-op here — kept harmless in case we swap back to a variable build. */
   font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
   font-size: 18px;
   line-height: 1;
+  /* Match Google's icon-font resets so ligatures resolve and long names
+     never wrap or get letter-spacing applied from inherited styles. */
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  display: inline-block;
 }
 
 .lt-daw-shell {
