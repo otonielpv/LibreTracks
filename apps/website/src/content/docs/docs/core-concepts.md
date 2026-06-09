@@ -18,7 +18,7 @@ The reference for how songs behave as containers — boundaries, effective BPM, 
 
 ## Library And Assets
 
-`Library` is the preparation area for show audio. Import one or more audio files, then drag them onto the timeline when you are ready to arrange. You can also keep assets grouped in virtual folders and bring in prepared song packages when building a larger session.
+`Library` is the preparation area for show audio. Import one or more audio files, including FLAC alongside the usual WAV, AIFF, and MP3 sources, then drag them onto the timeline when you are ready to arrange. You can also keep assets grouped in virtual folders and bring in prepared song packages when building a larger session.
 
 ![Import assets into the library](/screenshots/Library-Assets-Import.gif)
 

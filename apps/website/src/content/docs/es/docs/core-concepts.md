@@ -18,7 +18,7 @@ La referencia sobre como se comportan las canciones como contenedores — limite
 
 ## Biblioteca Y Assets
 
-`Biblioteca` es el area de preparacion de audio del show. Importa uno o varios archivos y arrastralos al timeline cuando quieras empezar a organizar. Tambien puedes agrupar assets en carpetas virtuales y traer paquetes de cancion ya preparados al construir una sesion mas grande.
+`Biblioteca` es el area de preparacion de audio del show. Importa uno o varios archivos, incluidos FLAC ademas de fuentes habituales como WAV, AIFF y MP3, y arrastralos al timeline cuando quieras empezar a organizar. Tambien puedes agrupar assets en carpetas virtuales y traer paquetes de cancion ya preparados al construir una sesion mas grande.
 
 ![Importar assets en Biblioteca](/screenshots/Library-Assets-Import.gif)
 

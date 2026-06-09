@@ -17,7 +17,7 @@ The project model is **song-first**: songs (song regions) are the primary contai
 
 ## Core Live Workflow
 
-1. Import audio into `Library`.
+1. Import WAV, AIFF, MP3, FLAC, or other supported audio into `Library`.
 2. Organize assets with virtual folders.
 3. Drag audio files or song packages into the session, then organize assets with the Library and timeline.
 4. Configure the audio device, sample rate, buffer size, hardware outputs, track routes, metronome, and MIDI input.
@@ -33,7 +33,7 @@ Editing is non-destructive. Splitting, moving, duplicating, or arranging clips c
 
 Transport behavior is also explicit. Marker jumps, song jumps, Vamp loops, metronome behavior, and remote commands are resolved through the same application state and Rust-side transport logic instead of temporary UI timers.
 
-Large imported sources are prepared for disk-backed playback. LibreTracks keeps a bounded RAM cache and reads ahead from the project cache on disk, so larger multitrack sessions can load without requiring every decoded source to stay resident in memory. The PCM cache is also reused across sessions when the source file is unchanged, and native-format files can stream in place without going through the cache when possible, so re-opening big projects is much faster.
+Large imported sources are prepared for disk-backed playback. LibreTracks keeps a bounded RAM cache and reads ahead from the project cache on disk, so larger multitrack sessions can load without requiring every decoded source to stay resident in memory. Audio preparation runs in the background, waveforms load lazily, the PCM cache is reused across sessions when the source file is unchanged, and native-format files can stream in place without going through the cache when possible, so re-opening big projects is much faster. You can review and clear the decoding cache from `Settings` when you need to free disk space.
 
 Each song region can independently change tempo and key. Region Warp time-stretches the audio to the timeline BPM while keeping pitch intact, and Region Transpose shifts pitch with or without changing duration depending on whether warp is on. See [Pitch, Warp & The T Button](./pitch-and-warp) for the full decision table.
 
@@ -45,8 +45,8 @@ LibreTracks also notifies you in-app when a new version is published, with the c
 
 ## Main Areas
 
-- `Settings`: audio device, sample rate, buffer size, hardware outputs, metronome, and MIDI Learn.
-- `Library`: imported audio assets and virtual folders. Collapsed-folder state persists across sessions.
+- `Settings`: audio device, sample rate, buffer size, hardware outputs, metronome, MIDI Learn, and decoding cache management.
+- `Library`: imported audio assets, including FLAC files, and virtual folders. Collapsed-folder state persists across sessions.
 - `Timeline (DAW view)`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, and color-coded organization.
 - `Compact View`: Session-style projection of the same model — one column per song with its own master fader, a shared horizontal mixer at the bottom, drag-and-drop assets / `.ltpkg` packages, and multi-select track reordering. See [Compact View](./compact-view).
 - `Remote`: local web control surface for transport, jumps, Vamp, transpose, and a mixer with meters and grouped track color cues.

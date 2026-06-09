@@ -17,7 +17,7 @@ El modelo del proyecto es **song-first**: las canciones (regiones de cancion) so
 
 ## Flujo Principal
 
-1. Importa audio en `Biblioteca`.
+1. Importa WAV, AIFF, MP3, FLAC u otros formatos soportados en `Biblioteca`.
 2. Organiza assets con carpetas virtuales.
 3. Arrastra archivos de audio o paquetes de cancion a la sesion y organiza los assets entre Biblioteca y timeline.
 4. Configura dispositivo de audio, frecuencia de muestreo, tamaño de buffer, salidas hardware, rutas por pista, metronomo y entrada MIDI.
@@ -33,7 +33,7 @@ La edicion es no destructiva. Cortar, mover, duplicar u organizar clips cambia r
 
 El transporte tambien es explicito. Saltos de marca, saltos de cancion, bucles Vamp, metronomo y comandos remotos se resuelven sobre el mismo estado de aplicacion y logica Rust de transporte, no con timers temporales de UI.
 
-Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. LibreTracks mantiene una cache limitada en RAM y lee por adelantado desde la cache del proyecto en disco, asi las sesiones multitrack mas grandes pueden cargar sin mantener cada fuente decodificada completa en memoria. La cache PCM tambien se reutiliza entre sesiones cuando el archivo no ha cambiado, y los archivos en formato nativo pueden transmitirse en sitio sin pasar por la cache cuando es posible, asi reabrir proyectos grandes es mucho mas rapido.
+Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. LibreTracks mantiene una cache limitada en RAM y lee por adelantado desde la cache del proyecto en disco, asi las sesiones multitrack mas grandes pueden cargar sin mantener cada fuente decodificada completa en memoria. La preparacion de audio ocurre en segundo plano, las formas de onda se cargan de forma diferida, la cache PCM se reutiliza entre sesiones cuando el archivo no ha cambiado, y los archivos en formato nativo pueden transmitirse en sitio sin pasar por la cache cuando es posible, asi reabrir proyectos grandes es mucho mas rapido. Puedes revisar y limpiar la cache de decodificacion desde `Configuracion` cuando necesites liberar espacio.
 
 Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Consulta [Pitch, warp y el boton T](./pitch-and-warp) para la tabla de decision completa.
 
@@ -45,8 +45,8 @@ LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, m
 
 ## Areas Principales
 
-- `Configuracion`: dispositivo de audio, frecuencia de muestreo, tamano de buffer, salidas hardware, metronomo y MIDI Learn.
-- `Biblioteca`: assets importados y carpetas virtuales. El estado expandido/colapsado de las carpetas se conserva entre sesiones.
+- `Configuracion`: dispositivo de audio, frecuencia de muestreo, tamano de buffer, salidas hardware, metronomo, MIDI Learn y gestion de cache de decodificacion.
+- `Biblioteca`: assets importados, incluidos archivos FLAC, y carpetas virtuales. El estado expandido/colapsado de las carpetas se conserva entre sesiones.
 - `Timeline (vista DAW)`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla y organizacion por color.
 - `Vista Compacta`: proyeccion estilo Session del mismo modelo — una columna por cancion con su propio fader Master, mixer horizontal compartido abajo, drag-and-drop de audio y paquetes `.ltpkg`, y reordenacion de pistas con multi-seleccion. Ver [Vista Compacta](./compact-view).
 - `Remote`: superficie web local para transporte, saltos, Vamp, transposicion y un mixer con medidores y pistas agrupadas visualmente.

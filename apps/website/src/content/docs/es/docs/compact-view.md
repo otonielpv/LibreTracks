@@ -57,7 +57,7 @@ Click derecho en el header abre un menu con:
 
 - `Renombrar cancion`
 - `Cambiar BPM…` — inserta o reemplaza el tempo marker en el inicio de la region. No toca el BPM global del proyecto.
-- `Exportar cancion` — guarda un paquete `.ltpkg` exactamente igual que el menu equivalente de la vista DAW.
+- `Exportar cancion` — guarda un paquete `.ltpkg`, con la misma opcion de incluir u omitir los archivos de audio que el menu equivalente de la vista DAW.
 - `Eliminar cancion` — destructivo. Borra la region, sus clips, los tempo markers en su rango, y purga las pistas auto-creadas que se queden sin clips.
 
 #### Crear o importar canciones

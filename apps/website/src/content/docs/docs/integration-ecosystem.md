@@ -13,6 +13,8 @@ After creating a song region, export it when you want to reuse the configuration
 
 ![Export a song](/screenshots/Export-Song.png)
 
+The export dialog lets you choose whether to include the audio files in the `.ltpkg`. Include audio when you need a self-contained package for another machine. Leave audio out when you only want to share the song structure, clips, routing, markers, and region settings while keeping the package lightweight.
+
 ## Import Songs And Packages
 
 Use `Import song` from the top `File` section when you want to bring another LibreTracks song or session package into the current session. This is useful for building a full show from prepared songs without recreating tracks, clips, routing, markers, and song-region setup by hand.

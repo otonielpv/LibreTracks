@@ -57,7 +57,7 @@ Right-click the header opens a menu with:
 
 - `Rename song`
 - `Change BPM…` — inserts or replaces the tempo marker at the start of the region. It does **not** touch the project's global BPM.
-- `Export song` — saves a `.ltpkg` package, identical to the equivalent right-click in the DAW view.
+- `Export song` — saves a `.ltpkg` package, with the same option to include or omit audio files as the equivalent right-click in the DAW view.
 - `Delete song` — destructive. Removes the region, its clips, tempo markers in its range, and prunes auto-created tracks that go empty.
 
 #### Creating or importing songs

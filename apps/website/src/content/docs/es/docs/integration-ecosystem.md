@@ -13,6 +13,8 @@ Despues de crear una region de cancion, exportala cuando quieras reutilizar la c
 
 ![Exportar una cancion](/screenshots/Export-Song.png)
 
+El dialogo de exportacion te permite elegir si incluir los archivos de audio dentro del `.ltpkg`. Incluye el audio cuando necesites un paquete autocontenido para otro equipo. Dejalos fuera cuando solo quieras compartir estructura de cancion, clips, routing, marcas y ajustes de region manteniendo el paquete ligero.
+
 ## Importar Canciones Y Paquetes
 
 Usa `Import song` desde la seccion superior `Archivo` cuando quieras traer otra cancion o paquete de sesion de LibreTracks a la sesion actual. Es util para construir un show completo desde canciones preparadas sin rehacer pistas, clips, routing, marcas y configuracion de regiones a mano.
