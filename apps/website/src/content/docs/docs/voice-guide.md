@@ -25,11 +25,9 @@ The bundled voice pack ships in Spanish and English. Markers with no recording f
 
 For the voice guide to announce a marker, the marker needs a **section type**. Right‑click a marker on the timeline and choose `Section type…`, then pick the section (Intro, Verse, Pre‑Chorus, Chorus, Bridge, Breakdown, Solo, Outro, and more). The marker is coloured by its type on the timeline.
 
-![Marker section type menu](/screenshots/Marker-Section-Type.png)
-
 Sections that have numbered recordings — **Verse**, **Chorus**, **Bridge**, **Pre‑Chorus** — open a second menu where you can choose the plain section or a numbered variant (Verse 1–6, Chorus 1–4, …). Only the variants that actually exist in the voice pack are offered, so you never see a "Verse 8" with no audio.
 
-![Marker variant menu](/screenshots/Marker-Section-Variant.png)
+![Marker variant menu](/screenshots/Marker-Section-Variant.gif)
 
 ## How The Cue Is Placed
 
@@ -49,8 +47,6 @@ The voice guide also covers **scheduled marker jumps**. When you arm a jump to a
 If a jump leaves very little lead time (for example, a jump only one bar away), the **count always plays** so you still get the rhythmic entry; the spoken name is added only when it fits in the remaining space.
 
 See [Live Control Flow](./live-control-flow) for how to arm marker jumps and set their trigger mode.
-
-![Voice guide announcing a scheduled jump](/screenshots/Voice-Guide-Jump.png)
 
 ## Tips
 

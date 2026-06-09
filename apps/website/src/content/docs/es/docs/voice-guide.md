@@ -25,13 +25,11 @@ El banco de voces incluido viene en espanol e ingles. Las marcas sin grabacion p
 
 Para que la voz guia anuncie una marca, esta necesita un **tipo de seccion**. Haz clic derecho en una marca del timeline y elige `Tipo de seccion…`, luego selecciona la seccion (Intro, Verso, Pre Coro, Coro, Puente, Breakdown, Solo, Outro y mas). La marca se colorea segun su tipo en el timeline.
 
-![Menu de tipo de seccion](/screenshots/Marker-Section-Type.png)
-
 Las secciones con grabaciones numeradas —**Verso**, **Coro**, **Puente**, **Pre Coro**— abren un segundo menu donde puedes elegir la seccion simple o una variante numerada (Verso 1–6, Coro 1–4, …). Solo se ofrecen las variantes que existen en el banco de voces, asi que nunca veras un "Verso 8" sin audio.
 
-![Menu de variante de seccion](/screenshots/Marker-Section-Variant.png)
+![Menu de variante de seccion](/screenshots/Marker-Section-Variant.gif)
 
-## Como Se Ubica La Senal
+## Como Se Ubica La Señal
 
 El compas previo a la marca lleva un **conteo completo** ("1, 2, 3, 4" en 4/4). El **nombre de la seccion se ubica para terminar justo en el downbeat** de ese conteo, de modo que el nombre acaba justo antes del "1" y nunca se pisa con el conteo —sin importar cuanto dure el nombre. Un nombre corto empieza mas tarde; uno largo ("Verso dos") empieza antes.
 
@@ -49,8 +47,6 @@ La voz guia tambien cubre los **saltos de marca programados**. Cuando armas un s
 Si un salto deja muy poco tiempo de aviso (por ejemplo, un salto a solo un compas), el **conteo siempre suena** para que tengas la entrada ritmica; el nombre hablado se anade solo cuando cabe en el espacio restante.
 
 Consulta [Control en vivo](./live-control-flow) para armar saltos de marca y configurar su modo de disparo.
-
-![Voz guia anunciando un salto programado](/screenshots/Voice-Guide-Jump.png)
 
 ## Consejos
 

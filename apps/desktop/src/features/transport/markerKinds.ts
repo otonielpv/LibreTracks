@@ -57,8 +57,9 @@ const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
   custom: "#bacac5",
 };
 
-/** Human-readable label for a kind. The terms are near-universal music-production
- * proper nouns, so they are not translated (matching how DAWs label sections). */
+/** English fallback labels, used when no translation function is supplied (or a
+ * key is missing). The localized labels live under `transport.markerKind.<kind>`
+ * in the i18n bundles. */
 const MARKER_KIND_LABELS: Record<MarkerKind, string> = {
   intro: "Intro",
   verse: "Verse",
@@ -89,8 +90,16 @@ export function markerKindColor(kind: MarkerKind | undefined): string {
   return MARKER_KIND_COLORS[kind ?? "custom"] ?? MARKER_KIND_COLORS.custom;
 }
 
-export function markerKindLabel(kind: MarkerKind | undefined): string {
-  return MARKER_KIND_LABELS[kind ?? "custom"] ?? MARKER_KIND_LABELS.custom;
+/** Localized label for a kind. Pass the i18n `t` to translate; without it (or on
+ * a missing key) the English fallback is returned. */
+export function markerKindLabel(
+  kind: MarkerKind | undefined,
+  t?: (key: string, options?: { defaultValue?: string }) => string,
+): string {
+  const resolved = kind ?? "custom";
+  const fallback = MARKER_KIND_LABELS[resolved] ?? MARKER_KIND_LABELS.custom;
+  if (!t) return fallback;
+  return t(`transport.markerKind.${resolved}`, { defaultValue: fallback });
 }
 
 /** Highest numbered variant shipped in the bundled voice pack, per kind. The

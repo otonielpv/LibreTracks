@@ -5815,7 +5815,7 @@ export function TransportPanelContent() {
     void runAction(async () => {
       const nextSnapshot = await setSectionMarkerKind(section.id, kind, variant);
       applyPlaybackSnapshot(nextSnapshot);
-      const kindLabel = markerKindLabel(kind);
+      const kindLabel = markerKindLabel(kind, t);
       setStatus(
         t("transport.status.markerKindSet", {
           name: section.name,
@@ -5840,15 +5840,15 @@ export function TransportPanelContent() {
     setContextMenu({
       x: next.x,
       y: next.y,
-      title: markerKindLabel(kind),
+      title: markerKindLabel(kind, t),
       actions: [
         {
-          label: `${markerKindLabel(kind)}${current == null ? " ✓" : ""}`,
+          label: `${markerKindLabel(kind, t)}${current == null ? " ✓" : ""}`,
           swatch: markerKindColor(kind),
           onSelect: () => applyMarkerKind(section, kind, null),
         },
         ...variants.map((n) => ({
-          label: `${markerKindLabel(kind)} ${n}${current === n ? " ✓" : ""}`,
+          label: `${markerKindLabel(kind, t)} ${n}${current === n ? " ✓" : ""}`,
           swatch: markerKindColor(kind),
           onSelect: () => applyMarkerKind(section, kind, n),
         })),
@@ -5866,7 +5866,7 @@ export function TransportPanelContent() {
       actions: MARKER_KINDS.map((kind) => {
         const hasVariants = markerKindVariants(kind).length > 0;
         return {
-          label: `${markerKindLabel(kind)}${hasVariants ? " ▸" : ""}${
+          label: `${markerKindLabel(kind, t)}${hasVariants ? " ▸" : ""}${
             kind === currentKind ? " ✓" : ""
           }`,
           swatch: markerKindColor(kind),
