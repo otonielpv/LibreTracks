@@ -21,7 +21,7 @@ El modelo del proyecto es **song-first**: las canciones (regiones de cancion) so
 2. Organiza assets con carpetas virtuales.
 3. Arrastra archivos de audio o paquetes de cancion a la sesion y organiza los assets entre Biblioteca y timeline.
 4. Configura dispositivo de audio, frecuencia de muestreo, tamaño de buffer, salidas hardware, rutas por pista, metronomo y entrada MIDI.
-5. Crea regiones de cancion, marcas, cambios de compas si hace falta y cambios de transposicion por region.
+5. Crea regiones de cancion, marcas, cambios de compas si hace falta y cambios de transposicion por region. Dale un tipo de seccion a las marcas para activar la [Voz Guia](./voice-guide).
 6. Ensaya saltos de marca, Vamp, saltos de cancion, transiciones, atajos, mapeos MIDI, estados de transposicion por pista y remote movil.
 7. Exporta canciones o paquetes preparados cuando quieras reutilizarlos en futuras sesiones.
 

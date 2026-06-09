@@ -15,6 +15,8 @@ Es comportamiento nativo del transporte, asi que la misma logica esta disponible
 
 ![Modos de salto de marca](/screenshots/Marker-Jump-Modes.png)
 
+Con la [Voz Guia](./voice-guide) activada, un salto armado a una marca con tipo se anuncia y se cuenta antes de ejecutarse, para que la banda oiga la seccion destino y entre junta en el downbeat.
+
 ## Vamp
 
 `Vamp` mantiene la reproduccion en un bucle musical mientras la banda, la accion de escenario o una intervencion necesita mas tiempo. `Vamp Mode` puede repetir la `Section` actual o un numero fijo de `Bars`. Pulsa `Vamp` de nuevo para salir.

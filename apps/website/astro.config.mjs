@@ -43,6 +43,7 @@ export default defineConfig({
           items: [
             { label: "Audio Routing & Metronome", translations: { es: "Routing y metrónomo" }, slug: "docs/audio-routing-metronome" },
             { label: "Live Control Flow", translations: { es: "Control en vivo" }, slug: "docs/live-control-flow" },
+            { label: "Voice Guide", translations: { es: "Voz guía" }, slug: "docs/voice-guide" },
             { label: "Integration & Ecosystem", translations: { es: "Integración y ecosistema" }, slug: "docs/integration-ecosystem" },
           ],
         },
