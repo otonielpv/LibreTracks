@@ -11,6 +11,9 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Compiles the macOS High Sierra cookie-symbol shim (see build.rs). cc only
+# does work when the target OS is macOS; on other targets it is unused.
+cc = "1"
 
 [dependencies]
 base64 = "0.22"
