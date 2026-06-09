@@ -357,7 +357,8 @@ void VoiceGuideRenderer::render(float** output_channels,
                                 int num_frames,
                                 double sample_rate,
                                 Frame timeline_frame,
-                                const Session* session) noexcept {
+                                const Session* session,
+                                const VoiceGuideTarget& jump_target) noexcept {
     if (num_channels <= 0 || num_frames <= 0 || sample_rate <= 0.0) return;
 
     // A discontinuity (seek/jump) invalidates in-flight voices and fire history.
@@ -423,27 +424,48 @@ void VoiceGuideRenderer::render(float** output_channels,
             const double beat_frames = quarter_note_frames * (4.0 / static_cast<double>(beat_unit));
 
             if (std::isfinite(beat_frames) && beat_frames >= 1.0) {
-                const Marker* marker = upcoming_marker(song, abs_frame);
-                if (marker) {
-                    next_marker_frame_.store(marker->frame, std::memory_order_release);
-                    copy_text(next_marker_kind_, kind_token(marker->kind));
+                // The announce target is the scheduled-jump destination when one
+                // is pending (announce where you're jumping TO, before it fires),
+                // otherwise the next marker ahead of the playhead. The jump
+                // target lands at its trigger frame, which may be behind us in
+                // linear time (you can jump backwards) — that's fine, we key off
+                // the trigger frame, not the playhead's position.
+                Frame target_frame = -1;
+                MarkerKind target_kind = MarkerKind::Custom;
+                int target_variant = 0;
+                if (jump_target.active && jump_target.at_frame > abs_frame) {
+                    target_frame = jump_target.at_frame;
+                    target_kind = jump_target.kind;
+                    target_variant = jump_target.variant;
+                } else if (const Marker* marker = upcoming_marker(song, abs_frame)) {
+                    target_frame = marker->frame;
+                    target_kind = marker->kind;
+                    target_variant = marker->variant;
+                }
+
+                if (target_frame > abs_frame) {
+                    next_marker_frame_.store(target_frame, std::memory_order_release);
+                    copy_text(next_marker_kind_, kind_token(target_kind));
 
                     // Layout (no overlap — Playback-style):
                     //   count bar  = the `lead_bars` bars immediately before the
-                    //               marker; full count "1,2,3,..,N" per bar.
+                    //               target downbeat; full count "1,2,3,..,N".
                     //   section    = spoken name placed to END right at the start
-                    //               of the count bar, in the bar before it.
-                    const Frame count_bar_start = marker->frame
+                    //               of the count bar.
+                    const Frame count_bar_start = target_frame
                         - static_cast<Frame>(std::llround(beats_per_bar * lead_bars * beat_frames));
 
                     // Section announcement: fire so its (trimmed) length ends at
-                    // count_bar_start. Computed once and matched by abs_frame.
+                    // count_bar_start. Best-effort — only if it still fits ahead
+                    // of the current block (short jumps may leave no room for the
+                    // name; the count below always plays).
                     const VoiceGuideClip* section =
-                        bank->section_for(marker->kind, marker->variant);
+                        bank->section_for(target_kind, target_variant);
                     if (section) {
                         const Frame section_start =
                             count_bar_start - static_cast<Frame>(section->samples.size());
                         if (section_start == abs_frame
+                            && section_start >= timeline_frame
                             && section_start != last_section_frame_) {
                             trigger_clip(section, 0.9f, sample_rate);
                             last_section_frame_ = section_start;
@@ -451,7 +473,8 @@ void VoiceGuideRenderer::render(float** output_channels,
                         }
                     }
 
-                    // Count: every beat of the lead bar(s), spoken "1..N".
+                    // Count: every beat of the lead bar(s), spoken "1..N". Always
+                    // plays (rhythmic entry), even when the name didn't fit.
                     if (count_in) {
                         const int lead_beats = beats_per_bar * lead_bars;
                         for (int b = 0; b < lead_beats; ++b) {

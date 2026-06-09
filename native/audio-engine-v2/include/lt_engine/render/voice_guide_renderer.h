@@ -83,14 +83,27 @@ struct VoiceGuideDiagnostics {
     bool        bank_loaded = false;
 };
 
+// A target the voice guide should announce at a specific timeline frame,
+// independent of the playhead's linear position. Used for scheduled jumps: the
+// section the player is jumping TO is announced/counted before the jump fires
+// at `at_frame`. The mixer fills this from the JumpScheduler each block.
+struct VoiceGuideTarget {
+    bool       active = false;     // false = no scheduled-jump announcement
+    Frame      at_frame = 0;       // frame at which the section "lands" (jump fires)
+    MarkerKind kind = MarkerKind::Custom;
+    int        variant = 0;
+};
+
 // ---------------------------------------------------------------------------
 // VoiceGuideRenderer — Playback-style spoken section cue + beat count-in.
 //
-// Synchronised to the same tempo/time-signature grid the metronome uses. For
-// the marker that the playhead is approaching, it speaks the section name on
-// beat 1 of the lead bar and counts "two, three, ..." on the remaining beats,
-// so the section lands exactly on the downbeat. Realtime-safe: render() takes no
-// locks and allocates nothing; the clip bank is swapped via shared_ptr.
+// Synchronised to the same tempo/time-signature grid the metronome uses. The
+// lead bar(s) before a target carry a full spoken count "1..N"; the section
+// name is placed to END right at the downbeat so it never overlaps the count.
+// The target is normally the next marker ahead of the playhead, but a scheduled
+// jump overrides it (announce the jump destination before the jump fires).
+// Realtime-safe: render() takes no locks and allocates nothing; the clip bank
+// is swapped via shared_ptr.
 // ---------------------------------------------------------------------------
 class VoiceGuideRenderer {
 public:
@@ -108,7 +121,8 @@ public:
                 int num_frames,
                 double sample_rate,
                 Frame timeline_frame,
-                const Session* session) noexcept;
+                const Session* session,
+                const VoiceGuideTarget& jump_target = {}) noexcept;
 
     VoiceGuideDiagnostics diagnostics() const;
 

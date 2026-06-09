@@ -74,6 +74,10 @@ public:
     void set_voice_guide_enabled(bool enabled);
     void set_voice_guide_clip_bank(std::shared_ptr<const VoiceGuideClipBank> bank) noexcept;
     VoiceGuideDiagnostics voice_guide_diagnostics() const;
+    // Build the voice-guide announce target from the next pending scheduled jump
+    // (so the destination section is spoken before the jump fires). Empty target
+    // when no announceable jump is pending.
+    VoiceGuideTarget announceable_jump_target(const Session* session) const noexcept;
 
     // Meter read (from UI thread — relaxed atomic).
     MeterValues meters() const noexcept;

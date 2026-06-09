@@ -74,7 +74,8 @@ int onsets(const std::vector<float>& s, float threshold = 0.02f) {
 // Render the whole [0, total_frames) range in fixed blocks into 4 channels
 // (so the monitor bus, channels 2-3, exists). Returns the 4 channel buffers.
 std::array<std::vector<float>, 4> render_all(VoiceGuideRenderer& r, const Session& session,
-                                             Frame total_frames, int block = 1024) {
+                                             Frame total_frames, int block = 1024,
+                                             VoiceGuideTarget jump = {}) {
     std::array<std::vector<float>, 4> ch;
     for (auto& c : ch) c.assign(static_cast<std::size_t>(total_frames), 0.0f);
     for (Frame start = 0; start < total_frames; start += block) {
@@ -83,9 +84,24 @@ std::array<std::vector<float>, 4> render_all(VoiceGuideRenderer& r, const Sessio
             ch[0].data() + start, ch[1].data() + start,
             ch[2].data() + start, ch[3].data() + start,
         };
-        r.render(out, 4, frames, static_cast<double>(kSampleRate), start, &session);
+        r.render(out, 4, frames, static_cast<double>(kSampleRate), start, &session, jump);
     }
     return ch;
+}
+
+// A bare song [0, 16s) with no markers (the jump target lives in the jump arg).
+Session make_song_no_markers(double bpm = 120.0, int beats_per_bar = 4, int beat_unit = 4) {
+    Session session;
+    session.sample_rate = kSampleRate;
+    Song song;
+    song.id = "song";
+    song.start_frame = 0;
+    song.end_frame = static_cast<Frame>(kSampleRate) * 16;
+    song.bpm = bpm;
+    song.beats_per_bar = beats_per_bar;
+    song.beat_unit = beat_unit;
+    session.songs.push_back(song);
+    return session;
 }
 
 } // namespace
@@ -287,4 +303,64 @@ TEST_CASE("choke prevents overlapping voices from summing") {
     // 20 ms fades across a handful of beats vs ~1 s of audible voice → well
     // under 10% overlap. Without choke this would be the majority of the buffer.
     CHECK(overlap_fraction < 0.1);
+}
+
+// ── Scheduled-jump announcements ─────────────────────────────────────────────
+
+TEST_CASE("a scheduled jump announces its destination before the trigger frame") {
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // No markers in the song; the jump destination is supplied separately. The
+    // jump fires at 4s and lands on a Chorus, so the count bar [2s,4s) names
+    // "Chorus" + counts 1-4, and the jump executes on the downbeat.
+    auto session = make_song_no_markers();
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 4;
+    jump.kind = MarkerKind::Chorus;
+    auto ch = render_all(r, session, kSampleRate * 6, 1024, jump);
+    auto diag = r.diagnostics();
+    CHECK(diag.announcements_fired == 1);
+    CHECK(diag.counts_fired == 4);
+}
+
+TEST_CASE("a short jump still counts even when the name does not fit") {
+    // Section clip is long (1.5 s); the jump is only ~1 bar (2 s at 120 BPM 4/4)
+    // ahead, but the count bar needs the whole [trigger-2s, trigger). The name
+    // would need to start at trigger-2s-1.5s = before frame 0 → it does NOT fit,
+    // so it is skipped, but the count still plays in full.
+    auto bank = make_marked_bank();
+    bank->sections[static_cast<std::size_t>(MarkerKind::Verse)]
+        .base.samples.assign(static_cast<int>(kSampleRate * 1.5), 0.5f);
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    auto session = make_song_no_markers();
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 2; // count bar is [0s, 2s)
+    jump.kind = MarkerKind::Verse;
+    auto ch = render_all(r, session, kSampleRate * 4, 1024, jump);
+    auto diag = r.diagnostics();
+    CHECK(diag.counts_fired == 4);       // count always plays
+    CHECK(diag.announcements_fired == 0); // name didn't fit, skipped
+}
+
+TEST_CASE("a jump to a Custom destination plays only the count") {
+    auto bank = make_marked_bank();
+    // Custom has no recording in a real bank.
+    bank->sections[static_cast<std::size_t>(MarkerKind::Custom)].base.samples.clear();
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    auto session = make_song_no_markers();
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 4;
+    jump.kind = MarkerKind::Custom; // no recording
+    auto ch = render_all(r, session, kSampleRate * 6, 1024, jump);
+    auto diag = r.diagnostics();
+    CHECK(diag.announcements_fired == 0);
+    CHECK(diag.counts_fired == 4);
 }

@@ -514,7 +514,8 @@ void Mixer::render_timeline_span(float** output_channels,
     metronome_.render(metronome_channels, num_channels, num_frames,
                       clock_->sample_rate(), timeline_frame, session.get());
     voice_guide_.render(metronome_channels, num_channels, num_frames,
-                        clock_->sample_rate(), timeline_frame, session.get());
+                        clock_->sample_rate(), timeline_frame, session.get(),
+                        announceable_jump_target(session.get()));
 
     const bool was_pending_start = clock_->pending_start();
     if (was_pending_start)
@@ -781,7 +782,8 @@ void Mixer::render(float** output_channels,
         metronome_.render(output_channels, num_channels, num_frames,
                           clock_->sample_rate(), timeline_frame, session.get());
         voice_guide_.render(output_channels, num_channels, num_frames,
-                            clock_->sample_rate(), timeline_frame, session.get());
+                            clock_->sample_rate(), timeline_frame, session.get(),
+                            announceable_jump_target(session.get()));
 
         const bool was_pending_start = clock_->pending_start();
         if (was_pending_start)
@@ -1082,6 +1084,21 @@ void Mixer::set_voice_guide_clip_bank(std::shared_ptr<const VoiceGuideClipBank> 
 
 VoiceGuideDiagnostics Mixer::voice_guide_diagnostics() const {
     return voice_guide_.diagnostics();
+}
+
+VoiceGuideTarget Mixer::announceable_jump_target(const Session* session) const noexcept {
+    VoiceGuideTarget target;
+    if (!session || !scheduler_) return target;
+    auto jump = scheduler_->peek_announceable_jump(*session, *clock_);
+    if (jump && jump->has_marker_target) {
+        target.active = true;
+        // The count lands at the jump's TRIGGER frame (the moment of the jump,
+        // in the current playback position) while naming the DESTINATION section.
+        target.at_frame = jump->trigger_frame;
+        target.kind = jump->target_kind;
+        target.variant = jump->target_variant;
+    }
+    return target;
 }
 
 MeterValues Mixer::meters() const noexcept {
