@@ -154,6 +154,7 @@ export type PlayheadDragState = {
 export type SettingsTab =
   | "audio"
   | "metronome"
+  | "voiceGuide"
   | "midi"
   | "general"
   | "midiLearn"

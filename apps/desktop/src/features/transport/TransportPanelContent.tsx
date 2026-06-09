@@ -8792,6 +8792,12 @@ export function TransportPanelContent() {
       }),
     },
     {
+      id: "voiceGuide",
+      label: t("transport.settingsModal.tabVoiceGuide", {
+        defaultValue: "Voice guide",
+      }),
+    },
+    {
       id: "general",
       label: t("transport.settingsModal.tabGeneral", {
         defaultValue: "General",

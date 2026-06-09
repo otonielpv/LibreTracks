@@ -123,6 +123,16 @@ const es = {
       metronomeVolume: "Volumen del metronomo",
       metronomeVolumeValue: "{{value}}%",
       metronomeOutput: "Salida del metronomo",
+      tabVoiceGuide: "Voz guía",
+      voiceGuide: "Voz guía",
+      voiceGuideDescription:
+        "Anuncia la sección que viene y cuenta la entrada antes de cada marca.",
+      voiceGuideLanguage: "Idioma",
+      voiceGuideLeadBars: "Compases de aviso",
+      voiceGuideCountIn: "Conteo",
+      voiceGuideCountInDescription:
+        "Cuenta los beats restantes tras el nombre de la sección.",
+      voiceGuideVolume: "Volumen de la voz",
       metronomeAccentSound: "Sonido del acento",
       metronomeBeatSound: "Sonido del pulso",
       metronomeAccentPitch: "Tono del acento",

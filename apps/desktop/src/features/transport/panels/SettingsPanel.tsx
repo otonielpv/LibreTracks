@@ -868,9 +868,18 @@ export function SettingsPanel({
                         </label>
                       </>
                     ) : null}
+                  </div>
+                </section>
+              ) : null}
 
-                    <div className="lt-settings-subsection-divider" />
-
+              {activeTab === "voiceGuide" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-voiceGuide"
+                  aria-labelledby="lt-settings-tab-voiceGuide"
+                >
+                  <div className="lt-settings-section-grid">
                     <label className="lt-settings-toggle">
                       <input
                         type="checkbox"
