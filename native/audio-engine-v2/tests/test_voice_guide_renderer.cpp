@@ -112,19 +112,19 @@ TEST_CASE("voice guide routes to the monitor bus, not master") {
     CHECK(peak(ch[1]) == doctest::Approx(0.0f));
 }
 
-TEST_CASE("voice guide fires section + count clips in a 4/4 lead bar") {
+TEST_CASE("voice guide fires section announcement + full count in a 4/4 lead bar") {
     VoiceGuideRenderer r;
     r.set_clip_bank(make_marked_bank());
     r.set_config({true, 1.0f, "monitor", 1, true});
-    // Marker at 4s, 120 BPM, 4/4: lead bar is [2s, 4s). Expect 4 onsets:
-    // section on beat 1 (2.0s) + counts on beats 2,3,4 (2.5,3.0,3.5s).
+    // Marker at 4s, 120 BPM, 4/4: count bar is [2s, 4s) with a full count
+    // "1,2,3,4" on beats 2.0,2.5,3.0,3.5s. The section name is placed to END at
+    // 2.0s (the "1"), so it fires just before it — never overlapping the count.
     auto session = make_session(MarkerKind::Chorus, 4.0);
     auto ch = render_all(r, session, kSampleRate * 6);
-    CHECK(onsets(ch[2]) == 4);
 
     auto diag = r.diagnostics();
     CHECK(diag.announcements_fired == 1);
-    CHECK(diag.counts_fired == 3);
+    CHECK(diag.counts_fired == 4); // full count includes beat 1
 }
 
 TEST_CASE("diagnostics report the upcoming marker kind while it is still ahead") {
@@ -151,11 +151,10 @@ TEST_CASE("count adapts to a 3/4 time signature") {
     VoiceGuideRenderer r;
     r.set_clip_bank(make_marked_bank());
     r.set_config({true, 1.0f, "monitor", 1, true});
-    // 3/4: lead bar has 3 beats -> section + 2 counts = 3 onsets.
+    // 3/4: count bar has 3 beats -> full count "1,2,3" = 3 counts.
     auto session = make_session(MarkerKind::Bridge, 4.0, 120.0, 3, 4);
     auto ch = render_all(r, session, kSampleRate * 6);
-    CHECK(onsets(ch[2]) == 3);
-    CHECK(r.diagnostics().counts_fired == 2);
+    CHECK(r.diagnostics().counts_fired == 3);
 }
 
 TEST_CASE("a Custom marker has no recording and stays silent") {
@@ -177,20 +176,18 @@ TEST_CASE("no clip bank means silence even when enabled") {
     CHECK(r.diagnostics().bank_loaded == false);
 }
 
-TEST_CASE("two lead bars announce one bar earlier") {
+TEST_CASE("two lead bars count both bars fully") {
     VoiceGuideRenderer r;
     r.set_clip_bank(make_marked_bank());
     r.set_config({true, 1.0f, "monitor", 2, true}); // lead_bars = 2
-    // Marker at 4s, 120 BPM 4/4. Two lead bars = [0s, 4s): 8 beats ->
-    // section on beat 1 + counts on the other 7 beats-in-bar (2,3,4 twice... )
-    // Section fires once; counts fire on every non-downbeat-1 beat = 6.
-    auto session = make_session(MarkerKind::Drop, 4.0);
-    auto ch = render_all(r, session, kSampleRate * 6);
+    // Marker at 6s, 120 BPM 4/4. Two lead bars = [2s, 6s): 8 beats counted
+    // "1,2,3,4,1,2,3,4". Section ends at 2s (the first count), so it fires once
+    // just before. (Marker at 6s leaves room for the section before 2s.)
+    auto session = make_session(MarkerKind::Drop, 6.0);
+    auto ch = render_all(r, session, kSampleRate * 7);
     auto diag = r.diagnostics();
     CHECK(diag.announcements_fired == 1);
-    // 8 lead beats, beat indices b=0..7; section at b=0, counts where
-    // (b % 4)+1 >= 2 -> b in {1,2,3,5,6,7} = 6 counts.
-    CHECK(diag.counts_fired == 6);
+    CHECK(diag.counts_fired == 8); // full count across both lead bars
 }
 
 // Find the amplitude of the section onset (beat 1 of the lead bar). The marked
@@ -224,6 +221,34 @@ TEST_CASE("a numbered variant falls back to the base clip when absent") {
     auto ch = render_all(r, session, kSampleRate * 6);
     // Falls back to base amplitude 0.50.
     CHECK(section_onset_amplitude(ch[2]) == doctest::Approx(0.50f * 0.9f).epsilon(0.05));
+}
+
+TEST_CASE("section announcement ends right before the count bar, no overlap") {
+    // Long section clip (0.4 s) + a marked bank. At 120 BPM 4/4, marker at 4s,
+    // the count bar starts at 2s. The section must be placed to end at ~2s, so
+    // its audio sits entirely BEFORE the first count and they never overlap.
+    auto bank = make_marked_bank();
+    const int section_len = static_cast<int>(kSampleRate * 0.4); // 0.4 s
+    bank->sections[static_cast<std::size_t>(MarkerKind::Chorus)]
+        .base.samples.assign(section_len, 0.5f);
+
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    auto session = make_session(MarkerKind::Chorus, 4.0);
+    auto ch = render_all(r, session, kSampleRate * 6);
+
+    // The section is amplitude 0.5; the counts are 0.10*n (n>=1 -> 0.1..). Find
+    // the last sample of the loud (>=0.4) section audio; it must land before the
+    // count bar start (2 s).
+    int last_section = -1;
+    const int count_bar_start = static_cast<int>(kSampleRate * 2.0);
+    for (int i = 0; i < static_cast<int>(ch[2].size()); ++i)
+        if (std::abs(ch[2][static_cast<std::size_t>(i)]) > 0.4f) last_section = i;
+    REQUIRE(last_section >= 0);
+    // Section audio ends at or just before the count bar start (allow the choke
+    // fade + a few ms of slack).
+    CHECK(last_section <= count_bar_start + static_cast<int>(kSampleRate * 0.03));
 }
 
 TEST_CASE("choke prevents overlapping voices from summing") {

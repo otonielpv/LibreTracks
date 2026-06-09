@@ -428,27 +428,38 @@ void VoiceGuideRenderer::render(float** output_channels,
                     next_marker_frame_.store(marker->frame, std::memory_order_release);
                     copy_text(next_marker_kind_, kind_token(marker->kind));
 
-                    // Beat 1 of the lead window: marker_frame - beats_per_bar*lead_bars.
-                    // We fire the section clip there, then a count clip on each
-                    // subsequent beat up to (but excluding) the marker downbeat.
-                    const int lead_beats = beats_per_bar * lead_bars;
-                    for (int b = 0; b < lead_beats; ++b) {
-                        const Frame beat_frame = marker->frame
-                            - static_cast<Frame>(std::llround((lead_beats - b) * beat_frames));
-                        if (beat_frame != abs_frame) continue;
-                        if (b == 0) {
-                            if (beat_frame != last_section_frame_) {
-                                trigger_clip(bank->section_for(marker->kind, marker->variant),
-                                             0.9f, sample_rate);
-                                last_section_frame_ = beat_frame;
-                                announcements_fired_.fetch_add(1, std::memory_order_relaxed);
-                            }
-                        } else if (count_in) {
-                            // Beat number within the bar the marker lands in is
-                            // (b % beats_per_bar) + 1; beat 1 is the section, so
-                            // counts run 2..beats_per_bar.
+                    // Layout (no overlap — Playback-style):
+                    //   count bar  = the `lead_bars` bars immediately before the
+                    //               marker; full count "1,2,3,..,N" per bar.
+                    //   section    = spoken name placed to END right at the start
+                    //               of the count bar, in the bar before it.
+                    const Frame count_bar_start = marker->frame
+                        - static_cast<Frame>(std::llround(beats_per_bar * lead_bars * beat_frames));
+
+                    // Section announcement: fire so its (trimmed) length ends at
+                    // count_bar_start. Computed once and matched by abs_frame.
+                    const VoiceGuideClip* section =
+                        bank->section_for(marker->kind, marker->variant);
+                    if (section) {
+                        const Frame section_start =
+                            count_bar_start - static_cast<Frame>(section->samples.size());
+                        if (section_start == abs_frame
+                            && section_start != last_section_frame_) {
+                            trigger_clip(section, 0.9f, sample_rate);
+                            last_section_frame_ = section_start;
+                            announcements_fired_.fetch_add(1, std::memory_order_relaxed);
+                        }
+                    }
+
+                    // Count: every beat of the lead bar(s), spoken "1..N".
+                    if (count_in) {
+                        const int lead_beats = beats_per_bar * lead_bars;
+                        for (int b = 0; b < lead_beats; ++b) {
+                            const Frame beat_frame = count_bar_start
+                                + static_cast<Frame>(std::llround(b * beat_frames));
+                            if (beat_frame != abs_frame) continue;
                             const int beat_number = (b % beats_per_bar) + 1;
-                            if (beat_number >= 2 && beat_frame != last_count_frame_) {
+                            if (beat_frame != last_count_frame_) {
                                 trigger_clip(bank->count_for(beat_number), 0.9f, sample_rate);
                                 last_count_frame_ = beat_frame;
                                 counts_fired_.fetch_add(1, std::memory_order_relaxed);
