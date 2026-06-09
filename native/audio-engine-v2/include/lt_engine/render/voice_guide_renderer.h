@@ -1,0 +1,142 @@
+#pragma once
+
+#include <lt_engine/core/types.h>
+#include <lt_engine/session/session.h>
+
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace lt {
+
+// ---------------------------------------------------------------------------
+// Voice-guide clip bank — decoded, in-memory mono audio for the spoken section
+// announcements and the beat count-in. Built off the audio thread (see the
+// loader); the renderer only ever reads it through a shared_ptr swap, so it is
+// realtime-safe to consult from render().
+//
+// Layout mirrors the asset tree voices/<lang>/{sections,counts}:
+//   sections[kind]  -> "Intro", "Verse", "Chorus", ...  (one per MarkerKind)
+//   counts[n]       -> spoken number n ("two", "three", ...). Index by beat
+//                      number; index 0 and 1 are unused (beat 1 is the section).
+// A clip is "absent" when its samples vector is empty; the renderer then simply
+// plays nothing for that slot (e.g. a Custom marker with no recording).
+// ---------------------------------------------------------------------------
+struct VoiceGuideClip {
+    std::vector<float> samples;   // mono, at the bank's sample_rate
+};
+
+struct VoiceGuideClipBank {
+    static constexpr int kKindCount = 11;   // MarkerKind values incl. Custom
+    static constexpr int kMaxCount  = 17;   // supports up to 16-beat bars + slack
+
+    double sample_rate = 0.0;               // sample rate the clips were decoded at
+    std::array<VoiceGuideClip, kKindCount> sections{};
+    std::array<VoiceGuideClip, kMaxCount>  counts{};
+
+    const VoiceGuideClip* section_for(MarkerKind kind) const noexcept;
+    const VoiceGuideClip* count_for(int beat_number) const noexcept;
+};
+
+struct VoiceGuideConfig {
+    bool  enabled = false;
+    float volume = 1.0f;
+    std::string output_route = "monitor";  // defaults to the monitor bus
+    int   lead_bars = 1;                    // bars of announcement before a marker
+    bool  count_in_enabled = true;          // false = section name only, no count
+};
+
+struct VoiceGuideDiagnostics {
+    bool        enabled = false;
+    float       volume = 0.f;
+    std::string route_resolved = "monitor";
+    int         lead_bars = 1;
+    Frame       next_marker_frame = -1;
+    std::string next_marker_kind;           // token, "" when none upcoming
+    uint64_t    announcements_fired = 0;    // section clips started
+    uint64_t    counts_fired = 0;           // count clips started
+    std::string muted_reason;
+    float       current_gain = 0.f;
+    bool        bank_loaded = false;
+};
+
+// ---------------------------------------------------------------------------
+// VoiceGuideRenderer — Playback-style spoken section cue + beat count-in.
+//
+// Synchronised to the same tempo/time-signature grid the metronome uses. For
+// the marker that the playhead is approaching, it speaks the section name on
+// beat 1 of the lead bar and counts "two, three, ..." on the remaining beats,
+// so the section lands exactly on the downbeat. Realtime-safe: render() takes no
+// locks and allocates nothing; the clip bank is swapped via shared_ptr.
+// ---------------------------------------------------------------------------
+class VoiceGuideRenderer {
+public:
+    void set_config(const VoiceGuideConfig& config);
+    void set_enabled(bool enabled);
+    void set_volume(float volume);
+    VoiceGuideConfig config() const;
+
+    // Swap in a freshly-loaded clip bank (or nullptr to clear). Cheap; the old
+    // bank is released once no render() is mid-read.
+    void set_clip_bank(std::shared_ptr<const VoiceGuideClipBank> bank) noexcept;
+
+    void render(float** output_channels,
+                int num_channels,
+                int num_frames,
+                double sample_rate,
+                Frame timeline_frame,
+                const Session* session) noexcept;
+
+    VoiceGuideDiagnostics diagnostics() const;
+
+private:
+    enum class RouteMode : int { Master = 0, Monitor = 1, Ext = 2 };
+
+    // One playing clip. The pool lets a count clip overlap a section clip's tail.
+    struct Voice {
+        const float* samples = nullptr; // points into a clip bank vector (bank outlives the voice)
+        int total = 0;
+        int index = 0;                  // next sample to read; index >= total == done
+        float gain = 0.0f;
+        bool active() const noexcept { return samples != nullptr && index < total; }
+    };
+    static constexpr int kVoiceCount = 4;
+
+    Voice* free_voice() noexcept;
+    void trigger_clip(const VoiceGuideClip* clip, float gain) noexcept;
+    void reset_voices() noexcept;
+
+    // Resolve the first marker at or after `frame` that has a non-Custom kind
+    // (Custom has no recording). Returns nullptr if none.
+    static const Marker* upcoming_marker(const Song* song, Frame frame) noexcept;
+
+    std::atomic<bool> enabled_{false};
+    std::atomic<float> volume_{1.0f};
+    std::atomic<int> lead_bars_{1};
+    std::atomic<bool> count_in_enabled_{true};
+    std::atomic<int> route_mode_{static_cast<int>(RouteMode::Monitor)};
+    std::array<char, 64> output_route_{};
+
+    std::shared_ptr<const VoiceGuideClipBank> bank_;
+    std::atomic<bool> bank_present_{false};
+
+    Frame last_render_end_ = -1;
+    // The beat frame at which we last started the section clip and each count,
+    // so a clip fires exactly once even across block boundaries.
+    Frame last_section_frame_ = -1;
+    Frame last_count_frame_ = -1;
+    std::array<Voice, kVoiceCount> voices_{};
+    float current_output_gain_ = 0.0f;
+
+    std::atomic<Frame> next_marker_frame_{-1};
+    std::array<char, 32> next_marker_kind_{};
+    std::atomic<uint64_t> announcements_fired_{0};
+    std::atomic<uint64_t> counts_fired_{0};
+    std::array<char, 64> muted_reason_{};
+    std::array<char, 64> route_resolved_{};
+};
+
+} // namespace lt
