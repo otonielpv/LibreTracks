@@ -3,8 +3,9 @@ pub mod validation;
 pub mod warp;
 
 pub use model::{
-    default_audio_to, parse_audio_output_route, Clip, Marker, Project, Song, SongMaster,
-    SongRegion, TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker, Track, TrackKind,
+    default_audio_to, parse_audio_output_route, Clip, Marker, MarkerKind, Project, Song,
+    SongMaster, SongRegion, TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker, Track,
+    TrackKind,
 };
 pub use validation::{
     validate_song, DomainError, MAX_TRANSPOSE_SEMITONES, MAX_WARP_SOURCE_BPM,
@@ -19,7 +20,7 @@ pub use warp::{
 #[cfg(test)]
 mod tests {
     use crate::{
-        validate_song, Clip, Marker, Song, SongMaster, SongRegion, Track, TrackKind,
+        validate_song, Clip, Marker, MarkerKind, Song, SongMaster, SongRegion, Track, TrackKind,
         MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
     };
 
@@ -91,6 +92,7 @@ mod tests {
                 name: "Intro".into(),
                 start_seconds: 0.0,
                 digit: Some(1),
+                kind: MarkerKind::Custom,
             }],
         }
     }
@@ -357,6 +359,7 @@ mod tests {
             name: "Verse".into(),
             start_seconds: 32.0,
             digit: Some(1),
+            kind: MarkerKind::Custom,
         });
 
         let error = validate_song(&song).expect_err("song should be invalid");
@@ -371,6 +374,7 @@ mod tests {
             name: "Outro".into(),
             start_seconds: 360.0,
             digit: Some(2),
+            kind: MarkerKind::Custom,
         });
 
         assert!(validate_song(&song).is_ok());
@@ -385,12 +389,14 @@ mod tests {
                 name: "Verse".into(),
                 start_seconds: 16.0,
                 digit: Some(2),
+                kind: MarkerKind::Custom,
             },
             Marker {
                 id: "section_outro".into(),
                 name: "Outro".into(),
                 start_seconds: 48.0,
                 digit: Some(3),
+                kind: MarkerKind::Custom,
             },
         ];
 
@@ -412,12 +418,14 @@ mod tests {
                 name: "Verse".into(),
                 start_seconds: 4.0,
                 digit: Some(2),
+                kind: MarkerKind::Custom,
             },
             Marker {
                 id: "section_outro".into(),
                 name: "Outro".into(),
                 start_seconds: 12.0,
                 digit: Some(3),
+                kind: MarkerKind::Custom,
             },
         ];
 
@@ -437,6 +445,7 @@ mod tests {
             name: "Verse".into(),
             start_seconds: 32.0,
             digit: Some(2),
+            kind: MarkerKind::Custom,
         });
 
         assert_eq!(song.next_marker_name(), "Marker 2");

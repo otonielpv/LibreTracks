@@ -14,8 +14,9 @@ use libretracks_audio::{
 };
 use libretracks_core::{
     audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio_in_song,
-    source_seconds_at_view, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, TempoMarker,
-    TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    source_seconds_at_view, warp_timeline_seconds_at, Clip, Marker, MarkerKind, Song, SongRegion,
+    TempoMarker, TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES,
+    MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
     append_wav_files_to_song, global_waveform_file_path,
@@ -2260,6 +2261,8 @@ impl DesktopSession {
             name: marker_name,
             start_seconds,
             digit: None,
+            // New markers start untyped; the user picks a kind in the editor.
+            kind: MarkerKind::Custom,
         });
         song.section_markers.sort_by(|left, right| {
             left.start_seconds
@@ -7386,8 +7389,8 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
     use libretracks_core::{
-        source_seconds_at_view, validate_song, warp_timeline_seconds_at, Clip, Marker, Song,
-        SongRegion, TempoMarker, Track, TrackKind,
+        source_seconds_at_view, validate_song, warp_timeline_seconds_at, Clip, Marker, MarkerKind,
+        Song, SongRegion, TempoMarker, Track, TrackKind,
     };
     use libretracks_project::{
         create_song_folder, export_region_as_package, generate_waveform_summary, load_song,
@@ -7463,6 +7466,7 @@ mod tests {
             name: "Intro".into(),
             start_seconds: 1.0,
             digit: Some(1),
+            kind: MarkerKind::Custom,
         });
         song
     }
@@ -7538,6 +7542,7 @@ mod tests {
             name: "Verse".into(),
             start_seconds: 4.0,
             digit: Some(2),
+            kind: MarkerKind::Custom,
         });
         song
     }
@@ -7549,6 +7554,7 @@ mod tests {
             name: "Bridge".into(),
             start_seconds: 8.0,
             digit: Some(3),
+            kind: MarkerKind::Custom,
         });
         song
     }
@@ -7600,12 +7606,14 @@ mod tests {
                 name: "Intro".into(),
                 start_seconds: 1.0,
                 digit: Some(1),
+                kind: MarkerKind::Custom,
             },
             Marker {
                 id: "section_2".into(),
                 name: "Outro".into(),
                 start_seconds: 15.0,
                 digit: Some(2),
+                kind: MarkerKind::Custom,
             },
         ];
         song
@@ -7897,6 +7905,7 @@ mod tests {
             name: "Target".into(),
             start_seconds: 18.0,
             digit: Some(1),
+            kind: MarkerKind::Custom,
         });
         let expected_execute_seconds = warp_timeline_seconds_at(&song, 18.0);
         let mut session = DesktopSession::default();
@@ -9384,6 +9393,7 @@ mod tests {
             name: "Far".into(),
             start_seconds: 6.0,
             digit: None,
+            kind: MarkerKind::Custom,
         });
         save_song(&song_dir, &song).expect("song should save");
 

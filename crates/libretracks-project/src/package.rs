@@ -623,7 +623,7 @@ fn unique_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libretracks_core::{validate_song, SongMaster, TrackKind};
+    use libretracks_core::{validate_song, MarkerKind, SongMaster, TrackKind};
     use tempfile::tempdir;
 
     fn track(id: &str, name: &str) -> Track {
@@ -690,6 +690,7 @@ mod tests {
                 name: "Drop".into(),
                 start_seconds: 5.0,
                 digit: None,
+                kind: MarkerKind::Custom,
             }],
         }
     }

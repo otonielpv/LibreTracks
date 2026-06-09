@@ -31,7 +31,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use hound::{SampleFormat, WavSpec, WavWriter};
-    use libretracks_core::{Clip, Marker, Song, SongRegion, Track, TrackKind};
+    use libretracks_core::{Clip, Marker, MarkerKind, Song, SongRegion, Track, TrackKind};
     use tempfile::tempdir;
 
     use crate::{
@@ -93,6 +93,7 @@ mod tests {
                 name: "Intro".into(),
                 start_seconds: 0.0,
                 digit: Some(1),
+                kind: MarkerKind::Custom,
             }],
         }
     }

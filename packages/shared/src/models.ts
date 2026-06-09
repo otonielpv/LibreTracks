@@ -12,11 +12,31 @@ export type JumpTriggerLabel =
   | `after_bars:${number}`;
 export type TransitionTypeLabel = "instant" | `fade_out:${number}`;
 
+/** Semantic section type. Mirrors Rust `MarkerKind` (snake_case serde). Drives
+ * the pre-recorded voice-guide clip and the marker's colour/icon. `custom` is
+ * the default for user-defined sections and for markers from sessions saved
+ * before the voice-guide feature. */
+export type MarkerKind =
+  | "intro"
+  | "verse"
+  | "pre_chorus"
+  | "chorus"
+  | "post_chorus"
+  | "bridge"
+  | "breakdown"
+  | "drop"
+  | "solo"
+  | "outro"
+  | "custom";
+
 export type SectionMarkerSummary = {
   id: string;
   name: string;
   startSeconds: number;
   digit?: number | null;
+  /** Optional for backward compat with snapshots that predate the field;
+   * treat a missing value as "custom". */
+  kind?: MarkerKind;
 };
 
 export type SongMasterSummary = {
