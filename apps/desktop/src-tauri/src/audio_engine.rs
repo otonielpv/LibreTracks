@@ -1089,7 +1089,7 @@ impl AudioController {
             engine.send_command(&EngineCommand::SetVoiceGuideConfig {
                 enabled: settings.voice_guide_enabled,
                 volume: settings.voice_guide_volume as f32,
-                route: "monitor".to_string(),
+                route: settings.voice_guide_output.clone(),
                 lead_bars: settings.voice_guide_lead_bars,
                 count_in_enabled: settings.voice_guide_count_in_enabled,
             })?;
@@ -1350,7 +1350,7 @@ impl AudioController {
             engine.send_command(&EngineCommand::SetVoiceGuideConfig {
                 enabled: settings.voice_guide_enabled,
                 volume: settings.voice_guide_volume as f32,
-                route: "monitor".to_string(),
+                route: settings.voice_guide_output.clone(),
                 lead_bars: settings.voice_guide_lead_bars,
                 count_in_enabled: settings.voice_guide_count_in_enabled,
             })?;

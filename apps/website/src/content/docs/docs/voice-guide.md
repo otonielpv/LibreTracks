@@ -5,7 +5,7 @@ description: Spoken section announcements and beat count-in before markers and s
 
 The **Voice Guide** speaks the upcoming section and counts you in before each marker, the way the Playback iPad app cues a band. As the playhead approaches a typed marker — or when a scheduled jump is about to fire — a voice announces the section ("Chorus", "Verse 2", "Bridge") and counts the beats of the lead bar ("1, 2, 3, 4") so the band lands together on the downbeat.
 
-It is a **monitoring** cue: like the metronome, the voice plays on the monitor bus, not through the song's audio chain. On a stereo interface it falls back to the main output so you still hear it.
+It is a **monitoring** cue: like the metronome, the voice does not pass through the song's audio chain. Choose its own output in settings: the legacy monitor bus, the main output, or a specific hardware channel.
 
 ![Voice guide settings](/screenshots/Voice-Guide-Settings.png)
 
@@ -15,6 +15,7 @@ Open `Settings` and select the `Voice guide` tab:
 
 - **Voice guide** — master on/off.
 - **Language** — `Español` or `English`. Switching reloads the matching voice bank.
+- **Voice guide output** — where the spoken cue is routed. This can be different from the metronome output.
 - **Lead-in bars** — how many bars before the marker the count is spoken (default `1`).
 - **Count-in** — when on, the remaining beats are counted after the section name. Turn it off to hear only the section name.
 - **Voice volume** — level of the spoken cue relative to the music.
@@ -50,6 +51,6 @@ See [Live Control Flow](./live-control-flow) for how to arm marker jumps and set
 
 ## Tips
 
-- Pair the voice guide with the [metronome](./audio-routing-metronome) on the same monitor bus so the band hears both the count and the click.
+- Pair the voice guide with the [metronome](./audio-routing-metronome) on the same monitor bus, or split them to separate hardware outputs when your monitor mix needs independent control.
 - Set lead-in to `2` bars at fast tempos if `1` bar feels rushed.
 - Leave markers you don't want announced as *Custom* — they still work for navigation and jumps, just without a spoken name.

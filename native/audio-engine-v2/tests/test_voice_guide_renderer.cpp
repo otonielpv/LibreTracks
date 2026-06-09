@@ -128,6 +128,18 @@ TEST_CASE("voice guide routes to the monitor bus, not master") {
     CHECK(peak(ch[1]) == doctest::Approx(0.0f));
 }
 
+TEST_CASE("voice guide can route to a specific external mono output") {
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "ext:1", 1, true});
+    auto session = make_session(MarkerKind::Chorus, 4.0);
+    auto ch = render_all(r, session, kSampleRate * 6);
+    CHECK(peak(ch[1]) > 0.05f);
+    CHECK(peak(ch[0]) == doctest::Approx(0.0f));
+    CHECK(peak(ch[2]) == doctest::Approx(0.0f));
+    CHECK(peak(ch[3]) == doctest::Approx(0.0f));
+}
+
 TEST_CASE("voice guide fires section announcement + full count in a 4/4 lead bar") {
     VoiceGuideRenderer r;
     r.set_clip_bank(make_marked_bank());

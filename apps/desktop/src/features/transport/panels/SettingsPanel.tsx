@@ -174,6 +174,13 @@ export function SettingsPanel({
   onMidiLearnTarget,
 }: SettingsPanelProps) {
   const { t } = useTranslation();
+  const voiceGuideRoutingOptions = [
+    {
+      value: "monitor",
+      label: t("trackHeader.monitor", { defaultValue: "Monitor" }),
+    },
+    ...audioRoutingOptions.filter((option) => option.value !== "monitor"),
+  ];
 
   if (!isOpen) {
     return null;
@@ -925,6 +932,29 @@ export function SettingsPanel({
                           >
                             <option value="es">Español</option>
                             <option value="en">English</option>
+                          </select>
+                        </label>
+
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.voiceGuideOutput", {
+                              defaultValue: "Voice guide output",
+                            })}
+                          </span>
+                          <select
+                            value={appSettings.voiceGuideOutput}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onVoiceGuideChange({
+                                voiceGuideOutput: event.target.value,
+                              })
+                            }
+                          >
+                            {voiceGuideRoutingOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
                           </select>
                         </label>
 

@@ -159,6 +159,8 @@ private:
     std::atomic<int> lead_bars_{1};
     std::atomic<bool> count_in_enabled_{true};
     std::atomic<int> route_mode_{static_cast<int>(RouteMode::Monitor)};
+    std::atomic<int> route_start_{2};
+    std::atomic<int> route_end_{3};
     std::array<char, 64> output_route_{};
 
     std::shared_ptr<const VoiceGuideClipBank> bank_;

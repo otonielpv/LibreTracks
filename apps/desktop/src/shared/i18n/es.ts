@@ -123,6 +123,7 @@ const es = {
       metronomeVolume: "Volumen del metronomo",
       metronomeVolumeValue: "{{value}}%",
       metronomeOutput: "Salida del metronomo",
+      voiceGuideOutput: "Salida de la voz guia",
       tabVoiceGuide: "Voz guía",
       voiceGuide: "Voz guía",
       voiceGuideDescription:
@@ -572,6 +573,7 @@ const es = {
     transposeDisableAria: "Desactivar la transposicion de tono en {{name}}",
     inherited: "Heredado (Folder)",
     master: "Master",
+    monitor: "Monitor",
     extOutMono: "Ext. Out {{channel}}",
     extOutStereo: "Ext. Out {{left}}/{{right}}",
   },

@@ -410,6 +410,7 @@ function buildInitialState(): DesktopApiMockState {
       metronomeSubdivisionPitch: 0,
       metronomeSubdivisionGain: 0.5,
       voiceGuideEnabled: false,
+      voiceGuideOutput: "monitor",
       voiceGuideVolume: 1.0,
       voiceGuideLeadBars: 1,
       voiceGuideCountInEnabled: true,

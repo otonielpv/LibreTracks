@@ -57,6 +57,10 @@ fn default_audio_route() -> String {
     "master".into()
 }
 
+fn default_voice_guide_route() -> String {
+    "monitor".into()
+}
+
 fn default_global_jump_mode() -> String {
     "immediate".into()
 }
@@ -152,6 +156,8 @@ pub struct AppSettings {
     pub metronome_subdivision_gain: f32,
     #[serde(default)]
     pub voice_guide_enabled: bool,
+    #[serde(default = "default_voice_guide_route")]
+    pub voice_guide_output: String,
     #[serde(default = "default_voice_guide_volume")]
     pub voice_guide_volume: f64,
     #[serde(default = "default_voice_guide_lead_bars")]
@@ -218,6 +224,7 @@ impl Default for AppSettings {
             metronome_subdivision_pitch: default_metronome_pitch(),
             metronome_subdivision_gain: default_metronome_subdivision_gain(),
             voice_guide_enabled: false,
+            voice_guide_output: default_voice_guide_route(),
             voice_guide_volume: default_voice_guide_volume(),
             voice_guide_lead_bars: default_voice_guide_lead_bars(),
             voice_guide_count_in_enabled: default_voice_guide_count_in_enabled(),
@@ -351,6 +358,7 @@ mod tests {
         assert!(!settings.metronome_enabled);
         assert_eq!(settings.metronome_volume, 0.8);
         assert_eq!(settings.metronome_output, "master");
+        assert_eq!(settings.voice_guide_output, "monitor");
         assert_eq!(settings.enabled_output_channels, vec![0, 1]);
         assert_eq!(settings.global_jump_mode, "immediate");
         assert_eq!(settings.global_jump_bars, 4);

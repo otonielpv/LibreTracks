@@ -5,7 +5,7 @@ description: Anuncios de seccion hablados y conteo de entrada antes de las marca
 
 La **Voz Guia** anuncia la seccion que viene y te da la entrada antes de cada marca, igual que la app Playback de iPad guia a una banda. Cuando el cursor se acerca a una marca con tipo —o cuando un salto programado esta a punto de ejecutarse— una voz dice la seccion ("Coro", "Verso 2", "Puente") y cuenta los beats del compas previo ("1, 2, 3, 4") para que la banda entre junta en el downbeat.
 
-Es una senal de **monitoreo**: como el metronomo, la voz suena por el bus de monitor, no por la cadena de audio de la cancion. En una interfaz estereo cae a la salida principal para que la sigas oyendo.
+Es una senal de **monitoreo**: como el metronomo, la voz no pasa por la cadena de audio de la cancion. Elige su propia salida en configuracion: el bus de monitor legacy, la salida principal o un canal de hardware concreto.
 
 ![Configuracion de la voz guia](/screenshots/Voice-Guide-Settings.png)
 
@@ -15,6 +15,7 @@ Abre `Configuracion` y entra a la pestana `Voz guia`:
 
 - **Voz guia** — encendido/apagado general.
 - **Idioma** — `Español` o `English`. Al cambiarlo se recarga el banco de voces correspondiente.
+- **Salida de la voz guia** — a donde se enruta la senal hablada. Puede ser distinta de la salida del metronomo.
 - **Compases de aviso** — cuantos compases antes de la marca se cuenta (por defecto `1`).
 - **Conteo** — cuando esta activo, se cuentan los beats restantes tras el nombre de la seccion. Apagalo para oir solo el nombre.
 - **Volumen de la voz** — nivel de la senal hablada respecto a la musica.
@@ -50,6 +51,6 @@ Consulta [Control en vivo](./live-control-flow) para armar saltos de marca y con
 
 ## Consejos
 
-- Combina la voz guia con el [metronomo](./audio-routing-metronome) en el mismo bus de monitor para que la banda oiga el conteo y el click.
+- Combina la voz guia con el [metronomo](./audio-routing-metronome) en el mismo bus de monitor, o separalos en salidas de hardware distintas cuando necesites control independiente en la mezcla de monitoreo.
 - Pon 2 compases de aviso en tempos rapidos si 1 compas se siente justo.
 - Deja en *Custom* las marcas que no quieras anunciar — siguen sirviendo para navegacion y saltos, solo que sin nombre hablado.

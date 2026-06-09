@@ -435,6 +435,7 @@ export type AppSettings = {
   metronomeSubdivisionPitch: number;
   metronomeSubdivisionGain: number;
   voiceGuideEnabled: boolean;
+  voiceGuideOutput: string;
   voiceGuideVolume: number;
   voiceGuideLeadBars: number;
   voiceGuideCountInEnabled: boolean;
@@ -477,6 +478,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   metronomeSubdivisionPitch: 0,
   metronomeSubdivisionGain: 0.5,
   voiceGuideEnabled: false,
+  voiceGuideOutput: "monitor",
   voiceGuideVolume: 1.0,
   voiceGuideLeadBars: 1,
   voiceGuideCountInEnabled: true,
@@ -590,6 +592,9 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const metronomeOutput =
     settings.metronomeOutput?.trim().toLowerCase() ||
     DEFAULT_APP_SETTINGS.metronomeOutput;
+  const voiceGuideOutput =
+    settings.voiceGuideOutput?.trim().toLowerCase() ||
+    DEFAULT_APP_SETTINGS.voiceGuideOutput;
   const globalJumpMode =
     settings.globalJumpMode === "after_bars" ||
     settings.globalJumpMode === "next_marker"
@@ -654,6 +659,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     metronomeSubdivisionPitch,
     metronomeSubdivisionGain,
     voiceGuideEnabled: Boolean(settings.voiceGuideEnabled),
+    voiceGuideOutput,
     voiceGuideVolume: Number.isFinite(settings.voiceGuideVolume)
       ? Math.min(4, Math.max(0, settings.voiceGuideVolume))
       : DEFAULT_APP_SETTINGS.voiceGuideVolume,

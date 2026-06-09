@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -260,8 +261,31 @@ void VoiceGuideRenderer::set_config(const VoiceGuideConfig& config) {
     copy_text(output_route_, route);
     if (route == "master") {
         route_mode_.store(static_cast<int>(RouteMode::Master), std::memory_order_release);
+        route_start_.store(0, std::memory_order_release);
+        route_end_.store(1, std::memory_order_release);
+    } else if (route.rfind("ext:", 0) == 0) {
+        route_mode_.store(static_cast<int>(RouteMode::Ext), std::memory_order_release);
+        std::string spec = route.substr(4);
+        auto dash = spec.find('-');
+        int start = 0;
+        int end = 0;
+        try {
+            if (dash == std::string::npos) {
+                start = end = std::max(0, std::stoi(spec));
+            } else {
+                start = std::max(0, std::stoi(spec.substr(0, dash)));
+                end = std::max(start, std::stoi(spec.substr(dash + 1)));
+            }
+        } catch (...) {
+            start = 2;
+            end = 3;
+        }
+        route_start_.store(start, std::memory_order_release);
+        route_end_.store(end, std::memory_order_release);
     } else {
         route_mode_.store(static_cast<int>(RouteMode::Monitor), std::memory_order_release);
+        route_start_.store(2, std::memory_order_release);
+        route_end_.store(3, std::memory_order_release);
     }
 }
 
@@ -388,7 +412,8 @@ void VoiceGuideRenderer::render(float** output_channels,
         if (current_output_gain_ <= 0.000001f) return;
     }
 
-    // Resolve the monitor output pair (channels 2-3 when available, else 0-1).
+    // Resolve the configured output route. The legacy monitor bus uses
+    // channels 2-3 when available, else falls back to the main pair.
     int left = 0;
     int right = std::min(1, num_channels - 1);
     const int mode = route_mode_.load(std::memory_order_acquire);
@@ -400,6 +425,10 @@ void VoiceGuideRenderer::render(float** output_channels,
         } else {
             copy_text(route_resolved_, "monitor_fallback_master");
         }
+    } else if (mode == static_cast<int>(RouteMode::Ext)) {
+        left = std::clamp(route_start_.load(std::memory_order_acquire), 0, num_channels - 1);
+        right = std::clamp(route_end_.load(std::memory_order_acquire), 0, num_channels - 1);
+        copy_text(route_resolved_, "ext");
     } else {
         copy_text(route_resolved_, "master");
     }

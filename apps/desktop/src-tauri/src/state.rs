@@ -1429,6 +1429,14 @@ impl DesktopSession {
                 - next_settings.metronome_subdivision_gain)
                 .abs()
                 > f32::EPSILON;
+        let voice_guide_config_changed = previous_settings.voice_guide_enabled
+            != next_settings.voice_guide_enabled
+            || previous_settings.voice_guide_output != next_settings.voice_guide_output
+            || (previous_settings.voice_guide_volume - next_settings.voice_guide_volume).abs()
+                > f64::EPSILON
+            || previous_settings.voice_guide_lead_bars != next_settings.voice_guide_lead_bars
+            || previous_settings.voice_guide_count_in_enabled
+                != next_settings.voice_guide_count_in_enabled;
 
         if !device_changed
             && !midi_changed
@@ -1437,6 +1445,7 @@ impl DesktopSession {
             && !metronome_volume_changed
             && !metronome_output_changed
             && !metronome_sound_changed
+            && !voice_guide_config_changed
         {
             return Ok(next_settings);
         }
