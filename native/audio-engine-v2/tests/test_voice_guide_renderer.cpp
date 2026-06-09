@@ -364,3 +364,19 @@ TEST_CASE("a jump to a Custom destination plays only the count") {
     CHECK(diag.announcements_fired == 0);
     CHECK(diag.counts_fired == 4);
 }
+
+TEST_CASE("a scheduled jump's count adapts to the time signature") {
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // 3/4 song: the count bar before the jump has 3 beats, so the jump is
+    // counted "1,2,3" — same adaptation as the linear path, proving both routes
+    // share signature_at().
+    auto session = make_song_no_markers(120.0, 3, 4);
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 4;
+    jump.kind = MarkerKind::Chorus;
+    auto ch = render_all(r, session, kSampleRate * 6, 1024, jump);
+    CHECK(r.diagnostics().counts_fired == 3);
+}
