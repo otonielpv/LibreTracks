@@ -7247,6 +7247,44 @@ export function TransportPanelContent() {
     };
   }
 
+  // Detects a drop over the left track-headers column (the "track info"
+  // sidebar). Dropping there is a shortcut for "place at the very start of
+  // the timeline": over an existing header row it targets that track, and
+  // over the empty area below the last row it leaves targetTrackId null so a
+  // fresh track is auto-created. Either way the caller pins dropSeconds to 0.
+  function resolveTrackHeadersDropFromClientPoint(
+    clientX: number,
+    clientY: number,
+  ): { targetTrackId: string | null } | null {
+    if (typeof document.elementFromPoint !== "function") {
+      return null;
+    }
+
+    const target = document.elementFromPoint(clientX, clientY);
+    if (!(target instanceof HTMLElement)) {
+      return null;
+    }
+
+    const pane = target.closest(".lt-track-headers-pane");
+    if (!(pane instanceof HTMLElement)) {
+      return null;
+    }
+
+    // The ruler header ("Tracks") isn't a drop target — ignore it so a drop
+    // there doesn't silently create a track at the top.
+    if (target.closest(".lt-ruler-header")) {
+      return null;
+    }
+
+    const headerRow = target.closest(".lt-track-header-row[data-track-id]");
+    const targetTrackId =
+      headerRow instanceof HTMLElement
+        ? headerRow.getAttribute("data-track-id")
+        : null;
+
+    return { targetTrackId: targetTrackId ?? null };
+  }
+
   function resolveLibraryAutoScrollVelocity(distancePx: number) {
     if (distancePx >= LIBRARY_DRAG_EDGE_BUFFER_PX) {
       return 0;
@@ -7424,6 +7462,41 @@ export function TransportPanelContent() {
         hover: {
           kind: "library-folder" as const,
           folderPath: libraryFolderTarget.folderPath,
+        },
+      };
+    }
+
+    const headersTarget = resolveTrackHeadersDropFromClientPoint(
+      args.clientX,
+      args.clientY,
+    );
+    if (headersTarget) {
+      const layout = resolveLibraryDropLayout(
+        args.drag.payload,
+        headersTarget.targetTrackId,
+        args.ctrlKey,
+        args.metaKey,
+      );
+      // Show the placement preview pinned at the timeline start instead of
+      // following the cursor (the cursor is over the headers column, not a
+      // lane, so there's no x→seconds mapping to honour here).
+      setLibraryClipPreview(
+        buildLibraryClipPreview({
+          payload: args.drag.payload,
+          targetTrackId: headersTarget.targetTrackId,
+          timelineStartSeconds: 0,
+          layout,
+        }),
+      );
+      libraryDragHoverRef.current = null;
+      stopLibraryDragAutoScroll();
+      return {
+        ...args.drag,
+        hover: {
+          kind: "timeline" as const,
+          dropSeconds: 0,
+          targetTrackId: headersTarget.targetTrackId,
+          layout,
         },
       };
     }
