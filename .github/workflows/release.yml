@@ -85,26 +85,11 @@ jobs:
         include:
           - os: windows-latest
             platform: windows
-            publish: true
           - os: macos-latest
             platform: macos
-            publish: true
           - os: ubuntu-22.04
             platform: linux
-            publish: true
-          # Backwards-compat validation only. macOS 13 is the oldest runner
-          # GitHub offers — it is not High Sierra (10.13), but it builds the
-          # bundle on an older toolchain and runs the cookie-shim symbol guard
-          # below, catching regressions that would break launch on 10.13/10.14.
-          # publish: false -> it never uploads artifacts, so it cannot collide
-          # with the macos-latest release bundle. continue-on-error keeps a
-          # flaky old-runner failure from blocking a legitimate release while
-          # still surfacing as a red check in the UI.
-          - os: macos-13
-            platform: macos
-            publish: false
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.publish == false }}
 
     steps:
       - name: Checkout repository
@@ -504,7 +489,6 @@ jobs:
           echo "High Sierra cookie shim confirmed linked into release binary."
 
       - name: Upload release assets
-        if: matrix.publish
         uses: actions/upload-artifact@v4
         with:
           name: libretracks-${{ matrix.platform }}-assets
