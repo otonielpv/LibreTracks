@@ -23,16 +23,34 @@ fn link_macos_highsierra_shim() {
     // link Foundation so the literals resolve.
     let shim = "macos-compat/highsierra_cookie_symbols.m";
     println!("cargo:rerun-if-changed={shim}");
+    let lib_name = "lt_macos_highsierra_shim";
     cc::Build::new()
         .file(shim)
         .flag("-x")
         .flag("objective-c")
-        .compile("lt_macos_highsierra_shim");
+        .compile(lib_name);
     println!("cargo:rustc-link-lib=framework=Foundation");
+
+    // Force the shim's object into the binary with `-force_load`. Our cookie
+    // symbols are `weak` and the only references to them (from wry) are *also*
+    // weakened below via `-U`, so a plain archive link would never extract the
+    // object — the linker only pulls archive members that resolve a still-
+    // pending undefined symbol. The result was the symbol vanishing entirely
+    // and High Sierra crashing at launch. `-force_load` makes the linker load
+    // every object in the archive unconditionally, guaranteeing our weak
+    // definitions ship. On 10.15+ the strong system symbol still wins, so this
+    // stays inert there.
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR is set by cargo");
+    let archive = PathBuf::from(&out_dir).join(format!("lib{lib_name}.a"));
+    println!(
+        "cargo:rustc-link-arg=-Wl,-force_load,{}",
+        archive.display()
+    );
 
     // Belt-and-braces: also tell the linker these symbols may be undefined at
     // link time so it never marks them as hard load-time requirements against
-    // Foundation. The weak shim above is what actually satisfies them on 10.13.
+    // Foundation. The weak shim above (force-loaded) is what actually satisfies
+    // them on 10.13.
     for symbol in [
         "_NSHTTPCookieSameSiteLax",
         "_NSHTTPCookieSameSiteStrict",
