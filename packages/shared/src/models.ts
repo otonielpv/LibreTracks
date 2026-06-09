@@ -27,6 +27,16 @@ export type MarkerKind =
   | "drop"
   | "solo"
   | "outro"
+  | "acapella"
+  | "instrumental"
+  | "interlude"
+  | "refrain"
+  | "tag"
+  | "vamp"
+  | "ending"
+  | "exhortation"
+  | "rap"
+  | "turnaround"
   | "custom";
 
 export type SectionMarkerSummary = {
@@ -37,6 +47,8 @@ export type SectionMarkerSummary = {
   /** Optional for backward compat with snapshots that predate the field;
    * treat a missing value as "custom". */
   kind?: MarkerKind;
+  /** Numbered section variant (Verse 2, Chorus 3). Absent = unnumbered base. */
+  variant?: number | null;
 };
 
 export type SongMasterSummary = {

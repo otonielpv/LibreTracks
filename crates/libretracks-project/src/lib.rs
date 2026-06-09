@@ -94,6 +94,7 @@ mod tests {
                 start_seconds: 0.0,
                 digit: Some(1),
                 kind: MarkerKind::Custom,
+                variant: None,
             }],
         }
     }

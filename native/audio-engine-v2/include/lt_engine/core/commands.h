@@ -112,6 +112,11 @@ struct CmdSetVoiceGuideConfig {
     bool count_in_enabled = true;
 };
 
+struct CmdLoadVoiceGuideBank {
+    std::string voices_dir;
+    std::string lang;
+};
+
 // ---------------------------------------------------------------------------
 // Pitch
 // ---------------------------------------------------------------------------
@@ -175,6 +180,7 @@ struct CmdSetSongMarkers {
         // Serialized snake_case MarkerKind token (e.g. "chorus"). Converted to
         // the Marker::kind enum when applied to the session. Empty == custom.
         std::string kind;
+        int variant = 0;   // numbered section variant; 0 = base
     };
     Id song_id;
     std::vector<MarkerUpdate> markers;
@@ -247,7 +253,7 @@ using EngineCommand = std::variant<
     CmdSetTrackTransposeEnabled, CmdStartMasterFade,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
-    CmdSetVoiceGuideConfig,
+    CmdSetVoiceGuideConfig, CmdLoadVoiceGuideBank,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize

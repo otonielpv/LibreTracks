@@ -218,6 +218,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
             // Legacy v2 sessions predate semantic marker kinds; they carry only
             // free-text names, so they migrate to Custom.
             kind: MarkerKind::Custom,
+            variant: None,
         })
         .collect::<Vec<_>>();
     section_markers.sort_by(|left, right| {

@@ -159,6 +159,19 @@ pub enum MarkerKind {
     Drop,
     Solo,
     Outro,
+    // Extended vocabulary covered by the bundled voice pack (worship/band
+    // arrangements). Append new variants at the end — the C++ engine indexes
+    // its clip bank by this enum's integer value, so order is part of the ABI.
+    Acapella,
+    Instrumental,
+    Interlude,
+    Refrain,
+    Tag,
+    Vamp,
+    Ending,
+    Exhortation,
+    Rap,
+    Turnaround,
     /// User-defined section with no pre-recorded voice clip; the announcement
     /// falls back to silence (or TTS, if added later).
     #[default]
@@ -180,6 +193,16 @@ impl MarkerKind {
             MarkerKind::Drop => "drop",
             MarkerKind::Solo => "solo",
             MarkerKind::Outro => "outro",
+            MarkerKind::Acapella => "acapella",
+            MarkerKind::Instrumental => "instrumental",
+            MarkerKind::Interlude => "interlude",
+            MarkerKind::Refrain => "refrain",
+            MarkerKind::Tag => "tag",
+            MarkerKind::Vamp => "vamp",
+            MarkerKind::Ending => "ending",
+            MarkerKind::Exhortation => "exhortation",
+            MarkerKind::Rap => "rap",
+            MarkerKind::Turnaround => "turnaround",
             MarkerKind::Custom => "custom",
         }
     }
@@ -194,6 +217,11 @@ pub struct Marker {
     pub digit: Option<u8>,
     #[serde(default)]
     pub kind: MarkerKind,
+    /// Numbered variant of the section (e.g. Verse 2, Chorus 3). `None` is the
+    /// unnumbered base section. The voice bank plays `<kind>_<variant>.wav` when
+    /// present, falling back to the base `<kind>.wav`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variant: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -366,6 +394,7 @@ mod tests {
             start_seconds,
             digit,
             kind: MarkerKind::Custom,
+            variant: None,
         }
     }
 
@@ -506,6 +535,7 @@ mod tests {
             start_seconds: 32.0,
             digit: Some(3),
             kind: MarkerKind::Chorus,
+            variant: None,
         };
         let json = serde_json::to_string(&marker).expect("serialize");
         // Enum serializes snake_case to match the camelCase session schema style.
@@ -522,6 +552,7 @@ mod tests {
             start_seconds: 0.0,
             digit: None,
             kind: MarkerKind::PreChorus,
+            variant: None,
         };
         let json = serde_json::to_string(&marker).expect("serialize");
         assert!(json.contains("\"kind\":\"pre_chorus\""), "got: {json}");

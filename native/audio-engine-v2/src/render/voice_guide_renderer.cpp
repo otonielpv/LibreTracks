@@ -1,9 +1,12 @@
 #include <lt_engine/render/voice_guide_renderer.h>
 
+#include <lt_engine/sources/audio_decoder.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <string>
 
 namespace lt {
 
@@ -100,6 +103,16 @@ std::string kind_token(MarkerKind kind) noexcept {
         case MarkerKind::Drop: return "drop";
         case MarkerKind::Solo: return "solo";
         case MarkerKind::Outro: return "outro";
+        case MarkerKind::Acapella: return "acapella";
+        case MarkerKind::Instrumental: return "instrumental";
+        case MarkerKind::Interlude: return "interlude";
+        case MarkerKind::Refrain: return "refrain";
+        case MarkerKind::Tag: return "tag";
+        case MarkerKind::Vamp: return "vamp";
+        case MarkerKind::Ending: return "ending";
+        case MarkerKind::Exhortation: return "exhortation";
+        case MarkerKind::Rap: return "rap";
+        case MarkerKind::Turnaround: return "turnaround";
         case MarkerKind::Custom: default: return "custom";
     }
 }
@@ -108,17 +121,101 @@ std::string kind_token(MarkerKind kind) noexcept {
 
 // ── Clip bank lookups ────────────────────────────────────────────────────────
 
-const VoiceGuideClip* VoiceGuideClipBank::section_for(MarkerKind kind) const noexcept {
+const VoiceGuideClip* VoiceGuideClipBank::section_for(MarkerKind kind, int variant) const noexcept {
     const int idx = static_cast<int>(kind);
     if (idx < 0 || idx >= kKindCount) return nullptr;
-    const VoiceGuideClip& clip = sections[static_cast<std::size_t>(idx)];
-    return clip.samples.empty() ? nullptr : &clip;
+    const VoiceGuideSection& section = sections[static_cast<std::size_t>(idx)];
+    if (variant >= 1 && variant < VoiceGuideSection::kMaxVariant) {
+        const VoiceGuideClip& v = section.variants[static_cast<std::size_t>(variant)];
+        if (!v.samples.empty()) return &v;   // numbered variant present
+        // else fall through to base
+    }
+    return section.base.samples.empty() ? nullptr : &section.base;
 }
 
 const VoiceGuideClip* VoiceGuideClipBank::count_for(int beat_number) const noexcept {
     if (beat_number < 0 || beat_number >= kMaxCount) return nullptr;
     const VoiceGuideClip& clip = counts[static_cast<std::size_t>(beat_number)];
     return clip.samples.empty() ? nullptr : &clip;
+}
+
+// ── Bank loading (off the audio thread) ──────────────────────────────────────
+
+namespace {
+
+// Decode one file to mono at the target rate. Returns empty on any failure
+// (missing file, decode error) — a missing clip is a valid "silent slot".
+std::vector<float> decode_mono(const std::string& path, int target_sample_rate) {
+    int channels = 0;
+    Frame duration = 0;
+    auto decoded = decode_file_to_float32(path, target_sample_rate, &channels, &duration);
+    if (!decoded.is_ok() || channels <= 0) return {};
+    const std::vector<float>& interleaved = decoded.unwrap();
+    if (channels == 1) return interleaved;
+    // Downmix to mono by averaging channels.
+    const std::size_t frames = interleaved.size() / static_cast<std::size_t>(channels);
+    std::vector<float> mono(frames, 0.0f);
+    for (std::size_t f = 0; f < frames; ++f) {
+        float sum = 0.0f;
+        for (int c = 0; c < channels; ++c)
+            sum += interleaved[f * static_cast<std::size_t>(channels) + static_cast<std::size_t>(c)];
+        mono[f] = sum / static_cast<float>(channels);
+    }
+    return mono;
+}
+
+const char* section_filename(int kind_index) noexcept {
+    switch (static_cast<MarkerKind>(kind_index)) {
+        case MarkerKind::Intro: return "intro";
+        case MarkerKind::Verse: return "verse";
+        case MarkerKind::PreChorus: return "pre_chorus";
+        case MarkerKind::Chorus: return "chorus";
+        case MarkerKind::PostChorus: return "post_chorus";
+        case MarkerKind::Bridge: return "bridge";
+        case MarkerKind::Breakdown: return "breakdown";
+        case MarkerKind::Drop: return "drop";
+        case MarkerKind::Solo: return "solo";
+        case MarkerKind::Outro: return "outro";
+        case MarkerKind::Acapella: return "acapella";
+        case MarkerKind::Instrumental: return "instrumental";
+        case MarkerKind::Interlude: return "interlude";
+        case MarkerKind::Refrain: return "refrain";
+        case MarkerKind::Tag: return "tag";
+        case MarkerKind::Vamp: return "vamp";
+        case MarkerKind::Ending: return "ending";
+        case MarkerKind::Exhortation: return "exhortation";
+        case MarkerKind::Rap: return "rap";
+        case MarkerKind::Turnaround: return "turnaround";
+        case MarkerKind::Custom: default: return nullptr;  // no recording
+    }
+}
+
+} // namespace
+
+std::shared_ptr<VoiceGuideClipBank> load_voice_guide_bank(
+    const std::string& voices_dir, const std::string& lang, int target_sample_rate) {
+    if (voices_dir.empty() || lang.empty() || target_sample_rate <= 0) return nullptr;
+
+    auto bank = std::make_shared<VoiceGuideClipBank>();
+    bank->sample_rate = static_cast<double>(target_sample_rate);
+
+    const std::string base = voices_dir + "/" + lang;
+    for (int k = 0; k < VoiceGuideClipBank::kKindCount; ++k) {
+        const char* name = section_filename(k);
+        if (!name) continue;  // Custom has no clip
+        VoiceGuideSection& section = bank->sections[static_cast<std::size_t>(k)];
+        const std::string dir = base + "/sections/";
+        section.base.samples = decode_mono(dir + name + ".wav", target_sample_rate);
+        for (int v = 1; v < VoiceGuideSection::kMaxVariant; ++v) {
+            section.variants[static_cast<std::size_t>(v)].samples =
+                decode_mono(dir + name + "_" + std::to_string(v) + ".wav", target_sample_rate);
+        }
+    }
+    for (int n = 1; n < VoiceGuideClipBank::kMaxCount; ++n) {
+        bank->counts[static_cast<std::size_t>(n)].samples =
+            decode_mono(base + "/counts/" + std::to_string(n) + ".wav", target_sample_rate);
+    }
+    return bank;
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -292,7 +389,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                         if (beat_frame != abs_frame) continue;
                         if (b == 0) {
                             if (beat_frame != last_section_frame_) {
-                                trigger_clip(bank->section_for(marker->kind),
+                                trigger_clip(bank->section_for(marker->kind, marker->variant),
                                              0.9f);
                                 last_section_frame_ = beat_frame;
                                 announcements_fired_.fetch_add(1, std::memory_order_relaxed);

@@ -14,7 +14,7 @@ constexpr int kSampleRate = 48000;
 
 // A song [0, 16s) at the given tempo/signature with one section marker.
 Session make_session(MarkerKind kind, double marker_seconds, double bpm = 120.0,
-                     int beats_per_bar = 4, int beat_unit = 4) {
+                     int beats_per_bar = 4, int beat_unit = 4, int variant = 0) {
     Session session;
     session.sample_rate = kSampleRate;
     Song song;
@@ -28,6 +28,7 @@ Session make_session(MarkerKind kind, double marker_seconds, double bpm = 120.0,
     marker.id = "m1";
     marker.name = "Section";
     marker.kind = kind;
+    marker.variant = variant;
     marker.frame = static_cast<Frame>(std::llround(marker_seconds * kSampleRate));
     song.markers.push_back(marker);
     session.songs.push_back(song);
@@ -43,7 +44,7 @@ std::shared_ptr<VoiceGuideClipBank> make_marked_bank() {
     bank->sample_rate = kSampleRate;
     const int len = 240; // 5 ms clip
     for (int k = 0; k < VoiceGuideClipBank::kKindCount; ++k)
-        bank->sections[static_cast<std::size_t>(k)].samples.assign(len, 0.50f);
+        bank->sections[static_cast<std::size_t>(k)].base.samples.assign(len, 0.50f);
     for (int n = 2; n < VoiceGuideClipBank::kMaxCount; ++n)
         bank->counts[static_cast<std::size_t>(n)].samples.assign(len, 0.10f * static_cast<float>(n));
     return bank;
@@ -190,4 +191,37 @@ TEST_CASE("two lead bars announce one bar earlier") {
     // 8 lead beats, beat indices b=0..7; section at b=0, counts where
     // (b % 4)+1 >= 2 -> b in {1,2,3,5,6,7} = 6 counts.
     CHECK(diag.counts_fired == 6);
+}
+
+// Find the amplitude of the section onset (beat 1 of the lead bar). The marked
+// bank uses base=0.50 and we set a distinct variant amplitude to tell them apart.
+float section_onset_amplitude(const std::vector<float>& s) {
+    for (float v : s)
+        if (std::abs(v) > 0.02f) return std::abs(v);
+    return 0.0f;
+}
+
+TEST_CASE("a numbered variant plays its own clip when present") {
+    auto bank = make_marked_bank();
+    // Give Chorus variant 2 a distinct amplitude (0.70 vs base 0.50).
+    bank->sections[static_cast<std::size_t>(MarkerKind::Chorus)]
+        .variants[2].samples.assign(240, 0.70f);
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, false}); // section only, no count noise
+    auto session = make_session(MarkerKind::Chorus, 4.0, 120.0, 4, 4, /*variant=*/2);
+    auto ch = render_all(r, session, kSampleRate * 6);
+    // Section onset amplitude should be the variant's 0.70, not the base 0.50.
+    CHECK(section_onset_amplitude(ch[2]) == doctest::Approx(0.70f * 0.9f).epsilon(0.05));
+}
+
+TEST_CASE("a numbered variant falls back to the base clip when absent") {
+    // Bank has only base clips (no variant 3 for Verse).
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, false});
+    auto session = make_session(MarkerKind::Verse, 4.0, 120.0, 4, 4, /*variant=*/3);
+    auto ch = render_all(r, session, kSampleRate * 6);
+    // Falls back to base amplitude 0.50.
+    CHECK(section_onset_amplitude(ch[2]) == doctest::Approx(0.50f * 0.9f).epsilon(0.05));
 }

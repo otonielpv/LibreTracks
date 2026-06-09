@@ -576,6 +576,7 @@ mod tests {
             start_seconds: -1.0,
             digit: None,
             kind: MarkerKind::Custom,
+            variant: None,
         }];
         assert!(matches!(
             validate_song(&song),
@@ -587,8 +588,8 @@ mod tests {
     fn rejects_out_of_order_markers() {
         let mut song = valid_song();
         song.section_markers = vec![
-            Marker { id: "m1".into(), name: "M1".into(), start_seconds: 10.0, digit: None, kind: MarkerKind::Custom },
-            Marker { id: "m2".into(), name: "M2".into(), start_seconds: 5.0, digit: None, kind: MarkerKind::Custom },
+            Marker { id: "m1".into(), name: "M1".into(), start_seconds: 10.0, digit: None, kind: MarkerKind::Custom, variant: None },
+            Marker { id: "m2".into(), name: "M2".into(), start_seconds: 5.0, digit: None, kind: MarkerKind::Custom, variant: None },
         ];
         assert!(matches!(
             validate_song(&song),
@@ -605,6 +606,7 @@ mod tests {
             start_seconds: 0.0,
             digit: Some(10),
             kind: MarkerKind::Custom,
+            variant: None,
         }];
         assert!(matches!(
             validate_song(&song),

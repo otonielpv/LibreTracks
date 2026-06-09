@@ -691,6 +691,7 @@ mod tests {
                 start_seconds: 5.0,
                 digit: None,
                 kind: MarkerKind::Custom,
+                variant: None,
             }],
         }
     }

@@ -29,17 +29,37 @@ struct VoiceGuideClip {
     std::vector<float> samples;   // mono, at the bank's sample_rate
 };
 
+// A section type's clips: the unnumbered base plus numbered variants (Verse 2,
+// Chorus 3, ...). variants[n] is the clip for "<kind>_<n>.wav"; index 0 unused.
+struct VoiceGuideSection {
+    static constexpr int kMaxVariant = 9;   // pack ships up to 6; headroom to 8
+    VoiceGuideClip base;
+    std::array<VoiceGuideClip, kMaxVariant> variants{};
+};
+
 struct VoiceGuideClipBank {
-    static constexpr int kKindCount = 11;   // MarkerKind values incl. Custom
+    static constexpr int kKindCount = 21;   // MarkerKind values incl. Custom
     static constexpr int kMaxCount  = 17;   // supports up to 16-beat bars + slack
 
     double sample_rate = 0.0;               // sample rate the clips were decoded at
-    std::array<VoiceGuideClip, kKindCount> sections{};
-    std::array<VoiceGuideClip, kMaxCount>  counts{};
+    std::array<VoiceGuideSection, kKindCount> sections{};
+    std::array<VoiceGuideClip, kMaxCount>     counts{};
 
-    const VoiceGuideClip* section_for(MarkerKind kind) const noexcept;
+    // Resolve a section's clip for the given variant, falling back to the base
+    // clip when the numbered variant is absent. `variant <= 0` means base.
+    const VoiceGuideClip* section_for(MarkerKind kind, int variant) const noexcept;
     const VoiceGuideClip* count_for(int beat_number) const noexcept;
 };
+
+// Decode a language's voice bank from disk into memory. Expects the asset tree
+//   <voices_dir>/<lang>/sections/<kind>.wav   (intro, verse, chorus, ...)
+//   <voices_dir>/<lang>/counts/<n>.wav        (1..kMaxCount-1)
+// Each file is decoded to `target_sample_rate` and downmixed to mono. Missing
+// files are simply left empty (the renderer plays nothing for that slot), so a
+// partial bank is valid. Runs off the audio thread. Returns a bank even if some
+// clips are absent; returns nullptr only if the language directory is unusable.
+std::shared_ptr<VoiceGuideClipBank> load_voice_guide_bank(
+    const std::string& voices_dir, const std::string& lang, int target_sample_rate);
 
 struct VoiceGuideConfig {
     bool  enabled = false;

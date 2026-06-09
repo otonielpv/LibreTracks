@@ -765,6 +765,7 @@ impl AudioController {
                     name: marker.0.name.clone(),
                     frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
+                    variant: marker.0.variant.unwrap_or(0) as i32,
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongMarkers {
@@ -840,6 +841,7 @@ impl AudioController {
                     name: marker.0.name.clone(),
                     frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
+                    variant: marker.0.variant.unwrap_or(0) as i32,
                 })
                 .collect();
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;

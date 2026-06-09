@@ -2263,6 +2263,7 @@ impl DesktopSession {
             digit: None,
             // New markers start untyped; the user picks a kind in the editor.
             kind: MarkerKind::Custom,
+            variant: None,
         });
         song.section_markers.sort_by(|left, right| {
             left.start_seconds
@@ -7492,6 +7493,7 @@ mod tests {
             start_seconds: 1.0,
             digit: Some(1),
             kind: MarkerKind::Custom,
+            variant: None,
         });
         song
     }
@@ -7568,6 +7570,7 @@ mod tests {
             start_seconds: 4.0,
             digit: Some(2),
             kind: MarkerKind::Custom,
+            variant: None,
         });
         song
     }
@@ -7580,6 +7583,7 @@ mod tests {
             start_seconds: 8.0,
             digit: Some(3),
             kind: MarkerKind::Custom,
+            variant: None,
         });
         song
     }
@@ -7632,6 +7636,7 @@ mod tests {
                 start_seconds: 1.0,
                 digit: Some(1),
                 kind: MarkerKind::Custom,
+                variant: None,
             },
             Marker {
                 id: "section_2".into(),
@@ -7639,6 +7644,7 @@ mod tests {
                 start_seconds: 15.0,
                 digit: Some(2),
                 kind: MarkerKind::Custom,
+                variant: None,
             },
         ];
         song
@@ -7931,6 +7937,7 @@ mod tests {
             start_seconds: 18.0,
             digit: Some(1),
             kind: MarkerKind::Custom,
+            variant: None,
         });
         let expected_execute_seconds = warp_timeline_seconds_at(&song, 18.0);
         let mut session = DesktopSession::default();
@@ -9419,6 +9426,7 @@ mod tests {
             start_seconds: 6.0,
             digit: None,
             kind: MarkerKind::Custom,
+            variant: None,
         });
         save_song(&song_dir, &song).expect("song should save");
 

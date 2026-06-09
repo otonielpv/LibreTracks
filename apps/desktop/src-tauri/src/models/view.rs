@@ -179,6 +179,8 @@ pub struct MarkerSummary {
     pub start_seconds: f64,
     pub digit: Option<u8>,
     pub kind: MarkerKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -519,6 +521,7 @@ pub(crate) fn marker_to_warped_summary(song: &Song, marker: &Marker) -> MarkerSu
         start_seconds: warp_timeline_seconds_at(song, marker.start_seconds),
         digit: marker.digit,
         kind: marker.kind,
+        variant: marker.variant,
     }
 }
 
@@ -857,6 +860,7 @@ mod tests {
                 start_seconds: 2.0,
                 digit: Some(1),
                 kind: MarkerKind::Custom,
+                variant: None,
             }],
         }
     }

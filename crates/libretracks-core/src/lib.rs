@@ -93,6 +93,7 @@ mod tests {
                 start_seconds: 0.0,
                 digit: Some(1),
                 kind: MarkerKind::Custom,
+                variant: None,
             }],
         }
     }
@@ -360,6 +361,7 @@ mod tests {
             start_seconds: 32.0,
             digit: Some(1),
             kind: MarkerKind::Custom,
+            variant: None,
         });
 
         let error = validate_song(&song).expect_err("song should be invalid");
@@ -375,6 +377,7 @@ mod tests {
             start_seconds: 360.0,
             digit: Some(2),
             kind: MarkerKind::Custom,
+            variant: None,
         });
 
         assert!(validate_song(&song).is_ok());
@@ -390,6 +393,7 @@ mod tests {
                 start_seconds: 16.0,
                 digit: Some(2),
                 kind: MarkerKind::Custom,
+                variant: None,
             },
             Marker {
                 id: "section_outro".into(),
@@ -397,6 +401,7 @@ mod tests {
                 start_seconds: 48.0,
                 digit: Some(3),
                 kind: MarkerKind::Custom,
+                variant: None,
             },
         ];
 
@@ -419,6 +424,7 @@ mod tests {
                 start_seconds: 4.0,
                 digit: Some(2),
                 kind: MarkerKind::Custom,
+                variant: None,
             },
             Marker {
                 id: "section_outro".into(),
@@ -426,6 +432,7 @@ mod tests {
                 start_seconds: 12.0,
                 digit: Some(3),
                 kind: MarkerKind::Custom,
+                variant: None,
             },
         ];
 
@@ -446,6 +453,7 @@ mod tests {
             start_seconds: 32.0,
             digit: Some(2),
             kind: MarkerKind::Custom,
+            variant: None,
         });
 
         assert_eq!(song.next_marker_name(), "Marker 2");

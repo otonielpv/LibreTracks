@@ -18,6 +18,16 @@ MarkerKind marker_kind_from_string(const std::string& token) noexcept {
     if (token == "drop") return MarkerKind::Drop;
     if (token == "solo") return MarkerKind::Solo;
     if (token == "outro") return MarkerKind::Outro;
+    if (token == "acapella") return MarkerKind::Acapella;
+    if (token == "instrumental") return MarkerKind::Instrumental;
+    if (token == "interlude") return MarkerKind::Interlude;
+    if (token == "refrain") return MarkerKind::Refrain;
+    if (token == "tag") return MarkerKind::Tag;
+    if (token == "vamp") return MarkerKind::Vamp;
+    if (token == "ending") return MarkerKind::Ending;
+    if (token == "exhortation") return MarkerKind::Exhortation;
+    if (token == "rap") return MarkerKind::Rap;
+    if (token == "turnaround") return MarkerKind::Turnaround;
     return MarkerKind::Custom;
 }
 

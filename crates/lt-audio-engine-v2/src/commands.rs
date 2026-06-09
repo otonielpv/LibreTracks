@@ -115,6 +115,14 @@ pub enum EngineCommand {
         count_in_enabled: bool,
     },
 
+    /// Decode and install the voice-guide clip bank for a language. The engine
+    /// reads `<voices_dir>/<lang>/{sections,counts}/*.wav`. Decoding happens off
+    /// the audio thread; the new bank is swapped in atomically.
+    LoadVoiceGuideBank {
+        voices_dir: String,
+        lang: String,
+    },
+
     SetSongTranspose {
         song_id: String,
         semitones: i32,
@@ -230,6 +238,10 @@ pub struct MarkerUpdate {
     /// falls back to Custom. Defaults to "custom" so older callers stay valid.
     #[serde(default = "default_marker_kind")]
     pub kind: String,
+    /// Numbered section variant (0 = unnumbered base). Plays `<kind>_<n>.wav`
+    /// with fallback to the base clip.
+    #[serde(default)]
+    pub variant: i32,
 }
 
 fn default_marker_kind() -> String {
