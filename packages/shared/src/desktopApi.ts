@@ -9,6 +9,7 @@ import type {
   LibraryAssetSummary,
   LibraryImportCompleteEvent,
   LibraryImportProgressEvent,
+  MarkerKind,
   ProjectLoadCompleteEvent,
   MidiRawMessage,
   ProjectLoadProgressEvent,
@@ -845,6 +846,13 @@ export async function assignSectionMarkerDigit(
   digit: number | null,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("assign_section_marker_digit", { sectionId, digit });
+}
+
+export async function setSectionMarkerKind(
+  sectionId: string,
+  kind: MarkerKind,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_section_marker_kind", { sectionId, kind });
 }
 
 export async function createTrack(args: {

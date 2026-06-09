@@ -3,7 +3,7 @@ use tauri::State;
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::{ClipMoveRequest, DesktopState};
-use libretracks_core::TrackKind;
+use libretracks_core::{MarkerKind, TrackKind};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -467,6 +467,22 @@ pub fn assign_section_marker_digit(
 
     session
         .assign_section_marker_digit(&section_id, digit, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_section_marker_kind(
+    section_id: String,
+    kind: MarkerKind,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_section_marker_kind(&section_id, kind, &state.audio)
         .map_err(|error| error.to_string())
 }
 

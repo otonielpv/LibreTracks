@@ -196,6 +196,7 @@ fn main() {
             commands::timeline::update_song_region_master_gain,
             commands::timeline::delete_song_region,
             commands::timeline::assign_section_marker_digit,
+            commands::timeline::set_section_marker_kind,
             commands::timeline::update_song_tempo,
             commands::timeline::upsert_song_tempo_marker,
             commands::timeline::delete_song_tempo_marker,

@@ -5,7 +5,18 @@ import type {
   TempoMarkerSummary,
 } from "../desktopApi";
 import type { TimelineGrid } from "../timelineMath";
+import { markerKindColor } from "../markerKinds";
 import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
+
+/** Convert a `#rrggbb` colour to an `rgba(...)` string at the given alpha. Used
+ * to derive the translucent flag fill from a marker kind's solid colour. */
+function hexToRgba(hex: string, alpha: number): string {
+  const value = hex.replace("#", "");
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 const MIN_LABEL_WIDTH_PX = 112;
 
@@ -378,27 +389,30 @@ export function drawRulerMarker(
     return;
   }
 
+  // Armed/selected/current keep their meaningful live-playback colours; only the
+  // resting state takes on the marker kind's colour so sections read distinctly.
+  const kindColor = markerKindColor(marker.kind);
   const strokeStyle = options.isArmed
     ? `rgba(87, 241, 219, ${options.pulseAlpha})`
     : options.isSelected
       ? "rgba(255, 226, 171, 0.9)"
       : options.isCurrent
         ? "rgba(229, 226, 225, 0.88)"
-        : "rgba(186, 202, 197, 0.48)";
+        : hexToRgba(kindColor, 0.62);
   const fillStyle = options.isArmed
     ? `rgba(87, 241, 219, ${0.22 + options.pulseAlpha * 0.22})`
     : options.isSelected
       ? "rgba(255, 226, 171, 0.18)"
       : options.isCurrent
         ? "rgba(229, 226, 225, 0.16)"
-        : "rgba(186, 202, 197, 0.12)";
+        : hexToRgba(kindColor, 0.16);
   const textStyle = options.isArmed
     ? "#57f1db"
     : options.isSelected
       ? "#ffe2ab"
       : options.isCurrent
         ? "#e5e2e1"
-        : "#bacac5";
+        : kindColor;
 
   context.save();
   context.strokeStyle = strokeStyle;

@@ -3149,6 +3149,31 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn set_section_marker_kind(
+        &mut self,
+        section_id: &str,
+        kind: MarkerKind,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let marker = song
+            .section_markers
+            .iter_mut()
+            .find(|section| section.id == section_id)
+            .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
+        marker.kind = kind;
+
+        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn update_song_tempo(
         &mut self,
         bpm: f64,
@@ -10370,6 +10395,39 @@ mod tests {
             .expect("song view should build")
             .expect("song view should exist");
         assert_eq!(song_view.section_markers[0].digit, Some(3));
+    }
+
+    #[test]
+    fn set_section_marker_kind_updates_kind_without_session_rebuild() {
+        let mut session = session_with_song_dir("section-kind-demo", demo_song_with_section());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .set_section_marker_kind("section_1", MarkerKind::Chorus, &audio)
+            .expect("set kind should succeed");
+
+        // Section markers are Rust-model-only; this must not hit the audio engine.
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
+        assert_eq!(diagnostics.session_rebuild_count, 0);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        assert_eq!(song_view.section_markers[0].kind, MarkerKind::Chorus);
+    }
+
+    #[test]
+    fn set_section_marker_kind_rejects_unknown_section() {
+        let mut session = session_with_song_dir("section-kind-missing", demo_song_with_section());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let result = session.set_section_marker_kind("nope", MarkerKind::Verse, &audio);
+        assert!(matches!(
+            result,
+            Err(crate::error::DesktopError::SectionNotFound(_))
+        ));
     }
 
     // ── Phase 5: set_track_transpose_enabled_realtime path ───────────────────

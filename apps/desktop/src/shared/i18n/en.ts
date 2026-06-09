@@ -245,6 +245,7 @@ const en = {
       splitClipAtCursor: "Split At Cursor",
       duplicateClip: "Duplicate",
       jumpToMarker: "Jump to This Marker",
+      markerKind: "Section type...",
     },
     prompt: {
       timelineBpm: "New timeline BPM",
@@ -332,6 +333,7 @@ const en = {
       clipsPasted: "Clips pasted.",
       markerCursorSent: "Cursor moved to {{name}}",
       markerRenamed: "Marker renamed: {{name}}",
+      markerKindSet: "{{name}} type: {{kind}}",
       markerDeleted: "Marker deleted: {{name}}",
       projectCreated: "Project created.",
       projectCreatedAt: "Project created at {{path}}.",

@@ -101,6 +101,7 @@ import {
   setMetronomeSoundRealtime,
   splitClip,
   splitClips,
+  setSectionMarkerKind,
   stopTransport,
   updateClipColor,
   updateAudioSettings,
@@ -123,6 +124,7 @@ import {
   formatTransposeSemitones,
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
+import { MARKER_KINDS, markerKindColor, markerKindLabel } from "./markerKinds";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./CompactView";
@@ -5788,6 +5790,37 @@ export function TransportPanelContent() {
     });
   }
 
+  function openMarkerKindMenu(section: SectionMarkerSummary) {
+    const currentKind = section.kind ?? "custom";
+    const position = contextMenuPositionRef.current;
+    const nextPosition = {
+      x: position.x + 12,
+      y: position.y + 12,
+    };
+    contextMenuPositionRef.current = nextPosition;
+    setContextMenu({
+      x: nextPosition.x,
+      y: nextPosition.y,
+      title: t("transport.menu.markerKind"),
+      actions: MARKER_KINDS.map((kind) => ({
+        label: `${markerKindLabel(kind)}${kind === currentKind ? " ✓" : ""}`,
+        swatch: markerKindColor(kind),
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await setSectionMarkerKind(section.id, kind);
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(
+              t("transport.status.markerKindSet", {
+                name: section.name,
+                kind: markerKindLabel(kind),
+              }),
+            );
+          });
+        },
+      })),
+    });
+  }
+
   function trackContextMenu(track: TrackSummary) {
     const currentSong = songRef.current;
     if (!currentSong) {
@@ -6618,6 +6651,12 @@ export function TransportPanelContent() {
             setStatus(t("transport.status.markerRenamed", { name: nextName }));
           });
         },
+      },
+      {
+        label: t("transport.menu.markerKind"),
+        swatch: markerKindColor(section.kind),
+        disabled: !canEditMarker,
+        onSelect: () => openMarkerKindMenu(section),
       },
       {
         label: t("common.delete"),
