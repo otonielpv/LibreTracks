@@ -17,9 +17,18 @@ fn link_macos_highsierra_shim() {
         return;
     }
 
-    let shim = "macos-compat/highsierra_cookie_symbols.c";
+    // The shim is Objective-C (it uses Foundation's `NSString` and `@"..."`
+    // string literals), so it must be compiled as such. The `.m` extension
+    // makes clang select the Objective-C frontend; we also force the flag and
+    // link Foundation so the literals resolve.
+    let shim = "macos-compat/highsierra_cookie_symbols.m";
     println!("cargo:rerun-if-changed={shim}");
-    cc::Build::new().file(shim).compile("lt_macos_highsierra_shim");
+    cc::Build::new()
+        .file(shim)
+        .flag("-x")
+        .flag("objective-c")
+        .compile("lt_macos_highsierra_shim");
+    println!("cargo:rustc-link-lib=framework=Foundation");
 
     // Belt-and-braces: also tell the linker these symbols may be undefined at
     // link time so it never marks them as hard load-time requirements against
