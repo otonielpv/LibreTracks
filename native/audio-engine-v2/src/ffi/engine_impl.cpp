@@ -2110,6 +2110,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         marker.id = update.id;
                         marker.name = update.name;
                         marker.frame = update.frame;
+                        marker.kind = marker_kind_from_string(update.kind);
                         song.markers.push_back(std::move(marker));
                     }
                     changed = true;
@@ -2272,6 +2273,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         marker.id = update.id;
                         marker.name = update.name;
                         marker.frame = update.frame;
+                        marker.kind = marker_kind_from_string(update.kind);
                         song.markers.push_back(std::move(marker));
                     }
 

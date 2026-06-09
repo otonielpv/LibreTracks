@@ -215,6 +215,15 @@ pub struct MarkerUpdate {
     pub id: String,
     pub name: String,
     pub frame: i64,
+    /// Serialized snake_case `MarkerKind` token (e.g. "chorus", "custom"). The
+    /// C++ engine maps it via `marker_kind_from_string`; an empty/unknown value
+    /// falls back to Custom. Defaults to "custom" so older callers stay valid.
+    #[serde(default = "default_marker_kind")]
+    pub kind: String,
+}
+
+fn default_marker_kind() -> String {
+    "custom".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

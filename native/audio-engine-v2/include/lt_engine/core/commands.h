@@ -164,6 +164,9 @@ struct CmdSetSongMarkers {
         Id          id;
         std::string name;
         Frame       frame = 0;
+        // Serialized snake_case MarkerKind token (e.g. "chorus"). Converted to
+        // the Marker::kind enum when applied to the session. Empty == custom.
+        std::string kind;
     };
     Id song_id;
     std::vector<MarkerUpdate> markers;

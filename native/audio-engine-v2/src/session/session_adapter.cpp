@@ -218,6 +218,7 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     Marker marker;
                     marker.id = jm.value("id", "");
                     marker.name = jm.value("name", "");
+                    marker.kind = marker_kind_from_string(jm.value("kind", ""));
                     marker.frame = value_any<Frame>(jm, "frame", "frame", 0LL);
                     if (marker.frame == 0) {
                         marker.frame = seconds_to_frames(

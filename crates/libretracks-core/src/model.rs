@@ -165,6 +165,26 @@ pub enum MarkerKind {
     Custom,
 }
 
+impl MarkerKind {
+    /// The serialized snake_case token (matching the serde representation), used
+    /// when sending markers to the audio engine over the command channel.
+    pub fn as_token(self) -> &'static str {
+        match self {
+            MarkerKind::Intro => "intro",
+            MarkerKind::Verse => "verse",
+            MarkerKind::PreChorus => "pre_chorus",
+            MarkerKind::Chorus => "chorus",
+            MarkerKind::PostChorus => "post_chorus",
+            MarkerKind::Bridge => "bridge",
+            MarkerKind::Breakdown => "breakdown",
+            MarkerKind::Drop => "drop",
+            MarkerKind::Solo => "solo",
+            MarkerKind::Outro => "outro",
+            MarkerKind::Custom => "custom",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Marker {

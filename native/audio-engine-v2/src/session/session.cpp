@@ -7,6 +7,20 @@ namespace lt {
 
 using json = nlohmann::json;
 
+MarkerKind marker_kind_from_string(const std::string& token) noexcept {
+    if (token == "intro") return MarkerKind::Intro;
+    if (token == "verse") return MarkerKind::Verse;
+    if (token == "pre_chorus") return MarkerKind::PreChorus;
+    if (token == "chorus") return MarkerKind::Chorus;
+    if (token == "post_chorus") return MarkerKind::PostChorus;
+    if (token == "bridge") return MarkerKind::Bridge;
+    if (token == "breakdown") return MarkerKind::Breakdown;
+    if (token == "drop") return MarkerKind::Drop;
+    if (token == "solo") return MarkerKind::Solo;
+    if (token == "outro") return MarkerKind::Outro;
+    return MarkerKind::Custom;
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------

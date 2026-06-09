@@ -211,6 +211,7 @@ EngineCommand command_from_json(const std::string& raw) {
             marker.id = item.at("id").get<Id>();
             marker.name = item.value("name", std::string{});
             marker.frame = item.at("frame").get<Frame>();
+            marker.kind = item.value("kind", std::string{});
             cmd.markers.push_back(std::move(marker));
         }
         return cmd;
@@ -277,6 +278,7 @@ EngineCommand command_from_json(const std::string& raw) {
             marker.id = item.at("id").get<Id>();
             marker.name = item.value("name", std::string{});
             marker.frame = item.at("frame").get<Frame>();
+            marker.kind = item.value("kind", std::string{});
             cmd.markers.push_back(std::move(marker));
         }
         for (const auto& item : j.at("tempo_markers")) {
