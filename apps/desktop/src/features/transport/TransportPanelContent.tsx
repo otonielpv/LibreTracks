@@ -725,6 +725,11 @@ export function TransportPanelContent() {
   // settings handler factory — instantiated near the top — can read the current
   // value without depending on render-order of the derived memo.
   const selectedOutputChannelCountRef = useRef(1);
+  // Mirrors `enabledOutputChannelsDraft` so the commit handler reads the live
+  // draft the user just edited, not the previously-persisted value. Without
+  // this, committing re-saved the stale settings value and silently reverted
+  // multichannel selections back to stereo (Out 1/2).
+  const enabledOutputChannelsDraftRef = useRef<number[]>([]);
   // Mirrors `audioDeviceDescriptors` so the settings handler factory can look up
   // a device descriptor at call time without depending on render order.
   const audioDeviceDescriptorsRef = useRef<AudioDeviceDescriptor[]>([]);
@@ -1602,6 +1607,8 @@ export function TransportPanelContent() {
         persistAudioSettings,
         getSelectedOutputChannelCount: () =>
           selectedOutputChannelCountRef.current,
+        getEnabledOutputChannelsDraft: () =>
+          enabledOutputChannelsDraftRef.current,
         getAudioDeviceDescriptors: () => audioDeviceDescriptorsRef.current,
         setMidiLearnFeedback,
         setEnabledOutputChannelsDraft,
@@ -8716,6 +8723,7 @@ export function TransportPanelContent() {
     ),
   );
   selectedOutputChannelCountRef.current = selectedOutputChannelCount;
+  enabledOutputChannelsDraftRef.current = enabledOutputChannelsDraft;
   audioDeviceDescriptorsRef.current = audioDeviceDescriptors;
   const effectiveEnabledOutputChannels = useMemo(
     () =>

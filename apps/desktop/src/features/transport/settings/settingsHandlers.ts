@@ -30,6 +30,12 @@ export type SettingsHandlerDeps = {
   ) => void;
   /** The currently selected output device's channel count. */
   getSelectedOutputChannelCount: () => number;
+  /**
+   * The live, in-progress channel selection the user is editing in the
+   * settings modal (read at commit time). Distinct from the persisted
+   * `appSettingsRef.current.enabledOutputChannels`.
+   */
+  getEnabledOutputChannelsDraft: () => number[];
   /** The current list of audio output device descriptors (read at call time). */
   getAudioDeviceDescriptors: () => AudioDeviceDescriptor[];
   /** Clears the MIDI-learn feedback toast when mappings are reset. */
@@ -52,6 +58,7 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
     appSettingsRef,
     persistAudioSettings,
     getSelectedOutputChannelCount,
+    getEnabledOutputChannelsDraft,
     getAudioDeviceDescriptors,
     setMidiLearnFeedback,
     setEnabledOutputChannelsDraft,
@@ -141,8 +148,11 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
     },
 
     handleCommitEnabledOutputChannels() {
+      // Commit the draft the user just edited — NOT the previously-persisted
+      // value. Reading appSettingsRef here silently discarded multichannel
+      // selections and reverted them to stereo on save.
       const nextChannels = normalizeEnabledOutputChannelsForOutputCount(
-        appSettingsRef.current.enabledOutputChannels,
+        getEnabledOutputChannelsDraft(),
         getSelectedOutputChannelCount(),
       );
       persistAudioPatch(
