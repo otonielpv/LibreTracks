@@ -31,6 +31,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { label: "Overview", translations: { es: "Resumen" }, slug: "docs" },
+            { label: "System Requirements", translations: { es: "Requisitos del sistema" }, slug: "docs/system-requirements" },
             { label: "Core Concepts", translations: { es: "Conceptos base" }, slug: "docs/core-concepts" },
             { label: "Compact View", translations: { es: "Vista Compacta" }, slug: "docs/compact-view" },
             { label: "Pitch, Warp & The T Button", translations: { es: "Pitch, warp y el boton T" }, slug: "docs/pitch-and-warp" },

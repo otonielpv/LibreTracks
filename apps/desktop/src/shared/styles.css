@@ -2527,18 +2527,38 @@ textarea {
 }
 
 .lt-track-header[style*="--lt-track-color"] {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--lt-track-color) 22%, transparent), transparent 34%),
-    linear-gradient(180deg, #2a2a2a 0%, #232323 100%);
+  background: linear-gradient(180deg, #2a2a2a 0%, #232323 100%);
+}
+
+/* Per-track colour tint. Painted as a low-opacity overlay of the solid track
+   colour instead of color-mix(var, transparent), which neither Safari 13
+   (Catalina) nor build-time CSS tooling can resolve against a runtime var.
+   This renders identically on legacy WebKit and modern browsers, per track. */
+.lt-track-header[style*="--lt-track-color"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(90deg, var(--lt-track-color, transparent), transparent 34%);
+  opacity: 0.22;
 }
 
 .lt-track-header.is-selected {
-  border-right-color: color-mix(in srgb, var(--lt-track-color, #57f1db) 42%, rgb(255 255 255 / 0.12));
-  border-bottom-color: color-mix(in srgb, var(--lt-track-color, #57f1db) 42%, rgb(255 255 255 / 0.12));
+  /* Per-track border/glow tints; opaque var() value, dimmed via low opacity is
+     not possible on borders, so we approximate the old ~42% mix with the solid
+     colour. Default teal keeps the prior look for uncoloured tracks. */
+  border-right-color: var(--lt-track-color, #57f1db);
+  border-bottom-color: var(--lt-track-color, #57f1db);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--lt-track-color, #57f1db) 46%, rgb(255 255 255 / 0.12)),
-    inset 0 1px 0 rgb(255 255 255 / 0.05),
-    inset 0 0 0 999px color-mix(in srgb, var(--lt-track-color, #57f1db) 10%, transparent);
+    inset 0 0 0 1px var(--lt-track-color, #57f1db),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Selected-track surface wash — overlay so the solid track colour reads at
+   ~10% without color-mix. Sits above the base tint, below the content. */
+.lt-track-header.is-selected::after {
+  opacity: 0.32;
 }
 
 .lt-track-header.is-dragging {
@@ -2560,6 +2580,8 @@ textarea {
   position: absolute;
   inset: 0 auto 0 0;
   width: 2px;
+  /* Above the ::after tint overlay so the accent bar stays crisp. */
+  z-index: 1;
   background: var(--lt-track-color, transparent);
 }
 
@@ -3010,6 +3032,9 @@ textarea {
 }
 
 .lt-track-header-body {
+  position: relative;
+  /* Above the ::after colour-tint overlay so content stays legible. */
+  z-index: 2;
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
@@ -4506,8 +4531,14 @@ textarea {
   color: #e5e2e1;
 }
 
+/* Explicit modifier class so Safari 13 (Catalina), which lacks :has(), still
+   gets the padding. The :has() rule is kept as a progressive enhancement. */
+.lt-import-header--simple,
 .lt-import-header:has(.lt-import-dialog--simple) {
-  padding-block: 0.9rem;
+  /* Physical props, not padding-block — logical padding is Safari 14.1+ and
+     Lightning CSS does not down-level it for our target. */
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
 }
 
 .lt-import-header-title .material-symbols-outlined {
@@ -5223,12 +5254,29 @@ textarea {
    the parent sets inline per clip. */
 .lt-compact-clip-entry.is-coloured {
   padding-left: 0.7rem;
-  border-color: color-mix(in srgb, var(--lt-track-color) 35%, transparent);
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--lt-track-color) 18%, transparent) 0%,
-    rgb(20 26 25 / 0.85) 60%
-  );
+  /* Solid var() border (was a ~35% color-mix); the per-track tint comes from
+     the ::after overlay below, so no color-mix() is needed — works on Safari 13
+     (Catalina) and modern browsers alike. */
+  border-color: var(--lt-track-color, rgba(87, 241, 219, 0.35));
+  background: rgba(20, 26, 25, 0.85);
+}
+
+/* Per-track background tint as a low-opacity overlay of the solid track colour,
+   replacing color-mix(var, transparent) which the runtime var defeats. */
+.lt-compact-clip-entry.is-coloured::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(to right, var(--lt-track-color, transparent), transparent 60%);
+  opacity: 0.22;
+  border-radius: inherit;
+}
+
+.lt-compact-clip-entry.is-coloured > * {
+  position: relative;
+  z-index: 1;
 }
 
 .lt-compact-clip-entry.is-coloured::before {
@@ -5238,6 +5286,7 @@ textarea {
   top: 0;
   bottom: 0;
   width: 3px;
+  z-index: 1;
   background: var(--lt-track-color);
   border-radius: 2px 0 0 2px;
 }
