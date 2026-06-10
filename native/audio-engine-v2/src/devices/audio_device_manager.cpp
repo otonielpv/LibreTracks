@@ -1,4 +1,5 @@
 #include <lt_engine/devices/audio_device_manager.h>
+#include <lt_engine/devices/device_channel_layout.h>
 
 #if LT_ENGINE_USE_JUCE
 
@@ -131,26 +132,8 @@ std::pair<std::string, std::string> split_device_id(const std::string& id) {
     return { id.substr(0, pos), id.substr(pos + 2) };
 }
 
-std::string lower_copy(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return value;
-}
-
-// Some backends (WASAPI shared / DirectSound / MME on Windows, the macOS
-// non-aggregate CoreAudio devices) only expose stereo. Probing them by
-// instantiating an AudioIODevice is pointless and, for some drivers
-// (notably WASAPI on certain Realtek installs), surprisingly slow. ASIO
-// and JACK are the ones where we *must* probe to discover the real
-// channel layout, because the device count is driver-dependent.
-bool backend_needs_channel_probe(const std::string& backend) {
-    const auto name = lower_copy(backend);
-    return name.find("asio") != std::string::npos
-        || name.find("jack") != std::string::npos
-        || name.find("alsa") != std::string::npos
-        || name.find("core audio") != std::string::npos
-        || name.find("coreaudio") != std::string::npos;
-}
+using device_layout::backend_needs_channel_probe;
+using device_layout::lower_copy;
 
 // Gated debug log: only emits when LIBRETRACKS_AUDIO_DEBUG is enabled in the
 // environment. Keeps the device-enumeration / open timings available for
@@ -340,8 +323,10 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
                 // WASAPI / DirectSound / MME report stereo via this code path
                 // without paying the createDevice cost. The exact channel count
                 // is recomputed from getOutputChannelNames() on open_device().
-                d.output_channel_count = 2;
-                d.output_channel_names = {"Out 1", "Out 2"};
+                auto resolved = device_layout::resolve_layout(
+                    d.output_channel_count, std::move(d.output_channel_names));
+                d.output_channel_count = resolved.count;
+                d.output_channel_names = std::move(resolved.names);
             }
             result.push_back(std::move(d));
         }
@@ -509,8 +494,10 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         impl_->output_channel_names.push_back(name.toStdString());
     impl_->output_channel_count = static_cast<int>(impl_->output_channel_names.size());
     if (impl_->output_channel_count <= 0) {
-        impl_->output_channel_count = 2;
-        impl_->output_channel_names = {"Out 1", "Out 2"};
+        auto resolved = device_layout::resolve_layout(
+            impl_->output_channel_count, std::move(impl_->output_channel_names));
+        impl_->output_channel_count = resolved.count;
+        impl_->output_channel_names = std::move(resolved.names);
     }
 
     impl_->juce_manager.addAudioCallback(impl_->adaptor.get());

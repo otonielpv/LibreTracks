@@ -29,6 +29,7 @@ import {
   type JumpTriggerLabel,
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
+  type MarkerKind,
   type MidiBinding,
   type PendingJumpSummary,
   type PitchPrepareSummary,
@@ -99,8 +100,10 @@ import {
   setMetronomeEnabledRealtime,
   setMetronomeVolumeRealtime,
   setMetronomeSoundRealtime,
+  setVoiceGuideConfigRealtime,
   splitClip,
   splitClips,
+  setSectionMarkerKind,
   stopTransport,
   updateClipColor,
   updateAudioSettings,
@@ -123,6 +126,12 @@ import {
   formatTransposeSemitones,
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
+import {
+  MARKER_KINDS,
+  markerKindColor,
+  markerKindLabel,
+  markerKindVariants,
+} from "./markerKinds";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./CompactView";
@@ -716,6 +725,11 @@ export function TransportPanelContent() {
   // settings handler factory — instantiated near the top — can read the current
   // value without depending on render-order of the derived memo.
   const selectedOutputChannelCountRef = useRef(1);
+  // Mirrors `enabledOutputChannelsDraft` so the commit handler reads the live
+  // draft the user just edited, not the previously-persisted value. Without
+  // this, committing re-saved the stale settings value and silently reverted
+  // multichannel selections back to stereo (Out 1/2).
+  const enabledOutputChannelsDraftRef = useRef<number[]>([]);
   // Mirrors `audioDeviceDescriptors` so the settings handler factory can look up
   // a device descriptor at call time without depending on render order.
   const audioDeviceDescriptorsRef = useRef<AudioDeviceDescriptor[]>([]);
@@ -1593,6 +1607,8 @@ export function TransportPanelContent() {
         persistAudioSettings,
         getSelectedOutputChannelCount: () =>
           selectedOutputChannelCountRef.current,
+        getEnabledOutputChannelsDraft: () =>
+          enabledOutputChannelsDraftRef.current,
         getAudioDeviceDescriptors: () => audioDeviceDescriptorsRef.current,
         setMidiLearnFeedback,
         setEnabledOutputChannelsDraft,
@@ -1664,6 +1680,7 @@ export function TransportPanelContent() {
         setMetronomeSoundRealtime,
         setMetronomeEnabledRealtime,
         setMetronomeVolumeRealtime,
+        setVoiceGuideConfigRealtime,
         saveSettings,
       }),
     [persistAudioSettings, runAction, setStatus, formatErrorStatus, t],
@@ -1671,6 +1688,7 @@ export function TransportPanelContent() {
   const {
     handleRefreshAudioDevices,
     handleMetronomeSoundChange,
+    handleVoiceGuideChange,
     handleMetronomeEnabledChange,
     handleMetronomeVolumeDraftChange,
     commitMetronomeVolumeDraft,
@@ -2727,6 +2745,14 @@ export function TransportPanelContent() {
     let active = true;
 
     void refreshAudioSettings()
+      .then((settings) => {
+        // If the voice guide was left enabled in a previous session, push the
+        // config + load the clip bank now so it works without re-opening the
+        // settings panel. set_voice_guide_config_realtime loads the bank.
+        if (active && settings?.voiceGuideEnabled) {
+          void setVoiceGuideConfigRealtime(settings).catch(() => {});
+        }
+      })
       .catch((error) => {
         if (!active) {
           return;
@@ -5788,6 +5814,78 @@ export function TransportPanelContent() {
     });
   }
 
+  function applyMarkerKind(
+    section: SectionMarkerSummary,
+    kind: MarkerKind,
+    variant: number | null,
+  ) {
+    void runAction(async () => {
+      const nextSnapshot = await setSectionMarkerKind(section.id, kind, variant);
+      applyPlaybackSnapshot(nextSnapshot);
+      const kindLabel = markerKindLabel(kind, t);
+      setStatus(
+        t("transport.status.markerKindSet", {
+          name: section.name,
+          kind: variant ? `${kindLabel} ${variant}` : kindLabel,
+        }),
+      );
+    });
+  }
+
+  function bumpContextMenuPosition() {
+    const position = contextMenuPositionRef.current;
+    const next = { x: position.x + 12, y: position.y + 12 };
+    contextMenuPositionRef.current = next;
+    return next;
+  }
+
+  // Variant chooser for kinds that ship numbered recordings (Verse 1-6, ...).
+  function openMarkerVariantMenu(section: SectionMarkerSummary, kind: MarkerKind) {
+    const variants = markerKindVariants(kind);
+    const current = section.kind === kind ? (section.variant ?? null) : null;
+    const next = bumpContextMenuPosition();
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: markerKindLabel(kind, t),
+      actions: [
+        {
+          label: `${markerKindLabel(kind, t)}${current == null ? " ✓" : ""}`,
+          swatch: markerKindColor(kind),
+          onSelect: () => applyMarkerKind(section, kind, null),
+        },
+        ...variants.map((n) => ({
+          label: `${markerKindLabel(kind, t)} ${n}${current === n ? " ✓" : ""}`,
+          swatch: markerKindColor(kind),
+          onSelect: () => applyMarkerKind(section, kind, n),
+        })),
+      ],
+    });
+  }
+
+  function openMarkerKindMenu(section: SectionMarkerSummary) {
+    const currentKind = section.kind ?? "custom";
+    const next = bumpContextMenuPosition();
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: t("transport.menu.markerKind"),
+      actions: MARKER_KINDS.map((kind) => {
+        const hasVariants = markerKindVariants(kind).length > 0;
+        return {
+          label: `${markerKindLabel(kind, t)}${hasVariants ? " ▸" : ""}${
+            kind === currentKind ? " ✓" : ""
+          }`,
+          swatch: markerKindColor(kind),
+          onSelect: () =>
+            hasVariants
+              ? openMarkerVariantMenu(section, kind)
+              : applyMarkerKind(section, kind, null),
+        };
+      }),
+    });
+  }
+
   function trackContextMenu(track: TrackSummary) {
     const currentSong = songRef.current;
     if (!currentSong) {
@@ -6618,6 +6716,12 @@ export function TransportPanelContent() {
             setStatus(t("transport.status.markerRenamed", { name: nextName }));
           });
         },
+      },
+      {
+        label: t("transport.menu.markerKind"),
+        swatch: markerKindColor(section.kind),
+        disabled: !canEditMarker,
+        onSelect: () => openMarkerKindMenu(section),
       },
       {
         label: t("common.delete"),
@@ -8619,6 +8723,7 @@ export function TransportPanelContent() {
     ),
   );
   selectedOutputChannelCountRef.current = selectedOutputChannelCount;
+  enabledOutputChannelsDraftRef.current = enabledOutputChannelsDraft;
   audioDeviceDescriptorsRef.current = audioDeviceDescriptors;
   const effectiveEnabledOutputChannels = useMemo(
     () =>
@@ -8692,6 +8797,12 @@ export function TransportPanelContent() {
       id: "metronome",
       label: t("transport.settingsModal.tabMetronome", {
         defaultValue: "Metronome",
+      }),
+    },
+    {
+      id: "voiceGuide",
+      label: t("transport.settingsModal.tabVoiceGuide", {
+        defaultValue: "Voice guide",
       }),
     },
     {
@@ -9758,6 +9869,7 @@ export function TransportPanelContent() {
               onMetronomeVolumeDraftChange={handleMetronomeVolumeDraftChange}
               onCommitMetronomeVolume={commitMetronomeVolumeDraft}
               onMetronomeSoundChange={handleMetronomeSoundChange}
+              onVoiceGuideChange={handleVoiceGuideChange}
               midiInputDevices={midiInputDevices}
               isMidiInputRefreshing={isMidiInputRefreshing}
               selectedMidiInputDevice={selectedMidiInputDevice}

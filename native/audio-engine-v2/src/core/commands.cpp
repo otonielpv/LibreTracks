@@ -143,6 +143,23 @@ EngineCommand command_from_json(const std::string& raw) {
         return c;
     }
 
+    if (type == "SetVoiceGuideConfig") {
+        CmdSetVoiceGuideConfig c;
+        c.enabled = j.at("enabled").get<bool>();
+        c.volume = j.at("volume").get<float>();
+        c.route = j.value("route", std::string{"monitor"});
+        c.lead_bars = j.value("lead_bars", 1);
+        c.count_in_enabled = j.value("count_in_enabled", true);
+        return c;
+    }
+
+    if (type == "LoadVoiceGuideBank") {
+        CmdLoadVoiceGuideBank c;
+        c.voices_dir = j.value("voices_dir", std::string{});
+        c.lang = j.value("lang", std::string{});
+        return c;
+    }
+
     if (type == "SetSongTranspose")
         return CmdSetSongTranspose{ j.at("song_id").get<Id>(), j.at("semitones").get<Semitones>() };
 
@@ -211,6 +228,8 @@ EngineCommand command_from_json(const std::string& raw) {
             marker.id = item.at("id").get<Id>();
             marker.name = item.value("name", std::string{});
             marker.frame = item.at("frame").get<Frame>();
+            marker.kind = item.value("kind", std::string{});
+            marker.variant = item.value("variant", 0);
             cmd.markers.push_back(std::move(marker));
         }
         return cmd;
@@ -277,6 +296,8 @@ EngineCommand command_from_json(const std::string& raw) {
             marker.id = item.at("id").get<Id>();
             marker.name = item.value("name", std::string{});
             marker.frame = item.at("frame").get<Frame>();
+            marker.kind = item.value("kind", std::string{});
+            marker.variant = item.value("variant", 0);
             cmd.markers.push_back(std::move(marker));
         }
         for (const auto& item : j.at("tempo_markers")) {
@@ -356,6 +377,19 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["subdivision_preset"] = c.subdivision_preset;
             j["subdivision_pitch"] = c.subdivision_pitch;
             j["subdivision_gain"] = c.subdivision_gain;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetVoiceGuideConfig>) {
+            j["type"] = "SetVoiceGuideConfig";
+            j["enabled"] = c.enabled;
+            j["volume"] = c.volume;
+            j["route"] = c.route;
+            j["lead_bars"] = c.lead_bars;
+            j["count_in_enabled"] = c.count_in_enabled;
+        }
+        else if constexpr (std::is_same_v<T, CmdLoadVoiceGuideBank>) {
+            j["type"] = "LoadVoiceGuideBank";
+            j["voices_dir"] = c.voices_dir;
+            j["lang"] = c.lang;
         }
         // ... additional types follow the same pattern.
         // Omitted for brevity — expand as needed.

@@ -33,12 +33,32 @@ fn default_metronome_subdivision_gain() -> f32 {
     0.5
 }
 
+fn default_voice_guide_volume() -> f64 {
+    1.0
+}
+
+fn default_voice_guide_lead_bars() -> i32 {
+    1
+}
+
+fn default_voice_guide_count_in_enabled() -> bool {
+    true
+}
+
+fn default_voice_guide_language() -> String {
+    "es".to_string()
+}
+
 fn default_enabled_output_channels() -> Vec<usize> {
     vec![0, 1]
 }
 
 fn default_audio_route() -> String {
     "master".into()
+}
+
+fn default_voice_guide_route() -> String {
+    "monitor".into()
 }
 
 fn default_global_jump_mode() -> String {
@@ -134,6 +154,18 @@ pub struct AppSettings {
     pub metronome_subdivision_pitch: f32,
     #[serde(default = "default_metronome_subdivision_gain")]
     pub metronome_subdivision_gain: f32,
+    #[serde(default)]
+    pub voice_guide_enabled: bool,
+    #[serde(default = "default_voice_guide_route")]
+    pub voice_guide_output: String,
+    #[serde(default = "default_voice_guide_volume")]
+    pub voice_guide_volume: f64,
+    #[serde(default = "default_voice_guide_lead_bars")]
+    pub voice_guide_lead_bars: i32,
+    #[serde(default = "default_voice_guide_count_in_enabled")]
+    pub voice_guide_count_in_enabled: bool,
+    #[serde(default = "default_voice_guide_language")]
+    pub voice_guide_language: String,
     #[serde(default = "default_global_jump_mode")]
     pub global_jump_mode: String,
     #[serde(default = "default_global_jump_bars")]
@@ -191,6 +223,12 @@ impl Default for AppSettings {
             metronome_subdivision_preset: default_metronome_preset(),
             metronome_subdivision_pitch: default_metronome_pitch(),
             metronome_subdivision_gain: default_metronome_subdivision_gain(),
+            voice_guide_enabled: false,
+            voice_guide_output: default_voice_guide_route(),
+            voice_guide_volume: default_voice_guide_volume(),
+            voice_guide_lead_bars: default_voice_guide_lead_bars(),
+            voice_guide_count_in_enabled: default_voice_guide_count_in_enabled(),
+            voice_guide_language: default_voice_guide_language(),
             global_jump_mode: default_global_jump_mode(),
             global_jump_bars: default_global_jump_bars(),
             song_jump_trigger: default_song_jump_trigger(),
@@ -320,6 +358,7 @@ mod tests {
         assert!(!settings.metronome_enabled);
         assert_eq!(settings.metronome_volume, 0.8);
         assert_eq!(settings.metronome_output, "master");
+        assert_eq!(settings.voice_guide_output, "monitor");
         assert_eq!(settings.enabled_output_channels, vec![0, 1]);
         assert_eq!(settings.global_jump_mode, "immediate");
         assert_eq!(settings.global_jump_bars, 4);

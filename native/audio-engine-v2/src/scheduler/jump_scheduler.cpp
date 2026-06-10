@@ -352,6 +352,64 @@ std::optional<DueJump> JumpScheduler::check_due(const TransportClock& clock,
     return std::nullopt;
 }
 
+std::optional<AnnounceableJump> JumpScheduler::peek_announceable_jump(
+    const Session& session, const TransportClock& clock) const {
+    std::lock_guard live_lock(impl_->live_mutex);
+    const Frame cur = clock.position().frame;
+
+    std::optional<AnnounceableJump> best;
+    for (const auto& j : impl_->jumps) {
+        if (j.status != JumpStatus::Pending && j.status != JumpStatus::Armed)
+            continue;
+        if (j.target.kind != JumpTarget::Kind::Marker)
+            continue;  // only marker destinations are announced
+
+        // Resolve the trigger frame ahead of time. Immediate jumps have no lead
+        // time, so they are not announceable.
+        Frame trigger_frame = -1;
+        switch (j.trigger) {
+            case JumpTrigger::Immediate:
+                continue;
+            case JumpTrigger::AtFrame:
+                if (j.trigger_frame) trigger_frame = *j.trigger_frame;
+                break;
+            case JumpTrigger::AtSongEnd:
+                for (const auto& song : session.songs)
+                    if (song.end_frame > cur &&
+                        (trigger_frame < 0 || song.end_frame < trigger_frame))
+                        trigger_frame = song.end_frame;
+                break;
+            case JumpTrigger::AtRegionEnd:
+                for (const auto& song : session.songs)
+                    for (const auto& region : song.regions)
+                        if (region.end_frame > cur &&
+                            (trigger_frame < 0 || region.end_frame < trigger_frame))
+                            trigger_frame = region.end_frame;
+                break;
+        }
+        if (trigger_frame <= cur) continue;  // already past or unresolved
+
+        // Find the destination marker to read its kind/variant.
+        const Marker* dest = nullptr;
+        if (j.target.id)
+            for (const auto& song : session.songs)
+                for (const auto& m : song.markers)
+                    if (m.id == *j.target.id) { dest = &m; break; }
+
+        AnnounceableJump candidate;
+        candidate.trigger_frame = trigger_frame;
+        candidate.has_marker_target = dest != nullptr;
+        if (dest) {
+            candidate.target_frame = dest->frame;
+            candidate.target_kind = dest->kind;
+            candidate.target_variant = dest->variant;
+        }
+        if (!best || candidate.trigger_frame < best->trigger_frame)
+            best = candidate;
+    }
+    return best;
+}
+
 void JumpScheduler::mark_executed(Frame from_frame, Frame to_frame) {
     std::lock_guard live_lock(impl_->live_mutex);
     if (!impl_->due_index) return;

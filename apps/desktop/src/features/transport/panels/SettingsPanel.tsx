@@ -80,6 +80,7 @@ type SettingsPanelProps = {
   onMetronomeVolumeDraftChange: (value: number) => void;
   onCommitMetronomeVolume: (value: number) => void;
   onMetronomeSoundChange: (patch: Partial<AppSettings>) => void;
+  onVoiceGuideChange: (patch: Partial<AppSettings>) => void;
 
   midiInputDevices: string[];
   isMidiInputRefreshing: boolean;
@@ -147,6 +148,7 @@ export function SettingsPanel({
   onMetronomeVolumeDraftChange,
   onCommitMetronomeVolume,
   onMetronomeSoundChange,
+  onVoiceGuideChange,
   midiInputDevices,
   isMidiInputRefreshing,
   selectedMidiInputDevice,
@@ -172,6 +174,13 @@ export function SettingsPanel({
   onMidiLearnTarget,
 }: SettingsPanelProps) {
   const { t } = useTranslation();
+  const voiceGuideRoutingOptions = [
+    {
+      value: "monitor",
+      label: t("trackHeader.monitor", { defaultValue: "Monitor" }),
+    },
+    ...audioRoutingOptions.filter((option) => option.value !== "monitor"),
+  ];
 
   if (!isOpen) {
     return null;
@@ -862,6 +871,163 @@ export function SettingsPanel({
                                 appSettings.metronomeSubdivisionGain * 100,
                               ),
                             })}
+                          </small>
+                        </label>
+                      </>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
+
+              {activeTab === "voiceGuide" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-voiceGuide"
+                  aria-labelledby="lt-settings-tab-voiceGuide"
+                >
+                  <div className="lt-settings-section-grid">
+                    <label className="lt-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.voiceGuideEnabled}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onVoiceGuideChange({
+                            voiceGuideEnabled: event.target.checked,
+                          })
+                        }
+                      />
+                      <div className="lt-settings-toggle-copy">
+                        <strong>
+                          {t("transport.settingsModal.voiceGuide", {
+                            defaultValue: "Voice guide",
+                          })}
+                        </strong>
+                        <small>
+                          {t("transport.settingsModal.voiceGuideDescription", {
+                            defaultValue:
+                              "Speak the upcoming section and count in before each marker.",
+                          })}
+                        </small>
+                      </div>
+                    </label>
+
+                    {appSettings.voiceGuideEnabled ? (
+                      <>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.voiceGuideLanguage", {
+                              defaultValue: "Language",
+                            })}
+                          </span>
+                          <select
+                            value={appSettings.voiceGuideLanguage}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onVoiceGuideChange({
+                                voiceGuideLanguage: event.target.value,
+                              })
+                            }
+                          >
+                            <option value="es">Español</option>
+                            <option value="en">English</option>
+                          </select>
+                        </label>
+
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.voiceGuideOutput", {
+                              defaultValue: "Voice guide output",
+                            })}
+                          </span>
+                          <select
+                            value={appSettings.voiceGuideOutput}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onVoiceGuideChange({
+                                voiceGuideOutput: event.target.value,
+                              })
+                            }
+                          >
+                            {voiceGuideRoutingOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.voiceGuideLeadBars", {
+                              defaultValue: "Lead-in bars",
+                            })}
+                          </span>
+                          <select
+                            value={appSettings.voiceGuideLeadBars}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onVoiceGuideChange({
+                                voiceGuideLeadBars: Number(event.target.value),
+                              })
+                            }
+                          >
+                            <option value={1}>1</option>
+                            <option value={2}>2</option>
+                          </select>
+                        </label>
+
+                        <label className="lt-settings-toggle">
+                          <input
+                            type="checkbox"
+                            checked={appSettings.voiceGuideCountInEnabled}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onVoiceGuideChange({
+                                voiceGuideCountInEnabled: event.target.checked,
+                              })
+                            }
+                          />
+                          <div className="lt-settings-toggle-copy">
+                            <strong>
+                              {t("transport.settingsModal.voiceGuideCountIn", {
+                                defaultValue: "Count-in",
+                              })}
+                            </strong>
+                            <small>
+                              {t(
+                                "transport.settingsModal.voiceGuideCountInDescription",
+                                {
+                                  defaultValue:
+                                    "Count the remaining beats after the section name.",
+                                },
+                              )}
+                            </small>
+                          </div>
+                        </label>
+
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.voiceGuideVolume", {
+                              defaultValue: "Voice volume",
+                            })}
+                          </span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            value={appSettings.voiceGuideVolume}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onVoiceGuideChange({
+                                voiceGuideVolume: Number(event.target.value),
+                              })
+                            }
+                          />
+                          <small>
+                            {Math.round(appSettings.voiceGuideVolume * 100)}%
                           </small>
                         </label>
                       </>

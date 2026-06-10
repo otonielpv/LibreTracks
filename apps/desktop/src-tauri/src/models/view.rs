@@ -1,8 +1,8 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
 use libretracks_core::{
-    audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
-    TempoMarker, TimeSignatureMarker, TrackKind,
+    audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, MarkerKind, Song,
+    SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -178,6 +178,9 @@ pub struct MarkerSummary {
     pub name: String,
     pub start_seconds: f64,
     pub digit: Option<u8>,
+    pub kind: MarkerKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -517,6 +520,8 @@ pub(crate) fn marker_to_warped_summary(song: &Song, marker: &Marker) -> MarkerSu
         name: marker.name.clone(),
         start_seconds: warp_timeline_seconds_at(song, marker.start_seconds),
         digit: marker.digit,
+        kind: marker.kind,
+        variant: marker.variant,
     }
 }
 
@@ -854,6 +859,8 @@ mod tests {
                 name: "Intro".into(),
                 start_seconds: 2.0,
                 digit: Some(1),
+                kind: MarkerKind::Custom,
+                variant: None,
             }],
         }
     }

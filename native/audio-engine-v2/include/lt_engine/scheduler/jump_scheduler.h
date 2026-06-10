@@ -57,6 +57,18 @@ struct DueJump {
     bool suppress_seek_fade = false;
 };
 
+// A pending (not-yet-due) jump whose execution frame is known in advance, used
+// by the voice guide to announce the destination section before the jump fires.
+// Only resolvable triggers (region/song end, explicit frame) produce one;
+// Immediate jumps have no lead time and are excluded.
+struct AnnounceableJump {
+    Frame      trigger_frame = 0;  // frame at which the jump will execute
+    Frame      target_frame  = 0;  // where it lands
+    MarkerKind target_kind   = MarkerKind::Custom;
+    int        target_variant = 0; // numbered variant of the destination marker
+    bool       has_marker_target = false; // false when the jump targets a non-marker
+};
+
 // Callback fired by audio thread when a jump executes.
 // Must be realtime-safe (no alloc, no lock, no I/O).
 using JumpExecutedCallback = std::function<void(const ScheduledJump&, Frame /*from*/, Frame /*to*/)>;
@@ -96,6 +108,12 @@ public:
 
     // Mark the last due jump as executed.
     void mark_executed(Frame from_frame, Frame to_frame);
+
+    // Read-only: the nearest pending jump (by trigger frame) whose execution
+    // frame is known ahead of time and which targets a marker. Returns nullopt
+    // when there is none. Realtime-safe; does not change jump state.
+    std::optional<AnnounceableJump> peek_announceable_jump(
+        const Session& session, const TransportClock& clock) const;
 
     // Read-only copy of the current jump list for snapshot.
     std::vector<ScheduledJump> jump_list() const;

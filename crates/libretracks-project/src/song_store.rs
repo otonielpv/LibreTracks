@@ -4,8 +4,8 @@ use std::{
 };
 
 use libretracks_core::{
-    validate_song, Clip, DomainError, Marker, Song, SongRegion, TempoMetadata, TimeSignatureMarker,
-    Track,
+    validate_song, Clip, DomainError, Marker, MarkerKind, Song, SongRegion, TempoMetadata,
+    TimeSignatureMarker, Track,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -215,6 +215,10 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
             name: section.name,
             start_seconds: section.start_seconds,
             digit: None,
+            // Legacy v2 sessions predate semantic marker kinds; they carry only
+            // free-text names, so they migrate to Custom.
+            kind: MarkerKind::Custom,
+            variant: None,
         })
         .collect::<Vec<_>>();
     section_markers.sort_by(|left, right| {

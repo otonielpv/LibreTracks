@@ -20,6 +20,7 @@ function setup(overrides: Partial<SettingsHandlerDeps> = {}) {
     appSettingsRef,
     persistAudioSettings,
     getSelectedOutputChannelCount: () => 8,
+    getEnabledOutputChannelsDraft: () => [],
     getAudioDeviceDescriptors: () => [],
     setMidiLearnFeedback: vi.fn(),
     setEnabledOutputChannelsDraft,
@@ -96,6 +97,40 @@ describe("createSettingsHandlers", () => {
     const { handlers, setEnabledOutputChannelsDraft } = setup();
     handlers.handleClearOutputChannels();
     expect(setEnabledOutputChannelsDraft).toHaveBeenCalledWith([]);
+  });
+
+  it("handleCommitEnabledOutputChannels persists the DRAFT, not the stale setting", () => {
+    // Regression: a user enabling all 4 outputs on a UMC204HD saw the save
+    // silently revert to stereo (Out 1/2). The commit read the persisted
+    // value instead of the draft the user just edited.
+    const { handlers, persistAudioSettings, appSettingsRef } = setup({
+      getSelectedOutputChannelCount: () => 4,
+      // What the user just selected in the modal.
+      getEnabledOutputChannelsDraft: () => [0, 1, 2, 3],
+    });
+    // What was previously persisted (stereo only).
+    appSettingsRef.current = normalizeAppSettings({
+      ...DEFAULT_APP_SETTINGS,
+      enabledOutputChannels: [0, 1],
+    });
+
+    handlers.handleCommitEnabledOutputChannels();
+
+    expect(lastPatch(persistAudioSettings).enabledOutputChannels).toEqual([
+      0, 1, 2, 3,
+    ]);
+  });
+
+  it("handleCommitEnabledOutputChannels clamps the draft to the device channel count", () => {
+    const { handlers, persistAudioSettings } = setup({
+      getSelectedOutputChannelCount: () => 2,
+      getEnabledOutputChannelsDraft: () => [0, 1, 2, 3],
+    });
+    handlers.handleCommitEnabledOutputChannels();
+    // Channels beyond the device width are dropped on commit.
+    expect(lastPatch(persistAudioSettings).enabledOutputChannels).toEqual([
+      0, 1,
+    ]);
   });
 
   it("jump/vamp handlers floor and clamp bar counts to at least 1", () => {

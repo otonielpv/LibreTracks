@@ -14,8 +14,9 @@ use libretracks_audio::{
 };
 use libretracks_core::{
     audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio_in_song,
-    source_seconds_at_view, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, TempoMarker,
-    TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    source_seconds_at_view, warp_timeline_seconds_at, Clip, Marker, MarkerKind, Song, SongRegion,
+    TempoMarker, TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES,
+    MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
     append_wav_files_to_song, global_waveform_file_path,
@@ -1428,6 +1429,14 @@ impl DesktopSession {
                 - next_settings.metronome_subdivision_gain)
                 .abs()
                 > f32::EPSILON;
+        let voice_guide_config_changed = previous_settings.voice_guide_enabled
+            != next_settings.voice_guide_enabled
+            || previous_settings.voice_guide_output != next_settings.voice_guide_output
+            || (previous_settings.voice_guide_volume - next_settings.voice_guide_volume).abs()
+                > f64::EPSILON
+            || previous_settings.voice_guide_lead_bars != next_settings.voice_guide_lead_bars
+            || previous_settings.voice_guide_count_in_enabled
+                != next_settings.voice_guide_count_in_enabled;
 
         if !device_changed
             && !midi_changed
@@ -1436,6 +1445,7 @@ impl DesktopSession {
             && !metronome_volume_changed
             && !metronome_output_changed
             && !metronome_sound_changed
+            && !voice_guide_config_changed
         {
             return Ok(next_settings);
         }
@@ -2260,6 +2270,9 @@ impl DesktopSession {
             name: marker_name,
             start_seconds,
             digit: None,
+            // New markers start untyped; the user picks a kind in the editor.
+            kind: MarkerKind::Custom,
+            variant: None,
         });
         song.section_markers.sort_by(|left, right| {
             left.start_seconds
@@ -3141,6 +3154,35 @@ impl DesktopSession {
         marker.digit = digit;
 
         // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn set_section_marker_kind(
+        &mut self,
+        section_id: &str,
+        kind: MarkerKind,
+        variant: Option<u8>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let marker = song
+            .section_markers
+            .iter_mut()
+            .find(|section| section.id == section_id)
+            .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
+        marker.kind = kind;
+        marker.variant = variant;
+
+        // Section markers ARE read by the engine voice guide (kind+variant pick
+        // the announcement clip), so push them live as well as persisting.
+        audio.update_live_section_markers(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
@@ -5544,11 +5586,16 @@ fn allocate_library_audio_path(reserved_paths: &HashSet<String>, file_name: &str
 /// Place audio files bundled in a self-contained `.ltpkg` into the destination
 /// project's `audio/` folder and re-point the imported clips to those copies.
 ///
-/// `bundled_audio` maps each original audio file name to its bytes. We allocate
-/// a collision-free `audio/<name>` per file (reusing the library's allocator),
-/// write the bytes, then rewrite every imported clip whose `file_path` has that
-/// same file name to the new relative path. Clips whose audio wasn't bundled are
-/// left untouched (light packages reference audio by their original path).
+/// `bundled_audio` maps each original audio file name to its bytes.
+///
+/// For each clip whose audio is bundled we prefer to REUSE the clip's original
+/// absolute path when that file still exists on this machine: copying it into
+/// `audio/` would leave the same audio referenced twice (the original library
+/// entry plus the new copy), which shows up as duplicated assets. Only when the
+/// original is missing (e.g. the package was opened on another machine) do we
+/// materialise the bundled bytes into a collision-free `audio/<name>` and
+/// re-point the clip there. Clips whose audio wasn't bundled are left untouched
+/// (light packages reference audio by their original path).
 fn place_bundled_audio_and_repoint(
     song_dir: &Path,
     song: &mut Song,
@@ -5564,26 +5611,44 @@ fn place_bundled_audio_and_repoint(
         .into_iter()
         .collect::<HashSet<_>>();
 
-    // original file name -> new "audio/<final>" relative path
-    let mut remap: HashMap<String, String> = HashMap::new();
-    for (original_name, bytes) in bundled_audio {
-        let relative_path = allocate_library_audio_path(&reserved_paths, original_name);
-        reserved_paths.insert(relative_path.clone());
-        let destination = song_dir.join(&relative_path);
-        fs::write(&destination, bytes)?;
-        remap.insert(original_name.clone(), relative_path);
-    }
+    // Materialise bundled bytes lazily: only the first clip that actually needs
+    // a copy (original missing) writes the file, and the result is cached here
+    // by original file name so sibling clips of the same source reuse it.
+    // file name -> "audio/<final>" relative path of the written copy.
+    let mut copied: HashMap<String, String> = HashMap::new();
 
     for clip in &mut song.clips {
         let Some(file_name) = Path::new(&clip.file_path)
             .file_name()
             .and_then(|value| value.to_str())
+            .map(str::to_string)
         else {
             continue;
         };
-        if let Some(new_path) = remap.get(file_name) {
-            clip.file_path = new_path.clone();
+        let Some(bytes) = bundled_audio.get(&file_name) else {
+            // Audio for this clip isn't bundled (light package): leave as-is.
+            continue;
+        };
+
+        // Prefer the clip's original absolute path when it still resolves on
+        // disk — reuse it instead of copying, so the asset isn't duplicated.
+        let original = resolve_audio_file_path(song_dir, &clip.file_path);
+        if original.is_file() {
+            continue;
         }
+
+        // Original is gone: write the bundled copy (once per source) and
+        // re-point the clip to it.
+        let relative_path = if let Some(existing) = copied.get(&file_name) {
+            existing.clone()
+        } else {
+            let relative_path = allocate_library_audio_path(&reserved_paths, &file_name);
+            reserved_paths.insert(relative_path.clone());
+            fs::write(song_dir.join(&relative_path), bytes)?;
+            copied.insert(file_name.clone(), relative_path.clone());
+            relative_path
+        };
+        clip.file_path = relative_path;
     }
 
     Ok(())
@@ -7386,8 +7451,8 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
     use libretracks_core::{
-        source_seconds_at_view, validate_song, warp_timeline_seconds_at, Clip, Marker, Song,
-        SongRegion, TempoMarker, Track, TrackKind,
+        source_seconds_at_view, validate_song, warp_timeline_seconds_at, Clip, Marker, MarkerKind,
+        Song, SongRegion, TempoMarker, Track, TrackKind,
     };
     use libretracks_project::{
         create_song_folder, export_region_as_package, generate_waveform_summary, load_song,
@@ -7400,9 +7465,9 @@ mod tests {
 
     use super::{
         build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
-        realign_regions_after_warp_tempo_change, write_library_manifest,
-        write_library_manifest_assets, AudioFileImportPayload, ClipMoveRequest, CreateClipRequest,
-        DesktopSession, TransportClock, WaveformMemoryCache,
+        place_bundled_audio_and_repoint, realign_regions_after_warp_tempo_change,
+        write_library_manifest, write_library_manifest_assets, AudioFileImportPayload,
+        ClipMoveRequest, CreateClipRequest, DesktopSession, TransportClock, WaveformMemoryCache,
     };
 
     fn demo_song() -> Song {
@@ -7463,6 +7528,8 @@ mod tests {
             name: "Intro".into(),
             start_seconds: 1.0,
             digit: Some(1),
+            kind: MarkerKind::Custom,
+            variant: None,
         });
         song
     }
@@ -7538,6 +7605,8 @@ mod tests {
             name: "Verse".into(),
             start_seconds: 4.0,
             digit: Some(2),
+            kind: MarkerKind::Custom,
+            variant: None,
         });
         song
     }
@@ -7549,6 +7618,8 @@ mod tests {
             name: "Bridge".into(),
             start_seconds: 8.0,
             digit: Some(3),
+            kind: MarkerKind::Custom,
+            variant: None,
         });
         song
     }
@@ -7600,12 +7671,16 @@ mod tests {
                 name: "Intro".into(),
                 start_seconds: 1.0,
                 digit: Some(1),
+                kind: MarkerKind::Custom,
+                variant: None,
             },
             Marker {
                 id: "section_2".into(),
                 name: "Outro".into(),
                 start_seconds: 15.0,
                 digit: Some(2),
+                kind: MarkerKind::Custom,
+                variant: None,
             },
         ];
         song
@@ -7897,6 +7972,8 @@ mod tests {
             name: "Target".into(),
             start_seconds: 18.0,
             digit: Some(1),
+            kind: MarkerKind::Custom,
+            variant: None,
         });
         let expected_execute_seconds = warp_timeline_seconds_at(&song, 18.0);
         let mut session = DesktopSession::default();
@@ -9384,6 +9461,8 @@ mod tests {
             name: "Far".into(),
             start_seconds: 6.0,
             digit: None,
+            kind: MarkerKind::Custom,
+            variant: None,
         });
         save_song(&song_dir, &song).expect("song should save");
 
@@ -10362,6 +10441,40 @@ mod tests {
         assert_eq!(song_view.section_markers[0].digit, Some(3));
     }
 
+    #[test]
+    fn set_section_marker_kind_updates_kind_without_session_rebuild() {
+        let mut session = session_with_song_dir("section-kind-demo", demo_song_with_section());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .set_section_marker_kind("section_1", MarkerKind::Chorus, Some(2), &audio)
+            .expect("set kind should succeed");
+
+        // Changing kind/variant is a live marker update for the voice guide, not
+        // a full session rebuild (which would interrupt playback).
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.session_rebuild_count, 0);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        assert_eq!(song_view.section_markers[0].kind, MarkerKind::Chorus);
+        assert_eq!(song_view.section_markers[0].variant, Some(2));
+    }
+
+    #[test]
+    fn set_section_marker_kind_rejects_unknown_section() {
+        let mut session = session_with_song_dir("section-kind-missing", demo_song_with_section());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let result = session.set_section_marker_kind("nope", MarkerKind::Verse, None, &audio);
+        assert!(matches!(
+            result,
+            Err(crate::error::DesktopError::SectionNotFound(_))
+        ));
+    }
+
     // ── Phase 5: set_track_transpose_enabled_realtime path ───────────────────
 
     #[test]
@@ -10939,5 +11052,68 @@ mod tests {
         assert_eq!(diag.commit_model_only_count, 2, "two name updates");
         assert_eq!(diag.commit_mix_command_count, 1, "one mix commit");
         assert_eq!(diag.session_rebuild_count, 0);
+    }
+
+    #[test]
+    fn place_bundled_audio_reuses_existing_original_and_copies_missing_one() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+
+        // An original source that still exists on disk: the clip must keep
+        // pointing at it and NO copy should be written into audio/.
+        let original = song_dir.join("present.wav");
+        fs::write(&original, b"present-bytes").expect("write original");
+        let original_path = original.to_string_lossy().to_string();
+
+        let mut song = build_empty_song("song_pkg".into(), "Pkg".into());
+        song.clips.push(Clip {
+            id: "clip_present".into(),
+            track_id: "t".into(),
+            file_path: original_path.clone(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 1.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        });
+        // A clip whose original is GONE: it must be copied into audio/ and
+        // re-pointed there.
+        song.clips.push(Clip {
+            id: "clip_missing".into(),
+            track_id: "t".into(),
+            file_path: song_dir
+                .join("gone.wav")
+                .to_string_lossy()
+                .to_string(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 1.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        });
+
+        let mut bundled = std::collections::HashMap::new();
+        bundled.insert("present.wav".to_string(), b"present-bytes".to_vec());
+        bundled.insert("gone.wav".to_string(), b"gone-bytes".to_vec());
+
+        place_bundled_audio_and_repoint(song_dir, &mut song, &bundled).expect("place");
+
+        // Present original: clip untouched, no copy created.
+        assert_eq!(song.clips[0].file_path, original_path);
+        assert!(
+            !song_dir.join("audio").join("present.wav").exists(),
+            "existing original must not be copied into audio/"
+        );
+
+        // Missing original: copied and re-pointed under audio/.
+        assert_eq!(song.clips[1].file_path, "audio/gone.wav");
+        assert_eq!(
+            fs::read(song_dir.join("audio").join("gone.wav")).expect("copied"),
+            b"gone-bytes"
+        );
     }
 }

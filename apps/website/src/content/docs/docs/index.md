@@ -21,7 +21,7 @@ The project model is **song-first**: songs (song regions) are the primary contai
 2. Organize assets with virtual folders.
 3. Drag audio files or song packages into the session, then organize assets with the Library and timeline.
 4. Configure the audio device, sample rate, buffer size, hardware outputs, track routes, metronome, and MIDI input.
-5. Create song regions, markers, optional meter changes, and region-based transpose changes.
+5. Create song regions, markers, optional meter changes, and region-based transpose changes. Give markers a section type to drive the [Voice Guide](./voice-guide).
 6. Rehearse marker jumps, Vamp, song jumps, transitions, keyboard shortcuts, MIDI mappings, track transpose enable states, and the mobile remote.
 7. Export prepared songs or packages when you want to reuse them in future sessions.
 

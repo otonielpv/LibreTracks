@@ -105,6 +105,24 @@ pub enum EngineCommand {
         subdivision_gain: f32,
     },
 
+    SetVoiceGuideConfig {
+        enabled: bool,
+        volume: f32,
+        route: String,
+        /// Bars of announcement/count-in before a marker (1..4).
+        lead_bars: i32,
+        /// false = speak the section name only, no beat count.
+        count_in_enabled: bool,
+    },
+
+    /// Decode and install the voice-guide clip bank for a language. The engine
+    /// reads `<voices_dir>/<lang>/{sections,counts}/*.wav`. Decoding happens off
+    /// the audio thread; the new bank is swapped in atomically.
+    LoadVoiceGuideBank {
+        voices_dir: String,
+        lang: String,
+    },
+
     SetSongTranspose {
         song_id: String,
         semitones: i32,
@@ -215,6 +233,19 @@ pub struct MarkerUpdate {
     pub id: String,
     pub name: String,
     pub frame: i64,
+    /// Serialized snake_case `MarkerKind` token (e.g. "chorus", "custom"). The
+    /// C++ engine maps it via `marker_kind_from_string`; an empty/unknown value
+    /// falls back to Custom. Defaults to "custom" so older callers stay valid.
+    #[serde(default = "default_marker_kind")]
+    pub kind: String,
+    /// Numbered section variant (0 = unnumbered base). Plays `<kind>_<n>.wav`
+    /// with fallback to the base clip.
+    #[serde(default)]
+    pub variant: i32,
+}
+
+fn default_marker_kind() -> String {
+    "custom".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

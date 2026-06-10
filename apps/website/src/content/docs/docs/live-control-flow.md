@@ -15,6 +15,8 @@ This is native transport behavior, so the same logic is available from desktop c
 
 ![Marker jump modes](/screenshots/Marker-Jump-Modes.png)
 
+When the [Voice Guide](./voice-guide) is enabled, an armed jump to a typed marker is announced and counted in before it fires, so the band hears the destination section and lands together on the downbeat.
+
 ## Vamp
 
 `Vamp` keeps playback looping musically while the band, stage action, or speaker needs more time. `Vamp Mode` can repeat the current `Section` or a fixed number of `Bars`. Press `Vamp` again to leave the loop.

@@ -12,11 +12,43 @@ export type JumpTriggerLabel =
   | `after_bars:${number}`;
 export type TransitionTypeLabel = "instant" | `fade_out:${number}`;
 
+/** Semantic section type. Mirrors Rust `MarkerKind` (snake_case serde). Drives
+ * the pre-recorded voice-guide clip and the marker's colour/icon. `custom` is
+ * the default for user-defined sections and for markers from sessions saved
+ * before the voice-guide feature. */
+export type MarkerKind =
+  | "intro"
+  | "verse"
+  | "pre_chorus"
+  | "chorus"
+  | "post_chorus"
+  | "bridge"
+  | "breakdown"
+  | "drop"
+  | "solo"
+  | "outro"
+  | "acapella"
+  | "instrumental"
+  | "interlude"
+  | "refrain"
+  | "tag"
+  | "vamp"
+  | "ending"
+  | "exhortation"
+  | "rap"
+  | "turnaround"
+  | "custom";
+
 export type SectionMarkerSummary = {
   id: string;
   name: string;
   startSeconds: number;
   digit?: number | null;
+  /** Optional for backward compat with snapshots that predate the field;
+   * treat a missing value as "custom". */
+  kind?: MarkerKind;
+  /** Numbered section variant (Verse 2, Chorus 3). Absent = unnumbered base. */
+  variant?: number | null;
 };
 
 export type SongMasterSummary = {
@@ -402,6 +434,12 @@ export type AppSettings = {
   metronomeSubdivisionPreset: number;
   metronomeSubdivisionPitch: number;
   metronomeSubdivisionGain: number;
+  voiceGuideEnabled: boolean;
+  voiceGuideOutput: string;
+  voiceGuideVolume: number;
+  voiceGuideLeadBars: number;
+  voiceGuideCountInEnabled: boolean;
+  voiceGuideLanguage: string;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars";
@@ -439,6 +477,12 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   metronomeSubdivisionPreset: 0,
   metronomeSubdivisionPitch: 0,
   metronomeSubdivisionGain: 0.5,
+  voiceGuideEnabled: false,
+  voiceGuideOutput: "monitor",
+  voiceGuideVolume: 1.0,
+  voiceGuideLeadBars: 1,
+  voiceGuideCountInEnabled: true,
+  voiceGuideLanguage: "es",
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -548,6 +592,9 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const metronomeOutput =
     settings.metronomeOutput?.trim().toLowerCase() ||
     DEFAULT_APP_SETTINGS.metronomeOutput;
+  const voiceGuideOutput =
+    settings.voiceGuideOutput?.trim().toLowerCase() ||
+    DEFAULT_APP_SETTINGS.voiceGuideOutput;
   const globalJumpMode =
     settings.globalJumpMode === "after_bars" ||
     settings.globalJumpMode === "next_marker"
@@ -611,6 +658,17 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     metronomeSubdivisionPreset,
     metronomeSubdivisionPitch,
     metronomeSubdivisionGain,
+    voiceGuideEnabled: Boolean(settings.voiceGuideEnabled),
+    voiceGuideOutput,
+    voiceGuideVolume: Number.isFinite(settings.voiceGuideVolume)
+      ? Math.min(4, Math.max(0, settings.voiceGuideVolume))
+      : DEFAULT_APP_SETTINGS.voiceGuideVolume,
+    voiceGuideLeadBars: Number.isFinite(settings.voiceGuideLeadBars)
+      ? Math.min(4, Math.max(1, Math.round(settings.voiceGuideLeadBars)))
+      : DEFAULT_APP_SETTINGS.voiceGuideLeadBars,
+    voiceGuideCountInEnabled: settings.voiceGuideCountInEnabled ?? true,
+    voiceGuideLanguage:
+      settings.voiceGuideLanguage ?? DEFAULT_APP_SETTINGS.voiceGuideLanguage,
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,

@@ -223,6 +223,52 @@ describe("buildAudioRoutingOptions", () => {
     expect(values).toContain("ext:3");
     expect(values).not.toContain("ext:1-2");
   });
+
+  // Regresión: interfaces multicanal tipo Behringer UMC204HD (4 salidas =
+  // dos pares estéreo). El usuario debe ver tanto "Ext. Out 1/2" como
+  // "Ext. Out 3/4" para poder enrutar multitracks en estéreo a la segunda
+  // salida. Si el engine solo reporta 2 canales (WASAPI shared en vez de
+  // ASIO), el par 3/4 desaparece — ese es el síntoma reportado.
+  it("exposes both stereo pairs for a 4-output interface", () => {
+    const values = buildAudioRoutingOptions([0, 1, 2, 3], t).map((o) => o.value);
+    // Los dos pares físicos estéreo: Out 1/2 y Out 3/4.
+    expect(values).toContain("ext:0-1");
+    expect(values).toContain("ext:2-3");
+    // Y los mono individuales siguen disponibles.
+    expect(values).toContain("ext:0");
+    expect(values).toContain("ext:3");
+    // NOTA: el agrupador empareja CUALQUIER par adyacente, así que también
+    // ofrece el par "cruzado" 2/3 (ext:1-2). No es un par físico de la
+    // interfaz, pero hoy se expone — documentado aquí para que el cambio
+    // sea deliberado si algún día solo queremos pares alineados a frontera.
+    expect(values).toContain("ext:1-2");
+  });
+
+  it("hides the second stereo pair when only 2 channels are reported (the bug)", () => {
+    // Reproduce lo que ve el usuario cuando el backend solo expone 1/2:
+    // el desplegable jamás ofrece la segunda salida estéreo.
+    const values = buildAudioRoutingOptions([0, 1], t).map((o) => o.value);
+    expect(values).toContain("ext:0-1");
+    expect(values).not.toContain("ext:2-3");
+    expect(values).not.toContain("ext:2");
+    expect(values).not.toContain("ext:3");
+  });
+});
+
+describe("multichannel output filtering (UMC204HD scenario)", () => {
+  it("keeps all 4 channels when the device reports 4 outputs", () => {
+    expect(
+      normalizeEnabledOutputChannelsForOutputCount([0, 1, 2, 3], 4),
+    ).toEqual([0, 1, 2, 3]);
+  });
+
+  it("clamps a 3/4 routing back to stereo when the device only has 2 outputs", () => {
+    // Si el usuario había enrutado a Out 3/4 y luego el backend reporta
+    // solo 2 canales, los canales 2 y 3 se descartan y caemos al fallback.
+    expect(
+      normalizeEnabledOutputChannelsForOutputCount([2, 3], 2, [0, 1]),
+    ).toEqual([0, 1]);
+  });
 });
 
 describe("formatMidiBinding", () => {

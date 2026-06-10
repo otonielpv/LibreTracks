@@ -141,6 +141,73 @@ pub struct Clip {
     pub color: Option<String>,
 }
 
+/// Semantic type of a section marker. Drives the pre-recorded voice-guide clip
+/// and the marker's colour/icon in the timeline. `name` remains the free-text
+/// label shown to the user; `kind` is the closed vocabulary the voice bank and
+/// UI key off. Sessions saved before the voice-guide feature lack this field and
+/// deserialize to [`MarkerKind::Custom`] via `#[serde(default)]`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MarkerKind {
+    Intro,
+    Verse,
+    PreChorus,
+    Chorus,
+    PostChorus,
+    Bridge,
+    Breakdown,
+    Drop,
+    Solo,
+    Outro,
+    // Extended vocabulary covered by the bundled voice pack (worship/band
+    // arrangements). Append new variants at the end — the C++ engine indexes
+    // its clip bank by this enum's integer value, so order is part of the ABI.
+    Acapella,
+    Instrumental,
+    Interlude,
+    Refrain,
+    Tag,
+    Vamp,
+    Ending,
+    Exhortation,
+    Rap,
+    Turnaround,
+    /// User-defined section with no pre-recorded voice clip; the announcement
+    /// falls back to silence (or TTS, if added later).
+    #[default]
+    Custom,
+}
+
+impl MarkerKind {
+    /// The serialized snake_case token (matching the serde representation), used
+    /// when sending markers to the audio engine over the command channel.
+    pub fn as_token(self) -> &'static str {
+        match self {
+            MarkerKind::Intro => "intro",
+            MarkerKind::Verse => "verse",
+            MarkerKind::PreChorus => "pre_chorus",
+            MarkerKind::Chorus => "chorus",
+            MarkerKind::PostChorus => "post_chorus",
+            MarkerKind::Bridge => "bridge",
+            MarkerKind::Breakdown => "breakdown",
+            MarkerKind::Drop => "drop",
+            MarkerKind::Solo => "solo",
+            MarkerKind::Outro => "outro",
+            MarkerKind::Acapella => "acapella",
+            MarkerKind::Instrumental => "instrumental",
+            MarkerKind::Interlude => "interlude",
+            MarkerKind::Refrain => "refrain",
+            MarkerKind::Tag => "tag",
+            MarkerKind::Vamp => "vamp",
+            MarkerKind::Ending => "ending",
+            MarkerKind::Exhortation => "exhortation",
+            MarkerKind::Rap => "rap",
+            MarkerKind::Turnaround => "turnaround",
+            MarkerKind::Custom => "custom",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Marker {
@@ -148,6 +215,13 @@ pub struct Marker {
     pub name: String,
     pub start_seconds: f64,
     pub digit: Option<u8>,
+    #[serde(default)]
+    pub kind: MarkerKind,
+    /// Numbered variant of the section (e.g. Verse 2, Chorus 3). `None` is the
+    /// unnumbered base section. The voice bank plays `<kind>_<variant>.wav` when
+    /// present, falling back to the base `<kind>.wav`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variant: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -319,6 +393,8 @@ mod tests {
             name: id.into(),
             start_seconds,
             digit,
+            kind: MarkerKind::Custom,
+            variant: None,
         }
     }
 
@@ -431,5 +507,54 @@ mod tests {
     fn next_marker_name_counts_existing_markers() {
         let song = song_with_markers(vec![marker("a", 0.0, None)]);
         assert_eq!(song.next_marker_name(), "Marker 1");
+    }
+
+    // ── MarkerKind migration ──────────────────────────────────────────────
+
+    #[test]
+    fn marker_without_kind_field_deserializes_to_custom() {
+        // Sessions saved before the voice-guide feature carry no `kind`. They
+        // must keep loading, defaulting to Custom and preserving their name.
+        let legacy = r#"{
+            "id": "section_intro",
+            "name": "Mi sección rara",
+            "startSeconds": 4.0,
+            "digit": 2
+        }"#;
+        let marker: Marker = serde_json::from_str(legacy).expect("legacy marker must load");
+        assert_eq!(marker.kind, MarkerKind::Custom);
+        assert_eq!(marker.name, "Mi sección rara");
+        assert_eq!(marker.digit, Some(2));
+    }
+
+    #[test]
+    fn marker_kind_round_trips_through_json() {
+        let marker = Marker {
+            id: "section_chorus".into(),
+            name: "Coro final".into(),
+            start_seconds: 32.0,
+            digit: Some(3),
+            kind: MarkerKind::Chorus,
+            variant: None,
+        };
+        let json = serde_json::to_string(&marker).expect("serialize");
+        // Enum serializes snake_case to match the camelCase session schema style.
+        assert!(json.contains("\"kind\":\"chorus\""), "got: {json}");
+        let back: Marker = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, marker);
+    }
+
+    #[test]
+    fn pre_chorus_kind_uses_snake_case_token() {
+        let marker = Marker {
+            id: "m".into(),
+            name: "PC".into(),
+            start_seconds: 0.0,
+            digit: None,
+            kind: MarkerKind::PreChorus,
+            variant: None,
+        };
+        let json = serde_json::to_string(&marker).expect("serialize");
+        assert!(json.contains("\"kind\":\"pre_chorus\""), "got: {json}");
     }
 }

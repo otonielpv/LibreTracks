@@ -108,6 +108,10 @@ export function formatAudioRouteLabel(route: string, t: TFunc) {
     return t("trackHeader.master", { defaultValue: "Master" });
   }
 
+  if (route === "monitor") {
+    return t("trackHeader.monitor", { defaultValue: "Monitor" });
+  }
+
   if (route.startsWith("ext:")) {
     const channelPart = route.slice(4);
     if (channelPart.includes("-")) {

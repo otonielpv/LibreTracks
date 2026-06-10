@@ -1304,6 +1304,24 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (mixer_) mixer_->set_metronome_config(metronome_config_);
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetVoiceGuideConfig>) {
+            voice_guide_config_.enabled = c.enabled;
+            voice_guide_config_.volume = std::clamp(c.volume, 0.0f, 4.0f);
+            voice_guide_config_.output_route = c.route.empty() ? std::string("monitor") : c.route;
+            voice_guide_config_.lead_bars = std::clamp(c.lead_bars, 1, 4);
+            voice_guide_config_.count_in_enabled = c.count_in_enabled;
+            if (mixer_) mixer_->set_voice_guide_config(voice_guide_config_);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdLoadVoiceGuideBank>) {
+            // Decode happens here on the command thread (never the audio thread).
+            const int rate = clock_ && clock_->sample_rate() > 0
+                ? clock_->sample_rate()
+                : 48000;
+            auto bank = load_voice_guide_bank(c.voices_dir, c.lang, rate);
+            if (mixer_) mixer_->set_voice_guide_clip_bank(std::move(bank));
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdJumpToMarker>) {
             if (!session_) return Result<void>::err("No session loaded");
             JumpTarget target{ JumpTarget::Kind::Marker, c.marker_id, std::nullopt };
@@ -2110,6 +2128,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         marker.id = update.id;
                         marker.name = update.name;
                         marker.frame = update.frame;
+                        marker.kind = marker_kind_from_string(update.kind);
+                        marker.variant = update.variant;
                         song.markers.push_back(std::move(marker));
                     }
                     changed = true;
@@ -2272,6 +2292,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         marker.id = update.id;
                         marker.name = update.name;
                         marker.frame = update.frame;
+                        marker.kind = marker_kind_from_string(update.kind);
+                        marker.variant = update.variant;
                         song.markers.push_back(std::move(marker));
                     }
 

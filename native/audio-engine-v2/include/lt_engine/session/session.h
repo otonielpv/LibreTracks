@@ -93,10 +93,47 @@ struct Track {
 // ---------------------------------------------------------------------------
 // Marker — a named position within a Song
 // ---------------------------------------------------------------------------
+// Semantic section type, mirrors Rust `MarkerKind` / TS `MarkerKind`. Drives
+// the voice-guide announcement clip. Order must match the Rust enum's intent
+// but the engine only ever sets it from the parsed `kind` string, so the
+// integer values are an engine-internal detail (Custom is the default/fallback).
+// Integer values index the voice-guide clip bank, so they ARE part of the
+// engine ABI — append new variants before Custom, never reorder.
+enum class MarkerKind : int {
+    Intro = 0,
+    Verse = 1,
+    PreChorus = 2,
+    Chorus = 3,
+    PostChorus = 4,
+    Bridge = 5,
+    Breakdown = 6,
+    Drop = 7,
+    Solo = 8,
+    Outro = 9,
+    Acapella = 10,
+    Instrumental = 11,
+    Interlude = 12,
+    Refrain = 13,
+    Tag = 14,
+    Vamp = 15,
+    Ending = 16,
+    Exhortation = 17,
+    Rap = 18,
+    Turnaround = 19,
+    Custom = 20,
+};
+
+// Map a serialized snake_case kind token (as sent by Rust/TS) to the enum.
+// Unknown or empty tokens fall back to Custom.
+MarkerKind marker_kind_from_string(const std::string& token) noexcept;
+
 struct Marker {
     Id          id;
     std::string name;
     Frame       frame = 0;
+    MarkerKind  kind = MarkerKind::Custom;
+    // Numbered section variant (Verse 2, Chorus 3); 0 = unnumbered base.
+    int         variant = 0;
 };
 
 struct TempoMarker {

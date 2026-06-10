@@ -48,6 +48,7 @@ export type MetronomeDeviceHandlerDeps = {
   setMetronomeSoundRealtime: (settings: AppSettings) => Promise<AppSettings>;
   setMetronomeEnabledRealtime: (enabled: boolean) => Promise<void>;
   setMetronomeVolumeRealtime: (volume: number) => Promise<void>;
+  setVoiceGuideConfigRealtime: (settings: AppSettings) => Promise<AppSettings>;
   saveSettings: (settings: AppSettings) => Promise<AppSettings>;
 };
 
@@ -85,6 +86,7 @@ export function createMetronomeDeviceHandlers(
     setMetronomeSoundRealtime,
     setMetronomeEnabledRealtime,
     setMetronomeVolumeRealtime,
+    setVoiceGuideConfigRealtime,
     saveSettings,
   } = deps;
 
@@ -135,6 +137,30 @@ export function createMetronomeDeviceHandlers(
           setStatus(
             t("transport.status.metronomeSoundUpdated", {
               defaultValue: "Metronome sound updated.",
+            }),
+          );
+        } catch (error) {
+          setStatus(formatErrorStatus(error));
+        }
+      });
+    },
+
+    handleVoiceGuideChange(patch: Partial<AppSettings>) {
+      // Realtime path: (re)load the clip bank for the selected language and push
+      // the voice-guide config to the engine, persisting without reopening the
+      // audio device. Mirrors handleMetronomeSoundChange.
+      const nextSettings = applyLocal(patch);
+
+      void runAction(async () => {
+        try {
+          const savedSettings = normalizeAppSettings(
+            await setVoiceGuideConfigRealtime(nextSettings),
+          );
+          appSettingsRef.current = savedSettings;
+          setAppSettings(savedSettings);
+          setStatus(
+            t("transport.status.voiceGuideUpdated", {
+              defaultValue: "Voice guide updated.",
             }),
           );
         } catch (error) {

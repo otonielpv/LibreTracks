@@ -126,6 +126,53 @@ pub fn set_metronome_sound_realtime(
     Ok(settings)
 }
 
+/// Resolve the bundled voice-guide assets directory. In release the `voices`
+/// folder ships under the Tauri resource dir; in dev it lives in the crate's
+/// `resources/voices` source tree.
+fn voice_guide_voices_dir(app: &AppHandle) -> Option<String> {
+    use tauri::Manager;
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let bundled = resource_dir.join("voices");
+        if bundled.exists() {
+            return bundled.to_str().map(|s| s.to_string());
+        }
+    }
+    // Dev fallback: source tree relative to the crate manifest.
+    let dev = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/voices");
+    dev.to_str().map(|s| s.to_string())
+}
+
+/// Apply voice-guide settings live (enabled/volume/lead bars/count-in/language)
+/// and (re)load the clip bank for the selected language. Persists settings.
+#[tauri::command]
+pub fn set_voice_guide_config_realtime(
+    app: AppHandle,
+    settings: AppSettings,
+    settings_store: State<'_, AppSettingsStore>,
+    state: State<'_, DesktopState>,
+) -> Result<AppSettings, String> {
+    // Load the bank first so the renderer has clips before it is enabled.
+    if let Some(voices_dir) = voice_guide_voices_dir(&app) {
+        state
+            .audio
+            .load_voice_guide_bank(&voices_dir, &settings.voice_guide_language)
+            .map_err(|error| error.to_string())?;
+    }
+    state
+        .audio
+        .set_voice_guide_config_realtime(&settings)
+        .map_err(|error| error.to_string())?;
+    state
+        .audio
+        .replace_settings(settings.clone())
+        .map_err(|error| error.to_string())?;
+    settings_store
+        .set(settings.clone())
+        .map_err(|error| error.to_string())?;
+    save_app_settings(&app, &settings).map_err(|error| error.to_string())?;
+    Ok(settings)
+}
+
 // ---------------------------------------------------------------------------
 // Decoding cache (Ableton-style "Decoding Cache" preferences)
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/metronome_renderer.h>
+#include <lt_engine/render/voice_guide_renderer.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -68,6 +69,15 @@ public:
     void set_metronome_enabled(bool enabled);
     void set_metronome_volume(float volume);
     MetronomeDiagnostics metronome_diagnostics() const;
+
+    void set_voice_guide_config(const VoiceGuideConfig& config);
+    void set_voice_guide_enabled(bool enabled);
+    void set_voice_guide_clip_bank(std::shared_ptr<const VoiceGuideClipBank> bank) noexcept;
+    VoiceGuideDiagnostics voice_guide_diagnostics() const;
+    // Build the voice-guide announce target from the next pending scheduled jump
+    // (so the destination section is spoken before the jump fires). Empty target
+    // when no announceable jump is pending.
+    VoiceGuideTarget announceable_jump_target(const Session* session) const noexcept;
 
     // Meter read (from UI thread — relaxed atomic).
     MeterValues meters() const noexcept;
@@ -201,6 +211,7 @@ private:
     // Click-free crossfade around seeks/jumps.
     FadeProcessor fade_;
     MetronomeRenderer metronome_;
+    VoiceGuideRenderer voice_guide_;
 
     // Check whether any track is soloed (scans control slots).
     bool any_solo_active_in_slots() const noexcept;

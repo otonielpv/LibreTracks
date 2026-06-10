@@ -157,6 +157,8 @@ fn set_song_markers_round_trip() {
             id: "section_a".into(),
             name: "Verse".into(),
             frame: 2025472,
+            kind: "verse".into(),
+            variant: 0,
         }],
     };
     let json = serde_json::to_string(&cmd).unwrap();
@@ -276,6 +278,8 @@ fn set_song_timeline_window_round_trip() {
             id: "section_a".into(),
             name: "Verse".into(),
             frame: 1024,
+            kind: "verse".into(),
+            variant: 0,
         }],
         bpm: 111.0,
         beats_per_bar: 4,

@@ -347,7 +347,9 @@ fn parse_time_signature(time_signature: &str) -> Option<(u32, u32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Clip, Marker, SongMaster, SongRegion, TimeSignatureMarker, Track};
+    use crate::model::{
+        Clip, Marker, MarkerKind, SongMaster, SongRegion, TimeSignatureMarker, Track,
+    };
 
     fn region(id: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
@@ -573,6 +575,8 @@ mod tests {
             name: "M".into(),
             start_seconds: -1.0,
             digit: None,
+            kind: MarkerKind::Custom,
+            variant: None,
         }];
         assert!(matches!(
             validate_song(&song),
@@ -584,8 +588,8 @@ mod tests {
     fn rejects_out_of_order_markers() {
         let mut song = valid_song();
         song.section_markers = vec![
-            Marker { id: "m1".into(), name: "M1".into(), start_seconds: 10.0, digit: None },
-            Marker { id: "m2".into(), name: "M2".into(), start_seconds: 5.0, digit: None },
+            Marker { id: "m1".into(), name: "M1".into(), start_seconds: 10.0, digit: None, kind: MarkerKind::Custom, variant: None },
+            Marker { id: "m2".into(), name: "M2".into(), start_seconds: 5.0, digit: None, kind: MarkerKind::Custom, variant: None },
         ];
         assert!(matches!(
             validate_song(&song),
@@ -601,6 +605,8 @@ mod tests {
             name: "M".into(),
             start_seconds: 0.0,
             digit: Some(10),
+            kind: MarkerKind::Custom,
+            variant: None,
         }];
         assert!(matches!(
             validate_song(&song),

@@ -25,7 +25,8 @@
     "targets": ["nsis", "deb", "rpm", "appimage", "app", "dmg"],
     "resources": {
       "../../remote/dist": "remote-dist",
-      "../../../vendor/bin/native/*": "."
+      "../../../vendor/bin/native/*": ".",
+      "resources/voices": "voices"
     },
     "windows": {
       "nsis": {

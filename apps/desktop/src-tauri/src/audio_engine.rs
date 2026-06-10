@@ -764,6 +764,8 @@ impl AudioController {
                     id: marker.0.id.clone(),
                     name: marker.0.name.clone(),
                     frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    kind: marker.0.kind.as_token().to_string(),
+                    variant: marker.0.variant.unwrap_or(0) as i32,
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongMarkers {
@@ -838,6 +840,8 @@ impl AudioController {
                     id: marker.0.id.clone(),
                     name: marker.0.name.clone(),
                     frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    kind: marker.0.kind.as_token().to_string(),
+                    variant: marker.0.variant.unwrap_or(0) as i32,
                 })
                 .collect();
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
@@ -1075,6 +1079,41 @@ impl AudioController {
         })
     }
 
+    /// Push the voice-guide config (enabled/volume/lead bars/count-in) to the
+    /// engine live, without reopening the device. Mirrors the metronome path.
+    pub fn set_voice_guide_config_realtime(
+        &self,
+        settings: &AppSettings,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("set_voice_guide_config_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetVoiceGuideConfig {
+                enabled: settings.voice_guide_enabled,
+                volume: settings.voice_guide_volume as f32,
+                route: settings.voice_guide_output.clone(),
+                lead_bars: settings.voice_guide_lead_bars,
+                count_in_enabled: settings.voice_guide_count_in_enabled,
+            })?;
+            Ok(())
+        })
+    }
+
+    /// Decode and install the voice-guide clip bank for a language. `voices_dir`
+    /// is the bundled resources path (resolved by the command layer from the
+    /// Tauri app handle). Decoding happens on the engine command thread.
+    pub fn load_voice_guide_bank(
+        &self,
+        voices_dir: &str,
+        lang: &str,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("load_voice_guide_bank", None, |engine, _state| {
+            engine.send_command(&EngineCommand::LoadVoiceGuideBank {
+                voices_dir: voices_dir.to_string(),
+                lang: lang.to_string(),
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {
         RealtimeControlDiagnostics {
             live_mix_realtime_command_count: self
@@ -1305,6 +1344,15 @@ impl AudioController {
                 subdivision_preset: settings.metronome_subdivision_preset,
                 subdivision_pitch: settings.metronome_subdivision_pitch,
                 subdivision_gain: settings.metronome_subdivision_gain,
+            })?;
+            // Voice-guide config (the clip bank is loaded separately via the
+            // command layer, which knows the bundled resources path).
+            engine.send_command(&EngineCommand::SetVoiceGuideConfig {
+                enabled: settings.voice_guide_enabled,
+                volume: settings.voice_guide_volume as f32,
+                route: settings.voice_guide_output.clone(),
+                lead_bars: settings.voice_guide_lead_bars,
+                count_in_enabled: settings.voice_guide_count_in_enabled,
             })?;
             state.settings = settings;
             Ok(())
