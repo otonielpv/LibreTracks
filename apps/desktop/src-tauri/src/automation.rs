@@ -46,7 +46,7 @@ pub struct AutomationCue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum AutomationAction {
     Jump {
         target: AutomationJumpTarget,
@@ -57,8 +57,12 @@ pub enum AutomationAction {
     },
 }
 
+// `rename_all = "camelCase"` renames the variant TAGS (marker/region/frame,
+// unchanged as single words) AND their fields (marker_id → markerId), matching
+// the camelCase TS `AutomationJumpTargetSummary`. With snake_case the frontend's
+// `markerId` failed to deserialize ("missing field marker_id").
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AutomationJumpTarget {
     Marker { marker_id: String },
     Region { region_id: String },
@@ -187,6 +191,37 @@ mod tests {
         let loaded = load_automation(dir.path()).expect("load automation");
 
         assert_eq!(loaded, document);
+    }
+
+    #[test]
+    fn jump_target_uses_camel_case_fields() {
+        // The frontend speaks camelCase; deserialization must accept regionId /
+        // markerId (not region_id) or upsert_automation_cue rejects the cue.
+        let json = r#"{
+            "id": "cue_1",
+            "name": "Jump",
+            "atSeconds": 10.0,
+            "enabled": true,
+            "action": {
+                "type": "jump",
+                "target": { "kind": "marker", "markerId": "m1" },
+                "transition": { "mode": "fade_out", "durationSeconds": 1.5 },
+                "mixSceneId": "s1"
+            }
+        }"#;
+        let cue: AutomationCue = serde_json::from_str(json).expect("camelCase cue parses");
+        let AutomationAction::Jump { target, .. } = cue.action;
+        assert_eq!(
+            target,
+            AutomationJumpTarget::Marker {
+                marker_id: "m1".into()
+            }
+        );
+
+        // And serialization round-trips back to camelCase keys.
+        let serialized = serde_json::to_string(&cue).expect("serialize");
+        assert!(serialized.contains("\"markerId\""));
+        assert!(!serialized.contains("marker_id"));
     }
 
     #[test]

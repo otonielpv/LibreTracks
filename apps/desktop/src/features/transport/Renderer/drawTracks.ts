@@ -86,7 +86,7 @@ function resolveVisibleTrackWindow(
  * row. Mirrors the old ruler-lane look (drawRulerAutomationCue) but anchored to
  * the track's `top`/`trackHeight` instead of a fixed header lane.
  */
-function drawAutomationLane(
+export function drawAutomationLane(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
   trackTop: number,

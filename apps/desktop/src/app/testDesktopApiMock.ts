@@ -1434,6 +1434,20 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   upsertAutomationCue: async (cue: AutomationCueSummary) => {
+    // Mirror the backend's deserialization contract: the jump target must carry
+    // the camelCase id field for its kind. This guards against a frontend that
+    // sends snake_case (which the real Rust command rejects).
+    const target = cue.action?.target;
+    if (target?.kind === "marker" && typeof target.markerId !== "string") {
+      throw new Error("invalid automation target: missing markerId");
+    }
+    if (target?.kind === "region" && typeof target.regionId !== "string") {
+      throw new Error("invalid automation target: missing regionId");
+    }
+    if (target?.kind === "frame" && typeof target.seconds !== "number") {
+      throw new Error("invalid automation target: missing seconds");
+    }
+
     const cues = (state.song.automationCues ?? []).filter(
       (candidate) => candidate.id !== cue.id,
     );

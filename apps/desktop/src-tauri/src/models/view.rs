@@ -129,7 +129,7 @@ pub struct AutomationCueSummary {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum AutomationActionSummary {
     Jump {
         target: AutomationJumpTargetSummary,
@@ -139,8 +139,10 @@ pub enum AutomationActionSummary {
     },
 }
 
+// camelCase to match the TS `AutomationJumpTargetSummary` (markerId/regionId).
+// Tags marker/region/frame are single words, unchanged.
 #[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AutomationJumpTargetSummary {
     Marker { marker_id: String },
     Region { region_id: String },
