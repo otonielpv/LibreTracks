@@ -205,27 +205,20 @@ jobs:
           }
           "LT_ASIO_SDK_DIR=$PWD/vendor/asiosdk" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Prepare universal FFmpeg (macOS arm64 runner)
-        if: matrix.os == 'macos-latest'
+      - name: Build universal LGPL FFmpeg (macOS)
+        if: matrix.platform == 'macos'
         shell: bash
         run: |
           set -euo pipefail
-          # The release ships a single universal (x86_64+arm64) .app. Homebrew
-          # bottles are single-arch, so the native arm64 FFmpeg can neither link
-          # the engine's x86_64 slice nor run on Intel once bundled. Install an
-          # x86_64 Homebrew under Rosetta and lipo-merge its FFmpeg closure into
-          # the native arm64 prefix in place. After this the ffmpeg pkg-config
-          # discovers — and everything the bundle step copies — is universal.
-          softwareupdate --install-rosetta --agree-to-license || true
-          if [ ! -x /usr/local/bin/brew ]; then
-            arch -x86_64 /bin/bash -c \
-              "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
-          fi
-          # Install the same ffmpeg version in both prefixes so the soname paths
-          # (and therefore the merge counterparts) line up.
-          /opt/homebrew/bin/brew install ffmpeg pkg-config
-          arch -x86_64 /usr/local/bin/brew install ffmpeg
-          bash scripts/macos-universal-ffmpeg.sh /opt/homebrew /usr/local
+          # Build a minimal, decoder-only, LGPL FFmpeg from source, universal
+          # (x86_64+arm64; the non-host arch is cross-compiled), with a 10.15
+          # deployment floor. This replaces Homebrew's FFmpeg, which is GPL
+          # (incompatible to bundle) AND targets a newer macOS — its dylibs
+          # reference symbols absent on Catalina/Big Sur and crash at launch.
+          # pkg-config is pointed here so the engine links our build; the bundle
+          # step then relocates the libav* dylibs into the .app.
+          bash scripts/build-ffmpeg-universal.sh "$PWD/vendor/ffmpeg-universal"
+          echo "PKG_CONFIG_PATH=$PWD/vendor/ffmpeg-universal/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
 
       - name: Build native engine release
         shell: pwsh
@@ -531,7 +524,7 @@ jobs:
             done
           done
           if [ "$archfail" -ne 0 ]; then
-            echo "::error::A bundled dylib does not cover the engine's architectures. Homebrew FFmpeg is single-arch; the universal release builds universal FFmpeg via scripts/macos-universal-ffmpeg.sh. See docs/HANDOFF_macos_ffmpeg_catalina.md §5.2."
+            echo "::error::A bundled dylib does not cover the engine's architectures. The universal release builds universal LGPL FFmpeg from source via scripts/build-ffmpeg-universal.sh. See docs/HANDOFF_macos_ffmpeg_catalina.md §5.2."
             exit 1
           fi
 

@@ -182,6 +182,23 @@ const ensureEngineV2 = (normalizedEnv) => {
     configureArgs.push(`-DCMAKE_OSX_ARCHITECTURES=${normalizedEnv.CMAKE_OSX_ARCHITECTURES ?? "x86_64;arm64"}`);
     configureArgs.push(`-DCMAKE_OSX_DEPLOYMENT_TARGET=${normalizedEnv.MACOSX_DEPLOYMENT_TARGET ?? "10.15"}`);
   }
+
+  // macOS + FFmpeg: build (or reuse) a minimal, decoder-only, LGPL, universal
+  // FFmpeg from source and point pkg-config at it, so the engine links OUR
+  // FFmpeg (LGPL, 10.15 floor) rather than a Homebrew GPL build whose dylibs
+  // target a newer macOS and crash on Catalina/Big Sur. The bundle step then
+  // relocates these into the .app like any other non-system dylib.
+  if (process.platform === "darwin" && useFFmpeg === "ON") {
+    const ffPrefix = path.join(repoRoot, "vendor", "ffmpeg-universal");
+    run("bash", ["scripts/build-ffmpeg-universal.sh", ffPrefix]);
+    const ffPkgconfig = path.join(ffPrefix, "lib", "pkgconfig");
+    // run() inherits process.env, so set it there for the cmake configure below.
+    process.env.PKG_CONFIG_PATH = [ffPkgconfig, process.env.PKG_CONFIG_PATH]
+      .filter(Boolean)
+      .join(":");
+    console.log(`LGPL FFmpeg PKG_CONFIG_PATH: ${process.env.PKG_CONFIG_PATH}`);
+  }
+
   run("cmake", configureArgs);
   run("cmake", [
     "--build",

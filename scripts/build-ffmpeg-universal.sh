@@ -42,6 +42,18 @@ SRC="$WORK/ffmpeg-$FFMPEG_VERSION"
 
 mkdir -p "$WORK"
 
+# ── Idempotency: skip the (slow) double build if the universal output is
+#    already present and universal. Set FORCE=1 to rebuild from scratch. ───────
+existing="$OUT_PREFIX/lib/libavformat.dylib"
+if [[ -z "${FORCE:-}" && -f "$existing" ]]; then
+  archs="$(lipo -archs "$existing" 2>/dev/null || echo '')"
+  if [[ "$archs" == *x86_64* && "$archs" == *arm64* ]]; then
+    echo "build-ffmpeg-universal: $OUT_PREFIX already built (universal). Set FORCE=1 to rebuild."
+    echo "  PKG_CONFIG_PATH=$OUT_PREFIX/lib/pkgconfig"
+    exit 0
+  fi
+fi
+
 # ── Fetch + verify source (pinned) ──────────────────────────────────────────
 TARBALL="$WORK/ffmpeg-$FFMPEG_VERSION.tar.xz"
 if [[ ! -d "$SRC" ]]; then
@@ -63,8 +75,18 @@ common_args=(
   --disable-avdevice --disable-avfilter --disable-swscale --disable-postproc
   --disable-network --disable-debug
   --disable-lzma              # liblzma (xz) is Homebrew, not a system lib — drop it
+  --disable-videotoolbox      # we decode audio only; avoids CoreVideo + its newer-OS
+                              # symbols (e.g. CVBufferCopyAttachments, macOS 12+) that
+                              # crash on Catalina/Big Sur as a hard dependency
   --disable-x86asm            # no nasm/yasm dependency; audio decode is light
-  --install-name-dir='@rpath' # link the engine straight to @rpath dylibs
+  # install_name points at the FINAL universal prefix (not the per-arch build
+  # prefix). The engine links these by that absolute path, so at bundle time
+  # scripts/macos-bundle-ffmpeg.sh copies the UNIVERSAL dylib (from OUT_PREFIX)
+  # and rewrites every reference to @rpath — the same path used for any other
+  # non-system dylib. Pointing at the per-arch prefix here would make the bundle
+  # step copy a single-arch slice; forcing @rpath would make it skip them (it
+  # only vendors absolute non-system paths).
+  "--install-name-dir=$OUT_PREFIX/lib"
 )
 
 # ── Build one architecture into its own prefix ──────────────────────────────

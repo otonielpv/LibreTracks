@@ -62,19 +62,10 @@
       "frameworks": [
         "../../../vendor/bin/native/liblt_audio_engine_v2.dylib",
         "../../../vendor/bin/native/bungee.framework",
-        "../../../vendor/bin/native/libavformat.62.dylib",
-        "../../../vendor/bin/native/libavcodec.62.dylib",
-        "../../../vendor/bin/native/libavutil.60.dylib",
-        "../../../vendor/bin/native/libswresample.6.dylib",
-        "../../../vendor/bin/native/libdav1d.7.dylib",
-        "../../../vendor/bin/native/libvpx.12.dylib",
-        "../../../vendor/bin/native/libmp3lame.0.dylib",
-        "../../../vendor/bin/native/libopus.0.dylib",
-        "../../../vendor/bin/native/libSvtAv1Enc.4.dylib",
-        "../../../vendor/bin/native/libx264.165.dylib",
-        "../../../vendor/bin/native/libx265.216.dylib",
-        "../../../vendor/bin/native/libssl.3.dylib",
-        "../../../vendor/bin/native/libcrypto.3.dylib"
+        "../../../vendor/bin/native/libavformat.61.dylib",
+        "../../../vendor/bin/native/libavcodec.61.dylib",
+        "../../../vendor/bin/native/libavutil.59.dylib",
+        "../../../vendor/bin/native/libswresample.5.dylib"
       ]
     },
     "icon": [
