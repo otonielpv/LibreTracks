@@ -1434,18 +1434,32 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   upsertAutomationCue: async (cue: AutomationCueSummary) => {
-    // Mirror the backend's deserialization contract: the jump target must carry
-    // the camelCase id field for its kind. This guards against a frontend that
-    // sends snake_case (which the real Rust command rejects).
-    const target = cue.action?.target;
-    if (target?.kind === "marker" && typeof target.markerId !== "string") {
-      throw new Error("invalid automation target: missing markerId");
+    // Mirror the backend's contract: actions non-empty, at most one jump and it
+    // must be last, jump targets carry the camelCase id field for their kind.
+    const actions = cue.actions ?? [];
+    if (actions.length === 0) {
+      throw new Error("automation cue must have at least one action");
     }
-    if (target?.kind === "region" && typeof target.regionId !== "string") {
-      throw new Error("invalid automation target: missing regionId");
+    const jumpIndex = actions.findIndex((a) => a.type === "jump");
+    const jumpCount = actions.filter((a) => a.type === "jump").length;
+    if (jumpCount > 1) {
+      throw new Error("a cue may contain at most one jump action");
     }
-    if (target?.kind === "frame" && typeof target.seconds !== "number") {
-      throw new Error("invalid automation target: missing seconds");
+    if (jumpIndex >= 0 && jumpIndex !== actions.length - 1) {
+      throw new Error("the jump action must be the last action of the cue");
+    }
+    for (const action of actions) {
+      if (action.type !== "jump") continue;
+      const target = action.target;
+      if (target.kind === "marker" && typeof target.markerId !== "string") {
+        throw new Error("invalid automation target: missing markerId");
+      }
+      if (target.kind === "region" && typeof target.regionId !== "string") {
+        throw new Error("invalid automation target: missing regionId");
+      }
+      if (target.kind === "frame" && typeof target.seconds !== "number") {
+        throw new Error("invalid automation target: missing seconds");
+      }
     }
 
     const cues = (state.song.automationCues ?? []).filter(

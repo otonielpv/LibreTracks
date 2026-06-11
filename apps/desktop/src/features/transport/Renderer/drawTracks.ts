@@ -174,17 +174,16 @@ export function drawAutomationLane(
     context.fill();
     context.stroke();
 
-    // Label: "→ <destino>" + optional fade suffix, truncated to the room before
-    // the next cue's diamond. If nothing fits, only the diamond remains.
-    const fadeSuffix =
-      cue.action.transition.mode === "fade_out" &&
-      (cue.action.transition.durationSeconds ?? 0) > 0
-        ? `  ·  fade ${(cue.action.transition.durationSeconds ?? 0).toFixed(1)}s`
-        : "";
+    // Label summarizes the job: the cue name plus a count when it has more than
+    // a single action (e.g. "Salto a Coro  ·  +2"). Truncated to the room before
+    // the next cue's diamond; if nothing fits, only the diamond remains.
+    const actions = cue.actions ?? [];
+    const extraCount = Math.max(0, actions.length - 1);
+    const countSuffix = extraCount > 0 ? `  ·  +${extraCount}` : "";
     const baseLabel = `→ ${cue.name.replace(/^Salto a\s+/i, "")}`;
     const fullLabel = cue.enabled
-      ? `${baseLabel}${fadeSuffix}`
-      : `${baseLabel}${fadeSuffix} (off)`;
+      ? `${baseLabel}${countSuffix}`
+      : `${baseLabel}${countSuffix} (off)`;
 
     const labelStart = snappedX + DIAMOND_HALF + 2;
     // Right boundary = next cue's diamond (minus a gap), or the canvas edge.

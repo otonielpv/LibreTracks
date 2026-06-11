@@ -34,6 +34,9 @@ pub struct AutomationDocument {
     pub track_after_id: Option<String>,
 }
 
+/// A cue is a "job": an ordered list of actions executed in sequence when the
+/// playhead reaches `at_seconds`. A jump, if present, must be the last action
+/// (it's scheduled sample-exact in the native engine as the culmination).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AutomationCue {
@@ -42,7 +45,33 @@ pub struct AutomationCue {
     pub at_seconds: f64,
     #[serde(default = "default_true")]
     pub enabled: bool,
-    pub action: AutomationAction,
+    /// Ordered actions. The legacy single `action` key is aliased here and the
+    /// custom deserializer accepts either a single action object or an array,
+    /// so existing automation.ltautomation files migrate transparently.
+    #[serde(default, alias = "action", deserialize_with = "deserialize_actions")]
+    pub actions: Vec<AutomationAction>,
+}
+
+/// Deserialize `actions: [...]` (new) or legacy `action: {...}` (single).
+/// Implemented over an untagged helper so both shapes round-trip into a Vec.
+fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<AutomationAction>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // The cue struct already routes the `actions` key here; legacy files carry
+    // `action` instead, handled by a flattened alias in a wrapper. Simplest
+    // robust approach: accept either a sequence or a single action object.
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        Many(Vec<AutomationAction>),
+        One(AutomationAction),
+    }
+
+    match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::Many(actions) => Ok(actions),
+        OneOrMany::One(action) => Ok(vec![action]),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -59,6 +88,83 @@ pub enum AutomationAction {
         )]
         mix_scene_id: Option<String>,
     },
+    SetTrackMute {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        muted: bool,
+    },
+    SetTrackSolo {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        solo: bool,
+    },
+    SetTrackMix {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        volume: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pan: Option<f64>,
+        #[serde(
+            rename = "rampSeconds",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        ramp_seconds: Option<f64>,
+    },
+    ApplyScene {
+        #[serde(rename = "sceneId")]
+        scene_id: String,
+    },
+    Wait {
+        #[serde(rename = "durationSeconds")]
+        duration_seconds: f64,
+    },
+}
+
+impl AutomationAction {
+    pub fn is_jump(&self) -> bool {
+        matches!(self, AutomationAction::Jump { .. })
+    }
+
+    /// Wait duration in seconds for `Wait` actions, else 0.
+    pub fn wait_seconds(&self) -> f64 {
+        match self {
+            AutomationAction::Wait { duration_seconds } => duration_seconds.max(0.0),
+            _ => 0.0,
+        }
+    }
+}
+
+impl AutomationCue {
+    /// The job's terminal jump action, if any. By invariant (validated) a jump
+    /// is the last action and there is at most one.
+    pub fn jump_action(&self) -> Option<&AutomationAction> {
+        self.actions.last().filter(|action| action.is_jump())
+    }
+
+    /// Total wait time before the jump (= sum of all waits, since the jump is
+    /// last). The jump's effective trigger is `at_seconds + this`.
+    pub fn pre_jump_wait_seconds(&self) -> f64 {
+        self.actions.iter().map(|action| action.wait_seconds()).sum()
+    }
+
+    /// Non-jump actions paired with their effective offset from `at_seconds`
+    /// (running sum of preceding waits). Used to fire mix actions on time.
+    pub fn timed_pre_jump_actions(&self) -> Vec<(f64, AutomationAction)> {
+        let mut offset = 0.0;
+        let mut out = Vec::new();
+        for action in &self.actions {
+            match action {
+                AutomationAction::Wait { duration_seconds } => {
+                    offset += duration_seconds.max(0.0);
+                }
+                AutomationAction::Jump { .. } => {}
+                other => out.push((offset, other.clone())),
+            }
+        }
+        out
+    }
 }
 
 // NOTE: for internally-tagged enums, serde's `rename_all` renames the variant
@@ -173,16 +279,25 @@ mod tests {
                 name: "Jump early".into(),
                 at_seconds: 42.0,
                 enabled: true,
-                action: AutomationAction::Jump {
-                    target: AutomationJumpTarget::Region {
-                        region_id: "region_outro".into(),
+                actions: vec![
+                    AutomationAction::SetTrackMute {
+                        track_id: "track_voice".into(),
+                        muted: true,
                     },
-                    transition: AutomationTransition {
-                        mode: AutomationTransitionMode::FadeOut,
-                        duration_seconds: Some(1.5),
+                    AutomationAction::Wait {
+                        duration_seconds: 2.0,
                     },
-                    mix_scene_id: Some("scene_soft".into()),
-                },
+                    AutomationAction::Jump {
+                        target: AutomationJumpTarget::Region {
+                            region_id: "region_outro".into(),
+                        },
+                        transition: AutomationTransition {
+                            mode: AutomationTransitionMode::FadeOut,
+                            duration_seconds: Some(1.5),
+                        },
+                        mix_scene_id: Some("scene_soft".into()),
+                    },
+                ],
             }],
             mix_scenes: vec![MixScene {
                 id: "scene_soft".into(),
@@ -221,11 +336,15 @@ mod tests {
                 "mixSceneId": "s1"
             }
         }"#;
+        // The legacy single `action` key migrates into a one-element `actions`.
         let cue: AutomationCue = serde_json::from_str(json).expect("camelCase cue parses");
-        let AutomationAction::Jump { target, .. } = cue.action;
+        assert_eq!(cue.actions.len(), 1);
+        let AutomationAction::Jump { target, .. } = &cue.actions[0] else {
+            panic!("expected jump");
+        };
         assert_eq!(
             target,
-            AutomationJumpTarget::Marker {
+            &AutomationJumpTarget::Marker {
                 marker_id: "m1".into()
             }
         );
@@ -247,6 +366,36 @@ mod tests {
                 region_id: "r1".into()
             }
         );
+    }
+
+    #[test]
+    fn multi_action_cue_round_trips_and_helpers() {
+        let json = r#"{
+            "id": "c1", "name": "Job", "atSeconds": 10.0, "enabled": true,
+            "actions": [
+                { "type": "setTrackMute", "trackId": "t1", "muted": true },
+                { "type": "wait", "durationSeconds": 2.0 },
+                { "type": "applyScene", "sceneId": "s1" },
+                { "type": "jump",
+                  "target": { "kind": "region", "regionId": "r1" },
+                  "transition": { "mode": "instant" } }
+            ]
+        }"#;
+        let cue: AutomationCue = serde_json::from_str(json).expect("multi-action parses");
+        assert_eq!(cue.actions.len(), 4);
+        // Helpers: jump is last, waits sum, pre-jump timed actions carry offsets.
+        assert!(cue.jump_action().is_some());
+        assert_eq!(cue.pre_jump_wait_seconds(), 2.0);
+        let timed = cue.timed_pre_jump_actions();
+        assert_eq!(timed.len(), 2); // mute + applyScene (wait/jump excluded)
+        assert_eq!(timed[0].0, 0.0); // mute at offset 0
+        assert_eq!(timed[1].0, 2.0); // applyScene after the 2s wait
+
+        // camelCase fields survive serialization.
+        let serialized = serde_json::to_string(&cue).expect("serialize");
+        assert!(serialized.contains("\"trackId\""));
+        assert!(serialized.contains("\"durationSeconds\""));
+        assert!(serialized.contains("\"sceneId\""));
     }
 
     #[test]

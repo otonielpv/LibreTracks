@@ -147,6 +147,8 @@ pub struct DesktopSession {
     last_native_scheduled_jump_executed_count: u64,
     automation: AutomationDocument,
     pending_automation_jump: Option<PendingAutomationJump>,
+    /// In-flight jobs without a terminal jump (pure mix/scene/wait sequences).
+    active_automation_job: Option<ActiveAutomationJob>,
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
@@ -172,11 +174,27 @@ struct TransposeHistoryGroup {
 struct PendingAutomationJump {
     cue_id: String,
     cue_name: String,
+    /// View-space time the jump itself fires: cue.at_seconds + Σ pre-jump waits.
     execute_at_seconds: f64,
     target: AutomationJumpTarget,
     mix_scene_id: Option<String>,
     fade_out_seconds: Option<f64>,
     fade_started: bool,
+    /// Non-jump actions of the job, paired with their view-space fire time
+    /// (cue.at_seconds + offset). Sorted by time; fired as the playhead crosses
+    /// them. `fired_count` is how many have already run this pass.
+    timed_actions: Vec<(f64, AutomationAction)>,
+    fired_count: usize,
+}
+
+/// An in-flight job that has NO terminal jump (pure mix/scene/wait sequence).
+/// Jobs with a jump are tracked via `pending_automation_jump` instead, since the
+/// native jump scheduling already drives them.
+#[derive(Debug, Clone)]
+struct ActiveAutomationJob {
+    cue_id: String,
+    timed_actions: Vec<(f64, AutomationAction)>,
+    fired_count: usize,
 }
 
 #[derive(Debug, Default)]
@@ -202,6 +220,7 @@ impl Default for DesktopSession {
             last_native_scheduled_jump_executed_count: 0,
             automation: AutomationDocument::default(),
             pending_automation_jump: None,
+            active_automation_job: None,
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1555,6 +1574,7 @@ impl DesktopSession {
         self.engine.stop()?;
         self.transport_clock.stop();
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         audio.cancel_scheduled_jumps()?;
 
         Ok(self.snapshot())
@@ -1592,6 +1612,7 @@ impl DesktopSession {
 
         self.transport_clock.seek_to(self.engine.position_seconds());
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         audio.cancel_scheduled_jumps()?;
         self.capture_transport_drift_sample(
             audio,
@@ -1627,6 +1648,7 @@ impl DesktopSession {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         let source_song = self
             .engine
             .song()
@@ -1694,6 +1716,7 @@ impl DesktopSession {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         let source_song = self
             .engine
             .song()
@@ -1785,6 +1808,7 @@ impl DesktopSession {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         audio.cancel_scheduled_jumps()?;
         Ok(self.snapshot())
     }
@@ -1797,6 +1821,7 @@ impl DesktopSession {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         audio.cancel_scheduled_jumps()?;
         self.engine.toggle_vamp(mode)?;
         if self.engine.playback_state() == PlaybackState::Playing {
@@ -1820,9 +1845,15 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         cue.at_seconds = source_seconds_at_view(&song, cue.at_seconds);
-        let AutomationAction::Jump { target, .. } = &mut cue.action;
-        if let AutomationJumpTarget::Frame { seconds } = target {
-            *seconds = source_seconds_at_view(&song, *seconds);
+        // Normalize any frame-target jump's seconds from view → source space.
+        for action in &mut cue.actions {
+            if let AutomationAction::Jump {
+                target: AutomationJumpTarget::Frame { seconds },
+                ..
+            } = action
+            {
+                *seconds = source_seconds_at_view(&song, *seconds);
+            }
         }
         validate_automation_cue(&song, &self.automation, &cue)?;
         cue.name = cue.name.trim().to_string();
@@ -1904,6 +1935,7 @@ impl DesktopSession {
                 .is_some_and(|pending| pending.cue_id == cue_id)
             {
                 self.pending_automation_jump = None;
+        self.active_automation_job = None;
                 audio.cancel_scheduled_jumps()?;
             }
             self.persist_automation(audio)?;
@@ -1951,10 +1983,22 @@ impl DesktopSession {
             .retain(|scene| scene.id != scene_id);
         if self.automation.mix_scenes.len() != before {
             for cue in &mut self.automation.cues {
-                let AutomationAction::Jump { mix_scene_id, .. } = &mut cue.action;
-                if mix_scene_id.as_deref() == Some(scene_id) {
-                    *mix_scene_id = None;
+                // Clear the deleted scene from jump actions, and drop any
+                // ApplyScene actions that referenced it (a dangling scene id
+                // would be a no-op at runtime, but we keep the model clean).
+                for action in &mut cue.actions {
+                    if let AutomationAction::Jump { mix_scene_id, .. } = action {
+                        if mix_scene_id.as_deref() == Some(scene_id) {
+                            *mix_scene_id = None;
+                        }
+                    }
                 }
+                cue.actions.retain(|action| {
+                    !matches!(
+                        action,
+                        AutomationAction::ApplyScene { scene_id: id } if id == scene_id
+                    )
+                });
             }
             self.persist_automation(audio)?;
         }
@@ -1967,6 +2011,7 @@ impl DesktopSession {
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
         self.project_revision = self.project_revision.saturating_add(1);
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         audio.cancel_scheduled_jumps()?;
         self.schedule_next_automation_jump(audio)?;
         Ok(())
@@ -2005,6 +2050,11 @@ impl DesktopSession {
         )
     }
 
+    /// Arm the next automation cue (job). The terminal jump — if the job has one
+    /// — is scheduled sample-exact in the native engine at its effective time
+    /// (`at_seconds + Σ pre-jump waits`); the job's pre-jump mix actions fire as
+    /// the playhead crosses each one's effective time. Jobs without a jump are
+    /// tracked as an `active_automation_job` and fire purely from the timeline.
     fn schedule_next_automation_jump(
         &mut self,
         audio: &AudioController,
@@ -2022,12 +2072,17 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let position_seconds = self.engine.position_seconds();
+
+        // The next cue to arm is the earliest enabled cue still ahead of the
+        // playhead. A cue's pre-jump actions may start firing once the playhead
+        // is at/after at_seconds, so only arm cues strictly in the future here;
+        // jobs already started are owned by pending_automation_jump / the active
+        // job and re-armed on completion.
         let Some(cue) = self
             .automation
             .cues
             .iter()
             .filter(|cue| cue.enabled && cue.at_seconds > position_seconds + 0.001)
-            .filter(|cue| matches!(cue.action, AutomationAction::Jump { .. }))
             .min_by(|left, right| {
                 left.at_seconds
                     .partial_cmp(&right.at_seconds)
@@ -2036,16 +2091,37 @@ impl DesktopSession {
             .cloned()
         else {
             self.pending_automation_jump = None;
+            self.active_automation_job = None;
             return Ok(());
         };
 
-        let AutomationAction::Jump {
+        let timed_actions = cue.timed_pre_jump_actions();
+
+        let Some(AutomationAction::Jump {
             target,
             transition,
             mix_scene_id,
-        } = cue.action.clone();
+        }) = cue.jump_action().cloned()
+        else {
+            // Pure mix/scene/wait job: nothing to schedule natively. Track it so
+            // the per-tick advance fires its actions on time.
+            self.pending_automation_jump = None;
+            self.active_automation_job = Some(ActiveAutomationJob {
+                cue_id: cue.id.clone(),
+                timed_actions: timed_actions
+                    .into_iter()
+                    .map(|(offset, action)| (cue.at_seconds + offset, action))
+                    .collect(),
+                fired_count: 0,
+            });
+            return Ok(());
+        };
+
+        // Job with a terminal jump. Effective jump time accounts for waits.
+        self.active_automation_job = None;
+        let execute_at_seconds = cue.at_seconds + cue.pre_jump_wait_seconds();
         let target_seconds = automation_target_source_seconds(&source_song, &target)?;
-        let trigger_seconds = warp_timeline_seconds_at(&source_song, cue.at_seconds);
+        let trigger_seconds = warp_timeline_seconds_at(&source_song, execute_at_seconds);
         let target_view_seconds = Some(warp_timeline_seconds_at(&source_song, target_seconds));
         let native_target = match &target {
             AutomationJumpTarget::Marker { marker_id } => NativeJumpTarget {
@@ -2079,13 +2155,97 @@ impl DesktopSession {
         self.pending_automation_jump = Some(PendingAutomationJump {
             cue_id: cue.id,
             cue_name: cue.name,
-            execute_at_seconds: cue.at_seconds,
+            execute_at_seconds,
             target,
             mix_scene_id,
             fade_out_seconds: (transition.mode == AutomationTransitionMode::FadeOut)
                 .then_some(transition.duration_seconds.unwrap_or(0.35).max(0.0)),
             fade_started: false,
+            timed_actions: timed_actions
+                .into_iter()
+                .map(|(offset, action)| (cue.at_seconds + offset, action))
+                .collect(),
+            fired_count: 0,
         });
+
+        Ok(())
+    }
+
+    /// Apply a single non-jump job action immediately (mute/solo/mix/scene).
+    fn apply_automation_action(
+        &mut self,
+        action: &AutomationAction,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        match action {
+            AutomationAction::SetTrackMute { track_id, muted } => {
+                audio.update_live_track_mix(track_id, None, None, Some(*muted), None, None)?;
+            }
+            AutomationAction::SetTrackSolo { track_id, solo } => {
+                audio.update_live_track_mix(track_id, None, None, None, Some(*solo), None)?;
+            }
+            AutomationAction::SetTrackMix {
+                track_id,
+                volume,
+                pan,
+                ..
+            } => {
+                // Ramps are not yet honoured by the live mix bridge; apply the
+                // target value immediately (ramp is a future enhancement).
+                audio.update_live_track_mix(track_id, *volume, *pan, None, None, None)?;
+            }
+            AutomationAction::ApplyScene { scene_id } => {
+                self.apply_mix_scene_runtime(scene_id, audio)?;
+            }
+            // Jump and Wait are handled by the scheduler/executor, not here.
+            AutomationAction::Jump { .. } | AutomationAction::Wait { .. } => {}
+        }
+        Ok(())
+    }
+
+    /// Fire any job pre-jump actions whose effective time the playhead has now
+    /// reached. Drives both jump-jobs (via `pending_automation_jump`) and pure
+    /// jobs (via `active_automation_job`). Pure jobs end when fully fired.
+    fn advance_automation_job_actions(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if self.engine.playback_state() != PlaybackState::Playing {
+            return Ok(());
+        }
+        let position_seconds = self.engine.position_seconds();
+
+        // Collect the actions that became due, then apply them (split borrow).
+        let mut due: Vec<AutomationAction> = Vec::new();
+        if let Some(pending) = self.pending_automation_jump.as_mut() {
+            while pending.fired_count < pending.timed_actions.len()
+                && pending.timed_actions[pending.fired_count].0 <= position_seconds + 0.001
+            {
+                due.push(pending.timed_actions[pending.fired_count].1.clone());
+                pending.fired_count += 1;
+            }
+        }
+        let mut pure_job_done = false;
+        if let Some(job) = self.active_automation_job.as_mut() {
+            while job.fired_count < job.timed_actions.len()
+                && job.timed_actions[job.fired_count].0 <= position_seconds + 0.001
+            {
+                due.push(job.timed_actions[job.fired_count].1.clone());
+                job.fired_count += 1;
+            }
+            pure_job_done = job.fired_count >= job.timed_actions.len();
+        }
+
+        for action in due {
+            self.apply_automation_action(&action, audio)?;
+        }
+
+        // A pure (jumpless) job ends once all its actions have fired; arm the
+        // next cue so consecutive jobs chain.
+        if pure_job_done {
+            self.active_automation_job = None;
+            self.schedule_next_automation_jump(audio)?;
+        }
 
         Ok(())
     }
@@ -4400,6 +4560,7 @@ impl DesktopSession {
         self.automation = load_automation(&song_dir)
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
         self.pending_automation_jump = None;
+        self.active_automation_job = None;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.live_history_anchor = None;
@@ -5234,6 +5395,9 @@ impl DesktopSession {
             if self.engine.pending_marker_jump().is_some() {
                 return Ok(());
             }
+            // Fire any job pre-jump mix actions whose effective time the
+            // playhead has reached (runs for both jump-jobs and pure jobs).
+            self.advance_automation_job_actions(audio)?;
             self.start_pending_automation_fade_if_due(audio)?;
             if self.pending_automation_jump.is_some() {
                 return Ok(());
@@ -6609,35 +6773,102 @@ fn validate_automation_cue(
             "automation cue time must be a finite, non-negative number".into(),
         ));
     }
+    if cue.actions.is_empty() {
+        return Err(DesktopError::AudioCommand(
+            "automation cue must have at least one action".into(),
+        ));
+    }
 
-    match &cue.action {
-        AutomationAction::Jump {
-            target,
-            transition,
-            mix_scene_id,
-        } => {
-            automation_target_source_seconds(song, target)?;
-            if transition.mode == AutomationTransitionMode::FadeOut
-                && transition
-                    .duration_seconds
-                    .is_some_and(|duration| !duration.is_finite() || duration < 0.0)
-            {
-                return Err(DesktopError::AudioCommand(
-                    "automation fade duration must be a finite, non-negative number".into(),
-                ));
-            }
-            if let Some(scene_id) = mix_scene_id {
-                if !automation
-                    .mix_scenes
-                    .iter()
-                    .any(|scene| scene.id == *scene_id)
+    let track_exists = |track_id: &str| song.tracks.iter().any(|track| track.id == track_id);
+    let scene_exists = |scene_id: &str| automation.mix_scenes.iter().any(|s| s.id == scene_id);
+
+    let mut jump_count = 0usize;
+    let last_index = cue.actions.len() - 1;
+    for (index, action) in cue.actions.iter().enumerate() {
+        match action {
+            AutomationAction::Jump {
+                target,
+                transition,
+                mix_scene_id,
+            } => {
+                jump_count += 1;
+                // The jump must be the terminal action (it's scheduled
+                // sample-exact as the job's culmination).
+                if index != last_index {
+                    return Err(DesktopError::AudioCommand(
+                        "the jump action must be the last action of the cue".into(),
+                    ));
+                }
+                automation_target_source_seconds(song, target)?;
+                if transition.mode == AutomationTransitionMode::FadeOut
+                    && transition
+                        .duration_seconds
+                        .is_some_and(|duration| !duration.is_finite() || duration < 0.0)
                 {
+                    return Err(DesktopError::AudioCommand(
+                        "automation fade duration must be a finite, non-negative number".into(),
+                    ));
+                }
+                if let Some(scene_id) = mix_scene_id {
+                    if !scene_exists(scene_id) {
+                        return Err(DesktopError::AudioCommand(format!(
+                            "mix scene not found: {scene_id}"
+                        )));
+                    }
+                }
+            }
+            AutomationAction::SetTrackMute { track_id, .. }
+            | AutomationAction::SetTrackSolo { track_id, .. } => {
+                if !track_exists(track_id) {
+                    return Err(DesktopError::AudioCommand(format!(
+                        "track not found: {track_id}"
+                    )));
+                }
+            }
+            AutomationAction::SetTrackMix {
+                track_id,
+                volume,
+                pan,
+                ramp_seconds,
+            } => {
+                if !track_exists(track_id) {
+                    return Err(DesktopError::AudioCommand(format!(
+                        "track not found: {track_id}"
+                    )));
+                }
+                for (value, label) in [(volume, "volume"), (pan, "pan")] {
+                    if value.is_some_and(|v| !v.is_finite()) {
+                        return Err(DesktopError::AudioCommand(format!(
+                            "automation {label} must be a finite number"
+                        )));
+                    }
+                }
+                if ramp_seconds.is_some_and(|r| !r.is_finite() || r < 0.0) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation ramp must be a finite, non-negative number".into(),
+                    ));
+                }
+            }
+            AutomationAction::ApplyScene { scene_id } => {
+                if !scene_exists(scene_id) {
                     return Err(DesktopError::AudioCommand(format!(
                         "mix scene not found: {scene_id}"
                     )));
                 }
             }
+            AutomationAction::Wait { duration_seconds } => {
+                if !duration_seconds.is_finite() || *duration_seconds < 0.0 {
+                    return Err(DesktopError::AudioCommand(
+                        "automation wait must be a finite, non-negative number".into(),
+                    ));
+                }
+            }
         }
+    }
+    if jump_count > 1 {
+        return Err(DesktopError::AudioCommand(
+            "a cue may contain at most one jump action".into(),
+        ));
     }
 
     Ok(())

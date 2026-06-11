@@ -125,19 +125,48 @@ pub struct AutomationCueSummary {
     pub name: String,
     pub at_seconds: f64,
     pub enabled: bool,
-    pub action: AutomationActionSummary,
+    /// Ordered actions of the job.
+    pub actions: Vec<AutomationActionSummary>,
 }
 
+// Internally-tagged enum: rename_all renames the tags but not struct-variant
+// fields, so rename per-field to emit camelCase for the frontend.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AutomationActionSummary {
     Jump {
         target: AutomationJumpTargetSummary,
         transition: AutomationTransitionSummary,
-        // Internally-tagged enum: rename_all doesn't reach struct-variant fields,
-        // so rename per-field to emit camelCase for the frontend.
         #[serde(rename = "mixSceneId", skip_serializing_if = "Option::is_none")]
         mix_scene_id: Option<String>,
+    },
+    SetTrackMute {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        muted: bool,
+    },
+    SetTrackSolo {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        solo: bool,
+    },
+    SetTrackMix {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        volume: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pan: Option<f64>,
+        #[serde(rename = "rampSeconds", skip_serializing_if = "Option::is_none")]
+        ramp_seconds: Option<f64>,
+    },
+    ApplyScene {
+        #[serde(rename = "sceneId")]
+        scene_id: String,
+    },
+    Wait {
+        #[serde(rename = "durationSeconds")]
+        duration_seconds: f64,
     },
 }
 
@@ -503,22 +532,62 @@ pub(crate) fn automation_cue_to_summary(song: &Song, cue: &AutomationCue) -> Aut
         name: cue.name.clone(),
         at_seconds: warp_timeline_seconds_at(song, cue.at_seconds),
         enabled: cue.enabled,
-        action: match &cue.action {
-            AutomationAction::Jump {
-                target,
-                transition,
-                mix_scene_id,
-            } => AutomationActionSummary::Jump {
-                target: automation_jump_target_to_summary(song, target),
-                transition: AutomationTransitionSummary {
-                    mode: match transition.mode {
-                        AutomationTransitionMode::Instant => "instant".into(),
-                        AutomationTransitionMode::FadeOut => "fade_out".into(),
-                    },
-                    duration_seconds: transition.duration_seconds,
+        actions: cue
+            .actions
+            .iter()
+            .map(|action| automation_action_to_summary(song, action))
+            .collect(),
+    }
+}
+
+pub(crate) fn automation_action_to_summary(
+    song: &Song,
+    action: &AutomationAction,
+) -> AutomationActionSummary {
+    match action {
+        AutomationAction::Jump {
+            target,
+            transition,
+            mix_scene_id,
+        } => AutomationActionSummary::Jump {
+            target: automation_jump_target_to_summary(song, target),
+            transition: AutomationTransitionSummary {
+                mode: match transition.mode {
+                    AutomationTransitionMode::Instant => "instant".into(),
+                    AutomationTransitionMode::FadeOut => "fade_out".into(),
                 },
-                mix_scene_id: mix_scene_id.clone(),
+                duration_seconds: transition.duration_seconds,
             },
+            mix_scene_id: mix_scene_id.clone(),
+        },
+        AutomationAction::SetTrackMute { track_id, muted } => {
+            AutomationActionSummary::SetTrackMute {
+                track_id: track_id.clone(),
+                muted: *muted,
+            }
+        }
+        AutomationAction::SetTrackSolo { track_id, solo } => {
+            AutomationActionSummary::SetTrackSolo {
+                track_id: track_id.clone(),
+                solo: *solo,
+            }
+        }
+        AutomationAction::SetTrackMix {
+            track_id,
+            volume,
+            pan,
+            ramp_seconds,
+        } => AutomationActionSummary::SetTrackMix {
+            track_id: track_id.clone(),
+            volume: *volume,
+            pan: *pan,
+            ramp_seconds: *ramp_seconds,
+        },
+        AutomationAction::ApplyScene { scene_id } => AutomationActionSummary::ApplyScene {
+            scene_id: scene_id.clone(),
+        },
+        AutomationAction::Wait { duration_seconds } => AutomationActionSummary::Wait {
+            duration_seconds: *duration_seconds,
         },
     }
 }

@@ -26,6 +26,7 @@ import {
   type AudioBackendKind,
   type AudioDeviceDescriptor,
   type AudioMeterLevel,
+  type AutomationActionSummary,
   type AutomationCueSummary,
   type AutomationJumpTargetSummary,
   type ClipSummary,
@@ -5521,17 +5522,18 @@ export function TransportPanelContent() {
       return;
     }
 
-    if (currentSong.regions.length === 0 && currentSong.sectionMarkers.length === 0) {
-      setStatus("Crea una cancion o una marca antes de automatizar saltos");
-      return;
-    }
+    // A new cue starts with a single jump action seeded to the next destination
+    // (if any). The user can then add/remove/reorder actions in the modal.
+    const defaultTarget = defaultAutomationTarget(currentSong, positionSeconds);
+    const seedActions: AutomationActionSummary[] = defaultTarget
+      ? [{ type: "jump", target: defaultTarget, transition: { mode: "instant" } }]
+      : [];
 
     setAutomationCueDraft({
       atSeconds: positionSeconds,
       cueId: null,
       name: null,
-      target: defaultAutomationTarget(currentSong, positionSeconds),
-      fadeSeconds: 0,
+      actions: seedActions,
     });
   }
 
@@ -5541,20 +5543,13 @@ export function TransportPanelContent() {
       atSeconds: cue.atSeconds,
       cueId: cue.id,
       name: cue.name,
-      target: cue.action.target,
-      fadeSeconds:
-        cue.action.transition.mode === "fade_out"
-          ? (cue.action.transition.durationSeconds ?? 0)
-          : 0,
+      actions: cue.actions,
     });
   }
 
   // Commit the modal's result: create or update the cue, then refresh.
   const handleConfirmAutomationCue = useCallback(
-    (result: {
-      target: AutomationJumpTargetSummary;
-      fadeSeconds: number;
-    }) => {
+    (result: { actions: AutomationActionSummary[] }) => {
       const draft = automationCueDraft;
       const currentSong = songRef.current;
       if (!draft || !currentSong) {
@@ -5563,27 +5558,24 @@ export function TransportPanelContent() {
       setAutomationCueDraft(null);
 
       void runAction(async () => {
-        const targetLabel = automationTargetLabel(currentSong, result.target);
+        const jump = result.actions.find((a) => a.type === "jump");
+        const label =
+          jump && jump.type === "jump"
+            ? `Salto a ${automationTargetLabel(currentSong, jump.target)}`
+            : `${result.actions.length} acciones`;
         const nextSnapshot = await upsertAutomationCue({
           id: draft.cueId ?? createAutomationCueId(),
-          name: draft.name ?? `Salto a ${targetLabel}`,
+          name: draft.name ?? label,
           atSeconds: draft.atSeconds,
           enabled: true,
-          action: {
-            type: "jump",
-            target: result.target,
-            transition:
-              result.fadeSeconds > 0
-                ? { mode: "fade_out", durationSeconds: result.fadeSeconds }
-                : { mode: "instant" },
-          },
+          actions: result.actions,
         });
         applyPlaybackSnapshot(nextSnapshot);
         await refreshSongView({ includeWaveforms: false, sync: true });
         setStatus(
           draft.cueId
-            ? `Automatismo actualizado hacia ${targetLabel}`
-            : `Automatismo creado en ${formatClock(draft.atSeconds)} hacia ${targetLabel}`,
+            ? `Automatismo actualizado (${label})`
+            : `Automatismo creado en ${formatClock(draft.atSeconds)} (${label})`,
         );
       });
     },

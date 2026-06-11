@@ -70,11 +70,13 @@ describe("drawAutomationLane", () => {
         name: "Salto a Outro",
         atSeconds: 4, // 4s * 50px = x=200, well inside width=1000
         enabled: true,
-        action: {
-          type: "jump",
-          target: { kind: "region", regionId: "r1" },
-          transition: { mode: "instant", durationSeconds: null },
-        },
+        actions: [
+          {
+            type: "jump",
+            target: { kind: "region", regionId: "r1" },
+            transition: { mode: "instant", durationSeconds: null },
+          },
+        ],
       },
     ]);
 
@@ -96,11 +98,13 @@ describe("drawAutomationLane", () => {
         name: "Salto a Lejos",
         atSeconds: 10000, // diamond x way past width → culled entirely
         enabled: true,
-        action: {
-          type: "jump",
-          target: { kind: "region", regionId: "r1" },
-          transition: { mode: "instant", durationSeconds: null },
-        },
+        actions: [
+          {
+            type: "jump",
+            target: { kind: "region", regionId: "r1" },
+            transition: { mode: "instant", durationSeconds: null },
+          },
+        ],
       },
     ]);
 
@@ -118,11 +122,13 @@ describe("drawAutomationLane", () => {
       name: "Salto a UnDestinoLargoQueNoCabe",
       atSeconds,
       enabled: true,
-      action: {
-        type: "jump" as const,
-        target: { kind: "region" as const, regionId: "r1" },
-        transition: { mode: "instant" as const, durationSeconds: null },
-      },
+      actions: [
+        {
+          type: "jump" as const,
+          target: { kind: "region" as const, regionId: "r1" },
+          transition: { mode: "instant" as const, durationSeconds: null },
+        },
+      ],
     });
     const snapshot = buildSnapshot([mkCue("a", 1), mkCue("b", 1.1)]);
 

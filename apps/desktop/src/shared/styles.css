@@ -1428,6 +1428,99 @@ textarea {
   margin-top: 0.4rem;
 }
 
+/* Multi-action job editor inside the cue modal. */
+.lt-automation-actions-body {
+  gap: 0.7rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.lt-automation-empty {
+  color: rgb(186 202 197 / 0.7);
+  font: 500 0.88rem/1.4 "Space Grotesk", sans-serif;
+  margin: 0;
+}
+
+.lt-automation-action-row {
+  border: 1px solid rgb(255 122 182 / 0.18);
+  border-radius: 4px;
+  padding: 0.7rem;
+  background: rgb(255 122 182 / 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lt-automation-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lt-automation-action-kind {
+  color: #ff9bcc;
+  font: 700 0.85rem/1.2 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lt-automation-action-tools {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.lt-automation-action-tools button {
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 3px;
+  background: rgb(28 31 32 / 0.9);
+  color: #f3f0ef;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.lt-automation-action-tools button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.lt-automation-action-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.55rem;
+}
+
+.lt-automation-action-fields .lt-settings-field input[type="number"],
+.lt-automation-action-fields .lt-settings-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.6rem 0.7rem;
+  font: 600 0.88rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-automation-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.lt-automation-add-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.lt-automation-add-buttons button {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.7rem;
+}
+
 /* Maximum-size row: label + a narrow numeric input with an inline "GB" unit
    so the field reads as a size, not a free-form box stretched across the row. */
 .lt-cache-max-row {

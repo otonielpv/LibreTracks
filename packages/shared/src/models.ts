@@ -116,19 +116,34 @@ export type AutomationJumpTargetSummary =
   | { kind: "region"; regionId: string }
   | { kind: "frame"; seconds: number };
 
-export type AutomationActionSummary = {
-  type: "jump";
-  target: AutomationJumpTargetSummary;
-  transition: AutomationTransitionSummary;
-  mixSceneId?: string | null;
-};
+/** One action of a cue's job. Discriminated by `type`. A `jump`, if present,
+ * is always the last action. */
+export type AutomationActionSummary =
+  | {
+      type: "jump";
+      target: AutomationJumpTargetSummary;
+      transition: AutomationTransitionSummary;
+      mixSceneId?: string | null;
+    }
+  | { type: "setTrackMute"; trackId: string; muted: boolean }
+  | { type: "setTrackSolo"; trackId: string; solo: boolean }
+  | {
+      type: "setTrackMix";
+      trackId: string;
+      volume?: number | null;
+      pan?: number | null;
+      rampSeconds?: number | null;
+    }
+  | { type: "applyScene"; sceneId: string }
+  | { type: "wait"; durationSeconds: number };
 
 export type AutomationCueSummary = {
   id: string;
   name: string;
   atSeconds: number;
   enabled: boolean;
-  action: AutomationActionSummary;
+  /** Ordered actions executed in sequence when the playhead reaches atSeconds. */
+  actions: AutomationActionSummary[];
 };
 
 export type MixSceneTrackOverrideSummary = {
