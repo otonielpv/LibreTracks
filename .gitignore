@@ -11,6 +11,9 @@ vendor/bin/native/*
 !vendor/bin/native/.gitkeep
 # Bungee pitch SDK — downloaded per-machine, not vendored (see README "Bungee pitch backend")
 vendor/bungee/
+# FFmpeg built/relocated per-machine by scripts/build-ffmpeg-universal.sh — regenerated, not vendored
+vendor/.ffmpeg-build/
+vendor/ffmpeg-universal/
 
 *.log
 .DS_Store
@@ -23,4 +26,6 @@ native/audio-engine-v2/vcpkg_installed/
 build-rb-tests*
 build-rb-release*
 build*
+# ...but the FFmpeg build *script* is source, not a build artifact (the broad build* above would catch it).
+!scripts/build-ffmpeg-universal.sh
 bench-out*

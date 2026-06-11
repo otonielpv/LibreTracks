@@ -74,9 +74,41 @@ Verificación: `npx vite build` y comprobar que `dist/assets/index-*.css` tiene
 - ✅ `apps/desktop/package.json` — browserslist `safari >= 13`.
 - ✅ `apps/desktop/src-tauri/tauri.conf.json` — `minimumSystemVersion` `10.15`.
 
+## 4-bis. Hecho en el Mac (sesión 2026-06-11)
+
+- ✅ **Bug crítico del script**: usaba `declare -A` (arrays asociativos, bash 4+),
+  pero macOS y los runners de GitHub traen bash 3.2 → fallaba con
+  `declare: -A: invalid option`. Reescrito a tracking por string ` token `
+  compatible con 3.2. (Habría fallado igual en CI.)
+- ✅ **Cierre transitivo completo, no solo `libav*`**: el FFmpeg "full" de
+  Homebrew arrastra códecs de terceros (x264, x265, libvpx, svt-av1, lame, opus,
+  dav1d, openssl). dyld los carga al cargar libavcodec, así que dejar SUS rutas
+  absolutas de Homebrew seguía rompiendo el arranque. El script ahora reubica
+  toda dependencia no-sistema (lo que NO está en `/usr/lib` ni `/System`), estilo
+  `dylibbundler`. Resultado: 13 dylibs vendored + engine, todos `@rpath`, sin
+  ninguna ruta absoluta restante (verificado).
+- ✅ §5.1 resuelto: `bundle.macOS.frameworks` en `tauri.conf.json` lista los 15
+  artefactos (engine + bungee.framework + 13 dylibs). El script imprime al final
+  la lista lista-para-pegar, para reconciliar drift cuando brew suba versiones.
+- ✅ §5.4 (CI): el paso "Validate macOS .app bundle dylib wiring" de `release.yml`
+  ahora además (a) falla si cualquier dylib bundled conserva una ruta absoluta
+  no-sistema, (b) exige que cada dep `@rpath/libav*` del engine esté en
+  Frameworks/, y (c) **exige que todo dylib bundled sea universal** (atrapa el
+  problema de §5.2 en CI en vez de en un crash de usuario).
+- ✅ §5.4 (docs): `system-requirements.md` (EN+ES) actualizado a mínimo macOS
+  10.15 Catalina + sección de formatos soportados en los 3 SO.
+
+### ⚠️ DECISIÓN ABIERTA — §5.2 (build universal). El bug es de arquitectura, no de runtime:
+el CI compila el engine universal (`x86_64;arm64`) y bundlea
+`--target universal-apple-darwin`, pero el FFmpeg de Homebrew es **single-arch**
+(la arch del runner). En un runner arm64 (macos-latest) el slice x86_64 del
+engine **ni siquiera enlaza** contra un FFmpeg arm64 → el build de release
+**falla**. Hay que elegir estrategia (ver opciones abajo) antes de poder cortar
+release universal. El check de arch añadido en CI lo hará explícito.
+
 ## 5. LO QUE FALTA (hacer en el Mac)
 
-### 5.1. Nombres exactos de los dylibs de FFmpeg → añadirlos al bundle
+### 5.1. ✅ RESUELTO — Nombres exactos de los dylibs de FFmpeg → añadidos al bundle
 
 Tauri solo copia a `Contents/Frameworks/` lo que esté en
 `bundle.macOS.frameworks`. Los `libav*.dylib` hay que listarlos ahí (el glob de
@@ -106,16 +138,35 @@ Con esa lista, añadir cada dylib a `bundle.macOS.frameworks` en
 
 (ajustar nombres/versiones a lo que devuelva `otool`).
 
-### 5.2. Ojo con el build universal (`universal-apple-darwin`)
+### 5.2. ✅ DECIDIDO — FFmpeg universal vía `lipo` (un solo DMG universal)
 
-El CI bundlea con `--target universal-apple-darwin` (x86_64 + arm64). Los dylibs
-de Homebrew suelen ser **single-arch** (solo la arch del host). Si se bundlean
-single-arch, fallará en la otra arquitectura. Opciones:
-- Build local solo para tu arch (no universal) para probar el fix rápido, **o**
-- Conseguir FFmpeg universal (vcpkg, o `lipo` de dos instalaciones brew), **o**
-- Decidir si el release universal necesita FFmpeg universal o se hace por-arch.
+Decisión: mantener un único `.app` universal y hacer FFmpeg universal en CI con
+`lipo`, en vez de releases por-arch. El problema no era solo de runtime: como el
+engine se compila universal, el slice de la "otra" arch **ni siquiera enlaza**
+contra un FFmpeg single-arch, así que el build de release fallaba.
+
+Implementado en `release.yml` (sin probar en CI todavía — esta máquina es Intel y
+no puede generar el slice arm64; la primera corrida de release es la prueba real):
+
+- **`scripts/macos-universal-ffmpeg.sh`** (NUEVO): dados dos prefijos de Homebrew
+  (nativo + el de la otra arch), recorre el cierre de FFmpeg desde los `libav*`
+  y hace `lipo -create` in-place de cada dylib con su counterpart, dejando el
+  prefijo nativo universal. Idempotente (salta los que ya son fat).
+- **Paso "Prepare universal FFmpeg (macOS arm64 runner)"** (solo `macos-latest`):
+  instala Rosetta + un Homebrew x86_64 en `/usr/local`, `brew install ffmpeg` en
+  ambos prefijos (misma versión → sonames alineados) y corre el merge.
+- **Arch por runner**: `macos-latest` (arm64) compila/bundlea universal;
+  `macos-13` (Intel, validación) compila/bundlea **x86_64** (un host Intel no
+  puede producir el slice arm64). Engine `CMAKE_OSX_ARCHITECTURES` y el
+  `--target` de tauri se eligen según `matrix.os`.
+- **Guard de arch** en la validación: cada dylib bundled debe cubrir TODAS las
+  arches del engine (no se asume universal; se compara contra el propio engine).
 
 Verificar arch de un dylib: `lipo -info vendor/bin/native/libavformat.*.dylib`.
+
+⚠️ Riesgos a vigilar en la primera corrida de CI: que ambos `brew install ffmpeg`
+resuelvan a la **misma versión** (si no, los sonames difieren y el merge aborta
+limpio con "no counterpart"); y el tiempo del install x86_64 bajo Rosetta.
 
 ### 5.3. FFmpeg en Linux (bundling .so)
 

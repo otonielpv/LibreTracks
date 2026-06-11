@@ -10,10 +10,14 @@ LibreTracks es una app nativa ligera (Rust + Tauri), no un DAW de estudio pesado
 | Plataforma | Mínimo | Notas |
 | --- | --- | --- |
 | **Windows** | Windows 10 (64 bits) | Necesita el runtime **WebView2**, que viene preinstalado en Windows 10/11 actuales. |
-| **macOS** | macOS 11 **Big Sur** | Intel y Apple Silicon. Mantén el sistema actualizado — la interfaz usa el WebView del sistema y un WebKit antiguo puede renderizar partes de la UI de forma incorrecta. |
+| **macOS** | macOS 10.15 **Catalina** | Intel y Apple Silicon. Mantén el sistema actualizado — la interfaz usa el WebView del sistema y un WebKit antiguo puede renderizar partes de la UI de forma incorrecta. |
 | **Linux** | Ubuntu 22.04 / Fedora 36 o posterior | Requiere `webkit2gtk-4.1`, `gtk3` y ALSA. Se distribuye como `.deb`, `.rpm` y `.AppImage`. |
 
-> **¿Por qué macOS 11+?** La UI de escritorio corre dentro del WebView del sistema operativo, y el motor de audio enlaza frameworks que se resuelven correctamente a partir de Big Sur. Las versiones anteriores de macOS traen un WebKit demasiado antiguo para renderizar CSS moderno (dejando la interfaz en negro o descuadrada) y carecen de símbolos que la app necesita al arrancar.
+> **¿Por qué macOS 10.15+?** La UI de escritorio corre dentro del WebView del sistema operativo. LibreTracks distribuye su CSS adaptado al WebKit del Safari 13 de Catalina, y el motor de audio incluye sus propias librerías de FFmpeg/códecs dentro de la app, así que arranca sin depender de nada instalado en el sistema. Las versiones anteriores de macOS traen un WebKit demasiado antiguo para renderizar la interfaz y carecen de símbolos que la app necesita al arrancar.
+
+## Formatos de audio
+
+El motor de audio incluye FFmpeg en **las tres plataformas**, así que los mismos formatos cargan en todas partes — entre ellos WAV, AIFF, FLAC, MP3 y AAC/M4A. No hay que instalar códecs aparte: en macOS las librerías de códecs viajan dentro del `.app`, y en Windows y Linux se distribuyen junto a la app.
 
 ## Hardware
 

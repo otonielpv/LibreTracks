@@ -10,10 +10,14 @@ LibreTracks is a lightweight native app (Rust + Tauri) rather than a heavyweight
 | Platform | Minimum | Notes |
 | --- | --- | --- |
 | **Windows** | Windows 10 (64‑bit) | Needs the **WebView2** runtime, which is preinstalled on current Windows 10/11. |
-| **macOS** | macOS 11 **Big Sur** | Intel and Apple Silicon. Keep the system up to date — the in‑app UI uses the system WebView, and an old WebKit can render parts of the interface incorrectly. |
+| **macOS** | macOS 10.15 **Catalina** | Intel and Apple Silicon. Keep the system up to date — the in‑app UI uses the system WebView, and an old WebKit can render parts of the interface incorrectly. |
 | **Linux** | Ubuntu 22.04 / Fedora 36 or newer | Requires `webkit2gtk-4.1`, `gtk3` and ALSA. Provided as `.deb`, `.rpm` and `.AppImage`. |
 
-> **Why macOS 11+?** The desktop UI runs inside the operating system's WebView, and the audio engine links frameworks that resolve cleanly from Big Sur onward. Older macOS releases ship a WebKit too old to render modern CSS (leaving the interface black or misaligned) and miss symbols the app needs at launch.
+> **Why macOS 10.15+?** The desktop UI runs inside the operating system's WebView. LibreTracks ships CSS down‑levelled for the WebKit in Catalina's Safari 13, and the audio engine bundles its own FFmpeg/codec libraries inside the app, so it launches without any system‑wide dependencies. Older macOS releases ship a WebKit too old to render the interface and miss symbols the app needs at launch.
+
+## Audio Formats
+
+The audio engine bundles FFmpeg on **all three platforms**, so the same formats load everywhere — WAV, AIFF, FLAC, MP3, and AAC/M4A among them. There is no separate codec install: on macOS the codec libraries travel inside the `.app`, and on Windows and Linux they ship alongside the app.
 
 ## Hardware
 

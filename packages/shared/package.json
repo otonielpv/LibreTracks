@@ -2,6 +2,7 @@
   "name": "@libretracks/shared",
   "private": true,
   "version": "1.2.0",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "exports": {
     "./models": "./src/models.ts",

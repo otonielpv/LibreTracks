@@ -2,6 +2,7 @@
   "name": "libretracks",
   "private": true,
   "version": "1.2.0",
+  "license": "AGPL-3.0-or-later",
   "description": "Editor y reproductor multitrack con escritorio Tauri y control remoto web.",
   "workspaces": [
     "apps/*",
