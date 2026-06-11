@@ -8,6 +8,10 @@ use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
 use std::collections::HashSet;
 
+use crate::automation::{
+    AutomationAction, AutomationCue, AutomationDocument, AutomationJumpTarget,
+    AutomationTransitionMode, MixScene,
+};
 use crate::error::DesktopError;
 use crate::state::WaveformMemoryCache;
 
@@ -20,7 +24,10 @@ pub struct TransportSnapshot {
     pub position_seconds: f64,
     pub current_marker: Option<MarkerSummary>,
     pub pending_marker_jump: Option<PendingJumpSummary>,
+    pub pending_automation_cue: Option<PendingAutomationCueSummary>,
     pub active_vamp: Option<ActiveVampSummary>,
+    pub automation_cues: Vec<AutomationCueSummary>,
+    pub mix_scenes: Vec<MixSceneSummary>,
     pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
     pub pitch: PitchPrepareSummary,
@@ -94,8 +101,73 @@ pub struct SongView {
     pub section_markers: Vec<MarkerSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
+    pub automation_cues: Vec<AutomationCueSummary>,
+    pub mix_scenes: Vec<MixSceneSummary>,
     pub waveforms: Vec<WaveformSummaryDto>,
     pub project_revision: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationCueSummary {
+    pub id: String,
+    pub name: String,
+    pub at_seconds: f64,
+    pub enabled: bool,
+    pub action: AutomationActionSummary,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AutomationActionSummary {
+    Jump {
+        target: AutomationJumpTargetSummary,
+        transition: AutomationTransitionSummary,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        mix_scene_id: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AutomationJumpTargetSummary {
+    Marker { marker_id: String },
+    Region { region_id: String },
+    Frame { seconds: f64 },
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationTransitionSummary {
+    pub mode: String,
+    pub duration_seconds: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MixSceneSummary {
+    pub id: String,
+    pub name: String,
+    pub track_overrides: Vec<MixSceneTrackOverrideSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MixSceneTrackOverrideSummary {
+    pub track_id: String,
+    pub volume: Option<f64>,
+    pub pan: Option<f64>,
+    pub muted: Option<bool>,
+    pub solo: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingAutomationCueSummary {
+    pub cue_id: String,
+    pub cue_name: String,
+    pub execute_at_seconds: f64,
+    pub target: AutomationJumpTargetSummary,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -270,6 +342,7 @@ pub struct DesktopPerformanceSnapshot {
 
 pub(crate) fn song_to_view(
     song: &Song,
+    automation: &AutomationDocument,
     waveform_cache: &WaveformMemoryCache,
     project_revision: u64,
     song_dir: Option<&std::path::Path>,
@@ -378,9 +451,84 @@ pub(crate) fn song_to_view(
                 auto_created: track.auto_created,
             })
             .collect(),
+        automation_cues: automation_cues_to_summary(song, &automation.cues),
+        mix_scenes: mix_scenes_to_summary(&automation.mix_scenes),
         waveforms,
         project_revision,
     }
+}
+
+pub(crate) fn automation_cues_to_summary(
+    song: &Song,
+    cues: &[AutomationCue],
+) -> Vec<AutomationCueSummary> {
+    cues.iter()
+        .map(|cue| automation_cue_to_summary(song, cue))
+        .collect()
+}
+
+pub(crate) fn automation_cue_to_summary(song: &Song, cue: &AutomationCue) -> AutomationCueSummary {
+    AutomationCueSummary {
+        id: cue.id.clone(),
+        name: cue.name.clone(),
+        at_seconds: warp_timeline_seconds_at(song, cue.at_seconds),
+        enabled: cue.enabled,
+        action: match &cue.action {
+            AutomationAction::Jump {
+                target,
+                transition,
+                mix_scene_id,
+            } => AutomationActionSummary::Jump {
+                target: automation_jump_target_to_summary(song, target),
+                transition: AutomationTransitionSummary {
+                    mode: match transition.mode {
+                        AutomationTransitionMode::Instant => "instant".into(),
+                        AutomationTransitionMode::FadeOut => "fade_out".into(),
+                    },
+                    duration_seconds: transition.duration_seconds,
+                },
+                mix_scene_id: mix_scene_id.clone(),
+            },
+        },
+    }
+}
+
+pub(crate) fn automation_jump_target_to_summary(
+    song: &Song,
+    target: &AutomationJumpTarget,
+) -> AutomationJumpTargetSummary {
+    match target {
+        AutomationJumpTarget::Marker { marker_id } => AutomationJumpTargetSummary::Marker {
+            marker_id: marker_id.clone(),
+        },
+        AutomationJumpTarget::Region { region_id } => AutomationJumpTargetSummary::Region {
+            region_id: region_id.clone(),
+        },
+        AutomationJumpTarget::Frame { seconds } => AutomationJumpTargetSummary::Frame {
+            seconds: warp_timeline_seconds_at(song, *seconds),
+        },
+    }
+}
+
+pub(crate) fn mix_scenes_to_summary(scenes: &[MixScene]) -> Vec<MixSceneSummary> {
+    scenes
+        .iter()
+        .map(|scene| MixSceneSummary {
+            id: scene.id.clone(),
+            name: scene.name.clone(),
+            track_overrides: scene
+                .track_overrides
+                .iter()
+                .map(|override_| MixSceneTrackOverrideSummary {
+                    track_id: override_.track_id.clone(),
+                    volume: override_.volume,
+                    pan: override_.pan,
+                    muted: override_.muted,
+                    solo: override_.solo,
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 pub(crate) fn clip_to_summary(
@@ -933,9 +1081,18 @@ mod tests {
 
     #[test]
     fn jump_trigger_labels_match_the_frontend_contract() {
-        assert_eq!(pending_jump_trigger_label(&JumpTrigger::Immediate), "immediate");
-        assert_eq!(pending_jump_trigger_label(&JumpTrigger::NextMarker), "next_marker");
-        assert_eq!(pending_jump_trigger_label(&JumpTrigger::RegionEnd), "region_end");
+        assert_eq!(
+            pending_jump_trigger_label(&JumpTrigger::Immediate),
+            "immediate"
+        );
+        assert_eq!(
+            pending_jump_trigger_label(&JumpTrigger::NextMarker),
+            "next_marker"
+        );
+        assert_eq!(
+            pending_jump_trigger_label(&JumpTrigger::RegionEnd),
+            "region_end"
+        );
         assert_eq!(
             pending_jump_trigger_label(&JumpTrigger::AfterBars(4)),
             "after_bars:4"
@@ -1005,7 +1162,14 @@ mod tests {
     fn song_to_view_maps_top_level_fields() {
         let song = base_song();
         let cache = WaveformMemoryCache::default();
-        let view = song_to_view(&song, &cache, 7, None, false);
+        let view = song_to_view(
+            &song,
+            &AutomationDocument::default(),
+            &cache,
+            7,
+            None,
+            false,
+        );
         assert_eq!(view.id, "song");
         assert_eq!(view.title, "Title");
         assert_eq!(view.bpm, 120.0);
@@ -1020,7 +1184,14 @@ mod tests {
     fn song_to_view_skips_waveforms_when_not_requested() {
         let song = base_song();
         let cache = WaveformMemoryCache::default();
-        let view = song_to_view(&song, &cache, 1, None, false);
+        let view = song_to_view(
+            &song,
+            &AutomationDocument::default(),
+            &cache,
+            1,
+            None,
+            false,
+        );
         assert!(view.waveforms.is_empty());
     }
 
@@ -1028,13 +1199,27 @@ mod tests {
     fn song_to_view_duration_covers_the_furthest_clip_and_song_duration() {
         let mut song = base_song();
         // Clip ends at 1 + 4 = 5; song.duration is 12 -> view duration >= 12.
-        let view = song_to_view(&song, &WaveformMemoryCache::default(), 1, None, false);
+        let view = song_to_view(
+            &song,
+            &AutomationDocument::default(),
+            &WaveformMemoryCache::default(),
+            1,
+            None,
+            false,
+        );
         assert!(view.duration_seconds >= 12.0);
 
         // Extend a clip past the song duration -> view duration follows it.
         song.clips[0].timeline_start_seconds = 20.0;
         song.clips[0].duration_seconds = 5.0;
-        let view = song_to_view(&song, &WaveformMemoryCache::default(), 1, None, false);
+        let view = song_to_view(
+            &song,
+            &AutomationDocument::default(),
+            &WaveformMemoryCache::default(),
+            1,
+            None,
+            false,
+        );
         assert!(view.duration_seconds >= 25.0);
     }
 }

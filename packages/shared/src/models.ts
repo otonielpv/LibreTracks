@@ -104,6 +104,54 @@ export type ActiveVampSummary = {
   endSeconds: number;
 };
 
+export type AutomationTransitionMode = "instant" | "fade_out";
+
+export type AutomationTransitionSummary = {
+  mode: AutomationTransitionMode;
+  durationSeconds?: number | null;
+};
+
+export type AutomationJumpTargetSummary =
+  | { kind: "marker"; markerId: string }
+  | { kind: "region"; regionId: string }
+  | { kind: "frame"; seconds: number };
+
+export type AutomationActionSummary = {
+  type: "jump";
+  target: AutomationJumpTargetSummary;
+  transition: AutomationTransitionSummary;
+  mixSceneId?: string | null;
+};
+
+export type AutomationCueSummary = {
+  id: string;
+  name: string;
+  atSeconds: number;
+  enabled: boolean;
+  action: AutomationActionSummary;
+};
+
+export type MixSceneTrackOverrideSummary = {
+  trackId: string;
+  volume?: number | null;
+  pan?: number | null;
+  muted?: boolean | null;
+  solo?: boolean | null;
+};
+
+export type MixSceneSummary = {
+  id: string;
+  name: string;
+  trackOverrides: MixSceneTrackOverrideSummary[];
+};
+
+export type PendingAutomationCueSummary = {
+  cueId: string;
+  cueName: string;
+  executeAtSeconds: number;
+  target: AutomationJumpTargetSummary;
+};
+
 export type TrackSummary = {
   id: string;
   name: string;
@@ -164,6 +212,8 @@ export type SongView = {
   sectionMarkers: SectionMarkerSummary[];
   clips: ClipSummary[];
   tracks: TrackSummary[];
+  automationCues?: AutomationCueSummary[];
+  mixScenes?: MixSceneSummary[];
   waveforms?: WaveformSummaryDto[];
   projectRevision: number;
 };
@@ -325,7 +375,10 @@ export type TransportSnapshot = {
   positionSeconds: number;
   currentMarker?: SectionMarkerSummary | null;
   pendingMarkerJump?: PendingJumpSummary | null;
+  pendingAutomationCue?: PendingAutomationCueSummary | null;
   activeVamp?: ActiveVampSummary | null;
+  automationCues?: AutomationCueSummary[];
+  mixScenes?: MixSceneSummary[];
   musicalPosition?: {
     barNumber: number;
     beatInBar: number;

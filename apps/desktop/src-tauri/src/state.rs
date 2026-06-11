@@ -21,9 +21,10 @@ use libretracks_core::{
 use libretracks_project::{
     append_wav_files_to_song, global_waveform_file_path,
     import_song_package as import_song_package_into_project, import_wav_files_to_library,
-    load_global_waveform, load_or_generate_global_waveform, load_song_from_file, read_audio_metadata,
-    save_song_to_file, waveform_summary_from_peaks, write_global_waveform, ImportOperationMetrics,
-    ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary, SONG_FILE_NAME,
+    load_global_waveform, load_or_generate_global_waveform, load_song_from_file,
+    read_audio_metadata, save_song_to_file, waveform_summary_from_peaks, write_global_waveform,
+    ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary,
+    SONG_FILE_NAME,
 };
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use rayon::prelude::*;
@@ -33,13 +34,18 @@ use serde_json::to_vec;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio_engine::{jump_debug_logging_enabled, AudioController, PlaybackStartReason};
+use crate::automation::{
+    load_automation, save_automation, AutomationAction, AutomationCue, AutomationDocument,
+    AutomationJumpTarget, AutomationTransitionMode, MixScene,
+};
 use crate::error::DesktopError;
 use crate::midi::MidiManager;
 use crate::models::view::{
-    active_vamp_to_summary, active_vamp_to_warped_summary, empty_musical_position_summary,
-    marker_to_warped_summary, musical_position_summary, pending_jump_to_summary,
+    active_vamp_to_summary, active_vamp_to_warped_summary, automation_cues_to_summary,
+    automation_jump_target_to_summary, empty_musical_position_summary, marker_to_warped_summary,
+    mix_scenes_to_summary, musical_position_summary, pending_jump_to_summary,
     pending_jump_to_warped_summary, song_to_view, waveform_key_for_file_path,
-    waveform_summary_to_dto,
+    waveform_summary_to_dto, PendingAutomationCueSummary,
 };
 use crate::models::{
     DesktopPerformanceSnapshot, LibraryAssetSummary, PitchPrepareSummary,
@@ -139,6 +145,8 @@ pub struct DesktopSession {
     last_transport_runtime_sync_at: Option<Instant>,
     last_transport_pitch_sync_at: Option<Instant>,
     last_native_scheduled_jump_executed_count: u64,
+    automation: AutomationDocument,
+    pending_automation_jump: Option<PendingAutomationJump>,
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
@@ -158,6 +166,17 @@ enum TransposeHistoryTarget {
 struct TransposeHistoryGroup {
     target: TransposeHistoryTarget,
     recorded_at: Instant,
+}
+
+#[derive(Debug, Clone)]
+struct PendingAutomationJump {
+    cue_id: String,
+    cue_name: String,
+    execute_at_seconds: f64,
+    target: AutomationJumpTarget,
+    mix_scene_id: Option<String>,
+    fade_out_seconds: Option<f64>,
+    fade_started: bool,
 }
 
 #[derive(Debug, Default)]
@@ -181,6 +200,8 @@ impl Default for DesktopSession {
             last_transport_runtime_sync_at: None,
             last_transport_pitch_sync_at: None,
             last_native_scheduled_jump_executed_count: 0,
+            automation: AutomationDocument::default(),
+            pending_automation_jump: None,
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -274,8 +295,11 @@ fn process_waveform_job(job: WaveformJob) {
         waveform_key,
     } = job;
 
-    let summary_result =
-        load_or_generate_global_waveform(&decoding_cache_root(), &song_dir, Path::new(&waveform_key));
+    let summary_result = load_or_generate_global_waveform(
+        &decoding_cache_root(),
+        &song_dir,
+        Path::new(&waveform_key),
+    );
 
     match summary_result {
         Ok(summary) => {
@@ -614,6 +638,8 @@ impl DesktopSession {
         fs::create_dir_all(song_dir.join("audio"))?;
         fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
         write_library_manifest(&song_dir, &[])?;
+        save_automation(&song_dir, &AutomationDocument::default())
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
 
         let save_started_at = Instant::now();
         save_song_to_file(&target_song_file, &song)?;
@@ -626,6 +652,7 @@ impl DesktopSession {
 
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {
         let song_file_path = self.current_song_file_path()?;
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
             .engine
             .song()
@@ -634,6 +661,8 @@ impl DesktopSession {
 
         let save_started_at = Instant::now();
         save_song_to_file(&song_file_path, &song)?;
+        save_automation(&song_dir, &self.automation)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
         Ok(self.snapshot())
     }
@@ -767,6 +796,8 @@ impl DesktopSession {
         )?;
         write_library_manifest_assets(&target_song_dir, &library_assets)?;
         save_song_to_file(&target_song_file, &song)?;
+        save_automation(&target_song_dir, &self.automation)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
 
         self.song_dir = Some(target_song_dir.clone());
@@ -823,7 +854,15 @@ impl DesktopSession {
         emit_project_load_progress(app, 10, "Proyecto leido.".into(), 0, 0, 0, 0);
         emit_project_load_progress(app, 14, "Cargando sesion de audio...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
-        emit_project_load_progress(app, 18, "Registrando fuentes de audio...".into(), 0, 0, 0, 0);
+        emit_project_load_progress(
+            app,
+            18,
+            "Registrando fuentes de audio...".into(),
+            0,
+            0,
+            0,
+            0,
+        );
         self.song_file_path = Some(song_file);
 
         Ok(self.snapshot())
@@ -1022,7 +1061,8 @@ impl DesktopSession {
             !Path::new(&normalized_file_path).is_absolute() && audio_file_path.exists();
         // The global waveform entry is keyed by the audio's path+size+mtime, so
         // capture its path BEFORE removing the audio (stat must still succeed).
-        let global_waveform_path = global_waveform_file_path(&decoding_cache_root(), &audio_file_path);
+        let global_waveform_path =
+            global_waveform_file_path(&decoding_cache_root(), &audio_file_path);
         if deleted_local_audio {
             fs::remove_file(&audio_file_path)?;
         }
@@ -1213,6 +1253,7 @@ impl DesktopSession {
         let song_view = self.engine.song().map(|song| {
             song_to_view(
                 song,
+                &self.automation,
                 &self.waveform_cache,
                 self.project_revision,
                 self.song_dir.as_deref(),
@@ -1485,6 +1526,7 @@ impl DesktopSession {
         self.engine.play()?;
         self.transport_clock
             .start_from(self.engine.position_seconds());
+        self.schedule_next_automation_jump(audio)?;
         self.capture_transport_drift_sample(
             audio,
             "play",
@@ -1512,6 +1554,8 @@ impl DesktopSession {
 
         self.engine.stop()?;
         self.transport_clock.stop();
+        self.pending_automation_jump = None;
+        audio.cancel_scheduled_jumps()?;
 
         Ok(self.snapshot())
     }
@@ -1536,6 +1580,7 @@ impl DesktopSession {
             self.reposition_audio(audio, PlaybackStartReason::Seek)?;
             self.transport_clock
                 .seek_while_playing(self.engine.position_seconds());
+            self.schedule_next_automation_jump(audio)?;
             self.capture_transport_drift_sample(
                 audio,
                 "seek",
@@ -1546,6 +1591,8 @@ impl DesktopSession {
         }
 
         self.transport_clock.seek_to(self.engine.position_seconds());
+        self.pending_automation_jump = None;
+        audio.cancel_scheduled_jumps()?;
         self.capture_transport_drift_sample(
             audio,
             "seek",
@@ -1579,6 +1626,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
+        self.pending_automation_jump = None;
         let source_song = self
             .engine
             .song()
@@ -1645,6 +1693,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
+        self.pending_automation_jump = None;
         let source_song = self
             .engine
             .song()
@@ -1735,6 +1784,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
+        self.pending_automation_jump = None;
         audio.cancel_scheduled_jumps()?;
         Ok(self.snapshot())
     }
@@ -1746,6 +1796,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
+        self.pending_automation_jump = None;
         audio.cancel_scheduled_jumps()?;
         self.engine.toggle_vamp(mode)?;
         if self.engine.playback_state() == PlaybackState::Playing {
@@ -1756,6 +1807,128 @@ impl DesktopSession {
             }
         }
         Ok(self.snapshot())
+    }
+
+    pub fn upsert_automation_cue(
+        &mut self,
+        mut cue: AutomationCue,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        cue.at_seconds = source_seconds_at_view(&song, cue.at_seconds);
+        let AutomationAction::Jump { target, .. } = &mut cue.action;
+        if let AutomationJumpTarget::Frame { seconds } = target {
+            *seconds = source_seconds_at_view(&song, *seconds);
+        }
+        validate_automation_cue(&song, &self.automation, &cue)?;
+        cue.name = cue.name.trim().to_string();
+        if cue.name.is_empty() {
+            cue.name = "Automation cue".into();
+        }
+
+        if let Some(existing) = self
+            .automation
+            .cues
+            .iter_mut()
+            .find(|existing| existing.id == cue.id)
+        {
+            *existing = cue;
+        } else {
+            self.automation.cues.push(cue);
+        }
+        self.automation.cues.sort_by(|left, right| {
+            left.at_seconds
+                .partial_cmp(&right.at_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        self.persist_automation(audio)?;
+        Ok(self.snapshot())
+    }
+
+    pub fn delete_automation_cue(
+        &mut self,
+        cue_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let before = self.automation.cues.len();
+        self.automation.cues.retain(|cue| cue.id != cue_id);
+        if self.automation.cues.len() != before {
+            if self
+                .pending_automation_jump
+                .as_ref()
+                .is_some_and(|pending| pending.cue_id == cue_id)
+            {
+                self.pending_automation_jump = None;
+                audio.cancel_scheduled_jumps()?;
+            }
+            self.persist_automation(audio)?;
+        }
+        Ok(self.snapshot())
+    }
+
+    pub fn upsert_mix_scene(
+        &mut self,
+        mut scene: MixScene,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        scene.name = scene.name.trim().to_string();
+        if scene.id.trim().is_empty() {
+            return Err(DesktopError::AudioCommand(
+                "mix scene id is required".into(),
+            ));
+        }
+        if scene.name.is_empty() {
+            scene.name = "Mix scene".into();
+        }
+
+        if let Some(existing) = self
+            .automation
+            .mix_scenes
+            .iter_mut()
+            .find(|existing| existing.id == scene.id)
+        {
+            *existing = scene;
+        } else {
+            self.automation.mix_scenes.push(scene);
+        }
+        self.persist_automation(audio)?;
+        Ok(self.snapshot())
+    }
+
+    pub fn delete_mix_scene(
+        &mut self,
+        scene_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let before = self.automation.mix_scenes.len();
+        self.automation
+            .mix_scenes
+            .retain(|scene| scene.id != scene_id);
+        if self.automation.mix_scenes.len() != before {
+            for cue in &mut self.automation.cues {
+                let AutomationAction::Jump { mix_scene_id, .. } = &mut cue.action;
+                if mix_scene_id.as_deref() == Some(scene_id) {
+                    *mix_scene_id = None;
+                }
+            }
+            self.persist_automation(audio)?;
+        }
+        Ok(self.snapshot())
+    }
+
+    fn persist_automation(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        save_automation(&song_dir, &self.automation)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        self.project_revision = self.project_revision.saturating_add(1);
+        self.pending_automation_jump = None;
+        audio.cancel_scheduled_jumps()?;
+        self.schedule_next_automation_jump(audio)?;
+        Ok(())
     }
 
     fn schedule_native_vamp_jump(
@@ -1789,6 +1962,162 @@ impl DesktopSession {
             target_seconds,
             true,
         )
+    }
+
+    fn schedule_next_automation_jump(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if self.engine.playback_state() != PlaybackState::Playing {
+            return Ok(());
+        }
+        if self.engine.pending_marker_jump().is_some() || self.engine.active_vamp().is_some() {
+            return Ok(());
+        }
+
+        let source_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let position_seconds = self.engine.position_seconds();
+        let Some(cue) = self
+            .automation
+            .cues
+            .iter()
+            .filter(|cue| cue.enabled && cue.at_seconds > position_seconds + 0.001)
+            .filter(|cue| matches!(cue.action, AutomationAction::Jump { .. }))
+            .min_by(|left, right| {
+                left.at_seconds
+                    .partial_cmp(&right.at_seconds)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .cloned()
+        else {
+            self.pending_automation_jump = None;
+            return Ok(());
+        };
+
+        let AutomationAction::Jump {
+            target,
+            transition,
+            mix_scene_id,
+        } = cue.action.clone();
+        let target_seconds = automation_target_source_seconds(&source_song, &target)?;
+        let trigger_seconds = warp_timeline_seconds_at(&source_song, cue.at_seconds);
+        let target_view_seconds = Some(warp_timeline_seconds_at(&source_song, target_seconds));
+        let native_target = match &target {
+            AutomationJumpTarget::Marker { marker_id } => NativeJumpTarget {
+                kind: NativeJumpTargetKind::Marker,
+                id: Some(marker_id.clone()),
+                frame: None,
+            },
+            AutomationJumpTarget::Region { region_id } => NativeJumpTarget {
+                kind: NativeJumpTargetKind::Region,
+                id: Some(region_id.clone()),
+                frame: None,
+            },
+            AutomationJumpTarget::Frame { .. } => NativeJumpTarget {
+                kind: NativeJumpTargetKind::Frame,
+                id: None,
+                frame: None,
+            },
+        };
+
+        self.last_native_scheduled_jump_executed_count = audio
+            .engine_snapshot()
+            .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
+            .unwrap_or(self.last_native_scheduled_jump_executed_count);
+        audio.schedule_jump_at_frame(
+            &cue.id,
+            native_target,
+            trigger_seconds,
+            target_view_seconds,
+            transition.mode == AutomationTransitionMode::FadeOut,
+        )?;
+        self.pending_automation_jump = Some(PendingAutomationJump {
+            cue_id: cue.id,
+            cue_name: cue.name,
+            execute_at_seconds: cue.at_seconds,
+            target,
+            mix_scene_id,
+            fade_out_seconds: (transition.mode == AutomationTransitionMode::FadeOut)
+                .then_some(transition.duration_seconds.unwrap_or(0.35).max(0.0)),
+            fade_started: false,
+        });
+
+        Ok(())
+    }
+
+    fn apply_mix_scene_runtime(
+        &mut self,
+        scene_id: &str,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        let Some(scene) = self
+            .automation
+            .mix_scenes
+            .iter()
+            .find(|scene| scene.id == scene_id)
+            .cloned()
+        else {
+            return Ok(());
+        };
+
+        let song = self.engine.song_mut()?;
+        for override_ in scene.track_overrides {
+            if let Some(track) = song
+                .tracks
+                .iter_mut()
+                .find(|track| track.id == override_.track_id)
+            {
+                let volume = override_.volume.map(|volume| volume.clamp(0.0, 1.0));
+                let pan = override_.pan.map(|pan| pan.clamp(-1.0, 1.0));
+                if let Some(volume) = volume {
+                    track.volume = volume.clamp(0.0, 1.0);
+                }
+                if let Some(pan) = pan {
+                    track.pan = pan.clamp(-1.0, 1.0);
+                }
+                if let Some(muted) = override_.muted {
+                    track.muted = muted;
+                }
+                if let Some(solo) = override_.solo {
+                    track.solo = solo;
+                }
+                audio.update_live_track_mix(
+                    &track.id,
+                    volume,
+                    pan,
+                    override_.muted,
+                    override_.solo,
+                    None,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn start_pending_automation_fade_if_due(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        let position_seconds = self.engine.position_seconds();
+        let Some(pending) = self.pending_automation_jump.as_mut() else {
+            return Ok(());
+        };
+        let Some(duration_seconds) = pending.fade_out_seconds else {
+            return Ok(());
+        };
+        if pending.fade_started {
+            return Ok(());
+        }
+        if position_seconds + 0.001 >= (pending.execute_at_seconds - duration_seconds).max(0.0) {
+            audio.start_master_fade(0.0, duration_seconds)?;
+            pending.fade_started = true;
+        }
+        Ok(())
     }
 
     fn schedule_native_marker_jump(
@@ -2951,10 +3280,8 @@ impl DesktopSession {
                         continue;
                     }
                     if region_iter.start_seconds >= edited_region_end - 1e-6 {
-                        region_iter.start_seconds =
-                            (region_iter.start_seconds + delta).max(0.0);
-                        region_iter.end_seconds =
-                            (region_iter.end_seconds + delta).max(0.0);
+                        region_iter.start_seconds = (region_iter.start_seconds + delta).max(0.0);
+                        region_iter.end_seconds = (region_iter.end_seconds + delta).max(0.0);
                     }
                 }
                 for clip in song.clips.iter_mut() {
@@ -2965,20 +3292,17 @@ impl DesktopSession {
                 }
                 for marker in song.tempo_markers.iter_mut() {
                     if marker.start_seconds >= edited_region_end - 1e-6 {
-                        marker.start_seconds =
-                            (marker.start_seconds + delta).max(0.0);
+                        marker.start_seconds = (marker.start_seconds + delta).max(0.0);
                     }
                 }
                 for marker in song.section_markers.iter_mut() {
                     if marker.start_seconds >= edited_region_end - 1e-6 {
-                        marker.start_seconds =
-                            (marker.start_seconds + delta).max(0.0);
+                        marker.start_seconds = (marker.start_seconds + delta).max(0.0);
                     }
                 }
                 for marker in song.time_signature_markers.iter_mut() {
                     if marker.start_seconds >= edited_region_end - 1e-6 {
-                        marker.start_seconds =
-                            (marker.start_seconds + delta).max(0.0);
+                        marker.start_seconds = (marker.start_seconds + delta).max(0.0);
                     }
                 }
                 sort_song_regions(&mut song.regions);
@@ -3482,7 +3806,15 @@ impl DesktopSession {
             Some(&imported.package_title),
         )?;
         write_library_manifest_assets(&song_dir, &library_assets)?;
-        emit_project_load_progress(app, 16, "Aplicando cambios al proyecto...".into(), 0, 0, 0, 0);
+        emit_project_load_progress(
+            app,
+            16,
+            "Aplicando cambios al proyecto...".into(),
+            0,
+            0,
+            0,
+            0,
+        );
         self.persist_song_update(
             imported.song,
             audio,
@@ -4024,6 +4356,9 @@ impl DesktopSession {
         self.song_dir = Some(song_dir.clone());
         self.song_file_path = Some(song_dir.join(SONG_FILE_NAME));
         self.last_drift_sample = None;
+        self.automation = load_automation(&song_dir)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        self.pending_automation_jump = None;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.live_history_anchor = None;
@@ -4858,6 +5193,10 @@ impl DesktopSession {
             if self.engine.pending_marker_jump().is_some() {
                 return Ok(());
             }
+            self.start_pending_automation_fade_if_due(audio)?;
+            if self.pending_automation_jump.is_some() {
+                return Ok(());
+            }
         }
 
         let elapsed = self.transport_clock.elapsed_since_anchor();
@@ -4881,6 +5220,7 @@ impl DesktopSession {
             self.transport_clock.reanchor_playing(advanced_position);
             return Ok(());
         }
+        self.start_pending_automation_fade_if_due(audio)?;
 
         if let Some(duration_seconds) = self.engine.pending_fade_duration_seconds() {
             if self
@@ -4996,6 +5336,34 @@ impl DesktopSession {
                 return Ok(true);
             }
 
+            if let Some(pending_automation) = self.pending_automation_jump.take() {
+                let source_song = self
+                    .engine
+                    .song()
+                    .cloned()
+                    .ok_or(DesktopError::NoSongLoaded)?;
+                let runtime_source_position =
+                    source_seconds_at_view(&source_song, snapshot.current_seconds.max(0.0));
+                self.engine
+                    .sync_position_preserving_transport_state(runtime_source_position)?;
+                self.transport_clock
+                    .note_jump_while_playing(runtime_source_position);
+                self.capture_transport_drift_sample(
+                    audio,
+                    "automation_jump",
+                    runtime_source_position,
+                    runtime_source_position,
+                );
+                if let Some(duration_seconds) = pending_automation.fade_out_seconds {
+                    audio.start_master_fade(1.0, duration_seconds)?;
+                }
+                if let Some(scene_id) = pending_automation.mix_scene_id.as_deref() {
+                    self.apply_mix_scene_runtime(scene_id, audio)?;
+                }
+                self.schedule_next_automation_jump(audio)?;
+                return Ok(true);
+            }
+
             if jump_debug_logging_enabled() {
                 eprintln!("[LT_JUMP_DEBUG][state] native_count_without_pending_jump");
             }
@@ -5045,6 +5413,7 @@ impl DesktopSession {
             runtime_source_position,
             runtime_source_position,
         );
+        self.schedule_next_automation_jump(audio)?;
         Ok(true)
     }
 
@@ -5130,12 +5499,30 @@ impl DesktopSession {
                     .map(|song| pending_jump_to_warped_summary(song, pending_jump))
                     .unwrap_or_else(|| pending_jump_to_summary(pending_jump))
             }),
+            pending_automation_cue: self.pending_automation_jump.as_ref().and_then(|pending| {
+                source_song
+                    .as_ref()
+                    .map(|song| PendingAutomationCueSummary {
+                        cue_id: pending.cue_id.clone(),
+                        cue_name: pending.cue_name.clone(),
+                        execute_at_seconds: warp_timeline_seconds_at(
+                            song,
+                            pending.execute_at_seconds,
+                        ),
+                        target: automation_jump_target_to_summary(song, &pending.target),
+                    })
+            }),
             active_vamp: self.engine.active_vamp().map(|active_vamp| {
                 source_song
                     .as_ref()
                     .map(|song| active_vamp_to_warped_summary(song, active_vamp))
                     .unwrap_or_else(|| active_vamp_to_summary(active_vamp))
             }),
+            automation_cues: source_song
+                .as_ref()
+                .map(|song| automation_cues_to_summary(song, &self.automation.cues))
+                .unwrap_or_default(),
+            mix_scenes: mix_scenes_to_summary(&self.automation.mix_scenes),
             musical_position: transport_song
                 .as_ref()
                 .map(|song| musical_position_summary(song, position_seconds))
@@ -6133,6 +6520,81 @@ fn project_root(app: &AppHandle) -> PathBuf {
         .unwrap_or_else(|_| std::env::temp_dir().join("LibreTracks"))
 }
 
+fn automation_target_source_seconds(
+    song: &Song,
+    target: &AutomationJumpTarget,
+) -> Result<f64, DesktopError> {
+    match target {
+        AutomationJumpTarget::Marker { marker_id } => song
+            .section_markers
+            .iter()
+            .find(|marker| marker.id == *marker_id)
+            .map(|marker| marker.start_seconds)
+            .ok_or_else(|| DesktopError::SectionNotFound(marker_id.clone())),
+        AutomationJumpTarget::Region { region_id } => song
+            .regions
+            .iter()
+            .find(|region| region.id == *region_id)
+            .map(|region| region.start_seconds)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.clone())),
+        AutomationJumpTarget::Frame { seconds } if seconds.is_finite() && *seconds >= 0.0 => {
+            Ok(*seconds)
+        }
+        AutomationJumpTarget::Frame { .. } => Err(DesktopError::AudioCommand(
+            "automation frame target must be a finite, non-negative number".into(),
+        )),
+    }
+}
+
+fn validate_automation_cue(
+    song: &Song,
+    automation: &AutomationDocument,
+    cue: &AutomationCue,
+) -> Result<(), DesktopError> {
+    if cue.id.trim().is_empty() {
+        return Err(DesktopError::AudioCommand(
+            "automation cue id is required".into(),
+        ));
+    }
+    if !cue.at_seconds.is_finite() || cue.at_seconds < 0.0 {
+        return Err(DesktopError::AudioCommand(
+            "automation cue time must be a finite, non-negative number".into(),
+        ));
+    }
+
+    match &cue.action {
+        AutomationAction::Jump {
+            target,
+            transition,
+            mix_scene_id,
+        } => {
+            automation_target_source_seconds(song, target)?;
+            if transition.mode == AutomationTransitionMode::FadeOut
+                && transition
+                    .duration_seconds
+                    .is_some_and(|duration| !duration.is_finite() || duration < 0.0)
+            {
+                return Err(DesktopError::AudioCommand(
+                    "automation fade duration must be a finite, non-negative number".into(),
+                ));
+            }
+            if let Some(scene_id) = mix_scene_id {
+                if !automation
+                    .mix_scenes
+                    .iter()
+                    .any(|scene| scene.id == *scene_id)
+                {
+                    return Err(DesktopError::AudioCommand(format!(
+                        "mix scene not found: {scene_id}"
+                    )));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn timestamp_suffix() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -6824,21 +7286,14 @@ fn snap_regions_after_to_downbeats(song: &mut Song, moved_region_id: &str) {
         .iter()
         .map(|region| region.id.clone())
         .collect();
-    let Some(moved_idx) = ordered_ids
-        .iter()
-        .position(|id| id == moved_region_id)
-    else {
+    let Some(moved_idx) = ordered_ids.iter().position(|id| id == moved_region_id) else {
         return;
     };
     if moved_idx + 1 >= ordered_ids.len() {
         return;
     }
 
-    let followers: Vec<String> = ordered_ids
-        .iter()
-        .skip(moved_idx + 1)
-        .cloned()
-        .collect();
+    let followers: Vec<String> = ordered_ids.iter().skip(moved_idx + 1).cloned().collect();
     let mut predecessor_id = moved_region_id.to_string();
     for follower_id in followers {
         let Some(predecessor_end) = song
@@ -6861,8 +7316,7 @@ fn snap_regions_after_to_downbeats(song: &mut Song, moved_region_id: &str) {
         };
 
         let predecessor_view_end = warp_timeline_seconds_at(song, predecessor_end);
-        let desired_view_start =
-            next_downbeat_after_in_view_timeline(song, predecessor_view_end);
+        let desired_view_start = next_downbeat_after_in_view_timeline(song, predecessor_view_end);
         let desired_source_start = source_seconds_at_view(song, desired_view_start);
         let delta = desired_source_start - current_start;
         if delta.abs() > 0.00001 {
@@ -7460,6 +7914,7 @@ mod tests {
     };
     use tempfile::tempdir;
 
+    use crate::automation::AutomationDocument;
     use crate::models::view::{musical_position_summary, song_to_view};
     use crate::models::LibraryAssetSummary;
 
@@ -8296,7 +8751,14 @@ mod tests {
             section_markers: vec![],
         };
 
-        let view = song_to_view(&song, &WaveformMemoryCache::default(), 7, None, true);
+        let view = song_to_view(
+            &song,
+            &AutomationDocument::default(),
+            &WaveformMemoryCache::default(),
+            7,
+            None,
+            true,
+        );
 
         assert_eq!(view.tracks[0].id, "folder_main");
         assert_eq!(view.tracks[0].parent_track_id, None);
@@ -11083,10 +11545,7 @@ mod tests {
         song.clips.push(Clip {
             id: "clip_missing".into(),
             track_id: "t".into(),
-            file_path: song_dir
-                .join("gone.wav")
-                .to_string_lossy()
-                .to_string(),
+            file_path: song_dir.join("gone.wav").to_string_lossy().to_string(),
             timeline_start_seconds: 0.0,
             source_start_seconds: 0.0,
             duration_seconds: 1.0,

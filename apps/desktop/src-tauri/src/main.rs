@@ -4,6 +4,7 @@
 )]
 
 mod audio_engine;
+mod automation;
 mod commands;
 mod error;
 mod error_log;
@@ -196,6 +197,10 @@ fn main() {
             commands::timeline::update_live_region_master_gain,
             commands::timeline::update_song_region_master_gain,
             commands::timeline::delete_song_region,
+            commands::timeline::upsert_automation_cue,
+            commands::timeline::delete_automation_cue,
+            commands::timeline::upsert_mix_scene,
+            commands::timeline::delete_mix_scene,
             commands::timeline::assign_section_marker_digit,
             commands::timeline::set_section_marker_kind,
             commands::timeline::update_song_tempo,

@@ -1,5 +1,6 @@
 use tauri::State;
 
+use crate::automation::{AutomationCue, MixScene};
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::{ClipMoveRequest, DesktopState};
@@ -451,6 +452,66 @@ pub fn delete_song_region(
 
     session
         .delete_song_region(&region_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn upsert_automation_cue(
+    cue: AutomationCue,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .upsert_automation_cue(cue, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_automation_cue(
+    cue_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_automation_cue(&cue_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn upsert_mix_scene(
+    scene: MixScene,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .upsert_mix_scene(scene, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_mix_scene(
+    scene_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_mix_scene(&scene_id, &state.audio)
         .map_err(|error| error.to_string())
 }
 
