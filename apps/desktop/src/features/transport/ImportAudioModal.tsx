@@ -17,7 +17,7 @@ export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: Imp
   return (
     <div className="lt-import-overlay">
       <div className="lt-import-dialog lt-import-dialog--simple">
-        <header className="lt-import-header">
+        <header className="lt-import-header lt-import-header--simple">
           <div className="lt-import-header-title">
             <span className="material-symbols-outlined">audio_file</span>
             <span>{t("importAudio.title")}</span>

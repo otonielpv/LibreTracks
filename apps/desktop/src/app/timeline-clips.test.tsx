@@ -38,7 +38,8 @@ import {
   getTrackLaneRow,
   getLibraryAssetButton,
   mockTrackRowDragGeometry,
-  setMockNativeWebviewPosition
+  setMockNativeWebviewPosition,
+  acceptConfirmDialog
 } from "../test/testUtils";
 import { useTimelineUIStore } from "../features/transport/uiStore";
 
@@ -130,7 +131,6 @@ describe("App / timeline-clips", () => {
 
   it("clears stale library clip ghosts after deleting a track", async () => {
     disablePointerEventSupport();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const { container } = await renderApp();
     mockRulerBounds(container);
     mockLaneBounds(container);
@@ -167,7 +167,7 @@ describe("App / timeline-clips", () => {
       fireEvent.click(await screen.findByRole("button", { name: textMatcher(en.common.delete) }));
     });
 
-    expect(confirmSpy).toHaveBeenCalled();
+    await acceptConfirmDialog();
     expect(await screen.findByText(trackDeletedMatcher("Drums"))).toBeTruthy();
     await waitFor(() => {
       expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
@@ -192,7 +192,6 @@ describe("App / timeline-clips", () => {
       },
     ]);
 
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const { container } = render(<App />);
   await screen.findByText(textMatcher(en.transport.status.readyDesktop));
     await screen.findByText("Solo");
@@ -208,7 +207,7 @@ describe("App / timeline-clips", () => {
       fireEvent.click(await screen.findByRole("button", { name: textMatcher(en.common.delete) }));
     });
 
-    expect(confirmSpy).toHaveBeenCalled();
+    await acceptConfirmDialog();
     expect(await screen.findByText(trackDeletedMatcher("Solo"))).toBeTruthy();
     expect(container.querySelector(".lt-track-list")).toBeTruthy();
     expect(container.querySelector(".lt-track-lane-row")).toBeNull();

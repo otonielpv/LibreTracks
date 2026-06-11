@@ -40,8 +40,8 @@ function setup(overrides: Partial<LibraryHandlerDeps> = {}) {
     moveLibraryAsset: vi.fn(async () => []),
     renameLibraryFolder: vi.fn(async () => []),
     deleteLibraryFolder: vi.fn(async () => []),
-    confirm: vi.fn(() => true),
-    prompt: vi.fn(() => "New Folder"),
+    confirm: vi.fn(async () => true),
+    prompt: vi.fn(async () =>"New Folder"),
     ...overrides,
   };
   return { handlers: createLibraryHandlers(deps), deps };
@@ -68,7 +68,7 @@ describe("createLibraryHandlers", () => {
   });
 
   it("delete dedupes assets by path and bails when the user cancels", async () => {
-    const confirm = vi.fn(() => false);
+    const confirm = vi.fn(async () => false);
     const { handlers, deps } = setup({ confirm });
     await handlers.handleDeleteLibraryAssets([asset("a.wav"), asset("a.wav")]);
     expect(confirm).toHaveBeenCalledTimes(1);
@@ -92,7 +92,7 @@ describe("createLibraryHandlers", () => {
   });
 
   it("create folder is a no-op when the prompt is dismissed", async () => {
-    const { handlers, deps } = setup({ prompt: vi.fn(() => null) });
+    const { handlers, deps } = setup({ prompt: vi.fn(async () =>null) });
     await handlers.handleCreateLibraryFolder();
     expect(deps.createLibraryFolder).not.toHaveBeenCalled();
   });

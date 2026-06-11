@@ -11,7 +11,7 @@ export type MidiLearnHandlerDeps = {
   setIsSettingsModalOpen: (open: boolean) => void;
   setIsRemoteModalOpen: (open: boolean) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
-  prompt: (message: string) => string | null;
+  prompt: (message: string) => Promise<string | null>;
 };
 
 export function createMidiLearnHandlers(deps: MidiLearnHandlerDeps) {
@@ -52,9 +52,9 @@ export function createMidiLearnHandlers(deps: MidiLearnHandlerDeps) {
       setMidiLearnMode(controlKey);
     },
 
-    handleDynamicMidiLearnJump(kind: "marker" | "song") {
+    async handleDynamicMidiLearnJump(kind: "marker" | "song") {
       const maxIndex = kind === "marker" ? 100 : 20;
-      const rawValue = prompt(
+      const rawValue = await prompt(
         kind === "marker"
           ? t("transport.settingsModal.midiLearnMapMarkerPrompt")
           : t("transport.settingsModal.midiLearnMapSongPrompt"),

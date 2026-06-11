@@ -662,6 +662,130 @@ textarea {
   overflow: hidden;
 }
 
+.lt-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4.5rem 1rem 1rem;
+  pointer-events: none;
+}
+
+.lt-dialog-card {
+  position: relative;
+  box-sizing: border-box;
+  width: min(25rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow: hidden;
+  border: 1px solid rgb(87 241 219 / 0.22);
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(24 23 23 / 0.98), rgb(14 14 14 / 0.98));
+  box-shadow:
+    0 18px 48px rgb(0 0 0 / 0.48),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+  color: #e5e2e1;
+  padding: 1rem;
+  pointer-events: auto;
+}
+
+.lt-dialog-accent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: #57f1db;
+  box-shadow: 0 0 16px rgb(87 241 219 / 0.45);
+}
+
+.lt-dialog-eyebrow {
+  margin: 0;
+  color: rgb(87 241 219 / 0.82);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lt-dialog-message {
+  margin: 0;
+  color: #f3f0ef;
+  font: 700 0.92rem/1.35 Inter, sans-serif;
+  white-space: pre-wrap;
+}
+
+.lt-dialog-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 2.15rem;
+  border: 1px solid rgb(186 202 197 / 0.22);
+  border-radius: 2px;
+  background: #0e0e0e;
+  color: #e5e2e1;
+  font: 600 0.86rem/1 Inter, sans-serif;
+  outline: none;
+  padding: 0 0.6rem;
+}
+
+.lt-dialog-input:focus {
+  border-color: rgb(87 241 219 / 0.62);
+  box-shadow: 0 0 0 2px rgb(87 241 219 / 0.14);
+}
+
+.lt-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding-top: 0.1rem;
+}
+
+.lt-dialog-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.75rem;
+  height: 2rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.04);
+  color: #e5e2e1;
+  cursor: pointer;
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-dialog-button:hover,
+.lt-dialog-button:focus-visible {
+  border-color: rgb(87 241 219 / 0.34);
+  color: #57f1db;
+  outline: none;
+}
+
+.lt-dialog-button--primary {
+  border-color: rgb(87 241 219 / 0.64);
+  background: linear-gradient(to bottom, #57f1db, #2dd4bf);
+  color: #003731;
+  box-shadow: 0 0 12px rgb(87 241 219 / 0.2);
+}
+
+.lt-dialog-button--primary:hover,
+.lt-dialog-button--primary:focus-visible {
+  border-color: #8ff8eb;
+  color: #002c27;
+}
+
+@media (max-width: 640px) {
+  .lt-dialog-layer {
+    padding-top: 0.75rem;
+  }
+
+  .lt-dialog-card {
+    width: 100%;
+  }
+}
+
 .lt-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2527,18 +2651,39 @@ textarea {
 }
 
 .lt-track-header[style*="--lt-track-color"] {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--lt-track-color) 22%, transparent), transparent 34%),
-    linear-gradient(180deg, #2a2a2a 0%, #232323 100%);
+  background: linear-gradient(180deg, #2a2a2a 0%, #232323 100%);
+}
+
+/* Per-track colour tint. Painted as a low-opacity overlay of the solid track
+   colour instead of color-mix(var, transparent): color-mix() is Safari 16.2+,
+   so the WebView on our minimum target (macOS 11 Big Sur, Safari 14.1) cannot
+   resolve it. The overlay renders identically on that WebKit and modern
+   browsers, and keeps the per-track colour the runtime var sets inline. */
+.lt-track-header[style*="--lt-track-color"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(90deg, var(--lt-track-color, transparent), transparent 34%);
+  opacity: 0.22;
 }
 
 .lt-track-header.is-selected {
-  border-right-color: color-mix(in srgb, var(--lt-track-color, #57f1db) 42%, rgb(255 255 255 / 0.12));
-  border-bottom-color: color-mix(in srgb, var(--lt-track-color, #57f1db) 42%, rgb(255 255 255 / 0.12));
+  /* Per-track border/glow tints; opaque var() value, dimmed via low opacity is
+     not possible on borders, so we approximate the old ~42% mix with the solid
+     colour. Default teal keeps the prior look for uncoloured tracks. */
+  border-right-color: var(--lt-track-color, #57f1db);
+  border-bottom-color: var(--lt-track-color, #57f1db);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--lt-track-color, #57f1db) 46%, rgb(255 255 255 / 0.12)),
-    inset 0 1px 0 rgb(255 255 255 / 0.05),
-    inset 0 0 0 999px color-mix(in srgb, var(--lt-track-color, #57f1db) 10%, transparent);
+    inset 0 0 0 1px var(--lt-track-color, #57f1db),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Selected-track surface wash — overlay so the solid track colour reads at
+   ~10% without color-mix. Sits above the base tint, below the content. */
+.lt-track-header.is-selected::after {
+  opacity: 0.32;
 }
 
 .lt-track-header.is-dragging {
@@ -2560,6 +2705,8 @@ textarea {
   position: absolute;
   inset: 0 auto 0 0;
   width: 2px;
+  /* Above the ::after tint overlay so the accent bar stays crisp. */
+  z-index: 1;
   background: var(--lt-track-color, transparent);
 }
 
@@ -3010,6 +3157,9 @@ textarea {
 }
 
 .lt-track-header-body {
+  position: relative;
+  /* Above the ::after colour-tint overlay so content stays legible. */
+  z-index: 2;
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
@@ -4506,8 +4656,13 @@ textarea {
   color: #e5e2e1;
 }
 
+/* Explicit modifier class because :has() is Safari 15.4+, newer than our
+   minimum target (macOS 11 Big Sur ships Safari 14.1). The class drives the
+   padding everywhere; the :has() rule is kept as a progressive enhancement. */
+.lt-import-header--simple,
 .lt-import-header:has(.lt-import-dialog--simple) {
-  padding-block: 0.9rem;
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
 }
 
 .lt-import-header-title .material-symbols-outlined {
@@ -5223,12 +5378,29 @@ textarea {
    the parent sets inline per clip. */
 .lt-compact-clip-entry.is-coloured {
   padding-left: 0.7rem;
-  border-color: color-mix(in srgb, var(--lt-track-color) 35%, transparent);
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--lt-track-color) 18%, transparent) 0%,
-    rgb(20 26 25 / 0.85) 60%
-  );
+  /* Solid var() border (was a ~35% color-mix); the per-track tint comes from
+     the ::after overlay below, so no color-mix() is needed — works on Safari
+     14.1 (our macOS 11 minimum) and modern browsers alike. */
+  border-color: var(--lt-track-color, rgba(87, 241, 219, 0.35));
+  background: rgba(20, 26, 25, 0.85);
+}
+
+/* Per-track background tint as a low-opacity overlay of the solid track colour,
+   replacing color-mix(var, transparent) which the runtime var defeats. */
+.lt-compact-clip-entry.is-coloured::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(to right, var(--lt-track-color, transparent), transparent 60%);
+  opacity: 0.22;
+  border-radius: inherit;
+}
+
+.lt-compact-clip-entry.is-coloured > * {
+  position: relative;
+  z-index: 1;
 }
 
 .lt-compact-clip-entry.is-coloured::before {
@@ -5238,6 +5410,7 @@ textarea {
   top: 0;
   bottom: 0;
   width: 3px;
+  z-index: 1;
   background: var(--lt-track-color);
   border-radius: 2px 0 0 2px;
 }

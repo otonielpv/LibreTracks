@@ -11,6 +11,7 @@ import { flushSync } from "react-dom";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
+import { confirmDialog, promptDialog } from "../../shared/dialog/dialogService";
 import {
   DEFAULT_APP_SETTINGS,
   buildSongTempoRegions,
@@ -1720,8 +1721,8 @@ export function TransportPanelContent() {
         moveLibraryAsset,
         renameLibraryFolder,
         deleteLibraryFolder,
-        confirm: (message) => window.confirm(message),
-        prompt: (message, defaultValue) => window.prompt(message, defaultValue),
+        confirm: (message) => confirmDialog(message),
+        prompt: (message, defaultValue) => promptDialog(message, defaultValue),
       }),
     [
       runAction,
@@ -2407,7 +2408,7 @@ export function TransportPanelContent() {
         t,
         moveTrack,
         createTrack,
-        prompt: (message, defaultValue) => window.prompt(message, defaultValue),
+        prompt: (message, defaultValue) => promptDialog(message, defaultValue),
       }),
     [
       runAction,
@@ -2435,7 +2436,7 @@ export function TransportPanelContent() {
         setIsSettingsModalOpen,
         setIsRemoteModalOpen,
         t,
-        prompt: (message) => window.prompt(message),
+        prompt: (message) => promptDialog(message),
       }),
     [setMidiLearnMode, t],
   );
@@ -3518,14 +3519,14 @@ export function TransportPanelContent() {
   // "Renombrar" context-menu entry works. We keep the song's existing
   // bounds + transpose; only the name changes.
   const handleCompactRenameSong = useCallback(
-    (regionId: string) => {
+    async (regionId: string) => {
       const currentRegion = songRef.current?.regions.find(
         (region) => region.id === regionId,
       );
       if (!currentRegion) return;
-      const nextName = window
-        .prompt("Renombrar canción", currentRegion.name)
-        ?.trim();
+      const nextName = (
+        await promptDialog("Renombrar canción", currentRegion.name)
+      )?.trim();
       if (!nextName || nextName === currentRegion.name) return;
       void runAction(async () => {
         const snapshot = await updateSongRegion(
@@ -3548,7 +3549,7 @@ export function TransportPanelContent() {
   // changes which tempo applies to which section. Backend's
   // upsertSongTempoMarker semantics handle the "create-or-replace" part.
   const handleCompactSetSongBpm = useCallback(
-    (regionId: string) => {
+    async (regionId: string) => {
       const currentSong = songRef.current;
       const currentRegion = currentSong?.regions.find(
         (region) => region.id === regionId,
@@ -3558,7 +3559,7 @@ export function TransportPanelContent() {
         currentSong,
         currentRegion.startSeconds,
       );
-      const raw = window.prompt(
+      const raw = await promptDialog(
         `BPM de "${currentRegion.name}"`,
         currentBpm.toFixed(2),
       );
@@ -3588,7 +3589,7 @@ export function TransportPanelContent() {
   // tempo markers that lived in its range). Same pattern the DAW's
   // songRegionContextMenu uses.
   const handleCompactDeleteSong = useCallback(
-    (regionId: string) => {
+    async (regionId: string) => {
       const currentSong = songRef.current;
       const currentRegion = currentSong?.regions.find(
         (region) => region.id === regionId,
@@ -3600,7 +3601,7 @@ export function TransportPanelContent() {
           clip.timelineStartSeconds < currentRegion.endSeconds,
       ).length;
       if (clipCount > 0) {
-        const confirmed = window.confirm(
+        const confirmed = await confirmDialog(
           `Borrar canción "${currentRegion.name}" y sus ${clipCount} ${
             clipCount === 1 ? "clip" : "clips"
           }?`,
@@ -5374,7 +5375,7 @@ export function TransportPanelContent() {
         disabled: !song,
         onSelect: async () => {
           const nextBpm = Number(
-            window.prompt(
+            await promptDialog(
               t("transport.prompt.timelineBpm"),
               songBaseBpm.toFixed(2),
             ),
@@ -5412,9 +5413,9 @@ export function TransportPanelContent() {
         label: "Crear marca de metrica",
         disabled: !song,
         onSelect: async () => {
-          const nextSignature = window
-            .prompt("Compas", displayedTimeSignature)
-            ?.trim();
+          const nextSignature = (
+            await promptDialog("Compas", displayedTimeSignature)
+          )?.trim();
           if (!nextSignature) {
             return;
           }
@@ -5451,9 +5452,9 @@ export function TransportPanelContent() {
       {
         label: t("transport.menu.renameSong"),
         onSelect: async () => {
-          const nextName = window
-            .prompt(t("transport.prompt.songRename"), region.name)
-            ?.trim();
+          const nextName = (
+            await promptDialog(t("transport.prompt.songRename"), region.name)
+          )?.trim();
           if (!nextName) {
             return;
           }
@@ -5476,12 +5477,12 @@ export function TransportPanelContent() {
         onSelect: async () => {
           const currentSourceBpm =
             region.warpSourceBpm ?? getEffectiveBpmAt(song, region.startSeconds);
-          const input = window
-            .prompt(
+          const input = (
+            await promptDialog(
               t("transport.prompt.regionWarpSourceBpm"),
               currentSourceBpm.toFixed(2),
             )
-            ?.trim();
+          )?.trim();
           if (!input) {
             return;
           }
@@ -5532,7 +5533,7 @@ export function TransportPanelContent() {
         label: t("transport.menu.changeBpm"),
         onSelect: async () => {
           const nextBpm = Number(
-            window.prompt(
+            await promptDialog(
               t("transport.prompt.tempoMarkerBpm"),
               marker.bpm.toFixed(2),
             ),
@@ -5910,9 +5911,9 @@ export function TransportPanelContent() {
       {
         label: t("common.rename"),
         onSelect: async () => {
-          const nextName = window
-            .prompt(t("transport.prompt.trackRename"), track.name)
-            ?.trim();
+          const nextName = (
+            await promptDialog(t("transport.prompt.trackRename"), track.name)
+          )?.trim();
           if (!nextName) {
             return;
           }
@@ -5943,7 +5944,7 @@ export function TransportPanelContent() {
           if (
             track.kind === "audio" &&
             clipCount > 0 &&
-            !window.confirm(t("transport.confirm.deleteTrackWithClips"))
+            !(await confirmDialog(t("transport.confirm.deleteTrackWithClips")))
           ) {
             return;
           }
@@ -6700,9 +6701,9 @@ export function TransportPanelContent() {
         label: t("common.rename"),
         disabled: !canEditMarker,
         onSelect: async () => {
-          const nextName = window
-            .prompt(t("transport.prompt.markerRename"), section.name)
-            ?.trim();
+          const nextName = (
+            await promptDialog(t("transport.prompt.markerRename"), section.name)
+          )?.trim();
           if (!nextName) {
             return;
           }
@@ -6784,9 +6785,9 @@ export function TransportPanelContent() {
       {
         label: "Cambiar compas",
         onSelect: async () => {
-          const nextSignature = window
-            .prompt("Compas", marker.signature)
-            ?.trim();
+          const nextSignature = (
+            await promptDialog("Compas", marker.signature)
+          )?.trim();
           if (!nextSignature) {
             return;
           }

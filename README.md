@@ -240,3 +240,15 @@ Region transpose is also available per song region, and tracks expose a transpos
 - Track routing starts from the `main` and `monitor` buses.
 - The transport supports immediate jumps, next-marker jumps, and quantized bar-based jumps.
 - UI labels are localized from `apps/desktop/src/shared/i18n/en.ts` and `es.ts`; documentation should follow those exact strings when describing the interface.
+
+## License
+
+LibreTracks is free software, licensed under the **GNU Affero General Public
+License v3.0 or later (AGPL-3.0-or-later)**. See [LICENSE](./LICENSE) for the
+full text. It is free and will stay free — there is no paid version.
+
+The project bundles third-party components under their own licenses (JUCE under
+AGPLv3, FFmpeg and libsndfile under LGPL-2.1, Bungee under MPL-2.0, fonts under
+OFL-1.1, and many MIT/Apache components). See
+[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) for the full list, attributions,
+and source offers; full license texts are in [`licenses/`](./licenses/).

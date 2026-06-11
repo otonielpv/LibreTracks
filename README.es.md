@@ -241,3 +241,16 @@ La transposicion por region de cancion tambien esta disponible, y los tracks exp
 - El routing de pistas parte de los buses `main` y `monitor`.
 - El transporte soporta saltos inmediatos, saltos a la siguiente marca y saltos cuantizados por compases.
 - Las etiquetas de UI salen de `apps/desktop/src/shared/i18n/en.ts` y `es.ts`; la documentación debe reutilizar esos textos exactos al describir la interfaz.
+
+## Licencia
+
+LibreTracks es software libre, bajo la **Licencia Pública General Affero de GNU
+v3.0 o posterior (AGPL-3.0-or-later)**. Consulta [LICENSE](./LICENSE) para el
+texto completo. Es gratis y seguirá siéndolo — no hay versión de pago.
+
+El proyecto incluye componentes de terceros bajo sus propias licencias (JUCE bajo
+AGPLv3; FFmpeg y libsndfile bajo LGPL-2.1; Bungee bajo MPL-2.0; las fuentes bajo
+OFL-1.1; y numerosos componentes MIT/Apache). Consulta
+[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) para la lista completa,
+atribuciones y ofertas de fuente; los textos completos están en
+[`licenses/`](./licenses/).

@@ -85,11 +85,26 @@ jobs:
         include:
           - os: windows-latest
             platform: windows
+            publish: true
           - os: macos-latest
             platform: macos
+            publish: true
           - os: ubuntu-22.04
             platform: linux
+            publish: true
+          # Backwards-compat validation only. macOS 13 is the oldest runner
+          # GitHub offers; it builds the bundle on an older toolchain and runs
+          # the dylib-wiring guard below, catching @rpath/load regressions that
+          # would break launch on our minimum target (macOS 11 Big Sur).
+          # publish: false -> it never uploads artifacts, so it cannot collide
+          # with the macos-latest release bundle. continue-on-error keeps a
+          # flaky old-runner failure from blocking a legitimate release while
+          # still surfacing as a red check in the UI.
+          - os: macos-13
+            platform: macos
+            publish: false
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.publish == false }}
 
     steps:
       - name: Checkout repository
@@ -190,11 +205,29 @@ jobs:
           }
           "LT_ASIO_SDK_DIR=$PWD/vendor/asiosdk" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Build universal LGPL FFmpeg (macOS)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Build a minimal, decoder-only, LGPL FFmpeg from source, universal
+          # (x86_64+arm64; the non-host arch is cross-compiled), with a 10.15
+          # deployment floor. This replaces Homebrew's FFmpeg, which is GPL
+          # (incompatible to bundle) AND targets a newer macOS — its dylibs
+          # reference symbols absent on Catalina/Big Sur and crash at launch.
+          # pkg-config is pointed here so the engine links our build; the bundle
+          # step then relocates the libav* dylibs into the .app.
+          bash scripts/build-ffmpeg-universal.sh "$PWD/vendor/ffmpeg-universal"
+          echo "PKG_CONFIG_PATH=$PWD/vendor/ffmpeg-universal/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+
       - name: Build native engine release
         shell: pwsh
         run: |
           $bungeeEnabled = "ON"
-          $ffmpegEnabled = if ("${{ matrix.platform }}" -eq "windows") { "ON" } else { "OFF" }
+          # FFmpeg on every platform so all audio formats (M4A/AAC/MP3/...) work
+          # everywhere. macOS bundles the libav dylibs into the .app (see the
+          # relocate step); Linux ships the .so next to the engine.
+          $ffmpegEnabled = "ON"
           $configureArgs = @(
             "-S", "native/audio-engine-v2",
             "-B", "build/engine-release",
@@ -225,9 +258,13 @@ jobs:
             $configureArgs += "-DLT_ASIO_SDK_DIR=$env:LT_ASIO_SDK_DIR"
           }
           if ("${{ matrix.platform }}" -eq "macos") {
-            $env:MACOSX_DEPLOYMENT_TARGET = "10.13"
-            $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64"
-            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.13"
+            $env:MACOSX_DEPLOYMENT_TARGET = "10.15"
+            # macos-latest (arm64) ships the real universal artifact; macos-13
+            # (Intel, validation-only) builds x86_64 since an Intel host cannot
+            # produce/obtain the arm64 FFmpeg slice the universal link needs.
+            $osxArchs = if ("${{ matrix.os }}" -eq "macos-latest") { "x86_64;arm64" } else { "x86_64" }
+            $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=$osxArchs"
+            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
             $configureArgs += "-DCMAKE_DISABLE_FIND_PACKAGE_SndFile=ON"
           }
           cmake @configureArgs
@@ -243,6 +280,10 @@ jobs:
           }
           if ("${{ matrix.platform }}" -eq "macos") {
             Copy-Item vendor/bungee/apple-mac/bungee.framework vendor/bin/native -Recurse -Force
+            # Relocate the engine's Homebrew FFmpeg deps into the bundle as
+            # @rpath dylibs so the .app launches on Macs without that Homebrew
+            # prefix (otherwise dyld aborts: Library not loaded .../ffmpeg/...).
+            bash scripts/macos-bundle-ffmpeg.sh vendor/bin/native
           }
 
       - name: Verify ASIO compiled into release engine (Windows)
@@ -276,7 +317,7 @@ jobs:
           LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
         with:
           projectPath: 'apps/desktop'
-          args: ${{ matrix.platform == 'macos' && '--verbose --target universal-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,rpm,appimage' || '--verbose' }}
+          args: ${{ matrix.os == 'macos-latest' && '--verbose --target universal-apple-darwin' || matrix.os == 'macos-13' && '--verbose --target x86_64-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,rpm,appimage' || '--verbose' }}
 
       - name: Validate Linux .deb runtime linkage
         if: matrix.platform == 'linux'
@@ -423,6 +464,70 @@ jobs:
               ;;
           esac
 
+          # 4b) The engine's FFmpeg/libav dependencies (and their full
+          #     non-system closure) must be bundled in Frameworks/ and every
+          #     vendored dylib must be free of absolute build-machine paths
+          #     (e.g. /usr/local/opt/ffmpeg/...). A leftover absolute path is
+          #     exactly the "Library not loaded" crash on Macs without that
+          #     Homebrew prefix.
+          echo "--- FFmpeg/non-system dylib bundling ---"
+          leak=0
+          for f in "$FRAMEWORKS"/*.dylib "$DYLIB"; do
+            [ -e "$f" ] || continue
+            while IFS= read -r dep; do
+              case "$dep" in
+                /usr/lib/*|/System/*|@*) ;;
+                /*)
+                  echo "::error::$(basename "$f") still references absolute non-system path: $dep"
+                  leak=1
+                  ;;
+              esac
+            done < <(otool -L "$f" | tail -n +2 | awk '{print $1}')
+          done
+          if [ "$leak" -ne 0 ]; then
+            echo "::error::A bundled dylib carries an absolute build-machine path. Run/inspect scripts/macos-bundle-ffmpeg.sh."
+            exit 1
+          fi
+          # Engine must actually link libav* (FFmpeg ON), and each one must
+          # resolve to a file present in Frameworks/.
+          for av in $(otool -L "$DYLIB" | tail -n +2 | awk '{print $1}' | grep -E '@rpath/lib(av|sw)'); do
+            base="${av#@rpath/}"
+            if [ ! -f "$FRAMEWORKS/$base" ]; then
+              echo "::error::Engine depends on $av but $FRAMEWORKS/$base is not bundled. Add it to bundle.macOS.frameworks in tauri.conf.json."
+              exit 1
+            fi
+          done
+
+          # 4c) Every bundled dylib must cover every architecture the engine
+          #     was built for. The engine dylib defines the required arch set
+          #     (x86_64;arm64 on the universal release, x86_64 only on the Intel
+          #     validation job). A bundled FFmpeg dylib missing one of those
+          #     slices launches on the build arch but crashes on the other
+          #     (dyld: no matching architecture) — catch it here, not in a user
+          #     crash report.
+          echo "--- bundled dylib architectures ---"
+          ENGINE_ARCHS="$(lipo -archs "$DYLIB" 2>/dev/null || echo '?')"
+          echo "engine arch set: $ENGINE_ARCHS"
+          archfail=0
+          for f in "$FRAMEWORKS"/*.dylib "$DYLIB"; do
+            [ -e "$f" ] || continue
+            archs="$(lipo -archs "$f" 2>/dev/null || echo '?')"
+            echo "  $(basename "$f"): $archs"
+            for need in $ENGINE_ARCHS; do
+              case " $archs " in
+                *" $need "*) ;;
+                *)
+                  echo "::error::$(basename "$f") is missing the $need slice the engine needs (has: $archs)."
+                  archfail=1
+                  ;;
+              esac
+            done
+          done
+          if [ "$archfail" -ne 0 ]; then
+            echo "::error::A bundled dylib does not cover the engine's architectures. The universal release builds universal LGPL FFmpeg from source via scripts/build-ffmpeg-universal.sh. See docs/HANDOFF_macos_ffmpeg_catalina.md §5.2."
+            exit 1
+          fi
+
           # 5) Dry-run loader resolution: ask dyld to resolve every dependency
           #    of the main binary. Will fail with the same DYLD error users hit
           #    if any @rpath dependency is unresolved.
@@ -456,39 +561,8 @@ jobs:
           fi
           echo "macOS bundle validation passed."
 
-      - name: Verify High Sierra cookie shim linked (macOS)
-        if: matrix.platform == 'macos'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Guard against silent loss of the 10.13/10.14 compatibility shim
-          # (apps/desktop/src-tauri/macos-compat/highsierra_cookie_symbols.m).
-          # If a wry/Tauri bump or a build.rs change ever drops it, the binary
-          # still builds and runs on the modern CI runner but crashes at launch
-          # on High Sierra with "Symbol not found: _NSHTTPCookieSameSiteLax" —
-          # a defect only 10.13/10.14 users hit after download. We require the
-          # three symbols to be *locally defined* (nm type T/D/S/B, i.e. lower-
-          # or upper-case but NOT 'U' undefined) in the shipped binary.
-          APP_PATH="$(find target-desktop-native -type d -name 'LibreTracks.app' -path '*/bundle/macos/*' | head -n1)"
-          BIN="$APP_PATH/Contents/MacOS/libretracks-desktop"
-          if [ ! -f "$BIN" ]; then
-            echo "::error::Main binary not found at $BIN"
-            exit 1
-          fi
-          for symbol in _NSHTTPCookieSameSiteLax _NSHTTPCookieSameSiteStrict _NSHTTPCookieSameSitePolicy; do
-            # A locally-defined symbol shows a defined type letter; an unresolved
-            # one shows 'U'. Fail if the symbol is missing entirely or only 'U'.
-            line="$(nm "$BIN" 2>/dev/null | grep -E "[0-9a-fA-F]+ [^U] $symbol$" || true)"
-            if [ -z "$line" ]; then
-              echo "::error::Symbol $symbol is not locally defined in the release binary. The High Sierra cookie shim was not linked — check build.rs and macos-compat/highsierra_cookie_symbols.m."
-              nm "$BIN" 2>/dev/null | grep "$symbol" || echo "($symbol absent from symbol table entirely)"
-              exit 1
-            fi
-            echo "OK: $symbol -> $line"
-          done
-          echo "High Sierra cookie shim confirmed linked into release binary."
-
       - name: Upload release assets
+        if: matrix.publish
         uses: actions/upload-artifact@v4
         with:
           name: libretracks-${{ matrix.platform }}-assets

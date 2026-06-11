@@ -2,71 +2,8 @@ use std::{env, fs, path::PathBuf};
 
 fn main() {
     configure_runtime_library_search_path();
-    link_macos_highsierra_shim();
     copy_native_engine_runtime();
     tauri_build::build()
-}
-
-/// Links a tiny Objective-C shim that defines the `NSHTTPCookieSameSite*`
-/// constants wry/Tauri reference but which only exist on macOS 10.15+. The
-/// symbols are weak, so on 10.15+ the system definition wins and this shim is
-/// inert; on 10.13/10.14 dyld resolves ours and the app launches instead of
-/// crashing at load (tauri-apps/tauri#14201). macOS-only — a no-op elsewhere.
-fn link_macos_highsierra_shim() {
-    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
-        return;
-    }
-
-    // The shim is Objective-C (it uses Foundation's `NSString` and `@"..."`
-    // string literals), so it must be compiled as such. The `.m` extension
-    // makes clang select the Objective-C frontend; we also force the flag and
-    // link Foundation so the literals resolve.
-    let shim = "macos-compat/highsierra_cookie_symbols.m";
-    println!("cargo:rerun-if-changed={shim}");
-    let lib_name = "lt_macos_highsierra_shim";
-    cc::Build::new()
-        .file(shim)
-        .flag("-x")
-        .flag("objective-c")
-        .compile(lib_name);
-    println!("cargo:rustc-link-lib=framework=Foundation");
-
-    // Force the shim's object into the binary with `-force_load`. Our cookie
-    // symbols are `weak` and the only references to them (from wry) are *also*
-    // weakened below via `-U`, so a plain archive link would never extract the
-    // object — the linker only pulls archive members that resolve a still-
-    // pending undefined symbol. The result was the symbol vanishing entirely
-    // and High Sierra crashing at launch. `-force_load` makes the linker load
-    // every object in the archive unconditionally, guaranteeing our weak
-    // definitions ship. On 10.15+ the strong system symbol still wins, so this
-    // stays inert there.
-    let out_dir = env::var("OUT_DIR").expect("OUT_DIR is set by cargo");
-    let archive = PathBuf::from(&out_dir).join(format!("lib{lib_name}.a"));
-    println!(
-        "cargo:rustc-link-arg=-Wl,-force_load,{}",
-        archive.display()
-    );
-
-    // Pin each shim symbol as a required link root with `-u` (lowercase). This
-    // is what actually keeps them in the shipped binary: rustc links macOS
-    // release binaries with `-dead_strip` by default, and because we build
-    // against a modern SDK whose Foundation already exports these symbols, wry's
-    // references bind to that strong dylib export instead of our weak defs. With
-    // no local referrer, `-dead_strip` would delete even the force-loaded atoms
-    // and the symbol would vanish — the failure the CI "Verify High Sierra cookie
-    // shim linked" guard catches. `-u <sym>` marks each as an undefined that must
-    // be resolved, which both pulls our archive member and exempts it from dead-
-    // stripping. Our force-loaded weak definition satisfies the requirement, so
-    // the link still succeeds with no dependency on Foundation actually exporting
-    // them at run time. (Note: lowercase `-u` = "require symbol", not uppercase
-    // `-U` = "allow undefined", which did NOT survive dead-stripping.)
-    for symbol in [
-        "_NSHTTPCookieSameSiteLax",
-        "_NSHTTPCookieSameSiteStrict",
-        "_NSHTTPCookieSameSitePolicy",
-    ] {
-        println!("cargo:rustc-link-arg=-Wl,-u,{symbol}");
-    }
 }
 
 fn configure_runtime_library_search_path() {

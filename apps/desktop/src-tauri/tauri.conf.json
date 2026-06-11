@@ -26,7 +26,10 @@
     "resources": {
       "../../remote/dist": "remote-dist",
       "../../../vendor/bin/native/*": ".",
-      "resources/voices": "voices"
+      "resources/voices": "voices",
+      "../../../LICENSE": "licenses/LICENSE",
+      "../../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
+      "../../../licenses/*": "licenses"
     },
     "windows": {
       "nsis": {
@@ -55,10 +58,14 @@
       }
     },
     "macOS": {
-      "minimumSystemVersion": "10.13",
+      "minimumSystemVersion": "10.15",
       "frameworks": [
         "../../../vendor/bin/native/liblt_audio_engine_v2.dylib",
-        "../../../vendor/bin/native/bungee.framework"
+        "../../../vendor/bin/native/bungee.framework",
+        "../../../vendor/bin/native/libavformat.61.dylib",
+        "../../../vendor/bin/native/libavcodec.61.dylib",
+        "../../../vendor/bin/native/libavutil.59.dylib",
+        "../../../vendor/bin/native/libswresample.5.dylib"
       ]
     },
     "icon": [
