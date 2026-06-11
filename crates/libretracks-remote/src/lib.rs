@@ -514,9 +514,7 @@ mod tests {
 
     #[test]
     fn parses_schedule_marker_jump_with_optional_fields() {
-        match parse(
-            r#"{"cmd":"scheduleMarkerJump","targetMarkerId":"m1","trigger":"immediate"}"#,
-        ) {
+        match parse(r#"{"cmd":"scheduleMarkerJump","targetMarkerId":"m1","trigger":"immediate"}"#) {
             RemoteCommand::ScheduleMarkerJump {
                 target_marker_id,
                 trigger,
@@ -544,9 +542,7 @@ mod tests {
             other => panic!("expected toggleVamp, got {other:?}"),
         }
 
-        match parse(
-            r#"{"cmd":"updateRegionTranspose","regionId":"r1","transposeSemitones":-5}"#,
-        ) {
+        match parse(r#"{"cmd":"updateRegionTranspose","regionId":"r1","transposeSemitones":-5}"#) {
             RemoteCommand::UpdateRegionTranspose {
                 region_id,
                 transpose_semitones,
@@ -560,9 +556,7 @@ mod tests {
 
     #[test]
     fn parses_live_track_mix_update_with_partial_fields() {
-        match parse(
-            r#"{"cmd":"updateTrackMixLive","trackId":"t1","volume":0.8,"muted":true}"#,
-        ) {
+        match parse(r#"{"cmd":"updateTrackMixLive","trackId":"t1","volume":0.8,"muted":true}"#) {
             RemoteCommand::UpdateTrackMixLive {
                 track_id,
                 volume,

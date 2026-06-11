@@ -119,7 +119,9 @@ pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
                 .unwrap_or_else(|_| "{}".to_string());
             *slot = Some(CString::new(json).unwrap_or_default());
         }
-        slot.as_ref().map(|s| s.as_ptr()).unwrap_or(std::ptr::null())
+        slot.as_ref()
+            .map(|s| s.as_ptr())
+            .unwrap_or(std::ptr::null())
     })
 }
 #[cfg(feature = "no-link")]

@@ -466,10 +466,7 @@ fn read_fresh_waveform_file(
 /// source freshness so future fresh-checks pass. Returns None when the legacy
 /// file is missing/older/corrupt or clearly belongs to a different audio (size
 /// mismatch), so the caller regenerates instead.
-fn migrate_legacy_waveform(
-    legacy_path: &Path,
-    source_path: &Path,
-) -> Option<WaveformSummary> {
+fn migrate_legacy_waveform(legacy_path: &Path, source_path: &Path) -> Option<WaveformSummary> {
     if !legacy_path.exists() {
         return None;
     }
@@ -1166,7 +1163,10 @@ mod tests {
         // source_size == 0 && mtime == 0 → can't prove staleness, keep the cache.
         let summary = sample_summary(); // built with a non-existent path → 0/0
         assert_eq!(summary.source_size, 0);
-        assert!(is_waveform_fresh(&summary, Path::new("/whatever/does/not/exist")));
+        assert!(is_waveform_fresh(
+            &summary,
+            Path::new("/whatever/does/not/exist")
+        ));
     }
 
     // ── write + load through the filesystem ───────────────────────────────
@@ -1201,9 +1201,7 @@ mod tests {
         let b = global_waveform_file_path(cache_root, source);
         assert_eq!(a, b);
         assert!(a.starts_with(cache_root.join("waveform-cache")));
-        assert!(a
-            .to_string_lossy()
-            .ends_with(".waveform.ltpeaks"));
+        assert!(a.to_string_lossy().ends_with(".waveform.ltpeaks"));
         // A different source yields a different file.
         let other = global_waveform_file_path(cache_root, Path::new("/music/snare.wav"));
         assert_ne!(a, other);
@@ -1276,7 +1274,8 @@ mod tests {
         // The migrated copy is written to the global cache at the current version.
         let global_path = global_waveform_file_path(&cache_root, &audio_abs);
         assert!(global_path.exists());
-        let on_disk = decode_waveform_summary_binary(&std::fs::read(&global_path).unwrap()).unwrap();
+        let on_disk =
+            decode_waveform_summary_binary(&std::fs::read(&global_path).unwrap()).unwrap();
         assert_eq!(on_disk.version, WAVEFORM_FORMAT_VERSION);
     }
 
@@ -1320,4 +1319,3 @@ mod tests {
         assert!(validate_waveform_summary(&analyzed.waveform, "<t>").is_ok());
     }
 }
-

@@ -10,8 +10,8 @@ use crate::commands::events::{
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
 use crate::state::{
-    ProjectLoadProgressEvent, AudioFileImportPayload, AudioFilePathImportPayload,
-    CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession, DesktopState,
+    AudioFileImportPayload, AudioFilePathImportPayload, CreateClipRequest,
+    CreateClipWithAutoTrackRequest, DesktopSession, DesktopState, ProjectLoadProgressEvent,
 };
 use rfd::FileDialog;
 
@@ -91,12 +91,7 @@ pub fn start_import_song_package_from_path(
 /// completion event (see `openProject`/`createSong` in desktopApi.ts).
 fn spawn_project_work<F>(app: &AppHandle, work: F)
 where
-    F: FnOnce(
-            &AppHandle,
-            &DesktopState,
-        ) -> Result<TransportSnapshot, String>
-        + Send
-        + 'static,
+    F: FnOnce(&AppHandle, &DesktopState) -> Result<TransportSnapshot, String> + Send + 'static,
 {
     let worker_app = app.clone();
     thread::spawn(move || {
@@ -186,7 +181,10 @@ pub fn resolve_missing_file(
 }
 
 #[tauri::command]
-pub fn start_save_project_as(app: AppHandle, state: State<'_, DesktopState>) -> Result<bool, String> {
+pub fn start_save_project_as(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<bool, String> {
     // Read the current title under a short lock so we can seed the dialog's
     // default file name, then drop the lock before opening the (blocking)
     // dialog and spawning the heavy save onto a worker thread.

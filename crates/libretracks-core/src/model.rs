@@ -474,10 +474,7 @@ mod tests {
 
     #[test]
     fn marker_by_id_and_digit_find_the_right_marker() {
-        let song = song_with_markers(vec![
-            marker("a", 0.0, Some(1)),
-            marker("b", 10.0, Some(2)),
-        ]);
+        let song = song_with_markers(vec![marker("a", 0.0, Some(1)), marker("b", 10.0, Some(2))]);
         assert_eq!(song.marker_by_id("b").unwrap().start_seconds, 10.0);
         assert!(song.marker_by_id("missing").is_none());
         assert_eq!(song.marker_by_digit(2).unwrap().id, "b");
@@ -486,10 +483,7 @@ mod tests {
 
     #[test]
     fn next_marker_after_returns_the_first_marker_strictly_ahead() {
-        let song = song_with_markers(vec![
-            marker("b", 20.0, None),
-            marker("a", 10.0, None),
-        ]);
+        let song = song_with_markers(vec![marker("b", 20.0, None), marker("a", 10.0, None)]);
         // Sorted internally; from 5s the next is "a" at 10s.
         assert_eq!(song.next_marker_after(5.0).unwrap().id, "a");
         // Exactly on a marker is not "after" it.

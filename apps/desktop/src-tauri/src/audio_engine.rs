@@ -1056,10 +1056,7 @@ impl AudioController {
     /// Push the full metronome sound config (presets, pitch, subdivision) to the
     /// engine without reopening the audio device, so changing the click sound
     /// never interrupts playback. Mirrors the realtime enabled/volume path.
-    pub fn set_metronome_sound_realtime(
-        &self,
-        settings: &AppSettings,
-    ) -> Result<(), DesktopError> {
+    pub fn set_metronome_sound_realtime(&self, settings: &AppSettings) -> Result<(), DesktopError> {
         self.with_engine_state("set_metronome_sound_realtime", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetMetronomeConfig {
                 enabled: settings.metronome_enabled,
@@ -1100,11 +1097,7 @@ impl AudioController {
     /// Decode and install the voice-guide clip bank for a language. `voices_dir`
     /// is the bundled resources path (resolved by the command layer from the
     /// Tauri app handle). Decoding happens on the engine command thread.
-    pub fn load_voice_guide_bank(
-        &self,
-        voices_dir: &str,
-        lang: &str,
-    ) -> Result<(), DesktopError> {
+    pub fn load_voice_guide_bank(&self, voices_dir: &str, lang: &str) -> Result<(), DesktopError> {
         self.with_engine_state("load_voice_guide_bank", None, |engine, _state| {
             engine.send_command(&EngineCommand::LoadVoiceGuideBank {
                 voices_dir: voices_dir.to_string(),

@@ -716,8 +716,16 @@ mod tests {
     fn song_bpm_at_returns_the_latest_marker_value() {
         let mut s = song();
         s.tempo_markers = vec![
-            TempoMarker { id: "a".into(), start_seconds: 0.0, bpm: 100.0 },
-            TempoMarker { id: "b".into(), start_seconds: 10.0, bpm: 140.0 },
+            TempoMarker {
+                id: "a".into(),
+                start_seconds: 0.0,
+                bpm: 100.0,
+            },
+            TempoMarker {
+                id: "b".into(),
+                start_seconds: 10.0,
+                bpm: 140.0,
+            },
         ];
         assert_eq!(song_bpm_at(&s, 5.0), 100.0);
         assert_eq!(song_bpm_at(&s, 12.0), 140.0);
@@ -757,8 +765,8 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result = import_song_package(song_dir, &empty, &package_path, 0.0)
-            .expect("import package");
+        let result =
+            import_song_package(song_dir, &empty, &package_path, 0.0).expect("import package");
 
         assert_eq!(result.package_title, "Verse");
         // The drums track and its clip came across.
@@ -778,8 +786,11 @@ mod tests {
         // The clip references audio/loop.wav (relative to song_dir); create it so
         // the exporter can bundle its bytes. Content is opaque to bundling.
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
-        fs::write(song_dir.join("audio").join("loop.wav"), b"RIFF....fake-wav-bytes")
-            .expect("write fake audio");
+        fs::write(
+            song_dir.join("audio").join("loop.wav"),
+            b"RIFF....fake-wav-bytes",
+        )
+        .expect("write fake audio");
 
         let package_path = song_dir.join("verse.ltpkg");
         export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, true)
@@ -806,8 +817,8 @@ mod tests {
             ..song()
         };
         let target = tempdir().expect("target");
-        let result = import_song_package(target.path(), &empty, &package_path, 0.0)
-            .expect("import full");
+        let result =
+            import_song_package(target.path(), &empty, &package_path, 0.0).expect("import full");
         assert_eq!(result.bundled_audio.len(), 1);
         assert!(result.bundled_audio.contains_key("loop.wav"));
     }
@@ -832,8 +843,8 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result = import_song_package(target.path(), &empty, &package_path, 0.0)
-            .expect("import light");
+        let result =
+            import_song_package(target.path(), &empty, &package_path, 0.0).expect("import light");
         assert!(result.bundled_audio.is_empty());
     }
 
@@ -853,8 +864,7 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result = import_song_package(song_dir, &empty, &package_path, 100.0)
-            .expect("import");
+        let result = import_song_package(song_dir, &empty, &package_path, 100.0).expect("import");
 
         // Original clip started at 4s within the region; inserted at 100s it
         // should now sit at 104s.
@@ -887,8 +897,8 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result = import_song_package(song_dir, &empty, &package_path, 0.0)
-            .expect("import package");
+        let result =
+            import_song_package(song_dir, &empty, &package_path, 0.0).expect("import package");
 
         // Both tracks survive as separate tracks...
         assert_eq!(result.song.tracks.len(), 2);
@@ -924,8 +934,8 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result = import_song_package(song_dir, &existing, &package_path, 100.0)
-            .expect("import package");
+        let result =
+            import_song_package(song_dir, &existing, &package_path, 100.0).expect("import package");
 
         // No duplicate "Drums" track was created.
         assert_eq!(

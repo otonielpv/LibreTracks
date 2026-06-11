@@ -663,8 +663,7 @@ mod tests {
             wav_files: vec![kick, snare],
         };
 
-        let imported = import_wav_song(dir.path(), "my-set", &request, |_, _| {})
-            .expect("import");
+        let imported = import_wav_song(dir.path(), "my-set", &request, |_, _| {}).expect("import");
 
         assert_eq!(imported.song.tracks.len(), 2);
         assert_eq!(imported.song.clips.len(), 2);
