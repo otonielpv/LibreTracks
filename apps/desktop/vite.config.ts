@@ -15,6 +15,12 @@ const legacyWebkitTargets = browserslistToTargets(["safari >= 13"]);
 export default defineConfig({
   plugins: [react()],
   build: {
+    // The Tauri WebView uses the system Safari; our floor is macOS 10.15
+    // Catalina (Safari 13.1). Vite's default target ('modules') assumes
+    // Safari 14, so pin esbuild to down-level JS *syntax* to Safari 13.
+    // Runtime *methods* newer than 13.1 are polyfilled in
+    // src/shared/legacy-polyfills.ts (esbuild down-levels syntax, not methods).
+    target: ["safari13", "es2020"],
     cssMinify: "lightningcss",
   },
   css: {
