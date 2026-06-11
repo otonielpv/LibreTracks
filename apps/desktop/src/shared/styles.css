@@ -1408,6 +1408,9 @@ textarea {
    destination dropdown and the fade/seconds inputs read as one control set. */
 .lt-automation-modal .lt-settings-field input[type="number"] {
   width: 100%;
+  /* Without border-box the padding adds to the 100% width and the input
+     overflows the modal body. */
+  box-sizing: border-box;
   border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.18);
   background: rgb(28 31 32 / 0.98);

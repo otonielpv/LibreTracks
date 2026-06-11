@@ -86,36 +86,62 @@ function resolveVisibleTrackWindow(
  * row. Mirrors the old ruler-lane look (drawRulerAutomationCue) but anchored to
  * the track's `top`/`trackHeight` instead of a fixed header lane.
  */
+/** Truncate `text` with an ellipsis so it fits within `maxTextWidth` px. Returns
+ * null when not even a single char + ellipsis fits (caller then hides the label,
+ * Ableton-style: the diamond stays, the text drops). */
+function fitLabel(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxTextWidth: number,
+): string | null {
+  if (context.measureText(text).width <= maxTextWidth) {
+    return text;
+  }
+  const ellipsis = "…";
+  if (context.measureText(ellipsis).width > maxTextWidth) {
+    return null;
+  }
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (context.measureText(text.slice(0, mid) + ellipsis).width <= maxTextWidth) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo > 0 ? text.slice(0, lo) + ellipsis : null;
+}
+
 export function drawAutomationLane(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
   trackTop: number,
 ) {
-  const cues = snapshot.song.automationCues ?? [];
   const laneHeight = snapshot.trackHeight;
   const centerY = trackTop + laneHeight / 2;
 
-  for (const cue of cues) {
+  // Ableton-style collision handling: a cue's label may only extend up to the
+  // next cue's diamond. Sort by time so each cue knows where its neighbour is.
+  const cues = [...(snapshot.song.automationCues ?? [])].sort(
+    (left, right) => left.atSeconds - right.atSeconds,
+  );
+
+  const LABEL_PADDING_X = 8;
+  const LABEL_GAP = 10; // min px between this label's end and the next diamond
+  const DIAMOND_HALF = 6;
+
+  context.font = '700 10px "Space Grotesk", sans-serif';
+
+  for (let index = 0; index < cues.length; index += 1) {
+    const cue = cues[index];
     const x = secondsToScreenX(cue.atSeconds, snapshot.cameraX, snapshot.zoomLevel);
     const snappedX = Math.round(x) + 0.5;
 
-    // Build a label that says what the cue does: "→ <destino>" plus a fade
-    // suffix when the jump fades out. Falls back to the cue name otherwise.
-    const fadeSuffix =
-      cue.action.transition.mode === "fade_out" &&
-      (cue.action.transition.durationSeconds ?? 0) > 0
-        ? `  ·  fade ${(cue.action.transition.durationSeconds ?? 0).toFixed(1)}s`
-        : "";
-    const baseLabel = `→ ${cue.name.replace(/^Salto a\s+/i, "")}`;
-    context.font = '700 10px "Space Grotesk", sans-serif';
-    const label = cue.enabled
-      ? `${baseLabel}${fadeSuffix}`
-      : `${baseLabel}${fadeSuffix} (off)`;
-    const labelWidth = Math.max(34, Math.ceil(context.measureText(label).width) + 16);
-    const alignRight = snappedX > snapshot.width - labelWidth - 14;
-    const labelLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 8;
-    const labelRight = labelLeft + labelWidth;
-    if (labelRight < -24 || labelLeft > snapshot.width + 24) {
+    // The diamond always draws (the anchor never disappears). Cull only when the
+    // diamond itself is well off-screen.
+    if (snappedX < -DIAMOND_HALF - 2 || snappedX > snapshot.width + DIAMOND_HALF + 2) {
       continue;
     }
 
@@ -132,13 +158,13 @@ export function drawAutomationLane(
     context.fillStyle = fillStyle;
     context.lineWidth = 1.2;
 
-    // Full-height stem through the lane.
+    // Full-height stem.
     context.beginPath();
     context.moveTo(snappedX, trackTop + 3);
     context.lineTo(snappedX, trackTop + laneHeight - 3);
     context.stroke();
 
-    // Diamond marker at the lane centre.
+    // Diamond marker.
     context.beginPath();
     context.moveTo(snappedX, centerY - 6);
     context.lineTo(snappedX + 6, centerY);
@@ -148,14 +174,46 @@ export function drawAutomationLane(
     context.fill();
     context.stroke();
 
-    // Label pill.
-    context.beginPath();
-    context.roundRect(labelLeft, centerY - 7.5, labelWidth, 15, 4);
-    context.fill();
-    context.stroke();
-    context.fillStyle = textStyle;
-    context.textBaseline = "middle";
-    context.fillText(label, labelLeft + 8, centerY + 0.5);
+    // Label: "→ <destino>" + optional fade suffix, truncated to the room before
+    // the next cue's diamond. If nothing fits, only the diamond remains.
+    const fadeSuffix =
+      cue.action.transition.mode === "fade_out" &&
+      (cue.action.transition.durationSeconds ?? 0) > 0
+        ? `  ·  fade ${(cue.action.transition.durationSeconds ?? 0).toFixed(1)}s`
+        : "";
+    const baseLabel = `→ ${cue.name.replace(/^Salto a\s+/i, "")}`;
+    const fullLabel = cue.enabled
+      ? `${baseLabel}${fadeSuffix}`
+      : `${baseLabel}${fadeSuffix} (off)`;
+
+    const labelStart = snappedX + DIAMOND_HALF + 2;
+    // Right boundary = next cue's diamond (minus a gap), or the canvas edge.
+    const nextCue = cues[index + 1];
+    const nextX = nextCue
+      ? secondsToScreenX(nextCue.atSeconds, snapshot.cameraX, snapshot.zoomLevel)
+      : Number.POSITIVE_INFINITY;
+    const rightBoundary = Math.min(
+      snapshot.width - 4,
+      Number.isFinite(nextX) ? nextX - DIAMOND_HALF - LABEL_GAP : snapshot.width - 4,
+    );
+    const availableTextWidth = rightBoundary - labelStart - LABEL_PADDING_X * 2;
+
+    const fitted =
+      availableTextWidth > 8
+        ? fitLabel(context, fullLabel, availableTextWidth)
+        : null;
+
+    if (fitted) {
+      const textWidth = context.measureText(fitted).width;
+      const pillWidth = textWidth + LABEL_PADDING_X * 2;
+      context.beginPath();
+      context.roundRect(labelStart, centerY - 7.5, pillWidth, 15, 4);
+      context.fill();
+      context.stroke();
+      context.fillStyle = textStyle;
+      context.textBaseline = "middle";
+      context.fillText(fitted, labelStart + LABEL_PADDING_X, centerY + 0.5);
+    }
     context.restore();
   }
 }

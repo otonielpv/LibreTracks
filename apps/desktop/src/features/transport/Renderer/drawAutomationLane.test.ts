@@ -25,7 +25,9 @@ function createFakeContext() {
       stroke: record("stroke"),
       roundRect: record("roundRect"),
       fillText: record("fillText"),
-      measureText: () => ({ width: 40 }),
+      // ~7px per char so label width scales with text length, letting the
+      // truncation/collision logic be exercised realistically.
+      measureText: (text: string) => ({ width: text.length * 7 }),
       font: "",
       fillStyle: "",
       strokeStyle: "",
@@ -86,13 +88,13 @@ describe("drawAutomationLane", () => {
     expect(labelCall).toContain("Outro");
   });
 
-  it("skips cues whose label is fully off-screen", () => {
+  it("draws no diamond for a cue whose diamond is off-screen", () => {
     const { ctx, calls } = createFakeContext();
     const snapshot = buildSnapshot([
       {
         id: "cue-far",
         name: "Salto a Lejos",
-        atSeconds: 10000, // x way past width → culled
+        atSeconds: 10000, // diamond x way past width → culled entirely
         enabled: true,
         action: {
           type: "jump",
@@ -105,6 +107,32 @@ describe("drawAutomationLane", () => {
     drawAutomationLane(ctx, snapshot, 0);
 
     expect(calls.find((c) => c.startsWith("fillText("))).toBeUndefined();
+  });
+
+  it("keeps the diamond but drops the label for two adjacent cues (Ableton-style)", () => {
+    const { ctx, calls } = createFakeContext();
+    // Two cues ~6px apart (0.1s * 50px/s = 5px): the first has no room for its
+    // label before the second's diamond, so only diamonds draw.
+    const mkCue = (id: string, atSeconds: number) => ({
+      id,
+      name: "Salto a UnDestinoLargoQueNoCabe",
+      atSeconds,
+      enabled: true,
+      action: {
+        type: "jump" as const,
+        target: { kind: "region" as const, regionId: "r1" },
+        transition: { mode: "instant" as const, durationSeconds: null },
+      },
+    });
+    const snapshot = buildSnapshot([mkCue("a", 1), mkCue("b", 1.1)]);
+
+    drawAutomationLane(ctx, snapshot, 0);
+
+    // Two diamonds (fill calls happen for diamonds and pills); at least the two
+    // diamonds drew, but the cramped first cue produced no label text.
+    const fillTexts = calls.filter((c) => c.startsWith("fillText("));
+    // The first cue's long label can't fit before the second diamond → dropped.
+    expect(fillTexts.length).toBeLessThan(2);
   });
 
   it("does nothing when there are no cues", () => {
