@@ -597,6 +597,7 @@ function normalizeSong(song: SongView): SongView {
       (left, right) => left.atSeconds - right.atSeconds,
     ),
     mixScenes: [...(song.mixScenes ?? [])],
+    automationTrack: song.automationTrack ?? null,
   };
 }
 
@@ -1441,6 +1442,8 @@ export const testDesktopApiMock = {
       automationCues: [...cues, clone(cue)].sort(
         (left, right) => left.atSeconds - right.atSeconds,
       ),
+      // Creating a cue implies the automation track is present.
+      automationTrack: state.song.automationTrack ?? { afterTrackId: null },
     });
     return clone(buildSnapshot());
   },
@@ -1454,6 +1457,30 @@ export const testDesktopApiMock = {
     if (state.pendingAutomationCue?.cueId === cueId) {
       state.pendingAutomationCue = null;
     }
+    return clone(buildSnapshot());
+  },
+  addAutomationTrack: async (afterTrackId: string | null = null) => {
+    replaceSong({
+      ...state.song,
+      automationTrack: { afterTrackId },
+    });
+    return clone(buildSnapshot());
+  },
+  removeAutomationTrack: async () => {
+    // Removing the track clears every cue (no ghost jumps).
+    replaceSong({
+      ...state.song,
+      automationCues: [],
+      automationTrack: null,
+    });
+    state.pendingAutomationCue = null;
+    return clone(buildSnapshot());
+  },
+  setAutomationTrackPosition: async (afterTrackId: string | null) => {
+    replaceSong({
+      ...state.song,
+      automationTrack: { afterTrackId },
+    });
     return clone(buildSnapshot());
   },
   createSectionMarker: async (startSeconds: number) => {

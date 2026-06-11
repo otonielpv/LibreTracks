@@ -33,7 +33,6 @@ import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
   LANE_REGIONS,
   LANE_SECTIONS,
-  LANE_AUTOMATION,
   LANE_TEMPO_METRIC,
 } from "./Renderer/drawBackground";
 import {
@@ -52,7 +51,7 @@ import {
   type ExternalDropPreview,
 } from "./dragDrop";
 
-const RULER_HEIGHT = 132;
+const RULER_HEIGHT = 110;
 
 type LibraryClipPreviewState = {
   trackId: string | null;
@@ -141,6 +140,11 @@ type TimelineCanvasPaneProps = {
     event: ReactMouseEvent<HTMLButtonElement>,
     cueId: string,
   ) => void;
+  /**
+   * Right-click on empty space of the automation lane. The parent resolves the
+   * cursor X to timeline seconds and offers "create automation cue here".
+   */
+  onAutomationLaneContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   /**
    * Commit a region resize. Called once on pointer-up with the final
    * start/end seconds after snap + clamp have already been applied. The
@@ -264,6 +268,7 @@ export function TimelineCanvasPane({
   onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
   onAutomationCueContextMenu,
+  onAutomationLaneContextMenu,
   onRegionResizeCommit,
   onRegionMoveCommit,
   snapEnabled,
@@ -804,7 +809,6 @@ export function TimelineCanvasPane({
             markers={song?.sectionMarkers ?? []}
             tempoMarkers={song?.tempoMarkers ?? []}
             timeSignatureMarkers={song?.timeSignatureMarkers ?? []}
-            automationCues={song?.automationCues ?? []}
             selectedRegionId={selectedRegionId}
             selectedMarkerId={selectedSectionId}
             pendingMarkerJump={pendingMarkerJump}
@@ -1058,38 +1062,6 @@ export function TimelineCanvasPane({
                 <span className="lt-sr-only">{marker.signature}</span>
               </button>
             ))}
-
-            {song?.automationCues?.map((cue: AutomationCueSummary) => {
-              const isPending = pendingAutomationCue?.cueId === cue.id;
-              const cueDescription = `${cue.name} - automatismo en ${cue.atSeconds.toFixed(2)} s`;
-              return (
-                <button
-                  key={cue.id}
-                  type="button"
-                  className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${cue.enabled ? "" : "is-disabled"}`}
-                  aria-label={cueDescription}
-                  title={cueDescription}
-                  style={{
-                    left: cue.atSeconds * pixelsPerSecond,
-                    top: LANE_AUTOMATION.top,
-                    height: LANE_AUTOMATION.height,
-                  }}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                  }}
-                  onContextMenu={(event) => {
-                    event.stopPropagation();
-                    onAutomationCueContextMenu(event, cue.id);
-                  }}
-                >
-                  <span className="lt-sr-only">{cue.name}</span>
-                </button>
-              );
-            })}
           </TimelineRulerCanvas>
 
           <PlayheadOverlay
@@ -1274,6 +1246,63 @@ export function TimelineCanvasPane({
             visibleTracks.map((track) => {
               const trackClips = clipsByTrack[track.id] ?? [];
               const isPendingTrack = Boolean(track.isPending);
+              const isAutomationTrack = Boolean(track.isAutomation);
+
+              if (isAutomationTrack) {
+                return (
+                  <div
+                    key={track.id}
+                    className="lt-track-lane-row"
+                    data-track-id={track.id}
+                    style={{ height: trackHeight }}
+                  >
+                    <div
+                      className="lt-track-lane is-automation"
+                      style={{ height: trackHeight }}
+                      aria-label="Lane Automatismos"
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onAutomationLaneContextMenu(event);
+                      }}
+                    >
+                      {song?.automationCues?.map((cue: AutomationCueSummary) => {
+                        const isPending =
+                          pendingAutomationCue?.cueId === cue.id;
+                        const cueDescription = `${cue.name} - automatismo en ${cue.atSeconds.toFixed(2)} s`;
+                        return (
+                          <button
+                            key={cue.id}
+                            type="button"
+                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${cue.enabled ? "" : "is-disabled"}`}
+                            aria-label={cueDescription}
+                            title={cueDescription}
+                            style={{
+                              left: cue.atSeconds * pixelsPerSecond,
+                              top: 0,
+                              height: trackHeight,
+                            }}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                            }}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onAutomationCueContextMenu(event, cue.id);
+                            }}
+                          >
+                            <span className="lt-sr-only">{cue.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div

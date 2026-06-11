@@ -28,6 +28,7 @@ pub struct TransportSnapshot {
     pub active_vamp: Option<ActiveVampSummary>,
     pub automation_cues: Vec<AutomationCueSummary>,
     pub mix_scenes: Vec<MixSceneSummary>,
+    pub automation_track: Option<AutomationTrackSummary>,
     pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
     pub pitch: PitchPrepareSummary,
@@ -103,8 +104,18 @@ pub struct SongView {
     pub tracks: Vec<TrackSummary>,
     pub automation_cues: Vec<AutomationCueSummary>,
     pub mix_scenes: Vec<MixSceneSummary>,
+    /// Present (non-null) only when the user has added the automation track to
+    /// the timeline. The track is a synthetic UI lane, not a real `Track`.
+    pub automation_track: Option<AutomationTrackSummary>,
     pub waveforms: Vec<WaveformSummaryDto>,
     pub project_revision: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationTrackSummary {
+    /// Id of the audio track the automation lane sits after; `None` = first row.
+    pub after_track_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -453,6 +464,13 @@ pub(crate) fn song_to_view(
             .collect(),
         automation_cues: automation_cues_to_summary(song, &automation.cues),
         mix_scenes: mix_scenes_to_summary(&automation.mix_scenes),
+        automation_track: if automation.track_present {
+            Some(AutomationTrackSummary {
+                after_track_id: automation.track_after_id.clone(),
+            })
+        } else {
+            None
+        },
         waveforms,
         project_revision,
     }

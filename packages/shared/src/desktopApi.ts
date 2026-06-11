@@ -833,6 +833,26 @@ export async function deleteAutomationCue(cueId: string): Promise<TransportSnaps
   return invokeCommand<TransportSnapshot>("delete_automation_cue", { cueId });
 }
 
+export async function addAutomationTrack(
+  afterTrackId: string | null = null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("add_automation_track", {
+    afterTrackId,
+  });
+}
+
+export async function removeAutomationTrack(): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("remove_automation_track", {});
+}
+
+export async function setAutomationTrackPosition(
+  afterTrackId: string | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_automation_track_position", {
+    afterTrackId,
+  });
+}
+
 export async function upsertMixScene(scene: MixSceneSummary): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("upsert_mix_scene", { scene });
 }

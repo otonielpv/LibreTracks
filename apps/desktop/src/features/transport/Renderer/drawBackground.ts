@@ -1,6 +1,5 @@
 import type {
   ActiveVampSummary,
-  AutomationCueSummary,
   SectionMarkerSummary,
   SongRegionSummary,
   TempoMarkerSummary,
@@ -34,11 +33,6 @@ export const LANE_SECTIONS = {
 export const LANE_TEMPO_METRIC = {
   top: 72,
   height: 34,
-} as const;
-
-export const LANE_AUTOMATION = {
-  top: 106,
-  height: 22,
 } as const;
 
 const GRID_LABEL_TOP = 24;
@@ -545,100 +539,12 @@ export function drawRulerTempoMarker(
   context.restore();
 }
 
-export function drawRulerAutomationCue(
-  context: CanvasRenderingContext2D,
-  cue: AutomationCueSummary,
-  width: number,
-  cameraX: number,
-  pixelsPerSecond: number,
-  options: {
-    isPending: boolean;
-    pulseAlpha: number;
-  },
-) {
-  const x = secondsToScreenX(cue.atSeconds, cameraX, pixelsPerSecond);
-  const snappedX = Math.round(x) + 0.5;
-  const laneTop = LANE_AUTOMATION.top;
-  const laneBottom = laneTop + LANE_AUTOMATION.height;
-  const centerY = laneTop + LANE_AUTOMATION.height / 2;
-
-  context.font = '700 10px "Space Grotesk", sans-serif';
-  const label = cue.enabled ? cue.name : `${cue.name} (off)`;
-  const labelWidth = Math.max(
-    34,
-    Math.ceil(context.measureText(label).width) + 16,
-  );
-  const alignRight = snappedX > width - labelWidth - 14;
-  const labelLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 8;
-  const labelRight = labelLeft + labelWidth;
-
-  if (labelRight < -24 || labelLeft > width + 24) {
-    return;
-  }
-
-  const activeAlpha = options.isPending ? options.pulseAlpha : 0.72;
-  const strokeStyle = cue.enabled
-    ? `rgba(255, 122, 182, ${activeAlpha})`
-    : "rgba(186, 202, 197, 0.34)";
-  const fillStyle = cue.enabled
-    ? `rgba(255, 122, 182, ${options.isPending ? 0.26 : 0.14})`
-    : "rgba(186, 202, 197, 0.08)";
-  const textStyle = cue.enabled ? "#ff9bcc" : "rgba(186, 202, 197, 0.62)";
-
-  context.save();
-  context.strokeStyle = strokeStyle;
-  context.fillStyle = fillStyle;
-  context.lineWidth = options.isPending ? 1.8 : 1.2;
-  if (options.isPending) {
-    context.shadowColor = "rgba(255, 122, 182, 0.45)";
-    context.shadowBlur = 10;
-  }
-
-  context.beginPath();
-  context.moveTo(snappedX, laneTop + 3);
-  context.lineTo(snappedX, laneBottom - 3);
-  context.stroke();
-
-  context.beginPath();
-  context.moveTo(snappedX, centerY - 6);
-  context.lineTo(snappedX + 6, centerY);
-  context.lineTo(snappedX, centerY + 6);
-  context.lineTo(snappedX - 6, centerY);
-  context.closePath();
-  context.fill();
-  context.stroke();
-
-  context.shadowBlur = 0;
-  context.beginPath();
-  context.roundRect(labelLeft, laneTop + 3, labelWidth, 15, 4);
-  context.fill();
-  context.stroke();
-
-  context.fillStyle = textStyle;
-  context.textBaseline = "middle";
-  context.fillText(label, labelLeft + 8, centerY + 0.5);
-  context.restore();
-}
-
 export function drawRulerBackgroundLayer(
   context: CanvasRenderingContext2D,
   args: RulerBackgroundLayerArgs,
 ) {
   context.fillStyle = "#2a2a2a";
   context.fillRect(0, 0, args.width, args.height);
-
-  context.save();
-  context.fillStyle = "rgba(255, 122, 182, 0.045)";
-  context.fillRect(0, LANE_AUTOMATION.top, args.width, LANE_AUTOMATION.height);
-  context.strokeStyle = "rgba(255, 122, 182, 0.16)";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(0, LANE_AUTOMATION.top + 0.5);
-  context.lineTo(args.width, LANE_AUTOMATION.top + 0.5);
-  context.moveTo(0, LANE_AUTOMATION.top + LANE_AUTOMATION.height - 0.5);
-  context.lineTo(args.width, LANE_AUTOMATION.top + LANE_AUTOMATION.height - 0.5);
-  context.stroke();
-  context.restore();
 
   if (args.activeVamp) {
     drawActiveVampRange(

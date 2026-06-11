@@ -1840,11 +1840,52 @@ impl DesktopSession {
         } else {
             self.automation.cues.push(cue);
         }
+        // Creating a cue implies the automation track is present: a cue with no
+        // visible lane would be a ghost jump. Keep the two invariants together.
+        self.automation.track_present = true;
         self.automation.cues.sort_by(|left, right| {
             left.at_seconds
                 .partial_cmp(&right.at_seconds)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        self.persist_automation(audio)?;
+        Ok(self.snapshot())
+    }
+
+    pub fn add_automation_track(
+        &mut self,
+        after_track_id: Option<String>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let after_track_id = after_track_id.filter(|id| !id.trim().is_empty());
+        if !self.automation.track_present || self.automation.track_after_id != after_track_id {
+            self.automation.track_present = true;
+            self.automation.track_after_id = after_track_id;
+            self.persist_automation(audio)?;
+        }
+        Ok(self.snapshot())
+    }
+
+    pub fn remove_automation_track(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        // Removing the track clears every cue: without a visible lane the cues
+        // would keep firing as ghost jumps. The runtime scheduler iterates over
+        // `cues`, so an empty list means nothing is armed.
+        self.automation.track_present = false;
+        self.automation.track_after_id = None;
+        self.automation.cues.clear();
+        self.persist_automation(audio)?;
+        Ok(self.snapshot())
+    }
+
+    pub fn set_automation_track_position(
+        &mut self,
+        after_track_id: Option<String>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.automation.track_after_id = after_track_id.filter(|id| !id.trim().is_empty());
         self.persist_automation(audio)?;
         Ok(self.snapshot())
     }
@@ -5523,6 +5564,13 @@ impl DesktopSession {
                 .map(|song| automation_cues_to_summary(song, &self.automation.cues))
                 .unwrap_or_default(),
             mix_scenes: mix_scenes_to_summary(&self.automation.mix_scenes),
+            automation_track: if self.automation.track_present {
+                Some(crate::models::view::AutomationTrackSummary {
+                    after_track_id: self.automation.track_after_id.clone(),
+                })
+            } else {
+                None
+            },
             musical_position: transport_song
                 .as_ref()
                 .map(|song| musical_position_summary(song, position_seconds))

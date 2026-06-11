@@ -81,6 +81,75 @@ function resolveVisibleTrackWindow(
   };
 }
 
+/**
+ * Paint the automation cues as diamonds along the synthetic automation track's
+ * row. Mirrors the old ruler-lane look (drawRulerAutomationCue) but anchored to
+ * the track's `top`/`trackHeight` instead of a fixed header lane.
+ */
+function drawAutomationLane(
+  context: CanvasRenderingContext2D,
+  snapshot: TrackSceneSnapshot,
+  trackTop: number,
+) {
+  const cues = snapshot.song.automationCues ?? [];
+  const laneHeight = snapshot.trackHeight;
+  const centerY = trackTop + laneHeight / 2;
+
+  for (const cue of cues) {
+    const x = secondsToScreenX(cue.atSeconds, snapshot.cameraX, snapshot.zoomLevel);
+    const snappedX = Math.round(x) + 0.5;
+
+    context.font = '700 10px "Space Grotesk", sans-serif';
+    const label = cue.enabled ? cue.name : `${cue.name} (off)`;
+    const labelWidth = Math.max(34, Math.ceil(context.measureText(label).width) + 16);
+    const alignRight = snappedX > snapshot.width - labelWidth - 14;
+    const labelLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 8;
+    const labelRight = labelLeft + labelWidth;
+    if (labelRight < -24 || labelLeft > snapshot.width + 24) {
+      continue;
+    }
+
+    const strokeStyle = cue.enabled
+      ? "rgba(255, 122, 182, 0.85)"
+      : "rgba(186, 202, 197, 0.34)";
+    const fillStyle = cue.enabled
+      ? "rgba(255, 122, 182, 0.16)"
+      : "rgba(186, 202, 197, 0.08)";
+    const textStyle = cue.enabled ? "#ff9bcc" : "rgba(186, 202, 197, 0.62)";
+
+    context.save();
+    context.strokeStyle = strokeStyle;
+    context.fillStyle = fillStyle;
+    context.lineWidth = 1.2;
+
+    // Full-height stem through the lane.
+    context.beginPath();
+    context.moveTo(snappedX, trackTop + 3);
+    context.lineTo(snappedX, trackTop + laneHeight - 3);
+    context.stroke();
+
+    // Diamond marker at the lane centre.
+    context.beginPath();
+    context.moveTo(snappedX, centerY - 6);
+    context.lineTo(snappedX + 6, centerY);
+    context.lineTo(snappedX, centerY + 6);
+    context.lineTo(snappedX - 6, centerY);
+    context.closePath();
+    context.fill();
+    context.stroke();
+
+    // Label pill.
+    context.beginPath();
+    context.roundRect(labelLeft, centerY - 7.5, labelWidth, 15, 4);
+    context.fill();
+    context.stroke();
+    context.fillStyle = textStyle;
+    context.textBaseline = "middle";
+    context.fillText(label, labelLeft + 8, centerY + 0.5);
+    context.restore();
+  }
+}
+
 export function drawTrackClipsLayer(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
@@ -110,6 +179,11 @@ export function drawTrackClipsLayer(
     const track = snapshot.visibleTracks[trackIndex];
     const trackTop = trackIndex * snapshot.trackHeight;
     const childCount = snapshot.song.tracks.filter((candidate) => candidate.parentTrackId === track.id).length;
+
+    if (track.isAutomation) {
+      drawAutomationLane(context, snapshot, trackTop);
+      continue;
+    }
 
     if (track.kind === "folder") {
       context.fillStyle = track.color ? `${track.color}33` : "rgba(32, 31, 31, 0.78)";

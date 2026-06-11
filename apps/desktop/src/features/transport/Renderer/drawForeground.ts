@@ -1,5 +1,4 @@
 import type {
-  AutomationCueSummary,
   PendingAutomationCueSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
@@ -8,11 +7,7 @@ import type {
 } from "../desktopApi";
 import { secondsToScreenX } from "../timelineMath";
 
-import {
-  drawRulerAutomationCue,
-  drawRulerMarker,
-  drawRulerTempoMarker,
-} from "./drawBackground";
+import { drawRulerMarker, drawRulerTempoMarker } from "./drawBackground";
 
 export type RulerForegroundLayerArgs = {
   width: number;
@@ -22,7 +17,6 @@ export type RulerForegroundLayerArgs = {
   markers: SectionMarkerSummary[];
   tempoMarkers: TempoMarkerSummary[];
   timeSignatureMarkers: TimeSignatureMarkerSummary[];
-  automationCues: AutomationCueSummary[];
   pendingMarkerJump: PendingJumpSummary | null;
   pendingAutomationCue: PendingAutomationCueSummary | null;
   selectedMarkerId: string | null;
@@ -133,17 +127,4 @@ export function drawRulerForegroundLayer(
     );
   }
 
-  for (const cue of args.automationCues) {
-    drawRulerAutomationCue(
-      context,
-      cue,
-      args.width,
-      args.cameraX,
-      args.pixelsPerSecond,
-      {
-        isPending: args.pendingAutomationCue?.cueId === cue.id,
-        pulseAlpha: args.pulseAlpha,
-      },
-    );
-  }
 }

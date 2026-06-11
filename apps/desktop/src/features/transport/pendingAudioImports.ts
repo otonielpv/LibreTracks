@@ -27,7 +27,12 @@ export type PendingAudioImport = {
 export type TimelineTrackSummary = TrackSummary & {
   isPending?: boolean;
   pendingImportId?: string;
+  /** True for the synthetic automation lane (not a real song track). */
+  isAutomation?: boolean;
 };
+
+/** Sentinel id for the synthetic automation track row. Never a real track id. */
+export const AUTOMATION_TRACK_ID = "__automation__";
 
 export type TimelineClipSummary = ClipSummary & {
   isPending?: boolean;
@@ -121,6 +126,29 @@ export function toPendingTrack(
     transposeEnabled: false,
     isPending: true,
     pendingImportId: importJob.id,
+  };
+}
+
+/**
+ * Build the synthetic automation track row. It is injected into `visibleTracks`
+ * alongside the real tracks (same mechanism as pending imports) but never exists
+ * as a `Track` in the song model — its data lives in `automation.ltautomation`.
+ */
+export function toAutomationTrack(): TimelineTrackSummary {
+  return {
+    id: AUTOMATION_TRACK_ID,
+    name: "Automatismos",
+    kind: "audio",
+    parentTrackId: null,
+    depth: 0,
+    hasChildren: false,
+    volume: 1,
+    pan: 0,
+    muted: false,
+    solo: false,
+    audioTo: "master",
+    transposeEnabled: false,
+    isAutomation: true,
   };
 }
 

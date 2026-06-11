@@ -9,7 +9,6 @@ import {
 
 import type {
   ActiveVampSummary,
-  AutomationCueSummary,
   PendingAutomationCueSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
@@ -62,7 +61,6 @@ type RulerCanvasProps = {
   markers: SectionMarkerSummary[];
   tempoMarkers: TempoMarkerSummary[];
   timeSignatureMarkers: TimeSignatureMarkerSummary[];
-  automationCues: AutomationCueSummary[];
   selectedRegionId: string | null;
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
@@ -248,7 +246,6 @@ export function TimelineRulerCanvas({
   markers,
   tempoMarkers,
   timeSignatureMarkers,
-  automationCues,
   selectedRegionId,
   selectedMarkerId,
   pendingMarkerJump,
@@ -278,7 +275,6 @@ export function TimelineRulerCanvas({
     markers,
     tempoMarkers,
     timeSignatureMarkers,
-    automationCues,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
@@ -297,7 +293,6 @@ export function TimelineRulerCanvas({
     markers,
     tempoMarkers,
     timeSignatureMarkers,
-    automationCues,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
@@ -334,17 +329,6 @@ export function TimelineRulerCanvas({
         .join("|"),
     [timeSignatureMarkers],
   );
-  const automationCuesSignature = useMemo(
-    () =>
-      automationCues
-        .map(
-          (cue) =>
-            `${cue.id}:${cue.name}:${cue.atSeconds}:${cue.enabled ? 1 : 0}:${JSON.stringify(cue.action)}`,
-        )
-        .join("|"),
-    [automationCues],
-  );
-
   const pendingJumpSignature = pendingMarkerJump
     ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
     : "";
@@ -363,7 +347,6 @@ export function TimelineRulerCanvas({
     markersSignature,
     tempoMarkersSignature,
     timeSignatureMarkersSignature,
-    automationCuesSignature,
     pendingJumpSignature,
     pendingAutomationSignature,
     activeVampSignature,
@@ -540,7 +523,6 @@ export function TimelineRulerCanvas({
               markers: snapshot.markers,
               tempoMarkers: snapshot.tempoMarkers,
               timeSignatureMarkers: snapshot.timeSignatureMarkers,
-              automationCues: snapshot.automationCues,
               pendingMarkerJump: snapshot.pendingMarkerJump,
               pendingAutomationCue: snapshot.pendingAutomationCue,
               selectedMarkerId: snapshot.selectedMarkerId,

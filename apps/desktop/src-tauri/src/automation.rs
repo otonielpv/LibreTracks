@@ -22,6 +22,16 @@ pub struct AutomationDocument {
     pub cues: Vec<AutomationCue>,
     #[serde(default)]
     pub mix_scenes: Vec<MixScene>,
+    /// Whether the user has added the automation track to the timeline. The
+    /// track is a synthetic UI lane (not a real song `Track`); its presence is
+    /// what gives the cues meaning, so removing the track clears `cues`.
+    #[serde(default)]
+    pub track_present: bool,
+    /// Id of the audio track the automation lane sits *after* in the timeline
+    /// order. `None` = first row. Persisted by id so it survives reordering of
+    /// the real tracks without index recomputation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_after_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -169,6 +179,8 @@ mod tests {
                     solo: None,
                 }],
             }],
+            track_present: true,
+            track_after_id: Some("track_drums".into()),
         };
 
         save_automation(dir.path(), &document).expect("save automation");

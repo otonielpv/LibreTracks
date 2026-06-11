@@ -152,6 +152,15 @@ export type PendingAutomationCueSummary = {
   target: AutomationJumpTargetSummary;
 };
 
+/**
+ * Present (non-null) only when the user has added the automation track to the
+ * timeline. The track is a synthetic UI lane, not a real `TrackSummary`.
+ */
+export type AutomationTrackSummary = {
+  /** Id of the audio track the lane sits after; `null` = first row. */
+  afterTrackId?: string | null;
+};
+
 export type TrackSummary = {
   id: string;
   name: string;
@@ -214,6 +223,7 @@ export type SongView = {
   tracks: TrackSummary[];
   automationCues?: AutomationCueSummary[];
   mixScenes?: MixSceneSummary[];
+  automationTrack?: AutomationTrackSummary | null;
   waveforms?: WaveformSummaryDto[];
   projectRevision: number;
 };
@@ -379,6 +389,7 @@ export type TransportSnapshot = {
   activeVamp?: ActiveVampSummary | null;
   automationCues?: AutomationCueSummary[];
   mixScenes?: MixSceneSummary[];
+  automationTrack?: AutomationTrackSummary | null;
   musicalPosition?: {
     barNumber: number;
     beatInBar: number;
