@@ -38,7 +38,8 @@ import {
   getTrackLaneRow,
   getLibraryAssetButton,
   mockTrackRowDragGeometry,
-  setMockNativeWebviewPosition
+  setMockNativeWebviewPosition,
+  submitPromptDialog
 } from "../test/testUtils";
 
 describe("App / library", () => {
@@ -135,7 +136,6 @@ describe("App / library", () => {
 
   it("moves a library asset into a folder with pointer drag", async () => {
     disablePointerEventSupport();
-    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Band");
     const desktopApi = await import("../features/transport/desktopApi");
     const moveLibraryAssetMock = vi.mocked(desktopApi.moveLibraryAsset);
 
@@ -151,6 +151,7 @@ describe("App / library", () => {
       fireEvent.click(screen.getByRole("button", { name: textMatcher(en.library.folderButton) }));
     });
 
+    await submitPromptDialog("Band");
     const bandFolderLabel = await screen.findByText("Band");
     const bandFolderSummary = bandFolderLabel.closest(".lt-library-folder-summary") as HTMLElement | null;
     expect(bandFolderSummary).toBeTruthy();
@@ -180,7 +181,6 @@ describe("App / library", () => {
       expect(moveLibraryAssetMock).toHaveBeenCalledWith("audio/drums.wav", "Band");
     });
 
-    promptSpy.mockRestore();
   });
 
   it("merges the old song library folder into the existing new one when renaming a compact song", async () => {
@@ -188,7 +188,6 @@ describe("App / library", () => {
     await desktopApi.moveLibraryAsset("audio/drums.wav", "LibreTracks Session");
     await desktopApi.createLibraryFolder("Renamed Song");
 
-    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Renamed Song");
     const renameLibraryFolderMock = vi.mocked(desktopApi.renameLibraryFolder);
     const moveLibraryAssetMock = vi.mocked(desktopApi.moveLibraryAsset);
     const deleteLibraryFolderMock = vi.mocked(desktopApi.deleteLibraryFolder);
@@ -216,13 +215,12 @@ describe("App / library", () => {
       fireEvent.click(screen.getByRole("button", { name: /renombrar canci/i }));
     });
 
+    await submitPromptDialog("Renamed Song");
     await waitFor(() => {
       expect(moveLibraryAssetMock).toHaveBeenCalledWith("audio/drums.wav", "Renamed Song");
       expect(deleteLibraryFolderMock).toHaveBeenCalledWith("LibreTracks Session");
       expect(renameLibraryFolderMock).not.toHaveBeenCalled();
     });
-
-    promptSpy.mockRestore();
   });
 
 });

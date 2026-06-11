@@ -345,6 +345,22 @@ export async function openLibraryPanel() {
   await screen.findByLabelText(textMatcher(en.library.panelAria));
 }
 
+export async function submitPromptDialog(value: string) {
+  const dialog = await screen.findByRole("dialog");
+  const input = within(dialog).getByRole("textbox");
+  await act(async () => {
+    fireEvent.change(input, { target: { value } });
+    fireEvent.click(within(dialog).getByRole("button", { name: textMatcher(en.common.ok) }));
+  });
+}
+
+export async function acceptConfirmDialog() {
+  const dialog = await screen.findByRole("dialog");
+  await act(async () => {
+    fireEvent.click(within(dialog).getByRole("button", { name: textMatcher(en.common.ok) }));
+  });
+}
+
 export function mockRulerBounds(container: HTMLElement) {
   const rulerTrack = container.querySelector(".lt-ruler-track") as HTMLDivElement | null;
   expect(rulerTrack).toBeTruthy();

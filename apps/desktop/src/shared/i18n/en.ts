@@ -13,6 +13,7 @@ const en = {
     import: "Import",
     audio: "Audio",
     settings: "Settings",
+    ok: "OK",
   },
   transport: {
     playbackState: {

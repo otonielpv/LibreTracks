@@ -5,6 +5,7 @@ import { isTauriApp } from "../features/transport/desktopApi";
 import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
+import { DialogHost } from "../shared/dialog/DialogHost";
 
 async function isDebugBuild() {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -76,6 +77,7 @@ export function App() {
           onClose={dismiss}
         />
       ) : null}
+      <DialogHost />
     </main>
   );
 }

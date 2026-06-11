@@ -38,7 +38,8 @@ import {
   getTrackLaneRow,
   getLibraryAssetButton,
   mockTrackRowDragGeometry,
-  setMockNativeWebviewPosition
+  setMockNativeWebviewPosition,
+  submitPromptDialog
 } from "../test/testUtils";
 import { useTimelineUIStore as useTimelineUIStoreForTest } from "../features/transport/uiStore";
 
@@ -60,7 +61,6 @@ describe("App / timeline-tracks", () => {
     const desktopApi = await import("../features/transport/desktopApi");
     await desktopApi.createSong();
 
-    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Narration");
     const { container } = await renderApp();
 
     const trackList = container.querySelector(".lt-track-list") as HTMLElement | null;
@@ -77,7 +77,9 @@ describe("App / timeline-tracks", () => {
       fireEvent.click(screen.getByRole("button", { name: /add audio track/i }));
     });
 
-    expect(promptSpy).toHaveBeenCalledWith(en.transport.prompt.trackName, en.transport.defaults.audioTrackName);
+    const dialog = await screen.findByRole("dialog", { name: textMatcher(en.transport.prompt.trackName) });
+    expect(within(dialog).getByDisplayValue(en.transport.defaults.audioTrackName)).toBeTruthy();
+    await submitPromptDialog("Narration");
     expect(await screen.findByText(trackCreatedMatcher("Narration"))).toBeTruthy();
     expect(screen.getByText("Narration")).toBeTruthy();
   });
@@ -252,7 +254,6 @@ describe("App / timeline-tracks", () => {
   // variant doesn't lose coverage.
 
   it("creates a new audio track from the track context menu", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("New track");
     await renderApp();
 
     const keysHeader = screen.getByText("Keys").closest(".lt-track-header");
@@ -266,6 +267,7 @@ describe("App / timeline-tracks", () => {
       fireEvent.click(await screen.findByRole("button", { name: textMatcher(en.transport.menu.insertTrack) }));
     });
 
+    await submitPromptDialog("New track");
     expect(await screen.findByText(trackCreatedMatcher("New track"))).toBeTruthy();
     expect(screen.getByText("New track")).toBeTruthy();
   });
