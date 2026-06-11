@@ -147,6 +147,9 @@ export function AutomationCueModal({
     setActions((prev) => normalize([...prev, makeAction(type, song)]));
 
   const hasJump = actions.some((a) => a.type === "jump");
+  // Highest index a non-jump row may move down to: the slot just above the
+  // pinned jump (or the last row when there's no jump).
+  const lastMovableIndex = hasJump ? actions.length - 2 : actions.length - 1;
 
   const canConfirm = actions.length > 0 && validateActions(actions);
 
@@ -182,22 +185,28 @@ export function AutomationCueModal({
                     {ACTION_LABELS[action.type]}
                   </span>
                   <div className="lt-automation-action-tools">
-                    <button
-                      type="button"
-                      aria-label="Subir"
-                      disabled={index === 0}
-                      onClick={() => move(index, -1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Bajar"
-                      disabled={index === actions.length - 1}
-                      onClick={() => move(index, 1)}
-                    >
-                      ↓
-                    </button>
+                    {/* The jump is pinned last, so it can't be reordered, and
+                        no action can move below it. */}
+                    {action.type !== "jump" ? (
+                      <>
+                        <button
+                          type="button"
+                          aria-label="Subir"
+                          disabled={index === 0}
+                          onClick={() => move(index, -1)}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Bajar"
+                          disabled={index >= lastMovableIndex}
+                          onClick={() => move(index, 1)}
+                        >
+                          ↓
+                        </button>
+                      </>
+                    ) : null}
                     <button
                       type="button"
                       aria-label="Quitar acción"
@@ -432,28 +441,30 @@ function ActionEditor({
           onChange={(trackId) => onChange({ ...action, trackId })}
         />
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Volumen (0–1)</span>
+          <span className="lt-settings-field-label">Volumen (0–100)</span>
           <input
             type="number"
             min={0}
-            max={1}
-            step={0.05}
-            value={action.volume ?? 1}
+            max={100}
+            step={1}
+            // Stored 0–1; shown as 0–100.
+            value={Math.round((action.volume ?? 1) * 100)}
             onChange={(event) =>
-              onChange({ ...action, volume: Number(event.target.value) })
+              onChange({ ...action, volume: Number(event.target.value) / 100 })
             }
           />
         </label>
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Paneo (−1 a 1)</span>
+          <span className="lt-settings-field-label">Paneo (L−100 / R+100)</span>
           <input
             type="number"
-            min={-1}
-            max={1}
-            step={0.1}
-            value={action.pan ?? 0}
+            min={-100}
+            max={100}
+            step={1}
+            // Stored −1..1; shown as −100 (L) .. 100 (R).
+            value={Math.round((action.pan ?? 0) * 100)}
             onChange={(event) =>
-              onChange({ ...action, pan: Number(event.target.value) })
+              onChange({ ...action, pan: Number(event.target.value) / 100 })
             }
           />
         </label>
