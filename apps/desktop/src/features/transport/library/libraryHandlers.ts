@@ -46,8 +46,8 @@ export type LibraryHandlerDeps = {
   ) => Promise<LibraryAssetSummary[]>;
   deleteLibraryFolder: (folderPath: string) => Promise<LibraryAssetSummary[]>;
   // Browser prompts (injected so the module is testable without a DOM global).
-  confirm: (message: string) => boolean;
-  prompt: (message: string, defaultValue?: string) => string | null;
+  confirm: (message: string) => Promise<boolean>;
+  prompt: (message: string, defaultValue?: string) => Promise<string | null>;
 };
 
 export function createLibraryHandlers(deps: LibraryHandlerDeps) {
@@ -122,7 +122,7 @@ export function createLibraryHandlers(deps: LibraryHandlerDeps) {
           : t("transport.confirm.deleteLibraryAssets", {
               count: uniqueAssets.length,
             });
-      if (!confirm(confirmationMessage)) {
+      if (!(await confirm(confirmationMessage))) {
         return;
       }
 
@@ -167,7 +167,7 @@ export function createLibraryHandlers(deps: LibraryHandlerDeps) {
         return;
       }
 
-      const folderPath = prompt(
+      const folderPath = await prompt(
         t("transport.prompt.virtualFolderName"),
         t("transport.defaults.virtualFolderName"),
       );
@@ -224,7 +224,7 @@ export function createLibraryHandlers(deps: LibraryHandlerDeps) {
         return;
       }
 
-      const nextFolderPath = prompt(
+      const nextFolderPath = await prompt(
         t("transport.prompt.virtualFolderRename"),
         folderPath,
       );
@@ -248,9 +248,9 @@ export function createLibraryHandlers(deps: LibraryHandlerDeps) {
 
     async handleDeleteLibraryFolder(folderPath: string) {
       if (
-        !confirm(
+        !(await confirm(
           t("transport.confirm.deleteLibraryFolder", { name: folderPath }),
-        )
+        ))
       ) {
         return;
       }

@@ -15,7 +15,7 @@ function setup(overrides: Partial<MidiLearnHandlerDeps> = {}) {
     setIsSettingsModalOpen: vi.fn(),
     setIsRemoteModalOpen: vi.fn(),
     t: (key) => key,
-    prompt: vi.fn(() => "3"),
+    prompt: vi.fn(async () =>"3"),
     ...overrides,
   };
   return { handlers: createMidiLearnHandlers(deps), deps };
@@ -47,29 +47,29 @@ describe("createMidiLearnHandlers", () => {
     expect(deps.setMidiLearnMode).toHaveBeenCalledWith("ctrl:play");
   });
 
-  it("dynamic jump arms the marker action for a valid index", () => {
-    const { handlers, deps } = setup({ prompt: vi.fn(() => "5") });
-    handlers.handleDynamicMidiLearnJump("marker");
+  it("dynamic jump arms the marker action for a valid index", async () => {
+    const { handlers, deps } = setup({ prompt: vi.fn(async () =>"5") });
+    await handlers.handleDynamicMidiLearnJump("marker");
     expect(deps.setMidiLearnMode).toHaveBeenCalledWith("action:jump_marker_5");
   });
 
   it("dynamic jump rejects out-of-range / non-integer indices", () => {
     const cases = ["0", "101", "abc", "2.5"];
     for (const value of cases) {
-      const { handlers, deps } = setup({ prompt: vi.fn(() => value) });
+      const { handlers, deps } = setup({ prompt: vi.fn(async () =>value) });
       handlers.handleDynamicMidiLearnJump("marker");
       expect(deps.setMidiLearnMode).not.toHaveBeenCalled();
     }
   });
 
   it("dynamic jump caps songs at 20", () => {
-    const { handlers, deps } = setup({ prompt: vi.fn(() => "21") });
+    const { handlers, deps } = setup({ prompt: vi.fn(async () =>"21") });
     handlers.handleDynamicMidiLearnJump("song");
     expect(deps.setMidiLearnMode).not.toHaveBeenCalled();
   });
 
   it("dynamic jump is cancelled when the prompt is dismissed", () => {
-    const { handlers, deps } = setup({ prompt: vi.fn(() => null) });
+    const { handlers, deps } = setup({ prompt: vi.fn(async () =>null) });
     handlers.handleDynamicMidiLearnJump("song");
     expect(deps.setMidiLearnMode).not.toHaveBeenCalled();
   });

@@ -38,7 +38,7 @@ function setup(overrides: Partial<TrackHandlerDeps> = {}) {
     t: (key) => key,
     moveTrack: vi.fn(async () => snapshot(3)),
     createTrack: vi.fn(async () => snapshot(4)),
-    prompt: vi.fn(() => "My Track"),
+    prompt: vi.fn(async () =>"My Track"),
     ...overrides,
   };
   return { handlers: createTrackHandlers(deps), deps, tracksById };
@@ -95,7 +95,7 @@ describe("createTrackHandlers", () => {
   });
 
   it("create track is cancelled when the name prompt is empty", async () => {
-    const { handlers, deps } = setup({ prompt: vi.fn(() => "   ") });
+    const { handlers, deps } = setup({ prompt: vi.fn(async () =>"   ") });
     await handlers.handleCreateTrack("audio", null);
     expect(deps.createTrack).not.toHaveBeenCalled();
   });

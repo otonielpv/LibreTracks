@@ -41,7 +41,7 @@ export type TrackHandlerDeps = {
     insertAfterTrackId: string | null;
     parentTrackId: string | null;
   }) => Promise<TransportSnapshot>;
-  prompt: (message: string, defaultValue?: string) => string | null;
+  prompt: (message: string, defaultValue?: string) => Promise<string | null>;
 };
 
 export function createTrackHandlers(deps: TrackHandlerDeps) {
@@ -145,7 +145,7 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
         kind === "folder"
           ? t("transport.defaults.folderTrackName")
           : t("transport.defaults.audioTrackName");
-      const name = prompt(t("transport.prompt.trackName"), defaultName)?.trim();
+      const name = (await prompt(t("transport.prompt.trackName"), defaultName))?.trim();
       if (!name) {
         return;
       }
