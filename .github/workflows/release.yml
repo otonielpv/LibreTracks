@@ -209,7 +209,10 @@ jobs:
         shell: pwsh
         run: |
           $bungeeEnabled = "ON"
-          $ffmpegEnabled = if ("${{ matrix.platform }}" -eq "windows") { "ON" } else { "OFF" }
+          # FFmpeg on every platform so all audio formats (M4A/AAC/MP3/...) work
+          # everywhere. macOS bundles the libav dylibs into the .app (see the
+          # relocate step); Linux ships the .so next to the engine.
+          $ffmpegEnabled = "ON"
           $configureArgs = @(
             "-S", "native/audio-engine-v2",
             "-B", "build/engine-release",
@@ -240,9 +243,9 @@ jobs:
             $configureArgs += "-DLT_ASIO_SDK_DIR=$env:LT_ASIO_SDK_DIR"
           }
           if ("${{ matrix.platform }}" -eq "macos") {
-            $env:MACOSX_DEPLOYMENT_TARGET = "11.0"
+            $env:MACOSX_DEPLOYMENT_TARGET = "10.15"
             $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64"
-            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
+            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
             $configureArgs += "-DCMAKE_DISABLE_FIND_PACKAGE_SndFile=ON"
           }
           cmake @configureArgs
@@ -258,6 +261,10 @@ jobs:
           }
           if ("${{ matrix.platform }}" -eq "macos") {
             Copy-Item vendor/bungee/apple-mac/bungee.framework vendor/bin/native -Recurse -Force
+            # Relocate the engine's Homebrew FFmpeg deps into the bundle as
+            # @rpath dylibs so the .app launches on Macs without that Homebrew
+            # prefix (otherwise dyld aborts: Library not loaded .../ffmpeg/...).
+            bash scripts/macos-bundle-ffmpeg.sh vendor/bin/native
           }
 
       - name: Verify ASIO compiled into release engine (Windows)

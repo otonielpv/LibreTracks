@@ -180,7 +180,7 @@ const ensureEngineV2 = (normalizedEnv) => {
   }
   if (process.platform === "darwin") {
     configureArgs.push(`-DCMAKE_OSX_ARCHITECTURES=${normalizedEnv.CMAKE_OSX_ARCHITECTURES ?? "x86_64;arm64"}`);
-    configureArgs.push(`-DCMAKE_OSX_DEPLOYMENT_TARGET=${normalizedEnv.MACOSX_DEPLOYMENT_TARGET ?? "11.0"}`);
+    configureArgs.push(`-DCMAKE_OSX_DEPLOYMENT_TARGET=${normalizedEnv.MACOSX_DEPLOYMENT_TARGET ?? "10.15"}`);
   }
   run("cmake", configureArgs);
   run("cmake", [
@@ -207,6 +207,15 @@ const ensureEngineV2 = (normalizedEnv) => {
       // them recursively so tauri.conf.json's bundle frameworks list resolves.
       cpSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName), { recursive: true });
     }
+  }
+
+  // macOS: the engine dylib links FFmpeg from the build machine's Homebrew
+  // prefix by absolute path. Relocate those libav*.dylib into vendor/bin/native
+  // with @rpath ids so the app is self-contained; otherwise dyld aborts at
+  // launch on any Mac without that exact Homebrew install. No-op when FFmpeg is
+  // off or no libav deps are present.
+  if (process.platform === "darwin" && useFFmpeg === "ON") {
+    run("bash", ["scripts/macos-bundle-ffmpeg.sh", nativeVendorDir]);
   }
 
   const pathSeparator = process.platform === "win32" ? ";" : ":";

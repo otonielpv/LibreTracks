@@ -55,7 +55,7 @@
       }
     },
     "macOS": {
-      "minimumSystemVersion": "11.0",
+      "minimumSystemVersion": "10.15",
       "frameworks": [
         "../../../vendor/bin/native/liblt_audio_engine_v2.dylib",
         "../../../vendor/bin/native/bungee.framework"
