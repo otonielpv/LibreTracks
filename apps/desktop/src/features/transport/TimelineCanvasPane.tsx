@@ -1285,9 +1285,11 @@ export function TimelineCanvasPane({
                             aria-label={cueDescription}
                             title={cueDescription}
                             style={{
+                              // Centre a tight hit target on the diamond. The
+                              // lane's own onMouseDown handles seek everywhere
+                              // else, so the hotspot must not cover the row.
                               left: cue.atSeconds * pixelsPerSecond,
-                              top: 0,
-                              height: trackHeight,
+                              top: trackHeight / 2,
                             }}
                             onMouseDown={(event) => {
                               event.preventDefault();
