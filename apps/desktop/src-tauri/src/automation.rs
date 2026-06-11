@@ -52,21 +52,33 @@ pub enum AutomationAction {
         target: AutomationJumpTarget,
         #[serde(default)]
         transition: AutomationTransition,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(
+            rename = "mixSceneId",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
         mix_scene_id: Option<String>,
     },
 }
 
-// `rename_all = "camelCase"` renames the variant TAGS (marker/region/frame,
-// unchanged as single words) AND their fields (marker_id → markerId), matching
-// the camelCase TS `AutomationJumpTargetSummary`. With snake_case the frontend's
-// `markerId` failed to deserialize ("missing field marker_id").
+// NOTE: for internally-tagged enums, serde's `rename_all` renames the variant
+// TAGS but NOT the fields inside struct variants — so the fields must be renamed
+// per-field to match the camelCase the frontend sends. Without these explicit
+// renames `markerId` failed to deserialize ("missing field marker_id").
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AutomationJumpTarget {
-    Marker { marker_id: String },
-    Region { region_id: String },
-    Frame { seconds: f64 },
+    Marker {
+        #[serde(rename = "markerId")]
+        marker_id: String,
+    },
+    Region {
+        #[serde(rename = "regionId")]
+        region_id: String,
+    },
+    Frame {
+        seconds: f64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -221,7 +233,20 @@ mod tests {
         // And serialization round-trips back to camelCase keys.
         let serialized = serde_json::to_string(&cue).expect("serialize");
         assert!(serialized.contains("\"markerId\""));
+        assert!(serialized.contains("\"mixSceneId\""));
         assert!(!serialized.contains("marker_id"));
+        assert!(!serialized.contains("mix_scene_id"));
+
+        // Region target deserializes from regionId too.
+        let region_json = r#"{ "kind": "region", "regionId": "r1" }"#;
+        let region: AutomationJumpTarget =
+            serde_json::from_str(region_json).expect("regionId parses");
+        assert_eq!(
+            region,
+            AutomationJumpTarget::Region {
+                region_id: "r1".into()
+            }
+        );
     }
 
     #[test]

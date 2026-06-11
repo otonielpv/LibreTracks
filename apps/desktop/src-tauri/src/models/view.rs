@@ -134,19 +134,29 @@ pub enum AutomationActionSummary {
     Jump {
         target: AutomationJumpTargetSummary,
         transition: AutomationTransitionSummary,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        // Internally-tagged enum: rename_all doesn't reach struct-variant fields,
+        // so rename per-field to emit camelCase for the frontend.
+        #[serde(rename = "mixSceneId", skip_serializing_if = "Option::is_none")]
         mix_scene_id: Option<String>,
     },
 }
 
-// camelCase to match the TS `AutomationJumpTargetSummary` (markerId/regionId).
-// Tags marker/region/frame are single words, unchanged.
+// Internally-tagged enum: rename_all renames the tags but not struct-variant
+// fields, so rename per-field to emit camelCase (markerId/regionId) for the TS.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AutomationJumpTargetSummary {
-    Marker { marker_id: String },
-    Region { region_id: String },
-    Frame { seconds: f64 },
+    Marker {
+        #[serde(rename = "markerId")]
+        marker_id: String,
+    },
+    Region {
+        #[serde(rename = "regionId")]
+        region_id: String,
+    },
+    Frame {
+        seconds: f64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
