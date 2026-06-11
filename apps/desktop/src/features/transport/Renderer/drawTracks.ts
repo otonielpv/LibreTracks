@@ -99,8 +99,18 @@ function drawAutomationLane(
     const x = secondsToScreenX(cue.atSeconds, snapshot.cameraX, snapshot.zoomLevel);
     const snappedX = Math.round(x) + 0.5;
 
+    // Build a label that says what the cue does: "→ <destino>" plus a fade
+    // suffix when the jump fades out. Falls back to the cue name otherwise.
+    const fadeSuffix =
+      cue.action.transition.mode === "fade_out" &&
+      (cue.action.transition.durationSeconds ?? 0) > 0
+        ? `  ·  fade ${(cue.action.transition.durationSeconds ?? 0).toFixed(1)}s`
+        : "";
+    const baseLabel = `→ ${cue.name.replace(/^Salto a\s+/i, "")}`;
     context.font = '700 10px "Space Grotesk", sans-serif';
-    const label = cue.enabled ? cue.name : `${cue.name} (off)`;
+    const label = cue.enabled
+      ? `${baseLabel}${fadeSuffix}`
+      : `${baseLabel}${fadeSuffix} (off)`;
     const labelWidth = Math.max(34, Math.ceil(context.measureText(label).width) + 16);
     const alignRight = snappedX > snapshot.width - labelWidth - 14;
     const labelLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 8;

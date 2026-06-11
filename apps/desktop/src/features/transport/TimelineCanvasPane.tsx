@@ -1260,6 +1260,13 @@ export function TimelineCanvasPane({
                       className="lt-track-lane is-automation"
                       style={{ height: trackHeight }}
                       aria-label="Lane Automatismos"
+                      onMouseDown={(event) => {
+                        // Same seek-on-click as a normal lane: the synthetic
+                        // track has no clips, so this falls through to the
+                        // playhead seek path. Cue buttons stopPropagation so
+                        // clicking a cue doesn't move the playhead.
+                        onTrackLaneMouseDown(event, track, []);
+                      }}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         event.stopPropagation();

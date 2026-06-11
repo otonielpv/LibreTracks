@@ -10282,12 +10282,14 @@ export function TransportPanelContent() {
               onConfirm={handleConfirmExportSong}
             />
 
-            <AutomationCueModal
-              draft={automationCueDraft}
-              song={song}
-              onCancel={() => setAutomationCueDraft(null)}
-              onConfirm={handleConfirmAutomationCue}
-            />
+            {automationCueDraft ? (
+              <AutomationCueModal
+                draft={automationCueDraft}
+                song={song}
+                onCancel={() => setAutomationCueDraft(null)}
+                onConfirm={handleConfirmAutomationCue}
+              />
+            ) : null}
 
             <TimelineContextMenus
               contextMenu={contextMenu}
