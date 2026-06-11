@@ -2416,7 +2416,6 @@ name = "libretracks-desktop"
 version = "1.2.0"
 dependencies = [
  "base64 0.22.1",
- "cc",
  "hound",
  "libretracks-audio",
  "libretracks-core",

@@ -2531,9 +2531,10 @@ textarea {
 }
 
 /* Per-track colour tint. Painted as a low-opacity overlay of the solid track
-   colour instead of color-mix(var, transparent), which neither Safari 13
-   (Catalina) nor build-time CSS tooling can resolve against a runtime var.
-   This renders identically on legacy WebKit and modern browsers, per track. */
+   colour instead of color-mix(var, transparent): color-mix() is Safari 16.2+,
+   so the WebView on our minimum target (macOS 11 Big Sur, Safari 14.1) cannot
+   resolve it. The overlay renders identically on that WebKit and modern
+   browsers, and keeps the per-track colour the runtime var sets inline. */
 .lt-track-header[style*="--lt-track-color"]::after {
   content: "";
   position: absolute;
@@ -4531,12 +4532,11 @@ textarea {
   color: #e5e2e1;
 }
 
-/* Explicit modifier class so Safari 13 (Catalina), which lacks :has(), still
-   gets the padding. The :has() rule is kept as a progressive enhancement. */
+/* Explicit modifier class because :has() is Safari 15.4+, newer than our
+   minimum target (macOS 11 Big Sur ships Safari 14.1). The class drives the
+   padding everywhere; the :has() rule is kept as a progressive enhancement. */
 .lt-import-header--simple,
 .lt-import-header:has(.lt-import-dialog--simple) {
-  /* Physical props, not padding-block — logical padding is Safari 14.1+ and
-     Lightning CSS does not down-level it for our target. */
   padding-top: 0.9rem;
   padding-bottom: 0.9rem;
 }
@@ -5255,8 +5255,8 @@ textarea {
 .lt-compact-clip-entry.is-coloured {
   padding-left: 0.7rem;
   /* Solid var() border (was a ~35% color-mix); the per-track tint comes from
-     the ::after overlay below, so no color-mix() is needed — works on Safari 13
-     (Catalina) and modern browsers alike. */
+     the ::after overlay below, so no color-mix() is needed — works on Safari
+     14.1 (our macOS 11 minimum) and modern browsers alike. */
   border-color: var(--lt-track-color, rgba(87, 241, 219, 0.35));
   background: rgba(20, 26, 25, 0.85);
 }

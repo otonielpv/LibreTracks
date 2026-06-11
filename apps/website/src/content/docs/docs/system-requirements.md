@@ -10,10 +10,10 @@ LibreTracks is a lightweight native app (Rust + Tauri) rather than a heavyweight
 | Platform | Minimum | Notes |
 | --- | --- | --- |
 | **Windows** | Windows 10 (64‑bit) | Needs the **WebView2** runtime, which is preinstalled on current Windows 10/11. |
-| **macOS** | macOS 10.15 **Catalina** | Intel and Apple Silicon. On Catalina, keep **Safari updated to 15.6.1** — the in‑app UI uses the system WebView, and older Safari builds render parts of the interface incorrectly. |
+| **macOS** | macOS 11 **Big Sur** | Intel and Apple Silicon. Keep the system up to date — the in‑app UI uses the system WebView, and an old WebKit can render parts of the interface incorrectly. |
 | **Linux** | Ubuntu 22.04 / Fedora 36 or newer | Requires `webkit2gtk-4.1`, `gtk3` and ALSA. Provided as `.deb`, `.rpm` and `.AppImage`. |
 
-> **Why macOS 10.15+?** The desktop UI runs inside the operating system's WebView. macOS releases before Catalina ship a WebKit too old to render modern CSS, which leaves the interface black or misaligned. Catalina is the oldest version that can run a recent enough Safari/WebView.
+> **Why macOS 11+?** The desktop UI runs inside the operating system's WebView, and the audio engine links frameworks that resolve cleanly from Big Sur onward. Older macOS releases ship a WebKit too old to render modern CSS (leaving the interface black or misaligned) and miss symbols the app needs at launch.
 
 ## Hardware
 

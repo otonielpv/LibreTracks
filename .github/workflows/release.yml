@@ -93,9 +93,9 @@ jobs:
             platform: linux
             publish: true
           # Backwards-compat validation only. macOS 13 is the oldest runner
-          # GitHub offers — it is not High Sierra (10.13), but it builds the
-          # bundle on an older toolchain and runs the cookie-shim symbol guard
-          # below, catching regressions that would break launch on 10.13/10.14.
+          # GitHub offers; it builds the bundle on an older toolchain and runs
+          # the dylib-wiring guard below, catching @rpath/load regressions that
+          # would break launch on our minimum target (macOS 11 Big Sur).
           # publish: false -> it never uploads artifacts, so it cannot collide
           # with the macos-latest release bundle. continue-on-error keeps a
           # flaky old-runner failure from blocking a legitimate release while
@@ -240,9 +240,9 @@ jobs:
             $configureArgs += "-DLT_ASIO_SDK_DIR=$env:LT_ASIO_SDK_DIR"
           }
           if ("${{ matrix.platform }}" -eq "macos") {
-            $env:MACOSX_DEPLOYMENT_TARGET = "10.13"
+            $env:MACOSX_DEPLOYMENT_TARGET = "11.0"
             $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64"
-            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.13"
+            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
             $configureArgs += "-DCMAKE_DISABLE_FIND_PACKAGE_SndFile=ON"
           }
           cmake @configureArgs
@@ -470,38 +470,6 @@ jobs:
             echo "Binary exited non-zero but dyld did not report missing libraries — OK."
           fi
           echo "macOS bundle validation passed."
-
-      - name: Verify High Sierra cookie shim linked (macOS)
-        if: matrix.platform == 'macos'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Guard against silent loss of the 10.13/10.14 compatibility shim
-          # (apps/desktop/src-tauri/macos-compat/highsierra_cookie_symbols.c).
-          # If a wry/Tauri bump or a build.rs change ever drops it, the binary
-          # still builds and runs on the modern CI runner but crashes at launch
-          # on High Sierra with "Symbol not found: _NSHTTPCookieSameSiteLax" —
-          # a defect only 10.13/10.14 users hit after download. We require the
-          # three symbols to be *locally defined* (nm type T/D/S/B, i.e. lower-
-          # or upper-case but NOT 'U' undefined) in the shipped binary.
-          APP_PATH="$(find target-desktop-native -type d -name 'LibreTracks.app' -path '*/bundle/macos/*' | head -n1)"
-          BIN="$APP_PATH/Contents/MacOS/libretracks-desktop"
-          if [ ! -f "$BIN" ]; then
-            echo "::error::Main binary not found at $BIN"
-            exit 1
-          fi
-          for symbol in _NSHTTPCookieSameSiteLax _NSHTTPCookieSameSiteStrict _NSHTTPCookieSameSitePolicy; do
-            # A locally-defined symbol shows a defined type letter; an unresolved
-            # one shows 'U'. Fail if the symbol is missing entirely or only 'U'.
-            line="$(nm "$BIN" 2>/dev/null | grep -E "[0-9a-fA-F]+ [^U] $symbol$" || true)"
-            if [ -z "$line" ]; then
-              echo "::error::Symbol $symbol is not locally defined in the release binary. The High Sierra cookie shim was not linked — check build.rs and macos-compat/highsierra_cookie_symbols.c."
-              nm "$BIN" 2>/dev/null | grep "$symbol" || echo "($symbol absent from symbol table entirely)"
-              exit 1
-            fi
-            echo "OK: $symbol -> $line"
-          done
-          echo "High Sierra cookie shim confirmed linked into release binary."
 
       - name: Upload release assets
         if: matrix.publish
