@@ -53,6 +53,62 @@ import {
 
 const RULER_HEIGHT = 110;
 
+/** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
+function describeAutomationCue(
+  cue: AutomationCueSummary,
+  song: SongView | null,
+): string {
+  const trackName = (id: string) =>
+    song?.tracks.find((t) => t.id === id)?.name ?? id;
+  const sceneName = (id: string) =>
+    song?.mixScenes?.find((s) => s.id === id)?.name ?? id;
+  const targetName = (target: AutomationCueSummary["actions"][number]) => {
+    if (target.type !== "jump") return "";
+    const t = target.target;
+    if (t.kind === "region") {
+      return song?.regions.find((r) => r.id === t.regionId)?.name ?? "canción";
+    }
+    if (t.kind === "marker") {
+      return (
+        song?.sectionMarkers.find((m) => m.id === t.markerId)?.name ?? "marca"
+      );
+    }
+    return `${t.seconds.toFixed(2)}s`;
+  };
+
+  const lines = (cue.actions ?? []).map((action) => {
+    switch (action.type) {
+      case "jump": {
+        const fade =
+          action.transition.mode === "fade_out" &&
+          (action.transition.durationSeconds ?? 0) > 0
+            ? ` (fade ${(action.transition.durationSeconds ?? 0).toFixed(1)}s)`
+            : "";
+        return `→ Saltar a ${targetName(action)}${fade}`;
+      }
+      case "setTrackMute":
+        return `${action.muted ? "Mutear" : "Desmutear"} ${trackName(action.trackId)}`;
+      case "setTrackSolo":
+        return `${action.solo ? "Solo" : "Quitar solo"} ${trackName(action.trackId)}`;
+      case "setTrackMix": {
+        const parts: string[] = [];
+        if (action.volume != null)
+          parts.push(`vol ${Math.round(action.volume * 100)}`);
+        if (action.pan != null)
+          parts.push(`pan ${Math.round(action.pan * 100)}`);
+        return `${trackName(action.trackId)}: ${parts.join(", ") || "mezcla"}`;
+      }
+      case "applyScene":
+        return `Escena «${sceneName(action.sceneId)}»`;
+      case "wait":
+        return `Esperar ${action.durationSeconds}s`;
+    }
+  });
+
+  const header = `${cue.name} — ${cue.atSeconds.toFixed(2)}s${cue.enabled ? "" : " (desactivado)"}`;
+  return lines.length ? `${header}\n${lines.join("\n")}` : header;
+}
+
 type LibraryClipPreviewState = {
   trackId: string | null;
   filePath: string;
@@ -140,6 +196,8 @@ type TimelineCanvasPaneProps = {
     event: ReactMouseEvent<HTMLButtonElement>,
     cueId: string,
   ) => void;
+  /** Left-click the cue diamond opens the cue editor directly. */
+  onAutomationCueEdit: (cueId: string) => void;
   /**
    * Right-click on empty space of the automation lane. The parent resolves the
    * cursor X to timeline seconds and offers "create automation cue here".
@@ -268,6 +326,7 @@ export function TimelineCanvasPane({
   onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
   onAutomationCueContextMenu,
+  onAutomationCueEdit,
   onAutomationLaneContextMenu,
   onRegionResizeCommit,
   onRegionMoveCommit,
@@ -1276,7 +1335,10 @@ export function TimelineCanvasPane({
                       {song?.automationCues?.map((cue: AutomationCueSummary) => {
                         const isPending =
                           pendingAutomationCue?.cueId === cue.id;
-                        const cueDescription = `${cue.name} - automatismo en ${cue.atSeconds.toFixed(2)} s`;
+                        // Rich tooltip: the cue name + a line per action so the
+                        // user sees what the job does on hover, even for cues
+                        // whose label is hidden because a neighbour is too close.
+                        const cueDescription = describeAutomationCue(cue, song);
                         return (
                           <button
                             key={cue.id}
@@ -1296,7 +1358,11 @@ export function TimelineCanvasPane({
                               event.stopPropagation();
                             }}
                             onClick={(event) => {
+                              event.preventDefault();
                               event.stopPropagation();
+                              // Left-click the diamond opens the editor directly
+                              // (right-click still opens the full context menu).
+                              onAutomationCueEdit(cue.id);
                             }}
                             onContextMenu={(event) => {
                               event.preventDefault();

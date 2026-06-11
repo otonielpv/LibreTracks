@@ -113,4 +113,53 @@ describe("App / automation-track", () => {
       expect(cueButtons.length).toBeGreaterThan(0);
     });
   });
+
+  it("opens the editor when the cue diamond is left-clicked", async () => {
+    await renderApp();
+    await addAutomationTrackViaMenu();
+    await waitFor(() => {
+      expect(
+        document.querySelector(".lt-track-lane.is-automation"),
+      ).toBeTruthy();
+    });
+
+    // Create a cue first.
+    const lane = document.querySelector(
+      ".lt-track-lane.is-automation",
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.contextMenu(lane, { clientX: 300, clientY: 130 });
+    });
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: /crear automatismo de salto/i,
+        }),
+      );
+    });
+    const createDialog = await screen.findByRole("dialog", {
+      name: /nuevo automatismo/i,
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(createDialog).getByRole("button", { name: /crear/i }),
+      );
+    });
+
+    const hotspot = await waitFor(() => {
+      const button = document.querySelector(
+        ".lt-track-lane.is-automation .lt-automation-hotspot",
+      );
+      expect(button).toBeTruthy();
+      return button as HTMLElement;
+    });
+
+    // Left-click the diamond → the editor opens (no right-click needed).
+    await act(async () => {
+      fireEvent.click(hotspot);
+    });
+    expect(
+      await screen.findByRole("dialog", { name: /editar automatismo/i }),
+    ).toBeTruthy();
+  });
 });

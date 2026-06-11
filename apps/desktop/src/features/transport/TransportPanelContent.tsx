@@ -10003,6 +10003,14 @@ export function TransportPanelContent() {
                               automationCueContextMenu(cue),
                             );
                           }}
+                          onAutomationCueEdit={(cueId) => {
+                            const cue = song?.automationCues?.find(
+                              (candidate) => candidate.id === cueId,
+                            );
+                            if (cue) {
+                              editAutomationCue(cue);
+                            }
+                          }}
                           onAutomationLaneContextMenu={(event) => {
                             if (!song) {
                               return;
