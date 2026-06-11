@@ -1061,7 +1061,7 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 #[cfg(test)]
 mod tests {
     use libretracks_core::{
-        warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, Track, TrackKind,
+        warp_timeline_seconds_at, Clip, Marker, MarkerKind, Song, SongRegion, Track, TrackKind,
     };
 
     use crate::{
@@ -1180,18 +1180,24 @@ mod tests {
                     name: "Intro".into(),
                     start_seconds: 0.0,
                     digit: Some(1),
+                    kind: MarkerKind::Custom,
+                    variant: None,
                 },
                 Marker {
                     id: "section_break".into(),
                     name: "Break".into(),
                     start_seconds: 8.0,
                     digit: None,
+                    kind: MarkerKind::Custom,
+                    variant: None,
                 },
                 Marker {
                     id: "section_outro".into(),
                     name: "Outro".into(),
                     start_seconds: 12.0,
                     digit: Some(2),
+                    kind: MarkerKind::Custom,
+                    variant: None,
                 },
             ],
         }
@@ -1312,12 +1318,16 @@ mod tests {
                     name: "Intro".into(),
                     digit: Some(1),
                     start_seconds: 0.0,
+                    kind: MarkerKind::Custom,
+                    variant: None,
                 },
                 Marker {
                     id: "section_outro".into(),
                     name: "Outro".into(),
                     digit: Some(2),
                     start_seconds: 15.0,
+                    kind: MarkerKind::Custom,
+                    variant: None,
                 },
             ],
         }
@@ -1621,6 +1631,8 @@ mod tests {
             name: "Target".into(),
             start_seconds: 6.0,
             digit: None,
+            kind: MarkerKind::Custom,
+            variant: None,
         }];
 
         let mut engine = AudioEngine::new();
@@ -1656,6 +1668,8 @@ mod tests {
             name: "Target".into(),
             start_seconds: 10.0,
             digit: None,
+            kind: MarkerKind::Custom,
+            variant: None,
         }];
 
         let mut engine = AudioEngine::new();
@@ -1847,6 +1861,8 @@ mod tests {
             name: "Target".into(),
             start_seconds: 20.0,
             digit: None,
+            kind: MarkerKind::Custom,
+            variant: None,
         }];
 
         let mut engine = AudioEngine::new();
