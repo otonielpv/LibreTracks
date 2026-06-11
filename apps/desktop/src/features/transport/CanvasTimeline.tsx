@@ -9,6 +9,8 @@ import {
 
 import type {
   ActiveVampSummary,
+  AutomationCueSummary,
+  PendingAutomationCueSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
   SongRegionSummary,
@@ -60,9 +62,11 @@ type RulerCanvasProps = {
   markers: SectionMarkerSummary[];
   tempoMarkers: TempoMarkerSummary[];
   timeSignatureMarkers: TimeSignatureMarkerSummary[];
+  automationCues: AutomationCueSummary[];
   selectedRegionId: string | null;
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: PendingAutomationCueSummary | null;
   activeVamp: ActiveVampSummary | null;
   playheadSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
@@ -244,9 +248,11 @@ export function TimelineRulerCanvas({
   markers,
   tempoMarkers,
   timeSignatureMarkers,
+  automationCues,
   selectedRegionId,
   selectedMarkerId,
   pendingMarkerJump,
+  pendingAutomationCue,
   activeVamp,
   playheadSecondsRef,
   playheadDragRef,
@@ -272,9 +278,11 @@ export function TimelineRulerCanvas({
     markers,
     tempoMarkers,
     timeSignatureMarkers,
+    automationCues,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
+    pendingAutomationCue,
     activeVamp,
     playheadDragRef,
   });
@@ -289,9 +297,11 @@ export function TimelineRulerCanvas({
     markers,
     tempoMarkers,
     timeSignatureMarkers,
+    automationCues,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
+    pendingAutomationCue,
     activeVamp,
     playheadDragRef,
   };
@@ -324,9 +334,22 @@ export function TimelineRulerCanvas({
         .join("|"),
     [timeSignatureMarkers],
   );
+  const automationCuesSignature = useMemo(
+    () =>
+      automationCues
+        .map(
+          (cue) =>
+            `${cue.id}:${cue.name}:${cue.atSeconds}:${cue.enabled ? 1 : 0}:${JSON.stringify(cue.action)}`,
+        )
+        .join("|"),
+    [automationCues],
+  );
 
   const pendingJumpSignature = pendingMarkerJump
     ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
+    : "";
+  const pendingAutomationSignature = pendingAutomationCue
+    ? `${pendingAutomationCue.cueId}:${pendingAutomationCue.executeAtSeconds}`
     : "";
   const activeVampSignature = activeVamp
     ? `${activeVamp.startSeconds}:${activeVamp.endSeconds}`
@@ -340,7 +363,9 @@ export function TimelineRulerCanvas({
     markersSignature,
     tempoMarkersSignature,
     timeSignatureMarkersSignature,
+    automationCuesSignature,
     pendingJumpSignature,
+    pendingAutomationSignature,
     activeVampSignature,
     pixelsPerSecond,
     selectedRegionId,
@@ -488,9 +513,10 @@ export function TimelineRulerCanvas({
           const playheadSeconds =
             snapshot.playheadDragRef.current?.currentSeconds ??
             playheadSecondsRef.current;
-          const pulseFrame = snapshot.pendingMarkerJump
-            ? Math.floor(performance.now() / 32)
-            : 0;
+          const pulseFrame =
+            snapshot.pendingMarkerJump || snapshot.pendingAutomationCue
+              ? Math.floor(performance.now() / 32)
+              : 0;
           const currentMarkerId =
             snapshot.markers
               .filter((marker) => playheadSeconds >= marker.startSeconds)
@@ -514,7 +540,9 @@ export function TimelineRulerCanvas({
               markers: snapshot.markers,
               tempoMarkers: snapshot.tempoMarkers,
               timeSignatureMarkers: snapshot.timeSignatureMarkers,
+              automationCues: snapshot.automationCues,
               pendingMarkerJump: snapshot.pendingMarkerJump,
+              pendingAutomationCue: snapshot.pendingAutomationCue,
               selectedMarkerId: snapshot.selectedMarkerId,
               currentMarkerId,
               pulseAlpha,

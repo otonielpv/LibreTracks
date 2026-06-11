@@ -3587,6 +3587,22 @@ textarea {
   z-index: 4;
 }
 
+.lt-automation-hotspot {
+  position: absolute;
+  width: 4rem;
+  height: 1.4rem;
+  margin-left: -0.85rem;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  z-index: 5;
+}
+
+.lt-automation-hotspot.is-disabled {
+  cursor: default;
+}
+
 .lt-region-hotspot {
   position: absolute;
   height: 1.35rem;
@@ -3677,6 +3693,15 @@ textarea {
 .lt-tempo-hotspot:focus-visible {
   outline: 1px solid rgb(87 241 219 / 0.88);
   outline-offset: 1px;
+}
+
+.lt-automation-hotspot:focus-visible {
+  outline: 1px solid rgb(255 122 182 / 0.88);
+  outline-offset: 1px;
+}
+
+.lt-automation-hotspot.is-pending:focus-visible {
+  outline-color: rgb(255 226 171 / 0.92);
 }
 
 .lt-sr-only {

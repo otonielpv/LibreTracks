@@ -13,7 +13,9 @@ import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type { TimelineNavigationScheme } from "./Renderer/InputManager";
 import type {
   ActiveVampSummary,
+  AutomationCueSummary,
   ClipSummary,
+  PendingAutomationCueSummary,
   PendingJumpSummary,
   SongRegionSummary,
   SongView,
@@ -31,6 +33,7 @@ import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
   LANE_REGIONS,
   LANE_SECTIONS,
+  LANE_AUTOMATION,
   LANE_TEMPO_METRIC,
 } from "./Renderer/drawBackground";
 import {
@@ -93,6 +96,7 @@ type TimelineCanvasPaneProps = {
   onSelectRegion: (regionId: string) => void;
   selectedSectionId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: PendingAutomationCueSummary | null;
   activeVamp: ActiveVampSummary | null;
   displayPositionSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{
@@ -132,6 +136,10 @@ type TimelineCanvasPaneProps = {
   onRegionContextMenu: (
     event: ReactMouseEvent<HTMLButtonElement>,
     regionId: string,
+  ) => void;
+  onAutomationCueContextMenu: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    cueId: string,
   ) => void;
   /**
    * Commit a region resize. Called once on pointer-up with the final
@@ -232,6 +240,7 @@ export function TimelineCanvasPane({
   onSelectRegion,
   selectedSectionId,
   pendingMarkerJump,
+  pendingAutomationCue,
   activeVamp,
   displayPositionSecondsRef,
   playheadDragRef,
@@ -254,6 +263,7 @@ export function TimelineCanvasPane({
   onTempoMarkerContextMenu,
   onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
+  onAutomationCueContextMenu,
   onRegionResizeCommit,
   onRegionMoveCommit,
   snapEnabled,
@@ -794,9 +804,11 @@ export function TimelineCanvasPane({
             markers={song?.sectionMarkers ?? []}
             tempoMarkers={song?.tempoMarkers ?? []}
             timeSignatureMarkers={song?.timeSignatureMarkers ?? []}
+            automationCues={song?.automationCues ?? []}
             selectedRegionId={selectedRegionId}
             selectedMarkerId={selectedSectionId}
             pendingMarkerJump={pendingMarkerJump}
+            pendingAutomationCue={pendingAutomationCue}
             activeVamp={activeVamp}
             playheadSecondsRef={displayPositionSecondsRef}
             playheadDragRef={playheadDragRef}
@@ -1046,6 +1058,38 @@ export function TimelineCanvasPane({
                 <span className="lt-sr-only">{marker.signature}</span>
               </button>
             ))}
+
+            {song?.automationCues?.map((cue: AutomationCueSummary) => {
+              const isPending = pendingAutomationCue?.cueId === cue.id;
+              const cueDescription = `${cue.name} - automatismo en ${cue.atSeconds.toFixed(2)} s`;
+              return (
+                <button
+                  key={cue.id}
+                  type="button"
+                  className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${cue.enabled ? "" : "is-disabled"}`}
+                  aria-label={cueDescription}
+                  title={cueDescription}
+                  style={{
+                    left: cue.atSeconds * pixelsPerSecond,
+                    top: LANE_AUTOMATION.top,
+                    height: LANE_AUTOMATION.height,
+                  }}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                  }}
+                  onContextMenu={(event) => {
+                    event.stopPropagation();
+                    onAutomationCueContextMenu(event, cue.id);
+                  }}
+                >
+                  <span className="lt-sr-only">{cue.name}</span>
+                </button>
+              );
+            })}
           </TimelineRulerCanvas>
 
           <PlayheadOverlay

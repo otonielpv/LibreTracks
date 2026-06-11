@@ -1,4 +1,6 @@
 import type {
+  AutomationCueSummary,
+  PendingAutomationCueSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
   TempoMarkerSummary,
@@ -6,7 +8,11 @@ import type {
 } from "../desktopApi";
 import { secondsToScreenX } from "../timelineMath";
 
-import { drawRulerMarker, drawRulerTempoMarker } from "./drawBackground";
+import {
+  drawRulerAutomationCue,
+  drawRulerMarker,
+  drawRulerTempoMarker,
+} from "./drawBackground";
 
 export type RulerForegroundLayerArgs = {
   width: number;
@@ -16,7 +22,9 @@ export type RulerForegroundLayerArgs = {
   markers: SectionMarkerSummary[];
   tempoMarkers: TempoMarkerSummary[];
   timeSignatureMarkers: TimeSignatureMarkerSummary[];
+  automationCues: AutomationCueSummary[];
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: PendingAutomationCueSummary | null;
   selectedMarkerId: string | null;
   currentMarkerId: string | null;
   pulseAlpha: number;
@@ -70,6 +78,17 @@ export function drawRulerForegroundLayer(
     );
   }
 
+  if (args.pendingAutomationCue) {
+    drawPendingExecutionLine(
+      context,
+      args.width,
+      args.height,
+      args.cameraX,
+      args.pixelsPerSecond,
+      args.pendingAutomationCue.executeAtSeconds,
+    );
+  }
+
   for (const marker of args.markers) {
     drawRulerMarker(
       context,
@@ -111,6 +130,20 @@ export function drawRulerForegroundLayer(
       args.cameraX,
       args.pixelsPerSecond,
       marker.signature,
+    );
+  }
+
+  for (const cue of args.automationCues) {
+    drawRulerAutomationCue(
+      context,
+      cue,
+      args.width,
+      args.cameraX,
+      args.pixelsPerSecond,
+      {
+        isPending: args.pendingAutomationCue?.cueId === cue.id,
+        pulseAlpha: args.pulseAlpha,
+      },
     );
   }
 }

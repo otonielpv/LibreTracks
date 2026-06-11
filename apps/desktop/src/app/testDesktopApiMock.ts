@@ -4,6 +4,7 @@ import {
 } from "../features/transport/timelineMath";
 import type {
   AppSettings,
+  AutomationCueSummary,
   AudioMeterLevel,
   AudioOutputDevices,
   CreateClipArgs,
@@ -37,6 +38,7 @@ type DesktopApiMockState = {
   libraryFolders: string[];
   activeVamp: TransportSnapshot["activeVamp"];
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: TransportSnapshot["pendingAutomationCue"];
   playbackPositionSeconds: number;
   playbackState: PlaybackState;
   projectRevision: number;
@@ -451,6 +453,7 @@ function buildInitialState(): DesktopApiMockState {
     libraryFolders: [],
     activeVamp: null,
     pendingMarkerJump: null,
+    pendingAutomationCue: null,
     playbackPositionSeconds: 0,
     playbackState: "stopped",
     projectRevision: 1,
@@ -590,6 +593,10 @@ function normalizeSong(song: SongView): SongView {
     timeSignatureMarkers: [...song.timeSignatureMarkers].sort(
       (left, right) => left.startSeconds - right.startSeconds,
     ),
+    automationCues: [...(song.automationCues ?? [])].sort(
+      (left, right) => left.atSeconds - right.atSeconds,
+    ),
+    mixScenes: [...(song.mixScenes ?? [])],
   };
 }
 
@@ -613,7 +620,12 @@ function buildSnapshot(): TransportSnapshot {
     pendingMarkerJump: state.pendingMarkerJump
       ? clone(state.pendingMarkerJump)
       : null,
+    pendingAutomationCue: state.pendingAutomationCue
+      ? clone(state.pendingAutomationCue)
+      : null,
     activeVamp: state.activeVamp ? clone(state.activeVamp) : null,
+    automationCues: clone(state.song.automationCues ?? []),
+    mixScenes: clone(state.song.mixScenes ?? []),
     musicalPosition,
     transportClock: {
       anchorPositionSeconds: state.playbackPositionSeconds,
@@ -825,6 +837,7 @@ export const testDesktopApiMock = {
     state.libraryAssets = [];
     state.libraryFolders = [];
     state.pendingMarkerJump = null;
+    state.pendingAutomationCue = null;
     state.playbackPositionSeconds = 0;
     state.playbackState = "stopped";
     return clone(buildSnapshot());
@@ -1099,6 +1112,7 @@ export const testDesktopApiMock = {
     state.playbackState = "stopped";
     state.playbackPositionSeconds = 0;
     state.pendingMarkerJump = null;
+    state.pendingAutomationCue = null;
     state.activeVamp = null;
     return clone(buildSnapshot());
   },
@@ -1416,6 +1430,30 @@ export const testDesktopApiMock = {
       ...state.song,
       regions: state.song.regions.filter((region) => region.id !== regionId),
     });
+    return clone(buildSnapshot());
+  },
+  upsertAutomationCue: async (cue: AutomationCueSummary) => {
+    const cues = (state.song.automationCues ?? []).filter(
+      (candidate) => candidate.id !== cue.id,
+    );
+    replaceSong({
+      ...state.song,
+      automationCues: [...cues, clone(cue)].sort(
+        (left, right) => left.atSeconds - right.atSeconds,
+      ),
+    });
+    return clone(buildSnapshot());
+  },
+  deleteAutomationCue: async (cueId: string) => {
+    replaceSong({
+      ...state.song,
+      automationCues: (state.song.automationCues ?? []).filter(
+        (cue) => cue.id !== cueId,
+      ),
+    });
+    if (state.pendingAutomationCue?.cueId === cueId) {
+      state.pendingAutomationCue = null;
+    }
     return clone(buildSnapshot());
   },
   createSectionMarker: async (startSeconds: number) => {

@@ -26,6 +26,8 @@ import {
   type AudioBackendKind,
   type AudioDeviceDescriptor,
   type AudioMeterLevel,
+  type AutomationCueSummary,
+  type AutomationJumpTargetSummary,
   type ClipSummary,
   type JumpTriggerLabel,
   type LibraryAssetSummary,
@@ -62,6 +64,7 @@ import {
   deleteSongRegion,
   deleteSongTempoMarker,
   deleteSongTimeSignatureMarker,
+  deleteAutomationCue,
   deleteTrack,
   duplicateClips,
   exportRegionAsPackage,
@@ -124,6 +127,7 @@ import {
   updateTrackTransposeEnabled,
   upsertSongTempoMarker,
   upsertSongTimeSignatureMarker,
+  upsertAutomationCue,
   formatTransposeSemitones,
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
@@ -1314,6 +1318,19 @@ export function TransportPanelContent() {
       pendingJump.trigger,
       pendingJump.executeAtSeconds.toFixed(6),
       pendingJump.transition,
+    ].join("|");
+  });
+  const pendingAutomationCueSignature = useTransportStore((state) => {
+    const pendingCue = state.playback?.pendingAutomationCue;
+    if (!pendingCue) {
+      return "";
+    }
+
+    return [
+      pendingCue.cueId,
+      pendingCue.cueName,
+      pendingCue.executeAtSeconds.toFixed(6),
+      JSON.stringify(pendingCue.target),
     ].join("|");
   });
   const activeVampSignature = useTransportStore((state) => {
@@ -5009,6 +5026,9 @@ export function TransportPanelContent() {
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? (snapshotRef.current?.pendingMarkerJump ?? null)
     : null;
+  const pendingAutomationCue = pendingAutomationCueSignature
+    ? (snapshotRef.current?.pendingAutomationCue ?? null)
+    : null;
   const activeVamp = activeVampSignature
     ? (snapshotRef.current?.activeVamp ?? null)
     : null;
@@ -5336,6 +5356,258 @@ export function TransportPanelContent() {
     setStatus(message);
   }
 
+  function createAutomationCueId() {
+    return `automation_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+  }
+
+  function automationTargetLabel(
+    currentSong: SongView,
+    target: AutomationJumpTargetSummary,
+  ) {
+    if (target.kind === "region") {
+      return (
+        currentSong.regions.find((region) => region.id === target.regionId)
+          ?.name ?? "cancion"
+      );
+    }
+
+    if (target.kind === "marker") {
+      return (
+        currentSong.sectionMarkers.find(
+          (marker) => marker.id === target.markerId,
+        )?.name ?? "marca"
+      );
+    }
+
+    return formatClock(target.seconds);
+  }
+
+  function defaultAutomationTarget(
+    currentSong: SongView,
+    positionSeconds: number,
+  ): AutomationJumpTargetSummary | null {
+    const nextRegion = [...currentSong.regions]
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .find((region) => region.startSeconds > positionSeconds + 0.01);
+    if (nextRegion) {
+      return { kind: "region", regionId: nextRegion.id };
+    }
+
+    const nextMarker = [...currentSong.sectionMarkers]
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .find((marker) => marker.startSeconds > positionSeconds + 0.01);
+    if (nextMarker) {
+      return { kind: "marker", markerId: nextMarker.id };
+    }
+
+    const firstRegion = currentSong.regions[0];
+    if (firstRegion) {
+      return { kind: "region", regionId: firstRegion.id };
+    }
+
+    const firstMarker = currentSong.sectionMarkers[0];
+    if (firstMarker) {
+      return { kind: "marker", markerId: firstMarker.id };
+    }
+
+    return null;
+  }
+
+  function resolveAutomationTarget(
+    currentSong: SongView,
+    input: string,
+  ): AutomationJumpTargetSummary | null {
+    const value = input.trim();
+    if (!value) {
+      return null;
+    }
+
+    const numericSeconds = Number(value.replace(",", "."));
+    if (Number.isFinite(numericSeconds) && numericSeconds >= 0) {
+      return { kind: "frame", seconds: numericSeconds };
+    }
+
+    const normalized = value.toLocaleLowerCase();
+    const region = currentSong.regions.find(
+      (candidate) =>
+        candidate.id.toLocaleLowerCase() === normalized ||
+        candidate.name.toLocaleLowerCase() === normalized,
+    );
+    if (region) {
+      return { kind: "region", regionId: region.id };
+    }
+
+    const marker = currentSong.sectionMarkers.find(
+      (candidate) =>
+        candidate.id.toLocaleLowerCase() === normalized ||
+        candidate.name.toLocaleLowerCase() === normalized,
+    );
+    if (marker) {
+      return { kind: "marker", markerId: marker.id };
+    }
+
+    return null;
+  }
+
+  async function promptAutomationTarget(
+    currentSong: SongView,
+    defaultTarget: AutomationJumpTargetSummary,
+  ) {
+    const targetInput = (
+      await promptDialog(
+        "Destino del salto (nombre de cancion, marca o segundos)",
+        automationTargetLabel(currentSong, defaultTarget),
+      )
+    )?.trim();
+    if (!targetInput) {
+      return null;
+    }
+
+    const target = resolveAutomationTarget(currentSong, targetInput);
+    if (!target) {
+      setStatus(`No encuentro destino "${targetInput}"`);
+    }
+    return target;
+  }
+
+  async function promptAutomationFadeSeconds(currentSeconds: number) {
+    const fadeInput = (
+      await promptDialog(
+        "Fade out antes del salto (segundos, 0 = instantaneo)",
+        currentSeconds > 0 ? currentSeconds.toFixed(2) : "0",
+      )
+    )?.trim();
+    if (fadeInput == null) {
+      return null;
+    }
+
+    const fadeSeconds = Number(fadeInput.replace(",", "."));
+    if (!Number.isFinite(fadeSeconds) || fadeSeconds < 0) {
+      setStatus("Fade invalido");
+      return null;
+    }
+
+    return fadeSeconds;
+  }
+
+  function automationCueContextMenu(cue: AutomationCueSummary) {
+    return [
+      {
+        label: "Renombrar automatismo",
+        onSelect: async () => {
+          const nextName = (
+            await promptDialog("Nombre del automatismo", cue.name)
+          )?.trim();
+          if (!nextName) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await upsertAutomationCue({
+              ...cue,
+              name: nextName,
+            });
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(`Automatismo renombrado a ${nextName}`);
+          });
+        },
+      },
+      {
+        label: cue.enabled ? "Desactivar automatismo" : "Activar automatismo",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await upsertAutomationCue({
+              ...cue,
+              enabled: !cue.enabled,
+            });
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(
+              cue.enabled ? "Automatismo desactivado" : "Automatismo activado",
+            );
+          });
+        },
+      },
+      {
+        label: "Cambiar destino",
+        disabled: !song,
+        onSelect: async () => {
+          const currentSong = songRef.current;
+          if (!currentSong) {
+            return;
+          }
+
+          const target = await promptAutomationTarget(
+            currentSong,
+            cue.action.target,
+          );
+          if (!target) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await upsertAutomationCue({
+              ...cue,
+              name: `Salto a ${automationTargetLabel(currentSong, target)}`,
+              action: {
+                ...cue.action,
+                target,
+              },
+            });
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(
+              `Automatismo actualizado: ${automationTargetLabel(currentSong, target)}`,
+            );
+          });
+        },
+      },
+      {
+        label: "Cambiar fade",
+        onSelect: async () => {
+          const currentDuration =
+            cue.action.transition.mode === "fade_out"
+              ? (cue.action.transition.durationSeconds ?? 0)
+              : 0;
+          const fadeSeconds = await promptAutomationFadeSeconds(currentDuration);
+          if (fadeSeconds == null) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await upsertAutomationCue({
+              ...cue,
+              action: {
+                ...cue.action,
+                transition:
+                  fadeSeconds > 0
+                    ? { mode: "fade_out", durationSeconds: fadeSeconds }
+                    : { mode: "instant" },
+              },
+            });
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus("Fade de automatismo actualizado");
+          });
+        },
+      },
+      {
+        label: "Eliminar automatismo",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await deleteAutomationCue(cue.id);
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(`Automatismo eliminado: ${cue.name}`);
+          });
+        },
+      },
+    ];
+  }
+
   function rulerContextMenu(
     positionSeconds: number,
     timelineRange: TimelineRangeSelection | null,
@@ -5432,6 +5704,64 @@ export function TransportPanelContent() {
             setTimeSignatureDraft(nextSignature);
             setStatus(
               `Compas ${nextSignature} en ${formatClock(positionSeconds)}`,
+            );
+          });
+        },
+      },
+      {
+        label: "Crear automatismo de salto",
+        disabled:
+          !song ||
+          ((song?.regions.length ?? 0) === 0 &&
+            (song?.sectionMarkers.length ?? 0) === 0),
+        onSelect: async () => {
+          const currentSong = songRef.current;
+          if (!currentSong) {
+            return;
+          }
+
+          const defaultTarget = defaultAutomationTarget(
+            currentSong,
+            positionSeconds,
+          );
+          if (!defaultTarget) {
+            setStatus("Crea una cancion o una marca antes de automatizar saltos");
+            return;
+          }
+
+          const target = await promptAutomationTarget(
+            currentSong,
+            defaultTarget,
+          );
+          if (!target) {
+            return;
+          }
+
+          const fadeSeconds = await promptAutomationFadeSeconds(0);
+          if (fadeSeconds == null) {
+            return;
+          }
+
+          await runAction(async () => {
+            const targetLabel = automationTargetLabel(currentSong, target);
+            const nextSnapshot = await upsertAutomationCue({
+              id: createAutomationCueId(),
+              name: `Salto a ${targetLabel}`,
+              atSeconds: positionSeconds,
+              enabled: true,
+              action: {
+                type: "jump",
+                target,
+                transition:
+                  fadeSeconds > 0
+                    ? { mode: "fade_out", durationSeconds: fadeSeconds }
+                    : { mode: "instant" },
+              },
+            });
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(
+              `Automatismo creado en ${formatClock(positionSeconds)} hacia ${targetLabel}`,
             );
           });
         },
@@ -9320,6 +9650,7 @@ export function TransportPanelContent() {
                           }}
                           selectedSectionId={selectedSectionId}
                           pendingMarkerJump={pendingMarkerJump}
+                          pendingAutomationCue={pendingAutomationCue}
                           activeVamp={activeVamp}
                           midiLearnMode={midiLearnMode}
                           onMidiLearnTarget={handleMidiLearnTarget}
@@ -9658,6 +9989,23 @@ export function TransportPanelContent() {
                               event,
                               region.name,
                               songRegionContextMenu(region),
+                            );
+                          }}
+                          onAutomationCueContextMenu={(event, cueId) => {
+                            const cue = song?.automationCues?.find(
+                              (candidate) => candidate.id === cueId,
+                            );
+                            if (!cue) {
+                              return;
+                            }
+
+                            clearSelection();
+                            setSelectedTimelineRange(null);
+                            setSelectedRegionId(null);
+                            openMenu(
+                              event,
+                              cue.name,
+                              automationCueContextMenu(cue),
                             );
                           }}
                           onRegionResizeCommit={(
