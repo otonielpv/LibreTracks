@@ -413,6 +413,122 @@ mod tests {
     }
 
     #[test]
+    fn timed_pre_jump_actions_accumulate_multiple_waits() {
+        // mute @0, wait 1, solo @1, wait 0.5, mix @1.5, jump (effective @1.5).
+        let json = r#"{
+            "id": "c1", "name": "J", "atSeconds": 5.0, "enabled": true,
+            "actions": [
+                { "type": "setTrackMute", "trackId": "t1", "muted": true },
+                { "type": "wait", "durationSeconds": 1.0 },
+                { "type": "setTrackSolo", "trackId": "t1", "solo": true },
+                { "type": "wait", "durationSeconds": 0.5 },
+                { "type": "setTrackMix", "trackId": "t1", "volume": 0.5 },
+                { "type": "jump",
+                  "target": { "kind": "marker", "markerId": "m1" },
+                  "transition": { "mode": "instant" } }
+            ]
+        }"#;
+        let cue: AutomationCue = serde_json::from_str(json).expect("parses");
+        assert_eq!(cue.pre_jump_wait_seconds(), 1.5);
+        let timed = cue.timed_pre_jump_actions();
+        assert_eq!(timed.len(), 3);
+        assert_eq!(timed[0].0, 0.0); // mute
+        assert_eq!(timed[1].0, 1.0); // solo after first wait
+        assert_eq!(timed[2].0, 1.5); // mix after both waits
+    }
+
+    #[test]
+    fn jumpless_job_has_no_jump_action() {
+        let json = r#"{
+            "id": "c1", "name": "MixOnly", "atSeconds": 3.0, "enabled": true,
+            "actions": [
+                { "type": "setTrackMute", "trackId": "t1", "muted": true },
+                { "type": "applyScene", "sceneId": "s1", "rampSeconds": 2.0 }
+            ]
+        }"#;
+        let cue: AutomationCue = serde_json::from_str(json).expect("parses");
+        assert!(cue.jump_action().is_none());
+        assert_eq!(cue.pre_jump_wait_seconds(), 0.0);
+        // Both actions are timed (no jump/wait to exclude).
+        assert_eq!(cue.timed_pre_jump_actions().len(), 2);
+    }
+
+    #[test]
+    fn max_runs_round_trips_and_omits_when_none() {
+        let with_limit: AutomationCue = serde_json::from_str(
+            r#"{ "id":"c","name":"n","atSeconds":1.0,"enabled":true,"maxRuns":2,
+                 "actions":[{ "type":"wait","durationSeconds":1.0 }] }"#,
+        )
+        .expect("parses maxRuns");
+        assert_eq!(with_limit.max_runs, Some(2));
+        assert!(serde_json::to_string(&with_limit)
+            .unwrap()
+            .contains("\"maxRuns\":2"));
+
+        // Unlimited cue omits the field on serialize.
+        let unlimited: AutomationCue = serde_json::from_str(
+            r#"{ "id":"c","name":"n","atSeconds":1.0,"enabled":true,
+                 "actions":[{ "type":"wait","durationSeconds":1.0 }] }"#,
+        )
+        .expect("parses no maxRuns");
+        assert_eq!(unlimited.max_runs, None);
+        assert!(!serde_json::to_string(&unlimited)
+            .unwrap()
+            .contains("maxRuns"));
+    }
+
+    #[test]
+    fn ramp_seconds_round_trips_on_mix_and_scene() {
+        let cue: AutomationCue = serde_json::from_str(
+            r#"{ "id":"c","name":"n","atSeconds":1.0,"enabled":true,"actions":[
+                 { "type":"setTrackMix","trackId":"t1","volume":0.3,"rampSeconds":1.5 },
+                 { "type":"applyScene","sceneId":"s1","rampSeconds":2.0 }
+               ] }"#,
+        )
+        .expect("parses ramps");
+        match &cue.actions[0] {
+            AutomationAction::SetTrackMix { ramp_seconds, .. } => {
+                assert_eq!(*ramp_seconds, Some(1.5))
+            }
+            _ => panic!("expected mix"),
+        }
+        match &cue.actions[1] {
+            AutomationAction::ApplyScene { ramp_seconds, .. } => {
+                assert_eq!(*ramp_seconds, Some(2.0))
+            }
+            _ => panic!("expected applyScene"),
+        }
+        let json = serde_json::to_string(&cue).unwrap();
+        assert!(json.contains("\"rampSeconds\":1.5"));
+        assert!(json.contains("\"rampSeconds\":2.0"));
+    }
+
+    #[test]
+    fn document_migrates_multiple_legacy_action_cues() {
+        // A whole document written by the old single-`action` schema must load.
+        let json = r#"{
+            "cues": [
+                { "id":"a","name":"A","atSeconds":1.0,"enabled":true,
+                  "action": { "type":"jump",
+                    "target": { "kind":"region","regionId":"r1" },
+                    "transition": { "mode":"instant" } } },
+                { "id":"b","name":"B","atSeconds":2.0,"enabled":true,
+                  "action": { "type":"jump",
+                    "target": { "kind":"marker","markerId":"m1" },
+                    "transition": { "mode":"fade_out","durationSeconds":1.0 } } }
+            ],
+            "mixScenes": [],
+            "trackPresent": true
+        }"#;
+        let doc: AutomationDocument = serde_json::from_str(json).expect("legacy doc loads");
+        assert_eq!(doc.cues.len(), 2);
+        assert_eq!(doc.cues[0].actions.len(), 1);
+        assert_eq!(doc.cues[1].actions.len(), 1);
+        assert!(doc.cues[0].jump_action().is_some());
+        assert!(doc.track_present);
+    }
+
+    #[test]
     fn missing_automation_file_loads_empty_document() {
         let dir = tempfile::tempdir().expect("temp dir");
         let loaded = load_automation(dir.path()).expect("load missing automation");

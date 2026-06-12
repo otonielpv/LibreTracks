@@ -252,4 +252,62 @@ describe("App / automation-track", () => {
       expect(hotspot?.getAttribute("title") ?? "").toContain("2×");
     });
   });
+
+  it("builds a multi-action job in the cue editor", async () => {
+    await renderApp();
+    await addAutomationTrackViaMenu();
+    await waitFor(() => {
+      expect(
+        document.querySelector(".lt-track-lane.is-automation"),
+      ).toBeTruthy();
+    });
+
+    const lane = document.querySelector(
+      ".lt-track-lane.is-automation",
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.contextMenu(lane, { clientX: 300, clientY: 130 });
+    });
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: /crear automatismo de salto/i,
+        }),
+      );
+    });
+    const dialog = await screen.findByRole("dialog", {
+      name: /nuevo automatismo/i,
+    });
+
+    // The new cue seeds one jump action; add a mute and a wait → 3 actions.
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: /mute \/ unmute pista/i }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: /^esperar$/i }),
+      );
+    });
+
+    // Three action rows now exist (jump + mute + wait).
+    expect(
+      within(dialog).getAllByText(
+        /saltar a…|mute \/ unmute pista|esperar/i,
+      ).length,
+    ).toBeGreaterThanOrEqual(3);
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /crear/i }));
+    });
+
+    // The lane label/tooltip reflects a multi-action job ("+2" extra actions).
+    await waitFor(() => {
+      const hotspot = document.querySelector(
+        ".lt-track-lane.is-automation .lt-automation-hotspot",
+      ) as HTMLElement | null;
+      expect(hotspot?.getAttribute("title") ?? "").toMatch(/Esperar|Mutear/i);
+    });
+  });
 });
