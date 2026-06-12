@@ -1521,6 +1521,143 @@ textarea {
   padding: 0.45rem 0.7rem;
 }
 
+/* Mix scene manager modal. */
+.lt-scene-modal {
+  max-width: 44rem;
+}
+
+.lt-scene-body {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 0.9rem;
+  max-height: 62vh;
+  overflow: hidden;
+}
+
+.lt-scene-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+
+.lt-scene-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 4px;
+  background: rgb(28 31 32 / 0.9);
+  color: #f3f0ef;
+  cursor: pointer;
+  font: 600 0.9rem/1.2 "Space Grotesk", sans-serif;
+  text-align: left;
+}
+
+.lt-scene-list-item.is-selected {
+  border-color: rgb(255 122 182 / 0.5);
+  background: rgb(255 122 182 / 0.08);
+}
+
+.lt-scene-list-meta {
+  color: rgb(186 202 197 / 0.65);
+  font: 500 0.74rem/1.1 "Space Grotesk", sans-serif;
+}
+
+.lt-scene-add {
+  margin-top: 0.2rem;
+}
+
+.lt-scene-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  overflow-y: auto;
+}
+
+.lt-scene-detail-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.7rem;
+}
+
+.lt-scene-detail-head .lt-settings-field {
+  flex: 1;
+}
+
+.lt-scene-detail-head input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.6rem 0.7rem;
+  font: 600 0.9rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-scene-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lt-scene-track-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 1fr) repeat(4, minmax(5rem, 7rem));
+  gap: 0.5rem;
+  align-items: start;
+  padding: 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 4px;
+  background: rgb(15 18 19 / 0.6);
+}
+
+.lt-scene-track-name {
+  color: #f3f0ef;
+  font: 600 0.85rem/1.3 "Space Grotesk", sans-serif;
+  align-self: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-scene-override {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.lt-scene-override-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: rgb(186 202 197 / 0.8);
+  font: 600 0.74rem/1.1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.lt-scene-override.is-active .lt-scene-override-toggle {
+  color: #ff9bcc;
+}
+
+.lt-scene-override-control input,
+.lt-scene-override-control select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.4rem 0.5rem;
+  font: 600 0.82rem/1.1 "Space Grotesk", sans-serif;
+}
+
 /* Maximum-size row: label + a narrow numeric input with an inline "GB" unit
    so the field reads as a size, not a free-form box stretched across the row. */
 .lt-cache-max-row {

@@ -137,6 +137,8 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     deleteSongRegion: vi.fn(testDesktopApiMock.deleteSongRegion),
     upsertAutomationCue: vi.fn(testDesktopApiMock.upsertAutomationCue),
     deleteAutomationCue: vi.fn(testDesktopApiMock.deleteAutomationCue),
+    upsertMixScene: vi.fn(testDesktopApiMock.upsertMixScene),
+    deleteMixScene: vi.fn(testDesktopApiMock.deleteMixScene),
     addAutomationTrack: vi.fn(testDesktopApiMock.addAutomationTrack),
     removeAutomationTrack: vi.fn(testDesktopApiMock.removeAutomationTrack),
     setAutomationTrackPosition: vi.fn(testDesktopApiMock.setAutomationTrackPosition),

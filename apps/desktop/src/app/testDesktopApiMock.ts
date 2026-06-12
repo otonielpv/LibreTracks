@@ -5,6 +5,7 @@ import {
 import type {
   AppSettings,
   AutomationCueSummary,
+  MixSceneSummary,
   AudioMeterLevel,
   AudioOutputDevices,
   CreateClipArgs,
@@ -1485,6 +1486,38 @@ export const testDesktopApiMock = {
     if (state.pendingAutomationCue?.cueId === cueId) {
       state.pendingAutomationCue = null;
     }
+    return clone(buildSnapshot());
+  },
+  upsertMixScene: async (scene: MixSceneSummary) => {
+    const scenes = (state.song.mixScenes ?? []).filter(
+      (candidate) => candidate.id !== scene.id,
+    );
+    replaceSong({
+      ...state.song,
+      mixScenes: [...scenes, clone(scene)],
+    });
+    return clone(buildSnapshot());
+  },
+  deleteMixScene: async (sceneId: string) => {
+    replaceSong({
+      ...state.song,
+      mixScenes: (state.song.mixScenes ?? []).filter((s) => s.id !== sceneId),
+      // Drop applyScene actions / clear jump mixSceneId referencing it, mirroring
+      // the backend's cleanup.
+      automationCues: (state.song.automationCues ?? []).map((cue) => ({
+        ...cue,
+        actions: cue.actions
+          .filter(
+            (action) =>
+              !(action.type === "applyScene" && action.sceneId === sceneId),
+          )
+          .map((action) =>
+            action.type === "jump" && action.mixSceneId === sceneId
+              ? { ...action, mixSceneId: null }
+              : action,
+          ),
+      })),
+    });
     return clone(buildSnapshot());
   },
   addAutomationTrack: async (afterTrackId: string | null = null) => {

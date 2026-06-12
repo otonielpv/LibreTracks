@@ -162,4 +162,43 @@ describe("App / automation-track", () => {
       await screen.findByRole("dialog", { name: /editar automatismo/i }),
     ).toBeTruthy();
   });
+
+  it("creates a mix scene from the automation track menu", async () => {
+    await renderApp();
+    await addAutomationTrackViaMenu();
+
+    const header = await waitFor(() => {
+      const el = document.querySelector(".lt-track-header.is-automation");
+      expect(el).toBeTruthy();
+      return el as HTMLElement;
+    });
+
+    // Open the automation track menu and the scene manager.
+    await act(async () => {
+      fireEvent.contextMenu(header, { clientX: 60, clientY: 200 });
+    });
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: /gestionar escenas de mezcla/i,
+        }),
+      );
+    });
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /escenas de mezcla/i,
+    });
+
+    // No scenes yet → create one.
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: /nueva escena/i }),
+      );
+    });
+
+    // The new scene's name field appears in the detail pane.
+    await waitFor(() => {
+      expect(within(dialog).getByDisplayValue(/escena 1/i)).toBeTruthy();
+    });
+  });
 });

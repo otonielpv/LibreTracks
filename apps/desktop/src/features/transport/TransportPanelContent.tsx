@@ -29,6 +29,7 @@ import {
   type AutomationActionSummary,
   type AutomationCueSummary,
   type AutomationJumpTargetSummary,
+  type MixSceneSummary,
   type ClipSummary,
   type JumpTriggerLabel,
   type LibraryAssetSummary,
@@ -129,6 +130,8 @@ import {
   upsertSongTempoMarker,
   upsertSongTimeSignatureMarker,
   upsertAutomationCue,
+  upsertMixScene,
+  deleteMixScene,
   addAutomationTrack,
   removeAutomationTrack,
   setAutomationTrackPosition,
@@ -194,6 +197,7 @@ import {
   AutomationCueModal,
   type AutomationCueDraft,
 } from "./panels/AutomationCueModal";
+import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
@@ -675,6 +679,7 @@ export function TransportPanelContent() {
     useState<ExportSongTarget | null>(null);
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
+  const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
   const selectedRegion = useMemo(
     () =>
       song?.regions.find((region) => region.id === selectedRegionId) ?? null,
@@ -5582,6 +5587,30 @@ export function TransportPanelContent() {
     [automationCueDraft, runAction, applyPlaybackSnapshot, refreshSongView],
   );
 
+  // Mix scene create/edit — the modal calls these; backend commands already
+  // exist. Refresh so the new/changed scene is available to applyScene actions.
+  const handleUpsertMixScene = useCallback(
+    async (scene: MixSceneSummary) => {
+      await runAction(async () => {
+        const nextSnapshot = await upsertMixScene(scene);
+        applyPlaybackSnapshot(nextSnapshot);
+        await refreshSongView({ includeWaveforms: false, sync: true });
+      });
+    },
+    [runAction, applyPlaybackSnapshot, refreshSongView],
+  );
+
+  const handleDeleteMixScene = useCallback(
+    async (sceneId: string) => {
+      await runAction(async () => {
+        const nextSnapshot = await deleteMixScene(sceneId);
+        applyPlaybackSnapshot(nextSnapshot);
+        await refreshSongView({ includeWaveforms: false, sync: true });
+      });
+    },
+    [runAction, applyPlaybackSnapshot, refreshSongView],
+  );
+
   function rulerContextMenu(
     positionSeconds: number,
     timelineRange: TimelineRangeSelection | null,
@@ -6149,6 +6178,10 @@ export function TransportPanelContent() {
         label: "Crear automatismo aquí",
         onSelect: () =>
           createAutomationCueAt(displayPositionSecondsRef.current),
+      },
+      {
+        label: "Gestionar escenas de mezcla…",
+        onSelect: () => setIsMixSceneModalOpen(true),
       },
       {
         label: "Quitar pista de automatismos",
@@ -10290,6 +10323,14 @@ export function TransportPanelContent() {
                 onConfirm={handleConfirmAutomationCue}
               />
             ) : null}
+
+            <MixSceneModal
+              open={isMixSceneModalOpen}
+              song={song}
+              onCancel={() => setIsMixSceneModalOpen(false)}
+              onUpsert={handleUpsertMixScene}
+              onDelete={handleDeleteMixScene}
+            />
 
             <TimelineContextMenus
               contextMenu={contextMenu}
