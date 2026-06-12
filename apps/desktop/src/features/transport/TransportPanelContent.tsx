@@ -10070,6 +10070,33 @@ export function TransportPanelContent() {
                             );
                             clearSelection();
                             setSelectedRegionId(null);
+                            // If the right-click landed near an existing cue's
+                            // diamond, open that cue's menu instead of the
+                            // create menu — so a near-miss on the small hotspot
+                            // still edits the cue rather than offering to create.
+                            // Use the RAW (unsnapped) click seconds so grid snap
+                            // doesn't skew the proximity test.
+                            const pps = livePixelsPerSecondRef.current;
+                            const rawSeconds = rulerClientXToSeconds(
+                              event.clientX,
+                              rulerTrackRef.current as HTMLElement,
+                              getCameraX(),
+                              workspaceDurationSeconds,
+                              pps,
+                            );
+                            const nearCue = (song.automationCues ?? []).find(
+                              (cue) =>
+                                Math.abs((cue.atSeconds - rawSeconds) * pps) <=
+                                12,
+                            );
+                            if (nearCue) {
+                              openMenu(
+                                event,
+                                nearCue.name,
+                                automationCueContextMenu(nearCue),
+                              );
+                              return;
+                            }
                             openMenu(event, "Automatismos", [
                               {
                                 label: "Crear automatismo de salto",
