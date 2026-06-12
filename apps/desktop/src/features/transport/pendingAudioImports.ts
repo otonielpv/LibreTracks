@@ -134,10 +134,10 @@ export function toPendingTrack(
  * alongside the real tracks (same mechanism as pending imports) but never exists
  * as a `Track` in the song model — its data lives in `automation.ltautomation`.
  */
-export function toAutomationTrack(): TimelineTrackSummary {
+export function toAutomationTrack(name = "Automation"): TimelineTrackSummary {
   return {
     id: AUTOMATION_TRACK_ID,
-    name: "Automatismos",
+    name,
     kind: "audio",
     parentTrackId: null,
     depth: 0,

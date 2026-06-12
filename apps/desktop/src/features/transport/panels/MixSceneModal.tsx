@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { MixSceneSummary, SongView } from "../desktopApi";
 
@@ -32,6 +33,7 @@ export function MixSceneModal({
   onUpsert,
   onDelete,
 }: MixSceneModalProps) {
+  const { t } = useTranslation();
   const scenes = song?.mixScenes ?? [];
   const tracks = (song?.tracks ?? []).filter((t) => t.kind !== "folder");
 
@@ -86,7 +88,9 @@ export function MixSceneModal({
   const createScene = () => {
     const scene: MixSceneSummary = {
       id: createSceneId(),
-      name: `Escena ${scenes.length + 1}`,
+      name: t("transport.mixScene.defaultName", {
+        index: scenes.length + 1,
+      }),
       trackOverrides: [],
     };
     void Promise.resolve(onUpsert(scene)).then(() => setSelectedId(scene.id));
@@ -107,16 +111,20 @@ export function MixSceneModal({
       >
         <header className="lt-settings-modal-header">
           <div>
-            <span className="lt-settings-modal-eyebrow">Mezcla</span>
-            <h2 id="lt-scene-modal-title">Escenas de mezcla</h2>
-            <p>Configura overrides de pista para aplicar desde un automatismo.</p>
+            <span className="lt-settings-modal-eyebrow">
+              {t("transport.mixScene.eyebrow")}
+            </span>
+            <h2 id="lt-scene-modal-title">{t("transport.mixScene.title")}</h2>
+            <p>{t("transport.mixScene.description")}</p>
           </div>
         </header>
 
         <div className="lt-settings-modal-body lt-scene-body">
           <div className="lt-scene-list">
             {scenes.length === 0 ? (
-              <p className="lt-automation-empty">No hay escenas todavía.</p>
+              <p className="lt-automation-empty">
+                {t("transport.mixScene.empty")}
+              </p>
             ) : (
               scenes.map((scene) => (
                 <button
@@ -129,7 +137,9 @@ export function MixSceneModal({
                 >
                   {scene.name}
                   <span className="lt-scene-list-meta">
-                    {scene.trackOverrides.length} pistas
+                    {t("transport.mixScene.tracksCount", {
+                      count: scene.trackOverrides.length,
+                    })}
                   </span>
                 </button>
               ))
@@ -139,7 +149,7 @@ export function MixSceneModal({
               className="lt-secondary-button lt-scene-add"
               onClick={createScene}
             >
-              + Nueva escena
+              {t("transport.mixScene.newScene")}
             </button>
           </div>
 
@@ -148,7 +158,9 @@ export function MixSceneModal({
               <>
                 <div className="lt-scene-detail-head">
                   <label className="lt-settings-field">
-                    <span className="lt-settings-field-label">Nombre</span>
+                    <span className="lt-settings-field-label">
+                      {t("transport.mixScene.name")}
+                    </span>
                     <input
                       type="text"
                       value={selected.name}
@@ -166,13 +178,15 @@ export function MixSceneModal({
                       );
                     }}
                   >
-                    Eliminar escena
+                    {t("transport.mixScene.deleteScene")}
                   </button>
                 </div>
 
                 <div className="lt-scene-tracks">
                   {tracks.length === 0 ? (
-                    <p className="lt-automation-empty">No hay pistas.</p>
+                    <p className="lt-automation-empty">
+                      {t("transport.mixScene.noTracks")}
+                    </p>
                   ) : (
                     tracks.map((track) => {
                       const ov = overrideFor(track.id);
@@ -241,7 +255,9 @@ export function MixSceneModal({
                               }
                             >
                               <option value="on">Mute</option>
-                              <option value="off">Sin mute</option>
+                              <option value="off">
+                                {t("transport.mixScene.muteOff")}
+                              </option>
                             </select>
                           </OverrideToggle>
                           <OverrideToggle
@@ -262,7 +278,9 @@ export function MixSceneModal({
                               }
                             >
                               <option value="on">Solo</option>
-                              <option value="off">Sin solo</option>
+                              <option value="off">
+                                {t("transport.mixScene.soloOff")}
+                              </option>
                             </select>
                           </OverrideToggle>
                         </div>
@@ -273,7 +291,7 @@ export function MixSceneModal({
               </>
             ) : (
               <p className="lt-automation-empty">
-                Selecciona o crea una escena para editarla.
+                {t("transport.mixScene.selectOrCreate")}
               </p>
             )}
           </div>
@@ -285,7 +303,7 @@ export function MixSceneModal({
             className="is-primary"
             onClick={onCancel}
           >
-            Cerrar
+            {t("common.close")}
           </button>
         </div>
       </section>

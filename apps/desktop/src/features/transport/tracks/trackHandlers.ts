@@ -149,7 +149,7 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
             const snapshot = await setAutomationTrackPosition(afterId);
             applyPlaybackSnapshot(snapshot);
             await refreshSongView({ includeWaveforms: false });
-            setStatus("Pista de automatismos reordenada");
+            setStatus(t("transport.automation.statusTrackReordered"));
           } finally {
             clearTrackDragVisuals();
           }

@@ -3303,6 +3303,13 @@ impl DesktopSession {
         song.regions
             .retain(|region| region.id != existing_region.id);
         replace_song_region_range(&mut song, updated_region);
+        // Extending a region's end past the last clip is allowed (the region is
+        // a named span, not a transform on its contents). The song must envelop
+        // every region or the engine's session validator rejects the sync with
+        // "Region X is outside its song", so grow the song duration to cover the
+        // new region end. refresh_song_duration takes max(clip_end, region_end),
+        // so shrinking back never strands the duration above real content.
+        refresh_song_duration(&mut song);
         audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -8837,6 +8844,35 @@ mod tests {
         assert_eq!(snapshot.transport_clock.last_start_position_seconds, None);
         assert_eq!(snapshot.transport_clock.last_jump_position_seconds, None);
         assert!(!snapshot.transport_clock.running);
+    }
+
+    #[test]
+    fn extending_last_region_right_grows_the_song_duration() {
+        // Bug: with a single region whose end sits at the song end, dragging the
+        // right edge outward did nothing because the song duration capped it.
+        // Extending the last region right is allowed and the song must grow to
+        // envelop it (otherwise the engine validator rejects "Region outside
+        // song"). Contents are NOT moved — only the named span grows.
+        let mut session = session_with_song_dir("extend_region", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .update_song_region("region_1", "Move Demo", 0.0, 30.0, &audio)
+            .expect("extending the last region right should succeed");
+
+        let song = session.engine.song().expect("song should be loaded");
+        let region = song
+            .regions
+            .iter()
+            .find(|region| region.id == "region_1")
+            .expect("region should still exist");
+        assert_eq!(region.end_seconds, 30.0);
+        // The song duration grew to cover the extended region.
+        assert_eq!(song.duration_seconds, 30.0);
+        // The clip inside was untouched.
+        let clip = &song.clips[0];
+        assert_eq!(clip.timeline_start_seconds, 1.0);
+        assert_eq!(clip.duration_seconds, 4.0);
     }
 
     #[test]

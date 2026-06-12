@@ -5239,7 +5239,9 @@ export function TransportPanelContent() {
     // It is not a real song track — see toAutomationTrack().
     if (song?.automationTrack) {
       const afterId = song.automationTrack.afterTrackId ?? null;
-      const automationRow = toAutomationTrack();
+      const automationRow = toAutomationTrack(
+        t("transport.automation.trackName"),
+      );
       if (afterId === null) {
         realTracks.unshift(automationRow);
       } else {
@@ -5256,7 +5258,7 @@ export function TransportPanelContent() {
     }
 
     return [...realTracks, ...pendingAudioImports.map(toPendingTrack)];
-  }, [collapsedFolders, pendingAudioImports, song]);
+  }, [collapsedFolders, pendingAudioImports, song, t]);
   // Mirror the visible-track order into a ref so the global mouse handlers
   // (which intentionally don't re-bind on every track/zoom change) can map a
   // cursor Y to a destination track during a vertical clip drag.
@@ -5522,7 +5524,7 @@ export function TransportPanelContent() {
     if (target.kind === "region") {
       return (
         currentSong.regions.find((region) => region.id === target.regionId)
-          ?.name ?? "cancion"
+          ?.name ?? t("transport.automation.defaultRegionTarget")
       );
     }
 
@@ -5530,7 +5532,7 @@ export function TransportPanelContent() {
       return (
         currentSong.sectionMarkers.find(
           (marker) => marker.id === target.markerId,
-        )?.name ?? "marca"
+        )?.name ?? t("transport.automation.defaultMarkerTarget")
       );
     }
 
@@ -5572,14 +5574,14 @@ export function TransportPanelContent() {
   function automationCueContextMenu(cue: AutomationCueSummary) {
     return [
       {
-        label: "Editar automatismo…",
+        label: t("transport.automation.editCue"),
         onSelect: () => editAutomationCue(cue),
       },
       {
-        label: "Renombrar automatismo",
+        label: t("transport.automation.renameCue"),
         onSelect: async () => {
           const nextName = (
-            await promptDialog("Nombre del automatismo", cue.name)
+            await promptDialog(t("transport.automation.renameCuePrompt"), cue.name)
           )?.trim();
           if (!nextName) {
             return;
@@ -5592,12 +5594,20 @@ export function TransportPanelContent() {
             });
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView({ includeWaveforms: false, sync: true });
-            setStatus(`Automatismo renombrado a ${nextName}`);
+            setStatus(
+              t("transport.automation.statusCueRenamed", {
+                name: nextName,
+              }),
+            );
           });
         },
       },
       {
-        label: cue.enabled ? "Desactivar automatismo" : "Activar automatismo",
+        label: t(
+          cue.enabled
+            ? "transport.automation.disableCue"
+            : "transport.automation.enableCue",
+        ),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await upsertAutomationCue({
@@ -5607,19 +5617,27 @@ export function TransportPanelContent() {
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView({ includeWaveforms: false, sync: true });
             setStatus(
-              cue.enabled ? "Automatismo desactivado" : "Automatismo activado",
+              t(
+                cue.enabled
+                  ? "transport.automation.statusCueDisabled"
+                  : "transport.automation.statusCueEnabled",
+              ),
             );
           });
         },
       },
       {
-        label: "Eliminar automatismo",
+        label: t("transport.automation.deleteCue"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteAutomationCue(cue.id);
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView({ includeWaveforms: false, sync: true });
-            setStatus(`Automatismo eliminado: ${cue.name}`);
+            setStatus(
+              t("transport.automation.statusCueDeleted", {
+                name: cue.name,
+              }),
+            );
           });
         },
       },
@@ -5677,8 +5695,12 @@ export function TransportPanelContent() {
         const jump = result.actions.find((a) => a.type === "jump");
         const label =
           jump && jump.type === "jump"
-            ? `Salto a ${automationTargetLabel(currentSong, jump.target)}`
-            : `${result.actions.length} acciones`;
+            ? t("transport.automation.labelJumpTo", {
+                target: automationTargetLabel(currentSong, jump.target),
+              })
+            : t("transport.automation.labelActionsCount", {
+                count: result.actions.length,
+              });
         const nextSnapshot = await upsertAutomationCue({
           id: draft.cueId ?? createAutomationCueId(),
           name: draft.name ?? label,
@@ -5691,12 +5713,15 @@ export function TransportPanelContent() {
         await refreshSongView({ includeWaveforms: false, sync: true });
         setStatus(
           draft.cueId
-            ? `Automatismo actualizado (${label})`
-            : `Automatismo creado en ${formatClock(draft.atSeconds)} (${label})`,
+            ? t("transport.automation.statusCueUpdated", { label })
+            : t("transport.automation.statusCueCreated", {
+                time: formatClock(draft.atSeconds),
+                label,
+              }),
         );
       });
     },
-    [automationCueDraft, runAction, applyPlaybackSnapshot, refreshSongView],
+    [automationCueDraft, runAction, applyPlaybackSnapshot, refreshSongView, t],
   );
 
   // Mix scene create/edit — the modal calls these; backend commands already
@@ -5824,7 +5849,7 @@ export function TransportPanelContent() {
         },
       },
       {
-        label: "Crear automatismo",
+        label: t("transport.automation.createCue"),
         disabled:
           !song ||
           ((song?.regions.length ?? 0) === 0 &&
@@ -6287,20 +6312,20 @@ export function TransportPanelContent() {
   function automationTrackContextMenu(): ContextMenuAction[] {
     return [
       {
-        label: "Crear automatismo aquí",
+        label: t("transport.automation.createCueHere"),
         onSelect: () =>
           createAutomationCueAt(displayPositionSecondsRef.current),
       },
       {
-        label: "Gestionar escenas de mezcla…",
+        label: t("transport.automation.manageScenes"),
         onSelect: () => setIsMixSceneModalOpen(true),
       },
       {
-        label: "Quitar pista de automatismos",
+        label: t("transport.automation.removeTrack"),
         onSelect: async () => {
           if (
             !(await confirmDialog(
-              "Se eliminarán todos los automatismos. ¿Quitar la pista?",
+              t("transport.automation.removeTrackConfirm"),
             ))
           ) {
             return;
@@ -6309,7 +6334,7 @@ export function TransportPanelContent() {
             const nextSnapshot = await removeAutomationTrack();
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView({ includeWaveforms: false, sync: true });
-            setStatus("Pista de automatismos eliminada");
+            setStatus(t("transport.automation.statusTrackRemoved"));
           });
         },
       },
@@ -6440,7 +6465,7 @@ export function TransportPanelContent() {
     // user can add it from a track's own menu (not only the empty area).
     if (!currentSong.automationTrack) {
       actions.push({
-        label: "Añadir pista de automatismos",
+        label: t("transport.automation.addTrack"),
         onSelect: () => handleAddAutomationTrack(track.id),
       });
     }
@@ -6482,7 +6507,7 @@ export function TransportPanelContent() {
       const realTracks = songRef.current?.tracks ?? [];
       const lastTrackId = realTracks.at(-1)?.id ?? null;
       actions.push({
-        label: "Añadir pista de automatismos",
+        label: t("transport.automation.addTrack"),
         onSelect: () => handleAddAutomationTrack(lastTrackId),
       });
     }
@@ -6496,7 +6521,7 @@ export function TransportPanelContent() {
       const nextSnapshot = await addAutomationTrack(afterTrackId);
       applyPlaybackSnapshot(nextSnapshot);
       await refreshSongView({ includeWaveforms: false, sync: true });
-      setStatus("Pista de automatismos añadida");
+      setStatus(t("transport.automation.statusTrackAdded"));
     });
   }
 
@@ -6558,7 +6583,11 @@ export function TransportPanelContent() {
     // The synthetic automation lane is not a real song track, so it has its
     // own reduced menu (create cue / remove track).
     if (trackId === AUTOMATION_TRACK_ID) {
-      openMenu(event, "Automatismos", automationTrackContextMenu());
+      openMenu(
+        event,
+        t("transport.automation.menuTitle"),
+        automationTrackContextMenu(),
+      );
       return;
     }
 
@@ -6867,6 +6896,80 @@ export function TransportPanelContent() {
     ];
   }
 
+  function beginTimelineSeekOrPan(event: ReactMouseEvent<HTMLElement>) {
+    event.preventDefault();
+    setContextMenu(null);
+    // Clamp the seek to the full timeline workspace (song + the empty
+    // 1-hour tail), not to the song's end. Clicking in the empty space
+    // past the last region should drop the playhead where the cursor is,
+    // not snap it back to the end of the song. timelineDurationSecondsRef
+    // mirrors workspaceDurationSeconds (= max(song, content) + tail).
+    const seekLimitSeconds =
+      timelineDurationSecondsRef.current || songRef.current?.durationSeconds || 0;
+    const previewSeconds = normalizeTimelineSeekSeconds(
+      rulerClientXToSeconds(
+        event.clientX,
+        event.currentTarget,
+        getCameraX(),
+        seekLimitSeconds,
+        livePixelsPerSecondRef.current,
+      ),
+      seekLimitSeconds,
+    );
+    previewSeek(previewSeconds);
+
+    const activePan: NonNullable<TimelinePanState> = {
+      pointerId: 1,
+      startClientX: event.clientX,
+      pointerScaleX: getElementScaleX(
+        event.currentTarget.getBoundingClientRect(),
+        event.currentTarget.offsetWidth,
+      ),
+      originCameraX: getCameraX(),
+      previewSeconds,
+      hasMoved: false,
+    };
+    timelinePanRef.current = activePan;
+
+    const onMouseMove = (windowEvent: MouseEvent) => {
+      const deltaX =
+        (activePan.startClientX - windowEvent.clientX) /
+        activePan.pointerScaleX;
+      const exceededThreshold = Math.abs(deltaX) > DRAG_THRESHOLD_PX;
+      if (!activePan.hasMoved && !exceededThreshold) {
+        return;
+      }
+
+      if (!activePan.hasMoved) {
+        activePan.hasMoved = true;
+        restoreConfirmedTransportVisual();
+      }
+
+      updateCameraX(activePan.originCameraX + deltaX, {
+        commitToStore: false,
+      });
+    };
+
+    const onMouseUp = (windowEvent: MouseEvent) => {
+      if (windowEvent.button !== 0) {
+        return;
+      }
+
+      timelinePanRef.current = null;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+
+      if (!activePan.hasMoved) {
+        void runAction(async () => {
+          await performSeek(activePan.previewSeconds);
+        });
+      }
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
   function handleTrackLaneMouseDown(
     event: ReactMouseEvent<HTMLDivElement>,
     track: TrackSummary,
@@ -7043,70 +7146,7 @@ export function TransportPanelContent() {
       return;
     }
 
-    event.preventDefault();
-    setContextMenu(null);
-    const previewSeconds = normalizeTimelineSeekSeconds(
-      rulerClientXToSeconds(
-        event.clientX,
-        event.currentTarget,
-        getCameraX(),
-        songRef.current?.durationSeconds ?? 0,
-        livePixelsPerSecondRef.current,
-      ),
-      songRef.current?.durationSeconds ?? 0,
-    );
-    previewSeek(previewSeconds);
-
-    const activePan: NonNullable<TimelinePanState> = {
-      pointerId: 1,
-      startClientX: event.clientX,
-      pointerScaleX: getElementScaleX(
-        event.currentTarget.getBoundingClientRect(),
-        event.currentTarget.offsetWidth,
-      ),
-      originCameraX: getCameraX(),
-      previewSeconds,
-      hasMoved: false,
-    };
-    timelinePanRef.current = activePan;
-
-    const onMouseMove = (windowEvent: MouseEvent) => {
-      const deltaX =
-        (activePan.startClientX - windowEvent.clientX) /
-        activePan.pointerScaleX;
-      const exceededThreshold = Math.abs(deltaX) > DRAG_THRESHOLD_PX;
-      if (!activePan.hasMoved && !exceededThreshold) {
-        return;
-      }
-
-      if (!activePan.hasMoved) {
-        activePan.hasMoved = true;
-        restoreConfirmedTransportVisual();
-      }
-
-      updateCameraX(activePan.originCameraX + deltaX, {
-        commitToStore: false,
-      });
-    };
-
-    const onMouseUp = (windowEvent: MouseEvent) => {
-      if (windowEvent.button !== 0) {
-        return;
-      }
-
-      timelinePanRef.current = null;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-
-      if (!activePan.hasMoved) {
-        void runAction(async () => {
-          await performSeek(activePan.previewSeconds);
-        });
-      }
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    beginTimelineSeekOrPan(event);
   }
 
   function handleTrackLaneContextMenu(
@@ -7144,7 +7184,11 @@ export function TransportPanelContent() {
 
     clearSelection();
     setSelectedRegionId(null);
-    openMenu(event, "Tracks", globalTrackListContextMenu());
+    openMenu(
+      event,
+      t("transport.menu.tracksMenuTitle", { defaultValue: "Tracks" }),
+      globalTrackListContextMenu(),
+    );
   }
 
   function handleTrackHeadersEmptyAreaContextMenu(
@@ -10229,9 +10273,9 @@ export function TransportPanelContent() {
                               );
                               return;
                             }
-                            openMenu(event, "Automatismos", [
+                            openMenu(event, t("transport.automation.menuTitle"), [
                               {
-                                label: "Crear automatismo",
+                                label: t("transport.automation.createCue"),
                                 disabled:
                                   (song?.regions.length ?? 0) === 0 &&
                                   (song?.sectionMarkers.length ?? 0) === 0,
@@ -10306,6 +10350,15 @@ export function TransportPanelContent() {
                           }}
                           onTrackListContextMenu={handleTrackListContextMenu}
                           onTrackLaneMouseDown={handleTrackLaneMouseDown}
+                          onTimelineBackgroundMouseDown={(event) => {
+                            if (
+                              event.button !== 0 ||
+                              isInteractiveTimelineTarget(event.target)
+                            ) {
+                              return;
+                            }
+                            beginTimelineSeekOrPan(event);
+                          }}
                           onTrackLaneContextMenu={handleTrackLaneContextMenu}
                           onResolveTimelineDropFromClientPoint={
                             resolveTimelineDropFromClientPoint

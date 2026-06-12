@@ -19,7 +19,7 @@ async function addAutomationTrackViaMenu() {
     fireEvent.contextMenu(pane, { clientX: 80, clientY: 600 });
   });
   const addButton = await screen.findByRole("button", {
-    name: /añadir pista de automatismos/i,
+    name: /add automation track/i,
   });
   await act(async () => {
     fireEvent.click(addButton);
@@ -90,7 +90,7 @@ describe("App / automation-track", () => {
     });
 
     const createButton = await screen.findByRole("button", {
-      name: /Crear automatismo/i,
+      name: /create automation/i,
     });
     await act(async () => {
       fireEvent.click(createButton);
@@ -98,10 +98,10 @@ describe("App / automation-track", () => {
 
     // The visual editor modal opens seeded with a default destination; confirm.
     const dialog = await screen.findByRole("dialog", {
-      name: /nuevo automatismo/i,
+      name: /new automation/i,
     });
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: /crear/i }));
+      fireEvent.click(within(dialog).getByRole("button", { name: /create/i }));
     });
 
     // A cue hotspot button now exists inside the automation lane, giving the
@@ -133,16 +133,16 @@ describe("App / automation-track", () => {
     await act(async () => {
       fireEvent.click(
         await screen.findByRole("button", {
-          name: /Crear automatismo/i,
+          name: /create automation/i,
         }),
       );
     });
     const createDialog = await screen.findByRole("dialog", {
-      name: /nuevo automatismo/i,
+      name: /new automation/i,
     });
     await act(async () => {
       fireEvent.click(
-        within(createDialog).getByRole("button", { name: /crear/i }),
+        within(createDialog).getByRole("button", { name: /create/i }),
       );
     });
 
@@ -159,7 +159,7 @@ describe("App / automation-track", () => {
       fireEvent.click(hotspot);
     });
     expect(
-      await screen.findByRole("dialog", { name: /editar automatismo/i }),
+      await screen.findByRole("dialog", { name: /edit automation/i }),
     ).toBeTruthy();
   });
 
@@ -180,25 +180,25 @@ describe("App / automation-track", () => {
     await act(async () => {
       fireEvent.click(
         await screen.findByRole("button", {
-          name: /gestionar escenas de mezcla/i,
+          name: /manage mix scenes/i,
         }),
       );
     });
 
     const dialog = await screen.findByRole("dialog", {
-      name: /escenas de mezcla/i,
+      name: /mix scenes/i,
     });
 
     // No scenes yet → create one.
     await act(async () => {
       fireEvent.click(
-        within(dialog).getByRole("button", { name: /nueva escena/i }),
+        within(dialog).getByRole("button", { name: /new scene/i }),
       );
     });
 
     // The new scene's name field appears in the detail pane.
     await waitFor(() => {
-      expect(within(dialog).getByDisplayValue(/escena 1/i)).toBeTruthy();
+      expect(within(dialog).getByDisplayValue(/scene 1/i)).toBeTruthy();
     });
   });
 
@@ -220,36 +220,36 @@ describe("App / automation-track", () => {
     await act(async () => {
       fireEvent.click(
         await screen.findByRole("button", {
-          name: /Crear automatismo/i,
+          name: /create automation/i,
         }),
       );
     });
     const dialog = await screen.findByRole("dialog", {
-      name: /nuevo automatismo/i,
+      name: /new automation/i,
     });
 
     // Enable the repeat limit and set it to 2.
     await act(async () => {
       fireEvent.click(
-        within(dialog).getByRole("checkbox", { name: /limitar repeticiones/i }),
+        within(dialog).getByRole("checkbox", { name: /limit repeats/i }),
       );
     });
-    const vecesInput = within(dialog).getByRole("spinbutton", {
-      name: /veces/i,
+    const timesInput = within(dialog).getByRole("spinbutton", {
+      name: /times/i,
     });
     await act(async () => {
-      fireEvent.change(vecesInput, { target: { value: "2" } });
+      fireEvent.change(timesInput, { target: { value: "2" } });
     });
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: /crear/i }));
+      fireEvent.click(within(dialog).getByRole("button", { name: /create/i }));
     });
 
-    // The cue's tooltip reflects the limit ("2×").
+    // The cue's tooltip reflects the limit ("2x").
     await waitFor(() => {
       const hotspot = document.querySelector(
         ".lt-track-lane.is-automation .lt-automation-hotspot",
       ) as HTMLElement | null;
-      expect(hotspot?.getAttribute("title") ?? "").toContain("2×");
+      expect(hotspot?.getAttribute("title") ?? "").toContain("2x");
     });
   });
 
@@ -271,35 +271,35 @@ describe("App / automation-track", () => {
     await act(async () => {
       fireEvent.click(
         await screen.findByRole("button", {
-          name: /Crear automatismo/i,
+          name: /create automation/i,
         }),
       );
     });
     const dialog = await screen.findByRole("dialog", {
-      name: /nuevo automatismo/i,
+      name: /new automation/i,
     });
 
     // The new cue seeds one jump action; add a mute and a wait → 3 actions.
     await act(async () => {
       fireEvent.click(
-        within(dialog).getByRole("button", { name: /mute \/ unmute pista/i }),
+        within(dialog).getByRole("button", { name: /mute \/ unmute track/i }),
       );
     });
     await act(async () => {
       fireEvent.click(
-        within(dialog).getByRole("button", { name: /^esperar$/i }),
+        within(dialog).getByRole("button", { name: /^wait$/i }),
       );
     });
 
     // Three action rows now exist (jump + mute + wait).
     expect(
       within(dialog).getAllByText(
-        /saltar a…|mute \/ unmute pista|esperar/i,
+        /jump to...|mute \/ unmute track|wait/i,
       ).length,
     ).toBeGreaterThanOrEqual(3);
 
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: /crear/i }));
+      fireEvent.click(within(dialog).getByRole("button", { name: /create/i }));
     });
 
     // The lane label/tooltip reflects a multi-action job ("+2" extra actions).
@@ -307,7 +307,7 @@ describe("App / automation-track", () => {
       const hotspot = document.querySelector(
         ".lt-track-lane.is-automation .lt-automation-hotspot",
       ) as HTMLElement | null;
-      expect(hotspot?.getAttribute("title") ?? "").toMatch(/Esperar|Mutear/i);
+      expect(hotspot?.getAttribute("title") ?? "").toMatch(/Wait|Mute/i);
     });
   });
 });

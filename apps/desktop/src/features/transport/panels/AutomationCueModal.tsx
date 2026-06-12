@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type {
   AutomationActionSummary,
@@ -32,13 +33,13 @@ type AutomationCueModalProps = {
 
 const FRAME_OPTION = "__frame__";
 
-const ACTION_LABELS: Record<AutomationActionSummary["type"], string> = {
-  jump: "Saltar a…",
-  setTrackMute: "Mute / Unmute pista",
-  setTrackSolo: "Solo / Unsolo pista",
-  setTrackMix: "Volumen / paneo",
-  applyScene: "Aplicar escena",
-  wait: "Esperar",
+const ACTION_LABEL_KEYS: Record<AutomationActionSummary["type"], string> = {
+  jump: "transport.automation.actionJump",
+  setTrackMute: "transport.automation.actionMute",
+  setTrackSolo: "transport.automation.actionSolo",
+  setTrackMix: "transport.automation.actionMix",
+  applyScene: "transport.automation.actionScene",
+  wait: "transport.automation.actionWait",
 };
 
 function encodeTarget(target: AutomationJumpTargetSummary): string {
@@ -107,6 +108,7 @@ export function AutomationCueModal({
   onCancel,
   onConfirm,
 }: AutomationCueModalProps) {
+  const { t } = useTranslation();
   const [actions, setActions] = useState<AutomationActionSummary[]>(
     () => draft?.actions ?? [],
   );
@@ -173,25 +175,35 @@ export function AutomationCueModal({
       >
         <header className="lt-settings-modal-header">
           <div>
-            <span className="lt-settings-modal-eyebrow">Automatismo</span>
+            <span className="lt-settings-modal-eyebrow">
+              {t("transport.automation.modalEyebrow")}
+            </span>
             <h2 id="lt-automation-modal-title">
-              {isEditing ? "Editar automatismo" : "Nuevo automatismo"}
+              {t(
+                isEditing
+                  ? "transport.automation.modalEditTitle"
+                  : "transport.automation.modalNewTitle",
+              )}
             </h2>
-            <p>En {formatClock(draft.atSeconds)}</p>
+            <p>
+              {t("transport.automation.modalAtTime", {
+                time: formatClock(draft.atSeconds),
+              })}
+            </p>
           </div>
         </header>
 
         <div className="lt-settings-modal-body lt-automation-actions-body">
           {actions.length === 0 ? (
             <p className="lt-automation-empty">
-              Añade acciones para este automatismo.
+              {t("transport.automation.modalEmpty")}
             </p>
           ) : (
             actions.map((action, index) => (
               <div className="lt-automation-action-row" key={index}>
                 <div className="lt-automation-action-head">
                   <span className="lt-automation-action-kind">
-                    {ACTION_LABELS[action.type]}
+                    {t(ACTION_LABEL_KEYS[action.type])}
                   </span>
                   <div className="lt-automation-action-tools">
                     {/* The jump is pinned last, so it can't be reordered, and
@@ -200,7 +212,7 @@ export function AutomationCueModal({
                       <>
                         <button
                           type="button"
-                          aria-label="Subir"
+                          aria-label={t("transport.automation.moveUp")}
                           disabled={index === 0}
                           onClick={() => move(index, -1)}
                         >
@@ -208,7 +220,7 @@ export function AutomationCueModal({
                         </button>
                         <button
                           type="button"
-                          aria-label="Bajar"
+                          aria-label={t("transport.automation.moveDown")}
                           disabled={index >= lastMovableIndex}
                           onClick={() => move(index, 1)}
                         >
@@ -218,7 +230,7 @@ export function AutomationCueModal({
                     ) : null}
                     <button
                       type="button"
-                      aria-label="Quitar acción"
+                      aria-label={t("transport.automation.removeAction")}
                       onClick={() => removeAt(index)}
                     >
                       ✕
@@ -231,6 +243,7 @@ export function AutomationCueModal({
                   markers={markers}
                   tracks={tracks}
                   scenes={scenes}
+                  t={t}
                   onChange={(next) => updateAt(index, next)}
                 />
               </div>
@@ -238,7 +251,9 @@ export function AutomationCueModal({
           )}
 
           <div className="lt-automation-add-row">
-            <span className="lt-settings-field-label">Añadir acción</span>
+            <span className="lt-settings-field-label">
+              {t("transport.automation.addAction")}
+            </span>
             <div className="lt-automation-add-buttons">
               {(
                 [
@@ -258,7 +273,7 @@ export function AutomationCueModal({
                   disabled={type === "jump" && hasJump}
                   onClick={() => addAction(type)}
                 >
-                  {ACTION_LABELS[type]}
+                  {t(ACTION_LABEL_KEYS[type])}
                 </button>
               ))}
             </div>
@@ -275,11 +290,13 @@ export function AutomationCueModal({
                   setMaxRuns(event.target.checked ? 1 : null)
                 }
               />
-              Limitar repeticiones
+              {t("transport.automation.limitRuns")}
             </label>
             {maxRuns != null ? (
               <label className="lt-settings-field lt-automation-runs-field">
-                <span className="lt-settings-field-label">Veces</span>
+                <span className="lt-settings-field-label">
+                  {t("transport.automation.runsCount")}
+                </span>
                 <input
                   type="number"
                   min={1}
@@ -291,7 +308,9 @@ export function AutomationCueModal({
                 />
               </label>
             ) : (
-              <span className="lt-automation-runs-hint">∞ (siempre)</span>
+              <span className="lt-automation-runs-hint">
+                {t("transport.automation.unlimited")}
+              </span>
             )}
           </div>
         </div>
@@ -302,7 +321,7 @@ export function AutomationCueModal({
             className="lt-secondary-button"
             onClick={onCancel}
           >
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -312,7 +331,7 @@ export function AutomationCueModal({
               onConfirm({ actions: normalize(actions), maxRuns })
             }
           >
-            {isEditing ? "Guardar" : "Crear"}
+            {t(isEditing ? "common.save" : "common.create")}
           </button>
         </div>
       </section>
@@ -350,6 +369,7 @@ type EditorProps = {
   markers: SongView["sectionMarkers"];
   tracks: SongView["tracks"];
   scenes: NonNullable<SongView["mixScenes"]>;
+  t: (key: string, options?: Record<string, unknown>) => string;
   onChange: (next: AutomationActionSummary) => void;
 };
 
@@ -359,6 +379,7 @@ function ActionEditor({
   markers,
   tracks,
   scenes,
+  t,
   onChange,
 }: EditorProps) {
   if (action.type === "jump") {
@@ -368,7 +389,9 @@ function ActionEditor({
     return (
       <div className="lt-automation-action-fields">
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Destino</span>
+          <span className="lt-settings-field-label">
+            {t("transport.automation.destination")}
+          </span>
           <select
             value={value}
             onChange={(event) => {
@@ -377,7 +400,7 @@ function ActionEditor({
             }}
           >
             {regions.length > 0 ? (
-              <optgroup label="Canciones">
+              <optgroup label={t("transport.automation.destinationSongs")}>
                 {regions.map((r) => (
                   <option key={r.id} value={`region:${r.id}`}>
                     {r.name}
@@ -386,7 +409,7 @@ function ActionEditor({
               </optgroup>
             ) : null}
             {markers.length > 0 ? (
-              <optgroup label="Marcas">
+              <optgroup label={t("transport.automation.destinationMarkers")}>
                 {markers.map((m) => (
                   <option key={m.id} value={`marker:${m.id}`}>
                     {m.name}
@@ -394,14 +417,18 @@ function ActionEditor({
                 ))}
               </optgroup>
             ) : null}
-            <optgroup label="Otro">
-              <option value={FRAME_OPTION}>Posición exacta…</option>
+            <optgroup label={t("transport.automation.destinationOther")}>
+              <option value={FRAME_OPTION}>
+                {t("transport.automation.exactPosition")}
+              </option>
             </optgroup>
           </select>
         </label>
         {value === FRAME_OPTION ? (
           <label className="lt-settings-field">
-            <span className="lt-settings-field-label">Segundos</span>
+            <span className="lt-settings-field-label">
+              {t("transport.automation.seconds")}
+            </span>
             <input
               type="number"
               min={0}
@@ -417,8 +444,12 @@ function ActionEditor({
           </label>
         ) : null}
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Fade out (s)</span>
-          <small className="lt-settings-field-hint">0 = instantáneo</small>
+          <span className="lt-settings-field-label">
+            {t("transport.automation.fadeOutSeconds")}
+          </span>
+          <small className="lt-settings-field-hint">
+            {t("transport.automation.instantHint")}
+          </small>
           <input
             type="number"
             min={0}
@@ -450,11 +481,16 @@ function ActionEditor({
         <TrackSelect
           tracks={tracks}
           value={action.trackId}
+          t={t}
           onChange={(trackId) => onChange({ ...action, trackId })}
         />
         <label className="lt-settings-field">
           <span className="lt-settings-field-label">
-            {isMute ? "Mutear" : "Solo"}
+            {t(
+              isMute
+                ? "transport.automation.muteLabel"
+                : "transport.automation.cueSolo",
+            )}
           </span>
           <select
             value={checked ? "on" : "off"}
@@ -466,8 +502,10 @@ function ActionEditor({
               )
             }
           >
-            <option value="on">Activar</option>
-            <option value="off">Desactivar</option>
+            <option value="on">{t("transport.automation.enableOption")}</option>
+            <option value="off">
+              {t("transport.automation.disableOption")}
+            </option>
           </select>
         </label>
       </div>
@@ -480,10 +518,13 @@ function ActionEditor({
         <TrackSelect
           tracks={tracks}
           value={action.trackId}
+          t={t}
           onChange={(trackId) => onChange({ ...action, trackId })}
         />
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Volumen (0–100)</span>
+          <span className="lt-settings-field-label">
+            {t("transport.automation.volumeLabel")}
+          </span>
           <input
             type="number"
             min={0}
@@ -497,7 +538,9 @@ function ActionEditor({
           />
         </label>
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Paneo (L−100 / R+100)</span>
+          <span className="lt-settings-field-label">
+            {t("transport.automation.panLabel")}
+          </span>
           <input
             type="number"
             min={-100}
@@ -511,9 +554,11 @@ function ActionEditor({
           />
         </label>
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Suavizado (s)</span>
+          <span className="lt-settings-field-label">
+            {t("transport.automation.smoothingSeconds")}
+          </span>
           <small className="lt-settings-field-hint">
-            0 = cambio inmediato
+            {t("transport.automation.immediateHint")}
           </small>
           <input
             type="number"
@@ -537,7 +582,9 @@ function ActionEditor({
     return (
       <div className="lt-automation-action-fields">
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Escena</span>
+          <span className="lt-settings-field-label">
+            {t("transport.automation.sceneLabel")}
+          </span>
           <select
             value={action.sceneId}
             onChange={(event) =>
@@ -545,7 +592,11 @@ function ActionEditor({
             }
           >
             <option value="" disabled>
-              {scenes.length ? "Elige una escena…" : "No hay escenas"}
+              {t(
+                scenes.length
+                  ? "transport.automation.chooseScene"
+                  : "transport.automation.noScenes",
+              )}
             </option>
             {scenes.map((scene) => (
               <option key={scene.id} value={scene.id}>
@@ -555,8 +606,12 @@ function ActionEditor({
           </select>
         </label>
         <label className="lt-settings-field">
-          <span className="lt-settings-field-label">Suavizado (s)</span>
-          <small className="lt-settings-field-hint">0 = inmediato</small>
+          <span className="lt-settings-field-label">
+            {t("transport.automation.smoothingSeconds")}
+          </span>
+          <small className="lt-settings-field-hint">
+            {t("transport.automation.immediateHint")}
+          </small>
           <input
             type="number"
             min={0}
@@ -579,7 +634,9 @@ function ActionEditor({
   return (
     <div className="lt-automation-action-fields">
       <label className="lt-settings-field">
-        <span className="lt-settings-field-label">Esperar (s)</span>
+        <span className="lt-settings-field-label">
+          {t("transport.automation.waitSeconds")}
+        </span>
         <input
           type="number"
           min={0}
@@ -597,18 +654,26 @@ function ActionEditor({
 function TrackSelect({
   tracks,
   value,
+  t,
   onChange,
 }: {
   tracks: SongView["tracks"];
   value: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
   onChange: (trackId: string) => void;
 }) {
   return (
     <label className="lt-settings-field">
-      <span className="lt-settings-field-label">Pista</span>
+      <span className="lt-settings-field-label">
+        {t("transport.automation.trackLabel")}
+      </span>
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="" disabled>
-          {tracks.length ? "Elige una pista…" : "No hay pistas"}
+          {t(
+            tracks.length
+              ? "transport.automation.chooseTrack"
+              : "transport.automation.noTracks",
+          )}
         </option>
         {tracks.map((track) => (
           <option key={track.id} value={track.id}>

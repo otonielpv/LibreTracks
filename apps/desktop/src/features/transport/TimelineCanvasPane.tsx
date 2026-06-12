@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type { TimelineNavigationScheme } from "./Renderer/InputManager";
@@ -39,6 +40,7 @@ import {
 import {
   BASE_PIXELS_PER_SECOND,
   getElementScaleX,
+  getTimelineWorkspaceEndSeconds,
   snapToTimelineBar,
   snapToTimelineGrid,
   type TimelineGrid,
@@ -54,11 +56,13 @@ import {
 } from "./dragDrop";
 
 const RULER_HEIGHT = 110;
+type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
 function describeAutomationCue(
   cue: AutomationCueSummary,
   song: SongView | null,
+  t: Translate,
 ): string {
   const trackName = (id: string) =>
     song?.tracks.find((t) => t.id === id)?.name ?? id;
@@ -66,16 +70,20 @@ function describeAutomationCue(
     song?.mixScenes?.find((s) => s.id === id)?.name ?? id;
   const targetName = (target: AutomationCueSummary["actions"][number]) => {
     if (target.type !== "jump") return "";
-    const t = target.target;
-    if (t.kind === "region") {
-      return song?.regions.find((r) => r.id === t.regionId)?.name ?? "canción";
-    }
-    if (t.kind === "marker") {
+    const jumpTarget = target.target;
+    if (jumpTarget.kind === "region") {
       return (
-        song?.sectionMarkers.find((m) => m.id === t.markerId)?.name ?? "marca"
+        song?.regions.find((r) => r.id === jumpTarget.regionId)?.name ??
+        t("transport.automation.defaultRegionTarget")
       );
     }
-    return `${t.seconds.toFixed(2)}s`;
+    if (jumpTarget.kind === "marker") {
+      return (
+        song?.sectionMarkers.find((m) => m.id === jumpTarget.markerId)?.name ??
+        t("transport.automation.defaultMarkerTarget")
+      );
+    }
+    return `${jumpTarget.seconds.toFixed(2)}s`;
   };
 
   const lines = (cue.actions ?? []).map((action) => {
@@ -84,34 +92,51 @@ function describeAutomationCue(
         const fade =
           action.transition.mode === "fade_out" &&
           (action.transition.durationSeconds ?? 0) > 0
-            ? ` (fade ${(action.transition.durationSeconds ?? 0).toFixed(1)}s)`
+            ? t("transport.automation.cueFadeSuffix", {
+                seconds: (action.transition.durationSeconds ?? 0).toFixed(1),
+              })
             : "";
-        return `→ Saltar a ${targetName(action)}${fade}`;
+        return t("transport.automation.cueJumpLine", {
+          target: targetName(action),
+          fade,
+        });
       }
       case "setTrackMute":
-        return `${action.muted ? "Mutear" : "Desmutear"} ${trackName(action.trackId)}`;
+        return `${t(
+          action.muted
+            ? "transport.automation.cueMute"
+            : "transport.automation.cueUnmute",
+        )} ${trackName(action.trackId)}`;
       case "setTrackSolo":
-        return `${action.solo ? "Solo" : "Quitar solo"} ${trackName(action.trackId)}`;
+        return `${t(
+          action.solo
+            ? "transport.automation.cueSolo"
+            : "transport.automation.cueUnsolo",
+        )} ${trackName(action.trackId)}`;
       case "setTrackMix": {
         const parts: string[] = [];
         if (action.volume != null)
           parts.push(`vol ${Math.round(action.volume * 100)}`);
         if (action.pan != null)
           parts.push(`pan ${Math.round(action.pan * 100)}`);
-        return `${trackName(action.trackId)}: ${parts.join(", ") || "mezcla"}`;
+        return `${trackName(action.trackId)}: ${parts.join(", ") || t("transport.automation.cueMixFallback")}`;
       }
       case "applyScene":
-        return `Escena «${sceneName(action.sceneId)}»`;
+        return t("transport.automation.cueScene", {
+          name: sceneName(action.sceneId),
+        });
       case "wait":
-        return `Esperar ${action.durationSeconds}s`;
+        return t("transport.automation.cueWait", {
+          seconds: action.durationSeconds,
+        });
     }
   });
 
   const runs =
     cue.maxRuns != null
-      ? ` · ${cue.maxRuns}×`
+      ? t("transport.automation.cueRuns", { count: cue.maxRuns })
       : "";
-  const header = `${cue.name} — ${cue.atSeconds.toFixed(2)}s${runs}${cue.enabled ? "" : " (desactivado)"}`;
+  const header = `${cue.name} - ${cue.atSeconds.toFixed(2)}s${runs}${cue.enabled ? "" : t("transport.automation.cueDisabled")}`;
   return lines.length ? `${header}\n${lines.join("\n")}` : header;
 }
 
@@ -263,6 +288,7 @@ type TimelineCanvasPaneProps = {
     track: TimelineTrackSummary,
     trackClips: ClipSummary[],
   ) => void;
+  onTimelineBackgroundMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onTrackLaneContextMenu: (
     event: ReactMouseEvent<HTMLDivElement>,
     track: TimelineTrackSummary,
@@ -354,6 +380,7 @@ export function TimelineCanvasPane({
   onPlayheadSeekCommit,
   onTrackListContextMenu,
   onTrackLaneMouseDown,
+  onTimelineBackgroundMouseDown,
   onTrackLaneContextMenu,
   onResolveTimelineDropFromClientPoint,
   nativeDropKindRef,
@@ -361,6 +388,7 @@ export function TimelineCanvasPane({
   onExternalDrop,
 }: TimelineCanvasPaneProps) {
   useRenderCounter("TimelineCanvasPane");
+  const { t } = useTranslation();
   const trackLayersRef = useRef<HTMLDivElement | null>(null);
 
   // Measured pixel height of the track-list cell (.lt-track-list). This cell is
@@ -467,9 +495,14 @@ export function TimelineCanvasPane({
     const rightNeighbour =
       idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
     const minStart = leftNeighbour ? leftNeighbour.endSeconds : 0;
+    // With a right neighbour, that neighbour's start is the hard wall — the
+    // region must not overlap it. Without one, the region is free to grow past
+    // the end of the song into the empty workspace tail; growing it does not
+    // move the song end or any clips (the user moves those separately if they
+    // want to). The 1-hour workspace tail is the practical upper bound.
     const maxEnd = rightNeighbour
       ? rightNeighbour.startSeconds
-      : Math.max(song.durationSeconds, region.endSeconds);
+      : getTimelineWorkspaceEndSeconds(song.durationSeconds);
 
     regionResizeDragRef.current = {
       regionId: region.id,
@@ -1365,7 +1398,7 @@ export function TimelineCanvasPane({
                     <div
                       className="lt-track-lane is-automation"
                       style={{ height: trackHeight }}
-                      aria-label="Lane Automatismos"
+                      aria-label={t("transport.automation.laneAria")}
                       onMouseDown={(event) => {
                         // Same seek-on-click as a normal lane: the synthetic
                         // track has no clips, so this falls through to the
@@ -1388,7 +1421,11 @@ export function TimelineCanvasPane({
                         // Rich tooltip: the cue name + a line per action so the
                         // user sees what the job does on hover, even for cues
                         // whose label is hidden because a neighbour is too close.
-                        const cueDescription = describeAutomationCue(cue, song);
+                        const cueDescription = describeAutomationCue(
+                          cue,
+                          song,
+                          t,
+                        );
                         return (
                           <button
                             key={cue.id}
@@ -1521,8 +1558,9 @@ export function TimelineCanvasPane({
 
           <div
             className="lt-track-list-dropzone"
-            aria-label="Dropzone para nuevas pistas"
+            aria-label={t("transport.preview.newTracksDropzone")}
             onDragEnter={handleTimelineDragEnter}
+            onMouseDown={onTimelineBackgroundMouseDown}
           />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import { densityFromHeight } from "./constants";
 import type { SongView } from "./desktopApi";
@@ -62,6 +63,7 @@ export function TrackHeadersPane({
   audioRoutingOptions,
   onAudioToChange,
 }: TrackHeadersPaneProps) {
+  const { t } = useTranslation();
   const headersListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -121,10 +123,14 @@ export function TrackHeadersPane({
                   style={{ height: trackHeight, paddingLeft: 8 }}
                   role="button"
                   tabIndex={0}
-                  aria-label="Pista de automatismos"
+                  aria-label={t("transport.automation.trackHeaderAria")}
                   onMouseDown={(event) => onStartTrackDrag(event, track.id)}
                   onClick={(event) =>
-                    onSelectTrack(track.id, track.name, event)
+                    onSelectTrack(
+                      track.id,
+                      t("transport.automation.trackName"),
+                      event,
+                    )
                   }
                   onContextMenu={(event) => onOpenContextMenu(event, track.id)}
                 >
@@ -133,9 +139,13 @@ export function TrackHeadersPane({
                       <div className="lt-track-header-summary">
                         <div className="lt-track-header-main">
                           <div className="lt-track-title-row">
-                            <strong>⚙ {track.name}</strong>
+                            <strong>
+                              ⚙ {t("transport.automation.trackName")}
+                            </strong>
                           </div>
-                          <span className="lt-track-meta">Saltos automáticos</span>
+                          <span className="lt-track-meta">
+                            {t("transport.automation.trackMeta")}
+                          </span>
                         </div>
                       </div>
                     </div>

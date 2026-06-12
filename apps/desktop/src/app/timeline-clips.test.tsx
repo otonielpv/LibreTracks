@@ -92,6 +92,57 @@ describe("App / timeline-clips", () => {
     });
   });
 
+  it("seeks from the empty timeline area below track rows", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const seekSpy = vi.mocked(desktopApi.seekTransport);
+
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    const dropzone = container.querySelector(
+      ".lt-track-list-dropzone",
+    ) as HTMLElement | null;
+    expect(dropzone).toBeTruthy();
+
+    Object.defineProperty(dropzone, "offsetWidth", {
+      configurable: true,
+      value: 1140,
+    });
+    Object.defineProperty(dropzone, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        left: 260,
+        right: 1400,
+        top: 420,
+        bottom: 520,
+        width: 1140,
+        height: 100,
+        x: 260,
+        y: 420,
+        toJSON: () => ({}),
+      }),
+    });
+
+    seekSpy.mockClear();
+    await act(async () => {
+      fireEvent.mouseDown(dropzone as HTMLElement, {
+        button: 0,
+        clientX: 520,
+        clientY: 450,
+      });
+      fireEvent.mouseUp(window, {
+        button: 0,
+        clientX: 520,
+        clientY: 450,
+      });
+    });
+
+    await waitFor(() => {
+      expect(seekSpy).toHaveBeenCalled();
+    });
+  });
+
   it("drags a clip before bar one for pre-roll alignment", async () => {
     const desktopApi = await import("../features/transport/desktopApi");
     const moveClipSpy = vi.spyOn(desktopApi, "moveClip");
