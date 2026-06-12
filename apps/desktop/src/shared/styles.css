@@ -39,8 +39,8 @@ textarea {
 }
 
 .lt-app-shell {
-  width: 100vw;
-  height: 100vh;
+  width: calc(100vw / var(--lt-ui-zoom, 1));
+  height: calc(100vh / var(--lt-ui-zoom, 1));
   overflow: hidden;
   background: #131313;
   color: #e5e2e1;

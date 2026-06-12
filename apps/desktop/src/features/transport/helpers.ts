@@ -15,7 +15,9 @@ import type {
 } from "@libretracks/shared/models";
 import {
   getCumulativeMusicalPosition,
+  clientXToLocalX,
   clientXToTimelineSeconds,
+  clientYToLocalY,
   screenXToSeconds,
   secondsToScreenX,
 } from "./timelineMath";
@@ -717,8 +719,12 @@ export function resolveTrackDropState(
   }
 
   const bounds = hoveredRow.getBoundingClientRect();
+  const layoutHeight = hoveredRow.offsetHeight || bounds.height;
   const verticalRatio =
-    bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0.5;
+    layoutHeight > 0
+      ? clientYToLocalY(clientY, bounds, hoveredRow.offsetHeight) /
+        layoutHeight
+      : 0.5;
   const mode =
     targetTrack.kind === "folder" &&
     verticalRatio >= 0.3 &&
@@ -763,8 +769,12 @@ export function resolveCompactTrackDropState(
   }
 
   const bounds = hoveredStrip.getBoundingClientRect();
+  const layoutWidth = hoveredStrip.offsetWidth || bounds.width;
   const horizontalRatio =
-    bounds.width > 0 ? (clientX - bounds.left) / bounds.width : 0.5;
+    layoutWidth > 0
+      ? clientXToLocalX(clientX, bounds, hoveredStrip.offsetWidth) /
+        layoutWidth
+      : 0.5;
   const mode =
     targetTrack.kind === "folder" &&
     horizontalRatio >= 0.3 &&
@@ -807,7 +817,12 @@ export function rulerClientXToSeconds(
   pixelsPerSecond: number,
 ) {
   const bounds = element.getBoundingClientRect();
-  const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
+  const viewportWidth = element.offsetWidth || bounds.width;
+  const viewportX = clamp(
+    clientXToLocalX(clientX, bounds, element.offsetWidth),
+    0,
+    viewportWidth,
+  );
   return clamp(
     screenXToSeconds(viewportX, cameraX, pixelsPerSecond),
     0,
@@ -823,7 +838,12 @@ export function lanePointerToClip(
   pixelsPerSecond: number,
 ) {
   const bounds = element.getBoundingClientRect();
-  const pointerX = clamp(clientX - bounds.left, 0, bounds.width);
+  const viewportWidth = element.offsetWidth || bounds.width;
+  const pointerX = clamp(
+    clientXToLocalX(clientX, bounds, element.offsetWidth),
+    0,
+    viewportWidth,
+  );
 
   for (let index = clips.length - 1; index >= 0; index -= 1) {
     const clip = clips[index];

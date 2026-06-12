@@ -6,7 +6,13 @@ import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
 import { DialogHost } from "../shared/dialog/DialogHost";
-import { initUiZoom, resetUiZoom, stepUiZoom } from "../shared/uiZoom";
+import {
+  dispatchUiZoomStatus,
+  getUiZoom,
+  initUiZoom,
+  resetUiZoom,
+  stepUiZoom,
+} from "../shared/uiZoom";
 
 async function isDebugBuild() {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -70,20 +76,30 @@ export function App() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const previousZoom = getUiZoom();
+      const showZoomStatus = () => {
+        const nextZoom = getUiZoom();
+        if (nextZoom !== previousZoom) {
+          dispatchUiZoomStatus(nextZoom);
+        }
+      };
       switch (event.key) {
         case "=":
         case "+":
           event.preventDefault();
           stepUiZoom(1);
+          showZoomStatus();
           break;
         case "-":
         case "_":
           event.preventDefault();
           stepUiZoom(-1);
+          showZoomStatus();
           break;
         case "0":
           event.preventDefault();
           resetUiZoom();
+          showZoomStatus();
           break;
         default:
           break;

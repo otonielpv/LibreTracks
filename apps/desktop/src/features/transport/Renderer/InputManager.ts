@@ -1,4 +1,9 @@
-import { clamp } from "../timelineMath";
+import {
+  clamp,
+  clientDeltaXToLocalDelta,
+  clientXToLocalX,
+  getElementScaleX,
+} from "../timelineMath";
 
 type NativeZoomView = {
   cameraX: number;
@@ -122,8 +127,10 @@ export class InputManager {
     const shouldPanHorizontally = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
     if (shouldPanHorizontally) {
       event.preventDefault();
+      const horizontalDelta =
+        event.deltaX + (event.shiftKey ? event.deltaY : 0);
       const nextCameraX = this.options.onPreviewCameraX(
-        state.cameraX + event.deltaX + (event.shiftKey ? event.deltaY : 0),
+        state.cameraX + this.wheelDeltaXToLocalDelta(horizontalDelta),
       );
       this.schedulePanCommit(nextCameraX);
       return;
@@ -170,7 +177,7 @@ export class InputManager {
       const horizontalDelta =
         event.deltaX + (event.shiftKey ? event.deltaY : 0);
       const nextCameraX = this.options.onPreviewCameraX(
-        state.cameraX + horizontalDelta,
+        state.cameraX + this.wheelDeltaXToLocalDelta(horizontalDelta),
       );
       this.schedulePanCommit(nextCameraX);
       return;
@@ -187,7 +194,12 @@ export class InputManager {
   private applyZoomFromWheel(event: WheelEvent, state: InputManagerState) {
     event.preventDefault();
     const bounds = this.container.getBoundingClientRect();
-    const anchorViewportX = clamp(event.clientX - bounds.left, 0, bounds.width);
+    const viewportWidth = this.container.offsetWidth || bounds.width;
+    const anchorViewportX = clamp(
+      clientXToLocalX(event.clientX, bounds, this.container.offsetWidth),
+      0,
+      viewportWidth,
+    );
     const nextZoomLevel = this.computeNextZoomLevel(event, state.zoomLevel);
     const nextView = this.options.onPreviewZoom(nextZoomLevel, anchorViewportX);
     if (!nextView) {
@@ -195,6 +207,11 @@ export class InputManager {
     }
 
     this.scheduleZoomCommit(nextView);
+  }
+
+  private wheelDeltaXToLocalDelta(deltaX: number) {
+    const bounds = this.container.getBoundingClientRect();
+    return deltaX / getElementScaleX(bounds, this.container.offsetWidth);
   }
 
   private computeNextZoomLevel(event: WheelEvent, currentZoomLevel: number) {
@@ -245,7 +262,12 @@ export class InputManager {
       return;
     }
 
-    const deltaX = this.dragPanState.startClientX - event.clientX;
+    const bounds = this.container.getBoundingClientRect();
+    const deltaX = clientDeltaXToLocalDelta(
+      this.dragPanState.startClientX - event.clientX,
+      bounds,
+      this.container.offsetWidth,
+    );
     const exceededThreshold = Math.abs(deltaX) > this.options.dragThresholdPx;
     if (!this.dragPanState.hasMoved && !exceededThreshold) {
       return;

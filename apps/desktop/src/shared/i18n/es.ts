@@ -322,6 +322,7 @@ const es = {
       playbackPaused: "Reproduccion pausada.",
       playbackStarted: "Reproduccion iniciada.",
       playbackStopped: "Reproduccion detenida.",
+      interfaceZoomChanged: "Tamano de interfaz: {{percent}}%",
       actionUndone: "Accion deshecha.",
       actionRedone: "Accion rehecha.",
       noMarkerForDigit: "No hay marca disponible para el digito {{digit}}.",

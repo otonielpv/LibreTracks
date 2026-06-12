@@ -159,7 +159,9 @@ import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
   clampCameraX,
-  clientXToTimelineSeconds,
+  clientXToLocalX,
+  getElementScaleX,
+  getElementScaleY,
   getCumulativeMusicalPosition,
   getMaxCameraX,
   getTimelineWorkspaceEndSeconds,
@@ -204,6 +206,7 @@ import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
 import { useLibraryActions } from "./hooks/useLibraryActions";
 import { useSettingsState } from "./hooks/useSettingsState";
+import { UI_ZOOM_STATUS_EVENT } from "../../shared/uiZoom";
 import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
 import { useTransportPolling } from "./hooks/useTransportPolling";
 import { useProjectActions } from "./hooks/useProjectActions";
@@ -543,6 +546,22 @@ export function TransportPanelContent() {
     },
     [],
   );
+  useEffect(() => {
+    const onUiZoomStatus = (event: Event) => {
+      const zoom = (event as CustomEvent<{ zoom?: number }>).detail?.zoom;
+      if (!Number.isFinite(zoom)) return;
+      setStatus(
+        t("transport.status.interfaceZoomChanged", {
+          percent: Math.round((zoom ?? 1) * 100),
+          defaultValue: "Interface size: {{percent}}%",
+        }),
+      );
+    };
+
+    window.addEventListener(UI_ZOOM_STATUS_EVENT, onUiZoomStatus);
+    return () =>
+      window.removeEventListener(UI_ZOOM_STATUS_EVENT, onUiZoomStatus);
+  }, [setStatus, t]);
   const [pitchPrepareUiState, setPitchPrepareUiState] = useState<{
     active: boolean;
     message: string;
@@ -2493,8 +2512,12 @@ export function TransportPanelContent() {
   const applyTrackDragVisuals = useCallback(
     (dragState: NonNullable<TrackDragState>, dropState: TrackDropState) => {
       const isCompact = dragState.originSurface === "compact";
-      const deltaY = dragState.currentClientY - dragState.startClientY;
-      const deltaX = dragState.currentClientX - dragState.startClientX;
+      const deltaY =
+        (dragState.currentClientY - dragState.startClientY) /
+        dragState.pointerScaleY;
+      const deltaX =
+        (dragState.currentClientX - dragState.startClientX) /
+        dragState.pointerScaleX;
 
       // Selector lists vary by origin: DAW drags grab both the
       // header row and the lane row so they translate together;
@@ -4316,9 +4339,13 @@ export function TransportPanelContent() {
       const effectSong = songRef.current;
       if (clipDrag && effectSong) {
         const effectPixelsPerSecond = livePixelsPerSecondRef.current;
+        const deltaClientX = event.clientX - clipDrag.startClientX;
+        const deltaClientY = event.clientY - clipDrag.startClientY;
+        const deltaLocalX = deltaClientX / clipDrag.pointerScaleX;
+        const deltaLocalY = deltaClientY / clipDrag.pointerScaleY;
         const exceededThreshold =
-          Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX ||
-          Math.abs(event.clientY - clipDrag.startClientY) > DRAG_THRESHOLD_PX;
+          Math.abs(deltaLocalX) > DRAG_THRESHOLD_PX ||
+          Math.abs(deltaLocalY) > DRAG_THRESHOLD_PX;
         if (!clipDrag.hasMoved && exceededThreshold) {
           restoreConfirmedTransportVisual();
         }
@@ -4333,7 +4360,7 @@ export function TransportPanelContent() {
           useTimelineUIStore.getState().trackHeight,
         );
         const desiredRowDelta = Math.round(
-          (event.clientY - clipDrag.startClientY) / liveTrackHeight,
+          deltaLocalY / liveTrackHeight,
         );
         const trackRowDelta = clampGroupRowDelta(
           clipDrag.members,
@@ -4353,8 +4380,7 @@ export function TransportPanelContent() {
             }
           }
         }
-        const rawDeltaSeconds =
-          (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
+        const rawDeltaSeconds = deltaLocalX / effectPixelsPerSecond;
 
         // Holding Ctrl/Cmd during the drag enables snap-to-anchors:
         // every member's start and end edge magnets onto the playhead,
@@ -4463,10 +4489,13 @@ export function TransportPanelContent() {
 
       const trackDrag = trackDragRef.current;
       if (trackDrag && songRef.current) {
+        const deltaLocalX =
+          (event.clientX - trackDrag.startClientX) / trackDrag.pointerScaleX;
+        const deltaLocalY =
+          (event.clientY - trackDrag.startClientY) / trackDrag.pointerScaleY;
         const exceededThreshold =
-          Math.abs(event.clientX - trackDrag.startClientX) >
-            DRAG_THRESHOLD_PX ||
-          Math.abs(event.clientY - trackDrag.startClientY) > DRAG_THRESHOLD_PX;
+          Math.abs(deltaLocalX) > DRAG_THRESHOLD_PX ||
+          Math.abs(deltaLocalY) > DRAG_THRESHOLD_PX;
         const isDraggingNow = trackDrag.isDragging || exceededThreshold;
         const nextDrag = {
           ...trackDrag,
@@ -4507,6 +4536,12 @@ export function TransportPanelContent() {
       clipDragRef.current = null;
       setClipDragSnapIndicatorSeconds(null);
       if (activeClipDrag) {
+        const deltaLocalX =
+          (event.clientX - activeClipDrag.startClientX) /
+          activeClipDrag.pointerScaleX;
+        const deltaLocalY =
+          (event.clientY - activeClipDrag.startClientY) /
+          activeClipDrag.pointerScaleY;
         // Destination tracks captured from the live preview (final clamped
         // row delta). A clip changed lane only when it has an entry here.
         const previewTrackIds = clipPreviewTrackIdRef.current;
@@ -4514,10 +4549,8 @@ export function TransportPanelContent() {
         const movedEnough =
           activeClipDrag.hasMoved ||
           changedTrack ||
-          Math.abs(event.clientX - activeClipDrag.startClientX) >
-            DRAG_THRESHOLD_PX ||
-          Math.abs(event.clientY - activeClipDrag.startClientY) >
-            DRAG_THRESHOLD_PX;
+          Math.abs(deltaLocalX) > DRAG_THRESHOLD_PX ||
+          Math.abs(deltaLocalY) > DRAG_THRESHOLD_PX;
         // Any track reassignment routes through the batch path so position +
         // track commit in a single operation (one undo, one revision), even
         // for a single clip.
@@ -4635,11 +4668,15 @@ export function TransportPanelContent() {
       const activeTrackDrag = trackDragRef.current;
       if (activeTrackDrag) {
         const currentSong = songRef.current;
+        const deltaLocalX =
+          (event.clientX - activeTrackDrag.startClientX) /
+          activeTrackDrag.pointerScaleX;
+        const deltaLocalY =
+          (event.clientY - activeTrackDrag.startClientY) /
+          activeTrackDrag.pointerScaleY;
         const movedEnough =
-          Math.abs(event.clientX - activeTrackDrag.startClientX) >
-            DRAG_THRESHOLD_PX ||
-          Math.abs(event.clientY - activeTrackDrag.startClientY) >
-            DRAG_THRESHOLD_PX;
+          Math.abs(deltaLocalX) > DRAG_THRESHOLD_PX ||
+          Math.abs(deltaLocalY) > DRAG_THRESHOLD_PX;
         const shouldTreatAsDrag =
           Boolean(currentSong) && (activeTrackDrag.isDragging || movedEnough);
         const dropState =
@@ -6513,11 +6550,15 @@ export function TransportPanelContent() {
       const originSurface: "daw" | "compact" = compactStrip
         ? "compact"
         : "daw";
+      const scaleElement = compactStrip ?? headerElement ?? event.currentTarget;
+      const scaleBounds = scaleElement.getBoundingClientRect();
       trackDragRef.current = {
         trackId,
         pointerId: 1,
         startClientX: event.clientX,
         startClientY: event.clientY,
+        pointerScaleX: getElementScaleX(scaleBounds, scaleElement.offsetWidth),
+        pointerScaleY: getElementScaleY(scaleBounds, scaleElement.offsetHeight),
         currentClientY: event.clientY,
         currentClientX: event.clientX,
         isDragging: false,
@@ -6919,6 +6960,7 @@ export function TransportPanelContent() {
       const snapAnchors = currentSong
         ? buildClipSnapAnchors(currentSong, members, playheadAnchorSeconds)
         : [];
+      const dragBounds = event.currentTarget.getBoundingClientRect();
 
       clipDragRef.current = {
         clipId: hitClip.id,
@@ -6928,6 +6970,8 @@ export function TransportPanelContent() {
         clickSeekSeconds,
         startClientX: event.clientX,
         startClientY: event.clientY,
+        pointerScaleX: getElementScaleX(dragBounds, event.currentTarget.offsetWidth),
+        pointerScaleY: getElementScaleY(dragBounds, event.currentTarget.offsetHeight),
         trackRowDelta: 0,
         hasMoved: false,
         members,
@@ -6956,6 +7000,10 @@ export function TransportPanelContent() {
     const activePan: NonNullable<TimelinePanState> = {
       pointerId: 1,
       startClientX: event.clientX,
+      pointerScaleX: getElementScaleX(
+        event.currentTarget.getBoundingClientRect(),
+        event.currentTarget.offsetWidth,
+      ),
       originCameraX: getCameraX(),
       previewSeconds,
       hasMoved: false,
@@ -6963,7 +7011,9 @@ export function TransportPanelContent() {
     timelinePanRef.current = activePan;
 
     const onMouseMove = (windowEvent: MouseEvent) => {
-      const deltaX = activePan.startClientX - windowEvent.clientX;
+      const deltaX =
+        (activePan.startClientX - windowEvent.clientX) /
+        activePan.pointerScaleX;
       const exceededThreshold = Math.abs(deltaX) > DRAG_THRESHOLD_PX;
       if (!activePan.hasMoved && !exceededThreshold) {
         return;
@@ -7307,15 +7357,16 @@ export function TransportPanelContent() {
     });
   }
 
-  function getLibraryDragViewportBounds(element: HTMLElement) {
+  function getLibraryDragViewportElement(element: HTMLElement) {
     if (element.classList.contains("lt-track-lane")) {
-      return element.getBoundingClientRect();
+      return element;
     }
 
-    return (
-      rulerTrackRef.current?.getBoundingClientRect() ??
-      element.getBoundingClientRect()
-    );
+    return rulerTrackRef.current ?? element;
+  }
+
+  function getLibraryDragViewportBounds(element: HTMLElement) {
+    return getLibraryDragViewportElement(element).getBoundingClientRect();
   }
 
   function snapTimelineDropSeconds(rawSeconds: number) {
@@ -7348,8 +7399,14 @@ export function TransportPanelContent() {
     clientX: number,
     element: HTMLElement,
   ) {
-    const bounds = getLibraryDragViewportBounds(element);
-    const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
+    const viewportElement = getLibraryDragViewportElement(element);
+    const bounds = viewportElement.getBoundingClientRect();
+    const viewportWidth = viewportElement.offsetWidth || bounds.width;
+    const viewportX = clamp(
+      clientXToLocalX(clientX, bounds, viewportElement.offsetWidth),
+      0,
+      viewportWidth,
+    );
     const rawSeconds = screenXToSeconds(
       viewportX,
       getCameraX(),
@@ -7371,11 +7428,13 @@ export function TransportPanelContent() {
       return null;
     }
 
-    const viewportBounds = getLibraryDragViewportBounds(targetElement);
+    const viewportElement = getLibraryDragViewportElement(targetElement);
+    const viewportBounds = viewportElement.getBoundingClientRect();
+    const viewportWidth = viewportElement.offsetWidth || viewportBounds.width;
     const viewportX = clamp(
-      clientX - viewportBounds.left,
+      clientXToLocalX(clientX, viewportBounds, viewportElement.offsetWidth),
       0,
-      viewportBounds.width,
+      viewportWidth,
     );
     const rawSeconds = screenXToSeconds(
       viewportX,
@@ -7387,6 +7446,7 @@ export function TransportPanelContent() {
       clientX,
       viewportLeft: viewportBounds.left,
       viewportWidth: viewportBounds.width,
+      viewportLayoutWidth: viewportWidth,
       cameraX: getCameraX(),
       pixelsPerSecond: livePixelsPerSecondRef.current,
       snappedSeconds,
@@ -9586,7 +9646,11 @@ export function TransportPanelContent() {
                             return null;
                           }
 
-                          const left = candidate.clientX - shellBounds.left;
+                          const left = clientXToLocalX(
+                            candidate.clientX,
+                            shellBounds,
+                            timelineShellRef.current?.offsetWidth,
+                          );
                           const color =
                             nativeDropCoordinateModeRef.current ===
                             candidate.label
@@ -9753,6 +9817,10 @@ export function TransportPanelContent() {
                             });
 
                             const startClientX = event.clientX;
+                            const pointerScaleX = getElementScaleX(
+                              event.currentTarget.getBoundingClientRect(),
+                              event.currentTarget.offsetWidth,
+                            );
                             let hasMoved = false;
                             let autoScrollFrameId: number | null = null;
                             let autoScrollVelocity = 0;
@@ -9846,8 +9914,10 @@ export function TransportPanelContent() {
 
                             const onMouseMove = (windowEvent: MouseEvent) => {
                               const exceededThreshold =
-                                Math.abs(windowEvent.clientX - startClientX) >
-                                DRAG_THRESHOLD_PX;
+                                Math.abs(
+                                  (windowEvent.clientX - startClientX) /
+                                    pointerScaleX,
+                                ) > DRAG_THRESHOLD_PX;
                               if (!hasMoved && !exceededThreshold) {
                                 return;
                               }

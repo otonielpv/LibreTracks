@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildVisibleTimelineGrid,
+  clientXToLocalX,
   clientXToTimelineSeconds,
   getContentWidth,
   getCumulativeMusicalPosition,
@@ -9,6 +10,7 @@ import {
   getTimelineWorkspaceEndSeconds,
   getZoomLevelDelta,
   secondsToAbsoluteX,
+  localXToClientX,
   snapToTimelineGrid,
 } from "./timelineMath";
 
@@ -230,6 +232,21 @@ describe("timelineMath", () => {
     };
 
     expect(clientXToTimelineSeconds(160, boundsElement, { scrollLeft: 240 }, 20)).toBe(15);
+  });
+
+  it("normalizes client coordinates through CSS zoomed element bounds", () => {
+    const boundsElement = {
+      offsetWidth: 1000,
+      getBoundingClientRect: () =>
+        ({
+          left: 70,
+          width: 700,
+        }) as DOMRect,
+    };
+
+    expect(clientXToLocalX(210, boundsElement.getBoundingClientRect(), 1000)).toBe(200);
+    expect(clientXToTimelineSeconds(210, boundsElement, { scrollLeft: 100 }, 20)).toBe(15);
+    expect(localXToClientX(200, boundsElement.getBoundingClientRect(), 1000)).toBe(210);
   });
 
   it("converts seconds into absolute timeline pixels", () => {

@@ -306,6 +306,7 @@ const en = {
       playbackPaused: "Playback paused.",
       playbackStarted: "Playback started.",
       playbackStopped: "Playback stopped.",
+      interfaceZoomChanged: "Interface size: {{percent}}%",
       actionUndone: "Action undone.",
       actionRedone: "Action redone.",
       noMarkerForDigit: "No marker is available for digit {{digit}}.",

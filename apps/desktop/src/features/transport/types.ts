@@ -118,6 +118,10 @@ export type ClipDragState = {
    * vertical movement into a whole-row delta (`trackRowDelta`).
    */
   startClientY: number;
+  /** CSS zoom / layout scale captured at drag start. Pointer deltas are in
+   * client pixels; timeline math expects layout pixels. */
+  pointerScaleX: number;
+  pointerScaleY: number;
   /**
    * Number of track rows the group has shifted vertically (negative = up).
    * Driven by the primary clip and applied uniformly to every member so the
@@ -170,6 +174,8 @@ export type TrackDragState = {
   pointerId: number;
   startClientX: number;
   startClientY: number;
+  pointerScaleX: number;
+  pointerScaleY: number;
   currentClientY: number;
   currentClientX: number;
   isDragging: boolean;
@@ -186,6 +192,7 @@ export type TrackDragState = {
 export type TimelinePanState = {
   pointerId: number;
   startClientX: number;
+  pointerScaleX: number;
   originCameraX: number;
   previewSeconds: number;
   hasMoved: boolean;

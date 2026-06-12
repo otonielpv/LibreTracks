@@ -2,6 +2,8 @@ import type { DragEvent as ReactDragEvent } from "react";
 
 import {
   clamp,
+  clientXToLocalX,
+  localXToClientX,
   screenXToSeconds,
   secondsToScreenX,
 } from "./timelineMath";
@@ -36,39 +38,63 @@ export type ExternalDropPreview = {
 
 export function resolveExternalDropGuideLeft(
   preview: ExternalDropPreview,
-  trackLayersBounds: Pick<DOMRect, "left"> | null,
+  trackLayersBounds:
+    | (Pick<DOMRect, "left"> &
+        Partial<Pick<DOMRect, "width">> & { layoutWidth?: number })
+    | null,
   fallbackLeft: number,
 ) {
   if (preview.snapApplied) {
     return Math.round(fallbackLeft);
   }
 
-  return preview.previewClientX != null && trackLayersBounds
-    ? preview.previewClientX - trackLayersBounds.left
-    : preview.previewLeftPx ?? fallbackLeft;
+  if (preview.previewClientX != null && trackLayersBounds) {
+    return "width" in trackLayersBounds && trackLayersBounds.layoutWidth
+      ? clientXToLocalX(
+          preview.previewClientX,
+          {
+            left: trackLayersBounds.left,
+            width: trackLayersBounds.width ?? trackLayersBounds.layoutWidth,
+          },
+          trackLayersBounds.layoutWidth,
+        )
+      : preview.previewClientX - trackLayersBounds.left;
+  }
+
+  return preview.previewLeftPx ?? fallbackLeft;
 }
 
 export function buildTimelineDropPreviewGeometry(args: {
   clientX: number;
   viewportLeft: number;
   viewportWidth: number;
+  viewportLayoutWidth?: number;
   cameraX: number;
   pixelsPerSecond: number;
   snappedSeconds: number;
   snapEnabled: boolean;
 }) {
-  const viewportX = clamp(args.clientX - args.viewportLeft, 0, args.viewportWidth);
+  const viewportBounds = {
+    left: args.viewportLeft,
+    width: args.viewportWidth,
+  };
+  const viewportLayoutWidth = args.viewportLayoutWidth ?? args.viewportWidth;
+  const viewportX = clamp(
+    clientXToLocalX(args.clientX, viewportBounds, args.viewportLayoutWidth),
+    0,
+    viewportLayoutWidth,
+  );
   const rawSeconds = screenXToSeconds(viewportX, args.cameraX, args.pixelsPerSecond);
   const dropSeconds = args.snapEnabled ? args.snappedSeconds : rawSeconds;
   const rawLeftPx = clamp(
     secondsToScreenX(rawSeconds, args.cameraX, args.pixelsPerSecond),
     0,
-    args.viewportWidth,
+    viewportLayoutWidth,
   );
   const snappedLeftPx = clamp(
     secondsToScreenX(args.snappedSeconds, args.cameraX, args.pixelsPerSecond),
     0,
-    args.viewportWidth,
+    viewportLayoutWidth,
   );
   const previewLeftPx = args.snapEnabled ? Math.round(snappedLeftPx) : rawLeftPx;
 
@@ -78,11 +104,23 @@ export function buildTimelineDropPreviewGeometry(args: {
     snappedSeconds: args.snappedSeconds,
     dropSeconds,
     rawLeftPx,
-    rawClientX: args.viewportLeft + rawLeftPx,
+    rawClientX: localXToClientX(
+      rawLeftPx,
+      viewportBounds,
+      args.viewportLayoutWidth,
+    ),
     snappedLeftPx,
-    snappedClientX: args.viewportLeft + snappedLeftPx,
+    snappedClientX: localXToClientX(
+      snappedLeftPx,
+      viewportBounds,
+      args.viewportLayoutWidth,
+    ),
     previewLeftPx,
-    previewClientX: args.viewportLeft + previewLeftPx,
+    previewClientX: localXToClientX(
+      previewLeftPx,
+      viewportBounds,
+      args.viewportLayoutWidth,
+    ),
     snapApplied: args.snapEnabled,
   };
 }

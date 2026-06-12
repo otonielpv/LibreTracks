@@ -15,6 +15,8 @@ import { useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "lt.ui.zoom";
 
+export const UI_ZOOM_STATUS_EVENT = "lt:ui-zoom-status";
+
 export const UI_ZOOM_MIN = 0.7;
 export const UI_ZOOM_MAX = 1.3;
 export const UI_ZOOM_DEFAULT = 1;
@@ -41,6 +43,7 @@ const listeners = new Set<() => void>();
 const applyToDom = (zoom: number): void => {
   if (typeof document === "undefined") return;
   const shell = document.querySelector<HTMLElement>(".lt-app-shell");
+  document.documentElement.style.setProperty("--lt-ui-zoom", String(zoom));
   // Fall back to documentElement so the scale still applies before the shell
   // mounts or in non-standard hosts.
   const target = shell ?? document.documentElement;
@@ -58,6 +61,15 @@ const persist = (zoom: number): void => {
 
 export function getUiZoom(): number {
   return current;
+}
+
+export function dispatchUiZoomStatus(zoom = current): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<{ zoom: number }>(UI_ZOOM_STATUS_EVENT, {
+      detail: { zoom },
+    }),
+  );
 }
 
 export function setUiZoom(next: number | ((current: number) => number)): void {

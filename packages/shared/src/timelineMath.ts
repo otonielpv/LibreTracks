@@ -226,14 +226,71 @@ export function screenXToSeconds(
   return (cameraX + screenX) / clampPositive(pixelsPerSecond, 1);
 }
 
+export type ClientCoordinateBounds = Pick<
+  DOMRect,
+  "left" | "top" | "width" | "height"
+>;
+
+export function getElementScaleX(
+  bounds: Pick<ClientCoordinateBounds, "width">,
+  layoutWidth?: number,
+) {
+  return Number.isFinite(layoutWidth) && layoutWidth && layoutWidth > 0
+    ? clampPositive(bounds.width / layoutWidth, 1)
+    : 1;
+}
+
+export function getElementScaleY(
+  bounds: Pick<ClientCoordinateBounds, "height">,
+  layoutHeight?: number,
+) {
+  return Number.isFinite(layoutHeight) && layoutHeight && layoutHeight > 0
+    ? clampPositive(bounds.height / layoutHeight, 1)
+    : 1;
+}
+
+export function clientXToLocalX(
+  clientX: number,
+  bounds: Pick<ClientCoordinateBounds, "left" | "width">,
+  layoutWidth?: number,
+) {
+  return (clientX - bounds.left) / getElementScaleX(bounds, layoutWidth);
+}
+
+export function clientYToLocalY(
+  clientY: number,
+  bounds: Pick<ClientCoordinateBounds, "top" | "height">,
+  layoutHeight?: number,
+) {
+  return (clientY - bounds.top) / getElementScaleY(bounds, layoutHeight);
+}
+
+export function clientDeltaXToLocalDelta(
+  deltaX: number,
+  bounds: Pick<ClientCoordinateBounds, "width">,
+  layoutWidth?: number,
+) {
+  return deltaX / getElementScaleX(bounds, layoutWidth);
+}
+
+export function localXToClientX(
+  localX: number,
+  bounds: Pick<ClientCoordinateBounds, "left" | "width">,
+  layoutWidth?: number,
+) {
+  return bounds.left + localX * getElementScaleX(bounds, layoutWidth);
+}
+
 export function clientXToTimelineSeconds(
   clientX: number,
-  boundsElement: Pick<HTMLElement, "getBoundingClientRect">,
+  boundsElement: Pick<HTMLElement, "getBoundingClientRect"> &
+    Partial<Pick<HTMLElement, "offsetWidth">>,
   scrollContainerElement: Pick<HTMLElement, "scrollLeft"> | null,
   pixelsPerSecond: number,
 ) {
   const bounds = boundsElement.getBoundingClientRect();
-  const x = Math.max(0, clientX - bounds.left + (scrollContainerElement?.scrollLeft ?? 0));
+  const localX = clientXToLocalX(clientX, bounds, boundsElement.offsetWidth);
+  const x = Math.max(0, localX + (scrollContainerElement?.scrollLeft ?? 0));
   return x / clampPositive(pixelsPerSecond, 1);
 }
 

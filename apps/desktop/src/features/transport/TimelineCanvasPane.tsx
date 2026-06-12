@@ -38,6 +38,7 @@ import {
 } from "./Renderer/drawBackground";
 import {
   BASE_PIXELS_PER_SECOND,
+  getElementScaleX,
   snapToTimelineBar,
   snapToTimelineGrid,
   type TimelineGrid,
@@ -401,6 +402,7 @@ export function TimelineCanvasPane({
     edge: "start" | "end";
     pointerId: number;
     pointerStartClientX: number;
+    pointerScaleX: number;
     initialStartSeconds: number;
     initialEndSeconds: number;
     minStartSeconds: number; // lower clamp for the moving edge (left neighbour end or 0)
@@ -425,6 +427,7 @@ export function TimelineCanvasPane({
     regionId: string;
     pointerId: number;
     pointerStartClientX: number;
+    pointerScaleX: number;
     initialStartSeconds: number;
     initialEndSeconds: number;
     // Clamps for the moving START seconds (so neighbour-end ≤ start
@@ -473,6 +476,10 @@ export function TimelineCanvasPane({
       edge,
       pointerId: event.pointerId,
       pointerStartClientX: event.clientX,
+      pointerScaleX: getElementScaleX(
+        event.currentTarget.getBoundingClientRect(),
+        event.currentTarget.offsetWidth,
+      ),
       initialStartSeconds: region.startSeconds,
       initialEndSeconds: region.endSeconds,
       minStartSeconds: minStart,
@@ -498,7 +505,9 @@ export function TimelineCanvasPane({
     if (effectivePixelsPerSecond <= 0) return;
 
     const deltaSeconds =
-      (event.clientX - drag.pointerStartClientX) / effectivePixelsPerSecond;
+      (event.clientX - drag.pointerStartClientX) /
+      drag.pointerScaleX /
+      effectivePixelsPerSecond;
 
     let nextStart = drag.initialStartSeconds;
     let nextEnd = drag.initialEndSeconds;
@@ -603,6 +612,10 @@ export function TimelineCanvasPane({
       regionId: region.id,
       pointerId: event.pointerId,
       pointerStartClientX: event.clientX,
+      pointerScaleX: getElementScaleX(
+        event.currentTarget.getBoundingClientRect(),
+        event.currentTarget.offsetWidth,
+      ),
       initialStartSeconds: region.startSeconds,
       initialEndSeconds: region.endSeconds,
       minStartSeconds: minStart,
@@ -629,7 +642,9 @@ export function TimelineCanvasPane({
     if (effectivePixelsPerSecond <= 0) return;
 
     const rawDelta =
-      (event.clientX - drag.pointerStartClientX) / effectivePixelsPerSecond;
+      (event.clientX - drag.pointerStartClientX) /
+      drag.pointerScaleX /
+      effectivePixelsPerSecond;
     let nextStart = drag.initialStartSeconds + rawDelta;
 
     // Visual snap during the drag uses the FULL song grid (the moved
@@ -860,7 +875,16 @@ export function TimelineCanvasPane({
 
     return resolveExternalDropGuideLeft(
       externalDropPreview,
-      trackLayersRef.current?.getBoundingClientRect() ?? null,
+      trackLayersRef.current
+        ? (() => {
+            const bounds = trackLayersRef.current.getBoundingClientRect();
+            return {
+              left: bounds.left,
+              width: bounds.width,
+              layoutWidth: trackLayersRef.current.offsetWidth,
+            };
+          })()
+        : null,
       resolveLibraryGhostLeft(externalDropPreview.seconds),
     );
   })();

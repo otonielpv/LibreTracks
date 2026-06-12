@@ -207,6 +207,21 @@ describe("resolveExternalDropGuideLeft", () => {
     ).toBe(320);
   });
 
+  it("converts previewClientX through CSS zoomed guide bounds", () => {
+    expect(
+      resolveExternalDropGuideLeft(
+        {
+          kind: "audio",
+          seconds: 10,
+          previewLeftPx: 240,
+          previewClientX: 240,
+        },
+        { left: 80, width: 800, layoutWidth: 1000 },
+        180,
+      ),
+    ).toBe(200);
+  });
+
   it("uses the rounded timeline seconds fallback for snapped previews", () => {
     expect(
       resolveExternalDropGuideLeft(
@@ -256,5 +271,23 @@ describe("buildTimelineDropPreviewGeometry", () => {
     expect(geometry.dropSeconds).toBe(2.5);
     expect(geometry.previewClientX).toBeCloseTo(125);
     expect(geometry.previewLeftPx).toBe(25);
+  });
+
+  it("normalizes drop geometry through CSS zoomed viewport bounds", () => {
+    const geometry = buildTimelineDropPreviewGeometry({
+      clientX: 240,
+      viewportLeft: 80,
+      viewportWidth: 800,
+      viewportLayoutWidth: 1000,
+      cameraX: 0,
+      pixelsPerSecond: 10,
+      snappedSeconds: 25,
+      snapEnabled: false,
+    });
+
+    expect(geometry.viewportX).toBeCloseTo(200);
+    expect(geometry.rawSeconds).toBeCloseTo(20);
+    expect(geometry.previewLeftPx).toBeCloseTo(200);
+    expect(geometry.previewClientX).toBeCloseTo(240);
   });
 });

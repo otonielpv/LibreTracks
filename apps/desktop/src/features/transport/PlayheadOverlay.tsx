@@ -10,6 +10,7 @@ import { useRenderCounter } from "./perf/useRenderCounter";
 import { useTransportStore } from "./store";
 import {
   clamp,
+  clientXToLocalX,
   secondsToAbsoluteX,
   screenXToSeconds,
 } from "./timelineMath";
@@ -61,12 +62,18 @@ type PlaybackSnapshotState = {
 
 function clientXToTimelineSecondsFromCamera(
   clientX: number,
-  boundsElement: Pick<HTMLElement, "getBoundingClientRect">,
+  boundsElement: Pick<HTMLElement, "getBoundingClientRect"> &
+    Partial<Pick<HTMLElement, "offsetWidth">>,
   cameraX: number,
   pixelsPerSecond: number,
 ) {
   const bounds = boundsElement.getBoundingClientRect();
-  const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
+  const viewportWidth = boundsElement.offsetWidth ?? bounds.width;
+  const viewportX = clamp(
+    clientXToLocalX(clientX, bounds, boundsElement.offsetWidth),
+    0,
+    viewportWidth,
+  );
   return screenXToSeconds(viewportX, cameraX, pixelsPerSecond);
 }
 
