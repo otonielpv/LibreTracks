@@ -93,6 +93,14 @@ function jumpSignature(playback: TransportSnapshot | null) {
   ].join("|");
 }
 
+function automationJumpSignature(playback: TransportSnapshot | null) {
+  const cue = playback?.pendingAutomationCue;
+  if (!cue) {
+    return "";
+  }
+  return [cue.cueId, cue.executeAtSeconds.toFixed(6)].join("|");
+}
+
 function vampSignature(playback: TransportSnapshot | null) {
   const vamp = playback?.activeVamp;
   if (!vamp) {
@@ -145,6 +153,7 @@ function shouldPublishPlaybackSnapshot(
     current.transportClock?.lastJumpPositionSeconds !==
       next.transportClock?.lastJumpPositionSeconds ||
     jumpSignature(current) !== jumpSignature(next) ||
+    automationJumpSignature(current) !== automationJumpSignature(next) ||
     vampSignature(current) !== vampSignature(next) ||
     pitchPrepareSignature(current) !== pitchPrepareSignature(next)
   );

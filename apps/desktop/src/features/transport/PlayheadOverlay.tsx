@@ -50,6 +50,10 @@ type PlaybackSnapshotState = {
   positionSeconds: number;
   transportClock: TransportClock | null;
   anchorReceivedAtMs: number;
+  /** While an automation jump is armed, the timeline second it fires at. The
+   * visual clock must not extrapolate past this, else the playhead overshoots
+   * the cue before the jump's reanchor arrives. */
+  pendingJumpExecuteSeconds: number | null;
 };
 
 function clientXToTimelineSecondsFromCamera(
@@ -78,11 +82,22 @@ function resolveClockPositionSeconds(
 
   const elapsedSeconds =
     (performance.now() - playback.anchorReceivedAtMs) / 1000;
-  return clamp(
-    playback.transportClock.anchorPositionSeconds + elapsedSeconds,
-    0,
-    safeDuration,
-  );
+  const extrapolated = playback.transportClock.anchorPositionSeconds + elapsedSeconds;
+
+  // While a jump is armed ahead of the playhead, freeze the visual clock at the
+  // cue's execute point so the playhead doesn't overshoot it before the jump's
+  // reanchor snapshot lands. Only clamps a forward-approaching jump (execute
+  // point at/after the anchor), so it never holds the playhead back otherwise.
+  const execute = playback.pendingJumpExecuteSeconds;
+  if (
+    execute != null &&
+    execute >= playback.transportClock.anchorPositionSeconds - 0.001 &&
+    extrapolated > execute
+  ) {
+    return clamp(execute, 0, safeDuration);
+  }
+
+  return clamp(extrapolated, 0, safeDuration);
 }
 
 export function PlayheadOverlay({
@@ -107,6 +122,7 @@ export function PlayheadOverlay({
     positionSeconds: 0,
     transportClock: null,
     anchorReceivedAtMs: performance.now(),
+    pendingJumpExecuteSeconds: null,
   });
   const latestPropsRef = useRef({
     durationSeconds,
@@ -144,6 +160,10 @@ export function PlayheadOverlay({
         positionSeconds: playback?.positionSeconds ?? 0,
         transportClock: playback?.transportClock ?? null,
         anchorReceivedAtMs: performance.now(),
+        pendingJumpExecuteSeconds:
+          playback?.pendingAutomationCue?.executeAtSeconds ??
+          playback?.pendingMarkerJump?.executeAtSeconds ??
+          null,
       };
     };
 
