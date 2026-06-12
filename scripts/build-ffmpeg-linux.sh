@@ -80,6 +80,10 @@ common_args=(
   --disable-avdevice --disable-avfilter --disable-swscale --disable-postproc
   --disable-network --disable-debug
   --disable-lzma
+  --disable-libxcb            # configure auto-detects libxcb/libX11 (x11grab) when
+                              # present on the build host; that would make the libav*
+                              # depend on libX11/libxcb we'd have to vendor too. We
+                              # decode audio only — no X11 needed.
   --disable-x86asm
   --enable-pic
 )
