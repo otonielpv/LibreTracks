@@ -168,6 +168,8 @@ export type PendingAutomationCueSummary = {
   cueId: string;
   cueName: string;
   executeAtSeconds: number;
+  /** Jump destination in view seconds — lets the playhead move there instantly. */
+  targetSeconds: number;
   target: AutomationJumpTargetSummary;
 };
 

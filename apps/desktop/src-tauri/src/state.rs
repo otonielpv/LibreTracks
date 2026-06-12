@@ -5781,6 +5781,9 @@ impl DesktopSession {
                             song,
                             pending.execute_at_seconds,
                         ),
+                        target_seconds: automation_target_source_seconds(song, &pending.target)
+                            .map(|seconds| warp_timeline_seconds_at(song, seconds))
+                            .unwrap_or(0.0),
                         target: automation_jump_target_to_summary(song, &pending.target),
                     })
             }),

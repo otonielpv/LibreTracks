@@ -224,6 +224,9 @@ pub struct PendingAutomationCueSummary {
     pub cue_id: String,
     pub cue_name: String,
     pub execute_at_seconds: f64,
+    /// The jump destination in view seconds, so the UI can move the playhead
+    /// there the instant it reaches the cue (no waiting for the reanchor).
+    pub target_seconds: f64,
     pub target: AutomationJumpTargetSummary,
 }
 

@@ -54,6 +54,9 @@ type PlaybackSnapshotState = {
    * visual clock must not extrapolate past this, else the playhead overshoots
    * the cue before the jump's reanchor arrives. */
   pendingJumpExecuteSeconds: number | null;
+  /** The armed automation jump's destination in seconds, so the playhead can
+   * snap there the instant it reaches the cue (no waiting for the reanchor). */
+  pendingJumpTargetSeconds: number | null;
 };
 
 function clientXToTimelineSecondsFromCamera(
@@ -112,6 +115,7 @@ export function PlayheadOverlay({
     transportClock: null,
     anchorReceivedAtMs: performance.now(),
     pendingJumpExecuteSeconds: null,
+    pendingJumpTargetSeconds: null,
   });
   const latestPropsRef = useRef({
     durationSeconds,
@@ -153,6 +157,10 @@ export function PlayheadOverlay({
           playback?.pendingAutomationCue?.executeAtSeconds ??
           playback?.pendingMarkerJump?.executeAtSeconds ??
           null,
+        // Only automation cues carry the resolved destination seconds; marker
+        // jumps fall back to the freeze-clamp (no instant target available).
+        pendingJumpTargetSeconds:
+          playback?.pendingAutomationCue?.targetSeconds ?? null,
       };
     };
 
@@ -194,15 +202,20 @@ export function PlayheadOverlay({
                 Math.max(0, latestPropsRef.current.durationSeconds),
               );
 
-      // While a jump is armed ahead of the playhead, freeze the visual position
-      // at the cue's execute point so it doesn't overshoot before the jump's
-      // reanchor lands. Applied here (not just in the clock branch) because the
-      // playhead is normally driven by positionSecondsRef, which extrapolates
-      // past the cue. Only bites a forward jump (execute ahead of us) and never
-      // during a drag.
+      // When the playhead reaches an armed jump, move it to the destination
+      // immediately rather than waiting for the backend reanchor (which can lag
+      // 80–250 ms, leaving the playhead visibly frozen at the cue). The audio
+      // already jumped sample-exact; this just keeps the visual in step.
+      //  - Automation jumps carry the resolved targetSeconds → snap there.
+      //  - Marker jumps have no target seconds here → fall back to freezing at
+      //    the execute point so they at least don't overshoot.
       const execute = playbackRef.current.pendingJumpExecuteSeconds;
-      if (!activeDrag && execute != null && nextSeconds > execute) {
-        nextSeconds = execute;
+      const target = playbackRef.current.pendingJumpTargetSeconds;
+      if (!activeDrag && execute != null && nextSeconds >= execute) {
+        nextSeconds =
+          target != null
+            ? clamp(target, 0, Math.max(0, latestPropsRef.current.durationSeconds))
+            : execute;
       }
       const absoluteX = secondsToAbsoluteX(
         nextSeconds,
