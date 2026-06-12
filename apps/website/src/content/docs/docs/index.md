@@ -22,7 +22,7 @@ The project model is **song-first**: songs (song regions) are the primary contai
 3. Drag audio files or song packages into the session, then organize assets with the Library and timeline.
 4. Configure the audio device, sample rate, buffer size, hardware outputs, track routes, metronome, and MIDI input.
 5. Create song regions, markers, optional meter changes, and region-based transpose changes. Give markers a section type to drive the [Voice Guide](./voice-guide).
-6. Rehearse marker jumps, Vamp, song jumps, transitions, keyboard shortcuts, MIDI mappings, track transpose enable states, and the mobile remote.
+6. Rehearse marker jumps, Vamp, song jumps, transitions, keyboard shortcuts, MIDI mappings, track transpose enable states, and the mobile remote. Add an [automation track](./automation) to fire jumps, mute/solo, fader moves, and mix scenes automatically at exact points.
 7. Export prepared songs or packages when you want to reuse them in future sessions.
 
 ![Library import workflow](/screenshots/Library-Assets-Import.gif)
@@ -47,7 +47,7 @@ LibreTracks also notifies you in-app when a new version is published, with the c
 
 - `Settings`: audio device, sample rate, buffer size, hardware outputs, metronome, MIDI Learn, and decoding cache management.
 - `Library`: imported audio assets, including FLAC files, and virtual folders. Collapsed-folder state persists across sessions.
-- `Timeline (DAW view)`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, and color-coded organization.
+- `Timeline (DAW view)`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, [automation cues](./automation), and color-coded organization. The whole interface can be zoomed and fit to small displays, and the timeline can follow the playhead during playback.
 - `Compact View`: Session-style projection of the same model — one column per song with its own master fader, a shared horizontal mixer at the bottom, drag-and-drop assets / `.ltpkg` packages, and multi-select track reordering. See [Compact View](./compact-view).
 - `Remote`: local web control surface for transport, jumps, Vamp, transpose, and a mixer with meters and grouped track color cues.
 - `File`: import songs/packages and export prepared songs.

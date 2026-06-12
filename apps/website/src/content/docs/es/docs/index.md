@@ -22,7 +22,7 @@ El modelo del proyecto es **song-first**: las canciones (regiones de cancion) so
 3. Arrastra archivos de audio o paquetes de cancion a la sesion y organiza los assets entre Biblioteca y timeline.
 4. Configura dispositivo de audio, frecuencia de muestreo, tamaño de buffer, salidas hardware, rutas por pista, metronomo y entrada MIDI.
 5. Crea regiones de cancion, marcas, cambios de compas si hace falta y cambios de transposicion por region. Dale un tipo de seccion a las marcas para activar la [Voz Guia](./voice-guide).
-6. Ensaya saltos de marca, Vamp, saltos de cancion, transiciones, atajos, mapeos MIDI, estados de transposicion por pista y remote movil.
+6. Ensaya saltos de marca, Vamp, saltos de cancion, transiciones, atajos, mapeos MIDI, estados de transposicion por pista y remote movil. Anade una [pista de automatizacion](./automation) para disparar saltos, mute/solo, movimientos de fader y escenas de mezcla automaticamente en puntos exactos.
 7. Exporta canciones o paquetes preparados cuando quieras reutilizarlos en futuras sesiones.
 
 ![Importacion en Biblioteca](/screenshots/Library-Assets-Import.gif)
@@ -47,7 +47,7 @@ LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, m
 
 - `Configuracion`: dispositivo de audio, frecuencia de muestreo, tamano de buffer, salidas hardware, metronomo, MIDI Learn y gestion de cache de decodificacion.
 - `Biblioteca`: assets importados, incluidos archivos FLAC, y carpetas virtuales. El estado expandido/colapsado de las carpetas se conserva entre sesiones.
-- `Timeline (vista DAW)`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla y organizacion por color.
+- `Timeline (vista DAW)`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla, [senales de automatizacion](./automation) y organizacion por color. Toda la interfaz se puede ampliar y ajustar a pantallas pequenas, y el timeline puede seguir al cursor de reproduccion.
 - `Vista Compacta`: proyeccion estilo Session del mismo modelo — una columna por cancion con su propio fader Master, mixer horizontal compartido abajo, drag-and-drop de audio y paquetes `.ltpkg`, y reordenacion de pistas con multi-seleccion. Ver [Vista Compacta](./compact-view).
 - `Remote`: superficie web local para transporte, saltos, Vamp, transposicion y un mixer con medidores y pistas agrupadas visualmente.
 - `Archivo`: importar canciones/paquetes y exportar canciones preparadas.
