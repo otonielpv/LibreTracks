@@ -120,6 +120,14 @@ pub enum AutomationAction {
     ApplyScene {
         #[serde(rename = "sceneId")]
         scene_id: String,
+        /// Ramp the scene's volume/pan changes over this many seconds when
+        /// applied (None / 0 = instant).
+        #[serde(
+            rename = "rampSeconds",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        ramp_seconds: Option<f64>,
     },
     Wait {
         #[serde(rename = "durationSeconds")]

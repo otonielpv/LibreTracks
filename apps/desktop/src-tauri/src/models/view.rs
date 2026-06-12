@@ -168,6 +168,8 @@ pub enum AutomationActionSummary {
     ApplyScene {
         #[serde(rename = "sceneId")]
         scene_id: String,
+        #[serde(rename = "rampSeconds", skip_serializing_if = "Option::is_none")]
+        ramp_seconds: Option<f64>,
     },
     Wait {
         #[serde(rename = "durationSeconds")]
@@ -606,8 +608,12 @@ pub(crate) fn automation_action_to_summary(
             pan: *pan,
             ramp_seconds: *ramp_seconds,
         },
-        AutomationAction::ApplyScene { scene_id } => AutomationActionSummary::ApplyScene {
+        AutomationAction::ApplyScene {
+            scene_id,
+            ramp_seconds,
+        } => AutomationActionSummary::ApplyScene {
             scene_id: scene_id.clone(),
+            ramp_seconds: *ramp_seconds,
         },
         AutomationAction::Wait { duration_seconds } => AutomationActionSummary::Wait {
             duration_seconds: *duration_seconds,

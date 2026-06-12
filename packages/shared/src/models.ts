@@ -134,7 +134,7 @@ export type AutomationActionSummary =
       pan?: number | null;
       rampSeconds?: number | null;
     }
-  | { type: "applyScene"; sceneId: string }
+  | { type: "applyScene"; sceneId: string; rampSeconds?: number | null }
   | { type: "wait"; durationSeconds: number };
 
 export type AutomationCueSummary = {

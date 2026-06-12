@@ -2025,7 +2025,7 @@ impl DesktopSession {
                 cue.actions.retain(|action| {
                     !matches!(
                         action,
-                        AutomationAction::ApplyScene { scene_id: id } if id == scene_id
+                        AutomationAction::ApplyScene { scene_id: id, .. } if id == scene_id
                     )
                 });
             }
@@ -2284,8 +2284,11 @@ impl DesktopSession {
                     audio.update_live_track_mix(track_id, *volume, *pan, None, None, None)?;
                 }
             }
-            AutomationAction::ApplyScene { scene_id } => {
-                self.apply_mix_scene_runtime(scene_id, audio)?;
+            AutomationAction::ApplyScene {
+                scene_id,
+                ramp_seconds,
+            } => {
+                self.apply_mix_scene_runtime(scene_id, ramp_seconds.unwrap_or(0.0), audio)?;
             }
             // Jump and Wait are handled by the scheduler/executor, not here.
             AutomationAction::Jump { .. } | AutomationAction::Wait { .. } => {}
@@ -2390,6 +2393,7 @@ impl DesktopSession {
     fn apply_mix_scene_runtime(
         &mut self,
         scene_id: &str,
+        ramp_seconds: f64,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         let Some(scene) = self
@@ -2402,6 +2406,10 @@ impl DesktopSession {
             return Ok(());
         };
 
+        let position_seconds = self.engine.position_seconds();
+        let ramped = ramp_seconds > 0.0;
+        let mut new_ramps: Vec<ActiveMixRamp> = Vec::new();
+
         let song = self.engine.song_mut()?;
         for override_ in scene.track_overrides {
             if let Some(track) = song
@@ -2411,11 +2419,14 @@ impl DesktopSession {
             {
                 let volume = override_.volume.map(|volume| volume.clamp(0.0, 1.0));
                 let pan = override_.pan.map(|pan| pan.clamp(-1.0, 1.0));
+                // Capture the current values BEFORE overwriting, to ramp from.
+                let from_volume = track.volume;
+                let from_pan = track.pan;
                 if let Some(volume) = volume {
-                    track.volume = volume.clamp(0.0, 1.0);
+                    track.volume = volume;
                 }
                 if let Some(pan) = pan {
-                    track.pan = pan.clamp(-1.0, 1.0);
+                    track.pan = pan;
                 }
                 if let Some(muted) = override_.muted {
                     track.muted = muted;
@@ -2423,16 +2434,43 @@ impl DesktopSession {
                 if let Some(solo) = override_.solo {
                     track.solo = solo;
                 }
-                audio.update_live_track_mix(
-                    &track.id,
-                    volume,
-                    pan,
-                    override_.muted,
-                    override_.solo,
-                    None,
-                )?;
+
+                if ramped && (volume.is_some() || pan.is_some()) {
+                    // Mute/solo are discrete → apply now; volume/pan ramp.
+                    audio.update_live_track_mix(
+                        &track.id,
+                        None,
+                        None,
+                        override_.muted,
+                        override_.solo,
+                        None,
+                    )?;
+                    new_ramps.push(ActiveMixRamp {
+                        track_id: track.id.clone(),
+                        start_position_seconds: position_seconds,
+                        duration_seconds: ramp_seconds,
+                        volume: volume.map(|to| (from_volume, to)),
+                        pan: pan.map(|to| (from_pan, to)),
+                    });
+                } else {
+                    audio.update_live_track_mix(
+                        &track.id,
+                        volume,
+                        pan,
+                        override_.muted,
+                        override_.solo,
+                        None,
+                    )?;
+                }
             }
         }
+
+        // Replace any existing ramps for these tracks with the new ones.
+        for ramp in &new_ramps {
+            self.active_mix_ramps
+                .retain(|existing| existing.track_id != ramp.track_id);
+        }
+        self.active_mix_ramps.extend(new_ramps);
 
         Ok(())
     }
@@ -5706,7 +5744,8 @@ impl DesktopSession {
                     audio.start_master_fade(1.0, duration_seconds)?;
                 }
                 if let Some(scene_id) = pending_automation.mix_scene_id.as_deref() {
-                    self.apply_mix_scene_runtime(scene_id, audio)?;
+                    // The jump's mix scene applies instantly as the culmination.
+                    self.apply_mix_scene_runtime(scene_id, 0.0, audio)?;
                 }
                 // Count this firing before re-arming so a cue at its run limit is
                 // not immediately re-scheduled (which would loop forever).
@@ -7009,11 +7048,19 @@ fn validate_automation_cue(
                     ));
                 }
             }
-            AutomationAction::ApplyScene { scene_id } => {
+            AutomationAction::ApplyScene {
+                scene_id,
+                ramp_seconds,
+            } => {
                 if !scene_exists(scene_id) {
                     return Err(DesktopError::AudioCommand(format!(
                         "mix scene not found: {scene_id}"
                     )));
+                }
+                if ramp_seconds.is_some_and(|r| !r.is_finite() || r < 0.0) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation scene ramp must be a finite, non-negative number".into(),
+                    ));
                 }
             }
             AutomationAction::Wait { duration_seconds } => {
