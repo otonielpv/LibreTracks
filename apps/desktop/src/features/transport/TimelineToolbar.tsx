@@ -545,21 +545,23 @@ export function TimelineToolbar({
             </svg>
           </button>
 
-          <button
-            type="button"
-            className={`lt-icon-button ${followPlayheadEnabled ? "is-active" : ""}`}
-            aria-label={
-              followPlayheadEnabled
-                ? t("timelineToolbar.disableFollowPlayhead")
-                : t("timelineToolbar.enableFollowPlayhead")
-            }
-            aria-pressed={followPlayheadEnabled}
-            title={t("timelineToolbar.followPlayheadTitle")}
-            disabled={controlsDisabled}
-            onClick={onToggleFollowPlayhead}
-          >
-            <span className="material-symbols-outlined">my_location</span>
-          </button>
+          {viewMode === "daw" ? (
+            <button
+              type="button"
+              className={`lt-icon-button ${followPlayheadEnabled ? "is-active" : ""}`}
+              aria-label={
+                followPlayheadEnabled
+                  ? t("timelineToolbar.disableFollowPlayhead")
+                  : t("timelineToolbar.enableFollowPlayhead")
+              }
+              aria-pressed={followPlayheadEnabled}
+              title={t("timelineToolbar.followPlayheadTitle")}
+              disabled={controlsDisabled}
+              onClick={onToggleFollowPlayhead}
+            >
+              <span className="material-symbols-outlined">my_location</span>
+            </button>
+          ) : null}
 
           <ControlGroup
             title={t("timelineToolbar.vampModeLabel")}
