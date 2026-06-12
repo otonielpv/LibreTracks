@@ -1491,6 +1491,15 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
   gap: 0.55rem;
+  /* Stretch cells to equal height so the label-grows rule below can bottom-
+     align every input regardless of how many lines its label wraps to. */
+  align-items: stretch;
+}
+
+/* The label absorbs the slack (.lt-settings-field is already a flex column), so
+   the control sits at the bottom and all inputs line up across the row. */
+.lt-automation-action-fields .lt-settings-field-label {
+  flex: 1 0 auto;
 }
 
 .lt-automation-action-fields .lt-settings-field input[type="number"],
