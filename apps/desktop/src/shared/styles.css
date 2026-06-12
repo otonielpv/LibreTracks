@@ -1401,7 +1401,9 @@ textarea {
 }
 
 .lt-automation-modal {
-  max-width: 30rem;
+  /* Wide enough that a SetTrackMix row's four fields (track, volume, pan,
+     smoothing) fit on one line instead of wrapping the last one. */
+  max-width: 38rem;
 }
 
 /* Numeric fields in the automation cue modal share the select's framing so the
