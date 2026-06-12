@@ -3804,11 +3804,14 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
 
         // Snapshot the region bounds before removing so we can also evict
-        // any clips and tempo markers that live inside its range. Without
-        // this the clips would survive past the region's removal and break
-        // the "clip lives inside one region" invariant (step 4.1), and
-        // stale tempo markers would keep affecting playback at positions
-        // the user thought were gone with the song.
+        // any clips and markers that live inside its range. Without this the
+        // clips would survive past the region's removal and break the "clip
+        // lives inside one region" invariant (step 4.1), and stale tempo /
+        // section markers would keep affecting playback at positions the user
+        // thought were gone with the song. Section markers in particular also
+        // break the next LoadSession: the C++ validator rejects a marker whose
+        // frame no longer falls inside any song range ("Marker X is outside
+        // its song"), so deleting a song with markers must take its markers.
         let region_start = song.regions[region_index].start_seconds;
         let region_end = song.regions[region_index].end_seconds;
 
@@ -3817,6 +3820,9 @@ impl DesktopSession {
             clip.timeline_start_seconds < region_start || clip.timeline_start_seconds >= region_end
         });
         song.tempo_markers.retain(|marker| {
+            marker.start_seconds < region_start || marker.start_seconds >= region_end
+        });
+        song.section_markers.retain(|marker| {
             marker.start_seconds < region_start || marker.start_seconds >= region_end
         });
 
@@ -11060,6 +11066,41 @@ mod tests {
         assert_eq!(song_view.regions[1].id, "region_3");
         assert_eq!(song_view.regions[1].start_seconds, 14.0);
         assert_eq!(song_view.regions[1].end_seconds, 18.0);
+    }
+
+    #[test]
+    fn deleting_a_song_region_evicts_section_markers_inside_its_range() {
+        // Regression: section markers used to survive their song's deletion,
+        // leaving an orphan marker whose frame fell outside any remaining song
+        // range. The next LoadSession then failed C++ validation with
+        // "Marker X is outside its song", so the user could only delete a song
+        // after manually removing every marker first.
+        let mut session = session_with_song_dir(
+            "region-delete-section-markers",
+            demo_song_with_region_changes_and_sections(),
+        );
+
+        let audio = crate::audio_engine::AudioController::default();
+        // section_2 lives at 15.0s, inside region_3 ([14, 18]); section_1 at
+        // 1.0s is inside region_1 and must be untouched.
+        session
+            .delete_song_region("region_3", &audio)
+            .expect("song region should delete");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        let section_ids: Vec<&str> = song_view
+            .section_markers
+            .iter()
+            .map(|marker| marker.id.as_str())
+            .collect();
+        assert_eq!(
+            section_ids,
+            vec!["section_1"],
+            "the marker inside the deleted region should be evicted, the other kept"
+        );
     }
 
     #[test]
