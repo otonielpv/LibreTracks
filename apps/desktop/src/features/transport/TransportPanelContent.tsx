@@ -163,6 +163,7 @@ import {
   getElementScaleX,
   getElementScaleY,
   getCumulativeMusicalPosition,
+  getFollowPlayheadCameraX,
   getMaxCameraX,
   getTimelineWorkspaceEndSeconds,
   getZoomLevelDelta,
@@ -866,6 +867,9 @@ export function TransportPanelContent() {
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
+  const followPlayheadEnabled = useTimelineUIStore(
+    (state) => state.followPlayheadEnabled,
+  );
   const midiLearnMode = useTimelineUIStore((state) => state.midiLearnMode);
   const viewMode = useTimelineUIStore((state) => state.viewMode);
   const toggleViewMode = useTimelineUIStore((state) => state.toggleViewMode);
@@ -1145,6 +1149,9 @@ export function TransportPanelContent() {
   const toggleSnapEnabled = useTimelineUIStore(
     (state) => state.toggleSnapEnabled,
   );
+  const toggleFollowPlayheadEnabled = useTimelineUIStore(
+    (state) => state.toggleFollowPlayheadEnabled,
+  );
   const setSelectedClipId = useTimelineUIStore(
     (state) => state.setSelectedClipId,
   );
@@ -1190,6 +1197,10 @@ export function TransportPanelContent() {
   // matches the previous one the anchor never re-runs → playhead frozen.
   const forceReanchorOnNextSnapshotRef = useRef(false);
   const displayPositionSecondsRef = useRef(0);
+  const followPlayheadEnabledRef = useRef(followPlayheadEnabled);
+  const viewModeRef = useRef(viewMode);
+  const laneViewportWidthRef = useRef(320);
+  const timelineContentEndSecondsRef = useRef(0);
   const suppressTrackClickRef = useRef(false);
   const trackSelectionAnchorRef = useRef<string | null>(null);
   const clipSelectionAnchorRef = useRef<string | null>(null);
@@ -1711,6 +1722,7 @@ export function TransportPanelContent() {
     handleVampModeChange,
     handleVampBarsChange,
     handleTimelineNavigationSchemeChange,
+    handleTimelinePlayheadFollowModeChange,
     handleLocaleChange,
   } = settingsHandlers;
 
@@ -4238,6 +4250,7 @@ export function TransportPanelContent() {
       );
 
       syncLivePosition(nextPositionSeconds);
+      maybeFollowPlayhead(nextPositionSeconds);
       animationFrameId = window.requestAnimationFrame(tick);
     };
 
@@ -4804,6 +4817,42 @@ export function TransportPanelContent() {
     }
   }
 
+  function maybeFollowPlayhead(positionSeconds: number) {
+    if (
+      !followPlayheadEnabledRef.current ||
+      viewModeRef.current !== "daw" ||
+      playheadDragRef.current
+    ) {
+      return;
+    }
+
+    const effectivePixelsPerSecond = livePixelsPerSecondRef.current;
+    const viewportWidth = laneViewportWidthRef.current;
+    const durationSeconds = songRef.current?.durationSeconds ?? 0;
+    const nextCameraX = getFollowPlayheadCameraX({
+      playheadSeconds: positionSeconds,
+      cameraX: cameraXRef.current,
+      pixelsPerSecond: effectivePixelsPerSecond,
+      viewportWidth,
+      durationSeconds,
+      contentEndSeconds: timelineContentEndSecondsRef.current,
+      followMode: appSettingsRef.current.timelinePlayheadFollowMode,
+    });
+
+    if (nextCameraX === null) {
+      return;
+    }
+
+    updateCameraX(nextCameraX, {
+      durationSeconds,
+      contentEndSeconds: timelineContentEndSecondsRef.current,
+      pixelsPerSecond: effectivePixelsPerSecond,
+      viewportWidth,
+      syncPlayhead: false,
+      commitToStore: false,
+    });
+  }
+
   function updateCameraX(
     nextCameraX: number,
     options?: {
@@ -5070,6 +5119,17 @@ export function TransportPanelContent() {
 
     return furthestContentSeconds;
   }, [pendingAudioImports, song]);
+  useEffect(() => {
+    followPlayheadEnabledRef.current = followPlayheadEnabled;
+    viewModeRef.current = viewMode;
+    laneViewportWidthRef.current = laneViewportWidth;
+    timelineContentEndSecondsRef.current = timelineContentEndSeconds;
+  }, [
+    followPlayheadEnabled,
+    laneViewportWidth,
+    timelineContentEndSeconds,
+    viewMode,
+  ]);
   const workspaceDurationSeconds = getTimelineWorkspaceEndSeconds(
     song?.durationSeconds ?? 0,
     timelineContentEndSeconds,
@@ -9579,7 +9639,9 @@ export function TransportPanelContent() {
                     trackCount={song?.tracks.length ?? 0}
                     clipCount={song?.clips.length ?? 0}
                     markerCount={song?.sectionMarkers.length ?? 0}
+                    followPlayheadEnabled={followPlayheadEnabled}
                     onToggleSnap={toggleSnapEnabled}
+                    onToggleFollowPlayhead={toggleFollowPlayheadEnabled}
                     onGlobalJumpModeChange={handleGlobalJumpModeChange}
                     onGlobalJumpBarsChange={handleGlobalJumpBarsChange}
                     onSongJumpTriggerChange={handleSongJumpTriggerChange}
@@ -10399,6 +10461,9 @@ export function TransportPanelContent() {
               onLocaleChange={handleLocaleChange}
               onTimelineNavigationSchemeChange={
                 handleTimelineNavigationSchemeChange
+              }
+              onTimelinePlayheadFollowModeChange={
+                handleTimelinePlayheadFollowModeChange
               }
               midiLearnMode={midiLearnMode}
               midiLearnFeedback={midiLearnFeedback}

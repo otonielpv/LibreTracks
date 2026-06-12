@@ -93,6 +93,10 @@ fn default_timeline_navigation_scheme() -> String {
     "ableton".into()
 }
 
+fn default_timeline_playhead_follow_mode() -> String {
+    "ahead".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MidiBinding {
@@ -182,6 +186,8 @@ pub struct AppSettings {
     pub vamp_bars: u32,
     #[serde(default = "default_timeline_navigation_scheme")]
     pub timeline_navigation_scheme: String,
+    #[serde(default = "default_timeline_playhead_follow_mode")]
+    pub timeline_playhead_follow_mode: String,
     #[serde(default)]
     pub midi_mappings: HashMap<String, MidiBinding>,
     /// Custom location for the decoded-PCM cache (`.rf64` files written when a
@@ -237,6 +243,7 @@ impl Default for AppSettings {
             vamp_mode: default_vamp_mode(),
             vamp_bars: default_vamp_bars(),
             timeline_navigation_scheme: default_timeline_navigation_scheme(),
+            timeline_playhead_follow_mode: default_timeline_playhead_follow_mode(),
             midi_mappings: HashMap::new(),
             decoding_cache_dir: None,
             decoding_cache_max_gb: None,

@@ -211,7 +211,9 @@ type TimelineToolbarProps = {
   trackCount: number;
   clipCount: number;
   markerCount: number;
+  followPlayheadEnabled: boolean;
   onToggleSnap: () => void;
+  onToggleFollowPlayhead: () => void;
   onGlobalJumpModeChange: (mode: GlobalJumpMode) => void;
   onGlobalJumpBarsChange: (bars: number) => void;
   onSongJumpTriggerChange: (trigger: SongJumpTrigger) => void;
@@ -323,7 +325,9 @@ export function TimelineToolbar({
   trackCount,
   clipCount,
   markerCount,
+  followPlayheadEnabled,
   onToggleSnap,
+  onToggleFollowPlayhead,
   onGlobalJumpModeChange,
   onGlobalJumpBarsChange,
   onSongJumpTriggerChange,
@@ -539,6 +543,22 @@ export function TimelineToolbar({
               <line x1="16" y1="4" x2="21" y2="4" />
               {!snapEnabled ? <line x1="4" y1="20" x2="20" y2="4" /> : null}
             </svg>
+          </button>
+
+          <button
+            type="button"
+            className={`lt-icon-button ${followPlayheadEnabled ? "is-active" : ""}`}
+            aria-label={
+              followPlayheadEnabled
+                ? t("timelineToolbar.disableFollowPlayhead")
+                : t("timelineToolbar.enableFollowPlayhead")
+            }
+            aria-pressed={followPlayheadEnabled}
+            title={t("timelineToolbar.followPlayheadTitle")}
+            disabled={controlsDisabled}
+            onClick={onToggleFollowPlayhead}
+          >
+            <span className="material-symbols-outlined">my_location</span>
           </button>
 
           <ControlGroup

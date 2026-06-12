@@ -13,6 +13,7 @@ export type ViewMode = "daw" | "compact";
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 76;
 export const TIMELINE_DEFAULT_SNAP_ENABLED = true;
+export const TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED = false;
 export const DEFAULT_VIEW_MODE: ViewMode = "daw";
 
 type TimelineUIState = {
@@ -24,6 +25,7 @@ type TimelineUIState = {
   selectedClipIds: string[];
   selectedSectionId: string | null;
   snapEnabled: boolean;
+  followPlayheadEnabled: boolean;
   midiLearnMode: string | null;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
@@ -42,6 +44,10 @@ type TimelineUIState = {
   selectSection: (sectionId: string | null) => void;
   setSnapEnabled: (enabled: boolean | ((currentSnapEnabled: boolean) => boolean)) => void;
   toggleSnapEnabled: () => void;
+  setFollowPlayheadEnabled: (
+    enabled: boolean | ((currentFollowPlayheadEnabled: boolean) => boolean),
+  ) => void;
+  toggleFollowPlayheadEnabled: () => void;
   setMidiLearnMode: (midiLearnMode: string | null) => void;
 };
 
@@ -55,6 +61,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     selectedClipIds: [],
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
+    followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
@@ -150,6 +157,19 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     toggleSnapEnabled: () => {
       set((state) => ({ snapEnabled: !state.snapEnabled }));
+    },
+    setFollowPlayheadEnabled: (followPlayheadEnabled) => {
+      set((state) => ({
+        followPlayheadEnabled:
+          typeof followPlayheadEnabled === "function"
+            ? followPlayheadEnabled(state.followPlayheadEnabled)
+            : followPlayheadEnabled,
+      }));
+    },
+    toggleFollowPlayheadEnabled: () => {
+      set((state) => ({
+        followPlayheadEnabled: !state.followPlayheadEnabled,
+      }));
     },
     setMidiLearnMode: (midiLearnMode) => {
       set({ midiLearnMode });

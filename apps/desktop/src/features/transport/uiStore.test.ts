@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   DEFAULT_VIEW_MODE,
+  TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
   TIMELINE_DEFAULT_SNAP_ENABLED,
   TIMELINE_DEFAULT_TRACK_HEIGHT,
   TIMELINE_DEFAULT_ZOOM_LEVEL,
@@ -20,6 +21,7 @@ function reset() {
     selectedClipIds: [],
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
+    followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
     viewMode: DEFAULT_VIEW_MODE,
   });
@@ -34,6 +36,9 @@ describe("useTimelineUIStore", () => {
     expect(initial.zoomLevel).toBe(TIMELINE_DEFAULT_ZOOM_LEVEL);
     expect(initial.trackHeight).toBe(TIMELINE_DEFAULT_TRACK_HEIGHT);
     expect(initial.snapEnabled).toBe(TIMELINE_DEFAULT_SNAP_ENABLED);
+    expect(initial.followPlayheadEnabled).toBe(
+      TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
+    );
     expect(initial.viewMode).toBe(DEFAULT_VIEW_MODE);
   });
 
@@ -180,6 +185,15 @@ describe("useTimelineUIStore", () => {
       expect(get().snapEnabled).toBe(true);
       get().toggleSnapEnabled();
       expect(get().snapEnabled).toBe(false);
+    });
+
+    it("sets playhead follow with a literal or updater and toggles it", () => {
+      get().setFollowPlayheadEnabled(true);
+      expect(get().followPlayheadEnabled).toBe(true);
+      get().setFollowPlayheadEnabled((enabled) => !enabled);
+      expect(get().followPlayheadEnabled).toBe(false);
+      get().toggleFollowPlayheadEnabled();
+      expect(get().followPlayheadEnabled).toBe(true);
     });
 
     it("stores and clears the midi learn target", () => {

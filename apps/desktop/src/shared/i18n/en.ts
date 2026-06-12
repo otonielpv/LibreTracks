@@ -117,6 +117,11 @@ const en = {
         "LibreTracks classic (scroll wheel zooms)",
       timelineNavigationSchemeHelp:
         "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor and Alt + scroll resizes track height.",
+      timelinePlayheadFollowMode: "Playhead follow",
+      timelinePlayheadFollowModeAhead: "Keep ahead (75% of the view)",
+      timelinePlayheadFollowModeCenter: "Centered",
+      timelinePlayheadFollowModeHelp:
+        "Choose where the cursor sits when follow is enabled in the timeline toolbar.",
       interfaceZoom: "Interface size",
       interfaceZoomHelp:
         "Scale the whole interface. Lower it if the app is wider than your screen. Shortcut: Cmd/Ctrl +, − and 0 to reset.",
@@ -386,6 +391,7 @@ const en = {
       metronomeSoundUpdated: "Metronome sound updated.",
       voiceGuideUpdated: "Voice guide updated.",
       timelineNavigationSchemeUpdated: "Timeline navigation scheme updated.",
+      timelinePlayheadFollowModeUpdated: "Playhead follow mode updated.",
       trackRoutingUpdated: "Track routing updated.",
       importRequiresSession:
         "Create or open a session before importing audio to the library.",
@@ -458,6 +464,9 @@ const en = {
     disableSnap: "Disable snap to grid",
     enableSnap: "Enable snap to grid",
     snapTitle: "Snap to Grid ({{subdivision}}/1)",
+    disableFollowPlayhead: "Disable cursor follow",
+    enableFollowPlayhead: "Enable cursor follow",
+    followPlayheadTitle: "Follow playhead while playing",
     markerJumpLabel: "Marker Jump",
     markerJumpModeAria: "Marker jump mode",
     jumpLabel: "Marker Jump",

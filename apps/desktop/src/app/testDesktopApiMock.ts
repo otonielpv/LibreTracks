@@ -426,6 +426,7 @@ function buildInitialState(): DesktopApiMockState {
       vampMode: "section",
       vampBars: 4,
       timelineNavigationScheme: "ableton",
+      timelinePlayheadFollowMode: "ahead",
       midiMappings: {},
     },
     audioOutputDevices: {

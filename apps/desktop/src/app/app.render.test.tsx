@@ -49,6 +49,7 @@ describe("App / app.render", () => {
     expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.play) })).toBeTruthy();
     expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.pause) })).toBeTruthy();
     expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.stop) })).toBeTruthy();
+    expect(screen.getByRole("button", { name: textMatcher(en.timelineToolbar.enableFollowPlayhead) })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /browser/i })).toBeNull();
     expect(screen.queryByLabelText(textMatcher(en.library.panelAria))).toBeNull();
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();

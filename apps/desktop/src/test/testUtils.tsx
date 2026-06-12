@@ -14,6 +14,7 @@ import enMessages from "../shared/i18n/en";
 import { useTransportStore as transportStore } from "../features/transport/store";
 import {
   DEFAULT_VIEW_MODE,
+  TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
   TIMELINE_DEFAULT_SNAP_ENABLED,
   TIMELINE_DEFAULT_TRACK_HEIGHT as defaultTrackHeight,
   TIMELINE_DEFAULT_ZOOM_LEVEL,
@@ -253,6 +254,7 @@ beforeEach(async () => {
     selectedClipIds: [],
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
+    followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
     viewMode: DEFAULT_VIEW_MODE,
   });

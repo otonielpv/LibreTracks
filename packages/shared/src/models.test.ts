@@ -221,12 +221,21 @@ describe("normalizeAppSettings", () => {
       songTransitionMode: "fade_out",
       vampMode: "bars",
       timelineNavigationScheme: "libretracks",
+      timelinePlayheadFollowMode: "center",
     });
     expect(result.globalJumpMode).toBe(DEFAULT_APP_SETTINGS.globalJumpMode);
     expect(result.songJumpTrigger).toBe("after_bars");
     expect(result.songTransitionMode).toBe("fade_out");
     expect(result.vampMode).toBe("bars");
     expect(result.timelineNavigationScheme).toBe("libretracks");
+    expect(result.timelinePlayheadFollowMode).toBe("center");
+    expect(
+      normalizeAppSettings({
+        ...DEFAULT_APP_SETTINGS,
+        timelinePlayheadFollowMode:
+          "sideways" as AppSettings["timelinePlayheadFollowMode"],
+      }).timelinePlayheadFollowMode,
+    ).toBe(DEFAULT_APP_SETTINGS.timelinePlayheadFollowMode);
   });
 });
 

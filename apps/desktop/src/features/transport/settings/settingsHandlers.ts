@@ -264,6 +264,17 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleTimelinePlayheadFollowModeChange(
+      nextValue: AppSettings["timelinePlayheadFollowMode"],
+    ) {
+      persistAudioPatch(
+        { timelinePlayheadFollowMode: nextValue },
+        t("transport.status.timelinePlayheadFollowModeUpdated", {
+          defaultValue: "Playhead follow mode updated.",
+        }),
+      );
+    },
+
     handleLocaleChange(nextValue: string) {
       // Locale uses a raw merge (not normalizeAppSettings) to mirror the
       // monolith, and a function message that reads the *saved* locale.

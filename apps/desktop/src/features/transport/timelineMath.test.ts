@@ -6,6 +6,7 @@ import {
   clientXToTimelineSeconds,
   getContentWidth,
   getCumulativeMusicalPosition,
+  getFollowPlayheadCameraX,
   getMusicalPosition,
   getTimelineWorkspaceEndSeconds,
   getZoomLevelDelta,
@@ -261,5 +262,42 @@ describe("timelineMath", () => {
   it("extends the workspace by one hour past the furthest content", () => {
     expect(getTimelineWorkspaceEndSeconds(12, 45)).toBe(3645);
     expect(getContentWidth(12, 18, 45)).toBe(3645 * 18);
+  });
+
+  it("returns a camera adjustment when playhead follow reaches the leading edge", () => {
+    expect(
+      getFollowPlayheadCameraX({
+        playheadSeconds: 8,
+        cameraX: 0,
+        pixelsPerSecond: 100,
+        viewportWidth: 1000,
+        durationSeconds: 20,
+      }),
+    ).toBe(50);
+  });
+
+  it("keeps the camera unchanged while the playhead is inside the follow window", () => {
+    expect(
+      getFollowPlayheadCameraX({
+        playheadSeconds: 5,
+        cameraX: 0,
+        pixelsPerSecond: 100,
+        viewportWidth: 1000,
+        durationSeconds: 20,
+      }),
+    ).toBeNull();
+  });
+
+  it("can keep the playhead centered while following", () => {
+    expect(
+      getFollowPlayheadCameraX({
+        playheadSeconds: 8,
+        cameraX: 0,
+        pixelsPerSecond: 100,
+        viewportWidth: 1000,
+        durationSeconds: 20,
+        followMode: "center",
+      }),
+    ).toBe(300);
   });
 });

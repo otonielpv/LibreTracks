@@ -118,6 +118,11 @@ const es = {
         "LibreTracks clásico (la rueda hace zoom)",
       timelineNavigationSchemeHelp:
         "Elige cómo el trackpad o la rueda del ratón se mueven por la línea de tiempo. En modo Ableton, pellizcar (o Ctrl + scroll) hace zoom hacia el cursor y Alt + scroll cambia la altura de las pistas.",
+      timelinePlayheadFollowMode: "Seguimiento del cursor",
+      timelinePlayheadFollowModeAhead: "Adelantado (75% de la vista)",
+      timelinePlayheadFollowModeCenter: "Centrado",
+      timelinePlayheadFollowModeHelp:
+        "Elige donde queda el cursor cuando el seguimiento esta activado en la barra del timeline.",
       interfaceZoom: "Tamaño de la interfaz",
       interfaceZoomHelp:
         "Escala toda la interfaz. Bájalo si la app es más ancha que tu pantalla. Atajo: Cmd/Ctrl +, − y 0 para restablecer.",
@@ -408,6 +413,8 @@ const es = {
       voiceGuideUpdated: "Voz guía actualizada.",
       timelineNavigationSchemeUpdated:
         "Navegación de la línea de tiempo actualizada.",
+      timelinePlayheadFollowModeUpdated:
+        "Modo de seguimiento del cursor actualizado.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",
       importRequiresSession:
         "Crea o abre una sesion antes de importar audio a la libreria.",
@@ -482,6 +489,9 @@ const es = {
     disableSnap: "Desactivar snap to grid",
     enableSnap: "Activar snap to grid",
     snapTitle: "Snap to Grid ({{subdivision}}/1)",
+    disableFollowPlayhead: "Desactivar seguimiento del cursor",
+    enableFollowPlayhead: "Activar seguimiento del cursor",
+    followPlayheadTitle: "Seguir el cursor durante la reproduccion",
     markerJumpLabel: "Salto de Marca",
     markerJumpModeAria: "Modo de salto de marca",
     jumpLabel: "Salto de Marca",

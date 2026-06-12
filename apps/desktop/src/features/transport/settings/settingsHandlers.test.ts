@@ -143,6 +143,14 @@ describe("createSettingsHandlers", () => {
     expect(lastPatch(persistAudioSettings).songJumpBars).toBe(1);
   });
 
+  it("handleTimelinePlayheadFollowModeChange persists the follow mode", () => {
+    const { handlers, persistAudioSettings } = setup();
+    handlers.handleTimelinePlayheadFollowModeChange("center");
+    expect(lastPatch(persistAudioSettings).timelinePlayheadFollowMode).toBe(
+      "center",
+    );
+  });
+
   it("handleResetMidiMappings clears mappings and the learn feedback toast", () => {
     const setMidiLearnFeedback = vi.fn();
     const { handlers, persistAudioSettings } = setup({ setMidiLearnFeedback });

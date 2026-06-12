@@ -336,6 +336,75 @@ export function clampCameraX(
   );
 }
 
+export function getFollowPlayheadCameraX(params: {
+  playheadSeconds: number;
+  cameraX: number;
+  pixelsPerSecond: number;
+  viewportWidth: number;
+  durationSeconds: number;
+  contentEndSeconds?: number;
+  followMode?: "ahead" | "center";
+  leadingRatio?: number;
+  trailingRatio?: number;
+}) {
+  const viewportWidth = Math.max(0, params.viewportWidth);
+  if (viewportWidth <= 0 || !Number.isFinite(params.playheadSeconds)) {
+    return null;
+  }
+
+  const playheadX = secondsToAbsoluteX(
+    params.playheadSeconds,
+    params.pixelsPerSecond,
+  );
+  const currentCameraX = Math.max(0, params.cameraX);
+  const followMode = params.followMode ?? "ahead";
+  if (followMode === "center") {
+    const clampedCameraX = clampCameraX(
+      playheadX - viewportWidth * 0.5,
+      params.durationSeconds,
+      params.pixelsPerSecond,
+      viewportWidth,
+      params.contentEndSeconds ?? params.durationSeconds,
+    );
+    return Math.abs(clampedCameraX - currentCameraX) > 0.5
+      ? clampedCameraX
+      : null;
+  }
+
+  const trailingRatio = clamp(params.trailingRatio ?? 0.18, 0, 0.9);
+  const leadingRatio = clamp(
+    params.leadingRatio ?? 0.75,
+    trailingRatio + 0.05,
+    0.95,
+  );
+  const trailingX = viewportWidth * trailingRatio;
+  const leadingX = viewportWidth * leadingRatio;
+  const viewportX = playheadX - currentCameraX;
+
+  let nextCameraX: number | null = null;
+  if (viewportX > leadingX) {
+    nextCameraX = playheadX - leadingX;
+  } else if (viewportX < trailingX) {
+    nextCameraX = playheadX - trailingX;
+  }
+
+  if (nextCameraX === null) {
+    return null;
+  }
+
+  const clampedCameraX = clampCameraX(
+    nextCameraX,
+    params.durationSeconds,
+    params.pixelsPerSecond,
+    viewportWidth,
+    params.contentEndSeconds ?? params.durationSeconds,
+  );
+
+  return Math.abs(clampedCameraX - currentCameraX) > 0.5
+    ? clampedCameraX
+    : null;
+}
+
 export function zoomCameraAtViewportX(params: {
   durationSeconds: number;
   contentEndSeconds?: number;

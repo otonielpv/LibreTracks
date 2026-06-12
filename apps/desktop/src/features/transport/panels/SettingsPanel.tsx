@@ -94,6 +94,9 @@ type SettingsPanelProps = {
   onLocaleChange: (value: string) => void;
 
   onTimelineNavigationSchemeChange: (value: "ableton" | "libretracks") => void;
+  onTimelinePlayheadFollowModeChange: (
+    value: AppSettings["timelinePlayheadFollowMode"],
+  ) => void;
 
   midiLearnMode: string | null;
   midiLearnFeedback: MidiLearnFeedback | null;
@@ -159,6 +162,7 @@ export function SettingsPanel({
   selectedLocale,
   onLocaleChange,
   onTimelineNavigationSchemeChange,
+  onTimelinePlayheadFollowModeChange,
   midiLearnMode,
   midiLearnFeedback,
   midiLearnFeedbackCommand,
@@ -1182,6 +1186,54 @@ export function SettingsPanel({
                           {
                             defaultValue:
                               "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor and Alt + scroll resizes track height.",
+                          },
+                        )}
+                      </small>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t(
+                          "transport.settingsModal.timelinePlayheadFollowMode",
+                          {
+                            defaultValue: "Playhead follow",
+                          },
+                        )}
+                      </span>
+                      <select
+                        value={appSettings.timelinePlayheadFollowMode}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onTimelinePlayheadFollowModeChange(
+                            event.target.value === "center"
+                              ? "center"
+                              : "ahead",
+                          )
+                        }
+                      >
+                        <option value="ahead">
+                          {t(
+                            "transport.settingsModal.timelinePlayheadFollowModeAhead",
+                            {
+                              defaultValue: "Keep ahead (75% of the view)",
+                            },
+                          )}
+                        </option>
+                        <option value="center">
+                          {t(
+                            "transport.settingsModal.timelinePlayheadFollowModeCenter",
+                            {
+                              defaultValue: "Centered",
+                            },
+                          )}
+                        </option>
+                      </select>
+                      <small>
+                        {t(
+                          "transport.settingsModal.timelinePlayheadFollowModeHelp",
+                          {
+                            defaultValue:
+                              "Choose where the cursor sits when follow is enabled in the timeline toolbar.",
                           },
                         )}
                       </small>
