@@ -418,6 +418,7 @@ function ActionEditor({
         ) : null}
         <label className="lt-settings-field">
           <span className="lt-settings-field-label">Fade out (s)</span>
+          <small className="lt-settings-field-hint">0 = instantáneo</small>
           <input
             type="number"
             min={0}
@@ -434,7 +435,6 @@ function ActionEditor({
               });
             }}
           />
-          <small className="lt-settings-field-hint">0 = instantáneo</small>
         </label>
       </div>
     );
@@ -512,6 +512,9 @@ function ActionEditor({
         </label>
         <label className="lt-settings-field">
           <span className="lt-settings-field-label">Suavizado (s)</span>
+          <small className="lt-settings-field-hint">
+            0 = cambio inmediato
+          </small>
           <input
             type="number"
             min={0}
@@ -525,9 +528,6 @@ function ActionEditor({
               });
             }}
           />
-          <small className="lt-settings-field-hint">
-            0 = cambio inmediato
-          </small>
         </label>
       </div>
     );

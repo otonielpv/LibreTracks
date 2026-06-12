@@ -1496,14 +1496,12 @@ textarea {
   align-items: stretch;
 }
 
-/* The label absorbs the slack (.lt-settings-field is already a flex column), so
-   the control sits at the bottom and all inputs line up across the row. */
-.lt-automation-action-fields .lt-settings-field-label {
-  flex: 1 0 auto;
-}
-
+/* Bottom-align every control: the label (and its optional hint, placed right
+   after it in the DOM) stay at the top, and the input/select is pushed to the
+   bottom of its equal-height cell, so all inputs line up across the row. */
 .lt-automation-action-fields .lt-settings-field input[type="number"],
 .lt-automation-action-fields .lt-settings-field select {
+  margin-top: auto;
   width: 100%;
   box-sizing: border-box;
   border-radius: 2px;
