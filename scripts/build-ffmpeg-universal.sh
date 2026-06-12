@@ -75,11 +75,11 @@ common_args=(
   --disable-avdevice --disable-avfilter --disable-swscale --disable-postproc
   --disable-network --disable-debug
   --disable-lzma              # liblzma (xz) is Homebrew, not a system lib — drop it
-  --disable-libxcb            # configure auto-detects libxcb/libX11 (x11grab screen
-                              # capture) when present on the build host and makes the
-                              # libav* depend on @rpath/libX11.6.dylib — which the
-                              # bundle can't reliably resolve and the .app dylib-wiring
-                              # guard rejects. We decode audio only; no X11 needed.
+  --disable-libxcb            # XCB (x11grab). FFmpeg also probes the older Xlib path
+  --disable-xlib              # separately, so disable BOTH — otherwise the libav*
+                              # still depend on @rpath/libX11.6.dylib, which the bundle
+                              # can't resolve and the .app dylib-wiring guard rejects.
+                              # We decode audio only; no X11 needed.
   --disable-videotoolbox      # we decode audio only; avoids CoreVideo + its newer-OS
                               # symbols (e.g. CVBufferCopyAttachments, macOS 12+) that
                               # crash on Catalina/Big Sur as a hard dependency

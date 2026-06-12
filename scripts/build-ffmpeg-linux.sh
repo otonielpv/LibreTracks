@@ -80,10 +80,10 @@ common_args=(
   --disable-avdevice --disable-avfilter --disable-swscale --disable-postproc
   --disable-network --disable-debug
   --disable-lzma
-  --disable-libxcb            # configure auto-detects libxcb/libX11 (x11grab) when
-                              # present on the build host; that would make the libav*
-                              # depend on libX11/libxcb we'd have to vendor too. We
-                              # decode audio only — no X11 needed.
+  --disable-libxcb            # XCB (x11grab screen capture). FFmpeg also probes the
+  --disable-xlib              # older Xlib path separately, so disable BOTH or the
+                              # libav* still gain a libX11/libxcb dependency we'd have
+                              # to vendor. We decode audio only — no X11 needed.
   --disable-x86asm
   --enable-pic
 )
