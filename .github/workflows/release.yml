@@ -92,15 +92,16 @@ jobs:
           - os: ubuntu-22.04
             platform: linux
             publish: true
-          # Backwards-compat validation only. macOS 13 is the oldest runner
-          # GitHub offers; it builds the bundle on an older toolchain and runs
-          # the dylib-wiring guard below, catching @rpath/load regressions that
-          # would break launch on our minimum target (macOS 11 Big Sur).
+          # Backwards-compat validation only. macos-15-intel is GitHub's last
+          # x86_64 (Intel) runner — the macos-13 image was retired on 2025-12-04
+          # — and is supported through ~Aug 2027. It builds the Intel bundle and
+          # runs the dylib-wiring guard below, catching @rpath/load regressions
+          # that would break launch on our minimum target (macOS 10.15 Catalina).
           # publish: false -> it never uploads artifacts, so it cannot collide
           # with the macos-latest release bundle. continue-on-error keeps a
-          # flaky old-runner failure from blocking a legitimate release while
-          # still surfacing as a red check in the UI.
-          - os: macos-13
+          # flaky runner failure from blocking a legitimate release while still
+          # surfacing as a red check in the UI.
+          - os: macos-15-intel
             platform: macos
             publish: false
     runs-on: ${{ matrix.os }}
@@ -133,6 +134,12 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
+          # NOTE: no libav*-dev here on purpose. The engine builds with
+          # LT_ENGINE_USE_FFMPEG=ON and links our own LGPL FFmpeg built from
+          # source (see "Build LGPL FFmpeg (Linux)"), which PKG_CONFIG_PATH points
+          # at, so the configure-time libav* come from our prefix — not the
+          # distro. patchelf is required by scripts/linux-bundle-ffmpeg.sh to set
+          # the $ORIGIN rpath that makes the bundle self-contained.
           sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libsndfile1-dev rpm
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
 
@@ -220,6 +227,19 @@ jobs:
           bash scripts/build-ffmpeg-universal.sh "$PWD/vendor/ffmpeg-universal"
           echo "PKG_CONFIG_PATH=$PWD/vendor/ffmpeg-universal/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
 
+      - name: Build LGPL FFmpeg (Linux)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Build the same minimal, decoder-only, LGPL FFmpeg from source we use
+          # on macOS, as .so for x86_64. pkg-config is pointed here so the engine
+          # links our build instead of the distro's libav* (whose SONAME differs
+          # across distros); linux-bundle-ffmpeg.sh then vendors the .so next to
+          # the engine with an $ORIGIN rpath so the bundle is self-contained.
+          bash scripts/build-ffmpeg-linux.sh "$PWD/vendor/ffmpeg-linux"
+          echo "PKG_CONFIG_PATH=$PWD/vendor/ffmpeg-linux/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+
       - name: Build native engine release
         shell: pwsh
         run: |
@@ -259,9 +279,10 @@ jobs:
           }
           if ("${{ matrix.platform }}" -eq "macos") {
             $env:MACOSX_DEPLOYMENT_TARGET = "10.15"
-            # macos-latest (arm64) ships the real universal artifact; macos-13
-            # (Intel, validation-only) builds x86_64 since an Intel host cannot
-            # produce/obtain the arm64 FFmpeg slice the universal link needs.
+            # macos-latest (arm64) ships the real universal artifact;
+            # macos-15-intel (Intel, validation-only) builds x86_64 since an
+            # Intel host cannot produce/obtain the arm64 FFmpeg slice the
+            # universal link needs.
             $osxArchs = if ("${{ matrix.os }}" -eq "macos-latest") { "x86_64;arm64" } else { "x86_64" }
             $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=$osxArchs"
             $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
@@ -277,6 +298,9 @@ jobs:
           Get-ChildItem -Path $libDir -Include "*.dll","*.so","*.dylib" -File -Recurse | Copy-Item -Destination vendor/bin/native -Force
           if ("${{ matrix.platform }}" -eq "linux") {
             Copy-Item vendor/bungee/linux-x86_64/libbungee.so vendor/bin/native -Force
+            # Vendor our LGPL FFmpeg .so next to the engine with an $ORIGIN rpath
+            # so the .deb/.rpm/AppImage run without the distro's libav* installed.
+            bash scripts/linux-bundle-ffmpeg.sh vendor/bin/native vendor/ffmpeg-linux
           }
           if ("${{ matrix.platform }}" -eq "macos") {
             Copy-Item vendor/bungee/apple-mac/bungee.framework vendor/bin/native -Recurse -Force
@@ -317,7 +341,7 @@ jobs:
           LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
         with:
           projectPath: 'apps/desktop'
-          args: ${{ matrix.os == 'macos-latest' && '--verbose --target universal-apple-darwin' || matrix.os == 'macos-13' && '--verbose --target x86_64-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,rpm,appimage' || '--verbose' }}
+          args: ${{ matrix.os == 'macos-latest' && '--verbose --target universal-apple-darwin' || matrix.os == 'macos-15-intel' && '--verbose --target x86_64-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,rpm,appimage' || '--verbose' }}
 
       - name: Validate Linux .deb runtime linkage
         if: matrix.platform == 'linux'
@@ -380,6 +404,35 @@ jobs:
               exit 1
             fi
           done
+
+          # Self-contained FFmpeg guard: the engine builds with FFmpeg ON, so it
+          # must (a) carry the libav* it links as bundled siblings and (b) resolve
+          # them inside the private lib dir, NOT from the host's /usr/lib (which a
+          # clean user machine won't have). This is the Linux analogue of the
+          # macOS dylib-wiring guard.
+          echo "--- bundled FFmpeg (libav*) ---"
+          for need in $(patchelf --print-needed "$ENGINE" 2>/dev/null \
+                        || readelf -d "$ENGINE" | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p'); do
+            case "$need" in
+              libav*|libswresample*|libswscale*)
+                if [ ! -e "$LIB_DIR/$need" ]; then
+                  echo "::error::Engine NEEDs $need but it is not bundled in $LIB_DIR — run scripts/linux-bundle-ffmpeg.sh."
+                  ls -1 "$LIB_DIR"
+                  exit 1
+                fi
+                # Where does the loader actually resolve it from?
+                resolved="$(LD_LIBRARY_PATH="$LIB_DIR" ldd "$ENGINE" | awk -v n="$need" '$1==n {print $3}')"
+                echo "  $need -> $resolved"
+                case "$resolved" in
+                  "$LIB_DIR"/*) ;;  # sibling in the bundle: good
+                  *)
+                    echo "::error::$need resolves outside the bundle ($resolved). The engine would crash on a host without FFmpeg."
+                    exit 1 ;;
+                esac
+                ;;
+            esac
+          done
+          echo "FFmpeg is bundled and resolves within the private lib dir."
 
       - name: Validate Linux .rpm contents
         if: matrix.platform == 'linux'
