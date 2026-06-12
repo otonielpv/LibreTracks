@@ -118,6 +118,9 @@ const es = {
         "LibreTracks clásico (la rueda hace zoom)",
       timelineNavigationSchemeHelp:
         "Elige cómo el trackpad o la rueda del ratón se mueven por la línea de tiempo. En modo Ableton, pellizcar (o Ctrl + scroll) hace zoom hacia el cursor y Alt + scroll cambia la altura de las pistas.",
+      interfaceZoom: "Tamaño de la interfaz",
+      interfaceZoomHelp:
+        "Escala toda la interfaz. Bájalo si la app es más ancha que tu pantalla. Atajo: Cmd/Ctrl +, − y 0 para restablecer.",
       metronomeTitle: "Metronomo",
       metronomeDescription:
         "Añade una claqueta sintetizada y la mantiene bloqueada muestra a muestra con el timeline del transporte.",

@@ -117,6 +117,9 @@ const en = {
         "LibreTracks classic (scroll wheel zooms)",
       timelineNavigationSchemeHelp:
         "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor and Alt + scroll resizes track height.",
+      interfaceZoom: "Interface size",
+      interfaceZoomHelp:
+        "Scale the whole interface. Lower it if the app is wider than your screen. Shortcut: Cmd/Ctrl +, − and 0 to reset.",
       metronomeTitle: "Metronome",
       metronomeDescription:
         "Adds a synthesized click and keeps it sample-locked to the transport timeline.",

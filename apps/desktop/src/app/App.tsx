@@ -6,6 +6,7 @@ import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
 import { DialogHost } from "../shared/dialog/DialogHost";
+import { initUiZoom, resetUiZoom, stepUiZoom } from "../shared/uiZoom";
 
 async function isDebugBuild() {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -59,6 +60,38 @@ export function App() {
     return () => {
       active = false;
     };
+  }, []);
+
+  // Interface zoom: apply the persisted scale on start, and wire the standard
+  // Cmd/Ctrl +/-/0 shortcuts so small screens (e.g. a 13" MacBook) can shrink
+  // the whole UI to fit. Lives here so it works regardless of focus/panel.
+  useEffect(() => {
+    initUiZoom();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      switch (event.key) {
+        case "=":
+        case "+":
+          event.preventDefault();
+          stepUiZoom(1);
+          break;
+        case "-":
+        case "_":
+          event.preventDefault();
+          stepUiZoom(-1);
+          break;
+        case "0":
+          event.preventDefault();
+          resetUiZoom();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const { release, isModalOpen, dismiss } = useUpdateCheck({
