@@ -1539,6 +1539,9 @@ textarea {
   flex-direction: column;
   gap: 0.35rem;
   overflow-y: auto;
+  /* Grid items default to min-height:auto, which lets them grow past the row
+     and defeats overflow scrolling — pin to 0 so the column scrolls instead. */
+  min-height: 0;
   padding-right: 0.3rem;
 }
 
@@ -1576,6 +1579,9 @@ textarea {
   flex-direction: column;
   gap: 0.7rem;
   overflow-y: auto;
+  /* Same grid min-height:auto trap as the list — pin to 0 so the track list
+     scrolls within the modal instead of overflowing it. */
+  min-height: 0;
 }
 
 .lt-scene-detail-head {
