@@ -510,6 +510,25 @@ function ActionEditor({
             }
           />
         </label>
+        <label className="lt-settings-field">
+          <span className="lt-settings-field-label">Suavizado (s)</span>
+          <input
+            type="number"
+            min={0}
+            step={0.1}
+            value={action.rampSeconds ?? 0}
+            onChange={(event) => {
+              const seconds = Math.max(0, Number(event.target.value));
+              onChange({
+                ...action,
+                rampSeconds: seconds > 0 ? seconds : null,
+              });
+            }}
+          />
+          <small className="lt-settings-field-hint">
+            0 = cambio inmediato
+          </small>
+        </label>
       </div>
     );
   }

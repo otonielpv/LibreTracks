@@ -153,6 +153,8 @@ pub struct DesktopSession {
     /// Session state only (never persisted); reset on stop and on seeking before
     /// a cue. Enforces `AutomationCue.max_runs` so loops can be bounded.
     automation_run_counts: HashMap<String, u32>,
+    /// In-progress volume/pan ramps from SetTrackMix actions with ramp_seconds.
+    active_mix_ramps: Vec<ActiveMixRamp>,
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
@@ -201,6 +203,19 @@ struct ActiveAutomationJob {
     fired_count: usize,
 }
 
+/// A volume/pan ramp in progress for a SetTrackMix action with `ramp_seconds`.
+/// The runtime interpolates from the start value to the target across the ramp
+/// window (stepped per transport tick), since the native engine only has
+/// instantaneous SetTrackGain/SetTrackPan. Session state; cleared on stop/seek.
+#[derive(Debug, Clone)]
+struct ActiveMixRamp {
+    track_id: String,
+    start_position_seconds: f64,
+    duration_seconds: f64,
+    volume: Option<(f64, f64)>, // (from, to)
+    pan: Option<(f64, f64)>,    // (from, to)
+}
+
 #[derive(Debug, Default)]
 struct TransportClock {
     anchor_position_seconds: f64,
@@ -226,6 +241,7 @@ impl Default for DesktopSession {
             pending_automation_jump: None,
             active_automation_job: None,
             automation_run_counts: HashMap::new(),
+            active_mix_ramps: Vec::new(),
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1581,6 +1597,7 @@ impl DesktopSession {
         self.transport_clock.stop();
         self.pending_automation_jump = None;
         self.active_automation_job = None;
+        self.active_mix_ramps.clear();
         // A fresh session: every cue can fire its full quota again.
         self.reset_automation_run_counts(None);
         audio.cancel_scheduled_jumps()?;
@@ -1606,6 +1623,8 @@ impl DesktopSession {
         self.engine.seek(position_seconds)?;
         // Seeking before a cue makes it eligible to fire its full quota again.
         self.reset_automation_run_counts(Some(self.engine.position_seconds()));
+        // A seek cancels any in-progress ramps (their timeline anchor is stale).
+        self.active_mix_ramps.clear();
         if was_playing {
             self.reposition_audio(audio, PlaybackStartReason::Seek)?;
             self.transport_clock
@@ -2241,11 +2260,29 @@ impl DesktopSession {
                 track_id,
                 volume,
                 pan,
-                ..
+                ramp_seconds,
             } => {
-                // Ramps are not yet honoured by the live mix bridge; apply the
-                // target value immediately (ramp is a future enhancement).
-                audio.update_live_track_mix(track_id, *volume, *pan, None, None, None)?;
+                let ramp = ramp_seconds.unwrap_or(0.0);
+                if ramp > 0.0 {
+                    // Register a stepped ramp from the track's current value to
+                    // the target; advance_mix_ramps interpolates per tick.
+                    let (cur_vol, cur_pan) = self
+                        .engine
+                        .song()
+                        .and_then(|song| song.tracks.iter().find(|t| &t.id == track_id))
+                        .map(|t| (t.volume, t.pan))
+                        .unwrap_or((1.0, 0.0));
+                    self.active_mix_ramps.retain(|r| &r.track_id != track_id);
+                    self.active_mix_ramps.push(ActiveMixRamp {
+                        track_id: track_id.clone(),
+                        start_position_seconds: self.engine.position_seconds(),
+                        duration_seconds: ramp,
+                        volume: volume.map(|to| (cur_vol, to)),
+                        pan: pan.map(|to| (cur_pan, to)),
+                    });
+                } else {
+                    audio.update_live_track_mix(track_id, *volume, *pan, None, None, None)?;
+                }
             }
             AutomationAction::ApplyScene { scene_id } => {
                 self.apply_mix_scene_runtime(scene_id, audio)?;
@@ -2253,6 +2290,46 @@ impl DesktopSession {
             // Jump and Wait are handled by the scheduler/executor, not here.
             AutomationAction::Jump { .. } | AutomationAction::Wait { .. } => {}
         }
+        Ok(())
+    }
+
+    /// Step any in-progress volume/pan ramps toward their target, measured by
+    /// transport position so the ramp respects pause/seek. Completed ramps land
+    /// exactly on the target and are removed.
+    fn advance_mix_ramps(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
+        if self.active_mix_ramps.is_empty() {
+            return Ok(());
+        }
+        if self.engine.playback_state() != PlaybackState::Playing {
+            return Ok(());
+        }
+        let position = self.engine.position_seconds();
+
+        // Compute each ramp's current value, then apply and prune (split borrow).
+        let mut updates: Vec<(String, Option<f64>, Option<f64>)> = Vec::new();
+        for ramp in &self.active_mix_ramps {
+            let elapsed = position - ramp.start_position_seconds;
+            // Seeking backwards before the ramp started would give a negative t;
+            // clamp to [0,1]. A backward seek also cancels jobs elsewhere, so in
+            // practice t stays forward.
+            let t = if ramp.duration_seconds > 0.0 {
+                (elapsed / ramp.duration_seconds).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            let lerp = |(from, to): (f64, f64)| from + (to - from) * t;
+            updates.push((
+                ramp.track_id.clone(),
+                ramp.volume.map(lerp),
+                ramp.pan.map(lerp),
+            ));
+        }
+        for (track_id, volume, pan) in updates {
+            audio.update_live_track_mix(&track_id, volume, pan, None, None, None)?;
+        }
+        // Drop ramps that have reached their end.
+        self.active_mix_ramps
+            .retain(|ramp| position - ramp.start_position_seconds < ramp.duration_seconds);
         Ok(())
     }
 
@@ -5458,6 +5535,8 @@ impl DesktopSession {
             // Fire any job pre-jump mix actions whose effective time the
             // playhead has reached (runs for both jump-jobs and pure jobs).
             self.advance_automation_job_actions(audio)?;
+            // Step any in-progress volume/pan ramps.
+            self.advance_mix_ramps(audio)?;
             self.start_pending_automation_fade_if_due(audio)?;
             if self.pending_automation_jump.is_some() {
                 return Ok(());
