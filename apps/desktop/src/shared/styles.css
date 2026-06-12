@@ -1524,24 +1524,28 @@ textarea {
 /* Mix scene manager modal. */
 .lt-scene-modal {
   max-width: 44rem;
+  /* Bound the modal to the viewport and let the inner track list be the only
+     scroll area, so the header/footer stay put while the tracks scroll. */
+  max-height: calc(100vh - 3rem);
+  overflow: hidden;
 }
 
 .lt-scene-body {
   display: grid;
   grid-template-columns: 12rem 1fr;
   gap: 0.9rem;
-  max-height: 62vh;
-  overflow: hidden;
+  /* The track list inside caps its own height and scrolls, so the body just
+     wraps its content. */
+  align-items: start;
 }
 
 .lt-scene-list {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  /* Self-contained scroll, matching the track list. */
+  max-height: 52vh;
   overflow-y: auto;
-  /* Grid items default to min-height:auto, which lets them grow past the row
-     and defeats overflow scrolling — pin to 0 so the column scrolls instead. */
-  min-height: 0;
   padding-right: 0.3rem;
 }
 
@@ -1578,9 +1582,6 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
-  overflow-y: auto;
-  /* Same grid min-height:auto trap as the list — pin to 0 so the track list
-     scrolls within the modal instead of overflowing it. */
   min-height: 0;
 }
 
@@ -1588,6 +1589,7 @@ textarea {
   display: flex;
   align-items: flex-end;
   gap: 0.7rem;
+  flex: 0 0 auto;
 }
 
 .lt-scene-detail-head .lt-settings-field {
@@ -1609,6 +1611,11 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /* Direct, self-contained scroll: cap the height and always scroll, so it does
+     not depend on parent flex/grid height propagation (which kept failing). */
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: 0.3rem;
 }
 
 .lt-scene-track-row {
