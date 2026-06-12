@@ -39,13 +39,18 @@ textarea {
 }
 
 .lt-app-shell {
-  width: calc(100vw / var(--lt-ui-zoom, 1));
-  height: calc(100vh / var(--lt-ui-zoom, 1));
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
   background: #131313;
   color: #e5e2e1;
   font-family: Inter, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+.lt-ui-zoom-compensate-viewport .lt-app-shell {
+  width: calc(100vw / var(--lt-ui-zoom, 1));
+  height: calc(100vh / var(--lt-ui-zoom, 1));
 }
 
 .material-symbols-outlined {

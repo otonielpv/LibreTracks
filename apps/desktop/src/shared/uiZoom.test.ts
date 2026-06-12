@@ -5,6 +5,7 @@ import {
   dispatchUiZoomStatus,
   resetUiZoom,
   setUiZoom,
+  shouldCompensateUiZoomViewport,
 } from "./uiZoom";
 
 describe("uiZoom", () => {
@@ -12,9 +13,12 @@ describe("uiZoom", () => {
     resetUiZoom();
     document.body.innerHTML = "";
     document.documentElement.style.removeProperty("--lt-ui-zoom");
+    document.documentElement.classList.remove(
+      "lt-ui-zoom-compensate-viewport",
+    );
   });
 
-  it("applies zoom and exposes the factor for shell viewport compensation", () => {
+  it("applies zoom and exposes the factor for platform viewport compensation", () => {
     document.body.innerHTML = '<main class="lt-app-shell"></main>';
 
     setUiZoom(0.7);
@@ -24,6 +28,21 @@ describe("uiZoom", () => {
     expect(document.documentElement.style.getPropertyValue("--lt-ui-zoom")).toBe(
       "0.7",
     );
+  });
+
+  it("uses viewport compensation on Windows only", () => {
+    expect(
+      shouldCompensateUiZoomViewport(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Win32",
+      ),
+    ).toBe(true);
+    expect(
+      shouldCompensateUiZoomViewport(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+        "MacIntel",
+      ),
+    ).toBe(false);
   });
 
   it("dispatches the current zoom for status overlays", () => {

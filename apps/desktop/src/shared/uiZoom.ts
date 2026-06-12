@@ -14,6 +14,7 @@ import { useSyncExternalStore } from "react";
 // so it works on our macOS 10.15 (Safari 13) floor too.
 
 const STORAGE_KEY = "lt.ui.zoom";
+const VIEWPORT_COMPENSATION_CLASS = "lt-ui-zoom-compensate-viewport";
 
 export const UI_ZOOM_STATUS_EVENT = "lt:ui-zoom-status";
 
@@ -44,6 +45,10 @@ const applyToDom = (zoom: number): void => {
   if (typeof document === "undefined") return;
   const shell = document.querySelector<HTMLElement>(".lt-app-shell");
   document.documentElement.style.setProperty("--lt-ui-zoom", String(zoom));
+  document.documentElement.classList.toggle(
+    VIEWPORT_COMPENSATION_CLASS,
+    shouldCompensateUiZoomViewport(),
+  );
   // Fall back to documentElement so the scale still applies before the shell
   // mounts or in non-standard hosts.
   const target = shell ?? document.documentElement;
@@ -61,6 +66,13 @@ const persist = (zoom: number): void => {
 
 export function getUiZoom(): number {
   return current;
+}
+
+export function shouldCompensateUiZoomViewport(
+  userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
+  platform = typeof navigator === "undefined" ? "" : navigator.platform,
+): boolean {
+  return /Windows|Win32|Win64|WOW64/i.test(`${userAgent} ${platform}`);
 }
 
 export function dispatchUiZoomStatus(zoom = current): void {
