@@ -143,10 +143,21 @@ while IFS= read -r dylib; do
   lipo -create "$dylib" "$arm" -output "$OUT_PREFIX/$rel"
 done < <(find "$WORK/prefix-x86_64/lib" -type f -name '*.dylib')
 
-# Repoint the pkg-config prefix at the universal tree so the engine build finds
-# these headers/libs via PKG_CONFIG_PATH="$OUT_PREFIX/lib/pkgconfig".
+# Repoint the pkg-config paths at the universal tree so the engine build finds
+# these headers/libs via PKG_CONFIG_PATH="$OUT_PREFIX/lib/pkgconfig". FFmpeg's
+# .pc files hardcode ABSOLUTE libdir/includedir (not ${prefix}-derived), and
+# `Libs: -L${libdir}` uses that absolute libdir — so rewriting only `prefix=`
+# leaves the linker pointing at the per-arch prefix-x86_64 tree, which is
+# x86_64-only and makes the arm64 link fail with "ignoring file ... found
+# architecture 'x86_64', required architecture 'arm64'". Rewrite every absolute
+# path (prefix/exec_prefix/libdir/includedir) that points at the per-arch build.
 while IFS= read -r pc; do
-  /usr/bin/sed -i '' "s#^prefix=.*#prefix=$OUT_PREFIX#" "$pc"
+  /usr/bin/sed -i '' \
+    -e "s#^prefix=.*#prefix=$OUT_PREFIX#" \
+    -e "s#^exec_prefix=.*#exec_prefix=$OUT_PREFIX#" \
+    -e "s#^libdir=.*#libdir=$OUT_PREFIX/lib#" \
+    -e "s#^includedir=.*#includedir=$OUT_PREFIX/include#" \
+    "$pc"
 done < <(find "$OUT_PREFIX/lib/pkgconfig" -name '*.pc')
 
 echo "build-ffmpeg-universal: done. Universal FFmpeg at $OUT_PREFIX"
