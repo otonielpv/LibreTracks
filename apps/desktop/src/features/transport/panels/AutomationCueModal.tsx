@@ -15,6 +15,8 @@ export type AutomationCueDraft = {
   atSeconds: number;
   cueId: string | null;
   name: string | null;
+  /** Max times the cue fires per session; null = unlimited. */
+  maxRuns: number | null;
   actions: AutomationActionSummary[];
 };
 
@@ -22,7 +24,10 @@ type AutomationCueModalProps = {
   draft: AutomationCueDraft | null;
   song: SongView | null;
   onCancel: () => void;
-  onConfirm: (result: { actions: AutomationActionSummary[] }) => void;
+  onConfirm: (result: {
+    actions: AutomationActionSummary[];
+    maxRuns: number | null;
+  }) => void;
 };
 
 const FRAME_OPTION = "__frame__";
@@ -104,6 +109,10 @@ export function AutomationCueModal({
 }: AutomationCueModalProps) {
   const [actions, setActions] = useState<AutomationActionSummary[]>(
     () => draft?.actions ?? [],
+  );
+  // null = unlimited (∞). When limited, the numeric value (≥1).
+  const [maxRuns, setMaxRuns] = useState<number | null>(
+    () => draft?.maxRuns ?? null,
   );
 
   if (!draft) {
@@ -254,6 +263,37 @@ export function AutomationCueModal({
               ))}
             </div>
           </div>
+
+          {/* Repeat limit: bound how many times the cue fires per session, so a
+              "jump back" loop runs only N times and then passes through. */}
+          <div className="lt-automation-runs-row">
+            <label className="lt-scene-override-toggle">
+              <input
+                type="checkbox"
+                checked={maxRuns != null}
+                onChange={(event) =>
+                  setMaxRuns(event.target.checked ? 1 : null)
+                }
+              />
+              Limitar repeticiones
+            </label>
+            {maxRuns != null ? (
+              <label className="lt-settings-field lt-automation-runs-field">
+                <span className="lt-settings-field-label">Veces</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={maxRuns}
+                  onChange={(event) =>
+                    setMaxRuns(Math.max(1, Math.floor(Number(event.target.value)) || 1))
+                  }
+                />
+              </label>
+            ) : (
+              <span className="lt-automation-runs-hint">∞ (siempre)</span>
+            )}
+          </div>
         </div>
 
         <div className="lt-inline-actions lt-automation-modal-actions">
@@ -268,7 +308,9 @@ export function AutomationCueModal({
             type="button"
             className="is-primary"
             disabled={!canConfirm}
-            onClick={() => onConfirm({ actions: normalize(actions) })}
+            onClick={() =>
+              onConfirm({ actions: normalize(actions), maxRuns })
+            }
           >
             {isEditing ? "Guardar" : "Crear"}
           </button>

@@ -1521,6 +1521,35 @@ textarea {
   padding: 0.45rem 0.7rem;
 }
 
+.lt-automation-runs-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.8rem;
+  margin-top: 0.3rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.lt-automation-runs-field {
+  width: 8rem;
+}
+
+.lt-automation-runs-field input[type="number"] {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.55rem 0.7rem;
+  font: 600 0.88rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-automation-runs-hint {
+  color: rgb(186 202 197 / 0.7);
+  font: 600 0.85rem/1.2 "Space Grotesk", sans-serif;
+}
+
 /* Mix scene manager modal. */
 .lt-scene-modal {
   max-width: 44rem;

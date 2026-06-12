@@ -45,6 +45,11 @@ pub struct AutomationCue {
     pub at_seconds: f64,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// Max times this cue fires per playback session. `None` = unlimited. Used to
+    /// break loops (e.g. "jump back to the chorus, but only twice"). The run
+    /// count itself is session state, not persisted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_runs: Option<u32>,
     /// Ordered actions. The legacy single `action` key is aliased here and the
     /// custom deserializer accepts either a single action object or an array,
     /// so existing automation.ltautomation files migrate transparently.
@@ -279,6 +284,7 @@ mod tests {
                 name: "Jump early".into(),
                 at_seconds: 42.0,
                 enabled: true,
+                max_runs: Some(2),
                 actions: vec![
                     AutomationAction::SetTrackMute {
                         track_id: "track_voice".into(),

@@ -149,6 +149,10 @@ pub struct DesktopSession {
     pending_automation_jump: Option<PendingAutomationJump>,
     /// In-flight jobs without a terminal jump (pure mix/scene/wait sequences).
     active_automation_job: Option<ActiveAutomationJob>,
+    /// Per-cue fire count for this playback session (cue id → times fired).
+    /// Session state only (never persisted); reset on stop and on seeking before
+    /// a cue. Enforces `AutomationCue.max_runs` so loops can be bounded.
+    automation_run_counts: HashMap<String, u32>,
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
@@ -221,6 +225,7 @@ impl Default for DesktopSession {
             automation: AutomationDocument::default(),
             pending_automation_jump: None,
             active_automation_job: None,
+            automation_run_counts: HashMap::new(),
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1575,6 +1580,8 @@ impl DesktopSession {
         self.transport_clock.stop();
         self.pending_automation_jump = None;
         self.active_automation_job = None;
+        // A fresh session: every cue can fire its full quota again.
+        self.reset_automation_run_counts(None);
         audio.cancel_scheduled_jumps()?;
 
         Ok(self.snapshot())
@@ -1596,6 +1603,8 @@ impl DesktopSession {
             .unwrap_or(position_seconds);
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
         self.engine.seek(position_seconds)?;
+        // Seeking before a cue makes it eligible to fire its full quota again.
+        self.reset_automation_run_counts(Some(self.engine.position_seconds()));
         if was_playing {
             self.reposition_audio(audio, PlaybackStartReason::Seek)?;
             self.transport_clock
@@ -2050,6 +2059,42 @@ impl DesktopSession {
         )
     }
 
+    /// Whether the cue can still fire this session (under its `max_runs` limit).
+    fn cue_has_runs_left(&self, cue: &AutomationCue) -> bool {
+        match cue.max_runs {
+            None => true,
+            Some(max) => self.automation_run_counts.get(&cue.id).copied().unwrap_or(0) < max,
+        }
+    }
+
+    /// Record one firing of the cue for this session.
+    fn record_automation_cue_run(&mut self, cue_id: &str) {
+        *self
+            .automation_run_counts
+            .entry(cue_id.to_string())
+            .or_insert(0) += 1;
+    }
+
+    /// Drop run counts for cues at or after `position_seconds` so seeking before
+    /// a cue makes it eligible to fire its full quota again. `None` clears all
+    /// (used on stop).
+    fn reset_automation_run_counts(&mut self, before_position_seconds: Option<f64>) {
+        match before_position_seconds {
+            None => self.automation_run_counts.clear(),
+            Some(position) => {
+                let cues = &self.automation.cues;
+                self.automation_run_counts.retain(|cue_id, _| {
+                    cues.iter()
+                        .find(|cue| &cue.id == cue_id)
+                        // Keep the count only for cues still behind the playhead;
+                        // cues at/after the new position get re-armed.
+                        .map(|cue| cue.at_seconds < position - 0.001)
+                        .unwrap_or(false)
+                });
+            }
+        }
+    }
+
     /// Arm the next automation cue (job). The terminal jump — if the job has one
     /// — is scheduled sample-exact in the native engine at its effective time
     /// (`at_seconds + Σ pre-jump waits`); the job's pre-jump mix actions fire as
@@ -2082,7 +2127,14 @@ impl DesktopSession {
             .automation
             .cues
             .iter()
-            .filter(|cue| cue.enabled && cue.at_seconds > position_seconds + 0.001)
+            .filter(|cue| {
+                cue.enabled
+                    && cue.at_seconds > position_seconds + 0.001
+                    // Skip cues that already hit their per-session run limit, so
+                    // a "jump back" loop fires only the configured number of
+                    // times and then the playhead passes through.
+                    && self.cue_has_runs_left(cue)
+            })
             .min_by(|left, right| {
                 left.at_seconds
                     .partial_cmp(&right.at_seconds)
@@ -2226,6 +2278,7 @@ impl DesktopSession {
             }
         }
         let mut pure_job_done = false;
+        let mut pure_job_cue_id: Option<String> = None;
         if let Some(job) = self.active_automation_job.as_mut() {
             while job.fired_count < job.timed_actions.len()
                 && job.timed_actions[job.fired_count].0 <= position_seconds + 0.001
@@ -2234,16 +2287,22 @@ impl DesktopSession {
                 job.fired_count += 1;
             }
             pure_job_done = job.fired_count >= job.timed_actions.len();
+            if pure_job_done {
+                pure_job_cue_id = Some(job.cue_id.clone());
+            }
         }
 
         for action in due {
             self.apply_automation_action(&action, audio)?;
         }
 
-        // A pure (jumpless) job ends once all its actions have fired; arm the
-        // next cue so consecutive jobs chain.
+        // A pure (jumpless) job ends once all its actions have fired; count the
+        // run and arm the next cue so consecutive jobs chain.
         if pure_job_done {
             self.active_automation_job = None;
+            if let Some(cue_id) = pure_job_cue_id {
+                self.record_automation_cue_run(&cue_id);
+            }
             self.schedule_next_automation_jump(audio)?;
         }
 
@@ -5565,6 +5624,9 @@ impl DesktopSession {
                 if let Some(scene_id) = pending_automation.mix_scene_id.as_deref() {
                     self.apply_mix_scene_runtime(scene_id, audio)?;
                 }
+                // Count this firing before re-arming so a cue at its run limit is
+                // not immediately re-scheduled (which would loop forever).
+                self.record_automation_cue_run(&pending_automation.cue_id);
                 self.schedule_next_automation_jump(audio)?;
                 return Ok(true);
             }
@@ -6771,6 +6833,11 @@ fn validate_automation_cue(
     if !cue.at_seconds.is_finite() || cue.at_seconds < 0.0 {
         return Err(DesktopError::AudioCommand(
             "automation cue time must be a finite, non-negative number".into(),
+        ));
+    }
+    if cue.max_runs == Some(0) {
+        return Err(DesktopError::AudioCommand(
+            "automation cue max runs must be at least 1 (omit for unlimited)".into(),
         ));
     }
     if cue.actions.is_empty() {

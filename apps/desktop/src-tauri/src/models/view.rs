@@ -125,6 +125,8 @@ pub struct AutomationCueSummary {
     pub name: String,
     pub at_seconds: f64,
     pub enabled: bool,
+    /// Max times the cue fires per session; `None` = unlimited.
+    pub max_runs: Option<u32>,
     /// Ordered actions of the job.
     pub actions: Vec<AutomationActionSummary>,
 }
@@ -532,6 +534,7 @@ pub(crate) fn automation_cue_to_summary(song: &Song, cue: &AutomationCue) -> Aut
         name: cue.name.clone(),
         at_seconds: warp_timeline_seconds_at(song, cue.at_seconds),
         enabled: cue.enabled,
+        max_runs: cue.max_runs,
         actions: cue
             .actions
             .iter()

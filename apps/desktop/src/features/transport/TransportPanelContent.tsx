@@ -5538,6 +5538,7 @@ export function TransportPanelContent() {
       atSeconds: positionSeconds,
       cueId: null,
       name: null,
+      maxRuns: null,
       actions: seedActions,
     });
   }
@@ -5548,13 +5549,14 @@ export function TransportPanelContent() {
       atSeconds: cue.atSeconds,
       cueId: cue.id,
       name: cue.name,
+      maxRuns: cue.maxRuns ?? null,
       actions: cue.actions,
     });
   }
 
   // Commit the modal's result: create or update the cue, then refresh.
   const handleConfirmAutomationCue = useCallback(
-    (result: { actions: AutomationActionSummary[] }) => {
+    (result: { actions: AutomationActionSummary[]; maxRuns: number | null }) => {
       const draft = automationCueDraft;
       const currentSong = songRef.current;
       if (!draft || !currentSong) {
@@ -5573,6 +5575,7 @@ export function TransportPanelContent() {
           name: draft.name ?? label,
           atSeconds: draft.atSeconds,
           enabled: true,
+          maxRuns: result.maxRuns,
           actions: result.actions,
         });
         applyPlaybackSnapshot(nextSnapshot);

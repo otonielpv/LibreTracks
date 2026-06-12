@@ -105,7 +105,11 @@ function describeAutomationCue(
     }
   });
 
-  const header = `${cue.name} — ${cue.atSeconds.toFixed(2)}s${cue.enabled ? "" : " (desactivado)"}`;
+  const runs =
+    cue.maxRuns != null
+      ? ` · ${cue.maxRuns}×`
+      : "";
+  const header = `${cue.name} — ${cue.atSeconds.toFixed(2)}s${runs}${cue.enabled ? "" : " (desactivado)"}`;
   return lines.length ? `${header}\n${lines.join("\n")}` : header;
 }
 

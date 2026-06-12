@@ -142,6 +142,8 @@ export type AutomationCueSummary = {
   name: string;
   atSeconds: number;
   enabled: boolean;
+  /** Max times the cue fires per session; null/undefined = unlimited. */
+  maxRuns?: number | null;
   /** Ordered actions executed in sequence when the playhead reaches atSeconds. */
   actions: AutomationActionSummary[];
 };

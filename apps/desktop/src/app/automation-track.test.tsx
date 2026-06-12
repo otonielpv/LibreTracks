@@ -201,4 +201,55 @@ describe("App / automation-track", () => {
       expect(within(dialog).getByDisplayValue(/escena 1/i)).toBeTruthy();
     });
   });
+
+  it("stores a repeat limit on the cue", async () => {
+    await renderApp();
+    await addAutomationTrackViaMenu();
+    await waitFor(() => {
+      expect(
+        document.querySelector(".lt-track-lane.is-automation"),
+      ).toBeTruthy();
+    });
+
+    const lane = document.querySelector(
+      ".lt-track-lane.is-automation",
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.contextMenu(lane, { clientX: 300, clientY: 130 });
+    });
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: /crear automatismo de salto/i,
+        }),
+      );
+    });
+    const dialog = await screen.findByRole("dialog", {
+      name: /nuevo automatismo/i,
+    });
+
+    // Enable the repeat limit and set it to 2.
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("checkbox", { name: /limitar repeticiones/i }),
+      );
+    });
+    const vecesInput = within(dialog).getByRole("spinbutton", {
+      name: /veces/i,
+    });
+    await act(async () => {
+      fireEvent.change(vecesInput, { target: { value: "2" } });
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /crear/i }));
+    });
+
+    // The cue's tooltip reflects the limit ("2×").
+    await waitFor(() => {
+      const hotspot = document.querySelector(
+        ".lt-track-lane.is-automation .lt-automation-hotspot",
+      ) as HTMLElement | null;
+      expect(hotspot?.getAttribute("title") ?? "").toContain("2×");
+    });
+  });
 });
