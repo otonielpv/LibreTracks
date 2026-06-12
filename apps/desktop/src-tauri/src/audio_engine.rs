@@ -20,8 +20,9 @@ use lt_audio_engine_v2::{
     TimeSignatureMarkerUpdate,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
 
+use crate::commands::engine_v2::EngineV2State;
 use crate::models::PitchPrepareSummary;
 use crate::{error::DesktopError, settings::AppSettings};
 
@@ -1703,7 +1704,38 @@ impl Drop for AudioController {
 }
 
 #[tauri::command]
-pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> {
+pub fn get_audio_output_devices(
+    engine_v2: State<'_, EngineV2State>,
+) -> Result<AudioOutputDevicesResponse, String> {
+    // CRITICAL: when an output stream is already open we MUST enumerate through
+    // the LIVE engine, never a throwaway one. Spinning up a second JUCE
+    // AudioDeviceManager and calling scanForDevices() on the DirectSound
+    // backend while the "Controlador primario de sonido" is playing tears down
+    // the live stream — DirectSound's primary buffer is process-global, so the
+    // concurrent scan stops playback. That was the "se para la reproducción al
+    // abrir Remote/Configuración" bug. Reusing the live engine means no second
+    // device manager touches DirectSound while it's in use.
+    {
+        let guard = engine_v2
+            .0
+            .lock()
+            .map_err(|_| "Engine v2 state lock poisoned".to_string())?;
+        if let Some(engine) = guard.as_ref() {
+            let devices = engine.list_devices().map_err(|error| {
+                eprintln!("[audio] get_audio_output_devices (live engine) FAILED: {error}");
+                error.to_string()
+            })?;
+            if devices.is_empty() {
+                eprintln!(
+                    "[audio] get_audio_output_devices (live engine) returned 0 device(s)"
+                );
+            }
+            return Ok(devices_response(devices));
+        }
+    }
+    // No live engine yet (settings opened before any device was initialized):
+    // fall back to a throwaway. Safe here because nothing is playing, so there
+    // is no open DirectSound stream for the scan to disrupt.
     let engine = Engine::new().map_err(|error| error.to_string())?;
     if let Err(error) = engine.initialize() {
         eprintln!("[audio] get_audio_output_devices initialize FAILED: {error}");
