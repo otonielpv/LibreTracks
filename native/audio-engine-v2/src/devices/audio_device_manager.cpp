@@ -185,27 +185,6 @@ bool backend_lies_about_sample_rate(const std::string& backend) {
            name.find("mme") != std::string::npos;
 }
 
-// For untrustworthy backends, only honor a requested sample rate if the device
-// genuinely advertises it via getAvailableSampleRates(). Otherwise we leave the
-// setup at the device default so JUCE opens — and truthfully reports — the rate
-// the OS mixer is actually running, which lets the engine's SR-change detection
-// re-decode sources at the correct rate. Returns true if `requested` is safe to
-// force; false means "let JUCE pick the default".
-bool requested_rate_is_supported(juce::AudioIODeviceType* type,
-                                 const juce::String& device_name,
-                                 int requested) {
-    if (!type || requested <= 0)
-        return false;
-    std::unique_ptr<juce::AudioIODevice> probe(type->createDevice(device_name, {}));
-    if (!probe)
-        return false;
-    for (double rate : probe->getAvailableSampleRates()) {
-        if (static_cast<int>(rate) == requested)
-            return true;
-    }
-    return false;
-}
-
 void select_preferred_default_device_type(juce::AudioDeviceManager& manager) {
     juce::AudioIODeviceType* best_type = nullptr;
     int best_score = std::numeric_limits<int>::max();
@@ -471,26 +450,29 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     }
     setup.useDefaultOutputChannels = false;
     if (request.sample_rate > 0) {
-        // For backends that misreport their rate (DirectSound primary / MME),
-        // only force the requested SR if the device actually advertises it.
-        // Otherwise leave setup.sampleRate at the device default so JUCE opens
-        // — and reports — the real OS-mixer rate. This is what makes the
-        // engine's SR-change detection fire and re-decode sources correctly;
-        // without it, switching to the "Controlador primario de sonido" leaves
-        // sources at the old rate and playback drifts slow/fast.
+        // DirectSound ("Controlador primario de sonido") and MME are virtual
+        // endpoints routed through the Windows shared mixer. They ACCEPT any
+        // sample rate we ask for — getAvailableSampleRates() advertises the
+        // full list and getCurrentSampleRate() echoes back whatever we
+        // requested — but the hardware always runs at the OS mixer rate (e.g.
+        // 44100) and resamples underneath. If we honor the request, the engine
+        // believes the device is at the requested rate: clock + sources get
+        // built for, say, 48000, while the hardware drains frames at 44100.
+        // Because the clock advances by frames-consumed (not by SR), playback
+        // ends up at 48000/44100 ≈ 1.088× — the "se acelera" bug on a 44.1k
+        // device with 48k selected. Conversely 48k device + 44.1k selected
+        // plays slow. There is no reliable way to read DirectSound's TRUE rate
+        // from JUCE, and forcing a rate it merely resamples is pointless, so we
+        // never override it: let JUCE open at the device default and report
+        // that consistently, keeping clock, sources and hardware in agreement.
         const auto current_type = impl_->juce_manager.getCurrentAudioDeviceType().toStdString();
         if (backend_lies_about_sample_rate(current_type)) {
-            if (requested_rate_is_supported(
-                    impl_->juce_manager.getCurrentDeviceTypeObject(),
-                    setup.outputDeviceName, request.sample_rate)) {
-                setup.sampleRate = request.sample_rate;
-            } else {
-                device_debug_log(
-                    "[LT_AUDIO_DEBUG] open_device: backend \"%s\" does not advertise "
-                    "%d Hz; leaving SR at device default to avoid silent OS resample\n",
-                    current_type.c_str(), request.sample_rate);
-                // Leave setup.sampleRate untouched (device default).
-            }
+            device_debug_log(
+                "[LT_AUDIO_DEBUG] open_device: ignoring requested %d Hz on "
+                "backend \"%s\" (resamples internally; using device default to "
+                "avoid playback speed drift)\n",
+                request.sample_rate, current_type.c_str());
+            // Leave setup.sampleRate untouched (device default).
         } else {
             setup.sampleRate = request.sample_rate;
         }
