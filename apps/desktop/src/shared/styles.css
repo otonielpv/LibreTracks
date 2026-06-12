@@ -3911,14 +3911,14 @@ textarea {
 
 .lt-automation-hotspot {
   position: absolute;
-  /* Tight target around the diamond only (drawn at the lane centre). A wide
-     box would swallow clicks meant for the playhead seek on the rest of the
-     lane. Centred on the cue X via negative margins; `top` is set inline to
-     the lane's vertical centre. */
-  width: 18px;
-  height: 18px;
-  margin-left: -9px;
-  margin-top: -9px;
+  /* Target around the diamond only (drawn at the lane centre). Big enough to be
+     comfortable to click/right-click, but not so wide it swallows clicks meant
+     for the playhead seek on the rest of the lane. Centred on the cue X via
+     negative margins; `top` is set inline to the lane's vertical centre. */
+  width: 24px;
+  height: 26px;
+  margin-left: -12px;
+  margin-top: -13px;
   border: 0;
   background: transparent;
   color: transparent;

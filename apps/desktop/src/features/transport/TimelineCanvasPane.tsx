@@ -1380,8 +1380,18 @@ export function TimelineCanvasPane({
                               top: trackHeight / 2,
                             }}
                             onMouseDown={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
+                              // Only swallow the LEFT button (so the diamond
+                              // doesn't start a lane seek). Calling
+                              // preventDefault on the right button cancels the
+                              // contextmenu event, which broke right-click edit.
+                              if (event.button === 0) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              } else {
+                                // Still stop the lane from handling it, but let
+                                // the native contextmenu fire.
+                                event.stopPropagation();
+                              }
                             }}
                             onClick={(event) => {
                               event.preventDefault();
