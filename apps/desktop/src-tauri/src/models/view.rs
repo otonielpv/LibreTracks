@@ -127,6 +127,9 @@ pub struct AutomationCueSummary {
     pub enabled: bool,
     /// Max times the cue fires per session; `None` = unlimited.
     pub max_runs: Option<u32>,
+    /// True when the cue has hit its `max_runs` this session and will be skipped
+    /// until reset (stop / seek before it). Runtime-derived, not persisted.
+    pub exhausted: bool,
     /// Ordered actions of the job.
     pub actions: Vec<AutomationActionSummary>,
 }
@@ -397,6 +400,7 @@ pub struct DesktopPerformanceSnapshot {
 pub(crate) fn song_to_view(
     song: &Song,
     automation: &AutomationDocument,
+    automation_run_counts: &std::collections::HashMap<String, u32>,
     waveform_cache: &WaveformMemoryCache,
     project_revision: u64,
     song_dir: Option<&std::path::Path>,
@@ -505,7 +509,11 @@ pub(crate) fn song_to_view(
                 auto_created: track.auto_created,
             })
             .collect(),
-        automation_cues: automation_cues_to_summary(song, &automation.cues),
+        automation_cues: automation_cues_to_summary(
+            song,
+            &automation.cues,
+            automation_run_counts,
+        ),
         mix_scenes: mix_scenes_to_summary(&automation.mix_scenes),
         automation_track: if automation.track_present {
             Some(AutomationTrackSummary {
@@ -522,19 +530,28 @@ pub(crate) fn song_to_view(
 pub(crate) fn automation_cues_to_summary(
     song: &Song,
     cues: &[AutomationCue],
+    run_counts: &std::collections::HashMap<String, u32>,
 ) -> Vec<AutomationCueSummary> {
     cues.iter()
-        .map(|cue| automation_cue_to_summary(song, cue))
+        .map(|cue| automation_cue_to_summary(song, cue, run_counts))
         .collect()
 }
 
-pub(crate) fn automation_cue_to_summary(song: &Song, cue: &AutomationCue) -> AutomationCueSummary {
+pub(crate) fn automation_cue_to_summary(
+    song: &Song,
+    cue: &AutomationCue,
+    run_counts: &std::collections::HashMap<String, u32>,
+) -> AutomationCueSummary {
+    let exhausted = cue
+        .max_runs
+        .is_some_and(|max| run_counts.get(&cue.id).copied().unwrap_or(0) >= max);
     AutomationCueSummary {
         id: cue.id.clone(),
         name: cue.name.clone(),
         at_seconds: warp_timeline_seconds_at(song, cue.at_seconds),
         enabled: cue.enabled,
         max_runs: cue.max_runs,
+        exhausted,
         actions: cue
             .actions
             .iter()
@@ -1267,6 +1284,7 @@ mod tests {
         let view = song_to_view(
             &song,
             &AutomationDocument::default(),
+            &std::collections::HashMap::new(),
             &cache,
             7,
             None,
@@ -1289,6 +1307,7 @@ mod tests {
         let view = song_to_view(
             &song,
             &AutomationDocument::default(),
+            &std::collections::HashMap::new(),
             &cache,
             1,
             None,
@@ -1304,6 +1323,7 @@ mod tests {
         let view = song_to_view(
             &song,
             &AutomationDocument::default(),
+            &std::collections::HashMap::new(),
             &WaveformMemoryCache::default(),
             1,
             None,
@@ -1317,6 +1337,7 @@ mod tests {
         let view = song_to_view(
             &song,
             &AutomationDocument::default(),
+            &std::collections::HashMap::new(),
             &WaveformMemoryCache::default(),
             1,
             None,

@@ -1278,6 +1278,7 @@ impl DesktopSession {
             song_to_view(
                 song,
                 &self.automation,
+                &self.automation_run_counts,
                 &self.waveform_cache,
                 self.project_revision,
                 self.song_dir.as_deref(),
@@ -5787,7 +5788,13 @@ impl DesktopSession {
             }),
             automation_cues: source_song
                 .as_ref()
-                .map(|song| automation_cues_to_summary(song, &self.automation.cues))
+                .map(|song| {
+                    automation_cues_to_summary(
+                        song,
+                        &self.automation.cues,
+                        &self.automation_run_counts,
+                    )
+                })
                 .unwrap_or_default(),
             mix_scenes: mix_scenes_to_summary(&self.automation.mix_scenes),
             automation_track: if self.automation.track_present {
@@ -9100,6 +9107,7 @@ mod tests {
         let view = song_to_view(
             &song,
             &AutomationDocument::default(),
+            &std::collections::HashMap::new(),
             &WaveformMemoryCache::default(),
             7,
             None,

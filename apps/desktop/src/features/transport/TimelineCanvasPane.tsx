@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
@@ -156,6 +157,8 @@ type TimelineCanvasPaneProps = {
   selectedSectionId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
   pendingAutomationCue: PendingAutomationCueSummary | null;
+  /** Cue ids that used up their per-session run limit (shown greyed/off). */
+  exhaustedCueIds: Set<string>;
   activeVamp: ActiveVampSummary | null;
   displayPositionSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{
@@ -307,6 +310,7 @@ export function TimelineCanvasPane({
   selectedSectionId,
   pendingMarkerJump,
   pendingAutomationCue,
+  exhaustedCueIds,
   activeVamp,
   displayPositionSecondsRef,
   playheadDragRef,
@@ -834,6 +838,21 @@ export function TimelineCanvasPane({
     visibleTracks.length * trackHeight,
   );
 
+  // The canvas draws cue diamonds from song.automationCues. Exhausted cues come
+  // from the live snapshot, not the song, so patch their `enabled` to false here
+  // so the diamond greys out without re-fetching the whole song.
+  const songForCanvas = useMemo(() => {
+    if (!song || exhaustedCueIds.size === 0 || !song.automationCues?.length) {
+      return song;
+    }
+    return {
+      ...song,
+      automationCues: song.automationCues.map((cue) =>
+        exhaustedCueIds.has(cue.id) ? { ...cue, enabled: false } : cue,
+      ),
+    };
+  }, [song, exhaustedCueIds]);
+
   const externalDropGuideLeft = (() => {
     if (!externalDropPreview) {
       return 0;
@@ -1161,7 +1180,7 @@ export function TimelineCanvasPane({
               width={laneViewportWidth}
               height={trackCanvasHeight}
               trackHeight={trackHeight}
-              song={song}
+              song={songForCanvas ?? song}
               visibleTracks={visibleTracks}
               clipsByTrack={renderedClipsByTrack}
               waveformCache={waveformCache}
@@ -1339,6 +1358,9 @@ export function TimelineCanvasPane({
                       {song?.automationCues?.map((cue: AutomationCueSummary) => {
                         const isPending =
                           pendingAutomationCue?.cueId === cue.id;
+                        // Exhausted = hit its run limit this session; show as off.
+                        const isOff =
+                          !cue.enabled || exhaustedCueIds.has(cue.id);
                         // Rich tooltip: the cue name + a line per action so the
                         // user sees what the job does on hover, even for cues
                         // whose label is hidden because a neighbour is too close.
@@ -1347,7 +1369,7 @@ export function TimelineCanvasPane({
                           <button
                             key={cue.id}
                             type="button"
-                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${cue.enabled ? "" : "is-disabled"}`}
+                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}`}
                             aria-label={cueDescription}
                             title={cueDescription}
                             style={{

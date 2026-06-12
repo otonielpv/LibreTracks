@@ -1350,6 +1350,18 @@ export function TransportPanelContent() {
       JSON.stringify(pendingCue.target),
     ].join("|");
   });
+  // Ids of cues that have used up their per-session run limit, taken from the
+  // live snapshot so the lane greys them out during playback without a refetch.
+  const exhaustedCueSignature = useTransportStore((state) =>
+    (state.playback?.automationCues ?? [])
+      .filter((cue) => cue.exhausted)
+      .map((cue) => cue.id)
+      .join("|"),
+  );
+  const exhaustedCueIds = useMemo(
+    () => new Set(exhaustedCueSignature ? exhaustedCueSignature.split("|") : []),
+    [exhaustedCueSignature],
+  );
   const activeVampSignature = useTransportStore((state) => {
     const activeVamp = state.playback?.activeVamp;
     if (!activeVamp) {
@@ -9682,6 +9694,7 @@ export function TransportPanelContent() {
                           selectedSectionId={selectedSectionId}
                           pendingMarkerJump={pendingMarkerJump}
                           pendingAutomationCue={pendingAutomationCue}
+                          exhaustedCueIds={exhaustedCueIds}
                           activeVamp={activeVamp}
                           midiLearnMode={midiLearnMode}
                           onMidiLearnTarget={handleMidiLearnTarget}
