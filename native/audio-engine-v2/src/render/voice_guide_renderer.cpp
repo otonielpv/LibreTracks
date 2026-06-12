@@ -453,74 +453,105 @@ void VoiceGuideRenderer::render(float** output_channels,
             const double beat_frames = quarter_note_frames * (4.0 / static_cast<double>(beat_unit));
 
             if (std::isfinite(beat_frames) && beat_frames >= 1.0) {
-                // The announce target is the scheduled-jump destination when one
-                // is pending (announce where you're jumping TO, before it fires),
-                // otherwise the next marker ahead of the playhead. The jump
-                // target lands at its trigger frame, which may be behind us in
-                // linear time (you can jump backwards) — that's fine, we key off
-                // the trigger frame, not the playhead's position.
-                Frame target_frame = -1;
-                MarkerKind target_kind = MarkerKind::Custom;
-                int target_variant = 0;
-                if (jump_target.active && jump_target.at_frame > abs_frame) {
-                    target_frame = jump_target.at_frame;
-                    target_kind = jump_target.kind;
-                    target_variant = jump_target.variant;
-                } else if (const Marker* marker = upcoming_marker(song, abs_frame)) {
-                    target_frame = marker->frame;
-                    target_kind = marker->kind;
-                    target_variant = marker->variant;
-                }
+                // Two independent announce targets, evaluated separately so one
+                // never silences the other (a pending automation jump further
+                // down the timeline must not stop the markers in between from
+                // being announced):
+                //   1. the next typed marker ahead of the playhead, and
+                //   2. the scheduled-jump destination, if one is pending
+                //      (announce where you're jumping TO, before it fires). Its
+                //      trigger frame may be behind us in linear time — you can
+                //      jump backwards — so we key off the trigger frame, not the
+                //      playhead. When the jump lands on exactly the same frame as
+                //      the upcoming marker they are the same downbeat: dedupe so
+                //      it only fires once.
+                const Marker* marker = upcoming_marker(song, abs_frame);
+                const Frame marker_frame = marker ? marker->frame : -1;
+                const Frame jump_frame =
+                    (jump_target.active && jump_target.at_frame > abs_frame)
+                        ? jump_target.at_frame
+                        : -1;
 
-                if (target_frame > abs_frame) {
-                    next_marker_frame_.store(target_frame, std::memory_order_release);
-                    copy_text(next_marker_kind_, kind_token(target_kind));
+                // Fire (section + count) for one target downbeat. Each beat-frame
+                // guard keys off the absolute frame, so distinct targets that
+                // happen to share this block fire on their own frames.
+                auto announce_target =
+                    [&](Frame target_frame, MarkerKind kind, int variant) {
+                        if (target_frame <= abs_frame) return;
 
-                    // Layout (no overlap — Playback-style):
-                    //   count bar  = the `lead_bars` bars immediately before the
-                    //               target downbeat; full count "1,2,3,..,N".
-                    //   section    = spoken name placed to END right at the start
-                    //               of the count bar.
-                    const Frame count_bar_start = target_frame
-                        - static_cast<Frame>(std::llround(beats_per_bar * lead_bars * beat_frames));
+                        // Layout (no overlap — Playback-style):
+                        //   count bar  = the `lead_bars` bars immediately before
+                        //               the target downbeat; full count "1..N".
+                        //   section    = spoken name placed to END right at the
+                        //               start of the count bar.
+                        const Frame count_bar_start = target_frame
+                            - static_cast<Frame>(
+                                  std::llround(beats_per_bar * lead_bars * beat_frames));
 
-                    // Section announcement: fire so its (trimmed) length ends at
-                    // count_bar_start. Best-effort — only if it still fits ahead
-                    // of the current block (short jumps may leave no room for the
-                    // name; the count below always plays).
-                    const VoiceGuideClip* section =
-                        bank->section_for(target_kind, target_variant);
-                    if (section) {
-                        const Frame section_start =
-                            count_bar_start - static_cast<Frame>(section->samples.size());
-                        if (section_start == abs_frame
-                            && section_start >= timeline_frame
-                            && section_start != last_section_frame_) {
-                            trigger_clip(section, 0.9f, sample_rate);
-                            last_section_frame_ = section_start;
-                            announcements_fired_.fetch_add(1, std::memory_order_relaxed);
-                        }
-                    }
-
-                    // Count: every beat of the lead bar(s), spoken "1..N". Always
-                    // plays (rhythmic entry), even when the name didn't fit.
-                    if (count_in) {
-                        const int lead_beats = beats_per_bar * lead_bars;
-                        for (int b = 0; b < lead_beats; ++b) {
-                            const Frame beat_frame = count_bar_start
-                                + static_cast<Frame>(std::llround(b * beat_frames));
-                            if (beat_frame != abs_frame) continue;
-                            const int beat_number = (b % beats_per_bar) + 1;
-                            if (beat_frame != last_count_frame_) {
-                                trigger_clip(bank->count_for(beat_number), 0.9f, sample_rate);
-                                last_count_frame_ = beat_frame;
-                                counts_fired_.fetch_add(1, std::memory_order_relaxed);
+                        // Section announcement: fire so its (trimmed) length ends
+                        // at count_bar_start. Best-effort — only if it still fits
+                        // ahead of the current block (short jumps may leave no
+                        // room for the name; the count below always plays).
+                        if (const VoiceGuideClip* section =
+                                bank->section_for(kind, variant)) {
+                            const Frame section_start =
+                                count_bar_start - static_cast<Frame>(section->samples.size());
+                            if (section_start == abs_frame
+                                && section_start >= timeline_frame
+                                && section_start != last_section_frame_) {
+                                trigger_clip(section, 0.9f, sample_rate);
+                                last_section_frame_ = section_start;
+                                announcements_fired_.fetch_add(1, std::memory_order_relaxed);
                             }
                         }
-                    }
+
+                        // Count: every beat of the lead bar(s), spoken "1..N".
+                        // Always plays (rhythmic entry), even when the name didn't
+                        // fit.
+                        if (count_in) {
+                            const int lead_beats = beats_per_bar * lead_bars;
+                            for (int b = 0; b < lead_beats; ++b) {
+                                const Frame beat_frame = count_bar_start
+                                    + static_cast<Frame>(std::llround(b * beat_frames));
+                                if (beat_frame != abs_frame) continue;
+                                const int beat_number = (b % beats_per_bar) + 1;
+                                if (beat_frame != last_count_frame_) {
+                                    trigger_clip(bank->count_for(beat_number), 0.9f,
+                                                 sample_rate);
+                                    last_count_frame_ = beat_frame;
+                                    counts_fired_.fetch_add(1, std::memory_order_relaxed);
+                                }
+                            }
+                        }
+                    };
+
+                // Diagnostics report the soonest pending downbeat of either kind.
+                Frame soonest = -1;
+                MarkerKind soonest_kind = MarkerKind::Custom;
+                if (jump_frame > abs_frame) {
+                    soonest = jump_frame;
+                    soonest_kind = jump_target.kind;
+                }
+                if (marker_frame > abs_frame && (soonest < 0 || marker_frame < soonest)) {
+                    soonest = marker_frame;
+                    soonest_kind = marker->kind;
+                }
+                if (soonest > abs_frame) {
+                    next_marker_frame_.store(soonest, std::memory_order_release);
+                    copy_text(next_marker_kind_, kind_token(soonest_kind));
                 } else {
                     next_marker_frame_.store(-1, std::memory_order_release);
                     copy_text(next_marker_kind_, "");
+                }
+
+                // The jump destination's section wins on its own downbeat; the
+                // marker is announced independently unless it lands on that exact
+                // frame (same downbeat — fire once).
+                if (jump_frame > abs_frame) {
+                    announce_target(jump_frame, jump_target.kind, jump_target.variant);
+                }
+                if (marker && marker_frame > abs_frame && marker_frame != jump_frame) {
+                    announce_target(marker_frame, marker->kind, marker->variant);
                 }
             }
         }

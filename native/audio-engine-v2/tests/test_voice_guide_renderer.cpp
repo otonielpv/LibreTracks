@@ -392,3 +392,62 @@ TEST_CASE("a scheduled jump's count adapts to the time signature") {
     auto ch = render_all(r, session, kSampleRate * 6, 1024, jump);
     CHECK(r.diagnostics().counts_fired == 3);
 }
+
+// ── Markers and a pending jump coexist (regression) ──────────────────────────
+// Bug: a pending automation jump anywhere ahead silenced every typed marker
+// between the playhead and the jump — the marker announcement was an `else if`
+// to the jump branch, so any active jump suppressed it. A jump further down the
+// timeline must NOT stop the markers in between from being announced.
+
+TEST_CASE("a marker is still announced when a jump is pending further ahead") {
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // Marker at 4s; a pending jump lands far later at 12s. Both downbeats fall in
+    // the rendered range, so both should announce + count (1 + 1 = 2 each).
+    auto session = make_session(MarkerKind::Chorus, 4.0);
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 12;
+    jump.kind = MarkerKind::Bridge;
+    auto ch = render_all(r, session, kSampleRate * 14, 1024, jump);
+    auto diag = r.diagnostics();
+    CHECK(diag.announcements_fired == 2); // the marker AND the jump destination
+    CHECK(diag.counts_fired == 8);        // 4 + 4
+}
+
+TEST_CASE("a jump to a region (Custom kind) leaves earlier markers announced") {
+    // Real-world case: an automation cue that jumps to a region/frame carries a
+    // Custom kind (no spoken name). It must not gag the section marker ahead.
+    auto bank = make_marked_bank();
+    bank->sections[static_cast<std::size_t>(MarkerKind::Custom)].base.samples.clear();
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    auto session = make_session(MarkerKind::Verse, 4.0);
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 12;
+    jump.kind = MarkerKind::Custom; // region/frame destination → no name
+    auto ch = render_all(r, session, kSampleRate * 14, 1024, jump);
+    auto diag = r.diagnostics();
+    CHECK(diag.announcements_fired == 1); // the Verse marker still speaks
+    CHECK(diag.counts_fired == 8);        // marker count (4) + jump count (4)
+}
+
+TEST_CASE("a jump landing on the same frame as a marker fires once, not twice") {
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // Jump trigger coincides exactly with the marker frame (4s): same downbeat,
+    // so it must announce + count once, not double-trigger.
+    auto session = make_session(MarkerKind::Chorus, 4.0);
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 4;
+    jump.kind = MarkerKind::Chorus;
+    auto ch = render_all(r, session, kSampleRate * 6, 1024, jump);
+    auto diag = r.diagnostics();
+    CHECK(diag.announcements_fired == 1);
+    CHECK(diag.counts_fired == 4);
+}
