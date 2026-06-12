@@ -524,10 +524,7 @@ mod tests {
     #[test]
     fn accepts_audio_track_parented_to_a_folder() {
         let mut song = valid_song();
-        song.tracks = vec![
-            folder("f1"),
-            track("child", TrackKind::Audio, Some("f1")),
-        ];
+        song.tracks = vec![folder("f1"), track("child", TrackKind::Audio, Some("f1"))];
         assert_eq!(validate_song(&song), Ok(()));
     }
 
@@ -588,8 +585,22 @@ mod tests {
     fn rejects_out_of_order_markers() {
         let mut song = valid_song();
         song.section_markers = vec![
-            Marker { id: "m1".into(), name: "M1".into(), start_seconds: 10.0, digit: None, kind: MarkerKind::Custom, variant: None },
-            Marker { id: "m2".into(), name: "M2".into(), start_seconds: 5.0, digit: None, kind: MarkerKind::Custom, variant: None },
+            Marker {
+                id: "m1".into(),
+                name: "M1".into(),
+                start_seconds: 10.0,
+                digit: None,
+                kind: MarkerKind::Custom,
+                variant: None,
+            },
+            Marker {
+                id: "m2".into(),
+                name: "M2".into(),
+                start_seconds: 5.0,
+                digit: None,
+                kind: MarkerKind::Custom,
+                variant: None,
+            },
         ];
         assert!(matches!(
             validate_song(&song),
@@ -635,8 +646,16 @@ mod tests {
     fn rejects_out_of_order_time_signature_markers() {
         let mut song = valid_song();
         song.time_signature_markers = vec![
-            TimeSignatureMarker { id: "a".into(), start_seconds: 10.0, signature: "4/4".into() },
-            TimeSignatureMarker { id: "b".into(), start_seconds: 4.0, signature: "4/4".into() },
+            TimeSignatureMarker {
+                id: "a".into(),
+                start_seconds: 10.0,
+                signature: "4/4".into(),
+            },
+            TimeSignatureMarker {
+                id: "b".into(),
+                start_seconds: 4.0,
+                signature: "4/4".into(),
+            },
         ];
         assert!(matches!(
             validate_song(&song),

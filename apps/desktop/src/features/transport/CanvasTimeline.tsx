@@ -9,6 +9,7 @@ import {
 
 import type {
   ActiveVampSummary,
+  PendingAutomationCueSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
   SongRegionSummary,
@@ -63,6 +64,7 @@ type RulerCanvasProps = {
   selectedRegionId: string | null;
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: PendingAutomationCueSummary | null;
   activeVamp: ActiveVampSummary | null;
   playheadSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
@@ -247,6 +249,7 @@ export function TimelineRulerCanvas({
   selectedRegionId,
   selectedMarkerId,
   pendingMarkerJump,
+  pendingAutomationCue,
   activeVamp,
   playheadSecondsRef,
   playheadDragRef,
@@ -275,6 +278,7 @@ export function TimelineRulerCanvas({
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
+    pendingAutomationCue,
     activeVamp,
     playheadDragRef,
   });
@@ -292,6 +296,7 @@ export function TimelineRulerCanvas({
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
+    pendingAutomationCue,
     activeVamp,
     playheadDragRef,
   };
@@ -324,9 +329,11 @@ export function TimelineRulerCanvas({
         .join("|"),
     [timeSignatureMarkers],
   );
-
   const pendingJumpSignature = pendingMarkerJump
     ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
+    : "";
+  const pendingAutomationSignature = pendingAutomationCue
+    ? `${pendingAutomationCue.cueId}:${pendingAutomationCue.executeAtSeconds}`
     : "";
   const activeVampSignature = activeVamp
     ? `${activeVamp.startSeconds}:${activeVamp.endSeconds}`
@@ -341,6 +348,7 @@ export function TimelineRulerCanvas({
     tempoMarkersSignature,
     timeSignatureMarkersSignature,
     pendingJumpSignature,
+    pendingAutomationSignature,
     activeVampSignature,
     pixelsPerSecond,
     selectedRegionId,
@@ -488,9 +496,10 @@ export function TimelineRulerCanvas({
           const playheadSeconds =
             snapshot.playheadDragRef.current?.currentSeconds ??
             playheadSecondsRef.current;
-          const pulseFrame = snapshot.pendingMarkerJump
-            ? Math.floor(performance.now() / 32)
-            : 0;
+          const pulseFrame =
+            snapshot.pendingMarkerJump || snapshot.pendingAutomationCue
+              ? Math.floor(performance.now() / 32)
+              : 0;
           const currentMarkerId =
             snapshot.markers
               .filter((marker) => playheadSeconds >= marker.startSeconds)
@@ -515,6 +524,7 @@ export function TimelineRulerCanvas({
               tempoMarkers: snapshot.tempoMarkers,
               timeSignatureMarkers: snapshot.timeSignatureMarkers,
               pendingMarkerJump: snapshot.pendingMarkerJump,
+              pendingAutomationCue: snapshot.pendingAutomationCue,
               selectedMarkerId: snapshot.selectedMarkerId,
               currentMarkerId,
               pulseAlpha,

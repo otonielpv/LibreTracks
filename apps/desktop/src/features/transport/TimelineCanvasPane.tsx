@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
@@ -13,7 +14,9 @@ import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type { TimelineNavigationScheme } from "./Renderer/InputManager";
 import type {
   ActiveVampSummary,
+  AutomationCueSummary,
   ClipSummary,
+  PendingAutomationCueSummary,
   PendingJumpSummary,
   SongRegionSummary,
   SongView,
@@ -49,7 +52,67 @@ import {
   type ExternalDropPreview,
 } from "./dragDrop";
 
-const RULER_HEIGHT = 132;
+const RULER_HEIGHT = 110;
+
+/** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
+function describeAutomationCue(
+  cue: AutomationCueSummary,
+  song: SongView | null,
+): string {
+  const trackName = (id: string) =>
+    song?.tracks.find((t) => t.id === id)?.name ?? id;
+  const sceneName = (id: string) =>
+    song?.mixScenes?.find((s) => s.id === id)?.name ?? id;
+  const targetName = (target: AutomationCueSummary["actions"][number]) => {
+    if (target.type !== "jump") return "";
+    const t = target.target;
+    if (t.kind === "region") {
+      return song?.regions.find((r) => r.id === t.regionId)?.name ?? "canción";
+    }
+    if (t.kind === "marker") {
+      return (
+        song?.sectionMarkers.find((m) => m.id === t.markerId)?.name ?? "marca"
+      );
+    }
+    return `${t.seconds.toFixed(2)}s`;
+  };
+
+  const lines = (cue.actions ?? []).map((action) => {
+    switch (action.type) {
+      case "jump": {
+        const fade =
+          action.transition.mode === "fade_out" &&
+          (action.transition.durationSeconds ?? 0) > 0
+            ? ` (fade ${(action.transition.durationSeconds ?? 0).toFixed(1)}s)`
+            : "";
+        return `→ Saltar a ${targetName(action)}${fade}`;
+      }
+      case "setTrackMute":
+        return `${action.muted ? "Mutear" : "Desmutear"} ${trackName(action.trackId)}`;
+      case "setTrackSolo":
+        return `${action.solo ? "Solo" : "Quitar solo"} ${trackName(action.trackId)}`;
+      case "setTrackMix": {
+        const parts: string[] = [];
+        if (action.volume != null)
+          parts.push(`vol ${Math.round(action.volume * 100)}`);
+        if (action.pan != null)
+          parts.push(`pan ${Math.round(action.pan * 100)}`);
+        return `${trackName(action.trackId)}: ${parts.join(", ") || "mezcla"}`;
+      }
+      case "applyScene":
+        return `Escena «${sceneName(action.sceneId)}»`;
+      case "wait":
+        return `Esperar ${action.durationSeconds}s`;
+    }
+  });
+
+  const runs =
+    cue.maxRuns != null
+      ? ` · ${cue.maxRuns}×`
+      : "";
+  const header = `${cue.name} — ${cue.atSeconds.toFixed(2)}s${runs}${cue.enabled ? "" : " (desactivado)"}`;
+  return lines.length ? `${header}\n${lines.join("\n")}` : header;
+}
 
 type LibraryClipPreviewState = {
   trackId: string | null;
@@ -93,6 +156,9 @@ type TimelineCanvasPaneProps = {
   onSelectRegion: (regionId: string) => void;
   selectedSectionId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: PendingAutomationCueSummary | null;
+  /** Cue ids that used up their per-session run limit (shown greyed/off). */
+  exhaustedCueIds: Set<string>;
   activeVamp: ActiveVampSummary | null;
   displayPositionSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{
@@ -133,6 +199,17 @@ type TimelineCanvasPaneProps = {
     event: ReactMouseEvent<HTMLButtonElement>,
     regionId: string,
   ) => void;
+  onAutomationCueContextMenu: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    cueId: string,
+  ) => void;
+  /** Left-click the cue diamond opens the cue editor directly. */
+  onAutomationCueEdit: (cueId: string) => void;
+  /**
+   * Right-click on empty space of the automation lane. The parent resolves the
+   * cursor X to timeline seconds and offers "create automation cue here".
+   */
+  onAutomationLaneContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   /**
    * Commit a region resize. Called once on pointer-up with the final
    * start/end seconds after snap + clamp have already been applied. The
@@ -232,6 +309,8 @@ export function TimelineCanvasPane({
   onSelectRegion,
   selectedSectionId,
   pendingMarkerJump,
+  pendingAutomationCue,
+  exhaustedCueIds,
   activeVamp,
   displayPositionSecondsRef,
   playheadDragRef,
@@ -254,6 +333,9 @@ export function TimelineCanvasPane({
   onTempoMarkerContextMenu,
   onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
+  onAutomationCueContextMenu,
+  onAutomationCueEdit,
+  onAutomationLaneContextMenu,
   onRegionResizeCommit,
   onRegionMoveCommit,
   snapEnabled,
@@ -756,6 +838,21 @@ export function TimelineCanvasPane({
     visibleTracks.length * trackHeight,
   );
 
+  // The canvas draws cue diamonds from song.automationCues. Exhausted cues come
+  // from the live snapshot, not the song, so patch their `enabled` to false here
+  // so the diamond greys out without re-fetching the whole song.
+  const songForCanvas = useMemo(() => {
+    if (!song || exhaustedCueIds.size === 0 || !song.automationCues?.length) {
+      return song;
+    }
+    return {
+      ...song,
+      automationCues: song.automationCues.map((cue) =>
+        exhaustedCueIds.has(cue.id) ? { ...cue, enabled: false } : cue,
+      ),
+    };
+  }, [song, exhaustedCueIds]);
+
   const externalDropGuideLeft = (() => {
     if (!externalDropPreview) {
       return 0;
@@ -797,6 +894,7 @@ export function TimelineCanvasPane({
             selectedRegionId={selectedRegionId}
             selectedMarkerId={selectedSectionId}
             pendingMarkerJump={pendingMarkerJump}
+            pendingAutomationCue={pendingAutomationCue}
             activeVamp={activeVamp}
             playheadSecondsRef={displayPositionSecondsRef}
             playheadDragRef={playheadDragRef}
@@ -1082,7 +1180,7 @@ export function TimelineCanvasPane({
               width={laneViewportWidth}
               height={trackCanvasHeight}
               trackHeight={trackHeight}
-              song={song}
+              song={songForCanvas ?? song}
               visibleTracks={visibleTracks}
               clipsByTrack={renderedClipsByTrack}
               waveformCache={waveformCache}
@@ -1230,6 +1328,92 @@ export function TimelineCanvasPane({
             visibleTracks.map((track) => {
               const trackClips = clipsByTrack[track.id] ?? [];
               const isPendingTrack = Boolean(track.isPending);
+              const isAutomationTrack = Boolean(track.isAutomation);
+
+              if (isAutomationTrack) {
+                return (
+                  <div
+                    key={track.id}
+                    className="lt-track-lane-row"
+                    data-track-id={track.id}
+                    style={{ height: trackHeight }}
+                  >
+                    <div
+                      className="lt-track-lane is-automation"
+                      style={{ height: trackHeight }}
+                      aria-label="Lane Automatismos"
+                      onMouseDown={(event) => {
+                        // Same seek-on-click as a normal lane: the synthetic
+                        // track has no clips, so this falls through to the
+                        // playhead seek path. Cue buttons stopPropagation so
+                        // clicking a cue doesn't move the playhead.
+                        onTrackLaneMouseDown(event, track, []);
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onAutomationLaneContextMenu(event);
+                      }}
+                    >
+                      {song?.automationCues?.map((cue: AutomationCueSummary) => {
+                        const isPending =
+                          pendingAutomationCue?.cueId === cue.id;
+                        // Exhausted = hit its run limit this session; show as off.
+                        const isOff =
+                          !cue.enabled || exhaustedCueIds.has(cue.id);
+                        // Rich tooltip: the cue name + a line per action so the
+                        // user sees what the job does on hover, even for cues
+                        // whose label is hidden because a neighbour is too close.
+                        const cueDescription = describeAutomationCue(cue, song);
+                        return (
+                          <button
+                            key={cue.id}
+                            type="button"
+                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}`}
+                            aria-label={cueDescription}
+                            title={cueDescription}
+                            style={{
+                              // Centre a tight hit target on the diamond. The
+                              // lane's own onMouseDown handles seek everywhere
+                              // else, so the hotspot must not cover the row.
+                              left: cue.atSeconds * pixelsPerSecond,
+                              top: trackHeight / 2,
+                            }}
+                            onMouseDown={(event) => {
+                              // Only swallow the LEFT button (so the diamond
+                              // doesn't start a lane seek). Calling
+                              // preventDefault on the right button cancels the
+                              // contextmenu event, which broke right-click edit.
+                              if (event.button === 0) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              } else {
+                                // Still stop the lane from handling it, but let
+                                // the native contextmenu fire.
+                                event.stopPropagation();
+                              }
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              // Left-click the diamond opens the editor directly
+                              // (right-click still opens the full context menu).
+                              onAutomationCueEdit(cue.id);
+                            }}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onAutomationCueContextMenu(event, cue.id);
+                            }}
+                          >
+                            <span className="lt-sr-only">{cue.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div

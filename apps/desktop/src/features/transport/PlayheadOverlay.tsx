@@ -50,6 +50,13 @@ type PlaybackSnapshotState = {
   positionSeconds: number;
   transportClock: TransportClock | null;
   anchorReceivedAtMs: number;
+  /** While an automation jump is armed, the timeline second it fires at. The
+   * visual clock must not extrapolate past this, else the playhead overshoots
+   * the cue before the jump's reanchor arrives. */
+  pendingJumpExecuteSeconds: number | null;
+  /** The armed automation jump's destination in seconds, so the playhead can
+   * snap there the instant it reaches the cue (no waiting for the reanchor). */
+  pendingJumpTargetSeconds: number | null;
 };
 
 function clientXToTimelineSecondsFromCamera(
@@ -107,6 +114,8 @@ export function PlayheadOverlay({
     positionSeconds: 0,
     transportClock: null,
     anchorReceivedAtMs: performance.now(),
+    pendingJumpExecuteSeconds: null,
+    pendingJumpTargetSeconds: null,
   });
   const latestPropsRef = useRef({
     durationSeconds,
@@ -144,6 +153,14 @@ export function PlayheadOverlay({
         positionSeconds: playback?.positionSeconds ?? 0,
         transportClock: playback?.transportClock ?? null,
         anchorReceivedAtMs: performance.now(),
+        pendingJumpExecuteSeconds:
+          playback?.pendingAutomationCue?.executeAtSeconds ??
+          playback?.pendingMarkerJump?.executeAtSeconds ??
+          null,
+        // Only automation cues carry the resolved destination seconds; marker
+        // jumps fall back to the freeze-clamp (no instant target available).
+        pendingJumpTargetSeconds:
+          playback?.pendingAutomationCue?.targetSeconds ?? null,
       };
     };
 
@@ -164,7 +181,7 @@ export function PlayheadOverlay({
         latestPropsRef.current.pixelsPerSecond;
       const sharedPositionSeconds =
         latestPropsRef.current.positionSecondsRef?.current;
-      const nextSeconds = activeDrag
+      let nextSeconds = activeDrag
         ? activeDrag.currentSeconds
         : typeof sharedPositionSeconds === "number"
           ? clamp(
@@ -184,6 +201,22 @@ export function PlayheadOverlay({
                 0,
                 Math.max(0, latestPropsRef.current.durationSeconds),
               );
+
+      // When the playhead reaches an armed jump, move it to the destination
+      // immediately rather than waiting for the backend reanchor (which can lag
+      // 80–250 ms, leaving the playhead visibly frozen at the cue). The audio
+      // already jumped sample-exact; this just keeps the visual in step.
+      //  - Automation jumps carry the resolved targetSeconds → snap there.
+      //  - Marker jumps have no target seconds here → fall back to freezing at
+      //    the execute point so they at least don't overshoot.
+      const execute = playbackRef.current.pendingJumpExecuteSeconds;
+      const target = playbackRef.current.pendingJumpTargetSeconds;
+      if (!activeDrag && execute != null && nextSeconds >= execute) {
+        nextSeconds =
+          target != null
+            ? clamp(target, 0, Math.max(0, latestPropsRef.current.durationSeconds))
+            : execute;
+      }
       const absoluteX = secondsToAbsoluteX(
         nextSeconds,
         effectivePixelsPerSecond,

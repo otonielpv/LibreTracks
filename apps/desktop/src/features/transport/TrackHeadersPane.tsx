@@ -106,6 +106,45 @@ export function TrackHeadersPane({
           const childCount = getTrackChildCount(track.id);
           const trackDensityClass = densityFromHeight(trackHeight);
 
+          if (track.isAutomation) {
+            return (
+              <div
+                key={track.id}
+                className="lt-track-header-row"
+                data-track-id={track.id}
+                style={{ height: trackHeight }}
+              >
+                <div
+                  className={`lt-track-header ${trackDensityClass} is-automation ${
+                    isTrackSelected ? "is-selected" : ""
+                  }`}
+                  style={{ height: trackHeight, paddingLeft: 8 }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Pista de automatismos"
+                  onMouseDown={(event) => onStartTrackDrag(event, track.id)}
+                  onClick={(event) =>
+                    onSelectTrack(track.id, track.name, event)
+                  }
+                  onContextMenu={(event) => onOpenContextMenu(event, track.id)}
+                >
+                  <div className="lt-track-header-body">
+                    <div className="lt-track-header-content">
+                      <div className="lt-track-header-summary">
+                        <div className="lt-track-header-main">
+                          <div className="lt-track-title-row">
+                            <strong>⚙ {track.name}</strong>
+                          </div>
+                          <span className="lt-track-meta">Saltos automáticos</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           if (track.isPending) {
             return (
               <div

@@ -4,6 +4,8 @@ import {
 } from "../features/transport/timelineMath";
 import type {
   AppSettings,
+  AutomationCueSummary,
+  MixSceneSummary,
   AudioMeterLevel,
   AudioOutputDevices,
   CreateClipArgs,
@@ -37,6 +39,7 @@ type DesktopApiMockState = {
   libraryFolders: string[];
   activeVamp: TransportSnapshot["activeVamp"];
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: TransportSnapshot["pendingAutomationCue"];
   playbackPositionSeconds: number;
   playbackState: PlaybackState;
   projectRevision: number;
@@ -451,6 +454,7 @@ function buildInitialState(): DesktopApiMockState {
     libraryFolders: [],
     activeVamp: null,
     pendingMarkerJump: null,
+    pendingAutomationCue: null,
     playbackPositionSeconds: 0,
     playbackState: "stopped",
     projectRevision: 1,
@@ -590,6 +594,11 @@ function normalizeSong(song: SongView): SongView {
     timeSignatureMarkers: [...song.timeSignatureMarkers].sort(
       (left, right) => left.startSeconds - right.startSeconds,
     ),
+    automationCues: [...(song.automationCues ?? [])].sort(
+      (left, right) => left.atSeconds - right.atSeconds,
+    ),
+    mixScenes: [...(song.mixScenes ?? [])],
+    automationTrack: song.automationTrack ?? null,
   };
 }
 
@@ -613,7 +622,12 @@ function buildSnapshot(): TransportSnapshot {
     pendingMarkerJump: state.pendingMarkerJump
       ? clone(state.pendingMarkerJump)
       : null,
+    pendingAutomationCue: state.pendingAutomationCue
+      ? clone(state.pendingAutomationCue)
+      : null,
     activeVamp: state.activeVamp ? clone(state.activeVamp) : null,
+    automationCues: clone(state.song.automationCues ?? []),
+    mixScenes: clone(state.song.mixScenes ?? []),
     musicalPosition,
     transportClock: {
       anchorPositionSeconds: state.playbackPositionSeconds,
@@ -825,6 +839,7 @@ export const testDesktopApiMock = {
     state.libraryAssets = [];
     state.libraryFolders = [];
     state.pendingMarkerJump = null;
+    state.pendingAutomationCue = null;
     state.playbackPositionSeconds = 0;
     state.playbackState = "stopped";
     return clone(buildSnapshot());
@@ -1099,6 +1114,7 @@ export const testDesktopApiMock = {
     state.playbackState = "stopped";
     state.playbackPositionSeconds = 0;
     state.pendingMarkerJump = null;
+    state.pendingAutomationCue = null;
     state.activeVamp = null;
     return clone(buildSnapshot());
   },
@@ -1415,6 +1431,116 @@ export const testDesktopApiMock = {
     replaceSong({
       ...state.song,
       regions: state.song.regions.filter((region) => region.id !== regionId),
+    });
+    return clone(buildSnapshot());
+  },
+  upsertAutomationCue: async (cue: AutomationCueSummary) => {
+    // Mirror the backend's contract: actions non-empty, at most one jump and it
+    // must be last, jump targets carry the camelCase id field for their kind.
+    const actions = cue.actions ?? [];
+    if (actions.length === 0) {
+      throw new Error("automation cue must have at least one action");
+    }
+    const jumpIndex = actions.findIndex((a) => a.type === "jump");
+    const jumpCount = actions.filter((a) => a.type === "jump").length;
+    if (jumpCount > 1) {
+      throw new Error("a cue may contain at most one jump action");
+    }
+    if (jumpIndex >= 0 && jumpIndex !== actions.length - 1) {
+      throw new Error("the jump action must be the last action of the cue");
+    }
+    for (const action of actions) {
+      if (action.type !== "jump") continue;
+      const target = action.target;
+      if (target.kind === "marker" && typeof target.markerId !== "string") {
+        throw new Error("invalid automation target: missing markerId");
+      }
+      if (target.kind === "region" && typeof target.regionId !== "string") {
+        throw new Error("invalid automation target: missing regionId");
+      }
+      if (target.kind === "frame" && typeof target.seconds !== "number") {
+        throw new Error("invalid automation target: missing seconds");
+      }
+    }
+
+    const cues = (state.song.automationCues ?? []).filter(
+      (candidate) => candidate.id !== cue.id,
+    );
+    replaceSong({
+      ...state.song,
+      automationCues: [...cues, clone(cue)].sort(
+        (left, right) => left.atSeconds - right.atSeconds,
+      ),
+      // Creating a cue implies the automation track is present.
+      automationTrack: state.song.automationTrack ?? { afterTrackId: null },
+    });
+    return clone(buildSnapshot());
+  },
+  deleteAutomationCue: async (cueId: string) => {
+    replaceSong({
+      ...state.song,
+      automationCues: (state.song.automationCues ?? []).filter(
+        (cue) => cue.id !== cueId,
+      ),
+    });
+    if (state.pendingAutomationCue?.cueId === cueId) {
+      state.pendingAutomationCue = null;
+    }
+    return clone(buildSnapshot());
+  },
+  upsertMixScene: async (scene: MixSceneSummary) => {
+    const scenes = (state.song.mixScenes ?? []).filter(
+      (candidate) => candidate.id !== scene.id,
+    );
+    replaceSong({
+      ...state.song,
+      mixScenes: [...scenes, clone(scene)],
+    });
+    return clone(buildSnapshot());
+  },
+  deleteMixScene: async (sceneId: string) => {
+    replaceSong({
+      ...state.song,
+      mixScenes: (state.song.mixScenes ?? []).filter((s) => s.id !== sceneId),
+      // Drop applyScene actions / clear jump mixSceneId referencing it, mirroring
+      // the backend's cleanup.
+      automationCues: (state.song.automationCues ?? []).map((cue) => ({
+        ...cue,
+        actions: cue.actions
+          .filter(
+            (action) =>
+              !(action.type === "applyScene" && action.sceneId === sceneId),
+          )
+          .map((action) =>
+            action.type === "jump" && action.mixSceneId === sceneId
+              ? { ...action, mixSceneId: null }
+              : action,
+          ),
+      })),
+    });
+    return clone(buildSnapshot());
+  },
+  addAutomationTrack: async (afterTrackId: string | null = null) => {
+    replaceSong({
+      ...state.song,
+      automationTrack: { afterTrackId },
+    });
+    return clone(buildSnapshot());
+  },
+  removeAutomationTrack: async () => {
+    // Removing the track clears every cue (no ghost jumps).
+    replaceSong({
+      ...state.song,
+      automationCues: [],
+      automationTrack: null,
+    });
+    state.pendingAutomationCue = null;
+    return clone(buildSnapshot());
+  },
+  setAutomationTrackPosition: async (afterTrackId: string | null) => {
+    replaceSong({
+      ...state.song,
+      automationTrack: { afterTrackId },
     });
     return clone(buildSnapshot());
   },

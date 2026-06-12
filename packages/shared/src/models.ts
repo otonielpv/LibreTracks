@@ -104,6 +104,84 @@ export type ActiveVampSummary = {
   endSeconds: number;
 };
 
+export type AutomationTransitionMode = "instant" | "fade_out";
+
+export type AutomationTransitionSummary = {
+  mode: AutomationTransitionMode;
+  durationSeconds?: number | null;
+};
+
+export type AutomationJumpTargetSummary =
+  | { kind: "marker"; markerId: string }
+  | { kind: "region"; regionId: string }
+  | { kind: "frame"; seconds: number };
+
+/** One action of a cue's job. Discriminated by `type`. A `jump`, if present,
+ * is always the last action. */
+export type AutomationActionSummary =
+  | {
+      type: "jump";
+      target: AutomationJumpTargetSummary;
+      transition: AutomationTransitionSummary;
+      mixSceneId?: string | null;
+    }
+  | { type: "setTrackMute"; trackId: string; muted: boolean }
+  | { type: "setTrackSolo"; trackId: string; solo: boolean }
+  | {
+      type: "setTrackMix";
+      trackId: string;
+      volume?: number | null;
+      pan?: number | null;
+      rampSeconds?: number | null;
+    }
+  | { type: "applyScene"; sceneId: string }
+  | { type: "wait"; durationSeconds: number };
+
+export type AutomationCueSummary = {
+  id: string;
+  name: string;
+  atSeconds: number;
+  enabled: boolean;
+  /** Max times the cue fires per session; null/undefined = unlimited. */
+  maxRuns?: number | null;
+  /** True once the cue used up its run limit this session (shown as off). */
+  exhausted?: boolean;
+  /** Ordered actions executed in sequence when the playhead reaches atSeconds. */
+  actions: AutomationActionSummary[];
+};
+
+export type MixSceneTrackOverrideSummary = {
+  trackId: string;
+  volume?: number | null;
+  pan?: number | null;
+  muted?: boolean | null;
+  solo?: boolean | null;
+};
+
+export type MixSceneSummary = {
+  id: string;
+  name: string;
+  trackOverrides: MixSceneTrackOverrideSummary[];
+};
+
+export type PendingAutomationCueSummary = {
+  cueId: string;
+  cueName: string;
+  executeAtSeconds: number;
+  /** Jump destination in view seconds — lets the playhead move there instantly. */
+  targetSeconds: number;
+  target: AutomationJumpTargetSummary;
+};
+
+/**
+ * Present (non-null) only when the user has added the automation track to the
+ * timeline. The track is a synthetic UI lane, not a real `TrackSummary`.
+ */
+export type AutomationTrackSummary = {
+  /** Id of the audio track the lane sits after; `null` = first row. */
+  afterTrackId?: string | null;
+};
+
 export type TrackSummary = {
   id: string;
   name: string;
@@ -164,6 +242,9 @@ export type SongView = {
   sectionMarkers: SectionMarkerSummary[];
   clips: ClipSummary[];
   tracks: TrackSummary[];
+  automationCues?: AutomationCueSummary[];
+  mixScenes?: MixSceneSummary[];
+  automationTrack?: AutomationTrackSummary | null;
   waveforms?: WaveformSummaryDto[];
   projectRevision: number;
 };
@@ -325,7 +406,11 @@ export type TransportSnapshot = {
   positionSeconds: number;
   currentMarker?: SectionMarkerSummary | null;
   pendingMarkerJump?: PendingJumpSummary | null;
+  pendingAutomationCue?: PendingAutomationCueSummary | null;
   activeVamp?: ActiveVampSummary | null;
+  automationCues?: AutomationCueSummary[];
+  mixScenes?: MixSceneSummary[];
+  automationTrack?: AutomationTrackSummary | null;
   musicalPosition?: {
     barNumber: number;
     beatInBar: number;

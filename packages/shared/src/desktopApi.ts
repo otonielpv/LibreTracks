@@ -3,6 +3,7 @@ import type {
   AudioFileImportPayload,
   AudioFilePathImportPayload,
   AudioMeterLevel,
+  AutomationCueSummary,
   AudioOutputDevices,
   CreateClipArgs,
   DesktopPerformanceSnapshot,
@@ -10,6 +11,7 @@ import type {
   LibraryImportCompleteEvent,
   LibraryImportProgressEvent,
   MarkerKind,
+  MixSceneSummary,
   ProjectLoadCompleteEvent,
   MidiRawMessage,
   ProjectLoadProgressEvent,
@@ -819,6 +821,44 @@ export async function updateSongRegionMasterGain(
 
 export async function deleteSongRegion(regionId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_song_region", { regionId });
+}
+
+export async function upsertAutomationCue(
+  cue: AutomationCueSummary,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("upsert_automation_cue", { cue });
+}
+
+export async function deleteAutomationCue(cueId: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("delete_automation_cue", { cueId });
+}
+
+export async function addAutomationTrack(
+  afterTrackId: string | null = null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("add_automation_track", {
+    afterTrackId,
+  });
+}
+
+export async function removeAutomationTrack(): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("remove_automation_track", {});
+}
+
+export async function setAutomationTrackPosition(
+  afterTrackId: string | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_automation_track_position", {
+    afterTrackId,
+  });
+}
+
+export async function upsertMixScene(scene: MixSceneSummary): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("upsert_mix_scene", { scene });
+}
+
+export async function deleteMixScene(sceneId: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("delete_mix_scene", { sceneId });
 }
 
 export async function createSectionMarker(startSeconds: number): Promise<TransportSnapshot> {

@@ -39,6 +39,8 @@ function setup(overrides: Partial<TrackHandlerDeps> = {}) {
     moveTrack: vi.fn(async () => snapshot(3)),
     createTrack: vi.fn(async () => snapshot(4)),
     prompt: vi.fn(async () =>"My Track"),
+    setAutomationTrackPosition: vi.fn(async () => snapshot(5)),
+    getVisibleTrackIds: () => Object.keys(tracksById),
     ...overrides,
   };
   return { handlers: createTrackHandlers(deps), deps, tracksById };

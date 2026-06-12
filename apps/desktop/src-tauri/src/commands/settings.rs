@@ -197,7 +197,9 @@ fn persist_settings(
     next: AppSettings,
 ) -> Result<AppSettings, String> {
     let previous = settings_store.current().map_err(|e| e.to_string())?;
-    settings_store.set(next.clone()).map_err(|e| e.to_string())?;
+    settings_store
+        .set(next.clone())
+        .map_err(|e| e.to_string())?;
     save_app_settings(app, &next).map_err(|e| e.to_string())?;
     apply_decoding_cache_env(app, &next);
     if previous != next {
@@ -216,8 +218,7 @@ pub fn get_decoding_cache_info(
     let dir = effective_decoding_cache_dir(&app, &settings);
     Ok(DecodingCacheInfo {
         dir: dir.to_string_lossy().replace('\\', "/"),
-        size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes()
-            + waveform_cache_size_bytes(),
+        size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes() + waveform_cache_size_bytes(),
         max_gb: settings.decoding_cache_max_gb,
     })
 }
@@ -233,8 +234,8 @@ pub fn set_decoding_cache_dir(
 ) -> Result<AppSettings, String> {
     let dir = dir.filter(|d| !d.trim().is_empty());
     if let Some(ref path) = dir {
-        let meta = std::fs::metadata(path)
-            .map_err(|e| format!("cache folder is not accessible: {e}"))?;
+        let meta =
+            std::fs::metadata(path).map_err(|e| format!("cache folder is not accessible: {e}"))?;
         if !meta.is_dir() {
             return Err("selected path is not a directory".into());
         }

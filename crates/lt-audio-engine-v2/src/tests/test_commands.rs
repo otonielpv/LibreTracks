@@ -415,11 +415,9 @@ fn set_metronome_config_round_trip() {
         subdivision_gain: 0.4,
     };
     let rt = round_trip(&cmd);
-    assert!(
-        matches!(rt, EngineCommand::SetMetronomeConfig {
+    assert!(matches!(rt, EngineCommand::SetMetronomeConfig {
             enabled: true, volume, route, accent_preset: 2, beat_preset: 1, subdivision: 2, ..
-        } if (volume - 0.5).abs() < 1e-6 && route == "monitor")
-    );
+        } if (volume - 0.5).abs() < 1e-6 && route == "monitor"));
 }
 
 // ── Pitch ───────────────────────────────────────────────────────────────────

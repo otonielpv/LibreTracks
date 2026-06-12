@@ -1400,6 +1400,306 @@ textarea {
   margin-top: 0.4rem;
 }
 
+.lt-automation-modal {
+  max-width: 30rem;
+}
+
+/* Numeric fields in the automation cue modal share the select's framing so the
+   destination dropdown and the fade/seconds inputs read as one control set. */
+.lt-automation-modal .lt-settings-field input[type="number"] {
+  width: 100%;
+  /* Without border-box the padding adds to the 100% width and the input
+     overflows the modal body. */
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.75rem 0.85rem;
+  font: 600 0.92rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-automation-modal .lt-settings-field-hint {
+  color: rgb(186 202 197 / 0.7);
+  font: 500 0.78rem/1.3 "Space Grotesk", sans-serif;
+}
+
+.lt-automation-modal-actions {
+  margin-top: 0.4rem;
+}
+
+/* Multi-action job editor inside the cue modal. */
+.lt-automation-actions-body {
+  gap: 0.7rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.lt-automation-empty {
+  color: rgb(186 202 197 / 0.7);
+  font: 500 0.88rem/1.4 "Space Grotesk", sans-serif;
+  margin: 0;
+}
+
+.lt-automation-action-row {
+  border: 1px solid rgb(255 122 182 / 0.18);
+  border-radius: 4px;
+  padding: 0.7rem;
+  background: rgb(255 122 182 / 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lt-automation-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lt-automation-action-kind {
+  color: #ff9bcc;
+  font: 700 0.85rem/1.2 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lt-automation-action-tools {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.lt-automation-action-tools button {
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 3px;
+  background: rgb(28 31 32 / 0.9);
+  color: #f3f0ef;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.lt-automation-action-tools button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.lt-automation-action-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.55rem;
+}
+
+.lt-automation-action-fields .lt-settings-field input[type="number"],
+.lt-automation-action-fields .lt-settings-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.6rem 0.7rem;
+  font: 600 0.88rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-automation-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.lt-automation-add-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.lt-automation-add-buttons button {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.lt-automation-runs-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.8rem;
+  margin-top: 0.3rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.lt-automation-runs-field {
+  width: 8rem;
+}
+
+.lt-automation-runs-field input[type="number"] {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.55rem 0.7rem;
+  font: 600 0.88rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-automation-runs-hint {
+  color: rgb(186 202 197 / 0.7);
+  font: 600 0.85rem/1.2 "Space Grotesk", sans-serif;
+}
+
+/* Mix scene manager modal. */
+.lt-scene-modal {
+  max-width: 44rem;
+  /* Bound the modal to the viewport and let the inner track list be the only
+     scroll area, so the header/footer stay put while the tracks scroll. */
+  max-height: calc(100vh - 3rem);
+  overflow: hidden;
+}
+
+.lt-scene-body {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 0.9rem;
+  /* The track list inside caps its own height and scrolls, so the body just
+     wraps its content. */
+  align-items: start;
+}
+
+.lt-scene-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  /* Self-contained scroll, matching the track list. */
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+
+.lt-scene-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 4px;
+  background: rgb(28 31 32 / 0.9);
+  color: #f3f0ef;
+  cursor: pointer;
+  font: 600 0.9rem/1.2 "Space Grotesk", sans-serif;
+  text-align: left;
+}
+
+.lt-scene-list-item.is-selected {
+  border-color: rgb(255 122 182 / 0.5);
+  background: rgb(255 122 182 / 0.08);
+}
+
+.lt-scene-list-meta {
+  color: rgb(186 202 197 / 0.65);
+  font: 500 0.74rem/1.1 "Space Grotesk", sans-serif;
+}
+
+.lt-scene-add {
+  margin-top: 0.2rem;
+}
+
+.lt-scene-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-height: 0;
+}
+
+.lt-scene-detail-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.7rem;
+  flex: 0 0 auto;
+}
+
+.lt-scene-detail-head .lt-settings-field {
+  flex: 1;
+}
+
+.lt-scene-detail-head input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.6rem 0.7rem;
+  font: 600 0.9rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-scene-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* Direct, self-contained scroll: cap the height and always scroll, so it does
+     not depend on parent flex/grid height propagation (which kept failing). */
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+
+.lt-scene-track-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 1fr) repeat(4, minmax(5rem, 7rem));
+  gap: 0.5rem;
+  align-items: start;
+  padding: 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 4px;
+  background: rgb(15 18 19 / 0.6);
+}
+
+.lt-scene-track-name {
+  color: #f3f0ef;
+  font: 600 0.85rem/1.3 "Space Grotesk", sans-serif;
+  align-self: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-scene-override {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.lt-scene-override-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: rgb(186 202 197 / 0.8);
+  font: 600 0.74rem/1.1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.lt-scene-override.is-active .lt-scene-override-toggle {
+  color: #ff9bcc;
+}
+
+.lt-scene-override-control input,
+.lt-scene-override-control select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.4rem 0.5rem;
+  font: 600 0.82rem/1.1 "Space Grotesk", sans-serif;
+}
+
 /* Maximum-size row: label + a narrow numeric input with an inline "GB" unit
    so the field reads as a size, not a free-form box stretched across the row. */
 .lt-cache-max-row {
@@ -2371,7 +2671,7 @@ textarea {
   min-height: 100%;
   min-width: 0;
   display: grid;
-  grid-template-rows: 132px minmax(0, 1fr);
+  grid-template-rows: 110px minmax(0, 1fr);
   align-content: start;
   overflow: visible;
 }
@@ -2526,7 +2826,7 @@ textarea {
   display: flex;
   align-items: flex-end;
   padding: 0 1rem 0.8rem;
-  height: 132px;
+  height: 110px;
   background: #2a2a2a;
   border-bottom: 1px solid rgb(19 19 19 / 0.55);
   box-shadow: 1px 0 0 rgb(19 19 19 / 0.55), 10px 0 18px rgb(0 0 0 / 0.12);
@@ -2540,7 +2840,7 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 10;
-  height: 132px;
+  height: 110px;
   box-sizing: border-box;
   background: #2a2a2a;
   border-bottom: 1px solid rgb(19 19 19 / 0.55);
@@ -2550,7 +2850,7 @@ textarea {
 .lt-ruler-content {
   position: relative;
   height: 100%;
-  min-height: 132px;
+  min-height: 110px;
   background: transparent;
   overflow: visible;
 }
@@ -2559,7 +2859,7 @@ textarea {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 132px;
+  min-height: 110px;
 }
 
 .lt-ruler-canvas,
@@ -2698,6 +2998,19 @@ textarea {
     linear-gradient(180deg, rgb(29 40 38 / 0.98) 0%, rgb(22 30 29 / 0.98) 100%);
   border-right-color: rgb(87 241 219 / 0.18);
   border-bottom-color: rgb(87 241 219 / 0.18);
+}
+
+.lt-track-header.is-automation {
+  background:
+    linear-gradient(180deg, rgb(40 26 33 / 0.98) 0%, rgb(30 21 26 / 0.98) 100%);
+  border-right-color: rgb(255 122 182 / 0.22);
+  border-bottom-color: rgb(255 122 182 / 0.18);
+  cursor: grab;
+}
+
+.lt-track-header.is-automation.is-selected {
+  background:
+    linear-gradient(180deg, rgb(54 31 42 / 0.98) 0%, rgb(40 24 32 / 0.98) 100%);
 }
 
 .lt-track-header::before {
@@ -3456,6 +3769,15 @@ textarea {
   border-bottom: 1px dashed rgb(87 241 219 / 0.18);
 }
 
+/* The synthetic automation lane: a faint pink wash so it reads as a distinct,
+   global track rather than an audio lane. Cues are painted on the canvas. */
+.lt-track-lane.is-automation {
+  padding-top: 0;
+  background: rgb(255 122 182 / 0.045);
+  border-top: 1px solid rgb(255 122 182 / 0.16);
+  border-bottom: 1px solid rgb(255 122 182 / 0.16);
+}
+
 .lt-folder-lane-fill {
   position: absolute;
   inset: 8px;
@@ -3587,6 +3909,27 @@ textarea {
   z-index: 4;
 }
 
+.lt-automation-hotspot {
+  position: absolute;
+  /* Target around the diamond only (drawn at the lane centre). Big enough to be
+     comfortable to click/right-click, but not so wide it swallows clicks meant
+     for the playhead seek on the rest of the lane. Centred on the cue X via
+     negative margins; `top` is set inline to the lane's vertical centre. */
+  width: 24px;
+  height: 26px;
+  margin-left: -12px;
+  margin-top: -13px;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  z-index: 5;
+}
+
+.lt-automation-hotspot.is-disabled {
+  cursor: default;
+}
+
 .lt-region-hotspot {
   position: absolute;
   height: 1.35rem;
@@ -3677,6 +4020,15 @@ textarea {
 .lt-tempo-hotspot:focus-visible {
   outline: 1px solid rgb(87 241 219 / 0.88);
   outline-offset: 1px;
+}
+
+.lt-automation-hotspot:focus-visible {
+  outline: 1px solid rgb(255 122 182 / 0.88);
+  outline-offset: 1px;
+}
+
+.lt-automation-hotspot.is-pending:focus-visible {
+  outline-color: rgb(255 226 171 / 0.92);
 }
 
 .lt-sr-only {

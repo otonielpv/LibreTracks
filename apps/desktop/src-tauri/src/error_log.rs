@@ -37,7 +37,11 @@ pub fn init(app_data_dir: PathBuf) {
     let dir = app_data_dir.join("logs");
     let path = dir.join("errors.log");
     let file = match fs::create_dir_all(&dir) {
-        Ok(()) => OpenOptions::new().create(true).append(true).open(&path).ok(),
+        Ok(()) => OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .ok(),
         Err(_) => None,
     };
     let _ = LOGGER.set(ErrorLogger {
@@ -117,7 +121,14 @@ pub fn install_panic_hook() {
 
         let location = info
             .location()
-            .map(|location| format!("{}:{}:{}", location.file(), location.line(), location.column()))
+            .map(|location| {
+                format!(
+                    "{}:{}:{}",
+                    location.file(),
+                    location.line(),
+                    location.column()
+                )
+            })
             .unwrap_or_else(|| "<unknown>".to_string());
         let payload = info
             .payload()

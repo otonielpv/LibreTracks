@@ -256,7 +256,9 @@ pub fn default_decoding_cache_dir(app: &AppHandle) -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
-            return PathBuf::from(local_app_data).join("LibreTracks").join("cache");
+            return PathBuf::from(local_app_data)
+                .join("LibreTracks")
+                .join("cache");
         }
     }
 

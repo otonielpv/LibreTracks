@@ -26,6 +26,10 @@ import {
   type AudioBackendKind,
   type AudioDeviceDescriptor,
   type AudioMeterLevel,
+  type AutomationActionSummary,
+  type AutomationCueSummary,
+  type AutomationJumpTargetSummary,
+  type MixSceneSummary,
   type ClipSummary,
   type JumpTriggerLabel,
   type LibraryAssetSummary,
@@ -62,6 +66,7 @@ import {
   deleteSongRegion,
   deleteSongTempoMarker,
   deleteSongTimeSignatureMarker,
+  deleteAutomationCue,
   deleteTrack,
   duplicateClips,
   exportRegionAsPackage,
@@ -124,6 +129,12 @@ import {
   updateTrackTransposeEnabled,
   upsertSongTempoMarker,
   upsertSongTimeSignatureMarker,
+  upsertAutomationCue,
+  upsertMixScene,
+  deleteMixScene,
+  addAutomationTrack,
+  removeAutomationTrack,
+  setAutomationTrackPosition,
   formatTransposeSemitones,
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
@@ -166,8 +177,10 @@ import {
   mergeLibraryAssetsByFilePath,
   mergePendingClipsByTrack,
   nextPaint,
+  toAutomationTrack,
   toPendingLibraryAsset,
   toPendingTrack,
+  AUTOMATION_TRACK_ID,
   type PendingAudioImport,
   type PendingLibraryAssetSummary,
   type TimelineClipSummary,
@@ -180,6 +193,11 @@ import {
   ExportSongModal,
   type ExportSongTarget,
 } from "./panels/ExportSongModal";
+import {
+  AutomationCueModal,
+  type AutomationCueDraft,
+} from "./panels/AutomationCueModal";
+import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
@@ -659,6 +677,9 @@ export function TransportPanelContent() {
   // When set, the export-mode chooser (Light / Full) is shown for this song.
   const [exportSongTarget, setExportSongTarget] =
     useState<ExportSongTarget | null>(null);
+  const [automationCueDraft, setAutomationCueDraft] =
+    useState<AutomationCueDraft | null>(null);
+  const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
   const selectedRegion = useMemo(
     () =>
       song?.regions.find((region) => region.id === selectedRegionId) ?? null,
@@ -1316,6 +1337,31 @@ export function TransportPanelContent() {
       pendingJump.transition,
     ].join("|");
   });
+  const pendingAutomationCueSignature = useTransportStore((state) => {
+    const pendingCue = state.playback?.pendingAutomationCue;
+    if (!pendingCue) {
+      return "";
+    }
+
+    return [
+      pendingCue.cueId,
+      pendingCue.cueName,
+      pendingCue.executeAtSeconds.toFixed(6),
+      JSON.stringify(pendingCue.target),
+    ].join("|");
+  });
+  // Ids of cues that have used up their per-session run limit, taken from the
+  // live snapshot so the lane greys them out during playback without a refetch.
+  const exhaustedCueSignature = useTransportStore((state) =>
+    (state.playback?.automationCues ?? [])
+      .filter((cue) => cue.exhausted)
+      .map((cue) => cue.id)
+      .join("|"),
+  );
+  const exhaustedCueIds = useMemo(
+    () => new Set(exhaustedCueSignature ? exhaustedCueSignature.split("|") : []),
+    [exhaustedCueSignature],
+  );
   const activeVampSignature = useTransportStore((state) => {
     const activeVamp = state.playback?.activeVamp;
     if (!activeVamp) {
@@ -2409,6 +2455,9 @@ export function TransportPanelContent() {
         moveTrack,
         createTrack,
         prompt: (message, defaultValue) => promptDialog(message, defaultValue),
+        setAutomationTrackPosition,
+        getVisibleTrackIds: () =>
+          visibleTracksRef.current.map((track) => track.id),
       }),
     [
       runAction,
@@ -5009,6 +5058,9 @@ export function TransportPanelContent() {
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? (snapshotRef.current?.pendingMarkerJump ?? null)
     : null;
+  const pendingAutomationCue = pendingAutomationCueSignature
+    ? (snapshotRef.current?.pendingAutomationCue ?? null)
+    : null;
   const activeVamp = activeVampSignature
     ? (snapshotRef.current?.activeVamp ?? null)
     : null;
@@ -5081,7 +5133,31 @@ export function TransportPanelContent() {
   const shouldShowEmptyState = !isShellBusy && !isProjectPending && !song;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = useMemo<TimelineTrackSummary[]>(() => {
-    const realTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
+    const realTracks: TimelineTrackSummary[] = song
+      ? buildVisibleTracks(song, collapsedFolders)
+      : [];
+
+    // Inject the synthetic automation lane (if the user added it) at the saved
+    // position: after the track whose id is `afterTrackId`, or first when null.
+    // It is not a real song track — see toAutomationTrack().
+    if (song?.automationTrack) {
+      const afterId = song.automationTrack.afterTrackId ?? null;
+      const automationRow = toAutomationTrack();
+      if (afterId === null) {
+        realTracks.unshift(automationRow);
+      } else {
+        const anchorIndex = realTracks.findIndex(
+          (track) => track.id === afterId,
+        );
+        if (anchorIndex >= 0) {
+          realTracks.splice(anchorIndex + 1, 0, automationRow);
+        } else {
+          // Anchor track no longer visible/exists: fall back to the top.
+          realTracks.unshift(automationRow);
+        }
+      }
+    }
+
     return [...realTracks, ...pendingAudioImports.map(toPendingTrack)];
   }, [collapsedFolders, pendingAudioImports, song]);
   // Mirror the visible-track order into a ref so the global mouse handlers
@@ -5336,6 +5412,220 @@ export function TransportPanelContent() {
     setStatus(message);
   }
 
+  function createAutomationCueId() {
+    return `automation_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+  }
+
+  function automationTargetLabel(
+    currentSong: SongView,
+    target: AutomationJumpTargetSummary,
+  ) {
+    if (target.kind === "region") {
+      return (
+        currentSong.regions.find((region) => region.id === target.regionId)
+          ?.name ?? "cancion"
+      );
+    }
+
+    if (target.kind === "marker") {
+      return (
+        currentSong.sectionMarkers.find(
+          (marker) => marker.id === target.markerId,
+        )?.name ?? "marca"
+      );
+    }
+
+    return formatClock(target.seconds);
+  }
+
+  function defaultAutomationTarget(
+    currentSong: SongView,
+    positionSeconds: number,
+  ): AutomationJumpTargetSummary | null {
+    const nextRegion = [...currentSong.regions]
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .find((region) => region.startSeconds > positionSeconds + 0.01);
+    if (nextRegion) {
+      return { kind: "region", regionId: nextRegion.id };
+    }
+
+    const nextMarker = [...currentSong.sectionMarkers]
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .find((marker) => marker.startSeconds > positionSeconds + 0.01);
+    if (nextMarker) {
+      return { kind: "marker", markerId: nextMarker.id };
+    }
+
+    const firstRegion = currentSong.regions[0];
+    if (firstRegion) {
+      return { kind: "region", regionId: firstRegion.id };
+    }
+
+    const firstMarker = currentSong.sectionMarkers[0];
+    if (firstMarker) {
+      return { kind: "marker", markerId: firstMarker.id };
+    }
+
+    return null;
+  }
+
+
+  function automationCueContextMenu(cue: AutomationCueSummary) {
+    return [
+      {
+        label: "Editar automatismo…",
+        onSelect: () => editAutomationCue(cue),
+      },
+      {
+        label: "Renombrar automatismo",
+        onSelect: async () => {
+          const nextName = (
+            await promptDialog("Nombre del automatismo", cue.name)
+          )?.trim();
+          if (!nextName) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await upsertAutomationCue({
+              ...cue,
+              name: nextName,
+            });
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(`Automatismo renombrado a ${nextName}`);
+          });
+        },
+      },
+      {
+        label: cue.enabled ? "Desactivar automatismo" : "Activar automatismo",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await upsertAutomationCue({
+              ...cue,
+              enabled: !cue.enabled,
+            });
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(
+              cue.enabled ? "Automatismo desactivado" : "Automatismo activado",
+            );
+          });
+        },
+      },
+      {
+        label: "Eliminar automatismo",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await deleteAutomationCue(cue.id);
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus(`Automatismo eliminado: ${cue.name}`);
+          });
+        },
+      },
+    ];
+  }
+
+  // Shared by the ruler menu and the automation-lane menu: open the visual cue
+  // editor seeded with a sensible default target. The actual upsert happens in
+  // handleConfirmAutomationCue when the user confirms. Creating a cue implies
+  // the automation track is present (the backend sets track_present).
+  function createAutomationCueAt(positionSeconds: number) {
+    const currentSong = songRef.current;
+    if (!currentSong) {
+      return;
+    }
+
+    // A new cue starts with a single jump action seeded to the next destination
+    // (if any). The user can then add/remove/reorder actions in the modal.
+    const defaultTarget = defaultAutomationTarget(currentSong, positionSeconds);
+    const seedActions: AutomationActionSummary[] = defaultTarget
+      ? [{ type: "jump", target: defaultTarget, transition: { mode: "instant" } }]
+      : [];
+
+    setAutomationCueDraft({
+      atSeconds: positionSeconds,
+      cueId: null,
+      name: null,
+      maxRuns: null,
+      actions: seedActions,
+    });
+  }
+
+  // Open the editor for an existing cue (used by the cue's context menu).
+  function editAutomationCue(cue: AutomationCueSummary) {
+    setAutomationCueDraft({
+      atSeconds: cue.atSeconds,
+      cueId: cue.id,
+      name: cue.name,
+      maxRuns: cue.maxRuns ?? null,
+      actions: cue.actions,
+    });
+  }
+
+  // Commit the modal's result: create or update the cue, then refresh.
+  const handleConfirmAutomationCue = useCallback(
+    (result: { actions: AutomationActionSummary[]; maxRuns: number | null }) => {
+      const draft = automationCueDraft;
+      const currentSong = songRef.current;
+      if (!draft || !currentSong) {
+        return;
+      }
+      setAutomationCueDraft(null);
+
+      void runAction(async () => {
+        const jump = result.actions.find((a) => a.type === "jump");
+        const label =
+          jump && jump.type === "jump"
+            ? `Salto a ${automationTargetLabel(currentSong, jump.target)}`
+            : `${result.actions.length} acciones`;
+        const nextSnapshot = await upsertAutomationCue({
+          id: draft.cueId ?? createAutomationCueId(),
+          name: draft.name ?? label,
+          atSeconds: draft.atSeconds,
+          enabled: true,
+          maxRuns: result.maxRuns,
+          actions: result.actions,
+        });
+        applyPlaybackSnapshot(nextSnapshot);
+        await refreshSongView({ includeWaveforms: false, sync: true });
+        setStatus(
+          draft.cueId
+            ? `Automatismo actualizado (${label})`
+            : `Automatismo creado en ${formatClock(draft.atSeconds)} (${label})`,
+        );
+      });
+    },
+    [automationCueDraft, runAction, applyPlaybackSnapshot, refreshSongView],
+  );
+
+  // Mix scene create/edit — the modal calls these; backend commands already
+  // exist. Refresh so the new/changed scene is available to applyScene actions.
+  const handleUpsertMixScene = useCallback(
+    async (scene: MixSceneSummary) => {
+      await runAction(async () => {
+        const nextSnapshot = await upsertMixScene(scene);
+        applyPlaybackSnapshot(nextSnapshot);
+        await refreshSongView({ includeWaveforms: false, sync: true });
+      });
+    },
+    [runAction, applyPlaybackSnapshot, refreshSongView],
+  );
+
+  const handleDeleteMixScene = useCallback(
+    async (sceneId: string) => {
+      await runAction(async () => {
+        const nextSnapshot = await deleteMixScene(sceneId);
+        applyPlaybackSnapshot(nextSnapshot);
+        await refreshSongView({ includeWaveforms: false, sync: true });
+      });
+    },
+    [runAction, applyPlaybackSnapshot, refreshSongView],
+  );
+
   function rulerContextMenu(
     positionSeconds: number,
     timelineRange: TimelineRangeSelection | null,
@@ -5435,6 +5725,14 @@ export function TransportPanelContent() {
             );
           });
         },
+      },
+      {
+        label: "Crear automatismo de salto",
+        disabled:
+          !song ||
+          ((song?.regions.length ?? 0) === 0 &&
+            (song?.sectionMarkers.length ?? 0) === 0),
+        onSelect: () => createAutomationCueAt(positionSeconds),
       },
       {
         label: t("transport.menu.clearTimelineSelection"),
@@ -5887,6 +6185,40 @@ export function TransportPanelContent() {
     });
   }
 
+  // Reduced menu for the synthetic automation lane: it has no volume/pan/color
+  // and removing it deletes every cue (no ghost jumps).
+  function automationTrackContextMenu(): ContextMenuAction[] {
+    return [
+      {
+        label: "Crear automatismo aquí",
+        onSelect: () =>
+          createAutomationCueAt(displayPositionSecondsRef.current),
+      },
+      {
+        label: "Gestionar escenas de mezcla…",
+        onSelect: () => setIsMixSceneModalOpen(true),
+      },
+      {
+        label: "Quitar pista de automatismos",
+        onSelect: async () => {
+          if (
+            !(await confirmDialog(
+              "Se eliminarán todos los automatismos. ¿Quitar la pista?",
+            ))
+          ) {
+            return;
+          }
+          await runAction(async () => {
+            const nextSnapshot = await removeAutomationTrack();
+            applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            setStatus("Pista de automatismos eliminada");
+          });
+        },
+      },
+    ];
+  }
+
   function trackContextMenu(track: TrackSummary) {
     const currentSong = songRef.current;
     if (!currentSong) {
@@ -5897,7 +6229,7 @@ export function TransportPanelContent() {
     const parentTrack = findTrack(currentSong, track.parentTrackId ?? null);
     const parentOfParent = parentTrack?.parentTrackId ?? null;
 
-    return [
+    const actions: ContextMenuAction[] = [
       {
         label: t("transport.menu.insertTrack"),
         onSelect: () =>
@@ -6006,6 +6338,17 @@ export function TransportPanelContent() {
         },
       },
     ];
+
+    // Offer the automation lane here too, anchored after this track, so the
+    // user can add it from a track's own menu (not only the empty area).
+    if (!currentSong.automationTrack) {
+      actions.push({
+        label: "Añadir pista de automatismos",
+        onSelect: () => handleAddAutomationTrack(track.id),
+      });
+    }
+
+    return actions;
   }
 
   function multiTrackContextMenu(tracks: TrackSummary[]) {
@@ -6025,7 +6368,7 @@ export function TransportPanelContent() {
   }
 
   function globalTrackListContextMenu() {
-    return [
+    const actions: ContextMenuAction[] = [
       {
         label: t("transport.menu.addAudioTrack"),
         onSelect: () => handleCreateTrack("audio", null, null),
@@ -6035,6 +6378,29 @@ export function TransportPanelContent() {
         onSelect: () => handleCreateTrack("folder", null, null),
       },
     ];
+
+    // Offer the automation lane only when it isn't already present. From the
+    // empty area below the tracks, anchor it after the last real track.
+    if (!songRef.current?.automationTrack) {
+      const realTracks = songRef.current?.tracks ?? [];
+      const lastTrackId = realTracks.at(-1)?.id ?? null;
+      actions.push({
+        label: "Añadir pista de automatismos",
+        onSelect: () => handleAddAutomationTrack(lastTrackId),
+      });
+    }
+
+    return actions;
+  }
+
+  // Add the synthetic automation lane after `afterTrackId` (null = first row).
+  async function handleAddAutomationTrack(afterTrackId: string | null) {
+    await runAction(async () => {
+      const nextSnapshot = await addAutomationTrack(afterTrackId);
+      applyPlaybackSnapshot(nextSnapshot);
+      await refreshSongView({ includeWaveforms: false, sync: true });
+      setStatus("Pista de automatismos añadida");
+    });
   }
 
   const handleTrackHeaderSelect = useCallback(
@@ -6092,6 +6458,13 @@ export function TransportPanelContent() {
     event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) {
+    // The synthetic automation lane is not a real song track, so it has its
+    // own reduced menu (create cue / remove track).
+    if (trackId === AUTOMATION_TRACK_ID) {
+      openMenu(event, "Automatismos", automationTrackContextMenu());
+      return;
+    }
+
     const track = findTrack(songRef.current, trackId);
     if (!track) {
       return;
@@ -9320,6 +9693,8 @@ export function TransportPanelContent() {
                           }}
                           selectedSectionId={selectedSectionId}
                           pendingMarkerJump={pendingMarkerJump}
+                          pendingAutomationCue={pendingAutomationCue}
+                          exhaustedCueIds={exhaustedCueIds}
                           activeVamp={activeVamp}
                           midiLearnMode={midiLearnMode}
                           onMidiLearnTarget={handleMidiLearnTarget}
@@ -9660,6 +10035,79 @@ export function TransportPanelContent() {
                               songRegionContextMenu(region),
                             );
                           }}
+                          onAutomationCueContextMenu={(event, cueId) => {
+                            const cue = song?.automationCues?.find(
+                              (candidate) => candidate.id === cueId,
+                            );
+                            if (!cue) {
+                              return;
+                            }
+
+                            clearSelection();
+                            setSelectedTimelineRange(null);
+                            setSelectedRegionId(null);
+                            openMenu(
+                              event,
+                              cue.name,
+                              automationCueContextMenu(cue),
+                            );
+                          }}
+                          onAutomationCueEdit={(cueId) => {
+                            const cue = song?.automationCues?.find(
+                              (candidate) => candidate.id === cueId,
+                            );
+                            if (cue) {
+                              editAutomationCue(cue);
+                            }
+                          }}
+                          onAutomationLaneContextMenu={(event) => {
+                            if (!song) {
+                              return;
+                            }
+                            const positionSeconds = snappedRulerSeconds(
+                              event,
+                              workspaceDurationSeconds,
+                            );
+                            clearSelection();
+                            setSelectedRegionId(null);
+                            // If the right-click landed near an existing cue's
+                            // diamond, open that cue's menu instead of the
+                            // create menu — so a near-miss on the small hotspot
+                            // still edits the cue rather than offering to create.
+                            // Use the RAW (unsnapped) click seconds so grid snap
+                            // doesn't skew the proximity test.
+                            const pps = livePixelsPerSecondRef.current;
+                            const rawSeconds = rulerClientXToSeconds(
+                              event.clientX,
+                              rulerTrackRef.current as HTMLElement,
+                              getCameraX(),
+                              workspaceDurationSeconds,
+                              pps,
+                            );
+                            const nearCue = (song.automationCues ?? []).find(
+                              (cue) =>
+                                Math.abs((cue.atSeconds - rawSeconds) * pps) <=
+                                12,
+                            );
+                            if (nearCue) {
+                              openMenu(
+                                event,
+                                nearCue.name,
+                                automationCueContextMenu(nearCue),
+                              );
+                              return;
+                            }
+                            openMenu(event, "Automatismos", [
+                              {
+                                label: "Crear automatismo de salto",
+                                disabled:
+                                  (song?.regions.length ?? 0) === 0 &&
+                                  (song?.sectionMarkers.length ?? 0) === 0,
+                                onSelect: () =>
+                                  createAutomationCueAt(positionSeconds),
+                              },
+                            ]);
+                          }}
                           onRegionResizeCommit={(
                             regionId,
                             startSeconds,
@@ -9908,6 +10356,23 @@ export function TransportPanelContent() {
               target={exportSongTarget}
               onCancel={() => setExportSongTarget(null)}
               onConfirm={handleConfirmExportSong}
+            />
+
+            {automationCueDraft ? (
+              <AutomationCueModal
+                draft={automationCueDraft}
+                song={song}
+                onCancel={() => setAutomationCueDraft(null)}
+                onConfirm={handleConfirmAutomationCue}
+              />
+            ) : null}
+
+            <MixSceneModal
+              open={isMixSceneModalOpen}
+              song={song}
+              onCancel={() => setIsMixSceneModalOpen(false)}
+              onUpsert={handleUpsertMixScene}
+              onDelete={handleDeleteMixScene}
             />
 
             <TimelineContextMenus

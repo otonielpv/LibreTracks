@@ -81,6 +81,142 @@ function resolveVisibleTrackWindow(
   };
 }
 
+/**
+ * Paint the automation cues as diamonds along the synthetic automation track's
+ * row. Mirrors the old ruler-lane look (drawRulerAutomationCue) but anchored to
+ * the track's `top`/`trackHeight` instead of a fixed header lane.
+ */
+/** Truncate `text` with an ellipsis so it fits within `maxTextWidth` px. Returns
+ * null when not even a single char + ellipsis fits (caller then hides the label,
+ * Ableton-style: the diamond stays, the text drops). */
+function fitLabel(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxTextWidth: number,
+): string | null {
+  if (context.measureText(text).width <= maxTextWidth) {
+    return text;
+  }
+  const ellipsis = "…";
+  if (context.measureText(ellipsis).width > maxTextWidth) {
+    return null;
+  }
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (context.measureText(text.slice(0, mid) + ellipsis).width <= maxTextWidth) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo > 0 ? text.slice(0, lo) + ellipsis : null;
+}
+
+export function drawAutomationLane(
+  context: CanvasRenderingContext2D,
+  snapshot: TrackSceneSnapshot,
+  trackTop: number,
+) {
+  const laneHeight = snapshot.trackHeight;
+  const centerY = trackTop + laneHeight / 2;
+
+  // Ableton-style collision handling: a cue's label may only extend up to the
+  // next cue's diamond. Sort by time so each cue knows where its neighbour is.
+  const cues = [...(snapshot.song.automationCues ?? [])].sort(
+    (left, right) => left.atSeconds - right.atSeconds,
+  );
+
+  const LABEL_PADDING_X = 8;
+  const LABEL_GAP = 10; // min px between this label's end and the next diamond
+  const DIAMOND_HALF = 6;
+
+  context.font = '700 10px "Space Grotesk", sans-serif';
+
+  for (let index = 0; index < cues.length; index += 1) {
+    const cue = cues[index];
+    const x = secondsToScreenX(cue.atSeconds, snapshot.cameraX, snapshot.zoomLevel);
+    const snappedX = Math.round(x) + 0.5;
+
+    // The diamond always draws (the anchor never disappears). Cull only when the
+    // diamond itself is well off-screen.
+    if (snappedX < -DIAMOND_HALF - 2 || snappedX > snapshot.width + DIAMOND_HALF + 2) {
+      continue;
+    }
+
+    const strokeStyle = cue.enabled
+      ? "rgba(255, 122, 182, 0.85)"
+      : "rgba(186, 202, 197, 0.34)";
+    const fillStyle = cue.enabled
+      ? "rgba(255, 122, 182, 0.16)"
+      : "rgba(186, 202, 197, 0.08)";
+    const textStyle = cue.enabled ? "#ff9bcc" : "rgba(186, 202, 197, 0.62)";
+
+    context.save();
+    context.strokeStyle = strokeStyle;
+    context.fillStyle = fillStyle;
+    context.lineWidth = 1.2;
+
+    // Full-height stem.
+    context.beginPath();
+    context.moveTo(snappedX, trackTop + 3);
+    context.lineTo(snappedX, trackTop + laneHeight - 3);
+    context.stroke();
+
+    // Diamond marker.
+    context.beginPath();
+    context.moveTo(snappedX, centerY - 6);
+    context.lineTo(snappedX + 6, centerY);
+    context.lineTo(snappedX, centerY + 6);
+    context.lineTo(snappedX - 6, centerY);
+    context.closePath();
+    context.fill();
+    context.stroke();
+
+    // Label summarizes the job: the cue name plus a count when it has more than
+    // a single action (e.g. "Salto a Coro  ·  +2"). Truncated to the room before
+    // the next cue's diamond; if nothing fits, only the diamond remains.
+    const actions = cue.actions ?? [];
+    const extraCount = Math.max(0, actions.length - 1);
+    const countSuffix = extraCount > 0 ? `  ·  +${extraCount}` : "";
+    const baseLabel = `→ ${cue.name.replace(/^Salto a\s+/i, "")}`;
+    const fullLabel = cue.enabled
+      ? `${baseLabel}${countSuffix}`
+      : `${baseLabel}${countSuffix} (off)`;
+
+    const labelStart = snappedX + DIAMOND_HALF + 2;
+    // Right boundary = next cue's diamond (minus a gap), or the canvas edge.
+    const nextCue = cues[index + 1];
+    const nextX = nextCue
+      ? secondsToScreenX(nextCue.atSeconds, snapshot.cameraX, snapshot.zoomLevel)
+      : Number.POSITIVE_INFINITY;
+    const rightBoundary = Math.min(
+      snapshot.width - 4,
+      Number.isFinite(nextX) ? nextX - DIAMOND_HALF - LABEL_GAP : snapshot.width - 4,
+    );
+    const availableTextWidth = rightBoundary - labelStart - LABEL_PADDING_X * 2;
+
+    const fitted =
+      availableTextWidth > 8
+        ? fitLabel(context, fullLabel, availableTextWidth)
+        : null;
+
+    if (fitted) {
+      const textWidth = context.measureText(fitted).width;
+      const pillWidth = textWidth + LABEL_PADDING_X * 2;
+      context.beginPath();
+      context.roundRect(labelStart, centerY - 7.5, pillWidth, 15, 4);
+      context.fill();
+      context.stroke();
+      context.fillStyle = textStyle;
+      context.textBaseline = "middle";
+      context.fillText(fitted, labelStart + LABEL_PADDING_X, centerY + 0.5);
+    }
+    context.restore();
+  }
+}
+
 export function drawTrackClipsLayer(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
@@ -110,6 +246,11 @@ export function drawTrackClipsLayer(
     const track = snapshot.visibleTracks[trackIndex];
     const trackTop = trackIndex * snapshot.trackHeight;
     const childCount = snapshot.song.tracks.filter((candidate) => candidate.parentTrackId === track.id).length;
+
+    if (track.isAutomation) {
+      drawAutomationLane(context, snapshot, trackTop);
+      continue;
+    }
 
     if (track.kind === "folder") {
       context.fillStyle = track.color ? `${track.color}33` : "rgba(32, 31, 31, 0.78)";

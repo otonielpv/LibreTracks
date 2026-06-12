@@ -1,4 +1,5 @@
 import type {
+  PendingAutomationCueSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
   TempoMarkerSummary,
@@ -17,6 +18,7 @@ export type RulerForegroundLayerArgs = {
   tempoMarkers: TempoMarkerSummary[];
   timeSignatureMarkers: TimeSignatureMarkerSummary[];
   pendingMarkerJump: PendingJumpSummary | null;
+  pendingAutomationCue: PendingAutomationCueSummary | null;
   selectedMarkerId: string | null;
   currentMarkerId: string | null;
   pulseAlpha: number;
@@ -70,6 +72,17 @@ export function drawRulerForegroundLayer(
     );
   }
 
+  if (args.pendingAutomationCue) {
+    drawPendingExecutionLine(
+      context,
+      args.width,
+      args.height,
+      args.cameraX,
+      args.pixelsPerSecond,
+      args.pendingAutomationCue.executeAtSeconds,
+    );
+  }
+
   for (const marker of args.markers) {
     drawRulerMarker(
       context,
@@ -113,4 +126,5 @@ export function drawRulerForegroundLayer(
       marker.signature,
     );
   }
+
 }
