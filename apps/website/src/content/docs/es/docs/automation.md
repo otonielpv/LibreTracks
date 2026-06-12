@@ -24,7 +24,7 @@ Haz clic izquierdo en el diamante de una señal para abrir el editor; al pasar e
 - **Aplicar escena** — recupera una [escena de mezcla](#escenas-de-mezcla) guardada para reconfigurar varias pistas a la vez.
 - **Esperar** — pausa los segundos indicados antes de que corra la siguiente acción.
 
-![Editor de señal de automatización](/screenshots/Automation-Cue-Editor.png)
+![Editor de señal de automatización](/screenshots/Automation-Cue-Editor.gif)
 
 ## Repeticiones
 
@@ -34,7 +34,7 @@ Por defecto, una señal se dispara cada vez que el cursor llega a ella. Activa *
 
 Una **escena de mezcla** es un conjunto guardado de ajustes por pista — volumen, pan, mute y solo — que puedes aplicar al instante desde una acción **Aplicar escena**. Abre **Gestionar escenas de mezcla…** para crear escenas, nombrarlas y elegir qué pistas controla cada una.
 
-![Escenas de mezcla](/screenshots/Mix-Scenes.png)
+![Escenas de mezcla](/screenshots/Mix-Scenes.gif)
 
 Las escenas son ideales para grandes movimientos de mezcla en un cambio de sección — por ejemplo, bajar la banda a solo click y voz en un breakdown, y restaurar la mezcla completa en la siguiente señal.
 

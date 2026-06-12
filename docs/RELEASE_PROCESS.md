@@ -57,6 +57,11 @@ Rules:
   Emojis go on the bullet text only — NEVER in the `##` headings, which the
   parser regex-matches and would break. Use the SAME emoji for a given item in
   both the ES and EN sections.
+- Proofread the Spanish section for spelling and accents before moving on —
+  the in-app update modal shows it verbatim to end users. Check tildes
+  (sección, inglés, número, según, rápida, automático), `e` instead of `y`
+  before words starting with "i"/"hi" (e.g. "español e inglés"), and ñ. Don't
+  rely on it "looking right" — read each bullet once specifically for orthography.
 
 ## 4. Bump versions
 

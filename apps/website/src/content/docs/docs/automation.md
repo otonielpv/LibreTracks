@@ -7,8 +7,6 @@ The **Automation** track lets you place **cues** on the timeline that fire one o
 
 Each cue lives on its own automation track, shown as a diamond on the timeline at the moment it fires.
 
-![Automation track](/screenshots/Automation-Track.png)
-
 ## Adding An Automation Track
 
 Open the automation menu from the transport area and choose **Add automation track**. Right‑click anywhere on the lane (or use **Create automation here**) to drop a new cue at that position.
@@ -24,7 +22,7 @@ Left‑click a cue's diamond to open the editor; hovering shows a quick summary 
 - **Apply scene** — recall a saved [mix scene](#mix-scenes) to reshape several tracks at once.
 - **Wait** — pause the given number of seconds before the next action runs.
 
-![Automation cue editor](/screenshots/Automation-Cue-Editor.png)
+![Automation cue editor](/screenshots/Automation-Cue-Editor.gif)
 
 ## Repeats
 
@@ -34,7 +32,7 @@ By default a cue fires every time the playhead reaches it. Turn on **Limit repea
 
 A **mix scene** is a saved set of per‑track overrides — volume, pan, mute, and solo — that you can apply instantly from an **Apply scene** action. Open **Manage mix scenes…** to create scenes, name them, and choose which tracks each one overrides.
 
-![Mix scenes](/screenshots/Mix-Scenes.png)
+![Mix scenes](/screenshots/Mix-Scenes.gif)
 
 Scenes are ideal for big mix moves at a section boundary — for example, pulling the band down to just click and vocal for a breakdown, then restoring the full mix at the next cue.
 
