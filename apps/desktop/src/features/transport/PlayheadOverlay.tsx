@@ -82,22 +82,11 @@ function resolveClockPositionSeconds(
 
   const elapsedSeconds =
     (performance.now() - playback.anchorReceivedAtMs) / 1000;
-  const extrapolated = playback.transportClock.anchorPositionSeconds + elapsedSeconds;
-
-  // While a jump is armed ahead of the playhead, freeze the visual clock at the
-  // cue's execute point so the playhead doesn't overshoot it before the jump's
-  // reanchor snapshot lands. Only clamps a forward-approaching jump (execute
-  // point at/after the anchor), so it never holds the playhead back otherwise.
-  const execute = playback.pendingJumpExecuteSeconds;
-  if (
-    execute != null &&
-    execute >= playback.transportClock.anchorPositionSeconds - 0.001 &&
-    extrapolated > execute
-  ) {
-    return clamp(execute, 0, safeDuration);
-  }
-
-  return clamp(extrapolated, 0, safeDuration);
+  return clamp(
+    playback.transportClock.anchorPositionSeconds + elapsedSeconds,
+    0,
+    safeDuration,
+  );
 }
 
 export function PlayheadOverlay({
@@ -184,7 +173,7 @@ export function PlayheadOverlay({
         latestPropsRef.current.pixelsPerSecond;
       const sharedPositionSeconds =
         latestPropsRef.current.positionSecondsRef?.current;
-      const nextSeconds = activeDrag
+      let nextSeconds = activeDrag
         ? activeDrag.currentSeconds
         : typeof sharedPositionSeconds === "number"
           ? clamp(
@@ -204,6 +193,17 @@ export function PlayheadOverlay({
                 0,
                 Math.max(0, latestPropsRef.current.durationSeconds),
               );
+
+      // While a jump is armed ahead of the playhead, freeze the visual position
+      // at the cue's execute point so it doesn't overshoot before the jump's
+      // reanchor lands. Applied here (not just in the clock branch) because the
+      // playhead is normally driven by positionSecondsRef, which extrapolates
+      // past the cue. Only bites a forward jump (execute ahead of us) and never
+      // during a drag.
+      const execute = playbackRef.current.pendingJumpExecuteSeconds;
+      if (!activeDrag && execute != null && nextSeconds > execute) {
+        nextSeconds = execute;
+      }
       const absoluteX = secondsToAbsoluteX(
         nextSeconds,
         effectivePixelsPerSecond,
