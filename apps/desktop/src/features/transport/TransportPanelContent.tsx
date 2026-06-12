@@ -5824,7 +5824,7 @@ export function TransportPanelContent() {
         },
       },
       {
-        label: "Crear automatismo de salto",
+        label: "Crear automatismo",
         disabled:
           !song ||
           ((song?.regions.length ?? 0) === 0 &&
@@ -10231,7 +10231,7 @@ export function TransportPanelContent() {
                             }
                             openMenu(event, "Automatismos", [
                               {
-                                label: "Crear automatismo de salto",
+                                label: "Crear automatismo",
                                 disabled:
                                   (song?.regions.length ?? 0) === 0 &&
                                   (song?.sectionMarkers.length ?? 0) === 0,

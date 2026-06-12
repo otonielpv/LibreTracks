@@ -90,7 +90,7 @@ describe("App / automation-track", () => {
     });
 
     const createButton = await screen.findByRole("button", {
-      name: /crear automatismo de salto/i,
+      name: /Crear automatismo/i,
     });
     await act(async () => {
       fireEvent.click(createButton);
@@ -133,7 +133,7 @@ describe("App / automation-track", () => {
     await act(async () => {
       fireEvent.click(
         await screen.findByRole("button", {
-          name: /crear automatismo de salto/i,
+          name: /Crear automatismo/i,
         }),
       );
     });
@@ -220,7 +220,7 @@ describe("App / automation-track", () => {
     await act(async () => {
       fireEvent.click(
         await screen.findByRole("button", {
-          name: /crear automatismo de salto/i,
+          name: /Crear automatismo/i,
         }),
       );
     });
@@ -271,7 +271,7 @@ describe("App / automation-track", () => {
     await act(async () => {
       fireEvent.click(
         await screen.findByRole("button", {
-          name: /crear automatismo de salto/i,
+          name: /Crear automatismo/i,
         }),
       );
     });
