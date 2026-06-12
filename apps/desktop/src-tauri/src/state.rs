@@ -5607,16 +5607,12 @@ impl DesktopSession {
                     .song()
                     .cloned()
                     .ok_or(DesktopError::NoSongLoaded)?;
-                // Reanchor to the EXACT jump target, like the marker-jump path
-                // does with complete_pending_native_jump_with_song's target. The
-                // engine's current position (snapshot.current_seconds) has
-                // already advanced a frame or two past the trigger, which made
-                // the playhead visibly overshoot before snapping back.
+                // Reanchor to the engine's actual post-jump position. (Using the
+                // computed target instead broke the second jump of a looping cue
+                // because the imposed position drifted from where the native
+                // engine really landed, desyncing the next jump's scheduling.)
                 let runtime_source_position =
-                    automation_target_source_seconds(&source_song, &pending_automation.target)
-                        .unwrap_or_else(|_| {
-                            source_seconds_at_view(&source_song, snapshot.current_seconds.max(0.0))
-                        });
+                    source_seconds_at_view(&source_song, snapshot.current_seconds.max(0.0));
                 self.engine
                     .sync_position_preserving_transport_state(runtime_source_position)?;
                 self.transport_clock
