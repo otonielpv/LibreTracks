@@ -426,6 +426,7 @@ export type TransportSnapshot = {
     lastJumpPositionSeconds?: number | null;
   };
   pitch?: PitchPrepareSummary;
+  sources?: SourceReadinessSummary;
   projectRevision: number;
   songDir?: string | null;
   songFilePath?: string | null;
@@ -810,6 +811,20 @@ export type PitchPrepareSummary = {
   lastPitchProxyError: string;
   lastMissingProxyKey: string;
   lastMissingProxyBlockIndex: number;
+};
+
+/** Aggregate readiness of the engine's audio sources (decode + PCM cache).
+ * Drives the global "Preparing audio…" indicator. `sourcesProgressPercent` is
+ * real (averaged from each source's live progress), never indeterminate. */
+export type SourceReadinessSummary = {
+  sourcesReady: boolean;
+  sourcesTotal: number;
+  sourcesReadyCount: number;
+  sourcesLoadingCount: number;
+  sourcesFailedCount: number;
+  sourcesProgressPercent: number;
+  cacheRamUsedMb: number;
+  cacheDiskUsedMb: number;
 };
 
 export type AudioBackendKind =

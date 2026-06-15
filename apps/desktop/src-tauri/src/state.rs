@@ -48,8 +48,8 @@ use crate::models::view::{
     waveform_summary_to_dto, PendingAutomationCueSummary,
 };
 use crate::models::{
-    DesktopPerformanceSnapshot, LibraryAssetSummary, PitchPrepareSummary,
-    SongPackageImportResponse, SongView, TransportClockSummary, TransportDriftSummary,
+    DesktopPerformanceSnapshot, LibraryAssetSummary, PitchPrepareSummary, SongPackageImportResponse,
+    SongView, SourceReadinessSummary, TransportClockSummary, TransportDriftSummary,
     TransportSnapshot, WaveformSummaryDto,
 };
 use crate::settings::AppSettings;
@@ -142,6 +142,7 @@ pub struct DesktopSession {
     song_file_path: Option<PathBuf>,
     last_drift_sample: Option<TransportDriftSummary>,
     last_runtime_pitch: Option<PitchPrepareSummary>,
+    last_source_readiness: Option<SourceReadinessSummary>,
     last_transport_runtime_sync_at: Option<Instant>,
     last_transport_pitch_sync_at: Option<Instant>,
     last_native_scheduled_jump_executed_count: u64,
@@ -234,6 +235,7 @@ impl Default for DesktopSession {
             song_file_path: None,
             last_drift_sample: None,
             last_runtime_pitch: None,
+            last_source_readiness: None,
             last_transport_runtime_sync_at: None,
             last_transport_pitch_sync_at: None,
             last_native_scheduled_jump_executed_count: 0,
@@ -3715,6 +3717,7 @@ impl DesktopSession {
             )?;
         }
         self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
+        self.last_source_readiness = Some(audio.source_readiness_summary());
 
         Ok(self.snapshot())
     }
@@ -3783,6 +3786,7 @@ impl DesktopSession {
             true,
         )?;
         self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
+        self.last_source_readiness = Some(audio.source_readiness_summary());
 
         Ok(self.snapshot())
     }
@@ -4709,6 +4713,7 @@ impl DesktopSession {
 
         if should_sync_pitch {
             self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
+            self.last_source_readiness = Some(audio.source_readiness_summary());
             self.last_transport_pitch_sync_at = Some(now);
         }
 
@@ -5948,6 +5953,7 @@ impl DesktopSession {
                 .unwrap_or_else(empty_musical_position_summary),
             transport_clock,
             pitch: self.last_runtime_pitch.clone().unwrap_or_default(),
+            sources: self.last_source_readiness.clone().unwrap_or_default(),
             last_drift_sample: self
                 .last_drift_sample
                 .clone()

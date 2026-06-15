@@ -32,6 +32,7 @@ pub struct TransportSnapshot {
     pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
     pub pitch: PitchPrepareSummary,
+    pub sources: SourceReadinessSummary,
     pub last_drift_sample: Option<TransportDriftSummary>,
     pub project_revision: u64,
     pub song_dir: Option<String>,
@@ -59,6 +60,28 @@ pub struct PitchPrepareSummary {
     pub last_pitch_proxy_error: String,
     pub last_missing_proxy_key: String,
     pub last_missing_proxy_block_index: i64,
+}
+
+/// Aggregate readiness of the engine's audio sources (decode + PCM cache
+/// preparation). Drives the global "Preparando audio…" indicator in the
+/// transport. Progress is REAL — derived from each source's live
+/// `progress_percent` reported by the C++ preparation queue — never an
+/// indeterminate spinner.
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceReadinessSummary {
+    /// True when every source has reached a terminal state (or there are none).
+    pub sources_ready: bool,
+    pub sources_total: usize,
+    /// Sources decoded/cached and playable (`ready` | `cache_ready`).
+    pub sources_ready_count: usize,
+    /// Sources still being prepared (`unloaded` | `loading`).
+    pub sources_loading_count: usize,
+    pub sources_failed_count: usize,
+    /// Aggregate 0-100 across all sources (Σ per-source progress / total).
+    pub sources_progress_percent: f64,
+    pub cache_ram_used_mb: u64,
+    pub cache_disk_used_mb: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

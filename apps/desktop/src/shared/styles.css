@@ -4657,6 +4657,67 @@ textarea {
   pointer-events: none;
 }
 
+/* Global "Preparing audio…" indicator. Ambient, non-blocking, real progress.
+ * Stacks just above the status overlay so the two don't collide. */
+.lt-source-prep-indicator {
+  position: absolute;
+  right: 1rem;
+  bottom: 3.35rem;
+  z-index: 32;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: min(20rem, calc(100vw - 6rem));
+  padding: 0.5rem 0.7rem;
+  border: 1px solid rgb(87 241 219 / 0.22);
+  border-radius: 4px;
+  background: rgb(10 10 10 / 0.78);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+  color: rgb(210 224 220 / 0.92);
+  pointer-events: none;
+}
+
+.lt-source-prep-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.lt-source-prep-label {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.lt-source-prep-detail {
+  font-variant-numeric: tabular-nums;
+  color: rgb(186 202 197 / 0.78);
+  white-space: nowrap;
+}
+
+.lt-source-prep-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  overflow: hidden;
+}
+
+.lt-source-prep-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(57 241 219 / 0.9), rgb(57 200 241 / 0.9));
+  transition: width 200ms ease-out;
+}
+
+.lt-source-prep-failed {
+  font-size: 0.72rem;
+  color: rgb(255 180 120 / 0.92);
+}
+
 .lt-missing-files-indicator {
   position: absolute;
   right: 1rem;

@@ -13,6 +13,9 @@ const IDLE_POLL_INTERVAL_MS = 800;
 // promptly the moment the work completes. Without this the user sees the
 // overlay linger up to ~800ms past the actual completion in idle state.
 const PITCH_PREPARING_POLL_INTERVAL_MS = 100;
+// Same fast cadence while audio sources are being prepared, so the global
+// "Preparing audio…" indicator's percent/track-count updates smoothly.
+const SOURCES_PREPARING_POLL_INTERVAL_MS = 100;
 const SLOW_POLL_THRESHOLD_MS = 120;
 const SLOW_POLL_BACKOFF_MS = 750;
 
@@ -27,12 +30,14 @@ type UseTransportPollingProps = {
   playbackState: string;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   pitchPreparing?: boolean;
+  sourcesPreparing?: boolean;
 };
 
 export function useTransportPolling({
   playbackState,
   applyPlaybackSnapshot,
   pitchPreparing = false,
+  sourcesPreparing = false,
 }: UseTransportPollingProps) {
   useEffect(() => {
     if (!isTauriApp) {
@@ -62,11 +67,15 @@ export function useTransportPolling({
       }, delayMs);
     };
 
-    const basePollInterval = pitchPreparing
-      ? PITCH_PREPARING_POLL_INTERVAL_MS
-      : playbackState === "playing"
-        ? PLAYING_POLL_INTERVAL_MS
-        : IDLE_POLL_INTERVAL_MS;
+    const basePollInterval =
+      pitchPreparing || sourcesPreparing
+        ? Math.min(
+            PITCH_PREPARING_POLL_INTERVAL_MS,
+            SOURCES_PREPARING_POLL_INTERVAL_MS,
+          )
+        : playbackState === "playing"
+          ? PLAYING_POLL_INTERVAL_MS
+          : IDLE_POLL_INTERVAL_MS;
 
     const refreshSnapshot = async () => {
       if (!active || inFlight) {
@@ -122,5 +131,5 @@ export function useTransportPolling({
       active = false;
       clearScheduledRefresh();
     };
-  }, [applyPlaybackSnapshot, playbackState, pitchPreparing]);
+  }, [applyPlaybackSnapshot, playbackState, pitchPreparing, sourcesPreparing]);
 }

@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::engine_v2::EngineV2State;
-use crate::models::PitchPrepareSummary;
+use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
 use crate::{error::DesktopError, settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
@@ -1612,6 +1612,69 @@ impl AudioController {
             last_pitch_proxy_error: pitch.last_pitch_proxy_error,
             last_missing_proxy_key: pitch.last_missing_proxy_key,
             last_missing_proxy_block_index: pitch.last_missing_proxy_block_index,
+        }
+    }
+
+    /// Aggregate source-preparation readiness for the global "Preparando audio…"
+    /// indicator. Mirrors `pitch_prepare_summary`'s plumbing. The aggregate
+    /// percent is REAL: each source's live `progress_percent` is averaged, with
+    /// terminal sources counted as 100%.
+    pub fn source_readiness_summary(&self) -> SourceReadinessSummary {
+        let mut state = match self.state.lock() {
+            Ok(state) => state,
+            Err(_) => return SourceReadinessSummary::default(),
+        };
+        let Ok(snapshot) = ensure_engine(&mut state).and_then(|engine| {
+            engine
+                .get_snapshot()
+                .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        }) else {
+            return SourceReadinessSummary::default();
+        };
+
+        let total = snapshot.source_states.len();
+        let mut ready_count = 0usize;
+        let mut loading_count = 0usize;
+        let mut failed_count = 0usize;
+        let mut progress_sum: f64 = 0.0;
+        for source in &snapshot.source_states {
+            match source.status.as_str() {
+                "ready" | "cache_ready" => {
+                    ready_count += 1;
+                    progress_sum += 100.0;
+                }
+                "failed" | "cancelled" => {
+                    failed_count += 1;
+                    // Terminal (won't progress further) — counts as done so the
+                    // aggregate can reach 100 and the indicator dismisses.
+                    progress_sum += 100.0;
+                }
+                _ => {
+                    // "unloaded" | "loading" (or anything non-terminal).
+                    loading_count += 1;
+                    progress_sum += source.progress_percent.clamp(0, 100) as f64;
+                }
+            }
+        }
+
+        // Terminal states match the `sources_ready` predicate used by the wait
+        // loop: every source is ready/cached or failed/cancelled.
+        let sources_ready = total == 0 || (ready_count + failed_count) >= total;
+        let progress_percent = if total == 0 {
+            100.0
+        } else {
+            progress_sum / total as f64
+        };
+
+        SourceReadinessSummary {
+            sources_ready,
+            sources_total: total,
+            sources_ready_count: ready_count,
+            sources_loading_count: loading_count,
+            sources_failed_count: failed_count,
+            sources_progress_percent: progress_percent,
+            cache_ram_used_mb: snapshot.source_cache.ram_bytes_used / (1024 * 1024),
+            cache_disk_used_mb: snapshot.source_cache.disk_bytes_used / (1024 * 1024),
         }
     }
 

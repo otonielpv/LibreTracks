@@ -42,6 +42,7 @@ import {
   type SectionMarkerSummary,
   type SongRegionSummary,
   type SongView,
+  type SourceReadinessSummary,
   type TempoMarkerSummary,
   type TimeSignatureMarkerSummary,
   type TrackKind,
@@ -210,6 +211,14 @@ import { useSettingsState } from "./hooks/useSettingsState";
 import { UI_ZOOM_STATUS_EVENT } from "../../shared/uiZoom";
 import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
 import { useTransportPolling } from "./hooks/useTransportPolling";
+import {
+  activateFromSources,
+  deriveSourcesPreparing,
+  nextSourcesPrepareUiState,
+  SOURCES_PREPARE_INITIAL,
+  SOURCES_SHOW_DELAY_MS,
+  type SourcesPrepareUiState,
+} from "./sourcesPrepare";
 import { useProjectActions } from "./hooks/useProjectActions";
 import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
 import { useTimelineActions } from "./timeline/useTimelineActions";
@@ -569,6 +578,22 @@ export function TransportPanelContent() {
     error?: string;
     startedAt?: number;
   }>({ active: false, message: "" });
+  // Global "Preparing audio…" indicator. `sourcesPrepareUiState.active` is
+  // debounced (see sourcesPrepare.ts) so cache-warm projects never flash it.
+  // `sourcesPreparing` is the UNdebounced flag that speeds up the snapshot poll.
+  const [sourcesPrepareUiState, setSourcesPrepareUiState] =
+    useState<SourcesPrepareUiState>(SOURCES_PREPARE_INITIAL);
+  const [sourcesPreparing, setSourcesPreparing] = useState(false);
+  const sourcesShowTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (sourcesShowTimerRef.current !== null) {
+        window.clearTimeout(sourcesShowTimerRef.current);
+        sourcesShowTimerRef.current = null;
+      }
+    },
+    [],
+  );
   const [isBusy, setIsBusy] = useState(false);
   const [isProjectViewHydrating, setIsProjectViewHydrating] = useState(false);
   const [busyFeedback, setBusyFeedback] = useState<{
@@ -1854,13 +1879,52 @@ export function TransportPanelContent() {
     [],
   );
 
+  const applySourcesSnapshot = useCallback(
+    (sources: SourceReadinessSummary | null | undefined) => {
+      const preparing = deriveSourcesPreparing(sources);
+      // Drive the fast-poll flag immediately (not debounced) so the indicator's
+      // numbers update smoothly while preparing.
+      setSourcesPreparing(preparing);
+
+      if (!preparing) {
+        if (sourcesShowTimerRef.current !== null) {
+          window.clearTimeout(sourcesShowTimerRef.current);
+          sourcesShowTimerRef.current = null;
+        }
+        setSourcesPrepareUiState((prev) =>
+          nextSourcesPrepareUiState(prev, sources),
+        );
+        return;
+      }
+
+      // Preparing: if already visible, refresh live numbers now.
+      setSourcesPrepareUiState((prev) =>
+        prev.active ? nextSourcesPrepareUiState(prev, sources) : prev,
+      );
+      // Not visible yet: arm the show-delay. When it fires, only show if prep is
+      // STILL in flight (reads the latest snapshot), so sub-180ms preps never
+      // flash the indicator.
+      if (sourcesShowTimerRef.current === null) {
+        sourcesShowTimerRef.current = window.setTimeout(() => {
+          sourcesShowTimerRef.current = null;
+          const next = activateFromSources(snapshotRef.current?.sources);
+          if (next) {
+            setSourcesPrepareUiState(next);
+          }
+        }, SOURCES_SHOW_DELAY_MS);
+      }
+    },
+    [],
+  );
+
   const applyPlaybackSnapshot = useCallback(
     (nextSnapshot: TransportSnapshot | null) => {
       useTransportStore.getState().setPlaybackState(nextSnapshot);
       snapshotRef.current = nextSnapshot;
       applyPitchPrepareSnapshot(nextSnapshot?.pitch);
+      applySourcesSnapshot(nextSnapshot?.sources);
     },
-    [applyPitchPrepareSnapshot],
+    [applyPitchPrepareSnapshot, applySourcesSnapshot],
   );
 
   // Track/clip colour handlers (optimistic song patch + snapshot publish).
@@ -4265,6 +4329,7 @@ export function TransportPanelContent() {
     playbackState,
     applyPlaybackSnapshot,
     pitchPreparing: pitchPrepareUiState.active,
+    sourcesPreparing,
   });
 
   useEffect(() => {
@@ -10590,6 +10655,44 @@ export function TransportPanelContent() {
                 </span>
                 Faltan archivos multimedia
               </button>
+            ) : null}
+
+            {sourcesPrepareUiState.active ? (
+              <div
+                className="lt-source-prep-indicator"
+                aria-live="polite"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(sourcesPrepareUiState.percent)}
+              >
+                <div className="lt-source-prep-line">
+                  <span className="lt-source-prep-label">
+                    {t("transport.status.preparingAudio")}
+                  </span>
+                  <span className="lt-source-prep-detail">
+                    {t("transport.status.tracksReady", {
+                      ready: sourcesPrepareUiState.readyCount,
+                      total: sourcesPrepareUiState.total,
+                    })}{" "}
+                    {Math.round(sourcesPrepareUiState.percent)}%
+                  </span>
+                </div>
+                <div className="lt-source-prep-bar">
+                  <span
+                    style={{
+                      width: `${Math.max(0, Math.min(100, sourcesPrepareUiState.percent))}%`,
+                    }}
+                  />
+                </div>
+                {sourcesPrepareUiState.failedCount > 0 ? (
+                  <span className="lt-source-prep-failed">
+                    {t("transport.status.sourcesFailed", {
+                      count: sourcesPrepareUiState.failedCount,
+                    })}
+                  </span>
+                ) : null}
+              </div>
             ) : null}
 
             {pitchPrepareUiState.active || status !== "" ? (

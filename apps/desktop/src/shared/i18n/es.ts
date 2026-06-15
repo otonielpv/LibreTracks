@@ -320,6 +320,9 @@ const es = {
     },
     status: {
       loadingSession: "Cargando sesion...",
+      preparingAudio: "Preparando audio...",
+      tracksReady: "{{ready}}/{{total}} pistas listas",
+      sourcesFailed: "{{count}} pista(s) no se pudieron cargar",
       error: "Error: {{message}}",
       readyDesktop: "Sesion desktop lista para edicion.",
       readyDemo:

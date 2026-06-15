@@ -304,6 +304,9 @@ const en = {
     },
     status: {
       loadingSession: "Loading session...",
+      preparingAudio: "Preparing audio...",
+      tracksReady: "{{ready}}/{{total}} tracks ready",
+      sourcesFailed: "{{count}} track(s) failed to load",
       error: "Error: {{message}}",
       readyDesktop: "Desktop session ready for editing.",
       readyDemo:
