@@ -482,6 +482,13 @@ export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSumma
   }
 }
 
+/** Open the native audio dialog and return the picked file paths WITHOUT
+ * importing. The caller then shows per-file "analyzing" placeholders and runs
+ * the shared import pipeline via importAudioFilesFromPaths. Empty = cancelled. */
+export async function pickLibraryFiles(): Promise<string[]> {
+  return invokeCommand<string[]>("pick_library_files");
+}
+
 export async function importAudioFilesFromBytes(
   files: AudioFileImportPayload[],
 ): Promise<LibraryAssetSummary[]> {

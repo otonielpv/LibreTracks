@@ -395,6 +395,23 @@ pub fn create_clips_with_auto_tracks(
 /// mode the project load/save commands fixed). Returns `false` if the user
 /// cancels the dialog. No event fires in that case, so the frontend resolves
 /// to null without waiting (see `importLibraryAssetsFromDialog` in desktopApi.ts).
+/// Open the native "import audio" dialog and return the picked file paths
+/// WITHOUT importing them. The frontend uses this to create per-file pending
+/// placeholders ("analyzing…") before kicking off the shared import pipeline via
+/// `import_audio_files_from_paths`, so the library dialog gets the same live
+/// feedback as drag-and-drop. Returns an empty vec if the user cancels.
+#[tauri::command]
+pub fn pick_library_files() -> Vec<String> {
+    FileDialog::new()
+        .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
+        .set_title("Importar audio a la libreria")
+        .pick_files()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect()
+}
+
 #[tauri::command]
 pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, String> {
     let files = FileDialog::new()

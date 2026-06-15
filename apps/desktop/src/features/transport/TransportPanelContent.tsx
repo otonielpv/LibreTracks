@@ -80,6 +80,7 @@ import {
   getSongView,
   getWaveformSummaries,
   importLibraryAssetsFromDialog,
+  pickLibraryFiles,
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
   importSongPackageFromPathWithProgress,
@@ -331,6 +332,7 @@ import {
 import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
 import { createLibraryHandlers } from "./library/libraryHandlers";
+import { runAudioImportPipeline } from "./library/importPipeline";
 import { createColorHandlers } from "./colors/colorHandlers";
 import { createTrackHandlers } from "./tracks/trackHandlers";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
@@ -1840,7 +1842,6 @@ export function TransportPanelContent() {
     ],
   );
   const {
-    handleImportLibraryAssetsClick,
     handleDeleteLibraryAssets,
     handleCreateLibraryFolder,
     handleMoveLibraryAssets,
@@ -4034,6 +4035,9 @@ export function TransportPanelContent() {
 
       const missingWaveformKeys = libraryAssets
         .map((asset) => asset.filePath)
+        // Defensive: never request a waveform for a pending placeholder's temp
+        // id (not a real file). Real imported assets replace these once ready.
+        .filter((filePath) => !filePath.startsWith("pending-asset-"))
         .filter(
           (waveformKey, index, keys) => keys.indexOf(waveformKey) === index,
         )
@@ -8752,68 +8756,44 @@ export function TransportPanelContent() {
 
     await nextPaint();
 
-    try {
-      const nativePayloads = isTauriApp
-        ? resolveNativeAudioImportPayloads(files)
-        : null;
+    const nativePayloads = isTauriApp
+      ? resolveNativeAudioImportPayloads(files)
+      : null;
 
-      let importedAssets: LibraryAssetSummary[];
-      if (nativePayloads) {
-        useTransportStore
-          .getState()
-          .updatePendingAudioImportStatus(pendingIds, "importing");
-        importedAssets = await importAudioFilesFromPaths(nativePayloads);
-      } else {
-        useTransportStore
-          .getState()
-          .updatePendingAudioImportStatus(pendingIds, "reading");
-
-        const payloads = await Promise.all(
-          files.map(async (file) => ({
-            fileName: file.name,
-            bytes: new Uint8Array(await file.arrayBuffer()),
-          })),
-        );
-
-        useTransportStore
-          .getState()
-          .updatePendingAudioImportStatus(pendingIds, "importing");
-        importedAssets = await importAudioFilesFromBytes(payloads);
-      }
-
-      useTransportStore
-        .getState()
-        .updatePendingAudioImportStatus(pendingIds, "metadata");
-      mergeLibraryAssets(importedAssets);
-      await refreshLibraryState({ preserveAssets: importedAssets });
-
-      useTransportStore
-        .getState()
-        .updatePendingAudioImportStatus(pendingIds, "analyzing");
-      await createRealTracksAndClipsForImportedAssets({
-        importedAssets,
-        dropSeconds,
-      });
-
-      useTransportStore.getState().removePendingAudioImports(pendingIds);
-      setStatus(
+    // Native paths import directly; the web/bytes path must read File bytes
+    // first (status "reading") before importing.
+    let bytesPayloads: { fileName: string; bytes: Uint8Array }[] | null = null;
+    await runAudioImportPipeline({
+      pendingIds,
+      beforeImport: nativePayloads
+        ? undefined
+        : async () => {
+            bytesPayloads = await Promise.all(
+              files.map(async (file) => ({
+                fileName: file.name,
+                bytes: new Uint8Array(await file.arrayBuffer()),
+              })),
+            );
+          },
+      importFn: () =>
+        nativePayloads
+          ? importAudioFilesFromPaths(nativePayloads)
+          : importAudioFilesFromBytes(bytesPayloads ?? []),
+      onImported: (importedAssets) =>
+        createRealTracksAndClipsForImportedAssets({
+          importedAssets,
+          dropSeconds,
+        }),
+      mergeLibraryAssets,
+      refreshLibraryState,
+      setStatus,
+      successMessage: (importedAssets) =>
         importedAssets.length === 1
           ? t("transport.status.clipAdded", {
               name: importedAssets[0].fileName,
             })
           : t("transport.status.clipsAdded", { count: importedAssets.length }),
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Could not import audio files. Please check the files and try again.";
-
-      useTransportStore
-        .getState()
-        .markPendingAudioImportsFailed(pendingIds, message);
-      setStatus(message);
-    }
+    });
   }
 
   function handleDroppedAudioFiles(files: File[], dropSeconds: number) {
@@ -8842,51 +8822,30 @@ export function TransportPanelContent() {
 
     await nextPaint();
 
-    try {
-      useTransportStore
-        .getState()
-        .updatePendingAudioImportStatus(pendingIds, "importing");
-
-      const importedAssets = await importAudioFilesFromPaths(
-        args.paths.map((path) => ({
-          fileName: libraryAssetFileName(path),
-          sourcePath: path,
-        })),
-      );
-
-      useTransportStore
-        .getState()
-        .updatePendingAudioImportStatus(pendingIds, "metadata");
-      mergeLibraryAssets(importedAssets);
-      await refreshLibraryState({ preserveAssets: importedAssets });
-
-      useTransportStore
-        .getState()
-        .updatePendingAudioImportStatus(pendingIds, "analyzing");
-      await createRealTracksAndClipsForImportedAssets({
-        importedAssets,
-        dropSeconds: args.dropSeconds,
-      });
-
-      useTransportStore.getState().removePendingAudioImports(pendingIds);
-      setStatus(
+    await runAudioImportPipeline({
+      pendingIds,
+      importFn: () =>
+        importAudioFilesFromPaths(
+          args.paths.map((path) => ({
+            fileName: libraryAssetFileName(path),
+            sourcePath: path,
+          })),
+        ),
+      onImported: (importedAssets) =>
+        createRealTracksAndClipsForImportedAssets({
+          importedAssets,
+          dropSeconds: args.dropSeconds,
+        }),
+      mergeLibraryAssets,
+      refreshLibraryState,
+      setStatus,
+      successMessage: (importedAssets) =>
         importedAssets.length === 1
           ? t("transport.status.clipAdded", {
               name: importedAssets[0].fileName,
             })
           : t("transport.status.clipsAdded", { count: importedAssets.length }),
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Could not import audio files. Please check the files and try again.";
-
-      useTransportStore
-        .getState()
-        .markPendingAudioImportsFailed(pendingIds, message);
-      setStatus(message);
-    }
+    });
   }
 
   function handleDroppedAudioPaths(paths: string[], dropSeconds: number) {
@@ -8906,6 +8865,43 @@ export function TransportPanelContent() {
       paths,
       pendingImports,
       dropSeconds,
+    });
+  }
+
+  // Library "import audio" button. Unified with drag-and-drop: pick paths, show
+  // the same per-file "analyzing" placeholders, and run the shared pipeline —
+  // but WITHOUT the timeline tail (library-only, no tracks/clips created).
+  async function handleImportLibraryFromDialog() {
+    if (!playbackSongDirRef.current) {
+      setStatus(t("transport.status.importRequiresSession"));
+      return;
+    }
+
+    const paths = await pickLibraryFiles();
+    if (!paths.length) {
+      return; // user cancelled
+    }
+
+    const pendingImports = createPendingAudioImportsFromPaths(paths, 0);
+    useTransportStore.getState().addPendingAudioImports(pendingImports);
+    setStatus(t("transport.status.libraryImportStarting"));
+    await nextPaint();
+
+    await runAudioImportPipeline({
+      pendingIds: pendingImports.map((item) => item.id),
+      importFn: () =>
+        importAudioFilesFromPaths(
+          paths.map((path) => ({
+            fileName: libraryAssetFileName(path),
+            sourcePath: path,
+          })),
+        ),
+      // No onImported tail: library import does not create timeline clips.
+      mergeLibraryAssets,
+      refreshLibraryState,
+      setStatus,
+      successMessage: (importedAssets) =>
+        t("transport.status.libraryUpdated", { count: importedAssets.length }),
     });
   }
 
@@ -9680,7 +9676,7 @@ export function TransportPanelContent() {
                 onLocateAsset={handleLocateMissingFile}
                 onPointerDragStart={startInternalLibraryPointerDrag}
                 onImport={() => {
-                  void handleImportLibraryAssetsClick();
+                  void handleImportLibraryFromDialog();
                 }}
                 onCreateFolder={() => {
                   void handleCreateLibraryFolder();
