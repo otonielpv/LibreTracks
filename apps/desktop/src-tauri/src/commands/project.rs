@@ -407,15 +407,61 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
     };
 
     let worker_app = app.clone();
+    let file_count = files.len();
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
+        // Mirror the drag-import flow: hold the session lock only BRIEFLY to
+        // clone (song_dir, current_song), then do the heavy copy+probe OUTSIDE
+        // the lock. Holding the lock across the whole import froze the UI.
         let result = (|| -> Result<Vec<LibraryAssetSummary>, String> {
-            let mut session = state
-                .session
-                .lock()
-                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-            session
-                .import_picked_library_assets(&worker_app, &files)
+            let (song_dir, current_song) = {
+                let session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+                let song_dir = session
+                    .song_dir
+                    .clone()
+                    .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?;
+                (song_dir, session.engine.song().cloned())
+            };
+
+            crate::state::emit_library_import_progress(
+                &worker_app,
+                10,
+                format!("Preparando {file_count} archivo(s) para importar..."),
+            );
+
+            // Funnel into the SAME path-based core the drag flow uses (copies
+            // files into the project's audio/ dir + probes metadata, no lock).
+            let payloads: Vec<AudioFilePathImportPayload> = files
+                .iter()
+                .map(|path| AudioFilePathImportPayload {
+                    file_name: path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("audio")
+                        .to_string(),
+                    source_path: path.to_string_lossy().to_string(),
+                })
+                .collect();
+
+            crate::state::import_audio_files_from_paths_to_library(
+                &song_dir,
+                current_song.as_ref(),
+                &payloads,
+            )
+            .map_err(|error| error.to_string())?;
+
+            crate::state::emit_library_import_progress(
+                &worker_app,
+                100,
+                "Importacion completada.".into(),
+            );
+
+            // Emit the FULL list (the frontend currently replaces its asset list
+            // wholesale from this event).
+            crate::state::list_library_assets(&song_dir, current_song.as_ref())
                 .map_err(|error| error.to_string())
         })();
 

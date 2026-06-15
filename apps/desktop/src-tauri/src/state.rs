@@ -1017,32 +1017,6 @@ impl DesktopSession {
     /// caller on the main thread; this runs on a worker thread so the heavy
     /// decode/persist work does not block the macOS run loop and freeze the
     /// window (see `start_import_library_assets_from_dialog`).
-    pub fn import_picked_library_assets(
-        &mut self,
-        app: &AppHandle,
-        files: &[PathBuf],
-    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
-        emit_library_import_progress(
-            app,
-            10,
-            format!("Preparando {} archivo(s) para importar...", files.len()),
-        );
-
-        let assets = self.import_audio_files_into_library(files, |percent, message| {
-            emit_library_import_progress(app, percent, message);
-        })?;
-        emit_library_import_progress(app, 85, "Actualizando libreria de la sesion...".into());
-        emit_library_import_progress(
-            app,
-            100,
-            format!(
-                "Importacion completada. {} asset(s) disponibles.",
-                assets.len()
-            ),
-        );
-        Ok(assets)
-    }
-
     #[cfg_attr(not(test), allow(dead_code))]
     fn import_audio_files_into_current_song(
         &mut self,
@@ -1067,6 +1041,7 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn import_audio_files_into_library(
         &mut self,
         files: &[PathBuf],
@@ -6294,7 +6269,7 @@ fn build_empty_song(song_id: String, title: String) -> Song {
     }
 }
 
-fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
+pub(crate) fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
     let payload = LibraryImportProgressEvent { percent, message };
 
     if let Err(error) = app.emit(LIBRARY_IMPORT_PROGRESS_EVENT, payload) {
@@ -6912,7 +6887,7 @@ fn collect_library_file_paths(
     Ok(file_paths)
 }
 
-fn list_library_assets(
+pub(crate) fn list_library_assets(
     song_dir: &Path,
     song: Option<&Song>,
 ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
