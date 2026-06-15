@@ -281,10 +281,31 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
                 "[LT_AUDIO] list_devices: 0 backend type(s) available — "
                 "JUCE failed to enumerate audio backends\n");
     }
+    // If a device is currently open, find which backend owns it. Re-running
+    // scanForDevices() on the backend that holds the live stream tears the
+    // stream down on Windows: DirectSound's scan re-enumerates the primary
+    // endpoint and leaves the open device in a dead state that only a fresh
+    // open_device() (i.e. the user "changing device") can revive. Symptom:
+    // opening Settings/Remote stops playback and it won't restart. We must
+    // therefore NOT scan the active backend; its device list is already known
+    // from the open, and getDeviceNames() below returns it without a rescan.
+    juce::AudioIODevice* open_dev = mgr.getCurrentAudioDevice();
+    const std::string active_backend =
+        open_dev ? open_dev->getTypeName().toStdString() : std::string{};
     for (auto* type : backend_types) {
         const juce::String backend_name = type->getTypeName();
         const auto t_scan = clk::now();
-        type->scanForDevices();
+        const bool is_active_backend =
+            !active_backend.empty() &&
+            backend_name.toStdString() == active_backend;
+        if (is_active_backend) {
+            device_debug_log(
+                "[LT_AUDIO_DEBUG] list_devices: skipping scanForDevices on active "
+                "backend \"%s\" to avoid disrupting the live stream\n",
+                active_backend.c_str());
+        } else {
+            type->scanForDevices();
+        }
         const double scan_ms = std::chrono::duration<double, std::milli>(clk::now() - t_scan).count();
         auto names = type->getDeviceNames(false); // false = output devices
         const auto backend = backend_name.toStdString();
