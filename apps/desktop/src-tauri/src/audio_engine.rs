@@ -448,10 +448,22 @@ impl AudioController {
         position_seconds: f64,
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
+        // Phase 1 — load the session under the lock.
         self.with_engine_state("play", Some(reason), |engine, state| {
+            // song_dir must be set before ensure_song_loaded: it resolves clip
+            // paths relative to it (song_with_resolved_audio_paths).
             state.song_dir = Some(song_dir);
-            ensure_song_loaded(engine, state, &song)?;
-            wait_for_engine_sources_ready(engine, playback_prepare_wait_timeout())?;
+            ensure_song_loaded(engine, state, &song)
+        })?;
+
+        // Phase 2 — wait for sources WITHOUT holding self.state continuously, so
+        // the UI / project load-save / snapshot pollers don't get starved while a
+        // slow (MP3 on a slow disk) source builds its PCM cache. service=false
+        // preserves "play"'s no-service-control contract (see with_engine_state).
+        self.wait_sources_ready_unlocked(playback_prepare_wait_timeout(), false)?;
+
+        // Phase 3 — start playback and update bookkeeping under the lock.
+        self.with_engine_state("play", Some(reason), |engine, state| {
             if !state.running {
                 engine.send_command(&EngineCommand::SeekAbsolute {
                     frame: seconds_to_frame_for_engine(engine, position_seconds),
@@ -475,9 +487,9 @@ impl AudioController {
     }
 
     pub fn wait_until_sources_ready(&self, timeout: Duration) -> Result<(), DesktopError> {
-        self.with_engine_state("wait_until_sources_ready", None, |engine, _state| {
-            wait_for_engine_sources_ready(engine, timeout)
-        })
+        // Lock-releasing wait: never holds self.state for the whole timeout, so
+        // the 120s import wait can't starve engine_snapshot() / the UI.
+        self.wait_sources_ready_unlocked(timeout, true)
     }
 
     pub fn prepare_playback_at(
@@ -485,9 +497,16 @@ impl AudioController {
         song: Song,
         position_seconds: f64,
     ) -> Result<(), DesktopError> {
+        // Phase 1 — load under the lock.
         self.with_engine_state("prepare_playback_at", None, |engine, state| {
-            ensure_song_loaded(engine, state, &song)?;
-            wait_for_engine_sources_ready(engine, playback_prepare_wait_timeout())?;
+            ensure_song_loaded(engine, state, &song)
+        })?;
+
+        // Phase 2 — wait without holding the lock continuously.
+        self.wait_sources_ready_unlocked(playback_prepare_wait_timeout(), true)?;
+
+        // Phase 3 — seek + bookkeeping under the lock.
+        self.with_engine_state("prepare_playback_at", None, |engine, state| {
             engine.send_command(&EngineCommand::SeekAbsolute {
                 frame: seconds_to_frame_for_engine(engine, position_seconds),
             })?;
@@ -496,6 +515,59 @@ impl AudioController {
             state.song_duration_seconds = Some(song.duration_seconds);
             Ok(())
         })
+    }
+
+    /// Poll the engine until all sources report ready (or `timeout` elapses),
+    /// RELEASING `self.state` between polls.
+    ///
+    /// The engine is `Send` but not `Sync`, so it must only be touched while the
+    /// lock is held — we re-acquire the lock for each `get_snapshot()` and drop
+    /// it again before sleeping. This keeps engine access serialized while
+    /// letting other threads (project load/save's `engine_snapshot()`, the meter
+    /// thread, the snapshot poll) interleave during the 20ms sleeps. Holding the
+    /// lock for the whole wait — as the old in-closure wait did — froze the UI
+    /// and made those callers fail with "engine_snapshot: state locked" whenever
+    /// a source (e.g. an MP3 on a slow disk) took a while to build its cache.
+    ///
+    /// `service` mirrors `with_engine_state`'s control-thread gating: `play`
+    /// passes `false` (it's on the no-service list), the others pass `true`.
+    /// Timeout is treated as success (best-effort), matching the prior behavior.
+    fn wait_sources_ready_unlocked(
+        &self,
+        timeout: Duration,
+        service: bool,
+    ) -> Result<(), DesktopError> {
+        let started_at = Instant::now();
+        loop {
+            let ready = {
+                let mut state = self.state.lock().map_err(|_| {
+                    DesktopError::AudioCommand("audio v2 state lock poisoned".into())
+                })?;
+                // No engine means nothing has been loaded yet -> nothing to wait
+                // for. Don't lazily create it here; the wait is a poll, not an
+                // initializer (load happens under with_engine_state).
+                let Some(engine) = state.engine.take() else {
+                    return Ok(());
+                };
+                if service {
+                    engine.service_control_thread();
+                }
+                let snapshot_result = engine.get_snapshot();
+                // Always restore the engine before the guard drops, even on error.
+                state.engine = Some(engine);
+                match snapshot_result {
+                    Ok(snapshot) => sources_ready(&snapshot),
+                    Err(error) => {
+                        return Err(DesktopError::AudioCommand(error.to_string()))
+                    }
+                }
+                // `state` guard drops here -> lock released before the sleep.
+            };
+            if ready || started_at.elapsed() >= timeout {
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
     }
 
     pub fn seek(
@@ -1386,13 +1458,31 @@ impl AudioController {
     }
 
     pub fn engine_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {
-        let mut state = match self.state.try_lock() {
-            Ok(guard) => guard,
-            Err(_) => {
-                return Err(DesktopError::AudioCommand(
-                    "engine_snapshot: state locked".into(),
-                ))
+        // Defense in depth: retry a few times before giving up with "state
+        // locked". The root cause of long lock holds is fixed (waits no longer
+        // hold the lock), but a brief overlap with any other command shouldn't
+        // make a project load/save fail. ~3 tries x 10ms covers short overlaps;
+        // a genuinely poisoned lock fails immediately (no point retrying).
+        const SNAPSHOT_LOCK_RETRIES: u32 = 3;
+        let mut state = 'acquire: loop {
+            for attempt in 0..SNAPSHOT_LOCK_RETRIES {
+                match self.state.try_lock() {
+                    Ok(guard) => break 'acquire guard,
+                    Err(std::sync::TryLockError::Poisoned(_)) => {
+                        return Err(DesktopError::AudioCommand(
+                            "audio v2 state lock poisoned".into(),
+                        ))
+                    }
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        if attempt + 1 < SNAPSHOT_LOCK_RETRIES {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                    }
+                }
             }
+            return Err(DesktopError::AudioCommand(
+                "engine_snapshot: state locked".into(),
+            ));
         };
         ensure_engine(&mut state)?
             .get_snapshot()
@@ -2192,6 +2282,46 @@ mod tests {
         assert_eq!(metronome_engine_volume(1.0), 2.5);
         assert_eq!(metronome_engine_volume(2.0), 2.5);
     }
+
+    fn source_state(status: &str) -> lt_audio_engine_v2::SourcePreparationInfo {
+        lt_audio_engine_v2::SourcePreparationInfo {
+            status: status.into(),
+            ..Default::default()
+        }
+    }
+
+    fn snapshot_with(statuses: &[&str]) -> EngineSnapshot {
+        EngineSnapshot {
+            source_states: statuses.iter().map(|s| source_state(s)).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn sources_ready_is_true_when_no_sources() {
+        assert!(sources_ready(&snapshot_with(&[])));
+    }
+
+    #[test]
+    fn sources_ready_is_true_when_all_terminal() {
+        assert!(sources_ready(&snapshot_with(&["ready", "cache_ready"])));
+    }
+
+    #[test]
+    fn sources_ready_counts_failed_and_cancelled_as_done() {
+        // A broken/cancelled source must never hang the wait.
+        assert!(sources_ready(&snapshot_with(&[
+            "ready",
+            "failed",
+            "cancelled"
+        ])));
+    }
+
+    #[test]
+    fn sources_ready_is_false_while_any_pending() {
+        assert!(!sources_ready(&snapshot_with(&["ready", "loading"])));
+        assert!(!sources_ready(&snapshot_with(&["unloaded"])));
+    }
 }
 
 fn estimate_position(state: &ControllerState) -> Option<f64> {
@@ -2212,28 +2342,25 @@ fn playback_prepare_wait_timeout() -> Duration {
     Duration::from_millis(millis)
 }
 
-fn wait_for_engine_sources_ready(engine: &Engine, timeout: Duration) -> Result<(), DesktopError> {
-    let started_at = Instant::now();
-    loop {
-        let snapshot = engine
-            .get_snapshot()
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-        let total = snapshot.source_states.len();
-        let ready = snapshot
-            .source_states
-            .iter()
-            .filter(|source| {
-                matches!(
-                    source.status.as_str(),
-                    "ready" | "cache_ready" | "failed" | "cancelled"
-                )
-            })
-            .count();
-        if total == 0 || ready >= total || started_at.elapsed() >= timeout {
-            return Ok(());
-        }
-        thread::sleep(Duration::from_millis(20));
+/// True when every source in the snapshot has reached a terminal preparation
+/// state (decoded/cached, or failed/cancelled — both count as "done" so a broken
+/// source never hangs the wait). An empty source set is trivially ready.
+fn sources_ready(snapshot: &EngineSnapshot) -> bool {
+    let total = snapshot.source_states.len();
+    if total == 0 {
+        return true;
     }
+    let ready = snapshot
+        .source_states
+        .iter()
+        .filter(|source| {
+            matches!(
+                source.status.as_str(),
+                "ready" | "cache_ready" | "failed" | "cancelled"
+            )
+        })
+        .count();
+    ready >= total
 }
 
 fn playback_reason_label(reason: PlaybackStartReason) -> &'static str {
