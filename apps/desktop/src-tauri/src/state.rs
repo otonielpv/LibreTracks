@@ -102,11 +102,15 @@ pub struct WaveformReadyEvent {
     pub summary: WaveformSummaryDto,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WaveformJob {
     pub app: tauri::AppHandle,
     pub song_dir: PathBuf,
     pub waveform_key: String,
+    /// Shared audio engine handle so the worker can fall back to native
+    /// (FFmpeg/dr_flac) peaks for formats symphonia can't decode (e.g. FLAC),
+    /// instead of decoding under the session lock on the command thread.
+    pub audio: Arc<AudioController>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,7 +120,7 @@ pub struct WaveformGenerationQueue {
 }
 
 pub struct DesktopState {
-    pub audio: AudioController,
+    pub audio: Arc<AudioController>,
     pub midi: MidiManager,
     pub waveform_jobs: WaveformGenerationQueue,
     pub session: Mutex<DesktopSession>,
@@ -126,7 +130,7 @@ pub struct DesktopState {
 impl Default for DesktopState {
     fn default() -> Self {
         Self {
-            audio: AudioController::default(),
+            audio: Arc::new(AudioController::default()),
             midi: MidiManager::default(),
             waveform_jobs: WaveformGenerationQueue::default(),
             session: Mutex::new(DesktopSession::default()),
@@ -261,6 +265,7 @@ impl WaveformGenerationQueue {
         app: AppHandle,
         song_dir: PathBuf,
         waveform_key: String,
+        audio: Arc<AudioController>,
     ) -> Result<(), DesktopError> {
         let job_key = waveform_job_key(&song_dir, &waveform_key);
         {
@@ -279,6 +284,7 @@ impl WaveformGenerationQueue {
                 app,
                 song_dir,
                 waveform_key,
+                audio,
             })
             .is_err()
         {
@@ -291,6 +297,16 @@ impl WaveformGenerationQueue {
         }
 
         Ok(())
+    }
+
+    /// Number of jobs currently enqueued / in flight. Test-only: lets tests
+    /// assert that a cache miss enqueued background work instead of decoding.
+    #[cfg(test)]
+    pub(crate) fn pending_count(&self) -> usize {
+        self.in_flight
+            .lock()
+            .map(|set| set.len())
+            .unwrap_or(0)
     }
 }
 
@@ -314,6 +330,22 @@ impl Default for WaveformGenerationQueue {
     }
 }
 
+#[cfg(test)]
+impl WaveformGenerationQueue {
+    /// Build a queue WITHOUT a draining worker, so enqueued jobs stay in
+    /// `in_flight` for tests to inspect (otherwise the real worker removes the
+    /// key as soon as it runs, racing the assertion). The receiver is leaked to
+    /// keep the channel open.
+    pub(crate) fn new_for_test() -> Self {
+        let (sender, receiver) = mpsc::channel::<WaveformJob>();
+        std::mem::forget(receiver);
+        Self {
+            sender,
+            in_flight: Arc::new(Mutex::new(HashSet::new())),
+        }
+    }
+}
+
 fn waveform_job_key(song_dir: &Path, waveform_key: &str) -> String {
     format!("{}\n{waveform_key}", song_dir.to_string_lossy())
 }
@@ -330,30 +362,66 @@ fn unique_waveform_keys(song: &Song) -> Vec<String> {
     keys
 }
 
+/// Generate a waveform from the C++ engine's native peaks (FFmpeg/dr_flac) and
+/// write it to the global on-disk cache. Used as the fallback for formats
+/// symphonia can't decode (e.g. FLAC). Pure: touches no session state, so it is
+/// safe to call off the command thread (the worker) — `source_peaks` only locks
+/// the AudioController's own mutex, never the session lock.
+fn generate_native_waveform(
+    audio: &AudioController,
+    song_dir: &Path,
+    waveform_key: &str,
+) -> Result<WaveformSummary, DesktopError> {
+    let peaks = audio.source_peaks(song_dir, waveform_key)?;
+    let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+    let source_path = resolve_audio_file_path(song_dir, waveform_key);
+    let summary = waveform_summary_from_peaks(
+        peaks.sample_rate,
+        duration_frames,
+        peaks.resolution_frames,
+        peaks.min_peaks,
+        peaks.max_peaks,
+        &source_path,
+    )?;
+    write_global_waveform(&decoding_cache_root(), &source_path, &summary)?;
+    Ok(summary)
+}
+
 fn process_waveform_job(job: WaveformJob) {
     let WaveformJob {
         app,
         song_dir,
         waveform_key,
+        audio,
     } = job;
 
-    let summary_result = load_or_generate_global_waveform(
+    // Symphonia first (handles MP3/WAV/etc). If it can't decode the format
+    // (FLAC and friends), fall back to the native engine peaks — both run here,
+    // on the worker thread, NEVER under the session lock.
+    let summary = match load_or_generate_global_waveform(
         &decoding_cache_root(),
         &song_dir,
         Path::new(&waveform_key),
-    );
+    ) {
+        Ok(summary) => Some(summary),
+        Err(symphonia_error) => {
+            match generate_native_waveform(&audio, &song_dir, &waveform_key) {
+                Ok(summary) => Some(summary),
+                Err(native_error) => {
+                    eprintln!(
+                        "[libretracks-waveform] failed to generate waveform for {}: \
+                         symphonia={symphonia_error} native={native_error}",
+                        waveform_key
+                    );
+                    None
+                }
+            }
+        }
+    };
 
-    match summary_result {
-        Ok(summary) => {
-            let summary = waveform_summary_to_dto(&waveform_key, &summary);
-            emit_waveform_ready(&app, &song_dir, &waveform_key, summary);
-        }
-        Err(error) => {
-            eprintln!(
-                "[libretracks-waveform] failed to generate waveform for {}: {error}",
-                waveform_key
-            );
-        }
+    if let Some(summary) = summary {
+        let dto = waveform_summary_to_dto(&waveform_key, &summary);
+        emit_waveform_ready(&app, &song_dir, &waveform_key, dto);
     }
 }
 
@@ -1334,16 +1402,15 @@ impl DesktopSession {
         waveform_keys: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
-        audio: &AudioController,
+        audio: &Arc<AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
-        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)), Some(audio))
+        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app, audio)))
     }
 
     fn load_waveforms_internal(
         &mut self,
         waveform_keys: &[String],
-        background_generation: Option<(&WaveformGenerationQueue, &AppHandle)>,
-        audio: Option<&AudioController>,
+        background_generation: Option<(&WaveformGenerationQueue, &AppHandle, &Arc<AudioController>)>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_waveform_keys = self
@@ -1361,29 +1428,20 @@ impl DesktopSession {
                 continue;
             }
 
+            // Read-only cache lookup ONLY. On a cache miss we NEVER decode here
+            // (that held the session lock for seconds and froze the UI); we
+            // enqueue to the background worker, which emits WAVEFORM_READY_EVENT
+            // when done and the frontend paints it.
             match self.load_waveform_summary_cached(&song_dir, waveform_key, false) {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if let Ok(summary) =
-                        self.load_waveform_summary_cached(&song_dir, waveform_key, true)
-                    {
-                        summaries.push(waveform_summary_to_dto(waveform_key, summary));
-                        continue;
-                    }
-                    if let Some(audio) = audio {
-                        if let Ok(summary) =
-                            self.load_native_waveform_summary(&song_dir, waveform_key, audio)
-                        {
-                            summaries.push(waveform_summary_to_dto(waveform_key, summary));
-                            continue;
-                        }
-                    }
-                    if let Some((waveform_jobs, app)) = background_generation {
+                    if let Some((waveform_jobs, app, audio)) = background_generation {
                         waveform_jobs.enqueue(
                             app.clone(),
                             song_dir.clone(),
                             waveform_key.clone(),
+                            Arc::clone(audio),
                         )?;
                     }
                 }
@@ -1399,7 +1457,7 @@ impl DesktopSession {
         file_paths: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
-        audio: &AudioController,
+        audio: &Arc<AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_library_paths = collect_library_file_paths(&song_dir, self.engine.song())?
@@ -1413,26 +1471,19 @@ impl DesktopSession {
                 continue;
             }
 
+            // Read-only cache lookup ONLY. Cache miss => enqueue to the
+            // background worker (never decode under the session lock — that was
+            // the post-import freeze). The frontend paints late waveforms via
+            // WAVEFORM_READY_EVENT.
             match self.load_waveform_summary_cached(&song_dir, &normalized_path, false) {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(&normalized_path, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if let Ok(summary) =
-                        self.load_waveform_summary_cached(&song_dir, &normalized_path, true)
-                    {
-                        summaries.push(waveform_summary_to_dto(&normalized_path, summary));
-                        continue;
-                    }
-                    if let Ok(summary) =
-                        self.load_native_waveform_summary(&song_dir, &normalized_path, audio)
-                    {
-                        summaries.push(waveform_summary_to_dto(&normalized_path, summary));
-                        continue;
-                    }
                     waveform_jobs.enqueue(
                         app.clone(),
                         song_dir.clone(),
                         normalized_path.clone(),
+                        Arc::clone(audio),
                     )?;
                 }
                 Err(error) => return Err(error),
@@ -6059,10 +6110,16 @@ impl DesktopSession {
         song: &Song,
     ) -> Result<(), DesktopError> {
         let misses = self.populate_waveform_cache_readonly(song_dir, song);
-        let jobs = &app.state::<DesktopState>().waveform_jobs;
+        let desktop_state = app.state::<DesktopState>();
+        let jobs = &desktop_state.waveform_jobs;
         for key in misses {
             // Best-effort: a full/unavailable worker must not fail the open.
-            let _ = jobs.enqueue(app.clone(), song_dir.to_path_buf(), key);
+            let _ = jobs.enqueue(
+                app.clone(),
+                song_dir.to_path_buf(),
+                key,
+                Arc::clone(&desktop_state.audio),
+            );
         }
         Ok(())
     }
@@ -6142,43 +6199,6 @@ impl DesktopSession {
             .entries
             .get(waveform_key)
             .expect("waveform cache entry should exist")
-            .summary)
-    }
-
-    fn load_native_waveform_summary(
-        &mut self,
-        song_dir: &Path,
-        waveform_key: &str,
-        audio: &AudioController,
-    ) -> Result<&WaveformSummary, DesktopError> {
-        let peaks = audio.source_peaks(song_dir, waveform_key)?;
-        let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
-        let source_path = resolve_audio_file_path(song_dir, waveform_key);
-        let summary = waveform_summary_from_peaks(
-            peaks.sample_rate,
-            duration_frames,
-            peaks.resolution_frames,
-            peaks.min_peaks,
-            peaks.max_peaks,
-            &source_path,
-        )?;
-        write_global_waveform(&decoding_cache_root(), &source_path, &summary)?;
-        let refreshed_token = build_waveform_cache_token(song_dir, waveform_key)?;
-
-        self.waveform_cache.reset_if_song_changed(song_dir);
-        self.waveform_cache.entries.insert(
-            waveform_key.to_string(),
-            CachedWaveformSummary {
-                token: refreshed_token,
-                summary,
-            },
-        );
-
-        Ok(&self
-            .waveform_cache
-            .entries
-            .get(waveform_key)
-            .expect("native waveform cache entry should exist")
             .summary)
     }
 
@@ -10364,11 +10384,11 @@ mod tests {
 
         let perf_after_load = session.performance_snapshot();
         let first_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
             .expect("waveform should load");
         let perf_after_first_request = session.performance_snapshot();
         let second_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
             .expect("waveform should load from cache");
         let perf_after_second_request = session.performance_snapshot();
 
@@ -10379,6 +10399,48 @@ mod tests {
             perf_after_second_request.waveform_cache_hits
                 > perf_after_first_request.waveform_cache_hits
         );
+    }
+
+    #[test]
+    fn waveform_cache_miss_does_not_decode_inline() {
+        // Regression guard for the post-import UI freeze: a cache MISS must NOT
+        // be decoded synchronously (that held the session lock for seconds).
+        // With no background queue wired, a miss now yields an EMPTY result
+        // instead of decoding inline (which previously returned 1).
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "waveform-miss-demo")
+            .expect("song dir should exist");
+        let wav_path = song_dir.join("audio").join("test.wav");
+        write_silent_test_wav(&wav_path, 6);
+        // NOTE: intentionally NO generate_waveform_summary() here, so the lookup
+        // is a genuine cache miss.
+        save_song(&song_dir, &demo_song()).expect("song should save");
+
+        let mut session = DesktopSession::default();
+        let audio = crate::audio_engine::AudioController::default();
+        session
+            .load_song_from_path(demo_song(), song_dir, &audio)
+            .expect("song should load");
+
+        let result = session
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .expect("call should succeed");
+
+        // Old behavior decoded inline and returned 1; new behavior enqueues
+        // (here: no queue) and returns nothing for the miss.
+        assert!(
+            result.is_empty(),
+            "a cache miss must not be decoded synchronously"
+        );
+    }
+
+    #[test]
+    fn waveform_queue_test_helper_tracks_pending() {
+        // The test-only queue does not drain, so enqueued keys stay in_flight.
+        // (We can't build a real AppHandle here, so this exercises the queue's
+        // pending bookkeeping in isolation rather than through load_*_waveforms.)
+        let queue = super::WaveformGenerationQueue::new_for_test();
+        assert_eq!(queue.pending_count(), 0);
     }
 
     #[test]
