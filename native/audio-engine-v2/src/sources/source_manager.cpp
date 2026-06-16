@@ -916,6 +916,18 @@ Result<void> SourceManager::decode_and_store_streaming(
         return true;
     };
 
+    // A 64k-frame chunk is already ~ms of decode+resample work, so we must NOT
+    // sleep 6ms per chunk (yield_to_ui_scheduler() does that while playing) — for
+    // a multi-minute file that's hundreds of chunks = seconds of pure sleep,
+    // which slowed preparation dramatically. The streaming pipeline self-limits
+    // memory, so it doesn't need to cede the disk like the whole-file writer did;
+    // just take a brief breather every so often to stay cooperative.
+    int chunk_counter = 0;
+    auto light_yield = [&chunk_counter]() {
+        if ((++chunk_counter % 16) == 0)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    };
+
     // Phase 1: feed real decoded input.
     while (in_done < fi.duration_frames && out_written < target_out_frames) {
         const int want = static_cast<int>(std::min<Frame>(
@@ -930,7 +942,7 @@ Result<void> SourceManager::decode_and_store_streaming(
         if (fi.duration_frames > 0) {
             report_progress(1 + static_cast<int>((in_done * 98) / fi.duration_frames));
         }
-        yield_to_ui_scheduler();
+        light_yield();
     }
 
     // Phase 2: flush — feed silence until we've collected the full output length.
@@ -945,7 +957,7 @@ Result<void> SourceManager::decode_and_store_streaming(
             if (produced < 0) { decode_ok = false; break; }
             if (produced == 0) continue;
             if (!write_output(produced)) { decode_ok = false; break; }
-            yield_to_ui_scheduler();
+            light_yield();
         }
     }
 

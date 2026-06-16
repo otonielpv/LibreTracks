@@ -48,11 +48,13 @@ void decode_background_yield() noexcept {
 }
 
 DecodeMemoryGate::DecodeMemoryGate() noexcept {
-    // Only serialize while playing: cold opens (stopped) keep full decode
-    // parallelism. Opt-out via LIBRETRACKS_DECODE_GATE=0 for benchmarking.
+    // OFF by default now: the streaming decode no longer materializes the whole
+    // file, so serializing decodes to one-at-a-time was pure slowdown (it halved
+    // import throughput) with no memory benefit. Set LIBRETRACKS_DECODE_GATE=1 to
+    // re-enable for the whole-file fallback path on low-RAM machines.
     static const bool enabled = [] {
         const char* v = std::getenv("LIBRETRACKS_DECODE_GATE");
-        return !(v && v[0] == '0' && v[1] == '\0');
+        return v && v[0] == '1' && v[1] == '\0';
     }();
     if (enabled && g_playback_active.load(std::memory_order_relaxed)) {
         g_decode_memory_mutex.lock();

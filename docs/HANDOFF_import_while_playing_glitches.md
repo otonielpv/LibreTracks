@@ -366,6 +366,17 @@ which is stateful and supports block-by-block processing.
   EvSourcePrepared time so the worker's `load_global_waveform` hits and skips
   the decode. `waveform_key == source file path == source_id` already.
 
+- **2026-06-16** — **Regression fix: streaming decode was much slower.** Two
+  causes I introduced: (1) `yield_to_ui_scheduler()` per 64k chunk sleeps 6ms
+  WHILE PLAYING — a multi-minute file is hundreds of chunks = seconds of pure
+  sleep per file. Replaced with a `light_yield` (1ms every 16 chunks). (2) The
+  `DecodeMemoryGate` serialized decodes to one-at-a-time while playing; with
+  streaming that's pure slowdown (no memory benefit), so it's now OFF by default
+  (`LIBRETRACKS_DECODE_GATE=1` to re-enable for the whole-file fallback). Bench:
+  streaming import now matches whole-file time (~21s for 9 files), peak WS 71MB.
+  ⚠️ Residual stutter remains = the waveform second-decode (see below); the
+  low-priority worker helps but the real fix (use source_peaks) is still TODO.
+
 ### Answer: do all actions avoid recreating the whole session? — YES (except open)
 - Import audio, add/remove/move tracks & clips, region/marker/timing edits →
   `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).
