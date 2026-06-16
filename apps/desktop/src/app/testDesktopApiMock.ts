@@ -1718,6 +1718,57 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  createAudioTracksWithClips: async (
+    args: Array<{
+      trackName: string;
+      filePath: string;
+      timelineStartSeconds: number;
+    }>,
+  ) => {
+    const nextTracks = [...state.song.tracks];
+    const nextClips = [...state.song.clips];
+    for (const entry of args) {
+      const trackId = nextId("track");
+      nextTracks.push({
+        id: trackId,
+        name: entry.trackName,
+        kind: "audio",
+        parentTrackId: null,
+        depth: 0,
+        hasChildren: false,
+        volume: 1,
+        pan: 0,
+        muted: false,
+        solo: false,
+        transposeEnabled: true,
+        audioTo: "master",
+        color: null,
+        autoCreated: false,
+      });
+      const asset = findLibraryAsset(entry.filePath);
+      const durationSeconds = asset?.durationSeconds ?? 180;
+      nextClips.push({
+        id: nextId("clip"),
+        trackId,
+        trackName: entry.trackName,
+        filePath: entry.filePath,
+        waveformKey: entry.filePath,
+        isMissing: false,
+        timelineStartSeconds: Math.max(0, entry.timelineStartSeconds),
+        sourceStartSeconds: 0,
+        sourceWindowDurationSeconds: durationSeconds,
+        sourceDurationSeconds: durationSeconds,
+        durationSeconds,
+        gain: 1,
+      });
+    }
+    replaceSong({
+      ...state.song,
+      tracks: nextTracks,
+      clips: nextClips,
+    });
+    return clone(buildSnapshot());
+  },
   moveClipToTrack: async (args: { clipId: string; targetTrackId: string }) => {
     const sourceClip = state.song.clips.find((clip) => clip.id === args.clipId);
     if (!sourceClip) return clone(buildSnapshot());

@@ -153,6 +153,9 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     createClipsWithAutoTracks: vi.fn(
       testDesktopApiMock.createClipsWithAutoTracks,
     ),
+    createAudioTracksWithClips: vi.fn(
+      testDesktopApiMock.createAudioTracksWithClips,
+    ),
     moveClipToTrack: vi.fn(testDesktopApiMock.moveClipToTrack),
     moveTrack: vi.fn(testDesktopApiMock.moveTrack),
     updateTrack: vi.fn(testDesktopApiMock.updateTrack),
