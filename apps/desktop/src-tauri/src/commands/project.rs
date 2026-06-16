@@ -480,8 +480,8 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
                 format!("Preparando {file_count} archivo(s) para importar..."),
             );
 
-            // Funnel into the SAME path-based core the drag flow uses (copies
-            // files into the project's audio/ dir + probes metadata, no lock).
+            // Funnel into the SAME path-based core the drag flow uses
+            // (register original paths + probe metadata, no lock).
             let payloads: Vec<AudioFilePathImportPayload> = files
                 .iter()
                 .map(|path| AudioFilePathImportPayload {
