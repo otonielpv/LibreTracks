@@ -222,6 +222,54 @@ struct CmdSetSongTimelineWindow {
 // Session management
 // ---------------------------------------------------------------------------
 
+// Incrementally upsert a song's full track set WITHOUT a full LoadSession.
+//
+// This is the structural-edit path (add/remove/move tracks and clips, import
+// audio) that replaces CmdLoadSession for the common in-session case. Unlike
+// LoadSession it does NOT call source_manager_->clear() or re-decode existing
+// sources — it copies the live session, replaces the named song's tracks in
+// place, registers ONLY the sources that aren't already known (the prep queue
+// skips ones already ready/loading), and atomically swaps the session pointer.
+// Already-decoded sources and the audio thread's warm pages are preserved, so
+// importing audio mid-playback no longer stalls the callback.
+struct CmdUpsertSongTracks {
+    struct ClipUpdate {
+        Id    id;
+        Id    source_id;
+        Frame timeline_start_frame = 0;
+        Frame source_start_frame = 0;
+        Frame length_frames = 0;
+        Gain  gain = 1.0f;
+        Frame fade_in_frames = 0;
+        Frame fade_out_frames = 0;
+        Semitones semitones = 0;
+    };
+    struct TrackUpdate {
+        Id          id;
+        std::string name;
+        Gain        gain = 1.0f;
+        float       pan = 0.0f;
+        std::string audio_to = "master";
+        bool        mute = false;
+        bool        solo = false;
+        // Serialized tokens; converted to the engine enums when applied.
+        std::string transpose_behavior;  // e.g. "follows_song_or_region" | "never"
+        std::string role;                // e.g. "normal" | "click" | "guide"
+        std::string kind;                // e.g. "audio" | "folder"
+        Id          parent_track_id;     // empty = top level
+        std::vector<ClipUpdate> clips;
+    };
+    // New source files to register+enqueue for background decode. Sources whose
+    // id is already known are skipped by the prep queue (no re-decode).
+    struct SourceRef {
+        Id          id;
+        std::string file_path;
+    };
+    Id song_id;
+    std::vector<TrackUpdate> tracks;   // authoritative full track set for the song
+    std::vector<SourceRef>   sources;  // sources referenced by the clips above
+};
+
 // Load a project from its JSON representation.
 // The engine will decode sources and install the Mixer callback.
 struct CmdLoadSession { std::string project_json; };
@@ -256,6 +304,7 @@ using EngineCommand = std::variant<
     CmdSetVoiceGuideConfig, CmdLoadVoiceGuideBank,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
+    CmdUpsertSongTracks,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;
 

@@ -318,6 +318,50 @@ EngineCommand command_from_json(const std::string& raw) {
         return cmd;
     }
 
+    if (type == "UpsertSongTracks") {
+        CmdUpsertSongTracks cmd;
+        cmd.song_id = j.at("song_id").get<Id>();
+        for (const auto& t : j.at("tracks")) {
+            CmdUpsertSongTracks::TrackUpdate track;
+            track.id   = t.at("id").get<Id>();
+            track.name = t.value("name", std::string{});
+            track.gain = t.value("gain", 1.0f);
+            track.pan  = t.value("pan", 0.0f);
+            track.audio_to = t.value("audio_to", std::string{"master"});
+            track.mute = t.value("mute", false);
+            track.solo = t.value("solo", false);
+            track.transpose_behavior = t.value("transpose_behavior", std::string{});
+            track.role = t.value("role", std::string{});
+            track.kind = t.value("kind", std::string{});
+            track.parent_track_id = t.value("parent_track_id", std::string{});
+            if (auto it = t.find("clips"); it != t.end() && it->is_array()) {
+                for (const auto& item : *it) {
+                    CmdUpsertSongTracks::ClipUpdate clip;
+                    clip.id = item.at("id").get<Id>();
+                    clip.source_id = item.at("source_id").get<Id>();
+                    clip.timeline_start_frame = item.at("timeline_start_frame").get<Frame>();
+                    clip.source_start_frame = item.at("source_start_frame").get<Frame>();
+                    clip.length_frames = item.at("length_frames").get<Frame>();
+                    clip.gain = item.value("gain", 1.0f);
+                    clip.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
+                    clip.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
+                    clip.semitones = item.value("semitones", static_cast<Semitones>(0));
+                    track.clips.push_back(std::move(clip));
+                }
+            }
+            cmd.tracks.push_back(std::move(track));
+        }
+        if (auto it = j.find("sources"); it != j.end() && it->is_array()) {
+            for (const auto& s : *it) {
+                CmdUpsertSongTracks::SourceRef sref;
+                sref.id = s.at("id").get<Id>();
+                sref.file_path = s.value("file_path", std::string{});
+                cmd.sources.push_back(std::move(sref));
+            }
+        }
+        return cmd;
+    }
+
     if (type == "SetOutputDevice") {
         CmdSetOutputDevice cmd;
         cmd.device_id = j.at("device_id").get<std::string>();

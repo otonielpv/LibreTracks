@@ -2533,6 +2533,125 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdUpsertSongTracks>) {
+            // Incremental structural edit (add/remove/move tracks & clips,
+            // import audio) WITHOUT a full LoadSession. Copies the live session,
+            // replaces the named song's track set, registers only NEW sources
+            // (the prep queue skips already-decoded ones), and atomically swaps
+            // the session pointer. Existing decoded sources are preserved, so
+            // this no longer stalls the audio thread when used mid-playback.
+            if (!session_)
+                return Result<void>::ok();
+
+            auto next_session = std::make_shared<Session>(*session_);
+            bool changed = false;
+            for (auto& song : next_session->songs) {
+                if (song.id != c.song_id) continue;
+
+                std::vector<Track> rebuilt;
+                rebuilt.reserve(c.tracks.size());
+                // Index existing tracks so we can preserve any runtime-only
+                // fields not carried by the command (none today, but keeps the
+                // upsert future-proof and cheap).
+                std::unordered_map<Id, const Track*> existing;
+                existing.reserve(song.tracks.size());
+                for (const auto& t : song.tracks)
+                    existing.emplace(t.id, &t);
+
+                for (const auto& tu : c.tracks) {
+                    Track track;
+                    track.id   = tu.id;
+                    track.name = tu.name;
+                    track.gain = tu.gain;
+                    track.pan  = std::clamp(tu.pan, -1.0f, 1.0f);
+                    track.audio_to = tu.audio_to.empty() ? "master" : tu.audio_to;
+                    track.mute = tu.mute;
+                    track.solo = tu.solo;
+                    track.transpose_behavior =
+                        (tu.transpose_behavior == "never"
+                         || tu.transpose_behavior == "never_transpose"
+                         || tu.transpose_behavior == "NeverTranspose")
+                            ? TransposeBehavior::NeverTranspose
+                            : TransposeBehavior::FollowsSongOrRegion;
+                    track.kind = (tu.kind == "folder")
+                        ? TrackKind::Folder : TrackKind::Audio;
+                    track.parent_track_id = tu.parent_track_id;
+
+                    track.clips.reserve(tu.clips.size());
+                    for (const auto& cu : tu.clips) {
+                        Clip clip;
+                        clip.id = cu.id;
+                        clip.source_id = cu.source_id;
+                        clip.timeline_start_frame = std::max<Frame>(0, cu.timeline_start_frame);
+                        clip.source_start_frame = std::max<Frame>(0, cu.source_start_frame);
+                        clip.length_frames = std::max<Frame>(0, cu.length_frames);
+                        clip.gain = cu.gain;
+                        clip.fade_in_frames = std::max<Frame>(0, cu.fade_in_frames);
+                        clip.fade_out_frames = std::max<Frame>(0, cu.fade_out_frames);
+                        clip.semitones = cu.semitones;
+                        track.clips.push_back(std::move(clip));
+                    }
+                    std::sort(track.clips.begin(), track.clips.end(),
+                        [](const Clip& l, const Clip& r) {
+                            return l.timeline_start_frame < r.timeline_start_frame;
+                        });
+                    rebuilt.push_back(std::move(track));
+                }
+                song.tracks = std::move(rebuilt);
+
+                Frame max_end = song.start_frame + 1;
+                for (const auto& track : song.tracks)
+                    for (const auto& clip : track.clips)
+                        max_end = std::max(max_end,
+                            clip.timeline_start_frame + clip.length_frames);
+                song.end_frame = max_end;
+
+                // Keep next_session->sources in sync so a later real LoadSession
+                // or diagnostics see the full source list.
+                changed = true;
+                break;
+            }
+            if (!changed)
+                return Result<void>::ok();
+
+            // Register + enqueue only sources not already known. NO clear().
+            {
+                std::unordered_set<Id> known_sources;
+                known_sources.reserve(next_session->sources.size());
+                for (const auto& s : next_session->sources)
+                    known_sources.insert(s.id);
+                for (const auto& sref : c.sources) {
+                    if (!known_sources.insert(sref.id).second)
+                        continue;  // already in the session's source list
+                    Source s;
+                    s.id = sref.id;
+                    s.file_path = sref.file_path;
+                    next_session->sources.push_back(s);  // keep session list complete
+                    if (prep_queue_)
+                        prep_queue_->enqueue_source(s);  // idempotent; skips ready ones
+                }
+            }
+
+            // Bungee: retime existing voices for the new clip layout (cheap;
+            // does not rebuild from scratch). New/unloaded sources are skipped
+            // and picked up when they finish decoding.
+            if (bungee_voices_ && bungee_voices_->is_available()
+                && source_manager_ && clock_) {
+                bungee_voices_->retime_existing_for_session(
+                    *next_session, *source_manager_, clock_->position().frame);
+            }
+
+            std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+            (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+            if (mixer_) mixer_->swap_session_atomic(next_session);
+            if (prearmed_jumps_) {
+                const auto rev = prearm_revision_.fetch_add(1,
+                    std::memory_order_relaxed) + 1;
+                prearmed_jumps_->prepare_all_targets_async(
+                    next_session, source_manager_.get(), rev);
+            }
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetOutputDevice>) {
             DeviceOpenRequest req;
             req.device_id = c.device_id;
