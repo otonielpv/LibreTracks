@@ -314,6 +314,12 @@ impl Default for WaveformGenerationQueue {
         let worker_in_flight = Arc::clone(&in_flight);
 
         thread::spawn(move || {
+            // The waveform worker re-reads/decodes files to build the visual
+            // peaks — purely cosmetic background work. Run it below normal
+            // priority so it never competes with audio playback (the source of
+            // the residual stutter while waveforms were "analyzing"). The audio
+            // callback is realtime; this can wait.
+            lower_current_thread_priority();
             while let Ok(job) = receiver.recv() {
                 let job_key = waveform_job_key(&job.song_dir, &job.waveform_key);
                 process_waveform_job(job);
@@ -357,6 +363,24 @@ fn unique_waveform_keys(song: &Song) -> Vec<String> {
         }
     }
     keys
+}
+
+/// Lower the calling thread below normal priority. Used by the background
+/// waveform worker so its (cosmetic) file decoding can never preempt the
+/// realtime audio callback. Best-effort; no-op off Windows.
+fn lower_current_thread_priority() {
+    #[cfg(windows)]
+    {
+        // THREAD_PRIORITY_BELOW_NORMAL = -1. Avoid a winapi dep; call directly.
+        extern "system" {
+            fn GetCurrentThread() -> isize;
+            fn SetThreadPriority(thread: isize, priority: i32) -> i32;
+        }
+        const THREAD_PRIORITY_BELOW_NORMAL: i32 = -1;
+        unsafe {
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+        }
+    }
 }
 
 /// Generate a waveform with the native decoder stack (FFmpeg/libav for

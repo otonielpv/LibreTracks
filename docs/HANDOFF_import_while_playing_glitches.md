@@ -343,6 +343,29 @@ which is stateful and supports block-by-block processing.
 - Once landed, the DecodeMemoryGate + working-set floor + MMCSS become
   redundant (Phase 3 removes them).
 
+- **2026-06-16** — **Residual stutter = waveform analysis re-decode.** After the
+  streaming decode landed, the user reported tracks show "prepared" but still
+  stutter while waveforms load ("analizando"). Root cause: `generate_native_
+  waveform` → `lt_audio_engine_v2::file_peaks(path)` RE-DECODES the whole MP3 on
+  a background thread to build the visual peaks — a SECOND full decode per file,
+  competing with playback (CPU + page faults). `analyze_file_peaks` already
+  streams in 64k chunks (no whole-file buffer), so it's CPU not memory.
+  Two fixes (Ableton-style single decode + don't fight the audio thread):
+  1. **Same-pass peaks**: `decode_and_store_streaming` now accumulates the
+     waveform peaks (256-frame buckets) in the SAME pass as the decode and caches
+     them on the Entry; `source_peaks(source_id)` returns them instantly (no
+     cache re-read, no re-decode). C++ done + tested (equivalence still passes).
+  2. **Low-priority waveform worker**: the Rust waveform thread now runs
+     BELOW_NORMAL so its cosmetic decoding can't preempt the realtime audio
+     callback. Done.
+  ⚠️ STILL TODO: wire the Rust waveform worker to call `source_peaks(source_id)`
+  for already-imported sources INSTEAD of `file_peaks(path)`, so the second
+  decode is eliminated entirely (today only its priority is lowered). The
+  waveform worker thread has no engine handle — needs the AudioController/engine
+  passed through, or write the global waveform cache from the same-pass peaks at
+  EvSourcePrepared time so the worker's `load_global_waveform` hits and skips
+  the decode. `waveform_key == source file path == source_id` already.
+
 ### Answer: do all actions avoid recreating the whole session? — YES (except open)
 - Import audio, add/remove/move tracks & clips, region/marker/timing edits →
   `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).

@@ -154,6 +154,10 @@ private:
         int                      sample_rate = 0;
         Frame                    duration_frames = 0;
         size_t                   disk_cache_bytes = 0;
+        // Waveform peaks computed in the SAME pass as the streaming decode (no
+        // second full decode for the UI's waveform — Ableton-style). When set,
+        // source_peaks() returns these directly instead of re-reading the cache.
+        std::shared_ptr<const SourcePeakOverview> cached_peaks;
     };
 
     using EntryMap = std::unordered_map<Id, Entry>;

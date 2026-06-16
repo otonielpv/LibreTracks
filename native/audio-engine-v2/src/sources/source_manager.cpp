@@ -846,6 +846,44 @@ Result<void> SourceManager::decode_and_store_streaming(
     // internal delay; the oneshot helper does the same zero-feed trick).
     const Frame target_out_frames = projected_out_frames;
 
+    // Accumulate waveform peaks in the SAME pass (Ableton-style single decode),
+    // at the UI's waveform resolution, so the UI never re-decodes the file.
+    constexpr Frame kPeakBucketWidth = 256;  // ENGINE_WAVEFORM_RESOLUTION_FRAMES
+    const std::size_t peak_buckets = static_cast<std::size_t>(
+        (target_out_frames + kPeakBucketWidth - 1) / kPeakBucketWidth);
+    const bool has_right = channel_count >= 2;
+    auto peaks = std::make_shared<SourcePeakOverview>();
+    peaks->sample_rate = sample_rate;
+    peaks->resolution_frames = static_cast<int>(kPeakBucketWidth);
+    peaks->min_peaks.assign(peak_buckets, 0.f);
+    peaks->max_peaks.assign(peak_buckets, 0.f);
+    if (has_right) {
+        peaks->min_peaks_right.assign(peak_buckets, 0.f);
+        peaks->max_peaks_right.assign(peak_buckets, 0.f);
+    }
+    std::vector<bool> peak_init(peak_buckets, false);
+    auto accumulate_peaks = [&](const float* interleaved, Frame start_frame, Frame n) {
+        for (Frame i = 0; i < n; ++i) {
+            const std::size_t b = static_cast<std::size_t>((start_frame + i) / kPeakBucketWidth);
+            if (b >= peak_buckets) break;
+            const float* row = interleaved + static_cast<std::size_t>(i) * channel_count;
+            const float l = std::clamp(row[0], -1.f, 1.f);
+            const float r = has_right ? std::clamp(row[1], -1.f, 1.f) : 0.f;
+            if (!peak_init[b]) {
+                peaks->min_peaks[b] = l; peaks->max_peaks[b] = l;
+                if (has_right) { peaks->min_peaks_right[b] = r; peaks->max_peaks_right[b] = r; }
+                peak_init[b] = true;
+            } else {
+                peaks->min_peaks[b] = std::min(peaks->min_peaks[b], l);
+                peaks->max_peaks[b] = std::max(peaks->max_peaks[b], l);
+                if (has_right) {
+                    peaks->min_peaks_right[b] = std::min(peaks->min_peaks_right[b], r);
+                    peaks->max_peaks_right[b] = std::max(peaks->max_peaks_right[b], r);
+                }
+            }
+        }
+    };
+
     // Write `produced` interleaved frames from `out_chunk` to the cache + eager
     // blocks, capped so the total never exceeds target_out_frames. Returns the
     // number of frames actually written (post-cap).
@@ -857,6 +895,7 @@ Result<void> SourceManager::decode_and_store_streaming(
         const sf_count_t w = sf_writef_float(sf, out_chunk.data(),
                                              static_cast<sf_count_t>(n));
         if (w <= 0) return false;
+        accumulate_peaks(out_chunk.data(), out_written, n);  // same-pass waveform
         const Frame chunk_start = out_written;
         for (Frame local = 0; local < n; ) {
             const Frame abs_frame = chunk_start + local;
@@ -919,6 +958,21 @@ Result<void> SourceManager::decode_and_store_streaming(
     const Frame duration_frames = out_written;
     const size_t disk_cache_bytes =
         static_cast<size_t>(out_written) * channel_count * sizeof(float);
+    peaks->duration_frames = duration_frames;
+    // Trim the peak arrays to the actual bucket count (out_written may be a hair
+    // under target_out_frames after the latency flush).
+    {
+        const std::size_t used = static_cast<std::size_t>(
+            (duration_frames + kPeakBucketWidth - 1) / kPeakBucketWidth);
+        if (used < peaks->min_peaks.size()) {
+            peaks->min_peaks.resize(used);
+            peaks->max_peaks.resize(used);
+            if (has_right) {
+                peaks->min_peaks_right.resize(used);
+                peaks->max_peaks_right.resize(used);
+            }
+        }
+    }
 
     SourceReadyCallback ready_callback;
     {
@@ -933,6 +987,7 @@ Result<void> SourceManager::decode_and_store_streaming(
         entry.sample_rate = sample_rate;
         entry.duration_frames = duration_frames;
         entry.disk_cache_bytes = disk_cache_bytes;
+        entry.cached_peaks = peaks;  // same-pass waveform; UI skips re-decode
         entry.source = std::make_shared<DecodedSource>(
             source_id, channel_count, sample_rate, duration_frames,
             &block_cache_,
@@ -1030,6 +1085,13 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
     if (!entry.source || !entry.source->is_loaded()
         || entry.channel_count <= 0 || entry.duration_frames <= 0) {
         return overview;
+    }
+
+    // Fast path: peaks were computed in the same pass as the streaming decode.
+    // Return them directly — no cache re-read, no MP3 re-decode for the UI.
+    if (entry.cached_peaks &&
+        entry.cached_peaks->resolution_frames == overview.resolution_frames) {
+        return *entry.cached_peaks;
     }
 
     if (entry.cache_file_path.empty())
