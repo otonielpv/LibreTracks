@@ -636,6 +636,21 @@ pub struct CreateClipWithAutoTrackRequest {
     pub timeline_start_seconds: f64,
 }
 
+/// Drop request when dragging library assets onto the timeline: each asset
+/// becomes a persistent audio track (`auto_created = false`) with the given
+/// `track_name`, plus a clip pointing at it. Unlike the per-asset
+/// create_track + create_clip loop this once was, the whole batch is one
+/// `persist_song_update` / `LoadSession` — so dropping N assets onto a song
+/// that already holds M clips costs one rebuild, not N rebuilds of a song that
+/// grows M..M+N (which made the *second* batch drop visibly progressive).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAudioTrackWithClipRequest {
+    pub track_name: String,
+    pub file_path: String,
+    pub timeline_start_seconds: f64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipMoveRequest {
@@ -4403,6 +4418,69 @@ impl DesktopSession {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: true,
+            });
+            append_clip_to_song(
+                &mut song,
+                &song_dir,
+                &CreateClipRequest {
+                    track_id,
+                    file_path: request.file_path.clone(),
+                    timeline_start_seconds: source_start_seconds,
+                },
+            )?;
+        }
+
+        refresh_song_duration(&mut song);
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    /// Drop a list of library assets onto the timeline: each becomes a
+    /// persistent audio track (named `track_name`) holding one clip. The whole
+    /// batch is a single song update so the cost is one rebuild regardless of
+    /// how many assets are dropped or how much the song already holds.
+    pub fn create_audio_tracks_with_clips(
+        &mut self,
+        requests: &[CreateAudioTrackWithClipRequest],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if requests.is_empty() {
+            return Ok(self.snapshot());
+        }
+
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        for (offset, request) in requests.iter().enumerate() {
+            let trimmed_name = request.track_name.trim();
+            if trimmed_name.is_empty() {
+                return Err(DesktopError::AudioCommand(
+                    "track name must not be empty".into(),
+                ));
+            }
+            // view-time -> source-time, same conversion create_clips_batch does
+            // so warp/varispeed regions don't shift the clip from the drop point.
+            let source_start_seconds =
+                source_seconds_at_view(&song, request.timeline_start_seconds);
+            let track_id = format!("track_{}_{}", timestamp_suffix(), song.tracks.len() + offset);
+            song.tracks.push(Track {
+                id: track_id.clone(),
+                name: trimmed_name.to_string(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+                color: None,
+                auto_created: false,
             });
             append_clip_to_song(
                 &mut song,
@@ -8422,7 +8500,8 @@ mod tests {
         build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
         place_bundled_audio_and_repoint, realign_regions_after_warp_tempo_change,
         write_library_manifest, write_library_manifest_assets, AudioFileImportPayload,
-        ClipMoveRequest, CreateClipRequest, DesktopSession, TransportClock, WaveformMemoryCache,
+        ClipMoveRequest, CreateAudioTrackWithClipRequest, CreateClipRequest, DesktopSession,
+        TransportClock, WaveformMemoryCache,
     };
 
     fn demo_song() -> Song {
@@ -10028,6 +10107,74 @@ mod tests {
 
         let saved_song = load_song(&song_dir).expect("song file should stay unchanged until save");
         assert_eq!(saved_song.clips.len(), 1);
+    }
+
+    #[test]
+    fn create_audio_tracks_with_clips_adds_tracks_and_clips_in_one_update() {
+        let mut session = session_with_song_dir("create-audio-tracks-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+        write_silent_test_wav(&song_dir.join("audio").join("loop-a.wav"), 3);
+        write_silent_test_wav(&song_dir.join("audio").join("loop-b.wav"), 4);
+
+        let snapshot = session
+            .create_audio_tracks_with_clips(
+                &[
+                    CreateAudioTrackWithClipRequest {
+                        track_name: "Loop A".into(),
+                        file_path: "audio/loop-a.wav".into(),
+                        timeline_start_seconds: 0.0,
+                    },
+                    CreateAudioTrackWithClipRequest {
+                        track_name: "Loop B".into(),
+                        file_path: "audio/loop-b.wav".into(),
+                        timeline_start_seconds: 0.0,
+                    },
+                ],
+                &audio,
+            )
+            .expect("batch track+clip creation should succeed");
+
+        // The whole batch is a single song update regardless of asset count —
+        // this is the property that makes a second drop instant instead of
+        // rebuilding the session once per asset.
+        assert_eq!(snapshot.project_revision, 1);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should exist");
+        // demo_song starts with 1 track + 1 clip; the batch added 2 of each.
+        assert_eq!(song_view.tracks.len(), 3);
+        assert_eq!(song_view.clips.len(), 3);
+        // New tracks are persistent (not auto-created one-shots).
+        assert!(song_view
+            .tracks
+            .iter()
+            .any(|track| track.name == "Loop A" && !track.auto_created));
+        assert!(song_view
+            .tracks
+            .iter()
+            .any(|track| track.name == "Loop B" && !track.auto_created));
+    }
+
+    #[test]
+    fn create_audio_tracks_with_clips_rejects_empty_track_name() {
+        let mut session = session_with_song_dir("create-audio-tracks-empty", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+        write_silent_test_wav(&song_dir.join("audio").join("loop-a.wav"), 3);
+
+        let result = session.create_audio_tracks_with_clips(
+            &[CreateAudioTrackWithClipRequest {
+                track_name: "   ".into(),
+                file_path: "audio/loop-a.wav".into(),
+                timeline_start_seconds: 0.0,
+            }],
+            &audio,
+        );
+
+        assert!(result.is_err());
     }
 
     #[test]

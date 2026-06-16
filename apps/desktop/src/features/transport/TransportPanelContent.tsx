@@ -53,6 +53,7 @@ import {
 import {
   assignSectionMarkerDigit,
   cancelMarkerJump,
+  createAudioTracksWithClips,
   createClipsBatch,
   createClipsWithAutoTracks,
   moveClipToTrack,
@@ -8603,43 +8604,41 @@ export function TransportPanelContent() {
 
       selectTrack([targetTrackId]);
     } else {
-      let selectedTrackId: string | null = args.targetTrackId;
-      let pendingTrackSnapshot: TransportSnapshot | null = null;
-      const placements: Array<{
-        asset: LibraryAssetSummary;
-        trackId: string;
-        timelineStartSeconds: number;
-      }> = [];
+      // Vertical layout: one new track per asset. The first asset may instead
+      // land on an existing `targetTrackId`. Both halves are single batched
+      // calls (clip-onto-existing + new-tracks-with-clips), so dropping N
+      // assets is two round-trips, not the 2N the per-asset loop once did —
+      // which is what made a second batch drop appear track by track.
+      let selectedTrackId: string | null = null;
 
-      for (const [index, asset] of assets.entries()) {
-        const createdTrack =
-          index === 0 && args.targetTrackId
-            ? null
-            : await createLibraryTrackForAsset(asset);
-        const targetTrackId = createdTrack?.trackId ?? args.targetTrackId;
-        if (!targetTrackId) {
-          if (createdTrack?.snapshot) {
-            applyPlaybackSnapshot(createdTrack.snapshot);
-          }
-          continue;
-        }
-
-        if (createdTrack?.snapshot) {
-          pendingTrackSnapshot = createdTrack.snapshot;
-        }
-
-        placements.push({
-          asset,
-          trackId: targetTrackId,
-          timelineStartSeconds: args.timelineStartSeconds,
+      const reuseFirstTrack = Boolean(args.targetTrackId);
+      if (reuseFirstTrack) {
+        await commitLibraryClipPlacements({
+          placements: [
+            {
+              asset: assets[0],
+              trackId: args.targetTrackId as string,
+              timelineStartSeconds: args.timelineStartSeconds,
+            },
+          ],
+          pendingTrackSnapshot: null,
         });
-        selectedTrackId = targetTrackId;
+        selectedTrackId = args.targetTrackId;
       }
 
-      await commitLibraryClipPlacements({
-        placements,
-        pendingTrackSnapshot,
-      });
+      const newTrackAssets = reuseFirstTrack ? assets.slice(1) : assets;
+      if (newTrackAssets.length) {
+        const snapshot = await createAudioTracksWithClips(
+          newTrackAssets.map((asset) => ({
+            trackName: humanizeLibraryTrackName(asset.filePath),
+            filePath: asset.filePath,
+            timelineStartSeconds: args.timelineStartSeconds,
+          })),
+        );
+        applyPlaybackSnapshot(snapshot);
+        const nextSong = await getSongView();
+        selectedTrackId = nextSong?.tracks.at(-1)?.id ?? selectedTrackId;
+      }
 
       if (selectedTrackId) {
         selectTrack([selectedTrackId]);
@@ -8713,39 +8712,29 @@ export function TransportPanelContent() {
     importedAssets: LibraryAssetSummary[];
     dropSeconds: number;
   }) {
-    const placements: Array<{
-      asset: LibraryAssetSummary;
-      trackId: string;
-      timelineStartSeconds: number;
-    }> = [];
-    let pendingTrackSnapshot: TransportSnapshot | null = null;
-    let selectedTrackId: string | null = null;
-
-    for (const asset of args.importedAssets) {
-      const createdTrack = await createLibraryTrackForAsset(asset);
-      if (!createdTrack.trackId) {
-        if (createdTrack.snapshot) {
-          applyPlaybackSnapshot(createdTrack.snapshot);
-        }
-        continue;
-      }
-
-      pendingTrackSnapshot = createdTrack.snapshot;
-      selectedTrackId = createdTrack.trackId;
-      placements.push({
-        asset,
-        trackId: createdTrack.trackId,
-        timelineStartSeconds: args.dropSeconds,
-      });
+    if (!args.importedAssets.length) {
+      return;
     }
 
-    await commitLibraryClipPlacements({
-      placements,
-      pendingTrackSnapshot,
-    });
+    // One track + one clip per asset, created in a SINGLE backend call. The old
+    // per-asset create_track loop rebuilt the whole session once per asset, so
+    // dropping onto an already-populated song scaled as N×(existing clips) and
+    // showed tracks appearing one by one. See createAudioTracksWithClips.
+    const snapshot = await createAudioTracksWithClips(
+      args.importedAssets.map((asset) => ({
+        trackName: humanizeLibraryTrackName(asset.filePath),
+        filePath: asset.filePath,
+        timelineStartSeconds: args.dropSeconds,
+      })),
+    );
+    applyPlaybackSnapshot(snapshot);
 
-    if (selectedTrackId) {
-      selectTrack([selectedTrackId]);
+    // Select the last track the batch appended (the snapshot is transport-only,
+    // so the track id comes from the refreshed song view — one call, not N).
+    const nextSong = await getSongView();
+    const lastNewTrackId = nextSong?.tracks.at(-1)?.id ?? null;
+    if (lastNewTrackId) {
+      selectTrack([lastNewTrackId]);
     }
 
     setSelectedSectionId(null);

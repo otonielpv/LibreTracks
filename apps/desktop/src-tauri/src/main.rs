@@ -217,6 +217,7 @@ fn main() {
             commands::project::create_clip,
             commands::project::create_clips_batch,
             commands::project::create_clips_with_auto_tracks,
+            commands::project::create_audio_tracks_with_clips,
             commands::timeline::move_clip_to_track,
             commands::timeline::move_track,
             commands::timeline::update_track_mix_realtime,

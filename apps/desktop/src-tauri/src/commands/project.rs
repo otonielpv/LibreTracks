@@ -10,8 +10,9 @@ use crate::commands::events::{
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
 use crate::state::{
-    AudioFileImportPayload, AudioFilePathImportPayload, CreateClipRequest,
-    CreateClipWithAutoTrackRequest, DesktopSession, DesktopState, ProjectLoadProgressEvent,
+    AudioFileImportPayload, AudioFilePathImportPayload, CreateAudioTrackWithClipRequest,
+    CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession, DesktopState,
+    ProjectLoadProgressEvent,
 };
 use rfd::FileDialog;
 
@@ -375,6 +376,36 @@ pub fn create_clips_with_auto_tracks(
 
     let snapshot = session
         .create_clips_with_auto_tracks(&requests, &state.audio)
+        .map_err(|error| error.to_string())?;
+
+    if let Some(song_dir) = snapshot.song_dir.as_deref() {
+        let requested_paths = requests
+            .iter()
+            .map(|request| request.file_path.clone())
+            .collect::<Vec<_>>();
+        emit_ready_library_waveforms(&app, &state, &mut session, song_dir, &requested_paths)?;
+    }
+
+    Ok(snapshot)
+}
+
+/// Drop one or more library assets onto the timeline. The state layer creates
+/// one persistent audio track per asset (named `track_name`) plus a clip, all
+/// in a single song update — so a batch drop onto an already-populated song
+/// costs one rebuild instead of one per asset.
+#[tauri::command]
+pub fn create_audio_tracks_with_clips(
+    app: AppHandle,
+    requests: Vec<CreateAudioTrackWithClipRequest>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    let snapshot = session
+        .create_audio_tracks_with_clips(&requests, &state.audio)
         .map_err(|error| error.to_string())?;
 
     if let Some(song_dir) = snapshot.song_dir.as_deref() {

@@ -948,6 +948,27 @@ export async function createClipsWithAutoTracks(
   });
 }
 
+export type CreateAudioTrackWithClipArgs = {
+  trackName: string;
+  filePath: string;
+  timelineStartSeconds: number;
+};
+
+/**
+ * Drop library assets onto the timeline: one persistent audio track per asset
+ * (named `trackName`) plus its clip, created in a single backend song update.
+ * Replaces the old per-asset create_track + create_clip loop, which rebuilt the
+ * whole session once per asset — making a second batch drop onto an already
+ * populated song visibly progressive instead of instant.
+ */
+export async function createAudioTracksWithClips(
+  args: CreateAudioTrackWithClipArgs[],
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("create_audio_tracks_with_clips", {
+    requests: args,
+  });
+}
+
 /**
  * Reassign a clip to a different track without moving its timeline position.
  * Backs the compact-view right-click "Mover a track…" submenu. When the
