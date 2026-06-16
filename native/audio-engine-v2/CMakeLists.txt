@@ -105,6 +105,10 @@ if(WIN32)
     if(NOT LT_ENGINE_USE_JUCE AND NOT LT_ENGINE_BUILD_TESTS)
         set_target_properties(lt_audio_engine_v2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
     endif()
+    # avrt: MMCSS (AvSetMmThreadCharacteristics) to promote the audio callback
+    # thread to "Pro Audio" realtime priority — see audio_device_manager.cpp.
+    # psapi: GetProcessMemoryInfo for page-fault diagnostics (engine_impl.cpp).
+    target_link_libraries(lt_audio_engine_v2 PRIVATE avrt psapi)
 endif()
 
 target_link_libraries(lt_audio_engine_v2
@@ -236,6 +240,18 @@ if(LT_ENGINE_BUILD_BENCHES)
         target_compile_features(bench_source_streaming_architectures PRIVATE cxx_std_20)
         target_link_libraries(bench_source_streaming_architectures PRIVATE lt_audio_engine_v2)
         target_include_directories(bench_source_streaming_architectures PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_import_while_playing.cpp")
+        add_executable(bench_import_while_playing
+            bench/bench_import_while_playing.cpp)
+        target_compile_features(bench_import_while_playing PRIVATE cxx_std_20)
+        target_link_libraries(bench_import_while_playing PRIVATE lt_audio_engine_v2)
+        if(WIN32)
+            target_link_libraries(bench_import_while_playing PRIVATE psapi)
+        endif()
+        target_include_directories(bench_import_while_playing PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
     endif()
 

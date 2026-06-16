@@ -1,5 +1,6 @@
 #include <lt_engine/sources/worker_pool.h>
 #include <lt_engine/sources/audio_decoder.h>
+#include <lt_engine/sources/io_throttle.h>
 
 #include <algorithm>
 #include <atomic>
@@ -97,6 +98,13 @@ struct DecodeWorkerPool::Impl {
                 if (task->on_progress)
                     task->on_progress(progress_job);
             };
+
+            // Bound peak resident memory while playing: only one decode holds
+            // its (multi-hundred-MB) buffer + resample copy + cache write at a
+            // time. Scoped to cover the decode AND the on_done store (where the
+            // buffer is still alive), released before looping to the next task.
+            // No-op when stopped, so cold opens keep full parallelism.
+            DecodeMemoryGate decode_gate;
 
             auto  result = decode_file_to_float32(
                 task->file_path, task->target_sample_rate,

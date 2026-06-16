@@ -7,6 +7,7 @@
 #include <vector>
 #include <atomic>
 #include <cstdint>
+#include <limits>
 
 namespace lt {
 class BungeeVoiceManager;
@@ -59,6 +60,13 @@ public:
     // position stays aligned for when the track un-mutes. Direct path still
     // renders. Used by the mixer to keep CPU bounded when several stretched
     // tracks are muted.
+    //
+    // `track_gain_override` (default NaN = use track.gain): lets the caller
+    // supply the gain WITHOUT copying the whole Track just to neutralize three
+    // scalars. The mixer applies track gain/pan/mute itself downstream, so it
+    // passes 1.0f here. Copying the Track (with its std::vector<Clip>) per block
+    // allocated on the audio thread and contended the global heap lock with the
+    // import's large allocations — a measured cause of playback dropouts.
     void render(const Track&          track,
                 Frame                 timeline_frame,
                 int                   block_frames,
@@ -69,7 +77,9 @@ public:
                 int                   engine_sample_rate,
                 Semitones             effective_semitones = 0,
                 const Song*           active_song = nullptr,
-                bool                  track_is_silent = false) noexcept;
+                bool                  track_is_silent = false,
+                float                 track_gain_override =
+                    std::numeric_limits<float>::quiet_NaN()) noexcept;
 
 private:
     struct ClipBlock {

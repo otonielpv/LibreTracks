@@ -107,6 +107,18 @@ public:
     CacheDiagnostics diagnostics() const;
     void             evict_lru(size_t target_blocks);
 
+    // --- Lock-contention diagnostics (LIBRETRACKS_AUDIO_DIAG) ---------------
+    // Worst-case microseconds the audio thread (read) spent BLOCKED acquiring
+    // mtx_, and the worst-case time a worker (fill/evict) HELD it. If the read
+    // wait is high, the single cache mutex is the dropout cause. Reset on read.
+    struct LockStats {
+        uint64_t read_wait_max_us = 0;
+        uint64_t fill_hold_max_us = 0;
+        uint64_t read_wait_count  = 0;  // reads that waited > ~50us
+        uint64_t evict_count      = 0;  // LRU evictions since last read
+    };
+    LockStats take_lock_stats() noexcept;
+
 private:
     int    block_frames_;
     size_t max_blocks_;
@@ -117,6 +129,12 @@ private:
 
     mutable std::atomic<size_t> hits_{0};
     mutable std::atomic<size_t> misses_{0};
+
+    mutable std::atomic<uint64_t> read_wait_max_us_{0};
+    mutable std::atomic<uint64_t> fill_hold_max_us_{0};
+    mutable std::atomic<uint64_t> read_wait_count_{0};
+    std::atomic<uint64_t> evict_count_{0};
+    static bool diag_enabled() noexcept;
 };
 
 } // namespace lt

@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <mutex>
 #include <thread>
 
 namespace lt {
@@ -10,6 +11,10 @@ namespace lt {
 namespace {
 
 std::atomic<bool> g_playback_active{false};
+
+// Serializes the heavy decode/resample section while playing — see
+// DecodeMemoryGate. A plain mutex: at most one decode holds it at a time.
+std::mutex g_decode_memory_mutex;
 
 int playing_yield_ms() {
     // Tunable so we can dial the trade-off (smoothness vs. decode speed during
@@ -40,6 +45,24 @@ void decode_background_yield() noexcept {
                        ? playing_yield_ms()
                        : 1;
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
+DecodeMemoryGate::DecodeMemoryGate() noexcept {
+    // Only serialize while playing: cold opens (stopped) keep full decode
+    // parallelism. Opt-out via LIBRETRACKS_DECODE_GATE=0 for benchmarking.
+    static const bool enabled = [] {
+        const char* v = std::getenv("LIBRETRACKS_DECODE_GATE");
+        return !(v && v[0] == '0' && v[1] == '\0');
+    }();
+    if (enabled && g_playback_active.load(std::memory_order_relaxed)) {
+        g_decode_memory_mutex.lock();
+        held_ = true;
+    }
+}
+
+DecodeMemoryGate::~DecodeMemoryGate() noexcept {
+    if (held_)
+        g_decode_memory_mutex.unlock();
 }
 
 } // namespace lt

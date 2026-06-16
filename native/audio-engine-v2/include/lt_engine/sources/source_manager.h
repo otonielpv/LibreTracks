@@ -106,6 +106,13 @@ public:
     void request_block(const Id& source_id, int block_index) const noexcept;
     void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
     CacheDiagnostics cache_diagnostics() const;
+
+    // Diagnostics (LIBRETRACKS_AUDIO_DIAG): pending fill requests and the
+    // block-cache lock-contention stats (resets the latter on read).
+    size_t fill_queue_depth() const noexcept;
+    BlockCache::LockStats take_block_cache_lock_stats() noexcept {
+        return block_cache_.take_lock_stats();
+    }
     SourcePeakOverview source_peaks(const Id& source_id, int resolution_frames) const;
 
     // Get a loaded source.  Returns nullptr if not loaded.
@@ -139,7 +146,14 @@ private:
     using EntryMap = std::unordered_map<Id, Entry>;
 
     mutable std::mutex              write_mutex_;
-    std::shared_ptr<const EntryMap> entries_;
+    // std::atomic<shared_ptr> (C++20), NOT the free std::atomic_load/store
+    // helpers: on MSVC those use a GLOBAL spinlock pool shared across all
+    // shared_ptrs, which causes priority inversion — the audio thread (high
+    // priority) calling get() per clip spins waiting on the spinlock held by a
+    // BELOW_NORMAL decode worker that got descheduled mid-import, stalling
+    // playback for 100s of ms. The member atomic uses per-object wait/notify.
+    // See microsoft/STL#86.
+    std::atomic<std::shared_ptr<const EntryMap>> entries_;
     std::deque<std::shared_ptr<const EntryMap>> retired_entries_;
     SourceReadyCallback             source_ready_callback_;
     mutable BlockCache              block_cache_;

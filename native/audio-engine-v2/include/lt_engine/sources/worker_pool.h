@@ -35,7 +35,10 @@ struct Job {
 
 // Fired on the worker thread when a job finishes (success or failure).
 // Must be fast and non-blocking — will be marshalled to the event queue.
-using JobCompletionCallback = std::function<void(const Job&)>;
+// Takes Job& (not const&) so the handler can MOVE the (large) decoded_samples
+// buffer out instead of copying it — copying a multi-MB decode per import is a
+// major source of memory pressure that evicts the audio thread's working set.
+using JobCompletionCallback = std::function<void(Job&)>;
 using JobProgressCallback = std::function<void(const Job&)>;
 
 class DecodeWorkerPool {

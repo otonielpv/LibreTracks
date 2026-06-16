@@ -24,6 +24,15 @@
 #include <unordered_set>
 #include <vector>
 
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <psapi.h>  // GetProcessMemoryInfo — page-fault diagnostics
+#endif
+
 namespace lt {
 
 using json = nlohmann::json;
@@ -31,6 +40,54 @@ using json = nlohmann::json;
 namespace {
 
 constexpr float kMaxMetronomeVolume = 2.5f;
+
+#if defined(_WIN32)
+// Raise the process working-set MINIMUM so Windows stops trimming our resident
+// pages during an import burst. The diagnostics showed ~300k page faults per
+// 500ms while a new song decoded, stalling the audio callback for 100-400ms as
+// it fault-paged its own buffers back in (LT_AUDIO_DIAG cbwork spikes with high
+// pf+=). A large guaranteed minimum keeps the audio thread's working set
+// resident through the burst. Best-effort: failure is non-fatal (logged).
+void raise_process_working_set_minimum() {
+    // The diagnostics showed the working set spiking to ~2.5GB during an import
+    // (each track decodes to a full float32 buffer + resample doubles it), and
+    // Windows trimming everything above the floor caused ~300k soft faults per
+    // 500ms that stalled the audio callback. A 512MB floor was useless because
+    // the real footprint is several GB. Size the floor to cover the spike:
+    // min(4GB, 25% of physical RAM), so the audio thread's pages stay resident
+    // through the burst. On a 32GB machine that reserves ~4GB — cheap insurance.
+    MEMORYSTATUSEX mem{};
+    mem.dwLength = sizeof(mem);
+    unsigned long long total_ram = 0;
+    if (GlobalMemoryStatusEx(&mem))
+        total_ram = mem.ullTotalPhys;
+
+    SIZE_T min_bytes = 4ull * 1024 * 1024 * 1024;  // 4 GB default ceiling
+    if (total_ram > 0) {
+        const SIZE_T quarter = static_cast<SIZE_T>(total_ram / 4);
+        min_bytes = std::min<SIZE_T>(min_bytes, quarter);
+    }
+    // Never go below 1GB (a multitrack session's resident floor).
+    min_bytes = std::max<SIZE_T>(min_bytes, 1024ull * 1024 * 1024);
+
+    if (const char* v = std::getenv("LIBRETRACKS_MIN_WORKING_SET_MB")) {
+        const long mb = std::atol(v);
+        if (mb >= 64 && mb <= 32768)
+            min_bytes = static_cast<SIZE_T>(mb) * 1024 * 1024;
+    }
+    SIZE_T max_bytes = min_bytes + 1024ull * 1024 * 1024;  // +1GB headroom
+
+    // QUOTA_LIMITS_HARDWS_MIN_ENABLE makes the minimum a hard floor Windows
+    // won't trim below, which is the whole point here.
+    const BOOL ok = SetProcessWorkingSetSizeEx(
+        GetCurrentProcess(), min_bytes, max_bytes,
+        QUOTA_LIMITS_HARDWS_MIN_ENABLE | QUOTA_LIMITS_HARDWS_MAX_DISABLE);
+    lt_debug_log("[LT_AUDIO_DIAG] SetProcessWorkingSetSizeEx min=%lluMB max=%lluMB ok=%d err=%lu\n",
+                 static_cast<unsigned long long>(min_bytes / (1024 * 1024)),
+                 static_cast<unsigned long long>(max_bytes / (1024 * 1024)),
+                 ok ? 1 : 0, ok ? 0ul : GetLastError());
+}
+#endif
 
 bool env_flag_enabled(const char* name) {
     const char* raw = std::getenv(name);
@@ -539,6 +596,11 @@ Result<void> EngineImpl::initialize() {
     mixer_->set_metronome_config(metronome_config_);
     mixer_->set_bungee_voice_manager(bungee_voices_.get());
 
+#if defined(_WIN32)
+    // Keep the audio thread's pages resident through import memory bursts.
+    raise_process_working_set_minimum();
+#endif
+
     // Open the default audio device with the silent callback.
     auto open_result = device_manager_->open_device(current_device_request_, mixer_.get());
     if (open_result.is_err()) {
@@ -861,6 +923,114 @@ std::string EngineImpl::get_snapshot() const {
         for (const auto& d : source_manager_->diagnostics())
             disk_bytes += d.disk_cache_bytes;
         snap.source_cache.disk_bytes_used = disk_bytes;
+    }
+
+    // Playback-starvation diagnostics — enabled by LIBRETRACKS_AUDIO_DIAG=1.
+    // Pinpoints WHY playing tracks drop out while a new import decodes:
+    //   cb_max_ms      — worst audio-callback duration since last dump
+    //   over_budget    — callbacks that blew the buffer deadline
+    //   read_wait_us   — worst time the audio thread BLOCKED on the cache lock
+    //                    (high => the single BlockCache mutex is the cause)
+    //   fill_hold_us   — worst time a worker HELD the cache lock
+    //   fill_q         — pending block-fill requests (high => fill thread can't
+    //                    keep up with the playhead)
+    //   miss/hit       — cache reads served as silence vs. from cache
+    //   playing        — whether the io_throttle thinks we're playing
+    if (env_flag_enabled("LIBRETRACKS_AUDIO_DIAG") && source_manager_ && mixer_) {
+        static std::chrono::steady_clock::time_point s_last_diag;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - s_last_diag >= std::chrono::milliseconds(500)) {
+            s_last_diag = now;
+            const auto ls = source_manager_->take_block_cache_lock_stats();
+            const auto cd = source_manager_->cache_diagnostics();
+            // Process-wide hard+soft page-fault delta. If this jumps in the same
+            // window cbwork spikes, the audio thread is stalling on page faults
+            // (memory pressure from import's large decode buffers + RF64 cache
+            // writes), not on locks or render cost.
+            unsigned long long pf_delta = 0;
+            unsigned long long ws_mb = 0;
+#if defined(_WIN32)
+            {
+                PROCESS_MEMORY_COUNTERS pmc{};
+                static unsigned long s_prev_pf = 0;
+                if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+                    pf_delta = pmc.PageFaultCount - s_prev_pf;
+                    s_prev_pf = pmc.PageFaultCount;
+                    ws_mb = pmc.WorkingSetSize / (1024 * 1024);
+                }
+            }
+#endif
+            static size_t s_prev_miss = 0, s_prev_hit = 0;
+            static unsigned long long s_prev_over = 0;
+            const size_t miss_delta = cd.blocks_miss - s_prev_miss;
+            const size_t hit_delta  = cd.blocks_hit - s_prev_hit;
+            const unsigned long long over_now =
+                static_cast<unsigned long long>(mixer_->callback_over_budget_count());
+            const unsigned long long over_delta = over_now - s_prev_over;
+            s_prev_miss = cd.blocks_miss;
+            s_prev_hit  = cd.blocks_hit;
+            s_prev_over = over_now;
+
+            // Render-path breakdown: which clip paths ran this window, and the
+            // two allocation-in-audio-thread hazards. If 'stretched' dominates,
+            // Bungee is the cost; if 'resize_at' or 'too_big' are nonzero, the
+            // scratch buffer is being (re)allocated on the audio thread.
+            const auto tr = TrackRenderer::diagnostics();
+            static std::uint64_t s_dir = 0, s_vari = 0, s_str = 0,
+                                 s_resize_at = 0, s_too_big = 0, s_miss_voice = 0;
+            const std::uint64_t dir_d   = tr.path_direct_count - s_dir;
+            const std::uint64_t vari_d  = tr.path_varispeed_count - s_vari;
+            const std::uint64_t str_d   = tr.path_stretched_count - s_str;
+            const std::uint64_t resize_d = tr.scratch_resize_in_audio_thread_count - s_resize_at;
+            const std::uint64_t toobig_d = tr.block_too_large_count - s_too_big;
+            const std::uint64_t missv_d  = tr.pitch_missing_stream_silence_count - s_miss_voice;
+            s_dir = tr.path_direct_count; s_vari = tr.path_varispeed_count;
+            s_str = tr.path_stretched_count;
+            s_resize_at = tr.scratch_resize_in_audio_thread_count;
+            s_too_big = tr.block_too_large_count;
+            s_miss_voice = tr.pitch_missing_stream_silence_count;
+
+            // Use lt_debug_log (not the file-local debug_log) so this fires on
+            // LIBRETRACKS_AUDIO_DIAG alone — the local debug_log additionally
+            // gates on LIBRETRACKS_AUDIO_DEBUG and would swallow these lines.
+            const double cb_gap_ms = device_manager_
+                ? device_manager_->take_callback_gap_max_ms() : 0.0;
+            const double cb_work_ms = device_manager_
+                ? device_manager_->take_callback_work_max_ms() : 0.0;
+            const auto ph = mixer_->take_phase_max_us();
+            lt_debug_log(
+                "[LT_AUDIO_DIAG] cb_max_ms=%.2f cbgap_ms=%.2f cbwork_ms=%.2f "
+                "phase_us[load=%llu sched=%llu tracks=%llu post=%llu] sched_lock_us=%llu "
+                "pf+=%llu ws=%lluMB "
+                "over_budget+=%llu "
+                "read_wait_us=%llu (n=%llu) fill_hold_us=%llu fill_q=%zu "
+                "evict+=%llu miss+=%zu hit+=%zu playing=%d | path[dir+=%llu "
+                "vari+=%llu str+=%llu] resize_at+=%llu too_big+=%llu "
+                "miss_voice+=%llu scratch_cap=%llu\n",
+                mixer_->take_callback_duration_max_ms(),
+                cb_gap_ms, cb_work_ms,
+                static_cast<unsigned long long>(ph.load),
+                static_cast<unsigned long long>(ph.sched),
+                static_cast<unsigned long long>(ph.tracks),
+                static_cast<unsigned long long>(ph.post),
+                static_cast<unsigned long long>(take_checkdue_lock_wait_max_us()),
+                pf_delta, ws_mb,
+                over_delta,
+                static_cast<unsigned long long>(ls.read_wait_max_us),
+                static_cast<unsigned long long>(ls.read_wait_count),
+                static_cast<unsigned long long>(ls.fill_hold_max_us),
+                source_manager_->fill_queue_depth(),
+                static_cast<unsigned long long>(ls.evict_count),
+                miss_delta, hit_delta,
+                playback_active() ? 1 : 0,
+                static_cast<unsigned long long>(dir_d),
+                static_cast<unsigned long long>(vari_d),
+                static_cast<unsigned long long>(str_d),
+                static_cast<unsigned long long>(resize_d),
+                static_cast<unsigned long long>(toobig_d),
+                static_cast<unsigned long long>(missv_d),
+                static_cast<unsigned long long>(tr.scratch_capacity_frames));
+        }
     }
     // RubberBand / PitchCache diagnostics removed (Bungee-only pipeline; the
     // PitchSnapshot fields are no longer populated and snapshot.cpp no longer

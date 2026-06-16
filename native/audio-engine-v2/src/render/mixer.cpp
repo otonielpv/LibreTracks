@@ -195,7 +195,7 @@ Mixer::Mixer(const Session*       session,
     , clock_(clock)
     , scheduler_(scheduler)
 {
-    rebuild_control_slots(session_, false);
+    rebuild_control_slots(session_.load(), false);
     prepare_render_resources(kMaxBlockFrames);
 }
 
@@ -208,7 +208,7 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
     , clock_(clock)
     , scheduler_(scheduler)
 {
-    rebuild_control_slots(session_, false);
+    rebuild_control_slots(session_.load(), false);
     prepare_render_resources(kMaxBlockFrames);
 }
 
@@ -439,15 +439,15 @@ void Mixer::render_timeline_span(float** output_channels,
             std::fill(mix_l_, mix_l_ + num_frames, 0.f);
             std::fill(mix_r_, mix_r_ + num_frames, 0.f);
 
-            Track patched = track;
-            patched.gain = 1.0f;
-            patched.mute = false;
-            patched.pan = 0.0f;
-
-            renderers_[ti].render(patched, timeline_frame, num_frames,
+            // gain_override=1.0f: the mixer applies track gain/pan/mute itself
+            // below, so we neutralize them here WITHOUT copying the Track (that
+            // per-block heap allocation contended the global allocator lock with
+            // import-time allocations and stalled the audio thread).
+            renderers_[ti].render(track, timeline_frame, num_frames,
                                    mix_, 2, *sources_, bungee_voices_,
                                    clock_->sample_rate(), 0, &song,
-                                   /*track_is_silent=*/settled_silent);
+                                   /*track_is_silent=*/settled_silent,
+                                   /*track_gain_override=*/1.0f);
             ++rendered_this_block;
 
             float track_peak_l = 0.f, track_peak_r = 0.f;
@@ -529,12 +529,29 @@ void Mixer::render(float** output_channels,
                    double  /*sample_rate*/) noexcept {
     auto t0 = std::chrono::steady_clock::now();
     callback_count_.fetch_add(1, std::memory_order_relaxed);
-    auto session = std::atomic_load(&session_);
+
+    // Phase timing (diagnostic). diag_phases_ is read once at construction.
+    const bool diag = diag_phases_;
+    auto phase_mark = [diag](std::chrono::steady_clock::time_point& last,
+                             std::atomic<std::uint64_t>& slot) {
+        if (!diag) return;
+        const auto now = std::chrono::steady_clock::now();
+        const auto us = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(now - last).count());
+        std::uint64_t prev = slot.load(std::memory_order_relaxed);
+        while (us > prev && !slot.compare_exchange_weak(prev, us, std::memory_order_relaxed)) {}
+        last = now;
+    };
+    auto phase_t = t0;
+
+    auto session = session_.load();
+    phase_mark(phase_t, phase_load_us_);  // shared_ptr atomic_load cost
 
     // Drain pending scheduler ops (at top of block, before clock advance).
     scheduler_->drain_pending();
 
     auto due_jump = session ? scheduler_->check_due(*clock_, *session, num_frames) : std::nullopt;
+    phase_mark(phase_t, phase_sched_us_);  // scheduler drain + check_due
 
     // Zero output buses.
     for (int ch = 0; ch < num_channels; ++ch)
@@ -710,20 +727,22 @@ void Mixer::render(float** output_channels,
                 std::fill(mix_l_, mix_l_ + num_frames, 0.f);
                 std::fill(mix_r_, mix_r_ + num_frames, 0.f);
 
-                Track patched = track;
-                patched.gain  = 1.0f;
-                patched.mute  = false;  // already handled above
-                patched.pan = 0.0f;
-
                 // `track_is_silent`: when both endpoints of the mute/gain
                 // smoothing window are zero, the stretched Bungee path is
                 // wasted work — its output gets multiplied by zero downstream.
                 // Telling the renderer lets it advance its source cursor
                 // without running the grain pipeline.
-                renderers_[ti].render(patched, timeline_frame, num_frames,
+                //
+                // gain_override=1.0f neutralizes the track gain in the renderer
+                // (the mixer applies gain/pan/mute below) WITHOUT copying the
+                // Track per block — that copy allocated on the audio thread and
+                // contended the global heap lock with import allocations,
+                // stalling playback (LT_AUDIO_DIAG cbwork spikes).
+                renderers_[ti].render(track, timeline_frame, num_frames,
                                        mix_, 2, *sources_, bungee_voices_,
                                        clock_->sample_rate(), 0, &song,
-                                       /*track_is_silent=*/settled_silent);
+                                       /*track_is_silent=*/settled_silent,
+                                       /*track_gain_override=*/1.0f);
                 ++rendered_this_block;
 
                 float track_peak_l = 0.f, track_peak_r = 0.f;
@@ -791,6 +810,8 @@ void Mixer::render(float** output_channels,
         clock_->advance(num_frames);
     }
 
+    phase_mark(phase_t, phase_tracks_us_);  // track render loop (+ jump split)
+
     // Apply crossfade ramp (Phase 7).
     if (!fade_processed_in_split)
         fade_.process(output_channels, num_channels, num_frames);
@@ -830,6 +851,8 @@ void Mixer::render(float** output_channels,
     } else {
         track_meter_count_.store(0, std::memory_order_relaxed);
     }
+
+    phase_mark(phase_t, phase_post_us_);  // fade + master gain + meters
 
     auto t1 = std::chrono::steady_clock::now();
     double dur = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -875,14 +898,14 @@ void Mixer::start_master_fade(float target_gain, double duration_seconds) noexce
 }
 
 void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
-    std::atomic_store(&session_, std::move(session));
-    rebuild_control_slots(std::atomic_load(&session_), preserve_realtime_state);
+    session_.store(std::move(session));
+    rebuild_control_slots(session_.load(), preserve_realtime_state);
     prepare_render_resources(kMaxBlockFrames);
     reset_track_meters();
 }
 
 void Mixer::swap_session_atomic(std::shared_ptr<const Session> session) noexcept {
-    std::atomic_store(&session_, std::move(session));
+    session_.store(std::move(session));
 }
 
 void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
@@ -890,7 +913,7 @@ void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
 }
 
 void Mixer::clear_session() {
-    std::atomic_store(&session_, std::shared_ptr<const Session>{});
+    session_.store(std::shared_ptr<const Session>{});
     reset_track_meters();
 }
 
@@ -1112,7 +1135,7 @@ MeterValues Mixer::meters() const noexcept {
 
 std::vector<TrackMeterValues> Mixer::track_meters() const {
     std::vector<TrackMeterValues> values;
-    auto session = std::atomic_load(&session_);
+    auto session = session_.load();
     if (!session) return values;
     Frame frame = clock_ ? clock_->position().frame : 0;
     const Song* active_song = nullptr;

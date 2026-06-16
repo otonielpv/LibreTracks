@@ -102,16 +102,19 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                     std::clamp(job.progress_pct, 0, 99));
             }
         },
-        [weak_impl, source_id](const Job& job) {
+        [weak_impl, source_id](Job& job) {
             auto impl = weak_impl.lock();
             if (!impl) {
                 return;
             }
             // Worker thread callback — marshal into engine event queue.
             if (job.status == JobStatus::Completed) {
+                // MOVE the decoded buffer into the store (don't copy it): a
+                // multi-MB copy per import inflates the resident working set and
+                // pages out the audio thread, causing playback dropouts.
                 auto stored = impl->source_manager->store_decoded_source(
                     source_id,
-                    job.decoded_samples,
+                    std::move(job.decoded_samples),
                     job.channel_count,
                     job.sample_rate,
                     job.duration_frames,

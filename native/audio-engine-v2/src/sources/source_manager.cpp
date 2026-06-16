@@ -558,7 +558,7 @@ void SourceManager::set_source_ready_callback(SourceReadyCallback callback) {
 }
 
 void SourceManager::publish_locked(EntryMap entries) {
-    auto previous = std::atomic_load(&entries_);
+    auto previous = entries_.load();
     if (previous) {
         retired_entries_.push_back(std::move(previous));
         // Audio-thread get() returns a borrowed pointer, so keep recent
@@ -569,13 +569,13 @@ void SourceManager::publish_locked(EntryMap entries) {
         while (retired_entries_.size() > kMaxRetiredSnapshots)
             retired_entries_.pop_front();
     }
-    std::atomic_store(&entries_, std::make_shared<const EntryMap>(std::move(entries)));
+    entries_.store(std::make_shared<const EntryMap>(std::move(entries)));
 }
 
 void SourceManager::register_source(const Id& source_id,
                                      const std::string& file_path) {
     std::lock_guard lock(write_mutex_);
-    EntryMap next = *std::atomic_load(&entries_);
+    EntryMap next = *entries_.load();
     auto& entry    = next[source_id];
     entry.file_path = file_path;
     entry.status    = "unloaded";
@@ -587,7 +587,7 @@ Result<void> SourceManager::load_source(const Id& source_id,
     std::string file_path;
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return Result<void>::err("Source not registered: " + source_id);
@@ -606,7 +606,7 @@ Result<void> SourceManager::load_source(const Id& source_id,
                                           &duration_frames);
     if (result.is_err()) {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         if (auto it = next.find(source_id); it != next.end()) {
             it->second.status        = "failed";
             it->second.error_message = result.error();
@@ -631,7 +631,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
     SourceReadyCallback ready_callback;
     std::string file_path;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return Result<void>::err("Source not registered: " + source_id);
@@ -642,7 +642,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         SourceReadyCallback ready_callback;
         {
             std::lock_guard lock(write_mutex_);
-            EntryMap next = *std::atomic_load(&entries_);
+            EntryMap next = *entries_.load();
             auto it = next.find(source_id);
             if (it == next.end())
                 return Result<void>::err("Source not registered: " + source_id);
@@ -751,7 +751,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
 
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return Result<void>::err("Source not registered: " + source_id);
@@ -836,6 +836,11 @@ CacheDiagnostics SourceManager::cache_diagnostics() const {
     return block_cache_.diagnostics();
 }
 
+size_t SourceManager::fill_queue_depth() const noexcept {
+    std::lock_guard lock(fill_mtx_);
+    return fill_queue_.size();
+}
+
 SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
                                                int resolution_frames) const {
     SourcePeakOverview overview;
@@ -843,7 +848,7 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
 
     Entry entry;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return overview;
@@ -952,7 +957,7 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
 }
 
 const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
-    auto entries = std::atomic_load(&entries_);
+    auto entries = entries_.load();
     auto it = entries->find(source_id);
     if (it == entries->end()) return nullptr;
     auto source = it->second.source;
@@ -961,7 +966,7 @@ const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
 
 std::shared_ptr<const DecodedSource>
 SourceManager::get_shared(const Id& source_id) const noexcept {
-    auto entries = std::atomic_load(&entries_);
+    auto entries = entries_.load();
     auto it = entries->find(source_id);
     if (it == entries->end()) return {};
     return it->second.source;
@@ -969,7 +974,7 @@ SourceManager::get_shared(const Id& source_id) const noexcept {
 
 std::vector<SourceDiagnostics> SourceManager::diagnostics() const {
     std::vector<SourceDiagnostics> out;
-    auto entries = std::atomic_load(&entries_);
+    auto entries = entries_.load();
     out.reserve(entries->size());
     for (const auto& [id, entry] : *entries) {
         SourceDiagnostics d;
@@ -1051,7 +1056,7 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
 
     Entry entry;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return;
@@ -1160,7 +1165,7 @@ bool SourceManager::try_install_native_file(const Id& source_id,
 #else
     std::string file_path;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return false;
@@ -1193,7 +1198,7 @@ bool SourceManager::try_install_native_file(const Id& source_id,
     SourceReadyCallback ready_callback;
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return false;
@@ -1240,7 +1245,7 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
 #else
     std::string file_path;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return false;
@@ -1293,7 +1298,7 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
     SourceReadyCallback ready_callback;
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return false;

@@ -89,6 +89,14 @@ public:
     // Live diagnostics (updated every callback).
     DeviceInfo device_info() const;
 
+    // Read-and-reset the worst inter-callback gap and worst in-callback work
+    // time since the last call (LIBRETRACKS_AUDIO_DIAG). Call from a non-audio
+    // thread (e.g. the snapshot poll) — the audio thread must never log.
+    // Distinguishes "thread starved between callbacks" (gap) from "render
+    // blocked inside the callback" (work). Returns 0 if no device is open.
+    double take_callback_gap_max_ms();
+    double take_callback_work_max_ms();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

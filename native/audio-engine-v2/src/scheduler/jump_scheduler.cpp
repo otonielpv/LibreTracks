@@ -1,8 +1,11 @@
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <lt_engine/debug/logging.h>
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
@@ -136,6 +139,14 @@ using PendingOp = std::variant<OpSchedule, OpCancel, OpCancelAll, OpReplace>;
 // ---------------------------------------------------------------------------
 // JumpScheduler::Impl
 // ---------------------------------------------------------------------------
+// Diagnostic (LIBRETRACKS_AUDIO_DIAG): worst microseconds the audio thread
+// spent BLOCKED acquiring live_mutex in check_due() since the last read. High
+// => the control thread holds the scheduler lock long during import/LoadSession.
+std::atomic<std::uint64_t> g_checkdue_lock_wait_max_us{0};
+std::uint64_t take_checkdue_lock_wait_max_us() {
+    return g_checkdue_lock_wait_max_us.exchange(0, std::memory_order_relaxed);
+}
+
 struct JumpScheduler::Impl {
     // Command thread writes here; audio thread drains.
     std::mutex              pending_mutex;
@@ -278,7 +289,16 @@ void JumpScheduler::drain_pending() {
 std::optional<DueJump> JumpScheduler::check_due(const TransportClock& clock,
                                                 const Session& session,
                                                 int block_frames) {
-    std::lock_guard live_lock(impl_->live_mutex);
+    const auto lock_wait_t0 = std::chrono::steady_clock::now();
+    std::unique_lock<std::mutex> live_lock(impl_->live_mutex);
+    {
+        const auto waited = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - lock_wait_t0).count());
+        std::uint64_t prev = g_checkdue_lock_wait_max_us.load(std::memory_order_relaxed);
+        while (waited > prev && !g_checkdue_lock_wait_max_us.compare_exchange_weak(
+                                    prev, waited, std::memory_order_relaxed)) {}
+    }
     impl_->due_index.reset();
     Frame cur = clock.position().frame;
     const Frame block_end = cur + std::max(0, block_frames);

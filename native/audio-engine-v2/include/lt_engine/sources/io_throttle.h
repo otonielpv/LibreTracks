@@ -27,4 +27,22 @@ bool playback_active() noexcept;
 // idle, ~6ms while playback is active so the live fill thread wins the disk.
 void decode_background_yield() noexcept;
 
+// RAII gate that bounds peak decode memory WHILE PLAYING. Each in-flight decode
+// materializes a full float32 buffer (+ a resample copy) — several hundred MB
+// per track. With N decode workers running in parallel during playback, the
+// process working set spiked to ~2.5GB, which made Windows trim (and soft-fault)
+// the audio thread's pages, stalling the callback for 100s of ms. When playback
+// is active this serializes the heavy decode/resample section to ONE at a time,
+// roughly halving the peak resident footprint; when stopped it's a no-op so cold
+// project opens keep full decode parallelism.
+class DecodeMemoryGate {
+public:
+    DecodeMemoryGate() noexcept;
+    ~DecodeMemoryGate() noexcept;
+    DecodeMemoryGate(const DecodeMemoryGate&) = delete;
+    DecodeMemoryGate& operator=(const DecodeMemoryGate&) = delete;
+private:
+    bool held_ = false;
+};
+
 } // namespace lt
