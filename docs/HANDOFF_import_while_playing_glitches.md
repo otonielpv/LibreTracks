@@ -310,6 +310,39 @@ peak from ~380MB to a few MB.
   OS-trimming stall can't be reproduced in the headless bench); (2) Phase 3
   remove symptom patches once confirmed; (3) optional Phase 4 streaming decode.
 
+- **2026-06-16** — **Found the real remaining bug for the reported scenario.**
+  The user's case is the FIRST import: dropping all MP3s, then hitting play
+  while they're still decoding → already-decoded tracks stutter. Diagnostic log
+  showed `persist_song_update impact=StructureRebuild playback_state=Stopped ->
+  sync_song (idle path)` — import ALWAYS runs with the transport Stopped, so the
+  upsert (only wired for the Playing branch) was never used. Fixed: idle
+  StructureRebuild now also routes through `upsert_song_tracks` when a session is
+  already loaded (`AudioController::has_loaded_session()`), keeping LoadSession
+  only for the cold initial project load. BUT the reported stutter is NOT the
+  LoadSession — it's the decode itself: `LT_AUDIO_DIAG` shows the working set
+  oscillating 300MB↔1GB as decode workers materialize ~190MB/track buffers, and
+  `cbwork` spikes correlate with those WS swings (page faults AND faultless
+  reassignment stalls). The DecodeMemoryGate only engages while playing, so it
+  doesn't bound the cold-load decode that's in flight when the user hits play.
+  → **Decision: Phase 4 (streaming decode) is the root fix.**
+
+### Phase 4 plan (chunked streaming decode → cache) — ⏳ IN PROGRESS
+Resampler backend in this build is **r8brain** (`LT_ENGINE_USE_R8BRAIN=ON`),
+which is stateful and supports block-by-block processing.
+- Add a streaming `store_streaming_decode(source_id, decoder, target_sr, ...)`
+  used by the worker pool: open the RF64 cache, then loop {decode a chunk via
+  `read_frames` → resample the chunk (stateful r8brain, one resampler per
+  source) → write the chunk to the cache + fill eager block-cache blocks if in
+  range → drop the chunk}. Never hold the whole file (or the resample copy) in
+  RAM. Per-track peak ~190MB → a few MB.
+- Keep `decode_file_to_float32` for any non-import callers (waveform/peaks).
+- Risk: r8brain block latency + output-length variability per chunk — get the
+  frame accounting right so the cached PCM is bit-equivalent to the whole-file
+  path. Mitigation: a C++ test comparing whole-file vs streamed output for a
+  known WAV (checksum); verify in the bench that peak WS stays flat.
+- Once landed, the DecodeMemoryGate + working-set floor + MMCSS become
+  redundant (Phase 3 removes them).
+
 ### Answer: do all actions avoid recreating the whole session? — YES (except open)
 - Import audio, add/remove/move tracks & clips, region/marker/timing edits →
   `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).

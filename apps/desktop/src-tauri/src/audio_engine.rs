@@ -1953,6 +1953,16 @@ impl AudioController {
             .collect())
     }
 
+    /// True once a session has been loaded into the engine (signature set).
+    /// Used to decide whether a structural edit can use the incremental upsert
+    /// (mutates the existing session) or needs a full initial load first.
+    pub fn has_loaded_session(&self) -> bool {
+        self.state
+            .lock()
+            .map(|s| s.loaded_session_signature.is_some())
+            .unwrap_or(false)
+    }
+
     pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, _song: Song) {
         // Source preparation is owned by the C++ engine after LoadSession.
         // Avoid issuing a second LoadSession immediately before Play; replacing

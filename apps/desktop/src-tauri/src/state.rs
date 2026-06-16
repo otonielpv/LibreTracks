@@ -5408,6 +5408,19 @@ impl DesktopSession {
                 // The native engine will receive the current song on the next Play/Seek.
             }
             AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
+                eprintln!(
+                    "[LT_DIAG] persist_song_update impact={impact:?} playback_state={playback_state:?} \
+                     -> {}",
+                    if playback_state == PlaybackState::Playing {
+                        if impact == AudioChangeImpact::TimelineWindow {
+                            "update_live_timeline_window"
+                        } else {
+                            "upsert_song_tracks (incremental)"
+                        }
+                    } else {
+                        "sync_song (idle path)"
+                    }
+                );
                 if playback_state == PlaybackState::Playing {
                     if impact == AudioChangeImpact::TimelineWindow {
                         audio.update_live_timeline_window(&song)?;
@@ -5423,12 +5436,23 @@ impl DesktopSession {
                         // docs/HANDOFF_import_while_playing_glitches.md).
                         audio.upsert_song_tracks(&song)?;
                     }
+                } else if impact == AudioChangeImpact::StructureRebuild
+                    && audio.has_loaded_session()
+                {
+                    // Not playing but a session is already loaded: use the
+                    // INCREMENTAL upsert here too. The previous code did a full
+                    // LoadSession (sync_song -> ensure_song_loaded) on every
+                    // structural edit, which clears() + re-decodes EVERY source —
+                    // slow even when stopped, and the reason the FIRST import felt
+                    // heavy. The upsert decodes only the new sources in the
+                    // background. (Playback is stopped so there's no callback to
+                    // stall, but the destructive re-decode is still wasteful.)
+                    // Importantly: the import drag-drop runs with the transport
+                    // Stopped, so THIS is the branch imports actually take.
+                    audio.upsert_song_tracks(&song)?;
                 } else {
-                    // Not playing: still push the updated session to the engine so
-                    // it can decode the newly-added sources in the background
-                    // while the user is busy (waveform analyzing, arranging clips,
-                    // etc). Otherwise the first Play after dropping audio has to
-                    // decode all clips synchronously — 3-4s for MP3 with ~7 tracks.
+                    // No session loaded yet (cold project) — do the initial full
+                    // load so the engine has something to upsert into next time.
                     // sync_song is cheap when the signature hasn't changed (early
                     // return in ensure_song_loaded).
                     audio.sync_song(song.clone())?;

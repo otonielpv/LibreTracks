@@ -2540,6 +2540,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // (the prep queue skips already-decoded ones), and atomically swaps
             // the session pointer. Existing decoded sources are preserved, so
             // this no longer stalls the audio thread when used mid-playback.
+            {
+                std::size_t total_clips = 0;
+                for (const auto& t : c.tracks) total_clips += t.clips.size();
+                lt_debug_log("[LT_AUDIO_DIAG] UpsertSongTracks song=%s tracks=%zu "
+                             "clips=%zu sources=%zu\n",
+                             c.song_id.c_str(), c.tracks.size(), total_clips,
+                             c.sources.size());
+            }
             if (!session_)
                 return Result<void>::ok();
 
