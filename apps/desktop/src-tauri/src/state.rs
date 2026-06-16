@@ -6273,23 +6273,14 @@ impl DesktopSession {
         Ok(())
     }
 
-    fn restart_audio(
-        &mut self,
-        audio: &AudioController,
-        reason: PlaybackStartReason,
-    ) -> Result<(), DesktopError> {
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        audio.replace_song_buffers(&song_dir, &song, "restart_audio")?;
-        let runtime_position_seconds =
-            self.runtime_seconds_for_engine_position(self.engine.position_seconds());
-        audio.play(song_dir, song, runtime_position_seconds, reason)?;
-        Ok(())
-    }
+    // restart_audio() was removed: structural edits now route through the
+    // incremental upsert (persist_song_update -> upsert_song_tracks +
+    // reposition_audio), so nothing needs the destructive
+    // replace_song_buffers (full LoadSession) + restart path anymore. Opening a
+    // project still uses load_song_from_path, which is where a full rebuild
+    // belongs. Keeping restart_audio around would leave the clear()+re-decode
+    // stall one careless call away. See
+    // docs/HANDOFF_import_while_playing_glitches.md.
 }
 
 /// Taxonomy of runtime update kinds. Documents what a given operation does to the C++ runtime.

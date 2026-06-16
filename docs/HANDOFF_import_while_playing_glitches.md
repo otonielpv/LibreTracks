@@ -298,8 +298,23 @@ peak from ~380MB to a few MB.
   across C++ struct/handler/parser and Rust variant/sender. Removes the
   region/marker-loss risk without auditing the 18 StructureRebuild callsites.
   216 DSP tests pass.
-- **Next:** (1) user test the glitch is gone; (2) Phase 3 remove symptom patches
-  once confirmed; (3) Phase 1 C++ acceptance test (no re-decode on upsert).
+- **2026-06-16** — **Audit: which actions still rebuild the whole session?**
+  Verified all ~16 `StructureRebuild` callsites go through `persist_song_update`
+  → incremental upsert while playing. The ONLY remaining `CmdLoadSession` paths
+  are `load_song_from_path` (opening a project — correct, full init from scratch)
+  and `engine_v2_load_session` (project open command). Removed the now-dead
+  `restart_audio()` (the last stray `replace_song_buffers` outside project open)
+  so the destructive path can't be called by a future edit by mistake.
+  150+72 no-link tests pass.
+- **Next:** (1) **user test** the glitch is gone (only remaining unknown — the
+  OS-trimming stall can't be reproduced in the headless bench); (2) Phase 3
+  remove symptom patches once confirmed; (3) optional Phase 4 streaming decode.
+
+### Answer: do all actions avoid recreating the whole session? — YES (except open)
+- Import audio, add/remove/move tracks & clips, region/marker/timing edits →
+  `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).
+- Opening a project / loading a song from disk → `CmdLoadSession` (full rebuild,
+  correct — nothing to preserve).
 
 ## 7. Status header (update each session)
 - Phase 1 (C++ command): ✅ done. Parser acceptance test added
