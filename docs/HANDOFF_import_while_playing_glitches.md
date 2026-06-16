@@ -302,7 +302,11 @@ peak from ~380MB to a few MB.
   once confirmed; (3) Phase 1 C++ acceptance test (no re-decode on upsert).
 
 ## 7. Status header (update each session)
-- Phase 1 (C++ command): ✅ done (needs C++ acceptance test for no-re-decode)
+- Phase 1 (C++ command): ✅ done. Parser acceptance test added
+  (`parse UpsertSongTracks full structural snapshot`, 217 tests). The
+  "no-re-decode on upsert" behavior needs a full engine+device harness the
+  headless DSP suite lacks — verify via the bench re-decode counter (Phase 2
+  acceptance) or the user's manual test.
 - Phase 2 (Rust routing): ✅ done — import + structural CRUD now send
   `CmdUpsertSongTracks` instead of LoadSession while playing; `reposition_audio`
   (seek) instead of `restart_audio`. JSON contract verified by round-trip tests.
