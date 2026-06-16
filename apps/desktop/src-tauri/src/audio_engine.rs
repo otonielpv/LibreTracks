@@ -1963,6 +1963,26 @@ impl AudioController {
             .unwrap_or(false)
     }
 
+    /// True if the engine has this source registered (decoding in progress OR
+    /// done) — i.e. its streaming decode will produce the waveform peaks, so the
+    /// UI must NOT enqueue a redundant full re-decode for it.
+    pub fn source_is_known(&self, source_id: &str) -> bool {
+        let mut state = match self.state.lock() {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let Some(engine) = state.engine.as_mut() else {
+            return false;
+        };
+        match engine.get_snapshot() {
+            Ok(snap) => snap
+                .source_states
+                .iter()
+                .any(|s| s.source_id == source_id),
+            Err(_) => false,
+        }
+    }
+
     /// Waveform peaks for an already-loaded source, computed in the same pass
     /// as the streaming decode (no re-decode). Returns None if the source isn't
     /// loaded yet. Lets the import flow write the waveform cache from the audio

@@ -370,6 +370,7 @@ fn generate_native_waveform(
 ) -> Result<WaveformSummary, DesktopError> {
     let source_path = resolve_audio_file_path(song_dir, waveform_key);
     let source_path_string = source_path.to_string_lossy().to_string();
+    eprintln!("[LT_DIAG] waveform RE-DECODE (file_peaks) for {waveform_key} — this is the expensive path");
     let peaks =
         lt_audio_engine_v2::file_peaks(&source_path_string, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -410,8 +411,10 @@ fn prime_waveforms_from_engine_peaks(
         }
         let Some(peaks) = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
         else {
+            eprintln!("[LT_DIAG] waveform MISS (no same-pass peaks, will re-decode): {key}");
             continue;  // not loaded / no same-pass peaks → leave to the worker
         };
+        eprintln!("[LT_DIAG] waveform HIT from engine peaks (no re-decode): {key}");
         let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
         if duration_frames == 0 {
             continue;
@@ -1449,13 +1452,14 @@ impl DesktopSession {
                 prime_waveforms_from_engine_peaks(&song_dir, &song, audio);
             }
         }
-        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)))
+        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)), Some(audio))
     }
 
     fn load_waveforms_internal(
         &mut self,
         waveform_keys: &[String],
         background_generation: Option<(&WaveformGenerationQueue, &AppHandle)>,
+        audio: Option<&AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_waveform_keys = self
@@ -1474,15 +1478,34 @@ impl DesktopSession {
             }
 
             // Read-only cache lookup ONLY. On a cache miss we NEVER decode here
-            // (that held the session lock for seconds and froze the UI); we
-            // enqueue to the background worker, which emits WAVEFORM_READY_EVENT
-            // when done and the frontend paints it.
+            // (that held the session lock for seconds and froze the UI).
             match self.load_waveform_summary_cached(&song_dir, waveform_key, false) {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if let Some((waveform_jobs, app)) = background_generation {
-                        waveform_jobs.enqueue(app.clone(), song_dir.clone(), waveform_key.clone())?;
+                    // If the engine is/will be decoding this source, its
+                    // streaming pass produces the peaks (same single decode) —
+                    // do NOT enqueue a redundant full re-decode. The frontend
+                    // re-requests; once the source finishes, prime_waveforms_
+                    // from_engine_peaks (top of load_waveforms) writes the cache
+                    // and the retry HITs. Only enqueue the heavy file_peaks path
+                    // when the engine won't produce peaks (source not loaded,
+                    // e.g. a library file not in the session).
+                    let source_id =
+                        resolve_audio_file_path(&song_dir, waveform_key)
+                            .to_string_lossy()
+                            .to_string();
+                    let engine_will_decode = audio
+                        .map(|a| a.source_is_known(&source_id))
+                        .unwrap_or(false);
+                    if !engine_will_decode {
+                        if let Some((waveform_jobs, app)) = background_generation {
+                            waveform_jobs.enqueue(
+                                app.clone(),
+                                song_dir.clone(),
+                                waveform_key.clone(),
+                            )?;
+                        }
                     }
                 }
                 Err(error) => return Err(error),
@@ -10605,11 +10628,11 @@ mod tests {
 
         let perf_after_load = session.performance_snapshot();
         let first_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("waveform should load");
         let perf_after_first_request = session.performance_snapshot();
         let second_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("waveform should load from cache");
         let perf_after_second_request = session.performance_snapshot();
 
@@ -10644,7 +10667,7 @@ mod tests {
             .expect("song should load");
 
         let result = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("call should succeed");
 
         // Old behavior decoded inline and returned 1; new behavior enqueues
