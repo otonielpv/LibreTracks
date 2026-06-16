@@ -35,6 +35,8 @@ Transport behavior is also explicit. Marker jumps, song jumps, Vamp loops, metro
 
 Large imported sources are prepared for disk-backed playback. LibreTracks keeps a bounded RAM cache and reads ahead from the project cache on disk, so larger multitrack sessions can load without requiring every decoded source to stay resident in memory. Audio preparation runs in the background, waveforms load lazily, the PCM cache is reused across sessions when the source file is unchanged, and native-format files can stream in place without going through the cache when possible, so re-opening big projects is much faster. You can review and clear the decoding cache from `Settings` when you need to free disk space.
 
+Playback never blocks on preparation: pressing play starts the transport immediately, and any track whose audio is still decoding stays silent and joins in on its own the moment it is ready, so already-prepared tracks are never held back by a slow new source.
+
 Each song region can independently change tempo and key. Region Warp time-stretches the audio to the timeline BPM while keeping pitch intact, and Region Transpose shifts pitch with or without changing duration depending on whether warp is on. See [Pitch, Warp & The T Button](./pitch-and-warp) for the full decision table.
 
 Clip editing supports Ableton-style flows: Ctrl/Cmd+click and Shift+click for multi-selection, group drag with batched IPC, and Ctrl-during-drag magnets that snap clip edges to the playhead, markers, regions, and other clip edges. Clips can also be dragged vertically to move them onto another track, with the target validated as you drag. Tracks and clips can also be color-coded from the context menu, which makes dense sessions easier to scan.

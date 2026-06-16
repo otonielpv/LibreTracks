@@ -447,7 +447,8 @@ impl AudioController {
         position_seconds: f64,
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
-        // Phase 1 — load the session under the lock.
+        // Phase 1 — load the session under the lock. This kicks off the C++
+        // engine's background decode of every source; we do NOT wait for it.
         self.with_engine_state("play", Some(reason), |engine, state| {
             // song_dir must be set before ensure_song_loaded: it resolves clip
             // paths relative to it (song_with_resolved_audio_paths).
@@ -455,13 +456,15 @@ impl AudioController {
             ensure_song_loaded(engine, state, &song)
         })?;
 
-        // Phase 2 — wait for sources WITHOUT holding self.state continuously, so
-        // the UI / project load-save / snapshot pollers don't get starved while a
-        // slow (MP3 on a slow disk) source builds its PCM cache. service=false
-        // preserves "play"'s no-service-control contract (see with_engine_state).
-        self.wait_sources_ready_unlocked(playback_prepare_wait_timeout(), false)?;
+        // No wait for sources: playback starts immediately. The mixer renders
+        // silence for any track whose source is still decoding (the track
+        // renderer skips clips when `!src->is_loaded()`), and the source
+        // manager publishes each source atomically the moment it finishes, so
+        // an unready clip starts producing sound mid-playback on the next render
+        // block — no restart needed. This keeps already-ready sources from being
+        // held hostage by one slow new source (e.g. an MP3 on a slow disk).
 
-        // Phase 3 — start playback and update bookkeeping under the lock.
+        // Phase 2 — start playback and update bookkeeping under the lock.
         self.with_engine_state("play", Some(reason), |engine, state| {
             if !state.running {
                 engine.send_command(&EngineCommand::SeekAbsolute {
