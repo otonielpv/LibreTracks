@@ -12,12 +12,13 @@ use std::{
 
 use libretracks_core::{
     audible_clip_duration_seconds, effective_bpm_at, warp_timeline_seconds_at, Song, TempoMarker,
+    TrackKind,
 };
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineError, EngineSnapshot, JumpTarget,
-    JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, TempoMarkerUpdate,
-    TimeSignatureMarkerUpdate,
+    JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, SourceRef, TempoMarkerUpdate,
+    TimeSignatureMarkerUpdate, TrackClipUpdate, TrackUpsert,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -961,6 +962,110 @@ impl AudioController {
             }
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("set_song_timeline_window".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
+    }
+
+    /// Incremental structural update (add/remove/move tracks & clips, import
+    /// audio) WITHOUT a full LoadSession. Sends `CmdUpsertSongTracks` so the
+    /// engine mutates the live session in place and registers only NEW sources,
+    /// preserving already-decoded ones — so it can run mid-playback without
+    /// stalling the audio thread. See
+    /// docs/HANDOFF_import_while_playing_glitches.md.
+    pub fn upsert_song_tracks(&self, song: &Song) -> Result<(), DesktopError> {
+        self.transport_timing_update_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.with_engine_state("upsert_song_tracks", None, |engine, state| {
+            let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+            let runtime_song = song_with_warped_timeline(&resolved_song);
+
+            // Group the warped clips by their owning track so each TrackUpsert
+            // carries its own clips (the engine command nests clips per track).
+            let mut clips_by_track: std::collections::HashMap<String, Vec<TrackClipUpdate>> =
+                std::collections::HashMap::new();
+            // Distinct source files referenced by the clips, for registration.
+            let mut sources: Vec<SourceRef> = Vec::new();
+            let mut seen_sources: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for clip in &runtime_song.clips {
+                if seen_sources.insert(clip.file_path.clone()) {
+                    sources.push(SourceRef {
+                        id: clip.file_path.clone(),
+                        file_path: clip.file_path.clone(),
+                    });
+                }
+                clips_by_track
+                    .entry(clip.track_id.clone())
+                    .or_default()
+                    .push(TrackClipUpdate {
+                        id: clip.id.clone(),
+                        source_id: clip.file_path.clone(),
+                        timeline_start_frame: seconds_to_frame_for_engine(
+                            engine,
+                            clip.timeline_start_seconds,
+                        ),
+                        source_start_frame: seconds_to_frame_for_engine(
+                            engine,
+                            clip.source_start_seconds,
+                        ),
+                        length_frames: seconds_to_frame_for_engine(engine, clip.duration_seconds),
+                        gain: clip.gain as f32,
+                        fade_in_frames: seconds_to_frame_for_engine(
+                            engine,
+                            clip.fade_in_seconds.unwrap_or(0.0),
+                        ),
+                        fade_out_frames: seconds_to_frame_for_engine(
+                            engine,
+                            clip.fade_out_seconds.unwrap_or(0.0),
+                        ),
+                        semitones: 0,
+                    });
+            }
+
+            let tracks = resolved_song
+                .tracks
+                .iter()
+                .map(|track| TrackUpsert {
+                    id: track.id.clone(),
+                    name: track.name.clone(),
+                    gain: track.volume as f32,
+                    pan: track.pan as f32,
+                    audio_to: track.audio_to.clone(),
+                    mute: track.muted,
+                    solo: track.solo,
+                    // transpose_enabled=false maps to NeverTranspose; default
+                    // (true) leaves the engine's FollowsSongOrRegion behaviour.
+                    transpose_behavior: if track.transpose_enabled {
+                        String::new()
+                    } else {
+                        "never_transpose".to_string()
+                    },
+                    role: String::new(),
+                    kind: match track.kind {
+                        TrackKind::Folder => "folder".to_string(),
+                        TrackKind::Audio => "audio".to_string(),
+                    },
+                    parent_track_id: track.parent_track_id.clone().unwrap_or_default(),
+                    clips: clips_by_track.remove(&track.id).unwrap_or_default(),
+                })
+                .collect();
+
+            engine.send_command(&EngineCommand::UpsertSongTracks {
+                song_id: song.id.clone(),
+                tracks,
+                sources,
+            })?;
+
+            if state.loaded_session_signature.is_some() {
+                state.loaded_session_signature = Some(session_signature(&resolved_song));
+            }
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("upsert_song_tracks".into()),
                 elapsed_ms: 0.0,
                 scheduled_clips: song.clips.len(),
                 active_sinks: song.tracks.len(),

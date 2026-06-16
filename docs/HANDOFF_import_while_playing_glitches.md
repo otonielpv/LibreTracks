@@ -288,13 +288,51 @@ peak from ~380MB to a few MB.
   Compiles clean; **216/216 DSP tests pass**. No `source_manager_->clear()` in the
   path. Pending Phase-1 follow-ups: folder/role routing check + a focused DSP
   test asserting existing sources aren't re-decoded on upsert.
-- **Next:** Phase 2 — add the Rust `UpsertSongTracks` command variant, the
-  `upsert_song_tracks` sender, the `IncrementalStructure` impact, and route
-  import + structural CRUD through it.
+- **2026-06-16** — **Phase 2 (Rust routing) DONE**: `UpsertSongTracks` command
+  variant + structs in the crate; `upsert_song_tracks` sender in audio_engine.rs;
+  `StructureRebuild` while playing routed through it (+ `reposition_audio`
+  instead of `restart_audio`). Round-trip JSON-contract tests pass; 150+70
+  no-link tests pass; desktop compiles. NO behaviour confirmed by user yet.
+- **Next:** (1) user test the glitch; (2) audit StructureRebuild callsites that
+  also change regions/markers (upsert only carries tracks+sources today);
+  (3) Phase 3 remove symptom patches once confirmed.
 
 ## 7. Status header (update each session)
-- Phase 1 (C++ command): ✅ done (needs acceptance test)
-- Phase 2 (Rust routing): ⏳ not started
-- Phase 3 (remove patches): ⏳ blocked on Phase 1+2 confirmation
+- Phase 1 (C++ command): ✅ done (needs C++ acceptance test for no-re-decode)
+- Phase 2 (Rust routing): ✅ done — import + structural CRUD now send
+  `CmdUpsertSongTracks` instead of LoadSession while playing; `reposition_audio`
+  (seek) instead of `restart_audio`. JSON contract verified by round-trip tests.
+- Phase 3 (remove patches): ⏳ blocked on user confirmation that glitch is gone
 - Phase 4 (streaming decode): ⏳ not started
 - Phase 5 (cleanup/commits): ⏳ not started
+
+### Phase 2 — what landed
+- `crates/lt-audio-engine-v2/src/commands.rs`: `UpsertSongTracks` variant +
+  `TrackUpsert` / `TrackClipUpdate` / `SourceRef` structs (serde tag="type").
+- `apps/desktop/src-tauri/src/audio_engine.rs`: `AudioController::upsert_song_tracks`
+  — groups warped clips per track, maps track metadata (volume→gain, muted→mute,
+  transpose_enabled→behavior token, kind→audio/folder), collects distinct
+  sources, sends `EngineCommand::UpsertSongTracks`.
+- `apps/desktop/src-tauri/src/state.rs`: `StructureRebuild` while playing now
+  calls `upsert_song_tracks` (was `replace_song_buffers`) and `reposition_audio`
+  (was `restart_audio`). Idle path unchanged (still `sync_song`).
+- Tests: `upsert_song_tracks_round_trip_type`,
+  `upsert_song_tracks_json_shape_matches_cpp_parser` (verify the Rust→C++ JSON
+  contract). 150 + 70 no-link tests pass.
+
+### Phase 2 caveats / to verify next session
+- [ ] **User test**: import MP3s while playing → confirm glitch gone, check
+  `LT_AUDIO_DIAG` (`cbwork` flat, `pf` low, no `clear()`-driven re-decode).
+- [ ] The upsert sends source `id = file_path` (matches how clips reference
+  sources via `file_path`). Confirm this matches the source ids the engine
+  already has from the initial LoadSession, so existing sources are recognized
+  as known (not re-registered/re-decoded). If ids differ, dedup won't trigger.
+- [ ] Folder tracks / `audio_to = "inherit"` routing through the upsert path
+  (the handler maps `kind` but `role` is always empty) — verify a folder bus
+  still routes children correctly vs the LoadSession path.
+- [ ] Region/marker/timing changes: `upsert_song_tracks` only sends tracks +
+  sources, NOT regions/markers/timing. If a structural edit ALSO changes those,
+  they won't reach the engine via this path. Today `StructureRebuild` callers
+  that change regions/markers may need to additionally send the timeline-window
+  command, or the upsert should be extended to carry regions/markers too.
+  **Audit the StructureRebuild callsites** (state.rs:839, 2849, 2894, 3525, …).

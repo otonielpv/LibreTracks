@@ -5365,7 +5365,10 @@ impl DesktopSession {
         let playback_state = self.engine.playback_state();
         let position_seconds = self.current_position();
         let pending_jump = self.engine.pending_marker_jump().cloned();
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        // Validates a song dir is set (NoSongLoaded otherwise). No longer used
+        // directly here since structural edits go through the incremental upsert
+        // instead of replace_song_buffers(&song_dir, ...).
+        let _song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
 
         // MixerOnly: C++ already has the correct state via a realtime command.
         // Just update the Rust model; skip LoadSession and audio restart entirely.
@@ -5409,7 +5412,16 @@ impl DesktopSession {
                     if impact == AudioChangeImpact::TimelineWindow {
                         audio.update_live_timeline_window(&song)?;
                     } else {
-                        audio.replace_song_buffers(&song_dir, &song, "structure_rebuild")?;
+                        // Structural edits (add/remove/move tracks & clips,
+                        // import audio) go through the INCREMENTAL upsert command
+                        // instead of a full LoadSession: the engine mutates the
+                        // live session in place and decodes only new sources,
+                        // preserving already-playing tracks. A full
+                        // replace_song_buffers here clears + re-decodes every
+                        // source and reassigns the session in cold pages, which
+                        // stalled the audio callback for 100-400ms (see
+                        // docs/HANDOFF_import_while_playing_glitches.md).
+                        audio.upsert_song_tracks(&song)?;
                     }
                 } else {
                     // Not playing: still push the updated session to the engine so
@@ -5455,11 +5467,12 @@ impl DesktopSession {
                 self.engine.play()?;
                 match impact {
                     AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
-                    AudioChangeImpact::TimelineWindow => {
+                    // StructureRebuild now goes through the incremental upsert
+                    // (above), so it only needs a transport resync — NOT
+                    // restart_audio, which would send a full LoadSession and
+                    // re-introduce the clear()+re-decode stall we just removed.
+                    AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
                         self.reposition_audio(audio, PlaybackStartReason::TransportResync)?
-                    }
-                    AudioChangeImpact::StructureRebuild => {
-                        self.restart_audio(audio, PlaybackStartReason::StructureRebuild)?
                     }
                 }
                 self.transport_clock

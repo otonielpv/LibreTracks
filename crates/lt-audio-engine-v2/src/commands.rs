@@ -177,6 +177,20 @@ pub enum EngineCommand {
         time_signature_markers: Vec<TimeSignatureMarkerUpdate>,
     },
 
+    /// Incrementally upsert a song's full track set WITHOUT a full LoadSession.
+    /// The structural-edit path (add/remove/move tracks & clips, import audio)
+    /// that replaces LoadSession for in-session changes: the engine copies the
+    /// live session, replaces the named song's tracks, registers ONLY new
+    /// sources (already-decoded ones are kept), and atomically swaps the session
+    /// — so it never stalls the audio thread mid-playback. See
+    /// docs/HANDOFF_import_while_playing_glitches.md.
+    UpsertSongTracks {
+        song_id: String,
+        tracks: Vec<TrackUpsert>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        sources: Vec<SourceRef>,
+    },
+
     SetOutputDevice {
         device_id: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -226,6 +240,73 @@ pub struct ClipUpdate {
     pub fade_out_frames: i64,
     #[serde(default)]
     pub semitones: i32,
+}
+
+/// A track in a `CmdUpsertSongTracks` command — full metadata plus its clips.
+/// Clips are nested here (no `track_id`), unlike the flat `ClipUpdate`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackUpsert {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "default_unity_gain")]
+    pub gain: f32,
+    #[serde(default)]
+    pub pan: f32,
+    #[serde(default = "default_audio_route")]
+    pub audio_to: String,
+    #[serde(default)]
+    pub mute: bool,
+    #[serde(default)]
+    pub solo: bool,
+    /// Serialized token, e.g. "follows_song_or_region" | "never_transpose".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub transpose_behavior: String,
+    /// Serialized token, e.g. "normal" | "click" | "guide".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub role: String,
+    /// "audio" | "folder".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub parent_track_id: String,
+    #[serde(default)]
+    pub clips: Vec<TrackClipUpdate>,
+}
+
+/// A clip inside a `TrackUpsert` (no `track_id`; the parent track owns it).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackClipUpdate {
+    pub id: String,
+    pub source_id: String,
+    pub timeline_start_frame: i64,
+    pub source_start_frame: i64,
+    pub length_frames: i64,
+    #[serde(default = "default_unity_gain")]
+    pub gain: f32,
+    #[serde(default)]
+    pub fade_in_frames: i64,
+    #[serde(default)]
+    pub fade_out_frames: i64,
+    #[serde(default)]
+    pub semitones: i32,
+}
+
+/// A source file referenced by an upsert. The engine registers + enqueues it
+/// for background decode only if its id isn't already known.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRef {
+    pub id: String,
+    #[serde(default)]
+    pub file_path: String,
+}
+
+fn default_unity_gain() -> f32 {
+    1.0
+}
+
+fn default_audio_route() -> String {
+    "master".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
