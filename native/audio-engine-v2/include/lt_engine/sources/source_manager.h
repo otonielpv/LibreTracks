@@ -83,6 +83,19 @@ public:
                                       Frame duration_frames,
                                       SourceStoreProgressCallback on_progress = {});
 
+    // Streaming decode+resample+cache-write in chunks, WITHOUT materializing the
+    // whole file (or a full resample copy) in RAM. Opens the source via the
+    // decoder, pipes it through a stateful resampler to the RF64 PCM cache a
+    // chunk at a time, fills the eager block-cache blocks, then installs the
+    // streaming DecodedSource (status "cache_ready"). This is the import path;
+    // it keeps the per-track peak footprint to a few MB so the working set
+    // stops swinging and the audio callback no longer stalls during cold import.
+    // Returns err if the file can't be decoded; callers may fall back.
+    Result<void> decode_and_store_streaming(const Id& source_id,
+                                            const std::string& file_path,
+                                            int target_sample_rate,
+                                            SourceStoreProgressCallback on_progress = {});
+
     // If a previously-written PCM cache file exists for this source, install
     // it as a streaming entry (status = "cache_ready") without re-decoding
     // and return true. Returns false if no usable cache is found — callers

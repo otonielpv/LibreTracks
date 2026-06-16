@@ -2,6 +2,7 @@
 
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/session/session.h>
+#include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <lt_engine/sources/source_manager.h>
 
@@ -652,4 +653,79 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
 
     REQUIRE(source.read(512, 512, out, 2) == 512);
     CHECK(requested_blocks.size() == 16);
+}
+
+TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {
+    // Write a 44.1k WAV and decode it to 48k both ways; the streamed cache must
+    // match the whole-file cache frame-for-frame (within float tolerance), so
+    // the chunked resample is bit-equivalent to the one-shot resample.
+    constexpr int kChannels = 2;
+    constexpr int kSrcRate = 44100;
+    constexpr int kDstRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 5 + 999;  // odd tail
+    const auto wav_path = make_temp_wav_path("stream_equiv");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSrcRate));
+
+    // Whole-file path.
+    SourceManager whole;
+    whole.register_source("src", wav_path);
+    {
+        int ch = 0;
+        Frame dur = 0;
+        auto decoded = decode_file_to_float32(wav_path, kDstRate, &ch, &dur);
+        REQUIRE(decoded.is_ok());
+        REQUIRE(whole.store_decoded_source("src", decoded.take(), ch, kDstRate, dur).is_ok());
+    }
+
+    // Streaming path.
+    SourceManager streamed;
+    streamed.register_source("src", wav_path);
+    REQUIRE(streamed.decode_and_store_streaming("src", wav_path, kDstRate).is_ok());
+
+    auto a = whole.get_shared("src");
+    auto b = streamed.get_shared("src");
+    REQUIRE(static_cast<bool>(a));
+    REQUIRE(static_cast<bool>(b));
+
+    // Durations should match (allow ±1 frame for resampler tail rounding).
+    const Frame da = a->duration_frames();
+    const Frame db = b->duration_frames();
+    CHECK(std::abs(static_cast<long long>(da) - static_cast<long long>(db)) <= 1);
+
+    // Read both full outputs (left channel) for an alignment search.
+    auto read_left = [](const std::shared_ptr<const DecodedSource>& s, Frame n) {
+        std::vector<float> out(static_cast<std::size_t>(n), 0.0f);
+        std::vector<float> r(static_cast<std::size_t>(n), 0.0f);
+        float* o[2] = {out.data(), r.data()};
+        s->read(0, static_cast<int>(n), o, 2);
+        return out;
+    };
+    const Frame common = std::min(da, db);
+    const Frame probe = std::min<Frame>(common, 200000);
+    const auto va = read_left(a, probe);
+    const auto vb = read_left(b, probe);
+
+    // Find the integer sample offset (small range) that best aligns b to a.
+    // A small constant offset = benign resampler latency; a large/garbage diff
+    // at all offsets = real corruption.
+    const int kMaxShift = 4096;
+    double best_diff = 1e9;
+    int best_shift = 0;
+    const Frame win = std::min<Frame>(probe - kMaxShift, 50000);
+    for (int shift = -kMaxShift; shift <= kMaxShift; ++shift) {
+        double d = 0.0;
+        for (Frame i = kMaxShift; i < win; ++i) {
+            const double x = va[static_cast<std::size_t>(i)];
+            const double y = vb[static_cast<std::size_t>(i + shift)];
+            d = std::max(d, std::abs(x - y));
+        }
+        if (d < best_diff) { best_diff = d; best_shift = shift; }
+    }
+    INFO("best_shift=" << best_shift << " best_diff=" << best_diff
+         << " da=" << da << " db=" << db);
+    // Streaming chunked resample is bit-equivalent to the one-shot whole-file
+    // resample: same length, zero offset, zero difference.
+    CHECK(best_diff < 1.0e-4);
+    CHECK(best_shift == 0);
 }

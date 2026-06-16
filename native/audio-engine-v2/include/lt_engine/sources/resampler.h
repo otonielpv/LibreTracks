@@ -32,4 +32,31 @@ public:
 
 std::unique_ptr<Resampler> make_resampler();
 
+// ---------------------------------------------------------------------------
+// StreamingResampler — stateful, block-by-block resampling so a decode can be
+// piped through to the PCM cache WITHOUT materializing the whole file (or a
+// full resample copy) in RAM. Each track's decode otherwise held ~190MB +
+// ~190MB, swinging the process working set 300MB↔1GB and stalling the audio
+// callback during cold import. Feed interleaved input chunks; receive
+// interleaved output chunks. Backend: r8brain (stateful CDSPResampler) or
+// libsamplerate (SRC state); sample-rate match = passthrough.
+// ---------------------------------------------------------------------------
+class StreamingResampler {
+public:
+    virtual ~StreamingResampler() = default;
+
+    // Resample one interleaved input chunk (`in_frames` frames, `channels`
+    // interleaved). Appends the produced interleaved output to `out` (does not
+    // clear it). `end_of_input=true` on the final chunk flushes tail samples.
+    // Returns the number of output FRAMES appended, or -1 on error.
+    virtual Frame process_chunk(const float* input,
+                                Frame in_frames,
+                                bool end_of_input,
+                                std::vector<float>& out) = 0;
+};
+
+// channels/source_sr/target_sr fixed for the source's lifetime.
+std::unique_ptr<StreamingResampler> make_streaming_resampler(
+    int channels, int source_sample_rate, int target_sample_rate);
+
 } // namespace lt

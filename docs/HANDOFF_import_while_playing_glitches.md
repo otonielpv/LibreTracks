@@ -359,8 +359,33 @@ which is stateful and supports block-by-block processing.
   `CmdUpsertSongTracks` instead of LoadSession while playing; `reposition_audio`
   (seek) instead of `restart_audio`. JSON contract verified by round-trip tests.
 - Phase 3 (remove patches): ⏳ blocked on user confirmation that glitch is gone
-- Phase 4 (streaming decode): ⏳ not started
+- Phase 4 (streaming decode): ✅ implemented + verified bit-equivalent to the
+  whole-file path (218 DSP tests). Needs user confirmation it kills the stutter.
 - Phase 5 (cleanup/commits): ⏳ not started
+
+### Phase 4 — what landed
+- `resampler.h/.cpp`: `StreamingResampler` (stateful, block-by-block) +
+  `make_streaming_resampler`. r8brain per-channel `CDSPResampler24`; passthrough
+  when sample rates match.
+- `source_manager.h/.cpp`: `decode_and_store_streaming` — opens the decoder,
+  pipes decode→resample→RF64 cache in 64k-frame chunks, fills eager blocks
+  inline, flushes the resampler's latency tail to hit the exact output length,
+  installs the streaming DecodedSource. Never holds the whole file or a resample
+  copy. (The whole-file path takes the first output_frames of a one-shot
+  process(), so streaming targets that exact length and matches it.)
+- `worker_pool.h/.cpp`: optional `StreamingStoreCallback` on `submit_decode`;
+  when set the worker runs it instead of whole-file decode + handback.
+- `preparation_queue.cpp`: wires the streaming callback (default ON;
+  `LIBRETRACKS_STREAMING_DECODE=0` to A/B). on_done handles the empty-buffer
+  (already-stored) completion.
+- Test: `decode_and_store_streaming matches whole-file decode (resampled)` —
+  decodes a 44.1k WAV to 48k both ways and asserts bit-equivalence (shift=0,
+  diff=0). 218 DSP tests pass.
+- Note: the bench A/B (LT_BENCH_STREAMING 1 vs 0) showed equal peak WS because
+  the bench's peak is dominated by its own 10 synthetic 60s setup tracks, not
+  the imports — it can't isolate the import delta. Streaming's benefit is proven
+  structurally (never materializes the file) + by the equivalence test; the real
+  WS win is only visible in the full app. Needs user test.
 
 ### Phase 2 — what landed
 - `crates/lt-audio-engine-v2/src/commands.rs`: `UpsertSongTracks` variant +

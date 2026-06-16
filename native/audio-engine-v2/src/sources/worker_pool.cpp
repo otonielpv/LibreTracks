@@ -42,6 +42,7 @@ struct DecodeTask {
     int                   target_sample_rate;
     JobProgressCallback   on_progress;
     JobCompletionCallback on_done;
+    StreamingStoreCallback streaming_store;
     std::atomic<bool>     cancelled{false};
 };
 
@@ -103,8 +104,46 @@ struct DecodeWorkerPool::Impl {
             // its (multi-hundred-MB) buffer + resample copy + cache write at a
             // time. Scoped to cover the decode AND the on_done store (where the
             // buffer is still alive), released before looping to the next task.
-            // No-op when stopped, so cold opens keep full parallelism.
+            // No-op when stopped, so cold opens keep full parallelism. (Mostly
+            // redundant for the streaming path, which never holds the whole
+            // file, but kept for the whole-file fallback.)
             DecodeMemoryGate decode_gate;
+
+            // Streaming path: decode→resample→cache in chunks on this thread,
+            // never materializing the whole file. Signals completion via on_done
+            // with an empty buffer.
+            if (task->streaming_store) {
+                JobProgressCallback prog =
+                    [&report_progress](const Job& j) { report_progress(j.progress_pct); };
+                const std::string err = task->streaming_store(
+                    task->source_id, task->file_path, task->target_sample_rate, prog);
+                if (task->cancelled.load(std::memory_order_relaxed)) {
+                    finish_job(task->job_id, JobStatus::Cancelled, "", task->on_done, task);
+                    continue;
+                }
+                if (!err.empty()) {
+                    finish_job(task->job_id, JobStatus::Failed, err, task->on_done, task);
+                } else {
+                    {
+                        std::lock_guard lock(jobs_mtx);
+                        auto it = jobs.find(task->job_id);
+                        if (it != jobs.end()) {
+                            it->second.status = JobStatus::Completed;
+                            it->second.progress_pct = 100;
+                        }
+                    }
+                    if (task->on_done) {
+                        Job j;
+                        j.job_id = task->job_id;
+                        j.source_id = task->source_id;
+                        j.status = JobStatus::Completed;
+                        j.progress_pct = 100;
+                        j.sample_rate = task->target_sample_rate;
+                        task->on_done(j);
+                    }
+                }
+                continue;
+            }
 
             auto  result = decode_file_to_float32(
                 task->file_path, task->target_sample_rate,
@@ -193,7 +232,8 @@ void DecodeWorkerPool::submit_decode(const Id& job_id,
                                       const std::string& file_path,
                                       int target_sample_rate,
                                       JobProgressCallback on_progress,
-                                      JobCompletionCallback on_done) {
+                                      JobCompletionCallback on_done,
+                                      StreamingStoreCallback streaming_store) {
     auto task = std::make_shared<DecodeTask>();
     task->job_id             = job_id;
     task->source_id          = source_id;
@@ -201,6 +241,7 @@ void DecodeWorkerPool::submit_decode(const Id& job_id,
     task->target_sample_rate = target_sample_rate;
     task->on_progress        = std::move(on_progress);
     task->on_done            = std::move(on_done);
+    task->streaming_store    = std::move(streaming_store);
 
     {
         std::lock_guard lock(impl_->jobs_mtx);

@@ -268,28 +268,40 @@ int main() {
                     // Same memory gate the real worker pool uses: bound the
                     // peak resident footprint while playing.
                     DecodeMemoryGate decode_gate;
-                    std::vector<float> samples;
-                    int ch = kChannels;
-                    Frame dur = song_frames;
-                    if (!import_files.empty()) {
+                    const bool streaming = env_int("LT_BENCH_STREAMING", 1) != 0;
+                    if (!import_files.empty() && streaming) {
+                        // NEW streaming path: decode→resample→cache in chunks,
+                        // never materializing the whole file. This is what the
+                        // app's prep queue now uses.
                         const std::string& path = import_files[static_cast<std::size_t>(idx)];
                         sources.register_source(sid, path);
-                        auto decoded = decode_file_to_float32(path, kSampleRate, &ch, &dur);
-                        if (decoded.is_err()) {
-                            std::fprintf(stderr, "decode failed (%s): %s\n",
-                                         path.c_str(), decoded.error().c_str());
-                            imports_done.fetch_add(1);
-                            continue;
-                        }
-                        samples = decoded.take();
+                        auto r = sources.decode_and_store_streaming(sid, path, kSampleRate);
+                        if (r.is_err())
+                            std::fprintf(stderr, "stream decode failed (%s): %s\n",
+                                         path.c_str(), r.error().c_str());
                     } else {
-                        sources.register_source(sid, "import-" + std::to_string(idx) + ".wav");
-                        samples = make_audio(song_frames, 1000 + idx);
+                        // Whole-file path (old) — for A/B of peak working set.
+                        std::vector<float> samples;
+                        int ch = kChannels;
+                        Frame dur = song_frames;
+                        if (!import_files.empty()) {
+                            const std::string& path = import_files[static_cast<std::size_t>(idx)];
+                            sources.register_source(sid, path);
+                            auto decoded = decode_file_to_float32(path, kSampleRate, &ch, &dur);
+                            if (decoded.is_err()) {
+                                std::fprintf(stderr, "decode failed (%s): %s\n",
+                                             path.c_str(), decoded.error().c_str());
+                                imports_done.fetch_add(1);
+                                continue;
+                            }
+                            samples = decoded.take();
+                        } else {
+                            sources.register_source(sid, "import-" + std::to_string(idx) + ".wav");
+                            samples = make_audio(song_frames, 1000 + idx);
+                        }
+                        auto r = sources.store_decoded_source(sid, std::move(samples), ch, kSampleRate, dur);
+                        (void)r;
                     }
-                    // store_decoded_source does the heavy RF64 PCM cache write +
-                    // throttle yields — the same work an import triggers at runtime.
-                    auto r = sources.store_decoded_source(sid, std::move(samples), ch, kSampleRate, dur);
-                    (void)r;
                 }
                 imports_done.fetch_add(1);
 

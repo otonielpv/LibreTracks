@@ -1,6 +1,7 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
+#include <lt_engine/sources/resampler.h>
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -779,6 +780,175 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
     if (ready_callback)
         ready_callback(source_id);
     return Result<void>::ok();
+}
+
+Result<void> SourceManager::decode_and_store_streaming(
+    const Id& source_id,
+    const std::string& file_path,
+    int target_sample_rate,
+    SourceStoreProgressCallback on_progress) {
+#if LT_ENGINE_USE_LIBSNDFILE
+    auto report_progress = [&](int pct) {
+        if (on_progress) on_progress(std::clamp(pct, 0, 100));
+    };
+
+    auto decoder = make_decoder(file_path);
+    if (!decoder)
+        return Result<void>::err("No decoder available for: " + file_path);
+    report_progress(1);
+    auto open_result = decoder->open(file_path);
+    if (open_result.is_err())
+        return Result<void>::err(open_result.error());
+
+    const AudioFileInfo fi = decoder->info();
+    if (fi.duration_frames <= 0 || fi.channel_count <= 0)
+        return Result<void>::err("Invalid audio file info: " + file_path);
+
+    const int channel_count = fi.channel_count;
+    const int sample_rate = target_sample_rate;
+    auto resampler = make_streaming_resampler(
+        channel_count, fi.original_sample_rate, target_sample_rate);
+
+    const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
+    // Rough projected size for the LRU pre-eviction (output frames ~ input *
+    // ratio); good enough to keep the budget honoured.
+    const double ratio = fi.original_sample_rate > 0
+        ? static_cast<double>(target_sample_rate) / fi.original_sample_rate : 1.0;
+    const Frame projected_out_frames =
+        static_cast<Frame>(std::ceil(static_cast<double>(fi.duration_frames) * ratio));
+    const size_t projected_bytes =
+        static_cast<size_t>(projected_out_frames) * channel_count * sizeof(float);
+
+    if (!create_directories_compat(parent_path_compat(cache_file)))
+        return Result<void>::err("Could not create PCM cache directory: " + cache_file);
+    evict_cache_lru(parent_path_compat(cache_file), projected_bytes, cache_file);
+
+    SF_INFO info{};
+    info.channels = channel_count;
+    info.samplerate = sample_rate;
+    info.format = SF_FORMAT_RF64 | SF_FORMAT_FLOAT;
+    SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
+    if (!sf)
+        return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
+
+    const int block_frames = block_cache_.block_frames();
+    const int eager_blocks = eager_source_blocks_from_env();
+    constexpr int kReadChunkFrames = 65536;
+
+    std::vector<float> in_chunk(static_cast<std::size_t>(kReadChunkFrames) * channel_count);
+    std::vector<float> out_chunk;  // resampled interleaved output, reused per chunk
+    Frame in_done = 0;
+    Frame out_written = 0;   // frames written to the cache so far
+    bool decode_ok = true;
+    // Exact target output length (matches the whole-file resample). We collect
+    // exactly this many output frames, feeding silence after real input ends to
+    // flush the resampler's internal latency tail (r8brain emits output with an
+    // internal delay; the oneshot helper does the same zero-feed trick).
+    const Frame target_out_frames = projected_out_frames;
+
+    // Write `produced` interleaved frames from `out_chunk` to the cache + eager
+    // blocks, capped so the total never exceeds target_out_frames. Returns the
+    // number of frames actually written (post-cap).
+    auto write_output = [&](Frame produced) -> bool {
+        if (produced <= 0) return true;
+        const Frame remaining = target_out_frames - out_written;
+        if (remaining <= 0) return true;  // already have the full output
+        const Frame n = std::min<Frame>(produced, remaining);
+        const sf_count_t w = sf_writef_float(sf, out_chunk.data(),
+                                             static_cast<sf_count_t>(n));
+        if (w <= 0) return false;
+        const Frame chunk_start = out_written;
+        for (Frame local = 0; local < n; ) {
+            const Frame abs_frame = chunk_start + local;
+            const int block_index = static_cast<int>(abs_frame / block_frames);
+            if (block_index >= eager_blocks) break;
+            const Frame block_start = static_cast<Frame>(block_index) * block_frames;
+            const int offset_in_block = static_cast<int>(abs_frame - block_start);
+            const int frames_this_block = std::min(
+                block_frames - offset_in_block, static_cast<int>(n - local));
+            if (offset_in_block == 0 && frames_this_block == block_frames) {
+                const float* ptr = out_chunk.data() +
+                    static_cast<std::size_t>(local) * channel_count;
+                block_cache_.fill(source_id, block_index, ptr, channel_count, block_frames);
+            }
+            local += frames_this_block;
+        }
+        out_written += n;
+        return true;
+    };
+
+    // Phase 1: feed real decoded input.
+    while (in_done < fi.duration_frames && out_written < target_out_frames) {
+        const int want = static_cast<int>(std::min<Frame>(
+            kReadChunkFrames, fi.duration_frames - in_done));
+        const int got = decoder->read_frames(in_chunk.data(), want);
+        if (got <= 0) break;  // unexpected EOF; flush handles the rest
+        in_done += got;
+        out_chunk.clear();
+        const Frame produced = resampler->process_chunk(
+            in_chunk.data(), got, /*end_of_input=*/false, out_chunk);
+        if (produced < 0 || !write_output(produced)) { decode_ok = false; break; }
+        if (fi.duration_frames > 0) {
+            report_progress(1 + static_cast<int>((in_done * 98) / fi.duration_frames));
+        }
+        yield_to_ui_scheduler();
+    }
+
+    // Phase 2: flush — feed silence until we've collected the full output length.
+    if (decode_ok) {
+        std::fill(in_chunk.begin(), in_chunk.end(), 0.0f);
+        int guard = 0;
+        const int kMaxFlush = 4096;  // safety bound; latency << this many chunks
+        while (out_written < target_out_frames && guard++ < kMaxFlush) {
+            out_chunk.clear();
+            const Frame produced = resampler->process_chunk(
+                in_chunk.data(), kReadChunkFrames, /*end_of_input=*/true, out_chunk);
+            if (produced < 0) { decode_ok = false; break; }
+            if (produced == 0) continue;
+            if (!write_output(produced)) { decode_ok = false; break; }
+            yield_to_ui_scheduler();
+        }
+    }
+
+    sf_close(sf);
+    decoder->close();
+
+    if (!decode_ok || out_written <= 0)
+        return Result<void>::err("Streaming decode failed: " + file_path);
+
+    const Frame duration_frames = out_written;
+    const size_t disk_cache_bytes =
+        static_cast<size_t>(out_written) * channel_count * sizeof(float);
+
+    SourceReadyCallback ready_callback;
+    {
+        std::lock_guard lock(write_mutex_);
+        EntryMap next = *entries_.load();
+        auto it = next.find(source_id);
+        if (it == next.end())
+            return Result<void>::err("Source not registered: " + source_id);
+        auto& entry = it->second;
+        entry.cache_file_path = cache_file;
+        entry.channel_count = channel_count;
+        entry.sample_rate = sample_rate;
+        entry.duration_frames = duration_frames;
+        entry.disk_cache_bytes = disk_cache_bytes;
+        entry.source = std::make_shared<DecodedSource>(
+            source_id, channel_count, sample_rate, duration_frames,
+            &block_cache_,
+            [this](const Id& id, int block_index) { request_block(id, block_index); });
+        entry.status = "cache_ready";
+        entry.error_message.clear();
+        publish_locked(std::move(next));
+        ready_callback = source_ready_callback_;
+    }
+    if (ready_callback)
+        ready_callback(source_id);
+    return Result<void>::ok();
+#else
+    (void)source_id; (void)file_path; (void)target_sample_rate; (void)on_progress;
+    return Result<void>::err("streaming decode requires libsndfile");
+#endif
 }
 
 void SourceManager::request_block(const Id& source_id, int block_index) const noexcept {
