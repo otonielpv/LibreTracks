@@ -314,12 +314,6 @@ impl Default for WaveformGenerationQueue {
         let worker_in_flight = Arc::clone(&in_flight);
 
         thread::spawn(move || {
-            // The waveform worker re-reads/decodes files to build the visual
-            // peaks — purely cosmetic background work. Run it below normal
-            // priority so it never competes with audio playback (the source of
-            // the residual stutter while waveforms were "analyzing"). The audio
-            // callback is realtime; this can wait.
-            lower_current_thread_priority();
             while let Ok(job) = receiver.recv() {
                 let job_key = waveform_job_key(&job.song_dir, &job.waveform_key);
                 process_waveform_job(job);
@@ -365,23 +359,6 @@ fn unique_waveform_keys(song: &Song) -> Vec<String> {
     keys
 }
 
-/// Lower the calling thread below normal priority. Used by the background
-/// waveform worker so its (cosmetic) file decoding can never preempt the
-/// realtime audio callback. Best-effort; no-op off Windows.
-fn lower_current_thread_priority() {
-    #[cfg(windows)]
-    {
-        // THREAD_PRIORITY_BELOW_NORMAL = -1. Avoid a winapi dep; call directly.
-        extern "system" {
-            fn GetCurrentThread() -> isize;
-            fn SetThreadPriority(thread: isize, priority: i32) -> i32;
-        }
-        const THREAD_PRIORITY_BELOW_NORMAL: i32 = -1;
-        unsafe {
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
-        }
-    }
-}
 
 /// Generate a waveform with the native decoder stack (FFmpeg/libav for
 /// compressed formats, native fast paths where available) and write it to the
@@ -409,6 +386,50 @@ fn generate_native_waveform(
     )?;
     write_global_waveform(&decoding_cache_root(), &source_path, &summary)?;
     Ok(summary)
+}
+
+/// Build the global waveform cache for a song's sources from the peaks the
+/// streaming decode ALREADY computed (AudioController::source_peaks), instead of
+/// re-decoding each file. Run after sources are ready, on the command thread
+/// (which owns the engine). Best-effort per file: a miss just leaves the normal
+/// background waveform job to generate it. This is what removes the second
+/// full decode that was contending with playback during import.
+fn prime_waveforms_from_engine_peaks(
+    song_dir: &Path,
+    song: &Song,
+    audio: &AudioController,
+) {
+    let cache_root = decoding_cache_root();
+    for key in unique_waveform_keys(song) {
+        // The source id the engine knows is the resolved audio file path.
+        let source_path = resolve_audio_file_path(song_dir, &key);
+        let source_id = source_path.to_string_lossy().to_string();
+        // Skip if a cache already exists (cheap check).
+        if load_global_waveform(&cache_root, song_dir, Path::new(&key)).is_ok() {
+            continue;
+        }
+        let Some(peaks) = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
+        else {
+            continue;  // not loaded / no same-pass peaks → leave to the worker
+        };
+        let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+        if duration_frames == 0 {
+            continue;
+        }
+        let Ok(summary) = waveform_summary_from_channel_peaks(
+            peaks.sample_rate,
+            duration_frames,
+            peaks.resolution_frames,
+            peaks.min_peaks,
+            peaks.max_peaks,
+            peaks.min_peaks_right,
+            peaks.max_peaks_right,
+            &source_path,
+        ) else {
+            continue;
+        };
+        let _ = write_global_waveform(&cache_root, &source_path, &summary);
+    }
 }
 
 fn process_waveform_job(job: WaveformJob) {
@@ -1418,7 +1439,16 @@ impl DesktopSession {
         waveform_keys: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
+        audio: &AudioController,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
+        // Before serving, prime the global cache from the engine's same-pass
+        // peaks (no re-decode) so the cache lookup below hits and we never
+        // enqueue the heavy file_peaks re-decode that contended with playback.
+        if let Some(song) = self.engine.song().cloned() {
+            if let Some(song_dir) = self.song_dir.clone() {
+                prime_waveforms_from_engine_peaks(&song_dir, &song, audio);
+            }
+        }
         self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)))
     }
 

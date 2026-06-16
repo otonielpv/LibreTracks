@@ -1963,6 +1963,21 @@ impl AudioController {
             .unwrap_or(false)
     }
 
+    /// Waveform peaks for an already-loaded source, computed in the same pass
+    /// as the streaming decode (no re-decode). Returns None if the source isn't
+    /// loaded yet. Lets the import flow write the waveform cache from the audio
+    /// decode we already did, so the cosmetic waveform worker never re-decodes
+    /// the file — the second decode was the residual import-time CPU contention.
+    pub fn source_peaks(
+        &self,
+        source_id: &str,
+        resolution_frames: usize,
+    ) -> Option<lt_audio_engine_v2::SourcePeaks> {
+        let mut state = self.state.lock().ok()?;
+        let engine = state.engine.as_mut()?;
+        engine.source_peaks(source_id, resolution_frames).ok()
+    }
+
     pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, _song: Song) {
         // Source preparation is owned by the C++ engine after LoadSession.
         // Avoid issuing a second LoadSession immediately before Play; replacing

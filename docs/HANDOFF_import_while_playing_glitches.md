@@ -377,6 +377,25 @@ which is stateful and supports block-by-block processing.
   ⚠️ Residual stutter remains = the waveform second-decode (see below); the
   low-priority worker helps but the real fix (use source_peaks) is still TODO.
 
+- **2026-06-16** — **Eliminated the waveform second-decode (the slowdown).**
+  User: "tarda muchísimo… desde que juntamos el waveform con la preparación".
+  Confirmed: streaming audio decode itself is NOT slower (bench: streaming ==
+  whole-file, ~10.7s/9 files single-thread). The slowdown is the SECOND decode —
+  the waveform worker re-decoding each file via file_peaks — and the
+  BELOW_NORMAL priority I added made it WORSE (starved the single-threaded worker
+  so total prep dragged). Fixes:
+  - Reverted the low-priority waveform worker (it hurt total prep time).
+  - Hardened the streaming flush: feed SMALL (1k) silence blocks and stop when
+    the resampler drains, instead of up to 4096×64k silence frames chasing a
+    ceil()-rounded target (a real perf trap for some sample-rate ratios).
+  - **Real fix**: `AudioController::source_peaks(source_id)` exposes the
+    same-pass peaks; `prime_waveforms_from_engine_peaks` writes the global
+    waveform cache from them; `load_waveforms` calls it before serving, so the
+    cache lookup hits and the heavy file_peaks re-decode is never enqueued.
+    `source_id == resolved audio file path == waveform_key`.
+  → import now does ONE decode per file (audio + peaks in the same pass), like
+    Ableton. Needs user confirmation on prep speed + stutter.
+
 ### Answer: do all actions avoid recreating the whole session? — YES (except open)
 - Import audio, add/remove/move tracks & clips, region/marker/timing edits →
   `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).

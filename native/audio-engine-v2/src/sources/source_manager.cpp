@@ -945,19 +945,28 @@ Result<void> SourceManager::decode_and_store_streaming(
         light_yield();
     }
 
-    // Phase 2: flush — feed silence until we've collected the full output length.
+    // Phase 2: flush the resampler's latency tail. The tail is only a few hundred
+    // frames, so feed SMALL silence blocks (not 64k!) and stop the moment the
+    // resampler stops producing — otherwise we'd resample millions of silence
+    // frames (huge slowdown) chasing a target_out_frames that ceil() rounding can
+    // leave 1-2 frames above what the resampler will ever emit.
     if (decode_ok) {
-        std::fill(in_chunk.begin(), in_chunk.end(), 0.0f);
+        constexpr int kFlushBlock = 1024;
+        std::fill(in_chunk.begin(), in_chunk.begin() + kFlushBlock * channel_count, 0.0f);
+        int empty_runs = 0;
         int guard = 0;
-        const int kMaxFlush = 4096;  // safety bound; latency << this many chunks
+        const int kMaxFlush = 256;  // « 256k input frames of latency is impossible
         while (out_written < target_out_frames && guard++ < kMaxFlush) {
             out_chunk.clear();
             const Frame produced = resampler->process_chunk(
-                in_chunk.data(), kReadChunkFrames, /*end_of_input=*/true, out_chunk);
+                in_chunk.data(), kFlushBlock, /*end_of_input=*/true, out_chunk);
             if (produced < 0) { decode_ok = false; break; }
-            if (produced == 0) continue;
+            if (produced == 0) {
+                if (++empty_runs >= 2) break;  // resampler drained; stop chasing
+                continue;
+            }
+            empty_runs = 0;
             if (!write_output(produced)) { decode_ok = false; break; }
-            light_yield();
         }
     }
 
