@@ -433,7 +433,7 @@ export function LibrarySidebarPanel({
                 </span>
                 <span className="lt-library-asset-copy" title={asset.fileName}>{asset.fileName}</span>
                 <span className="lt-library-asset-duration">
-                  {isPending ? getPendingClipLabel(asset.pendingStatus ?? "queued") : formatAssetDuration(asset.durationSeconds)}
+                  {isPending ? getPendingClipLabel(asset.pendingStatus ?? "queued", t) : formatAssetDuration(asset.durationSeconds)}
                 </span>
               </div>
             </div>

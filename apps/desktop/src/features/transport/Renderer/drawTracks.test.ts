@@ -17,6 +17,11 @@ vi.mock("./WaveformTileCache", () => {
   };
 });
 
+// drawTracks reads pending-import labels from the i18n singleton; importing the
+// config here initializes it so `i18n.t` resolves to real strings (in the app
+// it's initialized at startup). Assertions resolve labels through the same
+// instance so they stay language-agnostic (the test env may default to es).
+import i18n from "../../../shared/i18n";
 import { drawTrackClipsLayer } from "./drawTracks";
 import type {
   TrackSceneSnapshot,
@@ -194,9 +199,10 @@ describe("drawTrackClipsLayer", () => {
 
     drawTrackClipsLayer(context, snapshot, viewport);
 
+    const expectedLabel = i18n.t("library.pendingStatus.importing").toUpperCase();
     expect(
       (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
-        ([text]) => text === "IMPORTING...",
+        ([text]) => text === expectedLabel,
       ),
     ).toBe(true);
   });

@@ -256,22 +256,31 @@ export function mergeLibraryAssetsByFilePath(
   });
 }
 
-export function getPendingClipLabel(status: PendingAudioImportStatus): string {
+/** Maps an import status to its i18n key under `library.pendingStatus`. The
+ * synthetic "ready" state reuses the "analyzing" label (the waveform is still
+ * being generated when the asset row first appears). */
+function pendingStatusKey(status: PendingAudioImportStatus): string {
   switch (status) {
     case "queued":
-      return "Queued...";
+      return "library.pendingStatus.queued";
     case "reading":
-      return "Reading file...";
+      return "library.pendingStatus.reading";
     case "importing":
-      return "Importing...";
+      return "library.pendingStatus.importing";
     case "metadata":
-      return "Loading metadata...";
+      return "library.pendingStatus.metadata";
+    case "failed":
+      return "library.pendingStatus.failed";
     case "analyzing":
     case "ready":
-      return "Analyzing waveform...";
-    case "failed":
-      return "Import failed";
     default:
-      return "Analyzing waveform...";
+      return "library.pendingStatus.analyzing";
   }
+}
+
+export function getPendingClipLabel(
+  status: PendingAudioImportStatus,
+  t: (key: string) => string,
+): string {
+  return t(pendingStatusKey(status));
 }
