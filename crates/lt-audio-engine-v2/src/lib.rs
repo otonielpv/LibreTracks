@@ -40,6 +40,8 @@ pub struct SourcePeaks {
     pub resolution_frames: usize,
     pub min_peaks: Vec<f32>,
     pub max_peaks: Vec<f32>,
+    pub min_peaks_right: Vec<f32>,
+    pub max_peaks_right: Vec<f32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +59,10 @@ struct SourcePeaksResponse {
     min_peaks: Vec<f32>,
     #[serde(default)]
     max_peaks: Vec<f32>,
+    #[serde(default)]
+    min_peaks_right: Vec<f32>,
+    #[serde(default)]
+    max_peaks_right: Vec<f32>,
 }
 
 // SAFETY: EngineImpl internally synchronises its state.  The Rust wrapper
@@ -243,6 +249,8 @@ impl Engine {
             resolution_frames: response.resolution_frames,
             min_peaks: response.min_peaks,
             max_peaks: response.max_peaks,
+            min_peaks_right: response.min_peaks_right,
+            max_peaks_right: response.max_peaks_right,
         })
     }
 }
@@ -272,6 +280,21 @@ pub fn decoding_cache_dir() -> String {
     unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
 }
 
+pub fn file_peaks(
+    file_path: &str,
+    resolution_frames: usize,
+) -> Result<SourcePeaks, EngineError> {
+    let file_path = std::ffi::CString::new(file_path)
+        .map_err(|e| EngineError::Serialization(e.to_string()))?;
+    let ptr = unsafe {
+        lt_audio_engine_analyze_file_peaks(
+            file_path.as_ptr(),
+            resolution_frames.min(i32::MAX as usize) as i32,
+        )
+    };
+    source_peaks_from_json(ptr)
+}
+
 /// Total bytes occupied by the on-disk decoded-PCM cache (.rf64 files).
 pub fn decoding_cache_size_bytes() -> u64 {
     unsafe { lt_audio_engine_source_cache_size_bytes() }
@@ -295,6 +318,31 @@ fn lt_result_to_rust(rc: LtResult) -> Result<(), EngineError> {
         LT_ERR_DEVICE => Err(EngineError::Device("device error".into())),
         _ => Err(EngineError::Internal("unknown error code".into())),
     }
+}
+
+fn source_peaks_from_json(ptr: *const std::ffi::c_char) -> Result<SourcePeaks, EngineError> {
+    if ptr.is_null() {
+        return Err(EngineError::Internal("source peaks returned null".into()));
+    }
+    let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
+    let response: SourcePeaksResponse =
+        serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))?;
+    if !response.ok {
+        return Err(EngineError::Internal(
+            response
+                .error
+                .unwrap_or_else(|| "source peaks unavailable".into()),
+        ));
+    }
+    Ok(SourcePeaks {
+        sample_rate: response.sample_rate,
+        duration_frames: response.duration_frames,
+        resolution_frames: response.resolution_frames,
+        min_peaks: response.min_peaks,
+        max_peaks: response.max_peaks,
+        min_peaks_right: response.min_peaks_right,
+        max_peaks_right: response.max_peaks_right,
+    })
 }
 
 /// Short, human-readable tag for an EngineCommand variant, used in error

@@ -49,6 +49,12 @@ unsigned long long source_cache_dir_size_bytes();
 // Delete all .rf64 PCM cache files; returns bytes freed. Best-effort.
 unsigned long long purge_source_cache();
 
+// Decode an audio file directly and build peak buckets. This is used by the
+// host UI for waveform generation so it follows the same native decoder stack
+// as playback (FFmpeg/libav for compressed formats, fast native paths for WAV).
+SourcePeakOverview analyze_file_peaks(const std::string& file_path,
+                                      int resolution_frames);
+
 // ---------------------------------------------------------------------------
 // SourceManager — owns all DecodedSources for a session.
 //

@@ -9,7 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use symphonia::core::{
     audio::SampleBuffer,
-    codecs::{DecoderOptions, CODEC_TYPE_NULL},
+    codecs::{CodecParameters, DecoderOptions, CODEC_TYPE_NULL},
     errors::Error as SymphoniaError,
     formats::FormatOptions,
     io::MediaSourceStream,
@@ -23,6 +23,8 @@ const WAVEFORM_FORMAT_VERSION: u32 = 6;
 const MIN_READABLE_WAVEFORM_FORMAT_VERSION: u32 = 4;
 const WAVEFORM_FILE_MAGIC: &[u8; 8] = b"LTPEAKS1";
 const WAVEFORM_LOD_RESOLUTIONS: [usize; 4] = [256, 2_048, 16_384, 131_072];
+const WAVEFORM_DURATION_MISMATCH_GRACE_SECONDS: f64 = 2.0;
+const WAVEFORM_DURATION_MISMATCH_RATIO: f64 = 0.98;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -129,18 +131,52 @@ fn source_freshness(source_path: &Path) -> (u64, u128) {
 
 /// Whether a persisted waveform still matches its source audio. A v6+ summary
 /// carries the source size+mtime it was built from; if either differs from the
-/// file on disk the cache is stale and must be regenerated. Pre-v6 summaries
-/// (source_size == 0) carry no signature, so we cannot prove staleness and treat
-/// them as fresh — they get refreshed naturally on the next version bump or edit.
+/// file on disk the cache is stale and must be regenerated. We also reject
+/// summaries whose decoded duration is clearly shorter than the source metadata
+/// duration, which catches MP3 streams Symphonia can probe but only partially
+/// decode. Pre-v6 summaries (source_size == 0) carry no signature, so size/mtime
+/// cannot prove staleness, but the duration sanity check still applies when the
+/// source can be probed.
 pub fn is_waveform_fresh(summary: &WaveformSummary, source_path: &Path) -> bool {
     if summary.source_size == 0 && summary.source_modified_millis == 0 {
-        return true; // unknown provenance (legacy cache) — keep it
+        return is_waveform_duration_consistent(summary, source_path);
     }
     let (size, modified_millis) = source_freshness(source_path);
     if size == 0 && modified_millis == 0 {
         return true; // can't stat the source right now — don't discard the cache
     }
-    summary.source_size == size && summary.source_modified_millis == modified_millis
+    summary.source_size == size
+        && summary.source_modified_millis == modified_millis
+        && is_waveform_duration_consistent(summary, source_path)
+}
+
+fn is_waveform_duration_consistent(summary: &WaveformSummary, source_path: &Path) -> bool {
+    let Ok(metadata) = crate::importer::read_audio_metadata(source_path) else {
+        return true;
+    };
+    !is_duration_significantly_shorter(summary.duration_seconds, metadata.duration_seconds)
+}
+
+fn codec_duration_seconds(codec_params: &CodecParameters) -> Option<f64> {
+    if let (Some(n_frames), Some(sample_rate)) = (codec_params.n_frames, codec_params.sample_rate) {
+        return Some(n_frames as f64 / f64::from(sample_rate.max(1)));
+    }
+
+    if let (Some(n_frames), Some(time_base)) = (codec_params.n_frames, codec_params.time_base) {
+        let time = time_base.calc_time(n_frames);
+        return Some(time.seconds as f64 + f64::from(time.frac));
+    }
+
+    None
+}
+
+fn is_duration_significantly_shorter(actual_seconds: f64, expected_seconds: f64) -> bool {
+    expected_seconds.is_finite()
+        && actual_seconds.is_finite()
+        && expected_seconds > 0.0
+        && actual_seconds >= 0.0
+        && expected_seconds - actual_seconds > WAVEFORM_DURATION_MISMATCH_GRACE_SECONDS
+        && actual_seconds < expected_seconds * WAVEFORM_DURATION_MISMATCH_RATIO
 }
 
 fn resolve_audio_source_path(song_dir: &Path, audio_path: &Path) -> PathBuf {
@@ -245,6 +281,7 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
         .unwrap_or(1)
         .max(1);
     let codec_params = track.codec_params.clone();
+    let expected_duration_seconds = codec_duration_seconds(&codec_params);
     let mut decoder = symphonia::default::get_codecs()
         .make(&codec_params, &DecoderOptions::default())
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
@@ -315,6 +352,15 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
 
     buckets.truncate(frame_index);
     let duration_seconds = frame_index as f64 / f64::from(sample_rate.max(1));
+    if expected_duration_seconds
+        .is_some_and(|expected| is_duration_significantly_shorter(duration_seconds, expected))
+    {
+        return Err(ProjectError::AudioDecode(format!(
+            "decoded waveform for {} is shorter than the container duration ({duration_seconds:.3}s decoded vs {:.3}s expected)",
+            path.display(),
+            expected_duration_seconds.unwrap_or_default()
+        )));
+    }
 
     let (source_size, source_modified_millis) = source_freshness(path);
     let waveform = WaveformSummary {
@@ -357,11 +403,37 @@ pub fn waveform_summary_from_peaks(
     max_peaks: Vec<f32>,
     source_path: &Path,
 ) -> Result<WaveformSummary, ProjectError> {
+    waveform_summary_from_channel_peaks(
+        sample_rate,
+        duration_frames,
+        resolution_frames,
+        min_peaks,
+        max_peaks,
+        Vec::new(),
+        Vec::new(),
+        source_path,
+    )
+}
+
+pub fn waveform_summary_from_channel_peaks(
+    sample_rate: u32,
+    duration_frames: u64,
+    resolution_frames: usize,
+    min_peaks: Vec<f32>,
+    max_peaks: Vec<f32>,
+    min_peaks_right: Vec<f32>,
+    max_peaks_right: Vec<f32>,
+    source_path: &Path,
+) -> Result<WaveformSummary, ProjectError> {
     if sample_rate == 0
         || duration_frames == 0
         || resolution_frames == 0
         || min_peaks.is_empty()
         || min_peaks.len() != max_peaks.len()
+        || (!min_peaks_right.is_empty()
+            && (min_peaks_right.len() != min_peaks.len()
+                || max_peaks_right.len() != min_peaks.len()))
+        || (min_peaks_right.is_empty() && !max_peaks_right.is_empty())
     {
         return Err(ProjectError::InvalidWaveformSummary(
             "<native-waveform>".into(),
@@ -372,8 +444,8 @@ pub fn waveform_summary_from_peaks(
         resolution_frames,
         min_peaks,
         max_peaks,
-        min_peaks_right: Vec::new(),
-        max_peaks_right: Vec::new(),
+        min_peaks_right,
+        max_peaks_right,
     };
     let (source_size, source_modified_millis) = source_freshness(source_path);
     let summary = WaveformSummary {
@@ -415,10 +487,16 @@ pub fn load_waveform_summary(
     if path.exists() {
         let summary = decode_waveform_summary_binary(&fs::read(&path)?)
             .ok_or_else(|| ProjectError::InvalidWaveformSummary(path.clone()))?;
-        if summary.version < WAVEFORM_FORMAT_VERSION {
+        if summary.version != WAVEFORM_FORMAT_VERSION {
             let summary =
                 analyze_wav_file(resolve_audio_source_path(song_dir, audio_relative_path))?
                     .waveform;
+            write_waveform_summary(&path, &summary)?;
+            return Ok(summary);
+        }
+        let source_path = resolve_audio_source_path(song_dir, audio_relative_path);
+        if !is_waveform_fresh(&summary, &source_path) {
+            let summary = analyze_wav_file(source_path)?.waveform;
             write_waveform_summary(&path, &summary)?;
             return Ok(summary);
         }
@@ -450,7 +528,7 @@ fn read_fresh_waveform_file(
 ) -> Result<WaveformSummary, ProjectError> {
     let summary = decode_waveform_summary_binary(&fs::read(path)?)
         .ok_or_else(|| ProjectError::InvalidWaveformSummary(path.to_path_buf()))?;
-    if summary.version < WAVEFORM_FORMAT_VERSION || !is_waveform_fresh(&summary, source_path) {
+    if summary.version != WAVEFORM_FORMAT_VERSION || !is_waveform_fresh(&summary, source_path) {
         return Err(ProjectError::InvalidWaveformSummary(path.to_path_buf()));
     }
     validate_waveform_summary(&summary, path)?;
@@ -475,7 +553,9 @@ fn migrate_legacy_waveform(legacy_path: &Path, source_path: &Path) -> Option<Wav
     // signature. Migrate (and re-stamp) it instead of throwing it away and
     // re-analysing the whole file; only truly unreadable formats (< v4) are
     // regenerated. This is what keeps opening a project with old caches fast.
-    if summary.version < MIN_READABLE_WAVEFORM_FORMAT_VERSION {
+    if summary.version < MIN_READABLE_WAVEFORM_FORMAT_VERSION
+        || summary.version > WAVEFORM_FORMAT_VERSION
+    {
         return None;
     }
     if validate_waveform_summary(&summary, legacy_path).is_err() {
@@ -487,6 +567,9 @@ fn migrate_legacy_waveform(legacy_path: &Path, source_path: &Path) -> Option<Wav
     // If we can read the local size and it disagrees with what the cache was
     // built from, it's a different file — don't migrate a mismatched waveform.
     if size != 0 && summary.source_size != 0 && summary.source_size != size {
+        return None;
+    }
+    if !is_waveform_duration_consistent(&summary, source_path) {
         return None;
     }
     // Re-stamp to the local source so the migrated entry is considered fresh.
@@ -1038,6 +1121,25 @@ mod tests {
         assert!(waveform_summary_from_peaks(44_100, 100, 256, vec![], vec![], src).is_err());
     }
 
+    #[test]
+    fn summary_from_channel_peaks_preserves_stereo() {
+        let src = Path::new("<test-source>");
+        let summary = waveform_summary_from_channel_peaks(
+            44_100,
+            512,
+            256,
+            vec![-0.5, -0.2],
+            vec![0.6, 0.3],
+            vec![-0.4, -0.1],
+            vec![0.7, 0.2],
+            src,
+        )
+        .expect("summary");
+
+        assert_eq!(summary.lods[0].min_peaks_right, vec![-0.4, -0.1]);
+        assert_eq!(summary.lods[0].max_peaks_right, vec![0.7, 0.2]);
+    }
+
     // ── LOD pyramid ───────────────────────────────────────────────────────
 
     #[test]
@@ -1159,6 +1261,20 @@ mod tests {
     }
 
     #[test]
+    fn is_waveform_fresh_rejects_truncated_waveform_duration() {
+        let dir = tempdir().expect("tempdir");
+        let audio = dir.path().join("long.wav");
+        let samples = vec![0_i16; 80_000];
+        write_mono_wav(&audio, 8_000, &samples);
+
+        let summary =
+            waveform_summary_from_peaks(8_000, 8_000, 256, vec![-0.1; 32], vec![0.1; 32], &audio)
+                .expect("summary");
+
+        assert!(!is_waveform_fresh(&summary, &audio));
+    }
+
+    #[test]
     fn legacy_unknown_freshness_is_treated_as_fresh() {
         // source_size == 0 && mtime == 0 → can't prove staleness, keep the cache.
         let summary = sample_summary(); // built with a non-existent path → 0/0
@@ -1182,6 +1298,31 @@ mod tests {
 
         let loaded = load_waveform_summary(song_dir, "audio/loop.wav").expect("load");
         assert_eq!(loaded, summary);
+    }
+
+    #[test]
+    fn load_waveform_summary_regenerates_future_version_cache() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let audio_rel = Path::new("audio/loop.wav");
+        let audio_abs = song_dir.join(audio_rel);
+        let samples = vec![0_i16; 8_000];
+        std::fs::create_dir_all(audio_abs.parent().expect("audio parent")).expect("audio dir");
+        write_mono_wav(&audio_abs, 8_000, &samples);
+
+        let mut summary = analyze_wav_file(&audio_abs).expect("analyze").waveform;
+        summary.version = WAVEFORM_FORMAT_VERSION + 1;
+        let path = waveform_file_path(song_dir, audio_rel);
+        std::fs::create_dir_all(path.parent().expect("cache parent")).expect("cache dir");
+        std::fs::write(
+            &path,
+            encode_waveform_summary_binary(&summary).expect("encode"),
+        )
+        .expect("write future cache");
+
+        let loaded = load_waveform_summary(song_dir, audio_rel).expect("load");
+
+        assert_eq!(loaded.version, WAVEFORM_FORMAT_VERSION);
     }
 
     #[test]

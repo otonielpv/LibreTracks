@@ -92,7 +92,7 @@ pub(crate) fn emit_ready_library_waveforms(
         .map(|file_path| file_path.replace('\\', "/"))
         .collect::<Vec<_>>();
     let summaries = session
-        .load_library_waveforms(&normalized_paths, &state.waveform_jobs, app, &state.audio)
+        .load_library_waveforms(&normalized_paths, &state.waveform_jobs, app)
         .map_err(|error| error.to_string())?;
     let normalized_song_dir = song_dir.replace('\\', "/");
 

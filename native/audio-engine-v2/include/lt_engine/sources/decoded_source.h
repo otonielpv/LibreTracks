@@ -17,6 +17,8 @@ struct SourcePeakOverview {
     int resolution_frames = 0;
     std::vector<float> min_peaks;
     std::vector<float> max_peaks;
+    std::vector<float> min_peaks_right;
+    std::vector<float> max_peaks_right;
 };
 
 // ---------------------------------------------------------------------------

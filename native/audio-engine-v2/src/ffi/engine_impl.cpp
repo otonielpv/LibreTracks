@@ -1017,6 +1017,10 @@ std::string EngineImpl::get_source_peaks(const std::string& source_id,
     out["resolution_frames"] = overview.resolution_frames;
     out["min_peaks"] = overview.min_peaks;
     out["max_peaks"] = overview.max_peaks;
+    if (!overview.min_peaks_right.empty() && !overview.max_peaks_right.empty()) {
+        out["min_peaks_right"] = overview.min_peaks_right;
+        out["max_peaks_right"] = overview.max_peaks_right;
+    }
     return out.dump();
 }
 

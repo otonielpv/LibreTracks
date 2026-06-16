@@ -8,10 +8,39 @@
 #include <lt_engine/lt_engine.h>
 #include <lt_engine/engine_impl.h>
 #include <lt_engine/sources/source_manager.h>
+#include <nlohmann/json.hpp>
+
+namespace {
+
+using json = nlohmann::json;
 
 static lt::EngineImpl* as_impl(LtEngine* e) {
     return reinterpret_cast<lt::EngineImpl*>(e);
 }
+
+std::string peaks_to_json(const lt::SourcePeakOverview& overview) {
+    json out;
+    out["ok"] = false;
+    if (overview.sample_rate <= 0 || overview.duration_frames <= 0
+        || overview.min_peaks.empty() || overview.max_peaks.empty()) {
+        out["error"] = "source peaks are not ready";
+        return out.dump();
+    }
+
+    out["ok"] = true;
+    out["sample_rate"] = overview.sample_rate;
+    out["duration_frames"] = overview.duration_frames;
+    out["resolution_frames"] = overview.resolution_frames;
+    out["min_peaks"] = overview.min_peaks;
+    out["max_peaks"] = overview.max_peaks;
+    if (!overview.min_peaks_right.empty() && !overview.max_peaks_right.empty()) {
+        out["min_peaks_right"] = overview.min_peaks_right;
+        out["max_peaks_right"] = overview.max_peaks_right;
+    }
+    return out.dump();
+}
+
+} // namespace
 
 extern "C" {
 
@@ -98,6 +127,20 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
     if (!engine || !source_id) return "{\"ok\":false,\"error\":\"invalid handle\"}";
     thread_local std::string buf;
     buf = as_impl(engine)->get_source_peaks(source_id, static_cast<int>(resolution_frames));
+    return buf.c_str();
+}
+
+LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
+                                                      int32_t resolution_frames) {
+    if (!file_path) return "{\"ok\":false,\"error\":\"invalid file path\"}";
+    thread_local std::string buf;
+    try {
+        buf = peaks_to_json(lt::analyze_file_peaks(
+            file_path,
+            static_cast<int>(resolution_frames)));
+    } catch (...) {
+        buf = "{\"ok\":false,\"error\":\"native waveform analysis failed\"}";
+    }
     return buf.c_str();
 }
 

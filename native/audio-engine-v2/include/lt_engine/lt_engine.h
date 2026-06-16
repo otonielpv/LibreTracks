@@ -106,11 +106,16 @@ LT_API const char* lt_audio_engine_get_snapshot(LtEngine* engine);
  *  Each element has: { "id": "...", "name": "...", "backend": "..." } */
 LT_API const char* lt_audio_engine_list_devices(LtEngine* engine);
 
-/** JSON object with downsampled mono peaks for a loaded source.
+/** JSON object with downsampled peaks for a loaded source.
  *  Returns { "ok": false, "error": "..." } when the source is not ready. */
 LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
                                                     const char* source_id,
                                                     int32_t resolution_frames);
+
+/** JSON object with downsampled peaks for an audio file decoded directly by
+ *  the native decoder stack. Does not require a live engine handle. */
+LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
+                                                      int32_t resolution_frames);
 
 // ---------------------------------------------------------------------------
 // Decoding cache maintenance (no engine handle required)

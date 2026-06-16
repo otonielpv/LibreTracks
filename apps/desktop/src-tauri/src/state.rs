@@ -22,9 +22,9 @@ use libretracks_project::{
     append_wav_files_to_song, global_waveform_file_path,
     import_song_package as import_song_package_into_project, import_wav_files_to_library,
     load_global_waveform, load_or_generate_global_waveform, load_song_from_file,
-    read_audio_metadata, save_song_to_file, waveform_summary_from_peaks, write_global_waveform,
-    ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary,
-    SONG_FILE_NAME,
+    read_audio_metadata, save_song_to_file, waveform_summary_from_channel_peaks,
+    write_global_waveform, ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry,
+    ProjectError, WaveformSummary, SONG_FILE_NAME,
 };
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use rayon::prelude::*;
@@ -33,7 +33,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::audio_engine::{jump_debug_logging_enabled, AudioController, PlaybackStartReason};
+use crate::audio_engine::{
+    jump_debug_logging_enabled, AudioController, PlaybackStartReason,
+    ENGINE_WAVEFORM_RESOLUTION_FRAMES,
+};
 use crate::automation::{
     load_automation, save_automation, AutomationAction, AutomationCue, AutomationDocument,
     AutomationJumpTarget, AutomationTransitionMode, MixScene,
@@ -107,10 +110,6 @@ pub struct WaveformJob {
     pub app: tauri::AppHandle,
     pub song_dir: PathBuf,
     pub waveform_key: String,
-    /// Shared audio engine handle so the worker can fall back to native
-    /// (FFmpeg/dr_flac) peaks for formats symphonia can't decode (e.g. FLAC),
-    /// instead of decoding under the session lock on the command thread.
-    pub audio: Arc<AudioController>,
 }
 
 #[derive(Debug, Clone)]
@@ -265,7 +264,6 @@ impl WaveformGenerationQueue {
         app: AppHandle,
         song_dir: PathBuf,
         waveform_key: String,
-        audio: Arc<AudioController>,
     ) -> Result<(), DesktopError> {
         let job_key = waveform_job_key(&song_dir, &waveform_key);
         {
@@ -284,7 +282,6 @@ impl WaveformGenerationQueue {
                 app,
                 song_dir,
                 waveform_key,
-                audio,
             })
             .is_err()
         {
@@ -362,25 +359,28 @@ fn unique_waveform_keys(song: &Song) -> Vec<String> {
     keys
 }
 
-/// Generate a waveform from the C++ engine's native peaks (FFmpeg/dr_flac) and
-/// write it to the global on-disk cache. Used as the fallback for formats
-/// symphonia can't decode (e.g. FLAC). Pure: touches no session state, so it is
-/// safe to call off the command thread (the worker) — `source_peaks` only locks
-/// the AudioController's own mutex, never the session lock.
+/// Generate a waveform with the native decoder stack (FFmpeg/libav for
+/// compressed formats, native fast paths where available) and write it to the
+/// global on-disk cache. This is independent of playback session state, so it
+/// is safe to call from the background waveform worker.
 fn generate_native_waveform(
-    audio: &AudioController,
     song_dir: &Path,
     waveform_key: &str,
 ) -> Result<WaveformSummary, DesktopError> {
-    let peaks = audio.source_peaks(song_dir, waveform_key)?;
-    let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
     let source_path = resolve_audio_file_path(song_dir, waveform_key);
-    let summary = waveform_summary_from_peaks(
+    let source_path_string = source_path.to_string_lossy().to_string();
+    let peaks =
+        lt_audio_engine_v2::file_peaks(&source_path_string, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+    let summary = waveform_summary_from_channel_peaks(
         peaks.sample_rate,
         duration_frames,
         peaks.resolution_frames,
         peaks.min_peaks,
         peaks.max_peaks,
+        peaks.min_peaks_right,
+        peaks.max_peaks_right,
         &source_path,
     )?;
     write_global_waveform(&decoding_cache_root(), &source_path, &summary)?;
@@ -392,31 +392,33 @@ fn process_waveform_job(job: WaveformJob) {
         app,
         song_dir,
         waveform_key,
-        audio,
     } = job;
 
-    // Symphonia first (handles MP3/WAV/etc). If it can't decode the format
-    // (FLAC and friends), fall back to the native engine peaks — both run here,
-    // on the worker thread, NEVER under the session lock.
-    let summary = match load_or_generate_global_waveform(
-        &decoding_cache_root(),
-        &song_dir,
-        Path::new(&waveform_key),
-    ) {
+    // Cache read first, then native decode. Symphonia stays as a final fallback
+    // for builds where the native decoder is unavailable.
+    let cache_root = decoding_cache_root();
+    let summary = match load_global_waveform(&cache_root, &song_dir, Path::new(&waveform_key)) {
         Ok(summary) => Some(summary),
-        Err(symphonia_error) => {
-            match generate_native_waveform(&audio, &song_dir, &waveform_key) {
-                Ok(summary) => Some(summary),
-                Err(native_error) => {
-                    eprintln!(
-                        "[libretracks-waveform] failed to generate waveform for {}: \
-                         symphonia={symphonia_error} native={native_error}",
-                        waveform_key
-                    );
-                    None
+        Err(cache_error) => match generate_native_waveform(&song_dir, &waveform_key) {
+            Ok(summary) => Some(summary),
+            Err(native_error) => {
+                match load_or_generate_global_waveform(
+                    &cache_root,
+                    &song_dir,
+                    Path::new(&waveform_key),
+                ) {
+                    Ok(summary) => Some(summary),
+                    Err(symphonia_error) => {
+                        eprintln!(
+                            "[libretracks-waveform] failed to generate waveform for {}: \
+                             cache={cache_error} native={native_error} symphonia={symphonia_error}",
+                            waveform_key
+                        );
+                        None
+                    }
                 }
             }
-        }
+        },
     };
 
     if let Some(summary) = summary {
@@ -1392,15 +1394,14 @@ impl DesktopSession {
         waveform_keys: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
-        audio: &Arc<AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
-        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app, audio)))
+        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)))
     }
 
     fn load_waveforms_internal(
         &mut self,
         waveform_keys: &[String],
-        background_generation: Option<(&WaveformGenerationQueue, &AppHandle, &Arc<AudioController>)>,
+        background_generation: Option<(&WaveformGenerationQueue, &AppHandle)>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_waveform_keys = self
@@ -1426,13 +1427,8 @@ impl DesktopSession {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if let Some((waveform_jobs, app, audio)) = background_generation {
-                        waveform_jobs.enqueue(
-                            app.clone(),
-                            song_dir.clone(),
-                            waveform_key.clone(),
-                            Arc::clone(audio),
-                        )?;
+                    if let Some((waveform_jobs, app)) = background_generation {
+                        waveform_jobs.enqueue(app.clone(), song_dir.clone(), waveform_key.clone())?;
                     }
                 }
                 Err(error) => return Err(error),
@@ -1447,7 +1443,6 @@ impl DesktopSession {
         file_paths: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
-        audio: &Arc<AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_library_paths = collect_library_file_paths(&song_dir, self.engine.song())?
@@ -1473,7 +1468,6 @@ impl DesktopSession {
                         app.clone(),
                         song_dir.clone(),
                         normalized_path.clone(),
-                        Arc::clone(audio),
                     )?;
                 }
                 Err(error) => return Err(error),
@@ -6167,12 +6161,7 @@ impl DesktopSession {
         let jobs = &desktop_state.waveform_jobs;
         for key in misses {
             // Best-effort: a full/unavailable worker must not fail the open.
-            let _ = jobs.enqueue(
-                app.clone(),
-                song_dir.to_path_buf(),
-                key,
-                Arc::clone(&desktop_state.audio),
-            );
+            let _ = jobs.enqueue(app.clone(), song_dir.to_path_buf(), key);
         }
         Ok(())
     }

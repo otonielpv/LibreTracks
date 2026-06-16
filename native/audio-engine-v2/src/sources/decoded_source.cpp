@@ -176,26 +176,40 @@ SourcePeakOverview DecodedSource::peaks(int resolution_frames) const {
         (duration_frames_ + bucket_width - 1) / bucket_width);
     overview.min_peaks.assign(bucket_count, 0.f);
     overview.max_peaks.assign(bucket_count, 0.f);
+    const bool has_right_channel = channel_count_ >= 2;
+    if (has_right_channel) {
+        overview.min_peaks_right.assign(bucket_count, 0.f);
+        overview.max_peaks_right.assign(bucket_count, 0.f);
+    }
 
     for (std::size_t bucket = 0; bucket < bucket_count; ++bucket) {
         const Frame start = static_cast<Frame>(bucket) * bucket_width;
         const Frame end = std::min<Frame>(duration_frames_, start + bucket_width);
         float min_peak = std::numeric_limits<float>::max();
         float max_peak = std::numeric_limits<float>::lowest();
+        float min_peak_right = std::numeric_limits<float>::max();
+        float max_peak_right = std::numeric_limits<float>::lowest();
 
         for (Frame frame = start; frame < end; ++frame) {
             const float* src = samples_.data() + frame * channel_count_;
-            float value = 0.f;
-            for (int ch = 0; ch < channel_count_; ++ch)
-                value += src[ch];
-            value /= static_cast<float>(channel_count_);
-            value = std::clamp(value, -1.f, 1.f);
+            const float value = std::clamp(src[0], -1.f, 1.f);
             min_peak = std::min(min_peak, value);
             max_peak = std::max(max_peak, value);
+            if (has_right_channel) {
+                const float right = std::clamp(src[1], -1.f, 1.f);
+                min_peak_right = std::min(min_peak_right, right);
+                max_peak_right = std::max(max_peak_right, right);
+            }
         }
 
         overview.min_peaks[bucket] = min_peak == std::numeric_limits<float>::max() ? 0.f : min_peak;
         overview.max_peaks[bucket] = max_peak == std::numeric_limits<float>::lowest() ? 0.f : max_peak;
+        if (has_right_channel) {
+            overview.min_peaks_right[bucket] =
+                min_peak_right == std::numeric_limits<float>::max() ? 0.f : min_peak_right;
+            overview.max_peaks_right[bucket] =
+                max_peak_right == std::numeric_limits<float>::lowest() ? 0.f : max_peak_right;
+        }
     }
 
     return overview;

@@ -431,6 +431,106 @@ unsigned long long purge_source_cache() {
     return freed;
 }
 
+SourcePeakOverview analyze_file_peaks(const std::string& file_path,
+                                      int resolution_frames) {
+    SourcePeakOverview overview;
+    overview.resolution_frames = std::max(1, resolution_frames);
+
+    auto decoder = make_decoder(file_path);
+    if (!decoder)
+        return overview;
+
+    auto opened = decoder->open(file_path);
+    if (opened.is_err())
+        return overview;
+
+    const AudioFileInfo info = decoder->info();
+    if (info.channel_count <= 0 || info.original_sample_rate <= 0
+        || info.duration_frames <= 0) {
+        decoder->close();
+        return overview;
+    }
+
+    overview.sample_rate = info.original_sample_rate;
+
+    const Frame bucket_width = static_cast<Frame>(overview.resolution_frames);
+    std::size_t bucket_count = static_cast<std::size_t>(
+        (info.duration_frames + bucket_width - 1) / bucket_width);
+    std::vector<float> min_peaks(bucket_count, 0.f);
+    std::vector<float> max_peaks(bucket_count, 0.f);
+    const bool has_right_channel = info.channel_count >= 2;
+    std::vector<float> min_peaks_right(has_right_channel ? bucket_count : 0, 0.f);
+    std::vector<float> max_peaks_right(has_right_channel ? bucket_count : 0, 0.f);
+    std::vector<bool> initialized(bucket_count, false);
+
+    constexpr int kChunkFrames = 65536;
+    std::vector<float> data(static_cast<std::size_t>(kChunkFrames)
+                            * static_cast<std::size_t>(info.channel_count),
+                            0.f);
+
+    Frame cursor = 0;
+    while (cursor < info.duration_frames) {
+        const int frames_to_read = static_cast<int>(
+            std::min<Frame>(kChunkFrames, info.duration_frames - cursor));
+        if (frames_to_read <= 0)
+            break;
+        const int frames_read = decoder->read_frames(data.data(), frames_to_read);
+        if (frames_read <= 0)
+            break;
+
+        for (int frame = 0; frame < frames_read; ++frame) {
+            const Frame absolute = cursor + frame;
+            const std::size_t bucket = static_cast<std::size_t>(absolute / bucket_width);
+            if (bucket >= bucket_count)
+                continue;
+
+            const float* row = data.data()
+                + static_cast<std::size_t>(frame) * info.channel_count;
+            const float left = std::clamp(row[0], -1.f, 1.f);
+            const float right = has_right_channel ? std::clamp(row[1], -1.f, 1.f) : 0.f;
+
+            if (!initialized[bucket]) {
+                min_peaks[bucket] = left;
+                max_peaks[bucket] = left;
+                if (has_right_channel) {
+                    min_peaks_right[bucket] = right;
+                    max_peaks_right[bucket] = right;
+                }
+                initialized[bucket] = true;
+            } else {
+                min_peaks[bucket] = std::min(min_peaks[bucket], left);
+                max_peaks[bucket] = std::max(max_peaks[bucket], left);
+                if (has_right_channel) {
+                    min_peaks_right[bucket] = std::min(min_peaks_right[bucket], right);
+                    max_peaks_right[bucket] = std::max(max_peaks_right[bucket], right);
+                }
+            }
+        }
+
+        cursor += frames_read;
+    }
+    decoder->close();
+
+    if (cursor <= 0)
+        return overview;
+
+    bucket_count = static_cast<std::size_t>(
+        (cursor + bucket_width - 1) / bucket_width);
+    min_peaks.resize(bucket_count);
+    max_peaks.resize(bucket_count);
+    if (has_right_channel) {
+        min_peaks_right.resize(bucket_count);
+        max_peaks_right.resize(bucket_count);
+    }
+
+    overview.duration_frames = cursor;
+    overview.min_peaks = std::move(min_peaks);
+    overview.max_peaks = std::move(max_peaks);
+    overview.min_peaks_right = std::move(min_peaks_right);
+    overview.max_peaks_right = std::move(max_peaks_right);
+    return overview;
+}
+
 SourceManager::SourceManager()
     : entries_(std::make_shared<EntryMap>())
     , block_cache_(kDefaultBlockFrames, source_cache_blocks_from_env())
@@ -761,6 +861,9 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
         (entry.duration_frames + bucket_width - 1) / bucket_width);
     std::vector<float> min_peaks(bucket_count, 0.f);
     std::vector<float> max_peaks(bucket_count, 0.f);
+    const bool has_right_channel = entry.channel_count >= 2;
+    std::vector<float> min_peaks_right(has_right_channel ? bucket_count : 0, 0.f);
+    std::vector<float> max_peaks_right(has_right_channel ? bucket_count : 0, 0.f);
     std::vector<bool> initialized(bucket_count, false);
 
     constexpr int kChunkFrames = 16384;
@@ -807,20 +910,25 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
             const std::size_t bucket = static_cast<std::size_t>(absolute / bucket_width);
             if (bucket >= bucket_count)
                 continue;
-            float value = 0.f;
             const float* row = data.data()
                 + static_cast<std::size_t>(frame) * entry.channel_count;
-            for (int ch = 0; ch < entry.channel_count; ++ch)
-                value += row[ch];
-            value /= static_cast<float>(entry.channel_count);
-            value = std::clamp(value, -1.f, 1.f);
+            const float value = std::clamp(row[0], -1.f, 1.f);
+            const float right = has_right_channel ? std::clamp(row[1], -1.f, 1.f) : 0.f;
             if (!initialized[bucket]) {
                 min_peaks[bucket] = value;
                 max_peaks[bucket] = value;
+                if (has_right_channel) {
+                    min_peaks_right[bucket] = right;
+                    max_peaks_right[bucket] = right;
+                }
                 initialized[bucket] = true;
             } else {
                 min_peaks[bucket] = std::min(min_peaks[bucket], value);
                 max_peaks[bucket] = std::max(max_peaks[bucket], value);
+                if (has_right_channel) {
+                    min_peaks_right[bucket] = std::min(min_peaks_right[bucket], right);
+                    max_peaks_right[bucket] = std::max(max_peaks_right[bucket], right);
+                }
             }
         }
         cursor += frames_read;
@@ -834,6 +942,8 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
 
     overview.min_peaks = std::move(min_peaks);
     overview.max_peaks = std::move(max_peaks);
+    overview.min_peaks_right = std::move(min_peaks_right);
+    overview.max_peaks_right = std::move(max_peaks_right);
     return overview;
 }
 
