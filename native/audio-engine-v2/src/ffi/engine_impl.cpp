@@ -2359,6 +2359,17 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = current_device_request_.buffer_size;
             req.active_output_channels = c.active_channels;
+            // Idempotency guard: if the requested device + channels already match
+            // what's currently open, do NOT reopen. open_device can take several
+            // seconds on slow DirectSound stacks and runs under the Rust state
+            // lock, so redundant reopens (re-applying unchanged settings) froze
+            // playback. Require a device to actually be open (actual_sample_rate()
+            // > 0) so the first real open after the silent default still proceeds.
+            if (device_manager_->actual_sample_rate() > 0
+                && req.device_id == current_device_request_.device_id
+                && req.active_output_channels == current_device_request_.active_output_channels) {
+                return Result<void>::ok();
+            }
             bool was_playing = clock_ && clock_->position().state == TransportState::Playing;
             const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())

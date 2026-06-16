@@ -22,7 +22,6 @@ use lt_audio_engine_v2::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::commands::engine_v2::EngineV2State;
 use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
 use crate::{error::DesktopError, settings::AppSettings};
 
@@ -1233,9 +1232,17 @@ impl AudioController {
     pub fn apply_settings_with_stream_rebuild(
         &self,
         mut settings: AppSettings,
-        _rebuild_stream: bool,
+        rebuild_stream: bool,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("apply_settings", None, |engine, state| {
+            // Only touch the audio DEVICE (open/reconfigure — multi-second on
+            // slow DirectSound stacks, and it holds the lock) when the
+            // device-affecting settings actually changed. The caller (state.rs)
+            // sets rebuild_stream = device_changed || output_channels_changed.
+            // Metronome / voice-only changes skip this entirely (they used to
+            // needlessly reopen the device and freeze playback). Startup passes
+            // rebuild_stream = true.
+            if rebuild_stream {
             // Device-open errors must NOT abort apply_settings. There are
             // two failure modes we treat differently:
             //   (a) the saved device is GONE (unplugged USB, removed driver,
@@ -1395,6 +1402,7 @@ impl AudioController {
                     settings.output_buffer_size = AudioBufferSizeRequest::Default;
                 }
             }
+            } // end if rebuild_stream
             // Metronome config is a pure state setter; if THIS fails it's a
             // genuine engine bug, so we DO propagate.
             engine.send_command(&EngineCommand::SetMetronomeConfig {
@@ -1487,6 +1495,41 @@ impl AudioController {
         ensure_engine(&mut state)?
             .get_snapshot()
             .map_err(|e| DesktopError::AudioCommand(e.to_string()))
+    }
+
+    /// Enumerate output devices through the LIVE engine (the one playback uses),
+    /// reusing it via `ensure_engine` instead of spinning up a throwaway engine.
+    /// The throwaway path paid a full, multi-second `open_device` on every
+    /// Settings open (and on a process-global DirectSound stack it tore down the
+    /// live playback stream). Uses try_lock with a short retry so a device-list
+    /// refresh never blocks behind an in-flight command — it degrades to "state
+    /// locked" exactly like engine_snapshot.
+    pub fn list_devices(&self) -> Result<AudioOutputDevicesResponse, DesktopError> {
+        const LIST_LOCK_RETRIES: u32 = 3;
+        let mut state = 'acquire: loop {
+            for attempt in 0..LIST_LOCK_RETRIES {
+                match self.state.try_lock() {
+                    Ok(guard) => break 'acquire guard,
+                    Err(std::sync::TryLockError::Poisoned(_)) => {
+                        return Err(DesktopError::AudioCommand(
+                            "audio v2 state lock poisoned".into(),
+                        ))
+                    }
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        if attempt + 1 < LIST_LOCK_RETRIES {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                    }
+                }
+            }
+            return Err(DesktopError::AudioCommand(
+                "list_devices: state locked".into(),
+            ));
+        };
+        let devices = ensure_engine(&mut state)?
+            .list_devices()
+            .map_err(|e| DesktopError::AudioCommand(e.to_string()))?;
+        Ok(devices_response(devices))
     }
 
     pub fn source_peaks(
@@ -1858,70 +1901,21 @@ impl Drop for AudioController {
 
 #[tauri::command]
 pub fn get_audio_output_devices(
-    engine_v2: State<'_, EngineV2State>,
+    state: State<'_, crate::state::DesktopState>,
 ) -> Result<AudioOutputDevicesResponse, String> {
-    // CRITICAL: when an output stream is already open we MUST enumerate through
-    // the LIVE engine, never a throwaway one. Spinning up a second JUCE
-    // AudioDeviceManager and calling scanForDevices() on the DirectSound
-    // backend while the "Controlador primario de sonido" is playing tears down
-    // the live stream — DirectSound's primary buffer is process-global, so the
-    // concurrent scan stops playback. That was the "se para la reproducción al
-    // abrir Remote/Configuración" bug. Reusing the live engine means no second
-    // device manager touches DirectSound while it's in use.
-    {
-        let guard = engine_v2
-            .0
-            .lock()
-            .map_err(|_| "Engine v2 state lock poisoned".to_string())?;
-        if let Some(engine) = guard.as_ref() {
-            let devices = engine.list_devices().map_err(|error| {
-                eprintln!("[audio] get_audio_output_devices (live engine) FAILED: {error}");
-                error.to_string()
-            })?;
-            if devices.is_empty() {
-                eprintln!(
-                    "[audio] get_audio_output_devices (live engine) returned 0 device(s)"
-                );
-            }
-            return Ok(devices_response(devices));
-        }
-    }
-    // No live engine yet (settings opened before any device was initialized):
-    // fall back to a throwaway. Safe here because nothing is playing, so there
-    // is no open DirectSound stream for the scan to disrupt.
-    let engine = Engine::new().map_err(|error| error.to_string())?;
-    if let Err(error) = engine.initialize() {
-        eprintln!("[audio] get_audio_output_devices initialize FAILED: {error}");
-        return Err(error.to_string());
-    }
-    let devices = engine.list_devices().map_err(|error| {
-        eprintln!("[audio] get_audio_output_devices list_devices FAILED: {error}");
+    // Enumerate through the LIVE audio engine (the one playback uses), reusing
+    // it instead of spinning up a throwaway. The old code reused EngineV2State,
+    // which the normal app flow never populates, so it ALWAYS fell back to
+    // creating a throwaway Engine + a full ~multi-second open_device on every
+    // Settings open — dozens of redundant device opens that froze playback on
+    // slow DirectSound stacks (and on the process-global DirectSound primary
+    // buffer, the throwaway's scan tore down the live stream). AudioController::
+    // list_devices reuses the live engine and never touches a second JUCE
+    // device manager.
+    state.audio.list_devices().map_err(|error| {
+        eprintln!("[audio] get_audio_output_devices FAILED: {error}");
         error.to_string()
-    })?;
-    // Only log the empty case unconditionally. A populated list is the
-    // happy path — printing 60+ device names every time the settings
-    // panel opens just floods stderr. The per-device dump stays
-    // behind LIBRETRACKS_AUDIO_DEBUG for when we need to diagnose
-    // missing/duplicated entries again.
-    if devices.is_empty() {
-        eprintln!(
-            "[audio] get_audio_output_devices returned 0 device(s) — engine \
-             enumerated no devices, JUCE may have failed to initialise"
-        );
-    } else if audio_debug_logging_enabled() {
-        eprintln!(
-            "[audio] get_audio_output_devices returned {} device(s)",
-            devices.len(),
-        );
-        for device in &devices {
-            eprintln!(
-                "[audio]   device id={:?} name={:?} backend={:?} channels={}",
-                device.device_id, device.device_name, device.backend, device.output_channel_count,
-            );
-        }
-    }
-    let _ = engine.shutdown();
-    Ok(devices_response(devices))
+    })
 }
 
 pub fn audio_debug_logging_enabled() -> bool {
