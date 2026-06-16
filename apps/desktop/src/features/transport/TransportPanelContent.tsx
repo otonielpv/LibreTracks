@@ -5326,7 +5326,12 @@ export function TransportPanelContent() {
       }
     }
 
-    return [...realTracks, ...pendingAudioImports.map(toPendingTrack)];
+    return [
+      ...realTracks,
+      ...pendingAudioImports
+        .filter((pendingImport) => pendingImport.showInTimeline)
+        .map(toPendingTrack),
+    ];
   }, [collapsedFolders, pendingAudioImports, song, t]);
   // Mirror the visible-track order into a ref so the global mouse handlers
   // (which intentionally don't re-bind on every track/zoom change) can map a
@@ -8882,7 +8887,10 @@ export function TransportPanelContent() {
       return; // user cancelled
     }
 
-    const pendingImports = createPendingAudioImportsFromPaths(paths, 0);
+    // showInTimeline = false: this is a library-only import. The placeholder
+    // shows in the library list (analyzing feedback) but must NOT render a
+    // track/clip in the timeline, or clips flash in at position 0 and vanish.
+    const pendingImports = createPendingAudioImportsFromPaths(paths, 0, false);
     useTransportStore.getState().addPendingAudioImports(pendingImports);
     setStatus(t("transport.status.libraryImportStarting"));
     await nextPaint();

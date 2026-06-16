@@ -22,6 +22,13 @@ export type PendingAudioImport = {
   dropSeconds: number;
   status: PendingAudioImportStatus;
   error?: string;
+  /** Whether this import should render a placeholder track + clip in the
+   * timeline. True for drag-to-timeline imports (the placeholder is replaced by
+   * the real clip via `onImported`). False for the library "import audio"
+   * dialog, which only adds to the library — showing a timeline placeholder
+   * there makes clips flash in and vanish at position 0. The library list shows
+   * the pending placeholder regardless (see toPendingLibraryAsset). */
+  showInTimeline: boolean;
 };
 
 export type TimelineTrackSummary = TrackSummary & {
@@ -77,6 +84,7 @@ export function createPendingAudioImports(
       temporaryClipId: `pending-clip-${id}`,
       dropSeconds,
       status: "queued",
+      showInTimeline: true,
     };
   });
 }
@@ -84,6 +92,7 @@ export function createPendingAudioImports(
 export function createPendingAudioImportsFromPaths(
   paths: string[],
   dropSeconds: number,
+  showInTimeline = true,
 ): PendingAudioImport[] {
   return paths.map((path) => {
     const id = createPendingAudioImportId();
@@ -96,6 +105,7 @@ export function createPendingAudioImportsFromPaths(
       temporaryClipId: `pending-clip-${id}`,
       dropSeconds,
       status: "queued",
+      showInTimeline,
     };
   });
 }
@@ -193,6 +203,9 @@ export function mergePendingClipsByTrack(
   };
 
   for (const pendingImport of pendingAudioImports) {
+    if (!pendingImport.showInTimeline) {
+      continue;
+    }
     const trackId = pendingImport.temporaryTrackId;
     const currentTrackClips = nextClipsByTrack[trackId] ?? [];
     nextClipsByTrack[trackId] = [

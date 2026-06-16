@@ -23,6 +23,7 @@ function seedPending(ids: string[]) {
       temporaryClipId: `pending-clip-${id}`,
       dropSeconds: 0,
       status: "queued",
+      showInTimeline: true,
     })),
   );
 }

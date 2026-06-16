@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { LibraryAssetSummary } from "./desktopApi";
-import { mergeLibraryAssetsByFilePath } from "./pendingAudioImports";
+import {
+  createPendingAudioImportsFromPaths,
+  mergeLibraryAssetsByFilePath,
+  mergePendingClipsByTrack,
+} from "./pendingAudioImports";
 
 function asset(overrides: Partial<LibraryAssetSummary> & Pick<LibraryAssetSummary, "fileName" | "filePath">): LibraryAssetSummary {
   return {
@@ -37,5 +41,25 @@ describe("pendingAudioImports helpers", () => {
       "Kick.wav",
       "Snare.wav",
     ]);
+  });
+
+  it("omits timeline placeholder clips for library-only imports", () => {
+    // Regression: the library "import audio" dialog creates pending imports
+    // with showInTimeline=false. They must not render a placeholder clip in the
+    // timeline (which would flash in at position 0 and vanish on completion).
+    const libraryOnly = createPendingAudioImportsFromPaths(
+      ["/audio/guide.wav"],
+      0,
+      false,
+    );
+
+    expect(mergePendingClipsByTrack({}, libraryOnly)).toEqual({});
+  });
+
+  it("renders a timeline placeholder clip for drag imports", () => {
+    const dragImport = createPendingAudioImportsFromPaths(["/audio/loop.wav"], 0);
+    const merged = mergePendingClipsByTrack({}, dragImport);
+
+    expect(merged[dragImport[0].temporaryTrackId]).toHaveLength(1);
   });
 });

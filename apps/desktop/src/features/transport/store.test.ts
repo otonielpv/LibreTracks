@@ -45,6 +45,7 @@ function makePending(
     temporaryClipId: `clip-${id}`,
     dropSeconds: 0,
     status: "queued",
+    showInTimeline: true,
     ...overrides,
   };
 }
