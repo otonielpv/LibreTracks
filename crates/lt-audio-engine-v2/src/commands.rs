@@ -189,6 +189,20 @@ pub enum EngineCommand {
         tracks: Vec<TrackUpsert>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         sources: Vec<SourceRef>,
+        // Carried so the command is a complete structural snapshot (any edit,
+        // not just import, can route through it without losing region/marker/
+        // timing changes). Reuses the existing update shapes.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        regions: Vec<RegionUpdate>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        markers: Vec<MarkerUpdate>,
+        bpm: f64,
+        beats_per_bar: i32,
+        beat_unit: i32,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tempo_markers: Vec<TempoMarkerUpdate>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        time_signature_markers: Vec<TimeSignatureMarkerUpdate>,
     },
 
     SetOutputDevice {

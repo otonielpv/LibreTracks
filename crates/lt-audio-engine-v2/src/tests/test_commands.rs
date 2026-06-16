@@ -58,6 +58,13 @@ fn upsert_song_tracks_round_trip_type() {
         song_id: "song-1".into(),
         tracks: vec![],
         sources: vec![],
+        regions: vec![],
+        markers: vec![],
+        bpm: 120.0,
+        beats_per_bar: 4,
+        beat_unit: 4,
+        tempo_markers: vec![],
+        time_signature_markers: vec![],
     };
     assert_eq!(round_trip_type(&cmd), "UpsertSongTracks");
 }
@@ -96,6 +103,13 @@ fn upsert_song_tracks_json_shape_matches_cpp_parser() {
             id: "bass.mp3".into(),
             file_path: "bass.mp3".into(),
         }],
+        regions: vec![],
+        markers: vec![],
+        bpm: 128.0,
+        beats_per_bar: 4,
+        beat_unit: 4,
+        tempo_markers: vec![],
+        time_signature_markers: vec![],
     };
     let json = serde_json::to_string(&cmd).expect("serialize");
     let v: serde_json::Value = serde_json::from_str(&json).expect("parse");

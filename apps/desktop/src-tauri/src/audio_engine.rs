@@ -1055,10 +1055,74 @@ impl AudioController {
                 })
                 .collect();
 
+            // Regions / markers / timing — same mapping as
+            // update_live_timeline_window, so the upsert is a complete
+            // structural snapshot (structural edits that also touch these don't
+            // lose them).
+            let regions = song
+                .regions
+                .iter()
+                .zip(runtime_song.regions.iter())
+                .map(|region| RegionUpdate {
+                    id: region.0.id.clone(),
+                    name: region.0.name.clone(),
+                    start_frame: seconds_to_frame_for_engine(engine, region.1.start_seconds),
+                    end_frame: seconds_to_frame_for_engine(engine, region.1.end_seconds),
+                    transpose_semitones: region.0.transpose_semitones,
+                    warp_enabled: region.0.warp_enabled,
+                    warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
+                    master_gain: region.0.master.gain as f32,
+                })
+                .collect();
+            let markers = song
+                .section_markers
+                .iter()
+                .zip(runtime_song.section_markers.iter())
+                .map(|marker| MarkerUpdate {
+                    id: marker.0.id.clone(),
+                    name: marker.0.name.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    kind: marker.0.kind.as_token().to_string(),
+                    variant: marker.0.variant.unwrap_or(0) as i32,
+                })
+                .collect();
+            let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
+            let tempo_markers = runtime_song
+                .tempo_markers
+                .iter()
+                .map(|marker| TempoMarkerUpdate {
+                    id: marker.id.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    bpm: marker.bpm,
+                })
+                .collect();
+            let time_signature_markers = song
+                .time_signature_markers
+                .iter()
+                .zip(runtime_song.time_signature_markers.iter())
+                .map(|marker| {
+                    let (beats_per_bar, beat_unit) =
+                        parse_engine_time_signature(&marker.0.signature)?;
+                    Ok(TimeSignatureMarkerUpdate {
+                        id: marker.0.id.clone(),
+                        frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                        beats_per_bar,
+                        beat_unit,
+                    })
+                })
+                .collect::<Result<Vec<_>, DesktopError>>()?;
+
             engine.send_command(&EngineCommand::UpsertSongTracks {
                 song_id: song.id.clone(),
                 tracks,
                 sources,
+                regions,
+                markers,
+                bpm: song.bpm,
+                beats_per_bar,
+                beat_unit,
+                tempo_markers,
+                time_signature_markers,
             })?;
 
             if state.loaded_session_signature.is_some() {

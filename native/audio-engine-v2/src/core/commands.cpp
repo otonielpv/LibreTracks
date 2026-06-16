@@ -359,6 +359,53 @@ EngineCommand command_from_json(const std::string& raw) {
                 cmd.sources.push_back(std::move(sref));
             }
         }
+        if (auto it = j.find("regions"); it != j.end() && it->is_array()) {
+            for (const auto& item : *it) {
+                CmdSetSongRegions::RegionUpdate region;
+                region.id = item.at("id").get<Id>();
+                region.name = item.value("name", std::string{});
+                region.start_frame = item.at("start_frame").get<Frame>();
+                region.end_frame = item.at("end_frame").get<Frame>();
+                region.transpose_semitones = item.value("transpose_semitones", static_cast<Semitones>(0));
+                region.warp_enabled = item.value("warp_enabled", false);
+                region.warp_source_bpm = item.value("warp_source_bpm", 0.0);
+                region.master_gain = item.value("master_gain", 1.0f);
+                cmd.regions.push_back(std::move(region));
+            }
+        }
+        if (auto it = j.find("markers"); it != j.end() && it->is_array()) {
+            for (const auto& item : *it) {
+                CmdSetSongMarkers::MarkerUpdate marker;
+                marker.id = item.at("id").get<Id>();
+                marker.name = item.value("name", std::string{});
+                marker.frame = item.at("frame").get<Frame>();
+                marker.kind = item.value("kind", std::string{});
+                marker.variant = item.value("variant", 0);
+                cmd.markers.push_back(std::move(marker));
+            }
+        }
+        cmd.bpm = j.value("bpm", 120.0);
+        cmd.beats_per_bar = j.value("beats_per_bar", 4);
+        cmd.beat_unit = j.value("beat_unit", 4);
+        if (auto it = j.find("tempo_markers"); it != j.end() && it->is_array()) {
+            for (const auto& item : *it) {
+                CmdSetSongTiming::TempoMarkerUpdate marker;
+                marker.id = item.at("id").get<Id>();
+                marker.frame = item.at("frame").get<Frame>();
+                marker.bpm = item.at("bpm").get<double>();
+                cmd.tempo_markers.push_back(std::move(marker));
+            }
+        }
+        if (auto it = j.find("time_signature_markers"); it != j.end() && it->is_array()) {
+            for (const auto& item : *it) {
+                CmdSetSongTiming::TimeSignatureMarkerUpdate marker;
+                marker.id = item.at("id").get<Id>();
+                marker.frame = item.at("frame").get<Frame>();
+                marker.beats_per_bar = item.at("beats_per_bar").get<int>();
+                marker.beat_unit = item.at("beat_unit").get<int>();
+                cmd.time_signature_markers.push_back(std::move(marker));
+            }
+        }
         return cmd;
     }
 

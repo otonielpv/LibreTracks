@@ -2606,8 +2606,67 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             clip.timeline_start_frame + clip.length_frames);
                 song.end_frame = max_end;
 
-                // Keep next_session->sources in sync so a later real LoadSession
-                // or diagnostics see the full source list.
+                // Regions / markers / timing — applied like CmdSetSongTimelineWindow
+                // so this command is a complete structural snapshot.
+                song.regions.clear();
+                song.regions.reserve(c.regions.size());
+                for (const auto& update : c.regions) {
+                    Region region;
+                    region.id = update.id;
+                    region.name = update.name;
+                    region.start_frame = update.start_frame;
+                    region.end_frame = update.end_frame;
+                    region.transpose_semitones = update.transpose_semitones;
+                    region.warp_enabled = update.warp_enabled;
+                    region.warp_source_bpm = update.warp_source_bpm;
+                    region.master_gain = update.master_gain;
+                    song.regions.push_back(std::move(region));
+                }
+
+                song.markers.clear();
+                song.markers.reserve(c.markers.size());
+                for (const auto& update : c.markers) {
+                    Marker marker;
+                    marker.id = update.id;
+                    marker.name = update.name;
+                    marker.frame = update.frame;
+                    marker.kind = marker_kind_from_string(update.kind);
+                    marker.variant = update.variant;
+                    song.markers.push_back(std::move(marker));
+                }
+
+                song.bpm = std::clamp(c.bpm, 20.0, 300.0);
+                song.beats_per_bar = std::max(1, c.beats_per_bar);
+                song.beat_unit = std::max(1, c.beat_unit);
+                song.tempo_markers.clear();
+                song.tempo_markers.reserve(c.tempo_markers.size());
+                for (const auto& update : c.tempo_markers) {
+                    TempoMarker marker;
+                    marker.id = update.id;
+                    marker.frame = std::max<Frame>(0, update.frame);
+                    marker.bpm = std::clamp(update.bpm, 20.0, 300.0);
+                    song.tempo_markers.push_back(std::move(marker));
+                }
+                std::sort(song.tempo_markers.begin(), song.tempo_markers.end(),
+                    [](const TempoMarker& l, const TempoMarker& r) {
+                        return l.frame < r.frame;
+                    });
+                song.time_signature_markers.clear();
+                song.time_signature_markers.reserve(c.time_signature_markers.size());
+                for (const auto& update : c.time_signature_markers) {
+                    TimeSignatureMarker marker;
+                    marker.id = update.id;
+                    marker.frame = std::max<Frame>(0, update.frame);
+                    marker.beats_per_bar = std::max(1, update.beats_per_bar);
+                    marker.beat_unit = std::max(1, update.beat_unit);
+                    song.time_signature_markers.push_back(std::move(marker));
+                }
+                std::sort(song.time_signature_markers.begin(),
+                    song.time_signature_markers.end(),
+                    [](const TimeSignatureMarker& l, const TimeSignatureMarker& r) {
+                        return l.frame < r.frame;
+                    });
+
                 changed = true;
                 break;
             }

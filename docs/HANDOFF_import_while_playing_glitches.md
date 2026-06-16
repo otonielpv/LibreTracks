@@ -293,9 +293,13 @@ peak from ~380MB to a few MB.
   `StructureRebuild` while playing routed through it (+ `reposition_audio`
   instead of `restart_audio`). Round-trip JSON-contract tests pass; 150+70
   no-link tests pass; desktop compiles. NO behaviour confirmed by user yet.
-- **Next:** (1) user test the glitch; (2) audit StructureRebuild callsites that
-  also change regions/markers (upsert only carries tracks+sources today);
-  (3) Phase 3 remove symptom patches once confirmed.
+- **2026-06-16** — **Phase 2.5**: extended `CmdUpsertSongTracks` to a full
+  structural snapshot (regions + markers + timing on top of tracks + sources)
+  across C++ struct/handler/parser and Rust variant/sender. Removes the
+  region/marker-loss risk without auditing the 18 StructureRebuild callsites.
+  216 DSP tests pass.
+- **Next:** (1) user test the glitch is gone; (2) Phase 3 remove symptom patches
+  once confirmed; (3) Phase 1 C++ acceptance test (no re-decode on upsert).
 
 ## 7. Status header (update each session)
 - Phase 1 (C++ command): ✅ done (needs C++ acceptance test for no-re-decode)
@@ -330,9 +334,8 @@ peak from ~380MB to a few MB.
 - [ ] Folder tracks / `audio_to = "inherit"` routing through the upsert path
   (the handler maps `kind` but `role` is always empty) — verify a folder bus
   still routes children correctly vs the LoadSession path.
-- [ ] Region/marker/timing changes: `upsert_song_tracks` only sends tracks +
-  sources, NOT regions/markers/timing. If a structural edit ALSO changes those,
-  they won't reach the engine via this path. Today `StructureRebuild` callers
-  that change regions/markers may need to additionally send the timeline-window
-  command, or the upsert should be extended to carry regions/markers too.
-  **Audit the StructureRebuild callsites** (state.rs:839, 2849, 2894, 3525, …).
+- [x] ~~Region/marker/timing changes lost via upsert~~ — RESOLVED: extended
+  `CmdUpsertSongTracks` to carry regions + markers + bpm/beats + tempo/timesig
+  markers too (complete structural snapshot, same shapes as
+  CmdSetSongTimelineWindow). No callsite audit needed — any StructureRebuild
+  edit routes through it losslessly. 216 DSP tests + round-trip tests pass.

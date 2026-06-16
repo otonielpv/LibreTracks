@@ -268,6 +268,17 @@ struct CmdUpsertSongTracks {
     Id song_id;
     std::vector<TrackUpdate> tracks;   // authoritative full track set for the song
     std::vector<SourceRef>   sources;  // sources referenced by the clips above
+    // Regions / markers / timing are carried too so this single command is a
+    // complete structural snapshot of the song (any structural edit — not just
+    // import — can route through it without losing region/marker/tempo changes).
+    // Reuses the same update shapes as CmdSetSongTimelineWindow.
+    std::vector<CmdSetSongRegions::RegionUpdate> regions;
+    std::vector<CmdSetSongMarkers::MarkerUpdate> markers;
+    double bpm = 120.0;
+    int beats_per_bar = 4;
+    int beat_unit = 4;
+    std::vector<CmdSetSongTiming::TempoMarkerUpdate> tempo_markers;
+    std::vector<CmdSetSongTiming::TimeSignatureMarkerUpdate> time_signature_markers;
 };
 
 // Load a project from its JSON representation.
