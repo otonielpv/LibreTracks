@@ -818,6 +818,15 @@ textarea {
   overflow: auto;
 }
 
+/* Pin the tabbed settings modal to a stable height so the frame and its
+   centered position don't jump when switching tabs (each tab has a different
+   content height). The panel area scrolls internally instead. Other modals
+   that reuse .lt-settings-modal (e.g. Remote) keep sizing to their content. */
+.lt-settings-modal--fixed {
+  height: 44rem;
+  overflow: hidden;
+}
+
 .lt-settings-modal--compact {
   width: min(34rem, 100%);
 }
@@ -979,12 +988,18 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  /* Fill the remaining modal height below the header so the panel area can
+     own the scroll, keeping the modal frame fixed across tabs. */
+  flex: 1;
+  min-height: 0;
 }
 
 .lt-settings-tabs {
   display: flex;
   gap: 0.9rem;
   min-width: 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .lt-settings-tablist {
@@ -1034,6 +1049,10 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  /* This is the only scroll container: per-tab content overflows here while
+     the modal frame stays put. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .lt-settings-tab-panel {
@@ -1927,6 +1946,14 @@ textarea {
 @media (max-width: 720px) {
   .lt-modal-backdrop {
     padding: 1rem;
+  }
+
+  .lt-settings-modal--fixed {
+    /* On narrow screens the tablist stacks above the panels; let the modal
+       grow to its content (still capped by max-height) instead of forcing
+       the desktop fixed height. */
+    height: auto;
+    overflow: auto;
   }
 
   .lt-settings-modal-header {

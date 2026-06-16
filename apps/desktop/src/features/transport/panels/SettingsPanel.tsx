@@ -194,7 +194,7 @@ export function SettingsPanel({
   return (
     <div className="lt-modal-backdrop">
       <section
-        className="lt-settings-modal"
+        className="lt-settings-modal lt-settings-modal--fixed"
         role="dialog"
         aria-modal="true"
         aria-labelledby="lt-settings-modal-title"
