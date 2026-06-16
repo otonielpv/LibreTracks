@@ -5,6 +5,7 @@
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
+#include <lt_engine/sources/io_throttle.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cctype>
@@ -1121,17 +1122,22 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // is now a pure clock advance with no pitch-priming work.
             const auto pos = clock_->position();
             clock_->play();
+            // Tell the background decode/cache-write paths to back off the disk
+            // so they don't starve the live block-fill stream (see io_throttle.h).
+            set_playback_active(true);
             push_event(EvPlaybackStarted{ clock_->position().frame });
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdPause>) {
             clock_->pause();
+            set_playback_active(false);
             push_event(EvPlaybackPaused{ clock_->position().frame });
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdStop>) {
             Frame f = clock_->position().frame;
             clock_->stop();
+            set_playback_active(false);
             // Reposition Bungee voices to frame 0 so the next play emits
             // audio aligned with the clock instead of a brief blip from the
             // grain buffers left over by the pre-stop render. Done async so

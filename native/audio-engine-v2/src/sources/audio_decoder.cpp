@@ -1,5 +1,6 @@
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/resampler.h>
+#include <lt_engine/sources/io_throttle.h>
 
 #include <algorithm>
 #include <cctype>
@@ -28,7 +29,9 @@ namespace lt {
 namespace {
 
 void yield_to_ui_scheduler() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // Yields longer while the transport is playing so decoding a new import
+    // doesn't starve the live audio stream. See io_throttle.h.
+    decode_background_yield();
 }
 
 } // namespace

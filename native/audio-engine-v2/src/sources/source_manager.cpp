@@ -1,5 +1,6 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/audio_decoder.h>
+#include <lt_engine/sources/io_throttle.h>
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -64,7 +65,10 @@ std::string read_env(const char* name) {
 }
 
 void yield_to_ui_scheduler() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // Cede disk bandwidth to the live block-fill thread while playing so the
+    // PCM cache write of a freshly-imported source can't starve the already-
+    // playing tracks. See io_throttle.h.
+    decode_background_yield();
 }
 
 size_t source_cache_blocks_from_env() {
@@ -999,6 +1003,12 @@ void SourceManager::clear() {
 }
 
 void SourceManager::fill_worker_loop() const {
+#if defined(_WIN32)
+    // This thread serves the blocks the *playing* tracks need right now. Lift it
+    // above the decode workers (THREAD_PRIORITY_BELOW_NORMAL) so a heavy decode
+    // of a freshly-imported source can't preempt the live stream's disk reads.
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+#endif
     while (true) {
         CacheKey key;
         std::vector<int> block_batch;

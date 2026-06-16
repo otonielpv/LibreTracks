@@ -1,4 +1,5 @@
 #include <lt_engine/sources/audio_decoder.h>
+#include <lt_engine/sources/io_throttle.h>
 
 #if LT_ENGINE_USE_FFMPEG
 
@@ -56,7 +57,9 @@ std::string codec_name(const AVCodecParameters* params) {
 }
 
 void yield_to_ui_scheduler() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // Yields longer while playing so an FFmpeg decode of a new import doesn't
+    // starve the live audio stream. See io_throttle.h.
+    decode_background_yield();
 }
 
 class LibavDecoder : public AudioDecoder {
