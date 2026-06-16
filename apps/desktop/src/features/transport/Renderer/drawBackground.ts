@@ -380,7 +380,7 @@ export function drawRulerMarker(
   const stemTop = LANE_SECTIONS.top + 2;
   const stemBottom = LANE_SECTIONS.top + LANE_SECTIONS.height - 2;
   const alignRight = snappedX > width - labelWidth - 12;
-  const flagLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 2;
+  const flagLeft = alignRight ? snappedX - labelWidth - 2 : snappedX + 2;
   const flagRight = flagLeft + labelWidth;
   const flagTop = LANE_SECTIONS.top + 1;
   const flagBottom = flagTop + labelHeight;
@@ -430,11 +430,13 @@ export function drawRulerMarker(
 
   context.beginPath();
   if (alignRight) {
+    // Mirror of the right-pointing flag: the body grows leftwards from the stem
+    // with the chevron notch on the left, so it never overflows the right edge.
     context.moveTo(snappedX, flagTop + 1);
-    context.lineTo(flagRight, flagTop + 1);
-    context.lineTo(flagRight, flagBottom - 1);
+    context.lineTo(flagLeft + 7, flagTop + 1);
+    context.lineTo(flagLeft, flagTop + labelHeight * 0.5);
     context.lineTo(flagLeft + 7, flagBottom - 1);
-    context.lineTo(snappedX, flagTop + labelHeight * 0.55);
+    context.lineTo(snappedX, flagBottom - 1);
   } else {
     context.moveTo(snappedX, flagTop + 1);
     context.lineTo(flagRight - 7, flagTop + 1);
@@ -449,7 +451,12 @@ export function drawRulerMarker(
   context.shadowBlur = 0;
   context.fillStyle = textStyle;
   context.textBaseline = "middle";
-  context.fillText(label, flagLeft + 6, flagTop + labelHeight / 2 + 0.5);
+  // Clear the chevron notch: shift the text right when the flag points left.
+  context.fillText(
+    label,
+    alignRight ? flagLeft + 10 : flagLeft + 6,
+    flagTop + labelHeight / 2 + 0.5,
+  );
 
   context.fillStyle = textStyle;
   context.beginPath();
@@ -514,18 +521,32 @@ export function drawRulerTempoMarker(
   context.stroke();
 
   context.beginPath();
-  context.moveTo(snappedX, flagTop);
-  context.lineTo(flagRight - 6, flagTop);
-  context.lineTo(flagRight, flagTop + flagHeight / 2);
-  context.lineTo(flagRight - 6, flagTop + flagHeight);
-  context.lineTo(snappedX, flagTop + flagHeight);
+  if (alignRight) {
+    // Mirror the flag so it grows leftwards from the stem; otherwise the body
+    // and chevron overflow past the right edge and look clipped.
+    context.moveTo(snappedX, flagTop);
+    context.lineTo(flagLeft + 6, flagTop);
+    context.lineTo(flagLeft, flagTop + flagHeight / 2);
+    context.lineTo(flagLeft + 6, flagTop + flagHeight);
+    context.lineTo(snappedX, flagTop + flagHeight);
+  } else {
+    context.moveTo(snappedX, flagTop);
+    context.lineTo(flagRight - 6, flagTop);
+    context.lineTo(flagRight, flagTop + flagHeight / 2);
+    context.lineTo(flagRight - 6, flagTop + flagHeight);
+    context.lineTo(snappedX, flagTop + flagHeight);
+  }
   context.closePath();
   context.fill();
   context.stroke();
 
   context.fillStyle = overrideLabel ? "#ffb86b" : "#57f1db";
   context.textBaseline = "middle";
-  context.fillText(label, flagLeft + 6, flagTop + flagHeight / 2 + 0.5);
+  context.fillText(
+    label,
+    alignRight ? flagLeft + 10 : flagLeft + 6,
+    flagTop + flagHeight / 2 + 0.5,
+  );
 
   context.beginPath();
   const stemBottom = isMetricMarker

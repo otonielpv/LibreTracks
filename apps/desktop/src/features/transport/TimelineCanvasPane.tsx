@@ -55,7 +55,7 @@ import {
   type ExternalDropPreview,
 } from "./dragDrop";
 
-const RULER_HEIGHT = 110;
+const RULER_HEIGHT = 122;
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
