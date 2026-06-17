@@ -2704,7 +2704,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
 
             std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
-            if (mixer_) mixer_->swap_session_atomic(next_session);
+            if (mixer_) {
+                // Upsert can ADD/REMOVE/REORDER tracks, so the mixer must rebuild
+                // its control slots (gain/pan/mute/solo/folder chains) — NOT a
+                // bare swap_session_atomic, which only swaps the pointer and
+                // leaves new tracks without control slots (their mixer commands
+                // would silently no-op until a full LoadSession). preserve=true
+                // keeps live slider state for tracks that still exist.
+                mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+            }
             if (prearmed_jumps_) {
                 const auto rev = prearm_revision_.fetch_add(1,
                     std::memory_order_relaxed) + 1;
