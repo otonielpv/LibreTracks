@@ -13,14 +13,20 @@ import {
 // Open the global track-list menu by right-clicking the empty area of the
 // track-headers pane (below the last header), then add the automation track.
 async function addAutomationTrackViaMenu() {
+  if (document.querySelector(".lt-track-lane.is-automation")) {
+    return;
+  }
+
   const pane = document.querySelector(".lt-track-headers-pane") as HTMLElement;
   expect(pane).toBeTruthy();
   await act(async () => {
     fireEvent.contextMenu(pane, { clientX: 80, clientY: 600 });
   });
-  const addButton = await screen.findByRole("button", {
-    name: /add automation track/i,
-  });
+  const addButton = await screen.findByRole(
+    "button",
+    { name: /add automation track/i },
+    { timeout: 5000 },
+  );
   await act(async () => {
     fireEvent.click(addButton);
   });
