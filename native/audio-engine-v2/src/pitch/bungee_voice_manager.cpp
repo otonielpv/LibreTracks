@@ -645,7 +645,8 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
 void BungeeVoiceManager::retime_existing_for_session(
         const Session& session,
         const SourceManager& sources,
-        Frame playhead) noexcept {
+        Frame playhead,
+        bool live) noexcept {
     if (!is_available()) return;
 
 #if LT_ENGINE_HAVE_BUNGEE
@@ -686,6 +687,17 @@ void BungeeVoiceManager::retime_existing_for_session(
             std::abs(spec.time_ratio - voice.mapped_time_ratio()) > 1e-9;
         if (!timeline_changed && !source_changed && !ratio_changed) {
             // Unchanged clip: leave the warm pipeline completely alone.
+            ++retimed_soft;
+            continue;
+        }
+        if (live) {
+            // Drag in progress: the clip's mapping is changing every tick. A
+            // hard retime per tick (FIFO clear + ~108ms refill + fade-in) is the
+            // "trrrr" the user hears on big/multi-clip drags. Defer it entirely —
+            // do NOT touch the voice and do NOT update its recorded mapping, so
+            // the final commit (live=false) still sees the full pre-drag→drop
+            // delta and retimes exactly once at the drop. The voice keeps playing
+            // its current audio during the drag (churn-free); the drop snaps it.
             ++retimed_soft;
             continue;
         }

@@ -76,9 +76,14 @@ public:
     // Reposition already-active voices after a tempo/warp-ratio edit without
     // rebuilding Bungee streams. The next render block keeps the warm stream
     // state but reads from the source frame that matches `playhead`.
+    // `live` = a drag is in progress (per-tick update). When true, voices whose
+    // clip mapping changed are NOT hard-retimed (cursor reset + FIFO clear +
+    // fade-in) — doing that every tick of a big drag buzzes ("trrrr"). The drag
+    // commit calls again with live=false so they retime cleanly once at the drop.
     void retime_existing_for_session(const Session& session,
                                      const SourceManager& sources,
-                                     Frame playhead) noexcept;
+                                     Frame playhead,
+                                     bool live = false) noexcept;
 
     // Build a seek-ready voice map without publishing it. This lets callers
     // commit the transport seek and the Bungee voice swap together, avoiding

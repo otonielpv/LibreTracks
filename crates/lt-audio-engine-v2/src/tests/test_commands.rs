@@ -369,6 +369,7 @@ fn set_song_timeline_window_round_trip() {
             beats_per_bar: 6,
             beat_unit: 8,
         }],
+        live: false,
     };
     let json = serde_json::to_string(&cmd).unwrap();
     assert!(json.contains("\"type\":\"SetSongTimelineWindow\""));
@@ -385,6 +386,7 @@ fn set_song_timeline_window_round_trip() {
             beat_unit: 4,
             tempo_markers,
             time_signature_markers,
+            live: false,
         } if song_id == "song1"
             && clips.len() == 1
             && clips[0].length_frames == 48000
@@ -611,6 +613,7 @@ fn all_commands_have_type_field() {
             beat_unit: 4,
             tempo_markers: vec![],
             time_signature_markers: vec![],
+            live: false,
         },
         EngineCommand::SetSampleRate { sample_rate: 48000 },
         EngineCommand::SetBufferSize { buffer_size: 512 },

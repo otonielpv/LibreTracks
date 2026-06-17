@@ -216,6 +216,11 @@ struct CmdSetSongTimelineWindow {
     int beat_unit = 4;
     std::vector<CmdSetSongTiming::TempoMarkerUpdate> tempo_markers;
     std::vector<CmdSetSongTiming::TimeSignatureMarkerUpdate> time_signature_markers;
+    // True while a drag is IN PROGRESS. The handler then skips the warp
+    // voice hard-retime for moved clips (re-priming Bungee every tick of a
+    // big drag is what buzzes); the final commit sends live=false so voices
+    // retime once at the drop. Defaults false for back-compat.
+    bool live = false;
 };
 
 // ---------------------------------------------------------------------------

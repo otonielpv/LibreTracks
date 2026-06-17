@@ -2520,7 +2520,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         && source_manager_ && clock_) {
                         bungee_voices_->retime_existing_for_session(
                             *next_session, *source_manager_,
-                            clock_->position().frame);
+                            clock_->position().frame, /*live=*/c.live);
                     }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);

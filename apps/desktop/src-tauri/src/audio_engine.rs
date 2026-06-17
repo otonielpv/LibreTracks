@@ -859,7 +859,11 @@ impl AudioController {
         })
     }
 
-    pub fn update_live_timeline_window(&self, song: &Song) -> Result<(), DesktopError> {
+    pub fn update_live_timeline_window(
+        &self,
+        song: &Song,
+        live: bool,
+    ) -> Result<(), DesktopError> {
         self.transport_timing_update_count
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("set_song_timeline_window", None, |engine, state| {
@@ -955,6 +959,7 @@ impl AudioController {
                 beat_unit,
                 tempo_markers,
                 time_signature_markers,
+                live,
             })?;
             if state.loaded_session_signature.is_some() {
                 let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);

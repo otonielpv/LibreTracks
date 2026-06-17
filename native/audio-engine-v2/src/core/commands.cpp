@@ -265,6 +265,7 @@ EngineCommand command_from_json(const std::string& raw) {
         cmd.bpm = j.at("bpm").get<double>();
         cmd.beats_per_bar = j.at("beats_per_bar").get<int>();
         cmd.beat_unit = j.at("beat_unit").get<int>();
+        cmd.live = j.value("live", false);
         for (const auto& item : j.at("clips")) {
             CmdSetSongClips::ClipUpdate clip;
             clip.id = item.at("id").get<Id>();

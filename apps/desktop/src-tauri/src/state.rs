@@ -5597,7 +5597,11 @@ impl DesktopSession {
             AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
                 if playback_state == PlaybackState::Playing {
                     if impact == AudioChangeImpact::TimelineWindow {
-                        audio.update_live_timeline_window(&song)?;
+                        // record_history=false marks an IN-PROGRESS drag (the
+                        // _live_ variants); the commit records history. Pass that
+                        // through as `live` so the engine defers the warp
+                        // hard-retime to the drop (avoids the per-tick "trrrr").
+                        audio.update_live_timeline_window(&song, !record_history)?;
                     } else {
                         // Structural edits (add/remove/move tracks & clips,
                         // import audio) go through the INCREMENTAL upsert command

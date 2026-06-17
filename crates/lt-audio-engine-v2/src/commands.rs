@@ -175,6 +175,13 @@ pub enum EngineCommand {
         beat_unit: i32,
         tempo_markers: Vec<TempoMarkerUpdate>,
         time_signature_markers: Vec<TimeSignatureMarkerUpdate>,
+        /// True while a drag is IN PROGRESS (live, per-tick updates). The engine
+        /// then skips the expensive Bungee warp-voice hard-retime (cursor reset
+        /// + FIFO clear + fade-in) for moved clips — re-priming every tick of a
+        /// big drag is what buzzes ("trrrr"). The final commit sends live=false
+        /// so the voices retime cleanly once, at the drop position.
+        #[serde(default)]
+        live: bool,
     },
 
     /// Incrementally upsert a song's full track set WITHOUT a full LoadSession.
