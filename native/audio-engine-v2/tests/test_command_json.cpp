@@ -119,6 +119,56 @@ TEST_CASE("parse SetSongTiming") {
     CHECK(c.time_signature_markers[0].beat_unit == 4);
 }
 
+TEST_CASE("parse UpsertSongTracks full structural snapshot") {
+    // Mirrors the JSON the Rust AudioController::upsert_song_tracks emits.
+    auto cmd = command_from_json(R"({
+        "type":"UpsertSongTracks",
+        "song_id":"song1",
+        "tracks":[{
+            "id":"trk1","name":"Bass","gain":0.8,"pan":-0.2,
+            "audio_to":"master","mute":false,"solo":false,
+            "transpose_behavior":"never_transpose","role":"","kind":"audio",
+            "parent_track_id":"",
+            "clips":[{
+                "id":"clip1","source_id":"bass.mp3",
+                "timeline_start_frame":0,"source_start_frame":0,
+                "length_frames":480000,"gain":1.0,
+                "fade_in_frames":0,"fade_out_frames":0,"semitones":0
+            }]
+        }],
+        "sources":[{"id":"bass.mp3","file_path":"bass.mp3"}],
+        "regions":[{"id":"reg1","name":"A","start_frame":0,"end_frame":480000,
+                    "transpose_semitones":2,"warp_enabled":false,
+                    "warp_source_bpm":0.0,"master_gain":1.0}],
+        "markers":[{"id":"mk1","name":"Verse","frame":0,"kind":"verse","variant":1}],
+        "bpm":128.0,"beats_per_bar":4,"beat_unit":4,
+        "tempo_markers":[],"time_signature_markers":[]
+    })");
+    REQUIRE(std::holds_alternative<CmdUpsertSongTracks>(cmd));
+    auto& c = std::get<CmdUpsertSongTracks>(cmd);
+    CHECK(c.song_id == "song1");
+    REQUIRE(c.tracks.size() == 1);
+    CHECK(c.tracks[0].id == "trk1");
+    CHECK(c.tracks[0].name == "Bass");
+    CHECK(c.tracks[0].gain == doctest::Approx(0.8f));
+    CHECK(c.tracks[0].kind == "audio");
+    CHECK(c.tracks[0].transpose_behavior == "never_transpose");
+    REQUIRE(c.tracks[0].clips.size() == 1);
+    CHECK(c.tracks[0].clips[0].id == "clip1");
+    CHECK(c.tracks[0].clips[0].source_id == "bass.mp3");
+    CHECK(c.tracks[0].clips[0].length_frames == 480000);
+    REQUIRE(c.sources.size() == 1);
+    CHECK(c.sources[0].id == "bass.mp3");
+    CHECK(c.sources[0].file_path == "bass.mp3");
+    REQUIRE(c.regions.size() == 1);
+    CHECK(c.regions[0].id == "reg1");
+    CHECK(c.regions[0].transpose_semitones == 2);
+    REQUIRE(c.markers.size() == 1);
+    CHECK(c.markers[0].id == "mk1");
+    CHECK(c.markers[0].kind == "verse");
+    CHECK(c.bpm == doctest::Approx(128.0));
+}
+
 TEST_CASE("parse SetTrackGain") {
     auto cmd = command_from_json(R"({"type":"SetTrackGain","track_id":"t1","gain":0.75})");
     REQUIRE(std::holds_alternative<CmdSetTrackGain>(cmd));

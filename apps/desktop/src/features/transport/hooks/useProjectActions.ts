@@ -168,55 +168,31 @@ export function useProjectActions({
   }
 
   function handleImportSongClick() {
-    void runAction(
-      async () => {
-        let unlistenProjectProgress: (() => void) | null = null;
-        let stopProjectProgressPolling: (() => void) | null = null;
-        const progressStartedAt = Date.now();
-        setProjectViewHydrating(true);
-        setBusyFeedback({
-          message: t("transport.shell.importingProject", {
-            defaultValue: "Importing project...",
-          }),
-          percent: 2,
-        });
-        try {
-          unlistenProjectProgress = await registerProjectLoadProgressListener();
-          stopProjectProgressPolling = startProjectProgressPolling(progressStartedAt);
-          await nextPaint();
-          const nextSnapshot = await pickAndImportSong();
-          if (!nextSnapshot) {
-            setProjectViewHydrating(false);
-            setBusyFeedback(null);
-            return;
-          }
-
-          const nextSong = await refreshSongView({ sync: true });
-          applyPlaybackSnapshot(nextSnapshot);
-          await refreshLibraryState();
-          setActiveSidebarTab(null);
-          setStatus(t("transport.status.songImported"));
-          if (nextSong) {
-            setBusyFeedback({
-              message: t("transport.shell.projectReady", {
-                defaultValue: "Proyecto listo para reproducir.",
-              }),
-              percent: 100,
-            });
-            await nextPaint();
-            setProjectViewHydrating(false);
-          }
-        } catch (error) {
-          setProjectViewHydrating(false);
-          setBusyFeedback(null);
-          throw error;
-        } finally {
-          stopProjectProgressPolling?.();
-          unlistenProjectProgress?.();
-        }
-      },
-      { busy: true },
-    );
+    // Non-blocking import: the backend returns as soon as the package is
+    // unzipped + the song structure is persisted (it no longer waits for every
+    // source to finish decoding). So we do NOT raise the blocking shell overlay
+    // (no `busy: true`, no setProjectViewHydrating) — the timeline shows the new
+    // tracks immediately, waveforms fill in as they decode, and play is
+    // progressive (decoded head audible, rest silent). The user can keep using
+    // the UI throughout, exactly like the audio-file import.
+    void runAction(async () => {
+      setStatus(
+        t("transport.shell.importingProject", {
+          defaultValue: "Importing project...",
+        }),
+      );
+      const nextSnapshot = await pickAndImportSong();
+      if (!nextSnapshot) {
+        return;
+      }
+      const nextSong = await refreshSongView({ sync: true });
+      applyPlaybackSnapshot(nextSnapshot);
+      await refreshLibraryState();
+      setActiveSidebarTab(null);
+      if (nextSong) {
+        setStatus(t("transport.status.songImported"));
+      }
+    });
   }
 
   function handleSaveProjectClick() {

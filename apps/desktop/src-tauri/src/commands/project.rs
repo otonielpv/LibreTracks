@@ -557,7 +557,8 @@ pub async fn import_audio_files_from_bytes(
         (song_dir, current_song)
     };
 
-    tauri::async_runtime::spawn_blocking(move || {
+    let song_dir_for_prepare = song_dir.clone();
+    let assets = tauri::async_runtime::spawn_blocking(move || {
         crate::state::import_audio_files_from_bytes_to_library(
             &song_dir,
             current_song.as_ref(),
@@ -566,7 +567,29 @@ pub async fn import_audio_files_from_bytes(
     })
     .await
     .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_bytes", error))?
-    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_bytes", error))
+    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_bytes", error))?;
+
+    // Start decoding the imported library files now (see the paths variant).
+    prepare_library_assets(&state, &song_dir_for_prepare, &assets);
+    Ok(assets)
+}
+
+/// Kick off background decode→cache (+ same-pass waveform peaks) for freshly
+/// imported library assets, so they're ready before they hit the timeline.
+fn prepare_library_assets(
+    state: &DesktopState,
+    song_dir: &std::path::Path,
+    assets: &[crate::models::view::LibraryAssetSummary],
+) {
+    let resolved: Vec<String> = assets
+        .iter()
+        .map(|a| {
+            crate::state::resolve_audio_file_path(song_dir, &a.file_path)
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+    let _ = state.audio.prepare_sources(&resolved);
 }
 
 #[tauri::command]
@@ -587,7 +610,8 @@ pub async fn import_audio_files_from_paths(
         (song_dir, current_song)
     };
 
-    tauri::async_runtime::spawn_blocking(move || {
+    let song_dir_for_prepare = song_dir.clone();
+    let assets = tauri::async_runtime::spawn_blocking(move || {
         crate::state::import_audio_files_from_paths_to_library(
             &song_dir,
             current_song.as_ref(),
@@ -596,7 +620,14 @@ pub async fn import_audio_files_from_paths(
     })
     .await
     .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_paths", error))?
-    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_paths", error))
+    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_paths", error))?;
+
+    // Ableton-style: start decoding the imported files to cache + waveform peaks
+    // NOW, while they sit in the library — so by the time they're dragged to the
+    // timeline the audio + waveform are already prepared (no re-decode, no wait).
+    prepare_library_assets(&state, &song_dir_for_prepare, &assets);
+
+    Ok(assets)
 }
 
 #[tauri::command]

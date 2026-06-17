@@ -1,6 +1,7 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
+#include <lt_engine/sources/resampler.h>
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -83,6 +84,34 @@ size_t source_cache_blocks_from_env() {
         static_cast<size_t>(kDefaultBlockFrames) * sizeof(float) * 2;
     return std::max<size_t>(1, (cache_mb * 1024 * 1024) / bytes_per_block);
 }
+
+#if LT_ENGINE_USE_LIBSNDFILE
+// PCM cache file format. We store 16-bit PCM in a standard WAV container — the
+// same as Ableton's decoding cache: half the size (and disk I/O) of float32,
+// and int16 is plenty for playback. libsndfile transparently converts between
+// the on-disk int16 and the float buffers we read/write, so only the format
+// flag changes. Files ≥ ~3.9 GB of audio data fall back to RF64 (WAV's 4 GB
+// container limit). Set LIBRETRACKS_CACHE_FLOAT=1 to keep float32 (debug/AB).
+int cache_sample_format() {
+    static const bool want_float = [] {
+        const char* v = std::getenv("LIBRETRACKS_CACHE_FLOAT");
+        return v && v[0] == '1' && v[1] == '\0';
+    }();
+    return want_float ? SF_FORMAT_FLOAT : SF_FORMAT_PCM_16;
+}
+
+// Major (container) flag: WAV unless the PCM payload would exceed the WAV 4 GB
+// limit, in which case RF64 (a WAV superset for huge files).
+int cache_container_format(Frame out_frames, int channel_count) {
+    const int bytes_per_sample =
+        (cache_sample_format() == SF_FORMAT_FLOAT) ? 4 : 2;
+    const unsigned long long payload =
+        static_cast<unsigned long long>(out_frames) *
+        static_cast<unsigned long long>(std::max(1, channel_count)) * bytes_per_sample;
+    constexpr unsigned long long kWavLimit = 4000ull * 1024 * 1024;  // ~3.9 GB
+    return payload >= kWavLimit ? SF_FORMAT_RF64 : SF_FORMAT_WAV;
+}
+#endif
 
 int eager_source_blocks_from_env() {
     if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_EAGER_BLOCKS")) {
@@ -284,23 +313,29 @@ struct CacheEntryStat {
     long long   mtime      = 0;
 };
 
-bool ends_with_rf64(const std::string& name) {
-    constexpr const char* kExt = ".rf64";
-    constexpr std::size_t kLen = 5;
-    if (name.size() < kLen) return false;
-    return name.compare(name.size() - kLen, kLen, kExt) == 0;
+bool ends_with(const std::string& name, const char* ext) {
+    const std::size_t len = std::strlen(ext);
+    if (name.size() < len) return false;
+    return name.compare(name.size() - len, len, ext) == 0;
+}
+
+// A PCM cache file is either the int16 WAV (current) or the legacy float RF64.
+bool is_pcm_cache_file(const std::string& name) {
+    return ends_with(name, ".wav") || ends_with(name, ".rf64");
 }
 
 std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
     std::vector<CacheEntryStat> out;
 #if defined(_WIN32)
     WIN32_FIND_DATAA fd{};
-    const std::string pattern = dir + "\\*.rf64";
+    const std::string pattern = dir + "\\*";  // filter by extension below
     HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE)
         return out;
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+            continue;
+        if (!is_pcm_cache_file(fd.cFileName))
             continue;
         CacheEntryStat e;
         e.path = dir + "\\" + fd.cFileName;
@@ -321,7 +356,7 @@ std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
     if (!d) return out;
     while (auto* ent = ::readdir(d)) {
         const std::string name(ent->d_name);
-        if (!ends_with_rf64(name)) continue;
+        if (!is_pcm_cache_file(name)) continue;
         const std::string full = dir + "/" + name;
         struct stat st{};
         if (::stat(full.c_str(), &st) != 0) continue;
@@ -558,7 +593,7 @@ void SourceManager::set_source_ready_callback(SourceReadyCallback callback) {
 }
 
 void SourceManager::publish_locked(EntryMap entries) {
-    auto previous = std::atomic_load(&entries_);
+    auto previous = entries_.load();
     if (previous) {
         retired_entries_.push_back(std::move(previous));
         // Audio-thread get() returns a borrowed pointer, so keep recent
@@ -569,13 +604,13 @@ void SourceManager::publish_locked(EntryMap entries) {
         while (retired_entries_.size() > kMaxRetiredSnapshots)
             retired_entries_.pop_front();
     }
-    std::atomic_store(&entries_, std::make_shared<const EntryMap>(std::move(entries)));
+    entries_.store(std::make_shared<const EntryMap>(std::move(entries)));
 }
 
 void SourceManager::register_source(const Id& source_id,
                                      const std::string& file_path) {
     std::lock_guard lock(write_mutex_);
-    EntryMap next = *std::atomic_load(&entries_);
+    EntryMap next = *entries_.load();
     auto& entry    = next[source_id];
     entry.file_path = file_path;
     entry.status    = "unloaded";
@@ -587,7 +622,7 @@ Result<void> SourceManager::load_source(const Id& source_id,
     std::string file_path;
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return Result<void>::err("Source not registered: " + source_id);
@@ -606,7 +641,7 @@ Result<void> SourceManager::load_source(const Id& source_id,
                                           &duration_frames);
     if (result.is_err()) {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         if (auto it = next.find(source_id); it != next.end()) {
             it->second.status        = "failed";
             it->second.error_message = result.error();
@@ -631,7 +666,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
     SourceReadyCallback ready_callback;
     std::string file_path;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return Result<void>::err("Source not registered: " + source_id);
@@ -642,7 +677,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         SourceReadyCallback ready_callback;
         {
             std::lock_guard lock(write_mutex_);
-            EntryMap next = *std::atomic_load(&entries_);
+            EntryMap next = *entries_.load();
             auto it = next.find(source_id);
             if (it == next.end())
                 return Result<void>::err("Source not registered: " + source_id);
@@ -677,7 +712,8 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         SF_INFO info{};
         info.channels = channel_count;
         info.samplerate = sample_rate;
-        info.format = SF_FORMAT_RF64 | SF_FORMAT_FLOAT;
+        info.format = cache_container_format(duration_frames, channel_count)
+                    | cache_sample_format();
         SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
         if (!sf)
             return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
@@ -751,7 +787,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
 
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return Result<void>::err("Source not registered: " + source_id);
@@ -779,6 +815,302 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
     if (ready_callback)
         ready_callback(source_id);
     return Result<void>::ok();
+}
+
+Result<void> SourceManager::decode_and_store_streaming(
+    const Id& source_id,
+    const std::string& file_path,
+    int target_sample_rate,
+    SourceStoreProgressCallback on_progress) {
+#if LT_ENGINE_USE_LIBSNDFILE
+    auto report_progress = [&](int pct) {
+        if (on_progress) on_progress(std::clamp(pct, 0, 100));
+    };
+
+    auto decoder = make_decoder(file_path);
+    if (!decoder)
+        return Result<void>::err("No decoder available for: " + file_path);
+    report_progress(1);
+    auto open_result = decoder->open(file_path);
+    if (open_result.is_err())
+        return Result<void>::err(open_result.error());
+
+    const AudioFileInfo fi = decoder->info();
+    if (fi.duration_frames <= 0 || fi.channel_count <= 0)
+        return Result<void>::err("Invalid audio file info: " + file_path);
+
+    const int channel_count = fi.channel_count;
+    const int sample_rate = target_sample_rate;
+    auto resampler = make_streaming_resampler(
+        channel_count, fi.original_sample_rate, target_sample_rate);
+
+    const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
+    // Rough projected size for the LRU pre-eviction (output frames ~ input *
+    // ratio); good enough to keep the budget honoured.
+    const double ratio = fi.original_sample_rate > 0
+        ? static_cast<double>(target_sample_rate) / fi.original_sample_rate : 1.0;
+    const Frame projected_out_frames =
+        static_cast<Frame>(std::ceil(static_cast<double>(fi.duration_frames) * ratio));
+    const size_t projected_bytes =
+        static_cast<size_t>(projected_out_frames) * channel_count * sizeof(float);
+
+    if (!create_directories_compat(parent_path_compat(cache_file)))
+        return Result<void>::err("Could not create PCM cache directory: " + cache_file);
+    evict_cache_lru(parent_path_compat(cache_file), projected_bytes, cache_file);
+
+    SF_INFO info{};
+    info.channels = channel_count;
+    info.samplerate = sample_rate;
+    info.format = cache_container_format(projected_out_frames, channel_count)
+                | cache_sample_format();
+    SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
+    if (!sf)
+        return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
+
+    const int block_frames = block_cache_.block_frames();
+    const int eager_blocks = eager_source_blocks_from_env();
+    constexpr int kReadChunkFrames = 65536;
+
+    // R5 progressive availability: publish the source as PLAYABLE up front, with
+    // the projected duration, before the whole file is decoded. The decode loop
+    // fills blocks into the RAM cache as it produces them and advances
+    // `decoded_frames`; the play gate (playback_audio_window_ready) only waits on
+    // the playhead window's blocks, so playback starts on the decoded head while
+    // the tail keeps filling. Blocks past `decoded_frames` are absent → silence
+    // (Ableton's "decoded part plays, rest silent"). The disk fill worker is
+    // gated to not read past `decoded_frames` while status=="streaming" because
+    // the WAV header/data-chunk size isn't finalized until sf_close.
+    auto decoded_frames = std::make_shared<std::atomic<Frame>>(0);
+    {
+        std::lock_guard lock(write_mutex_);
+        EntryMap next = *entries_.load();
+        auto it = next.find(source_id);
+        if (it == next.end()) {
+            sf_close(sf);
+            return Result<void>::err("Source not registered: " + source_id);
+        }
+        auto& entry = it->second;
+        entry.cache_file_path = cache_file;
+        entry.channel_count = channel_count;
+        entry.sample_rate = sample_rate;
+        entry.duration_frames = projected_out_frames;
+        entry.decoded_frames = decoded_frames;
+        entry.source = std::make_shared<DecodedSource>(
+            source_id, channel_count, sample_rate, projected_out_frames,
+            &block_cache_,
+            [this](const Id& id, int block_index) { request_block(id, block_index); });
+        entry.status = "streaming";
+        entry.error_message.clear();
+        publish_locked(std::move(next));
+    }
+
+    std::vector<float> in_chunk(static_cast<std::size_t>(kReadChunkFrames) * channel_count);
+    std::vector<float> out_chunk;  // resampled interleaved output, reused per chunk
+    Frame in_done = 0;
+    Frame out_written = 0;   // frames written to the cache so far
+    bool decode_ok = true;
+    // Exact target output length (matches the whole-file resample). We collect
+    // exactly this many output frames, feeding silence after real input ends to
+    // flush the resampler's internal latency tail (r8brain emits output with an
+    // internal delay; the oneshot helper does the same zero-feed trick).
+    const Frame target_out_frames = projected_out_frames;
+
+    // Accumulate waveform peaks in the SAME pass (Ableton-style single decode),
+    // at the UI's waveform resolution, so the UI never re-decodes the file.
+    constexpr Frame kPeakBucketWidth = 256;  // ENGINE_WAVEFORM_RESOLUTION_FRAMES
+    const std::size_t peak_buckets = static_cast<std::size_t>(
+        (target_out_frames + kPeakBucketWidth - 1) / kPeakBucketWidth);
+    const bool has_right = channel_count >= 2;
+    auto peaks = std::make_shared<SourcePeakOverview>();
+    peaks->sample_rate = sample_rate;
+    peaks->resolution_frames = static_cast<int>(kPeakBucketWidth);
+    peaks->min_peaks.assign(peak_buckets, 0.f);
+    peaks->max_peaks.assign(peak_buckets, 0.f);
+    if (has_right) {
+        peaks->min_peaks_right.assign(peak_buckets, 0.f);
+        peaks->max_peaks_right.assign(peak_buckets, 0.f);
+    }
+    std::vector<bool> peak_init(peak_buckets, false);
+    auto accumulate_peaks = [&](const float* interleaved, Frame start_frame, Frame n) {
+        for (Frame i = 0; i < n; ++i) {
+            const std::size_t b = static_cast<std::size_t>((start_frame + i) / kPeakBucketWidth);
+            if (b >= peak_buckets) break;
+            const float* row = interleaved + static_cast<std::size_t>(i) * channel_count;
+            const float l = std::clamp(row[0], -1.f, 1.f);
+            const float r = has_right ? std::clamp(row[1], -1.f, 1.f) : 0.f;
+            if (!peak_init[b]) {
+                peaks->min_peaks[b] = l; peaks->max_peaks[b] = l;
+                if (has_right) { peaks->min_peaks_right[b] = r; peaks->max_peaks_right[b] = r; }
+                peak_init[b] = true;
+            } else {
+                peaks->min_peaks[b] = std::min(peaks->min_peaks[b], l);
+                peaks->max_peaks[b] = std::max(peaks->max_peaks[b], l);
+                if (has_right) {
+                    peaks->min_peaks_right[b] = std::min(peaks->min_peaks_right[b], r);
+                    peaks->max_peaks_right[b] = std::max(peaks->max_peaks_right[b], r);
+                }
+            }
+        }
+    };
+
+    // Write `produced` interleaved frames from `out_chunk` to the cache + eager
+    // blocks, capped so the total never exceeds target_out_frames. Returns the
+    // number of frames actually written (post-cap).
+    auto write_output = [&](Frame produced) -> bool {
+        if (produced <= 0) return true;
+        const Frame remaining = target_out_frames - out_written;
+        if (remaining <= 0) return true;  // already have the full output
+        const Frame n = std::min<Frame>(produced, remaining);
+        const sf_count_t w = sf_writef_float(sf, out_chunk.data(),
+                                             static_cast<sf_count_t>(n));
+        if (w <= 0) return false;
+        accumulate_peaks(out_chunk.data(), out_written, n);  // same-pass waveform
+        // R5: fill only the first `eager_blocks` into RAM as they're decoded, so
+        // the progressively published source is instantly audible from its head
+        // without a disk round-trip. The rest are pulled on demand by the fill
+        // worker from the cache file (gated by decoded_frames so it never reads
+        // unwritten data). We deliberately do NOT fill the whole file into RAM:
+        // the block cache is a SHARED bounded LRU (512 MB across all sources), so
+        // eagerly filling every block of several concurrently-imported songs
+        // blows the budget → constant eviction churn + disk re-reads contending
+        // with the decode writers = the import-while-playing stutter.
+        const Frame chunk_start = out_written;
+        for (Frame local = 0; local < n; ) {
+            const Frame abs_frame = chunk_start + local;
+            const int block_index = static_cast<int>(abs_frame / block_frames);
+            if (block_index >= eager_blocks) break;
+            const Frame block_start = static_cast<Frame>(block_index) * block_frames;
+            const int offset_in_block = static_cast<int>(abs_frame - block_start);
+            const int frames_this_block = std::min(
+                block_frames - offset_in_block, static_cast<int>(n - local));
+            if (offset_in_block == 0 && frames_this_block == block_frames) {
+                const float* ptr = out_chunk.data() +
+                    static_cast<std::size_t>(local) * channel_count;
+                block_cache_.fill(source_id, block_index, ptr, channel_count, block_frames);
+            }
+            local += frames_this_block;
+        }
+        out_written += n;
+        // Publish the new valid extent AFTER writing so readers/fill worker never
+        // see frames that aren't on disk yet (release so the writes above are
+        // visible to the audio/fill threads that acquire it).
+        decoded_frames->store(out_written, std::memory_order_release);
+        return true;
+    };
+
+    // Cede the disk to the live block-fill thread between chunks. This is the
+    // heavy disk-WRITE loop, and it runs on a decode worker WHILE playback may be
+    // streaming OTHER tracks' blocks off the same disk — without yielding here,
+    // a first-time (uncached) import starves the live fill thread and the playing
+    // tracks glitch (the user's "petardeo on first import while playing"). The
+    // streaming rewrite had dropped this throttle in favour of a fixed 1ms/16-
+    // chunk breather, which doesn't back off while playing; restore the
+    // playback-aware yield (decode_background_yield sleeps ~6ms while playing,
+    // ~1ms idle) so cold opens stay fast but live playback wins the disk. R3 made
+    // this matter more: several decode workers can write concurrently now.
+    auto light_yield = []() { decode_background_yield(); };
+
+    // Phase 1: feed real decoded input.
+    while (in_done < fi.duration_frames && out_written < target_out_frames) {
+        const int want = static_cast<int>(std::min<Frame>(
+            kReadChunkFrames, fi.duration_frames - in_done));
+        const int got = decoder->read_frames(in_chunk.data(), want);
+        if (got <= 0) break;  // unexpected EOF; flush handles the rest
+        in_done += got;
+        out_chunk.clear();
+        const Frame produced = resampler->process_chunk(
+            in_chunk.data(), got, /*end_of_input=*/false, out_chunk);
+        if (produced < 0 || !write_output(produced)) { decode_ok = false; break; }
+        if (fi.duration_frames > 0) {
+            report_progress(1 + static_cast<int>((in_done * 98) / fi.duration_frames));
+        }
+        light_yield();
+    }
+
+    // Phase 2: flush the resampler's latency tail. The tail is only a few hundred
+    // frames, so feed SMALL silence blocks (not 64k!) and stop the moment the
+    // resampler stops producing — otherwise we'd resample millions of silence
+    // frames (huge slowdown) chasing a target_out_frames that ceil() rounding can
+    // leave 1-2 frames above what the resampler will ever emit.
+    if (decode_ok) {
+        constexpr int kFlushBlock = 1024;
+        std::fill(in_chunk.begin(), in_chunk.begin() + kFlushBlock * channel_count, 0.0f);
+        int empty_runs = 0;
+        int guard = 0;
+        const int kMaxFlush = 256;  // « 256k input frames of latency is impossible
+        while (out_written < target_out_frames && guard++ < kMaxFlush) {
+            out_chunk.clear();
+            const Frame produced = resampler->process_chunk(
+                in_chunk.data(), kFlushBlock, /*end_of_input=*/true, out_chunk);
+            if (produced < 0) { decode_ok = false; break; }
+            if (produced == 0) {
+                if (++empty_runs >= 2) break;  // resampler drained; stop chasing
+                continue;
+            }
+            empty_runs = 0;
+            if (!write_output(produced)) { decode_ok = false; break; }
+        }
+    }
+
+    sf_close(sf);
+    decoder->close();
+
+    if (!decode_ok || out_written <= 0)
+        return Result<void>::err("Streaming decode failed: " + file_path);
+
+    const Frame duration_frames = out_written;
+    const size_t disk_cache_bytes =
+        static_cast<size_t>(out_written) * channel_count * sizeof(float);
+    peaks->duration_frames = duration_frames;
+    // Trim the peak arrays to the actual bucket count (out_written may be a hair
+    // under target_out_frames after the latency flush).
+    {
+        const std::size_t used = static_cast<std::size_t>(
+            (duration_frames + kPeakBucketWidth - 1) / kPeakBucketWidth);
+        if (used < peaks->min_peaks.size()) {
+            peaks->min_peaks.resize(used);
+            peaks->max_peaks.resize(used);
+            if (has_right) {
+                peaks->min_peaks_right.resize(used);
+                peaks->max_peaks_right.resize(used);
+            }
+        }
+    }
+
+    SourceReadyCallback ready_callback;
+    {
+        std::lock_guard lock(write_mutex_);
+        EntryMap next = *entries_.load();
+        auto it = next.find(source_id);
+        if (it == next.end())
+            return Result<void>::err("Source not registered: " + source_id);
+        auto& entry = it->second;
+        entry.cache_file_path = cache_file;
+        entry.channel_count = channel_count;
+        entry.sample_rate = sample_rate;
+        entry.duration_frames = duration_frames;
+        entry.disk_cache_bytes = disk_cache_bytes;
+        entry.cached_peaks = peaks;  // same-pass waveform; UI skips re-decode
+        entry.source = std::make_shared<DecodedSource>(
+            source_id, channel_count, sample_rate, duration_frames,
+            &block_cache_,
+            [this](const Id& id, int block_index) { request_block(id, block_index); });
+        // R5: the cache file is now closed and finalized — open the disk gate to
+        // the full length so the fill worker can fetch any (incl. evicted) block.
+        decoded_frames->store(duration_frames, std::memory_order_release);
+        entry.decoded_frames = decoded_frames;
+        entry.status = "cache_ready";
+        entry.error_message.clear();
+        publish_locked(std::move(next));
+        ready_callback = source_ready_callback_;
+    }
+    if (ready_callback)
+        ready_callback(source_id);
+    return Result<void>::ok();
+#else
+    (void)source_id; (void)file_path; (void)target_sample_rate; (void)on_progress;
+    return Result<void>::err("streaming decode requires libsndfile");
+#endif
 }
 
 void SourceManager::request_block(const Id& source_id, int block_index) const noexcept {
@@ -836,6 +1168,11 @@ CacheDiagnostics SourceManager::cache_diagnostics() const {
     return block_cache_.diagnostics();
 }
 
+size_t SourceManager::fill_queue_depth() const noexcept {
+    std::lock_guard lock(fill_mtx_);
+    return fill_queue_.size();
+}
+
 SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
                                                int resolution_frames) const {
     SourcePeakOverview overview;
@@ -843,7 +1180,7 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
 
     Entry entry;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return overview;
@@ -856,6 +1193,22 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
         || entry.channel_count <= 0 || entry.duration_frames <= 0) {
         return overview;
     }
+
+    // Fast path: peaks were computed in the same pass as the streaming decode.
+    // Return them directly — no cache re-read, no MP3 re-decode for the UI.
+    if (entry.cached_peaks &&
+        entry.cached_peaks->resolution_frames == overview.resolution_frames) {
+        return *entry.cached_peaks;
+    }
+
+    // R5: while a streaming decode is still in flight (status "streaming"), the
+    // cache file is only partially written and its WAV data-chunk size isn't
+    // finalized — reading it now yields a HALF waveform (or garbage) keyed to the
+    // projected full duration, which the caller would then cache as if complete.
+    // The same-pass peaks (cached_peaks) are published atomically at the end, so
+    // return no peaks now (duration is known) and let the UI poll until they land.
+    if (entry.status == "streaming")
+        return overview;
 
     if (entry.cache_file_path.empty())
         return entry.source->peaks(overview.resolution_frames);
@@ -952,7 +1305,7 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
 }
 
 const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
-    auto entries = std::atomic_load(&entries_);
+    auto entries = entries_.load();
     auto it = entries->find(source_id);
     if (it == entries->end()) return nullptr;
     auto source = it->second.source;
@@ -961,7 +1314,7 @@ const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
 
 std::shared_ptr<const DecodedSource>
 SourceManager::get_shared(const Id& source_id) const noexcept {
-    auto entries = std::atomic_load(&entries_);
+    auto entries = entries_.load();
     auto it = entries->find(source_id);
     if (it == entries->end()) return {};
     return it->second.source;
@@ -969,7 +1322,7 @@ SourceManager::get_shared(const Id& source_id) const noexcept {
 
 std::vector<SourceDiagnostics> SourceManager::diagnostics() const {
     std::vector<SourceDiagnostics> out;
-    auto entries = std::atomic_load(&entries_);
+    auto entries = entries_.load();
     out.reserve(entries->size());
     for (const auto& [id, entry] : *entries) {
         SourceDiagnostics d;
@@ -1051,7 +1404,7 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
 
     Entry entry;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return;
@@ -1059,6 +1412,14 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
     }
     if (entry.cache_file_path.empty() || entry.channel_count <= 0)
         return;
+
+    // R5: never read past the frames actually written so far. While a streaming
+    // decode is in flight the WAV's data-chunk size isn't finalized, so reading
+    // beyond `decoded_frames` would return garbage/short reads. Blocks past it
+    // simply stay absent (→ silence) until the decode catches up or finishes.
+    const Frame readable_frames = entry.decoded_frames
+        ? entry.decoded_frames->load(std::memory_order_acquire)
+        : entry.duration_frames;
 
     const int block_frames = block_cache_.block_frames();
     std::size_t cursor_index = 0;
@@ -1080,6 +1441,14 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
             (static_cast<Frame>(last_block) + 1) * block_frames);
         const int frames = static_cast<int>(end - start);
         if (frames <= 0)
+            continue;
+        // R5: only fetch the contiguous run that is fully decoded on disk. A run
+        // that extends past `readable_frames` is skipped entirely (rather than
+        // partially filled) so the audio thread never sees a block marked present
+        // with stale/zero tail — it stays absent (silence) until decode advances.
+        // The final block (which legitimately ends at duration < a full block) is
+        // covered because at cache_ready `readable_frames == duration_frames`.
+        if (end > readable_frames)
             continue;
 
         std::vector<float> data(
@@ -1142,13 +1511,23 @@ std::string SourceManager::cache_file_for(const Id& source_id,
     // cached PCM automatically. The orphaned old .rf64 stays on disk until
     // the LRU eviction sweep reclaims it.
     const FileStat st = stat_file(file_path);
+#if LT_ENGINE_USE_LIBSNDFILE
+    // Include the cache sample format in the key so switching float32<->int16
+    // regenerates rather than reusing a mismatched cache. Extension follows the
+    // container: WAV (int16, like Ableton) vs the legacy .rf64.
+    const int fmt = cache_sample_format();
+    const char* ext = (fmt == SF_FORMAT_FLOAT) ? ".rf64" : ".wav";
+#else
+    const int fmt = 0;
+    const char* ext = ".rf64";
+#endif
     const std::string key = source_id + "|" + file_path + "|" +
         std::to_string(sample_rate) + "|" +
         std::to_string(st.size_bytes) + "|" +
-        std::to_string(st.mtime);
+        std::to_string(st.mtime) + "|fmt" + std::to_string(fmt);
     const auto h = std::hash<std::string>{}(key);
     return source_cache_dir() + native_path_separator() +
-           std::to_string(h) + ".rf64";
+           std::to_string(h) + ext;
 }
 
 bool SourceManager::try_install_native_file(const Id& source_id,
@@ -1160,7 +1539,7 @@ bool SourceManager::try_install_native_file(const Id& source_id,
 #else
     std::string file_path;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return false;
@@ -1193,7 +1572,7 @@ bool SourceManager::try_install_native_file(const Id& source_id,
     SourceReadyCallback ready_callback;
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return false;
@@ -1240,7 +1619,7 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
 #else
     std::string file_path;
     {
-        auto entries = std::atomic_load(&entries_);
+        auto entries = entries_.load();
         auto it = entries->find(source_id);
         if (it == entries->end())
             return false;
@@ -1293,7 +1672,7 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
     SourceReadyCallback ready_callback;
     {
         std::lock_guard lock(write_mutex_);
-        EntryMap next = *std::atomic_load(&entries_);
+        EntryMap next = *entries_.load();
         auto it = next.find(source_id);
         if (it == next.end())
             return false;

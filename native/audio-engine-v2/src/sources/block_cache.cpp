@@ -1,13 +1,47 @@
 #include <lt_engine/sources/block_cache.h>
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <cstring>
 
 namespace lt {
+
+namespace {
+inline uint64_t now_us() {
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+}
+inline void atomic_max(std::atomic<uint64_t>& slot, uint64_t value) {
+    uint64_t prev = slot.load(std::memory_order_relaxed);
+    while (value > prev &&
+           !slot.compare_exchange_weak(prev, value, std::memory_order_relaxed)) {
+    }
+}
+} // namespace
+
+bool BlockCache::diag_enabled() noexcept {
+    static const bool on = [] {
+        const char* v = std::getenv("LIBRETRACKS_AUDIO_DIAG");
+        return v && *v && !(v[0] == '0' && v[1] == '\0');
+    }();
+    return on;
+}
 
 BlockCache::BlockCache(int block_frames, size_t max_blocks)
     : block_frames_(block_frames)
     , max_blocks_(max_blocks)
 {}
+
+BlockCache::LockStats BlockCache::take_lock_stats() noexcept {
+    LockStats s;
+    s.read_wait_max_us = read_wait_max_us_.exchange(0, std::memory_order_relaxed);
+    s.fill_hold_max_us = fill_hold_max_us_.exchange(0, std::memory_order_relaxed);
+    s.read_wait_count  = read_wait_count_.exchange(0, std::memory_order_relaxed);
+    s.evict_count      = evict_count_.exchange(0, std::memory_order_relaxed);
+    return s;
+}
 
 bool BlockCache::read(const Id&  source_id,
                       int        block_index,
@@ -19,7 +53,15 @@ bool BlockCache::read(const Id&  source_id,
 
     std::shared_ptr<CacheBlock> blk;
     {
+        const bool diag = diag_enabled();
+        const uint64_t wait_start = diag ? now_us() : 0;
         std::lock_guard<std::mutex> lk(mtx_);
+        if (diag) {
+            const uint64_t waited = now_us() - wait_start;
+            atomic_max(read_wait_max_us_, waited);
+            if (waited > 50)
+                read_wait_count_.fetch_add(1, std::memory_order_relaxed);
+        }
         auto it = blocks_.find(key);
         if (it == blocks_.end() || !it->second->ready.load(std::memory_order_acquire)) {
             misses_.fetch_add(1, std::memory_order_relaxed);
@@ -82,21 +124,27 @@ void BlockCache::fill(const Id&    source_id,
                       int          actual_frames) {
     CacheKey key{ source_id, block_index };
 
-    std::lock_guard<std::mutex> lk(mtx_);
+    const bool diag = diag_enabled();
+    const uint64_t hold_start = diag ? now_us() : 0;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
 
-    // Evict if at capacity.
-    if (blocks_.size() >= max_blocks_)
-        evict_lru(max_blocks_ * 3 / 4);  // trim to 75%
+        // Evict if at capacity.
+        if (blocks_.size() >= max_blocks_)
+            evict_lru(max_blocks_ * 3 / 4);  // trim to 75%
 
-    auto& blk       = blocks_[key];
-    if (!blk) blk   = std::make_shared<CacheBlock>();
+        auto& blk       = blocks_[key];
+        if (!blk) blk   = std::make_shared<CacheBlock>();
 
-    blk->channel_count = channel_count;
-    blk->block_frames  = actual_frames;
-    blk->samples.assign(interleaved_samples,
-                        interleaved_samples + actual_frames * channel_count);
-    blk->last_used = clock_.fetch_add(1, std::memory_order_relaxed);
-    blk->ready.store(true, std::memory_order_release);
+        blk->channel_count = channel_count;
+        blk->block_frames  = actual_frames;
+        blk->samples.assign(interleaved_samples,
+                            interleaved_samples + actual_frames * channel_count);
+        blk->last_used = clock_.fetch_add(1, std::memory_order_relaxed);
+        blk->ready.store(true, std::memory_order_release);
+    }
+    if (diag)
+        atomic_max(fill_hold_max_us_, now_us() - hold_start);
 }
 
 bool BlockCache::has_block(const Id& source_id, int block_index) const {
@@ -157,21 +205,33 @@ CacheDiagnostics BlockCache::diagnostics() const {
 }
 
 void BlockCache::evict_lru(size_t target_blocks) {
-    // Caller holds mtx_.
+    // Caller holds mtx_. This runs on a worker thread (fill) but shares mtx_
+    // with the audio thread's read(), so it must be cheap: a full std::sort of
+    // the whole cache (~16k blocks at the 512MB default) held the lock for tens
+    // of ms and stalled playback (see LT_AUDIO_DIAG fill_hold_us spikes).
+    //
+    // We only need the `to_remove` oldest entries, not a total order, so
+    // nth_element partitions in O(n) instead of O(n log n) — and we no longer
+    // sort the kept majority at all.
     if (blocks_.size() <= target_blocks) return;
 
-    // Collect (last_used, key) pairs, sort ascending, erase oldest.
+    const size_t to_remove = blocks_.size() - target_blocks;
+
     std::vector<std::pair<uint64_t, CacheKey>> aged;
     aged.reserve(blocks_.size());
     for (const auto& [k, b] : blocks_)
         aged.emplace_back(b ? b->last_used : 0ULL, k);
 
-    std::sort(aged.begin(), aged.end(),
-              [](const auto& a, const auto& b){ return a.first < b.first; });
+    // Partition so the `to_remove` smallest last_used values sit at the front.
+    std::nth_element(
+        aged.begin(), aged.begin() + static_cast<std::ptrdiff_t>(to_remove),
+        aged.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
 
-    size_t to_remove = blocks_.size() - target_blocks;
-    for (size_t i = 0; i < to_remove && i < aged.size(); ++i)
+    for (size_t i = 0; i < to_remove; ++i)
         blocks_.erase(aged[i].second);
+
+    evict_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
 } // namespace lt

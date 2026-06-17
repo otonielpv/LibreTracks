@@ -13,6 +13,7 @@
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <array>
 #include <atomic>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
@@ -88,6 +89,11 @@ public:
     int    callback_count()          const noexcept;
     double callback_duration_ms()    const noexcept;
     double callback_duration_max_ms() const noexcept;
+    // Read-and-reset the worst callback duration; lets a periodic diagnostic
+    // report the peak per window instead of the stuck session-wide maximum.
+    double take_callback_duration_max_ms() noexcept {
+        return callback_duration_max_ms_.exchange(0.0, std::memory_order_relaxed);
+    }
     std::uint64_t callback_over_budget_count() const noexcept;
     std::uint64_t rendered_track_count() const noexcept;
     std::uint64_t skipped_track_count() const noexcept;
@@ -105,7 +111,12 @@ public:
     static constexpr Frame kNoJumpPending = -1;
 
 private:
-    std::shared_ptr<const Session> session_;
+    // std::atomic<shared_ptr> (C++20) instead of the free atomic_load/store
+    // helpers: on MSVC the free helpers share a GLOBAL spinlock pool that
+    // priority-inverts the audio thread against the control thread's session
+    // swaps during import. See microsoft/STL#86 and the matching note in
+    // source_manager.h. The audio thread loads session_ every render block.
+    std::atomic<std::shared_ptr<const Session>> session_;
     const SourceManager* sources_;
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
@@ -188,6 +199,27 @@ private:
     std::atomic<int>    callback_count_{0};
     std::atomic<double> callback_duration_ms_{0.0};
     std::atomic<double> callback_duration_max_ms_{0.0};
+
+public:
+    // Phase breakdown (LIBRETRACKS_AUDIO_DIAG) — worst µs spent in each phase of
+    // render() since the last read. Pinpoints WHICH part of the callback blocks
+    // when cbwork spikes. Read-and-reset from the snapshot poll thread.
+    struct PhaseMaxUs { std::uint64_t load, sched, tracks, post; };
+    PhaseMaxUs take_phase_max_us() noexcept {
+        return { phase_load_us_.exchange(0, std::memory_order_relaxed),
+                 phase_sched_us_.exchange(0, std::memory_order_relaxed),
+                 phase_tracks_us_.exchange(0, std::memory_order_relaxed),
+                 phase_post_us_.exchange(0, std::memory_order_relaxed) };
+    }
+private:
+    std::atomic<std::uint64_t> phase_load_us_{0};
+    std::atomic<std::uint64_t> phase_sched_us_{0};
+    std::atomic<std::uint64_t> phase_tracks_us_{0};
+    std::atomic<std::uint64_t> phase_post_us_{0};
+    const bool diag_phases_ = [] {
+        const char* v = std::getenv("LIBRETRACKS_AUDIO_DIAG");
+        return v && *v && !(v[0] == '0' && v[1] == '\0');
+    }();
     std::atomic<std::uint64_t> callback_over_budget_count_{0};
     std::atomic<std::uint64_t> rendered_track_count_{0};
     std::atomic<std::uint64_t> skipped_track_count_{0};

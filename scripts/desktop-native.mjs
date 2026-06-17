@@ -63,8 +63,13 @@ const buildDesktopNativeEnv = (rawEnv) => {
     LIBRETRACKS_AUDIO_DEBUG_LOG: rawEnv.LIBRETRACKS_AUDIO_DEBUG_LOG ?? path.join(repoRoot, "lt_audio_debug.log"),
     LIBRETRACKS_ENGINE_V2_BUNGEE: rawEnv.LIBRETRACKS_ENGINE_V2_BUNGEE ?? "1",
     LIBRETRACKS_ENGINE_V2_FFMPEG: rawEnv.LIBRETRACKS_ENGINE_V2_FFMPEG ?? (process.platform === "linux" ? "0" : "1"),
-    VCPKG_DEFAULT_TRIPLET: rawEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows",
+    VCPKG_DEFAULT_TRIPLET: rawEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows-release",
   };
+
+  const overlayTriplets = path.join(repoRoot, "native", "audio-engine-v2", "vcpkg-triplets");
+  if (!env.VCPKG_OVERLAY_TRIPLETS && existsSync(overlayTriplets)) {
+    env.VCPKG_OVERLAY_TRIPLETS = overlayTriplets;
+  }
 
   const toolchainFile = detectToolchainFile(rawEnv);
   if (toolchainFile) {
@@ -226,6 +231,19 @@ const ensureEngineV2 = (normalizedEnv) => {
     }
   }
 
+  const vcpkgTriplet = normalizedEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows-release";
+  const buildVcpkgBin = path.join(buildDir, "vcpkg_installed", vcpkgTriplet, "bin");
+  if (useFFmpeg === "ON") {
+    if (!existsSync(buildVcpkgBin)) {
+      throw new Error(`Expected FFmpeg runtime DLLs in ${buildVcpkgBin}, but the directory was not found.`);
+    }
+    for (const fileName of readdirSync(buildVcpkgBin)) {
+      if (/\.dll$/i.test(fileName)) {
+        copyFileSync(path.join(buildVcpkgBin, fileName), path.join(nativeVendorDir, fileName));
+      }
+    }
+  }
+
   // macOS: the engine dylib links FFmpeg from the build machine's Homebrew
   // prefix by absolute path. Relocate those libav*.dylib into vendor/bin/native
   // with @rpath ids so the app is self-contained; otherwise dyld aborts at
@@ -240,10 +258,10 @@ const ensureEngineV2 = (normalizedEnv) => {
     ?? (normalizedEnv.CMAKE_TOOLCHAIN_FILE
       ? path.resolve(path.dirname(normalizedEnv.CMAKE_TOOLCHAIN_FILE), "..", "..")
       : "");
-  const triplet = normalizedEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows";
+  const triplet = normalizedEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows-release";
   const vcpkgBin = vcpkgRoot ? path.join(vcpkgRoot, "installed", triplet, "bin") : "";
   const vcpkgDebugBin = vcpkgRoot ? path.join(vcpkgRoot, "installed", triplet, "debug", "bin") : "";
-  const extraPath = [libDir, vcpkgDebugBin, vcpkgBin].filter((segment) => segment && existsSync(segment)).join(pathSeparator);
+  const extraPath = [libDir, buildVcpkgBin, vcpkgDebugBin, vcpkgBin].filter((segment) => segment && existsSync(segment)).join(pathSeparator);
   return {
     ...normalizedEnv,
     LT_ENGINE_V2_LIB_DIR: libDir,

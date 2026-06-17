@@ -139,9 +139,19 @@ void TrackRenderer::render(const Track&         track,
                             int                  engine_sample_rate,
                             Semitones            effective_semitones,
                             const Song*          active_song,
-                            bool                 track_is_silent) noexcept {
-    if (track.mute) return;
+                            bool                 track_is_silent,
+                            float                track_gain_override) noexcept {
+    // When the caller supplies a gain override it also owns mute handling (the
+    // mixer applies mute via its own gain ramp and still wants the renderer to
+    // run so the source cursor / Bungee voice stay aligned). Only honour the
+    // track's own mute flag on the legacy no-override path.
+    const bool has_override = !std::isnan(track_gain_override);
+    if (!has_override && track.mute) return;
     (void)engine_sample_rate;
+
+    // Use the override when supplied (mixer passes 1.0f to avoid copying the
+    // whole Track just to neutralize gain); otherwise the track's own gain.
+    const float track_gain = has_override ? track_gain_override : track.gain;
 
     for (const auto& clip : track.clips) {
         // Per-clip path decision. When the caller doesn't supply the song
@@ -171,7 +181,7 @@ void TrackRenderer::render(const Track&         track,
 
         ClipBlock cb;
         if (!prepare_clip_block(clip, timeline_frame, block_frames,
-                                 track.gain, sources, cb)) {
+                                 track_gain, sources, cb)) {
             continue;
         }
 

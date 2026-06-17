@@ -2,6 +2,7 @@
 
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/session/session.h>
+#include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <lt_engine/sources/source_manager.h>
 
@@ -103,8 +104,13 @@ std::vector<float> render_track_block(const SourceManager& manager,
 
 void require_audio_equal(const std::vector<float>& a, const std::vector<float>& b) {
     REQUIRE(a.size() == b.size());
+    // The PCM cache is 16-bit (like Ableton), so a float sample round-trips with
+    // up to one int16 quantization step (1/32768 ≈ 3.05e-5) of error. Use an
+    // absolute tolerance a bit above that — tight enough to catch real
+    // corruption/misalignment, loose enough for lossy-but-correct quantization.
+    constexpr float kInt16Step = 1.0f / 32768.0f;
     for (std::size_t i = 0; i < a.size(); ++i)
-        CHECK(a[i] == doctest::Approx(b[i]).epsilon(0.000001));
+        CHECK(std::abs(a[i] - b[i]) <= 2.0f * kInt16Step);
 }
 
 } // namespace
@@ -360,15 +366,25 @@ struct TestCacheDirStats {
     std::size_t total_bytes = 0;
 };
 
+// Matches a PCM cache file: the int16 .wav (current) or legacy float .rf64.
+static bool is_cache_file_name(const std::string& name) {
+    auto ends = [&](const char* e) {
+        const std::size_t n = std::strlen(e);
+        return name.size() >= n && name.compare(name.size() - n, n, e) == 0;
+    };
+    return ends(".wav") || ends(".rf64");
+}
+
 TestCacheDirStats stat_cache_dir(const std::string& dir) {
     TestCacheDirStats out;
 #if defined(_WIN32)
     WIN32_FIND_DATAA fd{};
-    const std::string pattern = dir + "\\*.rf64";
+    const std::string pattern = dir + "\\*";
     HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return out;
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
+        if (!is_cache_file_name(fd.cFileName)) continue;
         LARGE_INTEGER sz{};
         sz.LowPart = fd.nFileSizeLow;
         sz.HighPart = static_cast<LONG>(fd.nFileSizeHigh);
@@ -381,8 +397,7 @@ TestCacheDirStats stat_cache_dir(const std::string& dir) {
     if (!d) return out;
     while (auto* ent = ::readdir(d)) {
         const std::string name(ent->d_name);
-        if (name.size() < 5) continue;
-        if (name.compare(name.size() - 5, 5, ".rf64") != 0) continue;
+        if (!is_cache_file_name(name)) continue;
         const std::string full = dir + "/" + name;
         struct stat st{};
         if (::stat(full.c_str(), &st) != 0) continue;
@@ -419,11 +434,12 @@ public:
         const std::string sub = path_ + std::string(1, kTestPathSep) + "source-cache";
 #if defined(_WIN32)
         WIN32_FIND_DATAA fd{};
-        const std::string pattern = sub + "\\*.rf64";
+        const std::string pattern = sub + "\\*";
         HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
         if (h == INVALID_HANDLE_VALUE) return;
         do {
             if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
+            if (!is_cache_file_name(fd.cFileName)) continue;
             std::remove((sub + "\\" + fd.cFileName).c_str());
         } while (FindNextFileA(h, &fd));
         FindClose(h);
@@ -432,8 +448,7 @@ public:
         if (!d) return;
         while (auto* ent = ::readdir(d)) {
             const std::string name(ent->d_name);
-            if (name.size() < 5) continue;
-            if (name.compare(name.size() - 5, 5, ".rf64") != 0) continue;
+            if (!is_cache_file_name(name)) continue;
             std::remove((sub + "/" + name).c_str());
         }
         ::closedir(d);
@@ -652,4 +667,79 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
 
     REQUIRE(source.read(512, 512, out, 2) == 512);
     CHECK(requested_blocks.size() == 16);
+}
+
+TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {
+    // Write a 44.1k WAV and decode it to 48k both ways; the streamed cache must
+    // match the whole-file cache frame-for-frame (within float tolerance), so
+    // the chunked resample is bit-equivalent to the one-shot resample.
+    constexpr int kChannels = 2;
+    constexpr int kSrcRate = 44100;
+    constexpr int kDstRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 5 + 999;  // odd tail
+    const auto wav_path = make_temp_wav_path("stream_equiv");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSrcRate));
+
+    // Whole-file path.
+    SourceManager whole;
+    whole.register_source("src", wav_path);
+    {
+        int ch = 0;
+        Frame dur = 0;
+        auto decoded = decode_file_to_float32(wav_path, kDstRate, &ch, &dur);
+        REQUIRE(decoded.is_ok());
+        REQUIRE(whole.store_decoded_source("src", decoded.take(), ch, kDstRate, dur).is_ok());
+    }
+
+    // Streaming path.
+    SourceManager streamed;
+    streamed.register_source("src", wav_path);
+    REQUIRE(streamed.decode_and_store_streaming("src", wav_path, kDstRate).is_ok());
+
+    auto a = whole.get_shared("src");
+    auto b = streamed.get_shared("src");
+    REQUIRE(static_cast<bool>(a));
+    REQUIRE(static_cast<bool>(b));
+
+    // Durations should match (allow ±1 frame for resampler tail rounding).
+    const Frame da = a->duration_frames();
+    const Frame db = b->duration_frames();
+    CHECK(std::abs(static_cast<long long>(da) - static_cast<long long>(db)) <= 1);
+
+    // Read both full outputs (left channel) for an alignment search.
+    auto read_left = [](const std::shared_ptr<const DecodedSource>& s, Frame n) {
+        std::vector<float> out(static_cast<std::size_t>(n), 0.0f);
+        std::vector<float> r(static_cast<std::size_t>(n), 0.0f);
+        float* o[2] = {out.data(), r.data()};
+        s->read(0, static_cast<int>(n), o, 2);
+        return out;
+    };
+    const Frame common = std::min(da, db);
+    const Frame probe = std::min<Frame>(common, 200000);
+    const auto va = read_left(a, probe);
+    const auto vb = read_left(b, probe);
+
+    // Find the integer sample offset (small range) that best aligns b to a.
+    // A small constant offset = benign resampler latency; a large/garbage diff
+    // at all offsets = real corruption.
+    const int kMaxShift = 4096;
+    double best_diff = 1e9;
+    int best_shift = 0;
+    const Frame win = std::min<Frame>(probe - kMaxShift, 50000);
+    for (int shift = -kMaxShift; shift <= kMaxShift; ++shift) {
+        double d = 0.0;
+        for (Frame i = kMaxShift; i < win; ++i) {
+            const double x = va[static_cast<std::size_t>(i)];
+            const double y = vb[static_cast<std::size_t>(i + shift)];
+            d = std::max(d, std::abs(x - y));
+        }
+        if (d < best_diff) { best_diff = d; best_shift = shift; }
+    }
+    INFO("best_shift=" << best_shift << " best_diff=" << best_diff
+         << " da=" << da << " db=" << db);
+    // Streaming chunked resample is bit-equivalent to the one-shot whole-file
+    // resample: same length, zero offset, zero difference.
+    CHECK(best_diff < 1.0e-4);
+    CHECK(best_shift == 0);
 }

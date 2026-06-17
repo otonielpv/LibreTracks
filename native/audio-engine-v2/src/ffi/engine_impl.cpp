@@ -24,6 +24,15 @@
 #include <unordered_set>
 #include <vector>
 
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <psapi.h>  // GetProcessMemoryInfo — page-fault diagnostics
+#endif
+
 namespace lt {
 
 using json = nlohmann::json;
@@ -31,6 +40,54 @@ using json = nlohmann::json;
 namespace {
 
 constexpr float kMaxMetronomeVolume = 2.5f;
+
+#if defined(_WIN32)
+// Raise the process working-set MINIMUM so Windows stops trimming our resident
+// pages during an import burst. The diagnostics showed ~300k page faults per
+// 500ms while a new song decoded, stalling the audio callback for 100-400ms as
+// it fault-paged its own buffers back in (LT_AUDIO_DIAG cbwork spikes with high
+// pf+=). A large guaranteed minimum keeps the audio thread's working set
+// resident through the burst. Best-effort: failure is non-fatal (logged).
+void raise_process_working_set_minimum() {
+    // The diagnostics showed the working set spiking to ~2.5GB during an import
+    // (each track decodes to a full float32 buffer + resample doubles it), and
+    // Windows trimming everything above the floor caused ~300k soft faults per
+    // 500ms that stalled the audio callback. A 512MB floor was useless because
+    // the real footprint is several GB. Size the floor to cover the spike:
+    // min(4GB, 25% of physical RAM), so the audio thread's pages stay resident
+    // through the burst. On a 32GB machine that reserves ~4GB — cheap insurance.
+    MEMORYSTATUSEX mem{};
+    mem.dwLength = sizeof(mem);
+    unsigned long long total_ram = 0;
+    if (GlobalMemoryStatusEx(&mem))
+        total_ram = mem.ullTotalPhys;
+
+    SIZE_T min_bytes = 4ull * 1024 * 1024 * 1024;  // 4 GB default ceiling
+    if (total_ram > 0) {
+        const SIZE_T quarter = static_cast<SIZE_T>(total_ram / 4);
+        min_bytes = std::min<SIZE_T>(min_bytes, quarter);
+    }
+    // Never go below 1GB (a multitrack session's resident floor).
+    min_bytes = std::max<SIZE_T>(min_bytes, 1024ull * 1024 * 1024);
+
+    if (const char* v = std::getenv("LIBRETRACKS_MIN_WORKING_SET_MB")) {
+        const long mb = std::atol(v);
+        if (mb >= 64 && mb <= 32768)
+            min_bytes = static_cast<SIZE_T>(mb) * 1024 * 1024;
+    }
+    SIZE_T max_bytes = min_bytes + 1024ull * 1024 * 1024;  // +1GB headroom
+
+    // QUOTA_LIMITS_HARDWS_MIN_ENABLE makes the minimum a hard floor Windows
+    // won't trim below, which is the whole point here.
+    const BOOL ok = SetProcessWorkingSetSizeEx(
+        GetCurrentProcess(), min_bytes, max_bytes,
+        QUOTA_LIMITS_HARDWS_MIN_ENABLE | QUOTA_LIMITS_HARDWS_MAX_DISABLE);
+    lt_debug_log("[LT_AUDIO_DIAG] SetProcessWorkingSetSizeEx min=%lluMB max=%lluMB ok=%d err=%lu\n",
+                 static_cast<unsigned long long>(min_bytes / (1024 * 1024)),
+                 static_cast<unsigned long long>(max_bytes / (1024 * 1024)),
+                 ok ? 1 : 0, ok ? 0ul : GetLastError());
+}
+#endif
 
 bool env_flag_enabled(const char* name) {
     const char* raw = std::getenv(name);
@@ -531,6 +588,17 @@ Result<void> EngineImpl::initialize() {
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
+    // The prep queue + source manager now PERSIST for the engine's lifetime —
+    // they are NOT destroyed/recreated per LoadSession. This lets a source
+    // decoded early (e.g. on library import, or a previous session) survive a
+    // LoadSession instead of being cancelled + cleared + re-decoded. LoadSession
+    // just enqueues; the queue skips sources already ready/loading. Only a real
+    // sample-rate change (different cache) clears + re-decodes.
+    prep_queue_ = std::make_unique<SourcePreparationQueue>(
+        source_manager_.get(),
+        worker_pool_.get(),
+        [this](EngineEvent ev){ push_event(std::move(ev)); },
+        clock_ ? clock_->sample_rate() : 48000);
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
         source_manager_.get(),
@@ -538,6 +606,11 @@ Result<void> EngineImpl::initialize() {
         scheduler_.get());
     mixer_->set_metronome_config(metronome_config_);
     mixer_->set_bungee_voice_manager(bungee_voices_.get());
+
+#if defined(_WIN32)
+    // Keep the audio thread's pages resident through import memory bursts.
+    raise_process_working_set_minimum();
+#endif
 
     // Open the default audio device with the silent callback.
     auto open_result = device_manager_->open_device(current_device_request_, mixer_.get());
@@ -862,6 +935,114 @@ std::string EngineImpl::get_snapshot() const {
             disk_bytes += d.disk_cache_bytes;
         snap.source_cache.disk_bytes_used = disk_bytes;
     }
+
+    // Playback-starvation diagnostics — enabled by LIBRETRACKS_AUDIO_DIAG=1.
+    // Pinpoints WHY playing tracks drop out while a new import decodes:
+    //   cb_max_ms      — worst audio-callback duration since last dump
+    //   over_budget    — callbacks that blew the buffer deadline
+    //   read_wait_us   — worst time the audio thread BLOCKED on the cache lock
+    //                    (high => the single BlockCache mutex is the cause)
+    //   fill_hold_us   — worst time a worker HELD the cache lock
+    //   fill_q         — pending block-fill requests (high => fill thread can't
+    //                    keep up with the playhead)
+    //   miss/hit       — cache reads served as silence vs. from cache
+    //   playing        — whether the io_throttle thinks we're playing
+    if (env_flag_enabled("LIBRETRACKS_AUDIO_DIAG") && source_manager_ && mixer_) {
+        static std::chrono::steady_clock::time_point s_last_diag;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - s_last_diag >= std::chrono::milliseconds(500)) {
+            s_last_diag = now;
+            const auto ls = source_manager_->take_block_cache_lock_stats();
+            const auto cd = source_manager_->cache_diagnostics();
+            // Process-wide hard+soft page-fault delta. If this jumps in the same
+            // window cbwork spikes, the audio thread is stalling on page faults
+            // (memory pressure from import's large decode buffers + RF64 cache
+            // writes), not on locks or render cost.
+            unsigned long long pf_delta = 0;
+            unsigned long long ws_mb = 0;
+#if defined(_WIN32)
+            {
+                PROCESS_MEMORY_COUNTERS pmc{};
+                static unsigned long s_prev_pf = 0;
+                if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+                    pf_delta = pmc.PageFaultCount - s_prev_pf;
+                    s_prev_pf = pmc.PageFaultCount;
+                    ws_mb = pmc.WorkingSetSize / (1024 * 1024);
+                }
+            }
+#endif
+            static size_t s_prev_miss = 0, s_prev_hit = 0;
+            static unsigned long long s_prev_over = 0;
+            const size_t miss_delta = cd.blocks_miss - s_prev_miss;
+            const size_t hit_delta  = cd.blocks_hit - s_prev_hit;
+            const unsigned long long over_now =
+                static_cast<unsigned long long>(mixer_->callback_over_budget_count());
+            const unsigned long long over_delta = over_now - s_prev_over;
+            s_prev_miss = cd.blocks_miss;
+            s_prev_hit  = cd.blocks_hit;
+            s_prev_over = over_now;
+
+            // Render-path breakdown: which clip paths ran this window, and the
+            // two allocation-in-audio-thread hazards. If 'stretched' dominates,
+            // Bungee is the cost; if 'resize_at' or 'too_big' are nonzero, the
+            // scratch buffer is being (re)allocated on the audio thread.
+            const auto tr = TrackRenderer::diagnostics();
+            static std::uint64_t s_dir = 0, s_vari = 0, s_str = 0,
+                                 s_resize_at = 0, s_too_big = 0, s_miss_voice = 0;
+            const std::uint64_t dir_d   = tr.path_direct_count - s_dir;
+            const std::uint64_t vari_d  = tr.path_varispeed_count - s_vari;
+            const std::uint64_t str_d   = tr.path_stretched_count - s_str;
+            const std::uint64_t resize_d = tr.scratch_resize_in_audio_thread_count - s_resize_at;
+            const std::uint64_t toobig_d = tr.block_too_large_count - s_too_big;
+            const std::uint64_t missv_d  = tr.pitch_missing_stream_silence_count - s_miss_voice;
+            s_dir = tr.path_direct_count; s_vari = tr.path_varispeed_count;
+            s_str = tr.path_stretched_count;
+            s_resize_at = tr.scratch_resize_in_audio_thread_count;
+            s_too_big = tr.block_too_large_count;
+            s_miss_voice = tr.pitch_missing_stream_silence_count;
+
+            // Use lt_debug_log (not the file-local debug_log) so this fires on
+            // LIBRETRACKS_AUDIO_DIAG alone — the local debug_log additionally
+            // gates on LIBRETRACKS_AUDIO_DEBUG and would swallow these lines.
+            const double cb_gap_ms = device_manager_
+                ? device_manager_->take_callback_gap_max_ms() : 0.0;
+            const double cb_work_ms = device_manager_
+                ? device_manager_->take_callback_work_max_ms() : 0.0;
+            const auto ph = mixer_->take_phase_max_us();
+            lt_debug_log(
+                "[LT_AUDIO_DIAG] cb_max_ms=%.2f cbgap_ms=%.2f cbwork_ms=%.2f "
+                "phase_us[load=%llu sched=%llu tracks=%llu post=%llu] sched_lock_us=%llu "
+                "pf+=%llu ws=%lluMB "
+                "over_budget+=%llu "
+                "read_wait_us=%llu (n=%llu) fill_hold_us=%llu fill_q=%zu "
+                "evict+=%llu miss+=%zu hit+=%zu playing=%d | path[dir+=%llu "
+                "vari+=%llu str+=%llu] resize_at+=%llu too_big+=%llu "
+                "miss_voice+=%llu scratch_cap=%llu\n",
+                mixer_->take_callback_duration_max_ms(),
+                cb_gap_ms, cb_work_ms,
+                static_cast<unsigned long long>(ph.load),
+                static_cast<unsigned long long>(ph.sched),
+                static_cast<unsigned long long>(ph.tracks),
+                static_cast<unsigned long long>(ph.post),
+                static_cast<unsigned long long>(take_checkdue_lock_wait_max_us()),
+                pf_delta, ws_mb,
+                over_delta,
+                static_cast<unsigned long long>(ls.read_wait_max_us),
+                static_cast<unsigned long long>(ls.read_wait_count),
+                static_cast<unsigned long long>(ls.fill_hold_max_us),
+                source_manager_->fill_queue_depth(),
+                static_cast<unsigned long long>(ls.evict_count),
+                miss_delta, hit_delta,
+                playback_active() ? 1 : 0,
+                static_cast<unsigned long long>(dir_d),
+                static_cast<unsigned long long>(vari_d),
+                static_cast<unsigned long long>(str_d),
+                static_cast<unsigned long long>(resize_d),
+                static_cast<unsigned long long>(toobig_d),
+                static_cast<unsigned long long>(missv_d),
+                static_cast<unsigned long long>(tr.scratch_capacity_frames));
+        }
+    }
     // RubberBand / PitchCache diagnostics removed (Bungee-only pipeline; the
     // PitchSnapshot fields are no longer populated and snapshot.cpp no longer
     // emits a "pitch" object). The mixer scheduled-jump signal is drained by
@@ -1042,11 +1223,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (result.is_err())
                 return Result<void>::err(result.error());
 
-            if (prep_queue_) {
-                prep_queue_->cancel_all();
-                prep_queue_.reset();
-            }
-
             auto next_session = std::make_shared<Session>(result.take());
             // Log parsed session for pitch diagnostics.
             {
@@ -1073,15 +1249,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
 
-            // Register all sources, then hand off to the async worker pool.
-            source_manager_->clear();
-
-            prep_queue_ = std::make_unique<SourcePreparationQueue>(
-                source_manager_.get(),
-                worker_pool_.get(),
-                [this](EngineEvent ev){ push_event(std::move(ev)); },
-                sr
-            );
+            // PERSISTENT prep queue + source manager: do NOT clear() or recreate
+            // the queue. Enqueue the session's sources — the queue skips ones
+            // already ready/loading, so only genuinely new files decode. Sources
+            // prepared earlier (library import, prior session) are reused as-is,
+            // and their same-pass waveform peaks are already available.
             prep_queue_->enqueue_session(session_->sources,
                                           clock_->position().frame);
 
@@ -2348,7 +2520,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         && source_manager_ && clock_) {
                         bungee_voices_->retime_existing_for_session(
                             *next_session, *source_manager_,
-                            clock_->position().frame);
+                            clock_->position().frame, /*live=*/c.live);
                     }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
@@ -2361,6 +2533,208 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     }
                 }
             }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdUpsertSongTracks>) {
+            // Incremental structural edit (add/remove/move tracks & clips,
+            // import audio) WITHOUT a full LoadSession. Copies the live session,
+            // replaces the named song's track set, registers only NEW sources
+            // (the prep queue skips already-decoded ones), and atomically swaps
+            // the session pointer. Existing decoded sources are preserved, so
+            // this no longer stalls the audio thread when used mid-playback.
+            if (!session_)
+                return Result<void>::ok();
+
+            auto next_session = std::make_shared<Session>(*session_);
+            bool changed = false;
+            for (auto& song : next_session->songs) {
+                if (song.id != c.song_id) continue;
+
+                std::vector<Track> rebuilt;
+                rebuilt.reserve(c.tracks.size());
+                // Index existing tracks so we can preserve any runtime-only
+                // fields not carried by the command (none today, but keeps the
+                // upsert future-proof and cheap).
+                std::unordered_map<Id, const Track*> existing;
+                existing.reserve(song.tracks.size());
+                for (const auto& t : song.tracks)
+                    existing.emplace(t.id, &t);
+
+                for (const auto& tu : c.tracks) {
+                    Track track;
+                    track.id   = tu.id;
+                    track.name = tu.name;
+                    track.gain = tu.gain;
+                    track.pan  = std::clamp(tu.pan, -1.0f, 1.0f);
+                    track.audio_to = tu.audio_to.empty() ? "master" : tu.audio_to;
+                    track.mute = tu.mute;
+                    track.solo = tu.solo;
+                    track.transpose_behavior =
+                        (tu.transpose_behavior == "never"
+                         || tu.transpose_behavior == "never_transpose"
+                         || tu.transpose_behavior == "NeverTranspose")
+                            ? TransposeBehavior::NeverTranspose
+                            : TransposeBehavior::FollowsSongOrRegion;
+                    track.kind = (tu.kind == "folder")
+                        ? TrackKind::Folder : TrackKind::Audio;
+                    track.parent_track_id = tu.parent_track_id;
+
+                    track.clips.reserve(tu.clips.size());
+                    for (const auto& cu : tu.clips) {
+                        Clip clip;
+                        clip.id = cu.id;
+                        clip.source_id = cu.source_id;
+                        clip.timeline_start_frame = std::max<Frame>(0, cu.timeline_start_frame);
+                        clip.source_start_frame = std::max<Frame>(0, cu.source_start_frame);
+                        clip.length_frames = std::max<Frame>(0, cu.length_frames);
+                        clip.gain = cu.gain;
+                        clip.fade_in_frames = std::max<Frame>(0, cu.fade_in_frames);
+                        clip.fade_out_frames = std::max<Frame>(0, cu.fade_out_frames);
+                        clip.semitones = cu.semitones;
+                        track.clips.push_back(std::move(clip));
+                    }
+                    std::sort(track.clips.begin(), track.clips.end(),
+                        [](const Clip& l, const Clip& r) {
+                            return l.timeline_start_frame < r.timeline_start_frame;
+                        });
+                    rebuilt.push_back(std::move(track));
+                }
+                song.tracks = std::move(rebuilt);
+
+                Frame max_end = song.start_frame + 1;
+                for (const auto& track : song.tracks)
+                    for (const auto& clip : track.clips)
+                        max_end = std::max(max_end,
+                            clip.timeline_start_frame + clip.length_frames);
+                song.end_frame = max_end;
+
+                // Regions / markers / timing — applied like CmdSetSongTimelineWindow
+                // so this command is a complete structural snapshot.
+                song.regions.clear();
+                song.regions.reserve(c.regions.size());
+                for (const auto& update : c.regions) {
+                    Region region;
+                    region.id = update.id;
+                    region.name = update.name;
+                    region.start_frame = update.start_frame;
+                    region.end_frame = update.end_frame;
+                    region.transpose_semitones = update.transpose_semitones;
+                    region.warp_enabled = update.warp_enabled;
+                    region.warp_source_bpm = update.warp_source_bpm;
+                    region.master_gain = update.master_gain;
+                    song.regions.push_back(std::move(region));
+                }
+
+                song.markers.clear();
+                song.markers.reserve(c.markers.size());
+                for (const auto& update : c.markers) {
+                    Marker marker;
+                    marker.id = update.id;
+                    marker.name = update.name;
+                    marker.frame = update.frame;
+                    marker.kind = marker_kind_from_string(update.kind);
+                    marker.variant = update.variant;
+                    song.markers.push_back(std::move(marker));
+                }
+
+                song.bpm = std::clamp(c.bpm, 20.0, 300.0);
+                song.beats_per_bar = std::max(1, c.beats_per_bar);
+                song.beat_unit = std::max(1, c.beat_unit);
+                song.tempo_markers.clear();
+                song.tempo_markers.reserve(c.tempo_markers.size());
+                for (const auto& update : c.tempo_markers) {
+                    TempoMarker marker;
+                    marker.id = update.id;
+                    marker.frame = std::max<Frame>(0, update.frame);
+                    marker.bpm = std::clamp(update.bpm, 20.0, 300.0);
+                    song.tempo_markers.push_back(std::move(marker));
+                }
+                std::sort(song.tempo_markers.begin(), song.tempo_markers.end(),
+                    [](const TempoMarker& l, const TempoMarker& r) {
+                        return l.frame < r.frame;
+                    });
+                song.time_signature_markers.clear();
+                song.time_signature_markers.reserve(c.time_signature_markers.size());
+                for (const auto& update : c.time_signature_markers) {
+                    TimeSignatureMarker marker;
+                    marker.id = update.id;
+                    marker.frame = std::max<Frame>(0, update.frame);
+                    marker.beats_per_bar = std::max(1, update.beats_per_bar);
+                    marker.beat_unit = std::max(1, update.beat_unit);
+                    song.time_signature_markers.push_back(std::move(marker));
+                }
+                std::sort(song.time_signature_markers.begin(),
+                    song.time_signature_markers.end(),
+                    [](const TimeSignatureMarker& l, const TimeSignatureMarker& r) {
+                        return l.frame < r.frame;
+                    });
+
+                changed = true;
+                break;
+            }
+            if (!changed)
+                return Result<void>::ok();
+
+            // Register + enqueue only sources not already known. NO clear().
+            {
+                std::unordered_set<Id> known_sources;
+                known_sources.reserve(next_session->sources.size());
+                for (const auto& s : next_session->sources)
+                    known_sources.insert(s.id);
+                for (const auto& sref : c.sources) {
+                    if (!known_sources.insert(sref.id).second)
+                        continue;  // already in the session's source list
+                    Source s;
+                    s.id = sref.id;
+                    s.file_path = sref.file_path;
+                    next_session->sources.push_back(s);  // keep session list complete
+                    if (prep_queue_)
+                        prep_queue_->enqueue_source(s);  // idempotent; skips ready ones
+                }
+            }
+
+            // Bungee: retime existing voices for the new clip layout (cheap;
+            // does not rebuild from scratch). New/unloaded sources are skipped
+            // and picked up when they finish decoding.
+            if (bungee_voices_ && bungee_voices_->is_available()
+                && source_manager_ && clock_) {
+                bungee_voices_->retime_existing_for_session(
+                    *next_session, *source_manager_, clock_->position().frame);
+            }
+
+            std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+            (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+            if (mixer_) {
+                // Upsert can ADD/REMOVE/REORDER tracks, so the mixer must rebuild
+                // its control slots (gain/pan/mute/solo/folder chains) — NOT a
+                // bare swap_session_atomic, which only swaps the pointer and
+                // leaves new tracks without control slots (their mixer commands
+                // would silently no-op until a full LoadSession). preserve=true
+                // keeps live slider state for tracks that still exist.
+                mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+            }
+            if (prearmed_jumps_) {
+                const auto rev = prearm_revision_.fetch_add(1,
+                    std::memory_order_relaxed) + 1;
+                prearmed_jumps_->prepare_all_targets_async(
+                    next_session, source_manager_.get(), rev);
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdPrepareSources>) {
+            // Decode→cache (+ same-pass peaks) files NOW, without a session, so
+            // preparation starts the moment they're known (library import / OS
+            // drag). The persistent prep queue skips already-prepared sources.
+            if (!prep_queue_)
+                return Result<void>::ok();
+            const Frame playhead = clock_ ? clock_->position().frame : 0;
+            for (const auto& sref : c.sources) {
+                Source s;
+                s.id = sref.id;
+                s.file_path = sref.file_path;
+                prep_queue_->enqueue_source(s);
+            }
+            (void)playhead;
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetOutputDevice>) {

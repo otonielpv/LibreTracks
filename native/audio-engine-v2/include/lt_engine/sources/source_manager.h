@@ -83,6 +83,19 @@ public:
                                       Frame duration_frames,
                                       SourceStoreProgressCallback on_progress = {});
 
+    // Streaming decode+resample+cache-write in chunks, WITHOUT materializing the
+    // whole file (or a full resample copy) in RAM. Opens the source via the
+    // decoder, pipes it through a stateful resampler to the RF64 PCM cache a
+    // chunk at a time, fills the eager block-cache blocks, then installs the
+    // streaming DecodedSource (status "cache_ready"). This is the import path;
+    // it keeps the per-track peak footprint to a few MB so the working set
+    // stops swinging and the audio callback no longer stalls during cold import.
+    // Returns err if the file can't be decoded; callers may fall back.
+    Result<void> decode_and_store_streaming(const Id& source_id,
+                                            const std::string& file_path,
+                                            int target_sample_rate,
+                                            SourceStoreProgressCallback on_progress = {});
+
     // If a previously-written PCM cache file exists for this source, install
     // it as a streaming entry (status = "cache_ready") without re-decoding
     // and return true. Returns false if no usable cache is found — callers
@@ -106,6 +119,13 @@ public:
     void request_block(const Id& source_id, int block_index) const noexcept;
     void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
     CacheDiagnostics cache_diagnostics() const;
+
+    // Diagnostics (LIBRETRACKS_AUDIO_DIAG): pending fill requests and the
+    // block-cache lock-contention stats (resets the latter on read).
+    size_t fill_queue_depth() const noexcept;
+    BlockCache::LockStats take_block_cache_lock_stats() noexcept {
+        return block_cache_.take_lock_stats();
+    }
     SourcePeakOverview source_peaks(const Id& source_id, int resolution_frames) const;
 
     // Get a loaded source.  Returns nullptr if not loaded.
@@ -134,12 +154,32 @@ private:
         int                      sample_rate = 0;
         Frame                    duration_frames = 0;
         size_t                   disk_cache_bytes = 0;
+        // Waveform peaks computed in the SAME pass as the streaming decode (no
+        // second full decode for the UI's waveform — Ableton-style). When set,
+        // source_peaks() returns these directly instead of re-reading the cache.
+        std::shared_ptr<const SourcePeakOverview> cached_peaks;
+        // R5 progressive availability: while a streaming decode is in flight the
+        // source is published as playable (status "streaming") with the cache
+        // file still open for writing. This counts how many output frames have
+        // actually been written so far. The fill worker must NOT read past it
+        // from disk (the WAV header/data size isn't finalized until sf_close), so
+        // tail blocks beyond it stay absent and play silence — exactly Ableton's
+        // "decoded part plays, rest silent". shared_ptr so Entry stays copyable;
+        // flips to a final value and status "cache_ready" when the decode ends.
+        std::shared_ptr<std::atomic<Frame>> decoded_frames;
     };
 
     using EntryMap = std::unordered_map<Id, Entry>;
 
     mutable std::mutex              write_mutex_;
-    std::shared_ptr<const EntryMap> entries_;
+    // std::atomic<shared_ptr> (C++20), NOT the free std::atomic_load/store
+    // helpers: on MSVC those use a GLOBAL spinlock pool shared across all
+    // shared_ptrs, which causes priority inversion — the audio thread (high
+    // priority) calling get() per clip spins waiting on the spinlock held by a
+    // BELOW_NORMAL decode worker that got descheduled mid-import, stalling
+    // playback for 100s of ms. The member atomic uses per-object wait/notify.
+    // See microsoft/STL#86.
+    std::atomic<std::shared_ptr<const EntryMap>> entries_;
     std::deque<std::shared_ptr<const EntryMap>> retired_entries_;
     SourceReadyCallback             source_ready_callback_;
     mutable BlockCache              block_cache_;

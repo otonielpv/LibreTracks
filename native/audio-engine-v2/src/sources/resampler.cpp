@@ -124,4 +124,132 @@ std::unique_ptr<Resampler> make_resampler() {
     return std::make_unique<EngineResampler>();
 }
 
+// ---------------------------------------------------------------------------
+// StreamingResampler implementations
+// ---------------------------------------------------------------------------
+namespace {
+
+// Sample-rate match → just interleave-copy the input through.
+class PassthroughStreamingResampler final : public StreamingResampler {
+public:
+    explicit PassthroughStreamingResampler(int channels) : channels_(channels) {}
+    Frame process_chunk(const float* input, Frame in_frames, bool /*eoi*/,
+                        std::vector<float>& out) override {
+        if (in_frames <= 0) return 0;
+        const std::size_t n = static_cast<std::size_t>(in_frames) *
+                              static_cast<std::size_t>(channels_);
+        out.insert(out.end(), input, input + n);
+        return in_frames;
+    }
+private:
+    int channels_;
+};
+
+#if LT_ENGINE_USE_R8BRAIN
+// Stateful r8brain resampler, one CDSPResampler per channel. We de-interleave
+// each input chunk into per-channel double buffers, push through, then
+// re-interleave the produced output. r8brain keeps internal state across calls,
+// so feeding the file in chunks yields the same result as one big call.
+class R8brainStreamingResampler final : public StreamingResampler {
+public:
+    R8brainStreamingResampler(int channels, int src_sr, int dst_sr)
+        : channels_(channels) {
+        // MaxInLen: the largest input block we'll feed per process() call.
+        constexpr int kMaxInLen = 65536;
+        resamplers_.reserve(static_cast<std::size_t>(channels));
+        for (int c = 0; c < channels; ++c)
+            resamplers_.push_back(std::make_unique<r8b::CDSPResampler24>(
+                src_sr, dst_sr, kMaxInLen));
+        chan_in_.resize(static_cast<std::size_t>(channels));
+        // r8brain emits output with an internal delay; when streaming we must
+        // drop the first `getInLenBeforeOutStart()`-worth of OUTPUT frames so
+        // the result aligns with the one-shot whole-file resample. The whole-
+        // file path constructs the resampler over the entire file and takes the
+        // leading output_frames, which already starts at the correct position;
+        // streaming has to skip the latency transient explicitly. The call
+        // clears the resampler, so query it before any real processing.
+        // getInLenBeforeOutStart returns INPUT samples before output starts;
+        // the equivalent output latency is that many input frames × ratio.
+        // NOTE: the whole-file path does NOT discard latency (it takes the first
+        // output_frames of one big process() call), so to match it we DON'T skip
+        // either. Kept queryable for reference.
+        (void)src_sr; (void)dst_sr;
+        skip_out_frames_ = 0;
+    }
+
+    Frame process_chunk(const float* input, Frame in_frames, bool /*eoi*/,
+                        std::vector<float>& out) override {
+        if (in_frames <= 0 || channels_ <= 0) return 0;
+        // De-interleave into per-channel double buffers.
+        for (int c = 0; c < channels_; ++c)
+            chan_in_[static_cast<std::size_t>(c)].resize(static_cast<std::size_t>(in_frames));
+        for (Frame f = 0; f < in_frames; ++f)
+            for (int c = 0; c < channels_; ++c)
+                chan_in_[static_cast<std::size_t>(c)][static_cast<std::size_t>(f)] =
+                    static_cast<double>(input[static_cast<std::size_t>(f) *
+                        static_cast<std::size_t>(channels_) + static_cast<std::size_t>(c)]);
+
+        // Process each channel; r8brain returns a pointer to its internal output
+        // and the produced count. All channels produce the same count for the
+        // same input length (identical ratio + filter), so use channel 0's.
+        std::vector<double*> outs(static_cast<std::size_t>(channels_), nullptr);
+        int produced = 0;
+        for (int c = 0; c < channels_; ++c) {
+            double* op = nullptr;
+            const int p = resamplers_[static_cast<std::size_t>(c)]->process(
+                chan_in_[static_cast<std::size_t>(c)].data(),
+                static_cast<int>(in_frames), op);
+            outs[static_cast<std::size_t>(c)] = op;
+            if (c == 0) produced = p;
+        }
+        if (produced <= 0) return 0;
+
+        // Skip the leading latency-transient output frames so the streamed
+        // result aligns with the whole-file one-shot resample.
+        int start = 0;
+        if (skip_out_frames_ > 0) {
+            const Frame skip = std::min<Frame>(skip_out_frames_, produced);
+            start = static_cast<int>(skip);
+            skip_out_frames_ -= skip;
+        }
+        const int emit = produced - start;
+        if (emit <= 0) return 0;
+
+        const std::size_t base = out.size();
+        out.resize(base + static_cast<std::size_t>(emit) *
+                              static_cast<std::size_t>(channels_));
+        for (int f = 0; f < emit; ++f)
+            for (int c = 0; c < channels_; ++c)
+                out[base + static_cast<std::size_t>(f) *
+                        static_cast<std::size_t>(channels_) + static_cast<std::size_t>(c)] =
+                    static_cast<float>(outs[static_cast<std::size_t>(c)][start + f]);
+        return static_cast<Frame>(emit);
+    }
+private:
+    int channels_;
+    Frame skip_out_frames_ = 0;
+    std::vector<std::unique_ptr<r8b::CDSPResampler24>> resamplers_;
+    std::vector<std::vector<double>> chan_in_;
+};
+#endif
+
+} // namespace
+
+std::unique_ptr<StreamingResampler> make_streaming_resampler(
+    int channels, int source_sample_rate, int target_sample_rate) {
+    if (channels <= 0)
+        channels = 1;
+    if (source_sample_rate == target_sample_rate || source_sample_rate <= 0
+        || target_sample_rate <= 0)
+        return std::make_unique<PassthroughStreamingResampler>(channels);
+#if LT_ENGINE_USE_R8BRAIN
+    return std::make_unique<R8brainStreamingResampler>(
+        channels, source_sample_rate, target_sample_rate);
+#else
+    // No streaming backend compiled → passthrough (sample rates should match in
+    // that config, or the whole-file path is used).
+    return std::make_unique<PassthroughStreamingResampler>(channels);
+#endif
+}
+
 } // namespace lt

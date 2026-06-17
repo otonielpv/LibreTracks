@@ -35,8 +35,22 @@ struct Job {
 
 // Fired on the worker thread when a job finishes (success or failure).
 // Must be fast and non-blocking — will be marshalled to the event queue.
-using JobCompletionCallback = std::function<void(const Job&)>;
+// Takes Job& (not const&) so the handler can MOVE the (large) decoded_samples
+// buffer out instead of copying it — copying a multi-MB decode per import is a
+// major source of memory pressure that evicts the audio thread's working set.
+using JobCompletionCallback = std::function<void(Job&)>;
 using JobProgressCallback = std::function<void(const Job&)>;
+
+// Optional streaming decode+store, run on the worker thread INSTEAD of the
+// whole-file decode_file_to_float32 + on_done handback. When set, the worker
+// calls this (which pipes decode→resample→cache in chunks, never holding the
+// whole file in RAM) and reports success/failure via on_done with an empty
+// decoded_samples. Lets the prep queue keep the SourceManager dependency.
+// Returns an error string on failure, empty on success.
+using StreamingStoreCallback =
+    std::function<std::string(const Id& source_id, const std::string& file_path,
+                              int target_sample_rate,
+                              const JobProgressCallback& on_progress)>;
 
 class DecodeWorkerPool {
 public:
@@ -46,12 +60,16 @@ public:
 
     // Submit a decode+resample job for a source file.
     // Calls `on_done` on the worker thread when complete.
+    // If `streaming_store` is set, the worker runs IT (chunked decode→cache)
+    // instead of the whole-file decode + on_done handback, then signals
+    // completion via on_done with an empty decoded_samples buffer.
     void submit_decode(const Id&          job_id,
                        const Id&          source_id,
                        const std::string& file_path,
                        int                target_sample_rate,
                        JobProgressCallback on_progress,
-                       JobCompletionCallback on_done);
+                       JobCompletionCallback on_done,
+                       StreamingStoreCallback streaming_store = {});
 
     // Cancel a pending or running job.  No-op if already complete.
     void cancel(const Id& job_id);

@@ -50,6 +50,80 @@ fn seek_relative_negative_round_trip() {
     ));
 }
 
+// ── Incremental structural upsert ─────────────────────────────────────────────
+
+#[test]
+fn upsert_song_tracks_round_trip_type() {
+    let cmd = EngineCommand::UpsertSongTracks {
+        song_id: "song-1".into(),
+        tracks: vec![],
+        sources: vec![],
+        regions: vec![],
+        markers: vec![],
+        bpm: 120.0,
+        beats_per_bar: 4,
+        beat_unit: 4,
+        tempo_markers: vec![],
+        time_signature_markers: vec![],
+    };
+    assert_eq!(round_trip_type(&cmd), "UpsertSongTracks");
+}
+
+#[test]
+fn upsert_song_tracks_json_shape_matches_cpp_parser() {
+    // The C++ parser (core/commands.cpp "UpsertSongTracks") reads:
+    //   song_id, tracks[].{id,name,gain,...,clips[].{id,source_id,...}}, sources[].{id,file_path}
+    let cmd = EngineCommand::UpsertSongTracks {
+        song_id: "song-1".into(),
+        tracks: vec![TrackUpsert {
+            id: "trk-1".into(),
+            name: "Bass".into(),
+            gain: 0.8,
+            pan: -0.2,
+            audio_to: "master".into(),
+            mute: false,
+            solo: false,
+            transpose_behavior: "never_transpose".into(),
+            role: String::new(),
+            kind: "audio".into(),
+            parent_track_id: String::new(),
+            clips: vec![TrackClipUpdate {
+                id: "clip-1".into(),
+                source_id: "bass.mp3".into(),
+                timeline_start_frame: 0,
+                source_start_frame: 0,
+                length_frames: 480_000,
+                gain: 1.0,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                semitones: 0,
+            }],
+        }],
+        sources: vec![SourceRef {
+            id: "bass.mp3".into(),
+            file_path: "bass.mp3".into(),
+        }],
+        regions: vec![],
+        markers: vec![],
+        bpm: 128.0,
+        beats_per_bar: 4,
+        beat_unit: 4,
+        tempo_markers: vec![],
+        time_signature_markers: vec![],
+    };
+    let json = serde_json::to_string(&cmd).expect("serialize");
+    let v: serde_json::Value = serde_json::from_str(&json).expect("parse");
+    assert_eq!(v["type"], "UpsertSongTracks");
+    assert_eq!(v["song_id"], "song-1");
+    assert_eq!(v["tracks"][0]["id"], "trk-1");
+    assert_eq!(v["tracks"][0]["kind"], "audio");
+    assert_eq!(v["tracks"][0]["clips"][0]["source_id"], "bass.mp3");
+    assert_eq!(v["sources"][0]["id"], "bass.mp3");
+    assert_eq!(v["sources"][0]["file_path"], "bass.mp3");
+    // And it must deserialize back cleanly.
+    let _rt = round_trip(&cmd);
+}
+
 // ── Jumps ───────────────────────────────────────────────────────────────────
 
 #[test]
@@ -295,6 +369,7 @@ fn set_song_timeline_window_round_trip() {
             beats_per_bar: 6,
             beat_unit: 8,
         }],
+        live: false,
     };
     let json = serde_json::to_string(&cmd).unwrap();
     assert!(json.contains("\"type\":\"SetSongTimelineWindow\""));
@@ -311,6 +386,7 @@ fn set_song_timeline_window_round_trip() {
             beat_unit: 4,
             tempo_markers,
             time_signature_markers,
+            live: false,
         } if song_id == "song1"
             && clips.len() == 1
             && clips[0].length_frames == 48000
@@ -537,6 +613,7 @@ fn all_commands_have_type_field() {
             beat_unit: 4,
             tempo_markers: vec![],
             time_signature_markers: vec![],
+            live: false,
         },
         EngineCommand::SetSampleRate { sample_rate: 48000 },
         EngineCommand::SetBufferSize { buffer_size: 512 },

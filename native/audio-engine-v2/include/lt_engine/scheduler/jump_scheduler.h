@@ -24,6 +24,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <cstdint>
 
 namespace lt {
 
@@ -129,5 +130,9 @@ private:
 Result<Frame> resolve_jump_target(const JumpTarget& target,
                                    const Session& session,
                                    const TransportClock& clock);
+
+// Diagnostic (LIBRETRACKS_AUDIO_DIAG): worst µs the audio thread spent blocked
+// acquiring the scheduler's live_mutex in check_due() since the last read.
+std::uint64_t take_checkdue_lock_wait_max_us();
 
 } // namespace lt

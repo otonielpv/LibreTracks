@@ -19,7 +19,46 @@
 #include <mutex>
 #include <unordered_map>
 
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <avrt.h>  // MMCSS — AvSetMmThreadCharacteristics ("Pro Audio")
+#endif
+
 namespace lt {
+
+#if defined(_WIN32)
+// Promote the calling thread (the audio device's callback thread) to the
+// Windows Multimedia Class Scheduler "Pro Audio" task. Without this the JUCE
+// DirectSound/MME callback runs at normal priority and gets preempted by the
+// decode workers + UI under load — measured as 100-400ms callback stalls that
+// underrun the buffer and drop out playing tracks (LT_AUDIO_DIAG cb_max_ms
+// spikes with zero render work). Every real DAW does this. Idempotent per
+// thread via thread_local; best-effort (older Windows without avrt just skips).
+void promote_audio_thread_to_pro_audio() {
+    static thread_local bool promoted = false;
+    if (promoted) return;
+    promoted = true;
+    DWORD task_index = 0;
+    HANDLE h = AvSetMmThreadCharacteristicsA("Pro Audio", &task_index);
+    if (h) {
+        const BOOL prio_ok = AvSetMmThreadPriority(h, AVRT_PRIORITY_CRITICAL);
+        // Intentionally leak the handle: it must stay valid for the lifetime of
+        // the audio thread, which lives until the device closes / process exit.
+        lt_debug_log("[LT_AUDIO_DIAG] audio thread promoted to MMCSS Pro Audio "
+                     "(tid=%lu prio_ok=%d)\n",
+                     GetCurrentThreadId(), prio_ok ? 1 : 0);
+    } else {
+        // Fallback: at least lift the thread above the BELOW_NORMAL decode pool.
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+        lt_debug_log("[LT_AUDIO_DIAG] MMCSS promotion FAILED (err=%lu); fell back "
+                     "to THREAD_PRIORITY_TIME_CRITICAL\n", GetLastError());
+    }
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // JUCE callback adaptor — bridges AudioRenderCallback to juce::AudioIODeviceCallback
@@ -37,7 +76,22 @@ public:
         const juce::AudioIODeviceCallbackContext& /*ctx*/) override
     {
         // ── Realtime rules: no alloc, no lock, no I/O ──────────────────
+#if defined(_WIN32)
+        promote_audio_thread_to_pro_audio();  // once per audio thread
+#endif
         auto t0 = std::chrono::steady_clock::now();
+
+        // Gap between the END of the previous callback and the START of this
+        // one. If this is large while the work below stays small, the OS is
+        // descheduling / under-feeding the audio thread between callbacks
+        // (scheduling or device-driver buffering) — NOT our render cost.
+        if (last_callback_end_.time_since_epoch().count() != 0) {
+            const double gap_ms =
+                std::chrono::duration<double, std::milli>(t0 - last_callback_end_).count();
+            double gmax = gap_max_ms_.load(std::memory_order_relaxed);
+            while (gap_ms > gmax
+                   && !gap_max_ms_.compare_exchange_weak(gmax, gap_ms, std::memory_order_relaxed)) {}
+        }
 
         // Clear outputs first so stale data never reaches the hardware.
         for (int ch = 0; ch < num_output_channels; ++ch)
@@ -51,13 +105,28 @@ public:
         }
 
         auto t1 = std::chrono::steady_clock::now();
+        last_callback_end_ = t1;
         double dur_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        double wmax = work_max_ms_.load(std::memory_order_relaxed);
+        while (dur_ms > wmax
+               && !work_max_ms_.compare_exchange_weak(wmax, dur_ms, std::memory_order_relaxed)) {}
 
         callback_count_.fetch_add(1, std::memory_order_relaxed);
         // Simple exponential moving average for callback duration.
         double prev = callback_duration_ms_.load(std::memory_order_relaxed);
         callback_duration_ms_.store(0.9 * prev + 0.1 * dur_ms, std::memory_order_relaxed);
+        // NOTE: never log from this thread — lt_debug_log does fopen/fwrite/
+        // fflush/fclose under a global mutex, which is exactly the kind of
+        // blocking I/O that stalls the audio callback. The gap/work maxima are
+        // exposed via take_gap_max_ms()/take_work_max_ms() and logged from the
+        // snapshot poll thread instead.
     }
+
+    // Read-and-reset the worst inter-callback gap and worst in-callback work
+    // time since the last call (diagnostics). Distinguishes "thread starved
+    // between callbacks" (gap high) from "render blocked inside" (work high).
+    double take_gap_max_ms()  { return gap_max_ms_.exchange(0.0, std::memory_order_relaxed); }
+    double take_work_max_ms() { return work_max_ms_.exchange(0.0, std::memory_order_relaxed); }
 
     void audioDeviceAboutToStart(juce::AudioIODevice* device) override {
         device_sample_rate_.store(device->getCurrentSampleRate(), std::memory_order_relaxed);
@@ -83,6 +152,11 @@ private:
     std::atomic<int>          callback_count_{0};
     std::atomic<bool>         error_flag_{false};
     std::string               last_error_;
+    std::chrono::steady_clock::time_point last_callback_end_{};
+    std::atomic<double>       gap_max_ms_{0.0};
+    std::atomic<double>       work_max_ms_{0.0};
+    const bool                diag_enabled_ = lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG");
+    std::chrono::steady_clock::time_point last_diag_log_{};
 };
 
 // ---------------------------------------------------------------------------
@@ -614,6 +688,14 @@ DeviceInfo AudioDeviceManager::device_info() const {
     return info;
 }
 
+double AudioDeviceManager::take_callback_gap_max_ms() {
+    return impl_->adaptor ? impl_->adaptor->take_gap_max_ms() : 0.0;
+}
+
+double AudioDeviceManager::take_callback_work_max_ms() {
+    return impl_->adaptor ? impl_->adaptor->take_work_max_ms() : 0.0;
+}
+
 } // namespace lt
 
 #else // LT_ENGINE_USE_JUCE=0 - stub implementation
@@ -669,6 +751,8 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.output_channel_names = {"Out 1", "Out 2"};
     return info;
 }
+double AudioDeviceManager::take_callback_gap_max_ms()  { return 0.0; }
+double AudioDeviceManager::take_callback_work_max_ms() { return 0.0; }
 
 } // namespace lt
 

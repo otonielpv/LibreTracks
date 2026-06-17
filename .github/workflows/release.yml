@@ -302,6 +302,14 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path vendor/bin/native | Out-Null
           Get-ChildItem -Path $libDir -Include "*.dll","*.so","*.dylib" -File -Recurse | Copy-Item -Destination vendor/bin/native -Force
+          if ("${{ matrix.platform }}" -eq "windows") {
+            $vcpkgBin = "$PWD/build/engine-release/vcpkg_installed/$env:VCPKG_DEFAULT_TRIPLET/bin"
+            if (-not (Test-Path $vcpkgBin)) {
+              Write-Error "Expected FFmpeg runtime DLLs in $vcpkgBin, but the directory was not found."
+              exit 1
+            }
+            Get-ChildItem -Path $vcpkgBin -Filter "*.dll" -File | Copy-Item -Destination vendor/bin/native -Force
+          }
           if ("${{ matrix.platform }}" -eq "linux") {
             Copy-Item vendor/bungee/linux-x86_64/libbungee.so vendor/bin/native -Force
             # Vendor our LGPL FFmpeg .so next to the engine with an $ORIGIN rpath
@@ -348,6 +356,21 @@ jobs:
         with:
           projectPath: 'apps/desktop'
           args: ${{ matrix.os == 'macos-latest' && '--verbose --target universal-apple-darwin' || matrix.os == 'macos-15-intel' && '--verbose --target x86_64-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,rpm,appimage' || '--verbose' }}
+
+      - name: Validate Windows runtime linkage
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          .\scripts\verify-windows-no-vc-redist.ps1 -RequireBundledDependencies vendor\bin\native
+          .\scripts\verify-windows-no-vc-redist.ps1 target-desktop-native\release\libretracks-desktop.exe
+          $installer = Get-ChildItem target-desktop-native\release\bundle\nsis -Filter "*.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "No Windows installer was produced under target-desktop-native\release\bundle\nsis."
+            exit 1
+          }
+          .\scripts\verify-windows-no-vc-redist.ps1 $installer.FullName
 
       - name: Validate Linux .deb runtime linkage
         if: matrix.platform == 'linux'

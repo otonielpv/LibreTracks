@@ -112,10 +112,14 @@ pub struct WaveformJob {
     pub waveform_key: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WaveformGenerationQueue {
     sender: mpsc::Sender<WaveformJob>,
     in_flight: Arc<Mutex<HashSet<String>>>,
+    // The engine, so the worker can reuse the peaks the streaming decode ALREADY
+    // computed (source_peaks) instead of re-decoding the whole file. None in
+    // tests / before the controller exists.
+    audio: Arc<Mutex<Option<Arc<AudioController>>>>,
 }
 
 pub struct DesktopState {
@@ -128,10 +132,15 @@ pub struct DesktopState {
 
 impl Default for DesktopState {
     fn default() -> Self {
+        let audio = Arc::new(AudioController::default());
+        let waveform_jobs = WaveformGenerationQueue::default();
+        // Let the waveform worker reuse the engine's same-pass peaks instead of
+        // re-decoding each file.
+        waveform_jobs.set_audio(Arc::clone(&audio));
         Self {
-            audio: Arc::new(AudioController::default()),
+            audio,
             midi: MidiManager::default(),
-            waveform_jobs: WaveformGenerationQueue::default(),
+            waveform_jobs,
             session: Mutex::new(DesktopSession::default()),
             project_load_progress: Mutex::new(None),
         }
@@ -312,18 +321,32 @@ impl Default for WaveformGenerationQueue {
         let (sender, receiver) = mpsc::channel::<WaveformJob>();
         let in_flight = Arc::new(Mutex::new(HashSet::new()));
         let worker_in_flight = Arc::clone(&in_flight);
+        let audio: Arc<Mutex<Option<Arc<AudioController>>>> = Arc::new(Mutex::new(None));
+        let worker_audio = Arc::clone(&audio);
 
         thread::spawn(move || {
             while let Ok(job) = receiver.recv() {
                 let job_key = waveform_job_key(&job.song_dir, &job.waveform_key);
-                process_waveform_job(job);
+                let audio = worker_audio.lock().ok().and_then(|g| g.clone());
+                process_waveform_job(job, audio.as_deref());
                 if let Ok(mut in_flight) = worker_in_flight.lock() {
                     in_flight.remove(&job_key);
                 }
             }
         });
 
-        Self { sender, in_flight }
+        Self { sender, in_flight, audio }
+    }
+}
+
+impl WaveformGenerationQueue {
+    /// Give the worker the engine handle so it can reuse same-pass peaks
+    /// (source_peaks) instead of re-decoding. Called once after DesktopState
+    /// builds the shared AudioController.
+    pub fn set_audio(&self, audio: Arc<AudioController>) {
+        if let Ok(mut slot) = self.audio.lock() {
+            *slot = Some(audio);
+        }
     }
 }
 
@@ -339,6 +362,7 @@ impl WaveformGenerationQueue {
         Self {
             sender,
             in_flight: Arc::new(Mutex::new(HashSet::new())),
+            audio: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -358,6 +382,7 @@ fn unique_waveform_keys(song: &Song) -> Vec<String> {
     }
     keys
 }
+
 
 /// Generate a waveform with the native decoder stack (FFmpeg/libav for
 /// compressed formats, native fast paths where available) and write it to the
@@ -387,18 +412,148 @@ fn generate_native_waveform(
     Ok(summary)
 }
 
-fn process_waveform_job(job: WaveformJob) {
+/// Build the global waveform cache for a song's sources from the peaks the
+/// streaming decode ALREADY computed (AudioController::source_peaks), instead of
+/// re-decoding each file. Run after sources are ready, on the command thread
+/// (which owns the engine). Best-effort per file: a miss just leaves the normal
+/// background waveform job to generate it. This is what removes the second
+/// full decode that was contending with playback during import.
+fn prime_waveforms_from_engine_peaks(
+    song_dir: &Path,
+    song: &Song,
+    audio: &AudioController,
+) {
+    let cache_root = decoding_cache_root();
+    for key in unique_waveform_keys(song) {
+        // The source id the engine knows is the resolved audio file path.
+        let source_path = resolve_audio_file_path(song_dir, &key);
+        let source_id = source_path.to_string_lossy().to_string();
+        // Skip if a cache already exists (cheap check).
+        if load_global_waveform(&cache_root, song_dir, Path::new(&key)).is_ok() {
+            continue;
+        }
+        let Some(peaks) = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
+        else {
+            continue;  // not loaded yet / no same-pass peaks → retry will hit
+        };
+        let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+        if duration_frames == 0 {
+            continue;
+        }
+        let Ok(summary) = waveform_summary_from_channel_peaks(
+            peaks.sample_rate,
+            duration_frames,
+            peaks.resolution_frames,
+            peaks.min_peaks,
+            peaks.max_peaks,
+            peaks.min_peaks_right,
+            peaks.max_peaks_right,
+            &source_path,
+        ) else {
+            continue;
+        };
+        let _ = write_global_waveform(&cache_root, &source_path, &summary);
+    }
+}
+
+/// Build a waveform summary for one source from the engine's same-pass peaks
+/// (no re-decode). Returns None if the engine doesn't have the source yet or
+/// has no peaks — the caller then falls back to the full decode. Also writes
+/// the global cache so subsequent requests hit it.
+fn waveform_from_engine_peaks(
+    song_dir: &Path,
+    waveform_key: &str,
+    audio: Option<&AudioController>,
+) -> Option<WaveformSummary> {
+    let audio = audio?;
+    let source_path = resolve_audio_file_path(song_dir, waveform_key);
+    let source_id = source_path.to_string_lossy().to_string();
+    let peaks = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES)?;
+    let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+    if duration_frames == 0 {
+        return None;
+    }
+    // R5: a source still streaming reports its duration but no peaks yet (the
+    // same-pass peaks are published atomically at decode end). Treat empty peaks
+    // as not-ready so we don't cache a blank/half waveform — the caller polls.
+    if peaks.max_peaks.is_empty() {
+        return None;
+    }
+    let summary = waveform_summary_from_channel_peaks(
+        peaks.sample_rate,
+        duration_frames,
+        peaks.resolution_frames,
+        peaks.min_peaks,
+        peaks.max_peaks,
+        peaks.min_peaks_right,
+        peaks.max_peaks_right,
+        &source_path,
+    )
+    .ok()?;
+    let _ = write_global_waveform(&decoding_cache_root(), &source_path, &summary);
+    Some(summary)
+}
+
+fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
     let WaveformJob {
         app,
         song_dir,
         waveform_key,
     } = job;
 
-    // Cache read first, then native decode. Symphonia stays as a final fallback
-    // for builds where the native decoder is unavailable.
+    // 1) Disk cache. 2) Same-pass peaks from the engine (NO re-decode — the
+    // streaming decode already computed them). 3) Full re-decode (file_peaks),
+    // the expensive fallback only for sources the engine doesn't have (e.g. a
+    // library file not in the session). 4) Symphonia, last resort.
     let cache_root = decoding_cache_root();
+    // If the engine has this source (decoding or done) we must NOT re-decode for
+    // the waveform — its streaming pass produces the peaks. If they're not ready
+    // yet, bail (the frontend re-requests; in_flight is cleared when this job
+    // returns, so a later poll retries and eventually hits the engine peaks).
+    let engine_has_source = audio
+        .map(|a| {
+            let id = resolve_audio_file_path(&song_dir, &waveform_key)
+                .to_string_lossy()
+                .to_string();
+            a.source_is_known(&id)
+        })
+        .unwrap_or(false);
+
+    // When the engine is decoding this source, POLL for its same-pass peaks
+    // here (this is a background thread) instead of bailing — otherwise the
+    // frontend's one-shot "analyzing" request never gets a waveform and spins
+    // forever. The streaming decode finishes within seconds; cap the wait so a
+    // stuck/failed source eventually falls through to the file_peaks path.
+    let engine_peaks = if engine_has_source {
+        let mut got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
+        let mut waited_ms = 0u64;
+        const POLL_MS: u64 = 100;
+        const MAX_WAIT_MS: u64 = 120_000;
+        while got.is_none() && waited_ms < MAX_WAIT_MS {
+            // Stop early if the source vanished (session changed / removed).
+            let still_known = audio
+                .map(|a| {
+                    let id = resolve_audio_file_path(&song_dir, &waveform_key)
+                        .to_string_lossy()
+                        .to_string();
+                    a.source_is_known(&id)
+                })
+                .unwrap_or(false);
+            if !still_known {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
+            waited_ms += POLL_MS;
+            got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
+        }
+        got
+    } else {
+        waveform_from_engine_peaks(&song_dir, &waveform_key, audio)
+    };
+
     let summary = match load_global_waveform(&cache_root, &song_dir, Path::new(&waveform_key)) {
         Ok(summary) => Some(summary),
+        Err(_) if engine_peaks.is_some() => engine_peaks,
         Err(cache_error) => match generate_native_waveform(&song_dir, &waveform_key) {
             Ok(summary) => Some(summary),
             Err(native_error) => {
@@ -1014,17 +1169,20 @@ impl DesktopSession {
 
         let package_path = package_file.to_string_lossy().into_owned();
         emit_project_load_progress(app, 5, "Leyendo paquete...".into(), 0, 0, 0, 0);
-        // Import the package WITHOUT blocking on source decode — that's what
-        // wait_for_project_audio_preparation does, with live progress events.
-        // Otherwise the user only sees the loading bar at the very end, after
-        // sources have already been decoded silently. The no_wait phase itself
-        // (unzip + persist) is also synchronous and used to emit nothing, so the
-        // overlay sat frozen on "Leyendo paquete..." until decode began; pass
-        // `app` through so it reports its sub-phases inside the reserved 5..18
-        // band (decode then continues from 18 in the wait loop below).
+        // Import the package WITHOUT blocking on source decode. The no_wait phase
+        // unzips, copies audio, persists the structure (StructureRebuild → the
+        // engine's incremental upsert), and primes the waveform cache — all of
+        // which is fast and gives the frontend a complete song (tracks + clips +
+        // waveform placeholders). The sources are enqueued for background decode
+        // by the upsert; we do NOT wait for them here. This matches the audio
+        // import flow: the timeline shows the new tracks immediately, waveforms
+        // fill in as they decode, and play is progressive (decoded head audible,
+        // rest silent — R5). Previously this called
+        // wait_for_project_audio_preparation, which held the session lock until
+        // every source finished decoding and kept the UI behind a blocking
+        // overlay for the whole import.
         let inserted =
             self.import_song_package_no_wait(app, &package_path, insert_at_seconds, audio)?;
-        self.wait_for_project_audio_preparation(app, audio)?;
 
         Ok(inserted.snapshot)
     }
@@ -1394,14 +1552,24 @@ impl DesktopSession {
         waveform_keys: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
+        audio: &AudioController,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
-        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)))
+        // Before serving, prime the global cache from the engine's same-pass
+        // peaks (no re-decode) so the cache lookup below hits and we never
+        // enqueue the heavy file_peaks re-decode that contended with playback.
+        if let Some(song) = self.engine.song().cloned() {
+            if let Some(song_dir) = self.song_dir.clone() {
+                prime_waveforms_from_engine_peaks(&song_dir, &song, audio);
+            }
+        }
+        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)), Some(audio))
     }
 
     fn load_waveforms_internal(
         &mut self,
         waveform_keys: &[String],
         background_generation: Option<(&WaveformGenerationQueue, &AppHandle)>,
+        audio: Option<&AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_waveform_keys = self
@@ -1420,15 +1588,34 @@ impl DesktopSession {
             }
 
             // Read-only cache lookup ONLY. On a cache miss we NEVER decode here
-            // (that held the session lock for seconds and froze the UI); we
-            // enqueue to the background worker, which emits WAVEFORM_READY_EVENT
-            // when done and the frontend paints it.
+            // (that held the session lock for seconds and froze the UI).
             match self.load_waveform_summary_cached(&song_dir, waveform_key, false) {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if let Some((waveform_jobs, app)) = background_generation {
-                        waveform_jobs.enqueue(app.clone(), song_dir.clone(), waveform_key.clone())?;
+                    // If the engine is/will be decoding this source, its
+                    // streaming pass produces the peaks (same single decode) —
+                    // do NOT enqueue a redundant full re-decode. The frontend
+                    // re-requests; once the source finishes, prime_waveforms_
+                    // from_engine_peaks (top of load_waveforms) writes the cache
+                    // and the retry HITs. Only enqueue the heavy file_peaks path
+                    // when the engine won't produce peaks (source not loaded,
+                    // e.g. a library file not in the session).
+                    let source_id =
+                        resolve_audio_file_path(&song_dir, waveform_key)
+                            .to_string_lossy()
+                            .to_string();
+                    let engine_will_decode = audio
+                        .map(|a| a.source_is_known(&source_id))
+                        .unwrap_or(false);
+                    if !engine_will_decode {
+                        if let Some((waveform_jobs, app)) = background_generation {
+                            waveform_jobs.enqueue(
+                                app.clone(),
+                                song_dir.clone(),
+                                waveform_key.clone(),
+                            )?;
+                        }
                     }
                 }
                 Err(error) => return Err(error),
@@ -5365,7 +5552,10 @@ impl DesktopSession {
         let playback_state = self.engine.playback_state();
         let position_seconds = self.current_position();
         let pending_jump = self.engine.pending_marker_jump().cloned();
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        // Validates a song dir is set (NoSongLoaded otherwise). No longer used
+        // directly here since structural edits go through the incremental upsert
+        // instead of replace_song_buffers(&song_dir, ...).
+        let _song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
 
         // MixerOnly: C++ already has the correct state via a realtime command.
         // Just update the Rust model; skip LoadSession and audio restart entirely.
@@ -5407,16 +5597,40 @@ impl DesktopSession {
             AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
                 if playback_state == PlaybackState::Playing {
                     if impact == AudioChangeImpact::TimelineWindow {
-                        audio.update_live_timeline_window(&song)?;
+                        // record_history=false marks an IN-PROGRESS drag (the
+                        // _live_ variants); the commit records history. Pass that
+                        // through as `live` so the engine defers the warp
+                        // hard-retime to the drop (avoids the per-tick "trrrr").
+                        audio.update_live_timeline_window(&song, !record_history)?;
                     } else {
-                        audio.replace_song_buffers(&song_dir, &song, "structure_rebuild")?;
+                        // Structural edits (add/remove/move tracks & clips,
+                        // import audio) go through the INCREMENTAL upsert command
+                        // instead of a full LoadSession: the engine mutates the
+                        // live session in place and decodes only new sources,
+                        // preserving already-playing tracks. A full
+                        // replace_song_buffers here clears + re-decodes every
+                        // source and reassigns the session in cold pages, which
+                        // stalled the audio callback for 100-400ms (see
+                        // docs/HANDOFF_import_while_playing_glitches.md).
+                        audio.upsert_song_tracks(&song)?;
                     }
+                } else if impact == AudioChangeImpact::StructureRebuild
+                    && audio.has_loaded_session()
+                {
+                    // Not playing but a session is already loaded: use the
+                    // INCREMENTAL upsert here too. The previous code did a full
+                    // LoadSession (sync_song -> ensure_song_loaded) on every
+                    // structural edit, which clears() + re-decodes EVERY source —
+                    // slow even when stopped, and the reason the FIRST import felt
+                    // heavy. The upsert decodes only the new sources in the
+                    // background. (Playback is stopped so there's no callback to
+                    // stall, but the destructive re-decode is still wasteful.)
+                    // Importantly: the import drag-drop runs with the transport
+                    // Stopped, so THIS is the branch imports actually take.
+                    audio.upsert_song_tracks(&song)?;
                 } else {
-                    // Not playing: still push the updated session to the engine so
-                    // it can decode the newly-added sources in the background
-                    // while the user is busy (waveform analyzing, arranging clips,
-                    // etc). Otherwise the first Play after dropping audio has to
-                    // decode all clips synchronously — 3-4s for MP3 with ~7 tracks.
+                    // No session loaded yet (cold project) — do the initial full
+                    // load so the engine has something to upsert into next time.
                     // sync_song is cheap when the signature hasn't changed (early
                     // return in ensure_song_loaded).
                     audio.sync_song(song.clone())?;
@@ -5454,16 +5668,34 @@ impl DesktopSession {
             PlaybackState::Playing => {
                 self.engine.play()?;
                 match impact {
-                    AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
-                    AudioChangeImpact::TimelineWindow => {
-                        self.reposition_audio(audio, PlaybackStartReason::TransportResync)?
+                    AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {
+                        self.transport_clock
+                            .reanchor_playing(self.engine.position_seconds());
                     }
-                    AudioChangeImpact::StructureRebuild => {
-                        self.restart_audio(audio, PlaybackStartReason::StructureRebuild)?
+                    // TimelineWindow / StructureRebuild already pushed the edit
+                    // to the LIVE C++ session (update_live_timeline_window /
+                    // upsert_song_tracks above) without disturbing its clock —
+                    // the audio thread keeps playing seamlessly. We must NOT
+                    // reposition_audio here: that sends a SeekAbsolute to the
+                    // engine at `restored_position`, the playhead captured BEFORE
+                    // the edit. By now the audio has advanced past it, so the
+                    // seek drags the clock BACKWARD (and triggers the seek-fade /
+                    // voice re-prime) — heard as the playback "rewinding" a few
+                    // times per edit (worse in debug, where the gap is bigger).
+                    // Instead, read the engine's ACTUAL live playhead and anchor
+                    // both the Rust model and clock to it so they stay in sync. A
+                    // real seek still goes through reposition_audio on the
+                    // seek/jump paths.
+                    AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
+                        let live_position = self
+                            .runtime_transport_position(audio)
+                            .map(|(pos, _)| pos)
+                            .unwrap_or(restored_position);
+                        self.engine
+                            .sync_position_preserving_transport_state(live_position)?;
+                        self.transport_clock.reanchor_playing(live_position);
                     }
                 }
-                self.transport_clock
-                    .reanchor_playing(self.engine.position_seconds());
             }
             PlaybackState::Paused => {
                 self.engine.pause()?;
@@ -6260,23 +6492,14 @@ impl DesktopSession {
         Ok(())
     }
 
-    fn restart_audio(
-        &mut self,
-        audio: &AudioController,
-        reason: PlaybackStartReason,
-    ) -> Result<(), DesktopError> {
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        audio.replace_song_buffers(&song_dir, &song, "restart_audio")?;
-        let runtime_position_seconds =
-            self.runtime_seconds_for_engine_position(self.engine.position_seconds());
-        audio.play(song_dir, song, runtime_position_seconds, reason)?;
-        Ok(())
-    }
+    // restart_audio() was removed: structural edits now route through the
+    // incremental upsert (persist_song_update -> upsert_song_tracks +
+    // reposition_audio), so nothing needs the destructive
+    // replace_song_buffers (full LoadSession) + restart path anymore. Opening a
+    // project still uses load_song_from_path, which is where a full rebuild
+    // belongs. Keeping restart_audio around would leave the clear()+re-decode
+    // stall one careless call away. See
+    // docs/HANDOFF_import_while_playing_glitches.md.
 }
 
 /// Taxonomy of runtime update kinds. Documents what a given operation does to the C++ runtime.
@@ -7448,7 +7671,7 @@ fn build_waveform_cache_token(
     })
 }
 
-fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathBuf {
+pub(crate) fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathBuf {
     let path = Path::new(file_path);
     if path.is_absolute() {
         path.to_path_buf()
@@ -10523,11 +10746,11 @@ mod tests {
 
         let perf_after_load = session.performance_snapshot();
         let first_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("waveform should load");
         let perf_after_first_request = session.performance_snapshot();
         let second_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("waveform should load from cache");
         let perf_after_second_request = session.performance_snapshot();
 
@@ -10562,7 +10785,7 @@ mod tests {
             .expect("song should load");
 
         let result = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("call should succeed");
 
         // Old behavior decoded inline and returned 1; new behavior enqueues

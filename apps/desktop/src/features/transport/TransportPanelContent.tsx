@@ -8657,29 +8657,21 @@ export function TransportPanelContent() {
     packagePath: string,
     dropSeconds: number,
   ) {
-    // Route every path-based .ltpkg import (compact view picker, compact OS
-    // drag, and timeline drop from the file explorer) through the same
-    // progress-emitting flow the file-menu import uses, so the loading overlay
-    // shows real percent + source readiness instead of a bare "Aplicando
-    // cambios". The old importSongPackage command emitted nothing.
-    let unlistenProjectProgress: (() => void) | null = null;
-    setIsProjectViewHydrating(true);
-    setBusyFeedback({
-      message: t("transport.shell.importingProject", {
-        defaultValue: "Importing project...",
-      }),
-      percent: 2,
-    });
+    // Non-blocking .ltpkg import for every path-based entry point (compact view
+    // picker, compact OS drag, timeline drop from the file explorer). The
+    // backend returns as soon as the package is unzipped + the structure is
+    // persisted — it no longer waits for source decode — so we do NOT raise the
+    // blocking shell overlay. The new tracks appear immediately, waveforms fill
+    // in as sources decode, and play is progressive (decoded head audible, rest
+    // silent). The user keeps full use of the UI throughout, like the audio
+    // import. (Previously this sat behind the busy overlay until every source
+    // finished decoding.)
     try {
-      unlistenProjectProgress = await registerProjectLoadProgressListener();
-      await nextPaint();
       const snapshot = await importSongPackageFromPathWithProgress(
         packagePath,
         dropSeconds,
       );
       if (!snapshot) {
-        setIsProjectViewHydrating(false);
-        setBusyFeedback(null);
         return;
       }
       applyPlaybackSnapshot(snapshot);
@@ -8691,20 +8683,8 @@ export function TransportPanelContent() {
           time: formatClock(dropSeconds),
         }),
       );
-      setBusyFeedback({
-        message: t("transport.shell.projectReady", {
-          defaultValue: "Proyecto listo para reproducir.",
-        }),
-        percent: 100,
-      });
-      await nextPaint();
-      setIsProjectViewHydrating(false);
     } catch (error) {
-      setIsProjectViewHydrating(false);
-      setBusyFeedback(null);
-      throw error;
-    } finally {
-      unlistenProjectProgress?.();
+      setStatus(formatErrorStatus(error));
     }
   }
 

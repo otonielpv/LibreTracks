@@ -435,6 +435,12 @@ export function TimelineCanvasPane({
     initialEndSeconds: number;
     minStartSeconds: number; // lower clamp for the moving edge (left neighbour end or 0)
     maxEndSeconds: number; // upper clamp for the moving edge (right neighbour start or duration)
+    // Magnet bounds from the clips INSIDE the region: the region must not be
+    // shrunk past the audio it contains, or the backend rejects it. End edge
+    // can't go below the last clip's end; start edge can't go above the first
+    // clip's start. null = no clips in the region (no clip constraint).
+    clipFloorEndSeconds: number | null; // hard floor for the END edge
+    clipCeilStartSeconds: number | null; // hard ceiling for the START edge
     previewStartSeconds: number;
     previewEndSeconds: number;
   };
@@ -504,6 +510,31 @@ export function TimelineCanvasPane({
       ? rightNeighbour.startSeconds
       : getTimelineWorkspaceEndSeconds(song.durationSeconds);
 
+    // Magnet to the clips the region contains: a region can't be shrunk past
+    // its own audio (the backend rejects clips falling outside the region). A
+    // clip counts as "inside" if its timeline span overlaps the region's
+    // current span. The END edge can't shrink below the furthest clip end; the
+    // START edge can't grow past the earliest clip start.
+    let clipFloorEndSeconds: number | null = null;
+    let clipCeilStartSeconds: number | null = null;
+    for (const clips of Object.values(clipsByTrack)) {
+      for (const clip of clips) {
+        const clipStart = clip.timelineStartSeconds;
+        const clipEnd = clip.timelineStartSeconds + clip.durationSeconds;
+        const overlapsRegion =
+          clipStart < region.endSeconds && clipEnd > region.startSeconds;
+        if (!overlapsRegion) continue;
+        clipFloorEndSeconds =
+          clipFloorEndSeconds === null
+            ? clipEnd
+            : Math.max(clipFloorEndSeconds, clipEnd);
+        clipCeilStartSeconds =
+          clipCeilStartSeconds === null
+            ? clipStart
+            : Math.min(clipCeilStartSeconds, clipStart);
+      }
+    }
+
     regionResizeDragRef.current = {
       regionId: region.id,
       edge,
@@ -517,6 +548,8 @@ export function TimelineCanvasPane({
       initialEndSeconds: region.endSeconds,
       minStartSeconds: minStart,
       maxEndSeconds: maxEnd,
+      clipFloorEndSeconds,
+      clipCeilStartSeconds,
       previewStartSeconds: region.startSeconds,
       previewEndSeconds: region.endSeconds,
     };
@@ -567,21 +600,27 @@ export function TimelineCanvasPane({
 
     // Clamp to neighbours and minimum duration.
     if (drag.edge === "start") {
-      nextStart = Math.max(
-        drag.minStartSeconds,
-        Math.min(
-          nextStart,
-          drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS,
-        ),
-      );
+      // Magnet: the start edge can't grow past the first clip's start (would
+      // leave audio outside the region → backend error). Hard-stop there.
+      const startCeil =
+        drag.clipCeilStartSeconds === null
+          ? drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS
+          : Math.min(
+              drag.clipCeilStartSeconds,
+              drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS,
+            );
+      nextStart = Math.max(drag.minStartSeconds, Math.min(nextStart, startCeil));
     } else {
-      nextEnd = Math.min(
-        drag.maxEndSeconds,
-        Math.max(
-          nextEnd,
-          drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS,
-        ),
-      );
+      // Magnet: the end edge can't shrink below the last clip's end. Hard-stop
+      // there so the region stays "imantado" at the clip boundary.
+      const endFloor =
+        drag.clipFloorEndSeconds === null
+          ? drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS
+          : Math.max(
+              drag.clipFloorEndSeconds,
+              drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS,
+            );
+      nextEnd = Math.min(drag.maxEndSeconds, Math.max(nextEnd, endFloor));
     }
 
     drag.previewStartSeconds = nextStart;

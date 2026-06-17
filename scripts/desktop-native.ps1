@@ -19,7 +19,13 @@ if (-not $env:LIBRETRACKS_ENGINE_V2_FFMPEG) {
   $env:LIBRETRACKS_ENGINE_V2_FFMPEG = "1"
 }
 if (-not $env:VCPKG_DEFAULT_TRIPLET) {
-  $env:VCPKG_DEFAULT_TRIPLET = "x64-windows"
+  $env:VCPKG_DEFAULT_TRIPLET = "x64-windows-release"
+}
+if (-not $env:VCPKG_OVERLAY_TRIPLETS) {
+  $overlayTriplets = Join-Path $repoRoot "native\audio-engine-v2\vcpkg-triplets"
+  if (Test-Path $overlayTriplets) {
+    $env:VCPKG_OVERLAY_TRIPLETS = $overlayTriplets
+  }
 }
 if (-not $env:CMAKE_TOOLCHAIN_FILE) {
   foreach ($candidate in $toolchainCandidates) {
@@ -375,6 +381,9 @@ if ($env:CMAKE_TOOLCHAIN_FILE) {
 if ($env:VCPKG_DEFAULT_TRIPLET) {
   $cmakeConfigureArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
 }
+if ($env:VCPKG_OVERLAY_TRIPLETS) {
+  $cmakeConfigureArgs += "-DVCPKG_OVERLAY_TRIPLETS=$env:VCPKG_OVERLAY_TRIPLETS"
+}
 cmake @cmakeConfigureArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -394,15 +403,30 @@ Get-ChildItem $engineV2LibDir -File -ErrorAction SilentlyContinue | Where-Object
     Copy-Item $_.FullName $nativeVendorDir -Force
 }
 
+$vcpkgTriplet = if ($env:VCPKG_DEFAULT_TRIPLET) { $env:VCPKG_DEFAULT_TRIPLET } else { "x64-windows-release" }
+$buildVcpkgBin = Join-Path $engineV2BuildDir "vcpkg_installed\$vcpkgTriplet\bin"
+if ($useFFmpeg -eq "ON") {
+  if (-not (Test-Path $buildVcpkgBin)) {
+    throw "Expected FFmpeg runtime DLLs in $buildVcpkgBin, but the directory was not found."
+  }
+
+  Get-ChildItem $buildVcpkgBin -Filter "*.dll" -File | ForEach-Object {
+    Copy-Item $_.FullName $nativeVendorDir -Force
+  }
+}
+
 $env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
 $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir
 $env:PATH = "$engineV2LibDir;" + $env:PATH
+if (Test-Path $buildVcpkgBin) {
+  $env:PATH = "$buildVcpkgBin;" + $env:PATH
+}
 
 # Copy the engine DLL and its siblings into the Cargo output directory so
 # Windows finds them at exe-load time regardless of PATH inheritance.
 $cargoDebugDir = Join-Path $nativeTargetDir "debug"
 if (Test-Path $cargoDebugDir) {
-  Get-ChildItem $engineV2LibDir -Filter "*.dll" | ForEach-Object {
+  Get-ChildItem $nativeVendorDir -Filter "*.dll" | ForEach-Object {
     Copy-Item $_.FullName $cargoDebugDir -Force
   }
 }
@@ -411,7 +435,6 @@ $vcpkgRoot = $env:VCPKG_ROOT
 if (-not $vcpkgRoot -and $env:CMAKE_TOOLCHAIN_FILE) {
   $vcpkgRoot = Resolve-Path (Join-Path (Split-Path -Parent $env:CMAKE_TOOLCHAIN_FILE) "..\..") -ErrorAction SilentlyContinue
 }
-$vcpkgTriplet = if ($env:VCPKG_DEFAULT_TRIPLET) { $env:VCPKG_DEFAULT_TRIPLET } else { "x64-windows" }
 if ($vcpkgRoot) {
   Add-PathSegment (Join-Path $vcpkgRoot "installed\$vcpkgTriplet\bin")
   Add-PathSegment (Join-Path $vcpkgRoot "installed\$vcpkgTriplet\debug\bin")
@@ -461,6 +484,9 @@ switch ($Mode) {
     }
     if ($env:VCPKG_DEFAULT_TRIPLET) {
       $cppTestArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
+    }
+    if ($env:VCPKG_OVERLAY_TRIPLETS) {
+      $cppTestArgs += "-DVCPKG_OVERLAY_TRIPLETS=$env:VCPKG_OVERLAY_TRIPLETS"
     }
     if ($useBungee -eq "ON") {
       $cppTestArgs += "-DLT_ENGINE_USE_BUNGEE=ON"

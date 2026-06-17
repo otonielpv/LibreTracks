@@ -12,12 +12,13 @@ use std::{
 
 use libretracks_core::{
     audible_clip_duration_seconds, effective_bpm_at, warp_timeline_seconds_at, Song, TempoMarker,
+    TrackKind,
 };
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineError, EngineSnapshot, JumpTarget,
-    JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, TempoMarkerUpdate,
-    TimeSignatureMarkerUpdate,
+    JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, SourceRef, TempoMarkerUpdate,
+    TimeSignatureMarkerUpdate, TrackClipUpdate, TrackUpsert,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -858,7 +859,11 @@ impl AudioController {
         })
     }
 
-    pub fn update_live_timeline_window(&self, song: &Song) -> Result<(), DesktopError> {
+    pub fn update_live_timeline_window(
+        &self,
+        song: &Song,
+        live: bool,
+    ) -> Result<(), DesktopError> {
         self.transport_timing_update_count
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("set_song_timeline_window", None, |engine, state| {
@@ -954,6 +959,7 @@ impl AudioController {
                 beat_unit,
                 tempo_markers,
                 time_signature_markers,
+                live,
             })?;
             if state.loaded_session_signature.is_some() {
                 let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
@@ -961,6 +967,174 @@ impl AudioController {
             }
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("set_song_timeline_window".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
+    }
+
+    /// Incremental structural update (add/remove/move tracks & clips, import
+    /// audio) WITHOUT a full LoadSession. Sends `CmdUpsertSongTracks` so the
+    /// engine mutates the live session in place and registers only NEW sources,
+    /// preserving already-decoded ones — so it can run mid-playback without
+    /// stalling the audio thread. See
+    /// docs/HANDOFF_import_while_playing_glitches.md.
+    pub fn upsert_song_tracks(&self, song: &Song) -> Result<(), DesktopError> {
+        self.transport_timing_update_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.with_engine_state("upsert_song_tracks", None, |engine, state| {
+            let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+            let runtime_song = song_with_warped_timeline(&resolved_song);
+
+            // Group the warped clips by their owning track so each TrackUpsert
+            // carries its own clips (the engine command nests clips per track).
+            let mut clips_by_track: std::collections::HashMap<String, Vec<TrackClipUpdate>> =
+                std::collections::HashMap::new();
+            // Distinct source files referenced by the clips, for registration.
+            let mut sources: Vec<SourceRef> = Vec::new();
+            let mut seen_sources: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for clip in &runtime_song.clips {
+                if seen_sources.insert(clip.file_path.clone()) {
+                    sources.push(SourceRef {
+                        id: clip.file_path.clone(),
+                        file_path: clip.file_path.clone(),
+                    });
+                }
+                clips_by_track
+                    .entry(clip.track_id.clone())
+                    .or_default()
+                    .push(TrackClipUpdate {
+                        id: clip.id.clone(),
+                        source_id: clip.file_path.clone(),
+                        timeline_start_frame: seconds_to_frame_for_engine(
+                            engine,
+                            clip.timeline_start_seconds,
+                        ),
+                        source_start_frame: seconds_to_frame_for_engine(
+                            engine,
+                            clip.source_start_seconds,
+                        ),
+                        length_frames: seconds_to_frame_for_engine(engine, clip.duration_seconds),
+                        gain: clip.gain as f32,
+                        fade_in_frames: seconds_to_frame_for_engine(
+                            engine,
+                            clip.fade_in_seconds.unwrap_or(0.0),
+                        ),
+                        fade_out_frames: seconds_to_frame_for_engine(
+                            engine,
+                            clip.fade_out_seconds.unwrap_or(0.0),
+                        ),
+                        semitones: 0,
+                    });
+            }
+
+            let tracks = resolved_song
+                .tracks
+                .iter()
+                .map(|track| TrackUpsert {
+                    id: track.id.clone(),
+                    name: track.name.clone(),
+                    gain: track.volume as f32,
+                    pan: track.pan as f32,
+                    audio_to: track.audio_to.clone(),
+                    mute: track.muted,
+                    solo: track.solo,
+                    // transpose_enabled=false maps to NeverTranspose; default
+                    // (true) leaves the engine's FollowsSongOrRegion behaviour.
+                    transpose_behavior: if track.transpose_enabled {
+                        String::new()
+                    } else {
+                        "never_transpose".to_string()
+                    },
+                    role: String::new(),
+                    kind: match track.kind {
+                        TrackKind::Folder => "folder".to_string(),
+                        TrackKind::Audio => "audio".to_string(),
+                    },
+                    parent_track_id: track.parent_track_id.clone().unwrap_or_default(),
+                    clips: clips_by_track.remove(&track.id).unwrap_or_default(),
+                })
+                .collect();
+
+            // Regions / markers / timing — same mapping as
+            // update_live_timeline_window, so the upsert is a complete
+            // structural snapshot (structural edits that also touch these don't
+            // lose them).
+            let regions = song
+                .regions
+                .iter()
+                .zip(runtime_song.regions.iter())
+                .map(|region| RegionUpdate {
+                    id: region.0.id.clone(),
+                    name: region.0.name.clone(),
+                    start_frame: seconds_to_frame_for_engine(engine, region.1.start_seconds),
+                    end_frame: seconds_to_frame_for_engine(engine, region.1.end_seconds),
+                    transpose_semitones: region.0.transpose_semitones,
+                    warp_enabled: region.0.warp_enabled,
+                    warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
+                    master_gain: region.0.master.gain as f32,
+                })
+                .collect();
+            let markers = song
+                .section_markers
+                .iter()
+                .zip(runtime_song.section_markers.iter())
+                .map(|marker| MarkerUpdate {
+                    id: marker.0.id.clone(),
+                    name: marker.0.name.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    kind: marker.0.kind.as_token().to_string(),
+                    variant: marker.0.variant.unwrap_or(0) as i32,
+                })
+                .collect();
+            let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
+            let tempo_markers = runtime_song
+                .tempo_markers
+                .iter()
+                .map(|marker| TempoMarkerUpdate {
+                    id: marker.id.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    bpm: marker.bpm,
+                })
+                .collect();
+            let time_signature_markers = song
+                .time_signature_markers
+                .iter()
+                .zip(runtime_song.time_signature_markers.iter())
+                .map(|marker| {
+                    let (beats_per_bar, beat_unit) =
+                        parse_engine_time_signature(&marker.0.signature)?;
+                    Ok(TimeSignatureMarkerUpdate {
+                        id: marker.0.id.clone(),
+                        frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                        beats_per_bar,
+                        beat_unit,
+                    })
+                })
+                .collect::<Result<Vec<_>, DesktopError>>()?;
+
+            engine.send_command(&EngineCommand::UpsertSongTracks {
+                song_id: song.id.clone(),
+                tracks,
+                sources,
+                regions,
+                markers,
+                bpm: song.bpm,
+                beats_per_bar,
+                beat_unit,
+                tempo_markers,
+                time_signature_markers,
+            })?;
+
+            if state.loaded_session_signature.is_some() {
+                state.loaded_session_signature = Some(session_signature(&resolved_song));
+            }
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("upsert_song_tracks".into()),
                 elapsed_ms: 0.0,
                 scheduled_clips: song.clips.len(),
                 active_sinks: song.tracks.len(),
@@ -1782,6 +1956,83 @@ impl AudioController {
                 peak: meter.peak,
             })
             .collect())
+    }
+
+    /// True once a session has been loaded into the engine (signature set).
+    /// Used to decide whether a structural edit can use the incremental upsert
+    /// (mutates the existing session) or needs a full initial load first.
+    pub fn has_loaded_session(&self) -> bool {
+        self.state
+            .lock()
+            .map(|s| s.loaded_session_signature.is_some())
+            .unwrap_or(false)
+    }
+
+    /// Start decoding the given audio files to cache (+ same-pass waveform
+    /// peaks) immediately, WITHOUT a session — Ableton-style: the moment a file
+    /// is imported to the library (or dragged in), preparation begins, so by the
+    /// time it reaches the timeline the cache + waveform already exist. Paths are
+    /// normalized to the engine source-id form. No-op for files already prepared.
+    pub fn prepare_sources(&self, resolved_paths: &[String]) -> Result<(), DesktopError> {
+        if resolved_paths.is_empty() {
+            return Ok(());
+        }
+        let sources: Vec<SourceRef> = resolved_paths
+            .iter()
+            .map(|p| {
+                let id = normalize_engine_audio_path(p);
+                SourceRef {
+                    id: id.clone(),
+                    file_path: id,
+                }
+            })
+            .collect();
+        self.with_engine_state("prepare_sources", None, |engine, _state| {
+            engine.send_command(&EngineCommand::PrepareSources { sources })?;
+            Ok(())
+        })
+    }
+
+    /// True if the engine has this source registered (decoding in progress OR
+    /// done) — i.e. its streaming decode will produce the waveform peaks, so the
+    /// UI must NOT enqueue a redundant full re-decode for it.
+    pub fn source_is_known(&self, source_id: &str) -> bool {
+        // The engine knows sources by their normalized path (verbatim \\?\
+        // prefix stripped, forward slashes) — see song_with_resolved_audio_paths.
+        // The waveform lookup passes the raw resolved path which may still carry
+        // the prefix, so normalize before comparing or it never matches.
+        let needle = normalize_engine_audio_path(source_id);
+        let mut state = match self.state.lock() {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let Some(engine) = state.engine.as_mut() else {
+            return false;
+        };
+        match engine.get_snapshot() {
+            Ok(snap) => snap
+                .source_states
+                .iter()
+                .any(|s| normalize_engine_audio_path(&s.source_id) == needle),
+            Err(_) => false,
+        }
+    }
+
+    /// Waveform peaks for an already-loaded source, computed in the same pass
+    /// as the streaming decode (no re-decode). Returns None if the source isn't
+    /// loaded yet. Lets the import flow write the waveform cache from the audio
+    /// decode we already did, so the cosmetic waveform worker never re-decodes
+    /// the file — the second decode was the residual import-time CPU contention.
+    pub fn source_peaks(
+        &self,
+        source_id: &str,
+        resolution_frames: usize,
+    ) -> Option<lt_audio_engine_v2::SourcePeaks> {
+        // Normalize to the engine's source-id form (see source_is_known).
+        let source_id = normalize_engine_audio_path(source_id);
+        let mut state = self.state.lock().ok()?;
+        let engine = state.engine.as_mut()?;
+        engine.source_peaks(&source_id, resolution_frames).ok()
     }
 
     pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, _song: Song) {
