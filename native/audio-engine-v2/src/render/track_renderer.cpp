@@ -48,6 +48,7 @@ std::atomic<std::uint64_t> TrackRenderer::pitch_missing_stream_silence_count_{0}
 std::atomic<std::uint64_t> TrackRenderer::path_direct_count_{0};
 std::atomic<std::uint64_t> TrackRenderer::path_varispeed_count_{0};
 std::atomic<std::uint64_t> TrackRenderer::path_stretched_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::direct_short_read_count_{0};
 
 void TrackRenderer::prepare(int max_block_frames) noexcept {
     if (max_block_frames <= 0)
@@ -96,7 +97,8 @@ TrackRendererDiagnostics TrackRenderer::diagnostics() noexcept {
         pitch_missing_stream_silence_count_.load(std::memory_order_relaxed),
         path_direct_count_.load(std::memory_order_relaxed),
         path_varispeed_count_.load(std::memory_order_relaxed),
-        path_stretched_count_.load(std::memory_order_relaxed)};
+        path_stretched_count_.load(std::memory_order_relaxed),
+        direct_short_read_count_.load(std::memory_order_relaxed)};
 }
 
 void TrackRenderer::reset_diagnostics() noexcept {
@@ -109,6 +111,7 @@ void TrackRenderer::reset_diagnostics() noexcept {
     path_direct_count_.store(0, std::memory_order_relaxed);
     path_varispeed_count_.store(0, std::memory_order_relaxed);
     path_stretched_count_.store(0, std::memory_order_relaxed);
+    direct_short_read_count_.store(0, std::memory_order_relaxed);
 }
 
 bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
@@ -277,6 +280,7 @@ int TrackRenderer::render_path_direct(const ClipBlock& cb) noexcept {
                   scratch_l_.begin() + cb.frames_to_read, 0.0f);
         std::fill(scratch_r_.begin() + copied,
                   scratch_r_.begin() + cb.frames_to_read, 0.0f);
+        direct_short_read_count_.fetch_add(1, std::memory_order_relaxed);
     }
     return cb.frames_to_read;
 }

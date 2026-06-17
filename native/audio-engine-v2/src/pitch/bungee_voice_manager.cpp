@@ -710,7 +710,8 @@ void BungeeVoiceManager::retime_existing_for_session(
     }
     if (bungee_debug_enabled()) {
         lt_debug_log(
-            "[BUNGEE] retime_existing playhead=%lld specs=%zu retimed=%d soft=%d missing=%d active=%zu\n",
+            "[BUNGEE] retime_existing live=%d playhead=%lld specs=%zu retimed=%d soft=%d missing=%d active=%zu\n",
+            live ? 1 : 0,
             static_cast<long long>(playhead), specs.size(),
             retimed, retimed_soft, missing,
             current ? current->size() : 0);

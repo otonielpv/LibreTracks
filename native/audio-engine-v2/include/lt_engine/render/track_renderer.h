@@ -29,6 +29,11 @@ struct TrackRendererDiagnostics {
     std::uint64_t path_direct_count = 0;
     std::uint64_t path_varispeed_count = 0;
     std::uint64_t path_stretched_count = 0;
+    // Direct-path reads that came back SHORT (source returned fewer frames than
+    // requested → the tail was zero-filled = an audible gap). Spikes during a
+    // clip drag mean the block cache is starving on the rapidly-changing source
+    // offsets the drag reads — the prime suspect for the "trrrr" on big moves.
+    std::uint64_t direct_short_read_count = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -148,6 +153,7 @@ private:
     static std::atomic<std::uint64_t> path_direct_count_;
     static std::atomic<std::uint64_t> path_varispeed_count_;
     static std::atomic<std::uint64_t> path_stretched_count_;
+    static std::atomic<std::uint64_t> direct_short_read_count_;
 };
 
 } // namespace lt
