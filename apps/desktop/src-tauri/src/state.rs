@@ -473,6 +473,12 @@ fn waveform_from_engine_peaks(
     if duration_frames == 0 {
         return None;
     }
+    // R5: a source still streaming reports its duration but no peaks yet (the
+    // same-pass peaks are published atomically at decode end). Treat empty peaks
+    // as not-ready so we don't cache a blank/half waveform — the caller polls.
+    if peaks.max_peaks.is_empty() {
+        return None;
+    }
     let summary = waveform_summary_from_channel_peaks(
         peaks.sample_rate,
         duration_frames,

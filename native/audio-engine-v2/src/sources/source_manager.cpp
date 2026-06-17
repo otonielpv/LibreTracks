@@ -868,6 +868,7 @@ Result<void> SourceManager::decode_and_store_streaming(
         return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
 
     const int block_frames = block_cache_.block_frames();
+    const int eager_blocks = eager_source_blocks_from_env();
     constexpr int kReadChunkFrames = 65536;
 
     // R5 progressive availability: publish the source as PLAYABLE up front, with
@@ -964,16 +965,20 @@ Result<void> SourceManager::decode_and_store_streaming(
                                              static_cast<sf_count_t>(n));
         if (w <= 0) return false;
         accumulate_peaks(out_chunk.data(), out_written, n);  // same-pass waveform
-        // R5: fill EVERY complete decoded block into the RAM block cache as it's
-        // produced (not just the first `eager_blocks`), so the progressively
-        // published source is audible from disk-free RAM while decoding. The
-        // block cache is a bounded LRU, so this can't grow unbounded — cold tail
-        // blocks get evicted and are re-fetched from the (by-then finalized)
-        // cache file on demand.
+        // R5: fill only the first `eager_blocks` into RAM as they're decoded, so
+        // the progressively published source is instantly audible from its head
+        // without a disk round-trip. The rest are pulled on demand by the fill
+        // worker from the cache file (gated by decoded_frames so it never reads
+        // unwritten data). We deliberately do NOT fill the whole file into RAM:
+        // the block cache is a SHARED bounded LRU (512 MB across all sources), so
+        // eagerly filling every block of several concurrently-imported songs
+        // blows the budget → constant eviction churn + disk re-reads contending
+        // with the decode writers = the import-while-playing stutter.
         const Frame chunk_start = out_written;
         for (Frame local = 0; local < n; ) {
             const Frame abs_frame = chunk_start + local;
             const int block_index = static_cast<int>(abs_frame / block_frames);
+            if (block_index >= eager_blocks) break;
             const Frame block_start = static_cast<Frame>(block_index) * block_frames;
             const int offset_in_block = static_cast<int>(abs_frame - block_start);
             const int frames_this_block = std::min(
@@ -993,17 +998,17 @@ Result<void> SourceManager::decode_and_store_streaming(
         return true;
     };
 
-    // A 64k-frame chunk is already ~ms of decode+resample work, so we must NOT
-    // sleep 6ms per chunk (yield_to_ui_scheduler() does that while playing) — for
-    // a multi-minute file that's hundreds of chunks = seconds of pure sleep,
-    // which slowed preparation dramatically. The streaming pipeline self-limits
-    // memory, so it doesn't need to cede the disk like the whole-file writer did;
-    // just take a brief breather every so often to stay cooperative.
-    int chunk_counter = 0;
-    auto light_yield = [&chunk_counter]() {
-        if ((++chunk_counter % 16) == 0)
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    };
+    // Cede the disk to the live block-fill thread between chunks. This is the
+    // heavy disk-WRITE loop, and it runs on a decode worker WHILE playback may be
+    // streaming OTHER tracks' blocks off the same disk — without yielding here,
+    // a first-time (uncached) import starves the live fill thread and the playing
+    // tracks glitch (the user's "petardeo on first import while playing"). The
+    // streaming rewrite had dropped this throttle in favour of a fixed 1ms/16-
+    // chunk breather, which doesn't back off while playing; restore the
+    // playback-aware yield (decode_background_yield sleeps ~6ms while playing,
+    // ~1ms idle) so cold opens stay fast but live playback wins the disk. R3 made
+    // this matter more: several decode workers can write concurrently now.
+    auto light_yield = []() { decode_background_yield(); };
 
     // Phase 1: feed real decoded input.
     while (in_done < fi.duration_frames && out_written < target_out_frames) {
@@ -1195,6 +1200,15 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
         entry.cached_peaks->resolution_frames == overview.resolution_frames) {
         return *entry.cached_peaks;
     }
+
+    // R5: while a streaming decode is still in flight (status "streaming"), the
+    // cache file is only partially written and its WAV data-chunk size isn't
+    // finalized — reading it now yields a HALF waveform (or garbage) keyed to the
+    // projected full duration, which the caller would then cache as if complete.
+    // The same-pass peaks (cached_peaks) are published atomically at the end, so
+    // return no peaks now (duration is known) and let the UI poll until they land.
+    if (entry.status == "streaming")
+        return overview;
 
     if (entry.cache_file_path.empty())
         return entry.source->peaks(overview.resolution_frames);
