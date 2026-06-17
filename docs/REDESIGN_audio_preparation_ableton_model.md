@@ -136,12 +136,22 @@ Order chosen so each phase is independently verifiable and de-risks the next.
   resample (74/68 = 1.088 = 48000/44100) — removed by R4.
 - 218 DSP tests pass (equivalence tolerance retuned to the int16 step 1/32768).
 
-### Phase R2 — single-pass waveform, correct keying  ⏳  (kills the 2nd decode)
-- Fix the path mismatch so source_peaks/source_is_known match the engine id.
-- Write the global waveform cache from the same-pass peaks.
-- Remove the file_peaks re-decode for in-session sources; delete the separate
-  single-threaded waveform worker (no second job to run).
-- **Measure:** console shows ZERO `RE-DECODE`; prep time drops further.
+### Phase R2 — single-pass waveform, correct keying  ✅ DONE (needs user test)
+- Root cause of the persistent re-decode: there are THREE enqueue sites and the
+  drag-drop import uses `load_library_waveforms` (state.rs:1549) which I hadn't
+  guarded; per-site guards were fragile.
+- Fix at the SINGLE chokepoint: the waveform worker now holds the engine handle
+  (`WaveformGenerationQueue.audio`, injected in `DesktopState::default`). In
+  `process_waveform_job`, before the expensive `file_peaks` re-decode:
+  1. disk cache → 2. **engine same-pass peaks** (`waveform_from_engine_peaks` →
+  `source_peaks`, no decode, writes the global cache) → 3. if the engine HAS the
+  source but peaks aren't ready, **bail (no re-decode)** so a later frontend
+  retry hits → 4. only re-decode (file_peaks) for sources the engine doesn't
+  have (library files not in the session) → 5. symphonia last resort.
+- Path normalization (R-prev) keeps the source-id comparison correct.
+- **Measure:** console should show NO `RE-DECODE` for in-session imports.
+- Note: a temp `[LT_DIAG] source_is_known=false …` log prints the exact id
+  strings if it still misses — removed in R6.
 
 ### Phase R3 — real parallelism  ⏳
 - Raise decode pool toward hardware_concurrency (bounded, e.g. min(cores, 8)) so

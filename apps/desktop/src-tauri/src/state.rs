@@ -112,10 +112,14 @@ pub struct WaveformJob {
     pub waveform_key: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WaveformGenerationQueue {
     sender: mpsc::Sender<WaveformJob>,
     in_flight: Arc<Mutex<HashSet<String>>>,
+    // The engine, so the worker can reuse the peaks the streaming decode ALREADY
+    // computed (source_peaks) instead of re-decoding the whole file. None in
+    // tests / before the controller exists.
+    audio: Arc<Mutex<Option<Arc<AudioController>>>>,
 }
 
 pub struct DesktopState {
@@ -128,10 +132,15 @@ pub struct DesktopState {
 
 impl Default for DesktopState {
     fn default() -> Self {
+        let audio = Arc::new(AudioController::default());
+        let waveform_jobs = WaveformGenerationQueue::default();
+        // Let the waveform worker reuse the engine's same-pass peaks instead of
+        // re-decoding each file.
+        waveform_jobs.set_audio(Arc::clone(&audio));
         Self {
-            audio: Arc::new(AudioController::default()),
+            audio,
             midi: MidiManager::default(),
-            waveform_jobs: WaveformGenerationQueue::default(),
+            waveform_jobs,
             session: Mutex::new(DesktopSession::default()),
             project_load_progress: Mutex::new(None),
         }
@@ -312,18 +321,32 @@ impl Default for WaveformGenerationQueue {
         let (sender, receiver) = mpsc::channel::<WaveformJob>();
         let in_flight = Arc::new(Mutex::new(HashSet::new()));
         let worker_in_flight = Arc::clone(&in_flight);
+        let audio: Arc<Mutex<Option<Arc<AudioController>>>> = Arc::new(Mutex::new(None));
+        let worker_audio = Arc::clone(&audio);
 
         thread::spawn(move || {
             while let Ok(job) = receiver.recv() {
                 let job_key = waveform_job_key(&job.song_dir, &job.waveform_key);
-                process_waveform_job(job);
+                let audio = worker_audio.lock().ok().and_then(|g| g.clone());
+                process_waveform_job(job, audio.as_deref());
                 if let Ok(mut in_flight) = worker_in_flight.lock() {
                     in_flight.remove(&job_key);
                 }
             }
         });
 
-        Self { sender, in_flight }
+        Self { sender, in_flight, audio }
+    }
+}
+
+impl WaveformGenerationQueue {
+    /// Give the worker the engine handle so it can reuse same-pass peaks
+    /// (source_peaks) instead of re-decoding. Called once after DesktopState
+    /// builds the shared AudioController.
+    pub fn set_audio(&self, audio: Arc<AudioController>) {
+        if let Ok(mut slot) = self.audio.lock() {
+            *slot = Some(audio);
+        }
     }
 }
 
@@ -339,6 +362,7 @@ impl WaveformGenerationQueue {
         Self {
             sender,
             in_flight: Arc::new(Mutex::new(HashSet::new())),
+            audio: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -440,19 +464,72 @@ fn prime_waveforms_from_engine_peaks(
     }
 }
 
-fn process_waveform_job(job: WaveformJob) {
+/// Build a waveform summary for one source from the engine's same-pass peaks
+/// (no re-decode). Returns None if the engine doesn't have the source yet or
+/// has no peaks — the caller then falls back to the full decode. Also writes
+/// the global cache so subsequent requests hit it.
+fn waveform_from_engine_peaks(
+    song_dir: &Path,
+    waveform_key: &str,
+    audio: Option<&AudioController>,
+) -> Option<WaveformSummary> {
+    let audio = audio?;
+    let source_path = resolve_audio_file_path(song_dir, waveform_key);
+    let source_id = source_path.to_string_lossy().to_string();
+    let peaks = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES)?;
+    let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+    if duration_frames == 0 {
+        return None;
+    }
+    let summary = waveform_summary_from_channel_peaks(
+        peaks.sample_rate,
+        duration_frames,
+        peaks.resolution_frames,
+        peaks.min_peaks,
+        peaks.max_peaks,
+        peaks.min_peaks_right,
+        peaks.max_peaks_right,
+        &source_path,
+    )
+    .ok()?;
+    let _ = write_global_waveform(&decoding_cache_root(), &source_path, &summary);
+    Some(summary)
+}
+
+fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
     let WaveformJob {
         app,
         song_dir,
         waveform_key,
     } = job;
 
-    // Cache read first, then native decode. Symphonia stays as a final fallback
-    // for builds where the native decoder is unavailable.
+    // 1) Disk cache. 2) Same-pass peaks from the engine (NO re-decode — the
+    // streaming decode already computed them). 3) Full re-decode (file_peaks),
+    // the expensive fallback only for sources the engine doesn't have (e.g. a
+    // library file not in the session). 4) Symphonia, last resort.
     let cache_root = decoding_cache_root();
+    // If the engine has this source (decoding or done) we must NOT re-decode for
+    // the waveform — its streaming pass produces the peaks. If they're not ready
+    // yet, bail (the frontend re-requests; in_flight is cleared when this job
+    // returns, so a later poll retries and eventually hits the engine peaks).
+    let engine_has_source = audio
+        .map(|a| {
+            let id = resolve_audio_file_path(&song_dir, &waveform_key)
+                .to_string_lossy()
+                .to_string();
+            a.source_is_known(&id)
+        })
+        .unwrap_or(false);
+
     let summary = match load_global_waveform(&cache_root, &song_dir, Path::new(&waveform_key)) {
         Ok(summary) => Some(summary),
-        Err(cache_error) => match generate_native_waveform(&song_dir, &waveform_key) {
+        Err(cache_error) => match waveform_from_engine_peaks(&song_dir, &waveform_key, audio) {
+            Some(summary) => Some(summary),
+            None if engine_has_source => {
+                // Known but not decoded yet — don't re-decode; let a retry hit.
+                None
+            }
+            None => match generate_native_waveform(&song_dir, &waveform_key) {
             Ok(summary) => Some(summary),
             Err(native_error) => {
                 match load_or_generate_global_waveform(
@@ -471,6 +548,7 @@ fn process_waveform_job(job: WaveformJob) {
                     }
                 }
             }
+            },
         },
     };
 
