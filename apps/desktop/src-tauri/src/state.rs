@@ -1169,17 +1169,20 @@ impl DesktopSession {
 
         let package_path = package_file.to_string_lossy().into_owned();
         emit_project_load_progress(app, 5, "Leyendo paquete...".into(), 0, 0, 0, 0);
-        // Import the package WITHOUT blocking on source decode — that's what
-        // wait_for_project_audio_preparation does, with live progress events.
-        // Otherwise the user only sees the loading bar at the very end, after
-        // sources have already been decoded silently. The no_wait phase itself
-        // (unzip + persist) is also synchronous and used to emit nothing, so the
-        // overlay sat frozen on "Leyendo paquete..." until decode began; pass
-        // `app` through so it reports its sub-phases inside the reserved 5..18
-        // band (decode then continues from 18 in the wait loop below).
+        // Import the package WITHOUT blocking on source decode. The no_wait phase
+        // unzips, copies audio, persists the structure (StructureRebuild → the
+        // engine's incremental upsert), and primes the waveform cache — all of
+        // which is fast and gives the frontend a complete song (tracks + clips +
+        // waveform placeholders). The sources are enqueued for background decode
+        // by the upsert; we do NOT wait for them here. This matches the audio
+        // import flow: the timeline shows the new tracks immediately, waveforms
+        // fill in as they decode, and play is progressive (decoded head audible,
+        // rest silent — R5). Previously this called
+        // wait_for_project_audio_preparation, which held the session lock until
+        // every source finished decoding and kept the UI behind a blocking
+        // overlay for the whole import.
         let inserted =
             self.import_song_package_no_wait(app, &package_path, insert_at_seconds, audio)?;
-        self.wait_for_project_audio_preparation(app, audio)?;
 
         Ok(inserted.snapshot)
     }
