@@ -2005,22 +2005,10 @@ impl AudioController {
             return false;
         };
         match engine.get_snapshot() {
-            Ok(snap) => {
-                let known = snap
-                    .source_states
-                    .iter()
-                    .any(|s| normalize_engine_audio_path(&s.source_id) == needle);
-                if !known {
-                    eprintln!(
-                        "[LT_DIAG] source_is_known=false needle='{needle}' engine_ids={:?}",
-                        snap.source_states
-                            .iter()
-                            .map(|s| normalize_engine_audio_path(&s.source_id))
-                            .collect::<Vec<_>>()
-                    );
-                }
-                known
-            }
+            Ok(snap) => snap
+                .source_states
+                .iter()
+                .any(|s| normalize_engine_audio_path(&s.source_id) == needle),
             Err(_) => false,
         }
     }

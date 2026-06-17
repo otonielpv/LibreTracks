@@ -394,10 +394,6 @@ fn generate_native_waveform(
 ) -> Result<WaveformSummary, DesktopError> {
     let source_path = resolve_audio_file_path(song_dir, waveform_key);
     let source_path_string = source_path.to_string_lossy().to_string();
-    eprintln!(
-        "[LT_DIAG] waveform RE-DECODE (file_peaks, EXPENSIVE): {}",
-        waveform_key.rsplit('/').next().unwrap_or(waveform_key)
-    );
     let peaks =
         lt_audio_engine_v2::file_peaks(&source_path_string, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -440,10 +436,6 @@ fn prime_waveforms_from_engine_peaks(
         else {
             continue;  // not loaded yet / no same-pass peaks → retry will hit
         };
-        eprintln!(
-            "[LT_DIAG] waveform HIT from engine peaks (no re-decode): {}",
-            key.rsplit('/').next().unwrap_or(&key)
-        );
         let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
         if duration_frames == 0 {
             continue;
@@ -521,15 +513,42 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
         })
         .unwrap_or(false);
 
+    // When the engine is decoding this source, POLL for its same-pass peaks
+    // here (this is a background thread) instead of bailing — otherwise the
+    // frontend's one-shot "analyzing" request never gets a waveform and spins
+    // forever. The streaming decode finishes within seconds; cap the wait so a
+    // stuck/failed source eventually falls through to the file_peaks path.
+    let engine_peaks = if engine_has_source {
+        let mut got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
+        let mut waited_ms = 0u64;
+        const POLL_MS: u64 = 100;
+        const MAX_WAIT_MS: u64 = 120_000;
+        while got.is_none() && waited_ms < MAX_WAIT_MS {
+            // Stop early if the source vanished (session changed / removed).
+            let still_known = audio
+                .map(|a| {
+                    let id = resolve_audio_file_path(&song_dir, &waveform_key)
+                        .to_string_lossy()
+                        .to_string();
+                    a.source_is_known(&id)
+                })
+                .unwrap_or(false);
+            if !still_known {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
+            waited_ms += POLL_MS;
+            got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
+        }
+        got
+    } else {
+        waveform_from_engine_peaks(&song_dir, &waveform_key, audio)
+    };
+
     let summary = match load_global_waveform(&cache_root, &song_dir, Path::new(&waveform_key)) {
         Ok(summary) => Some(summary),
-        Err(cache_error) => match waveform_from_engine_peaks(&song_dir, &waveform_key, audio) {
-            Some(summary) => Some(summary),
-            None if engine_has_source => {
-                // Known but not decoded yet — don't re-decode; let a retry hit.
-                None
-            }
-            None => match generate_native_waveform(&song_dir, &waveform_key) {
+        Err(_) if engine_peaks.is_some() => engine_peaks,
+        Err(cache_error) => match generate_native_waveform(&song_dir, &waveform_key) {
             Ok(summary) => Some(summary),
             Err(native_error) => {
                 match load_or_generate_global_waveform(
@@ -548,7 +567,6 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
                     }
                 }
             }
-            },
         },
     };
 
@@ -5568,19 +5586,6 @@ impl DesktopSession {
                 // The native engine will receive the current song on the next Play/Seek.
             }
             AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
-                eprintln!(
-                    "[LT_DIAG] persist_song_update impact={impact:?} playback_state={playback_state:?} \
-                     -> {}",
-                    if playback_state == PlaybackState::Playing {
-                        if impact == AudioChangeImpact::TimelineWindow {
-                            "update_live_timeline_window"
-                        } else {
-                            "upsert_song_tracks (incremental)"
-                        }
-                    } else {
-                        "sync_song (idle path)"
-                    }
-                );
                 if playback_state == PlaybackState::Playing {
                     if impact == AudioChangeImpact::TimelineWindow {
                         audio.update_live_timeline_window(&song)?;
