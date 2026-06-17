@@ -409,6 +409,19 @@ EngineCommand command_from_json(const std::string& raw) {
         return cmd;
     }
 
+    if (type == "PrepareSources") {
+        CmdPrepareSources cmd;
+        if (auto it = j.find("sources"); it != j.end() && it->is_array()) {
+            for (const auto& s : *it) {
+                CmdPrepareSources::SourceRef sref;
+                sref.id = s.at("id").get<Id>();
+                sref.file_path = s.value("file_path", std::string{});
+                cmd.sources.push_back(std::move(sref));
+            }
+        }
+        return cmd;
+    }
+
     if (type == "SetOutputDevice") {
         CmdSetOutputDevice cmd;
         cmd.device_id = j.at("device_id").get<std::string>();

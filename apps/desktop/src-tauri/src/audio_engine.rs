@@ -1963,6 +1963,31 @@ impl AudioController {
             .unwrap_or(false)
     }
 
+    /// Start decoding the given audio files to cache (+ same-pass waveform
+    /// peaks) immediately, WITHOUT a session — Ableton-style: the moment a file
+    /// is imported to the library (or dragged in), preparation begins, so by the
+    /// time it reaches the timeline the cache + waveform already exist. Paths are
+    /// normalized to the engine source-id form. No-op for files already prepared.
+    pub fn prepare_sources(&self, resolved_paths: &[String]) -> Result<(), DesktopError> {
+        if resolved_paths.is_empty() {
+            return Ok(());
+        }
+        let sources: Vec<SourceRef> = resolved_paths
+            .iter()
+            .map(|p| {
+                let id = normalize_engine_audio_path(p);
+                SourceRef {
+                    id: id.clone(),
+                    file_path: id,
+                }
+            })
+            .collect();
+        self.with_engine_state("prepare_sources", None, |engine, _state| {
+            engine.send_command(&EngineCommand::PrepareSources { sources })?;
+            Ok(())
+        })
+    }
+
     /// True if the engine has this source registered (decoding in progress OR
     /// done) — i.e. its streaming decode will produce the waveform peaks, so the
     /// UI must NOT enqueue a redundant full re-decode for it.

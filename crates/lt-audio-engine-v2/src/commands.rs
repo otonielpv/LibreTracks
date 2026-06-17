@@ -184,6 +184,14 @@ pub enum EngineCommand {
     /// sources (already-decoded ones are kept), and atomically swaps the session
     /// — so it never stalls the audio thread mid-playback. See
     /// docs/HANDOFF_import_while_playing_glitches.md.
+    /// Decode→cache (+ same-pass waveform peaks) files WITHOUT a session, so
+    /// preparation starts the moment a file is known (library import / OS drag),
+    /// Ableton-style. Already-prepared sources are skipped. The engine's prep
+    /// queue + source manager persist, so a later LoadSession reuses these.
+    PrepareSources {
+        sources: Vec<SourceRef>,
+    },
+
     UpsertSongTracks {
         song_id: String,
         tracks: Vec<TrackUpsert>,

@@ -281,6 +281,17 @@ struct CmdUpsertSongTracks {
     std::vector<CmdSetSongTiming::TimeSignatureMarkerUpdate> time_signature_markers;
 };
 
+// Prepare (decode→cache + same-pass waveform peaks) a set of audio files WITHOUT
+// putting them in a session/timeline. Used when files are imported into the
+// library or dragged from the OS, so decoding starts the moment we know the
+// file — Ableton-style — instead of waiting for a LoadSession. Sources already
+// prepared are skipped (no re-decode). The prep queue + source manager persist,
+// so a later LoadSession reuses these instead of re-decoding.
+struct CmdPrepareSources {
+    struct SourceRef { Id id; std::string file_path; };
+    std::vector<SourceRef> sources;
+};
+
 // Load a project from its JSON representation.
 // The engine will decode sources and install the Mixer callback.
 struct CmdLoadSession { std::string project_json; };
@@ -315,7 +326,7 @@ using EngineCommand = std::variant<
     CmdSetVoiceGuideConfig, CmdLoadVoiceGuideBank,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
-    CmdUpsertSongTracks,
+    CmdUpsertSongTracks, CmdPrepareSources,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;
 

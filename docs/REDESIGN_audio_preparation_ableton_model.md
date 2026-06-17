@@ -153,6 +153,29 @@ Order chosen so each phase is independently verifiable and de-risks the next.
 - Note: a temp `[LT_DIAG] source_is_known=false …` log prints the exact id
   strings if it still misses — removed in R6.
 
+### Phase R2.5 — PERSISTENT prep + decode-on-library-import  ✅ DONE (needs user test)
+The user's test exposed the real root: `engine_ids=[]` when waveforms were
+requested. The library waveform is requested when files are imported to the
+LIBRARY, but sources only reach the engine on the timeline LoadSession — and
+each LoadSession was DESTROYING the prep queue (`cancel_all`+`reset`) and
+`source_manager_->clear()`, so nothing decoded early could survive. Ableton
+decodes the moment a file is known, independent of the timeline.
+- **Persist the prep queue + source manager** across LoadSessions: created once
+  in `initialize()`, never reset per LoadSession. LoadSession now only
+  `enqueue_session` (the queue skips already-ready/loading sources). Only a real
+  sample-rate change still clears+re-decodes (different cache). Shutdown still
+  tears down.
+- **New `CmdPrepareSources`**: decode→cache (+ same-pass peaks) a set of files
+  WITHOUT a session. `AudioController::prepare_sources(paths)` sends it.
+- **Wired into library import**: `import_audio_files_from_paths/_from_bytes`
+  commands call `prepare_sources` on the imported assets, so decoding starts
+  immediately while the files sit in the library — by the time they're dragged
+  to the timeline the cache + waveform peaks already exist (no re-decode, no
+  `engine_ids=[]`).
+- TODO (R5): also fire `prepare_sources` for OS-drag-direct-to-timeline; and
+  make availability progressive (publish playable before the whole file decodes).
+- 218 DSP tests pass; persistence didn't regress playback.
+
 ### Phase R3 — real parallelism  ⏳
 - Raise decode pool toward hardware_concurrency (bounded, e.g. min(cores, 8)) so
   all dropped files prepare at once instead of in waves of 2.

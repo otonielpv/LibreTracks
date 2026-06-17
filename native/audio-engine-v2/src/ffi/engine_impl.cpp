@@ -588,6 +588,17 @@ Result<void> EngineImpl::initialize() {
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
+    // The prep queue + source manager now PERSIST for the engine's lifetime —
+    // they are NOT destroyed/recreated per LoadSession. This lets a source
+    // decoded early (e.g. on library import, or a previous session) survive a
+    // LoadSession instead of being cancelled + cleared + re-decoded. LoadSession
+    // just enqueues; the queue skips sources already ready/loading. Only a real
+    // sample-rate change (different cache) clears + re-decodes.
+    prep_queue_ = std::make_unique<SourcePreparationQueue>(
+        source_manager_.get(),
+        worker_pool_.get(),
+        [this](EngineEvent ev){ push_event(std::move(ev)); },
+        clock_ ? clock_->sample_rate() : 48000);
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
         source_manager_.get(),
@@ -1212,11 +1223,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (result.is_err())
                 return Result<void>::err(result.error());
 
-            if (prep_queue_) {
-                prep_queue_->cancel_all();
-                prep_queue_.reset();
-            }
-
             auto next_session = std::make_shared<Session>(result.take());
             // Log parsed session for pitch diagnostics.
             {
@@ -1243,15 +1249,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
 
-            // Register all sources, then hand off to the async worker pool.
-            source_manager_->clear();
-
-            prep_queue_ = std::make_unique<SourcePreparationQueue>(
-                source_manager_.get(),
-                worker_pool_.get(),
-                [this](EngineEvent ev){ push_event(std::move(ev)); },
-                sr
-            );
+            // PERSISTENT prep queue + source manager: do NOT clear() or recreate
+            // the queue. Enqueue the session's sources — the queue skips ones
+            // already ready/loading, so only genuinely new files decode. Sources
+            // prepared earlier (library import, prior session) are reused as-is,
+            // and their same-pass waveform peaks are already available.
             prep_queue_->enqueue_session(session_->sources,
                                           clock_->position().frame);
 
@@ -2717,6 +2719,22 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 prearmed_jumps_->prepare_all_targets_async(
                     next_session, source_manager_.get(), rev);
             }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdPrepareSources>) {
+            // Decode→cache (+ same-pass peaks) files NOW, without a session, so
+            // preparation starts the moment they're known (library import / OS
+            // drag). The persistent prep queue skips already-prepared sources.
+            if (!prep_queue_)
+                return Result<void>::ok();
+            const Frame playhead = clock_ ? clock_->position().frame : 0;
+            for (const auto& sref : c.sources) {
+                Source s;
+                s.id = sref.id;
+                s.file_path = sref.file_path;
+                prep_queue_->enqueue_source(s);
+            }
+            (void)playhead;
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetOutputDevice>) {

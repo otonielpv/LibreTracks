@@ -7636,7 +7636,7 @@ fn build_waveform_cache_token(
     })
 }
 
-fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathBuf {
+pub(crate) fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathBuf {
     let path = Path::new(file_path);
     if path.is_absolute() {
         path.to_path_buf()
