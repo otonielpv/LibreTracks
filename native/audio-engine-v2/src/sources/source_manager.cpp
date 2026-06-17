@@ -85,6 +85,34 @@ size_t source_cache_blocks_from_env() {
     return std::max<size_t>(1, (cache_mb * 1024 * 1024) / bytes_per_block);
 }
 
+#if LT_ENGINE_USE_LIBSNDFILE
+// PCM cache file format. We store 16-bit PCM in a standard WAV container — the
+// same as Ableton's decoding cache: half the size (and disk I/O) of float32,
+// and int16 is plenty for playback. libsndfile transparently converts between
+// the on-disk int16 and the float buffers we read/write, so only the format
+// flag changes. Files ≥ ~3.9 GB of audio data fall back to RF64 (WAV's 4 GB
+// container limit). Set LIBRETRACKS_CACHE_FLOAT=1 to keep float32 (debug/AB).
+int cache_sample_format() {
+    static const bool want_float = [] {
+        const char* v = std::getenv("LIBRETRACKS_CACHE_FLOAT");
+        return v && v[0] == '1' && v[1] == '\0';
+    }();
+    return want_float ? SF_FORMAT_FLOAT : SF_FORMAT_PCM_16;
+}
+
+// Major (container) flag: WAV unless the PCM payload would exceed the WAV 4 GB
+// limit, in which case RF64 (a WAV superset for huge files).
+int cache_container_format(Frame out_frames, int channel_count) {
+    const int bytes_per_sample =
+        (cache_sample_format() == SF_FORMAT_FLOAT) ? 4 : 2;
+    const unsigned long long payload =
+        static_cast<unsigned long long>(out_frames) *
+        static_cast<unsigned long long>(std::max(1, channel_count)) * bytes_per_sample;
+    constexpr unsigned long long kWavLimit = 4000ull * 1024 * 1024;  // ~3.9 GB
+    return payload >= kWavLimit ? SF_FORMAT_RF64 : SF_FORMAT_WAV;
+}
+#endif
+
 int eager_source_blocks_from_env() {
     if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_EAGER_BLOCKS")) {
         const int parsed = std::atoi(raw);
@@ -285,23 +313,29 @@ struct CacheEntryStat {
     long long   mtime      = 0;
 };
 
-bool ends_with_rf64(const std::string& name) {
-    constexpr const char* kExt = ".rf64";
-    constexpr std::size_t kLen = 5;
-    if (name.size() < kLen) return false;
-    return name.compare(name.size() - kLen, kLen, kExt) == 0;
+bool ends_with(const std::string& name, const char* ext) {
+    const std::size_t len = std::strlen(ext);
+    if (name.size() < len) return false;
+    return name.compare(name.size() - len, len, ext) == 0;
+}
+
+// A PCM cache file is either the int16 WAV (current) or the legacy float RF64.
+bool is_pcm_cache_file(const std::string& name) {
+    return ends_with(name, ".wav") || ends_with(name, ".rf64");
 }
 
 std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
     std::vector<CacheEntryStat> out;
 #if defined(_WIN32)
     WIN32_FIND_DATAA fd{};
-    const std::string pattern = dir + "\\*.rf64";
+    const std::string pattern = dir + "\\*";  // filter by extension below
     HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE)
         return out;
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+            continue;
+        if (!is_pcm_cache_file(fd.cFileName))
             continue;
         CacheEntryStat e;
         e.path = dir + "\\" + fd.cFileName;
@@ -322,7 +356,7 @@ std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
     if (!d) return out;
     while (auto* ent = ::readdir(d)) {
         const std::string name(ent->d_name);
-        if (!ends_with_rf64(name)) continue;
+        if (!is_pcm_cache_file(name)) continue;
         const std::string full = dir + "/" + name;
         struct stat st{};
         if (::stat(full.c_str(), &st) != 0) continue;
@@ -678,7 +712,8 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         SF_INFO info{};
         info.channels = channel_count;
         info.samplerate = sample_rate;
-        info.format = SF_FORMAT_RF64 | SF_FORMAT_FLOAT;
+        info.format = cache_container_format(duration_frames, channel_count)
+                    | cache_sample_format();
         SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
         if (!sf)
             return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
@@ -826,7 +861,8 @@ Result<void> SourceManager::decode_and_store_streaming(
     SF_INFO info{};
     info.channels = channel_count;
     info.samplerate = sample_rate;
-    info.format = SF_FORMAT_RF64 | SF_FORMAT_FLOAT;
+    info.format = cache_container_format(projected_out_frames, channel_count)
+                | cache_sample_format();
     SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
     if (!sf)
         return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
@@ -1400,13 +1436,23 @@ std::string SourceManager::cache_file_for(const Id& source_id,
     // cached PCM automatically. The orphaned old .rf64 stays on disk until
     // the LRU eviction sweep reclaims it.
     const FileStat st = stat_file(file_path);
+#if LT_ENGINE_USE_LIBSNDFILE
+    // Include the cache sample format in the key so switching float32<->int16
+    // regenerates rather than reusing a mismatched cache. Extension follows the
+    // container: WAV (int16, like Ableton) vs the legacy .rf64.
+    const int fmt = cache_sample_format();
+    const char* ext = (fmt == SF_FORMAT_FLOAT) ? ".rf64" : ".wav";
+#else
+    const int fmt = 0;
+    const char* ext = ".rf64";
+#endif
     const std::string key = source_id + "|" + file_path + "|" +
         std::to_string(sample_rate) + "|" +
         std::to_string(st.size_bytes) + "|" +
-        std::to_string(st.mtime);
+        std::to_string(st.mtime) + "|fmt" + std::to_string(fmt);
     const auto h = std::hash<std::string>{}(key);
     return source_cache_dir() + native_path_separator() +
-           std::to_string(h) + ".rf64";
+           std::to_string(h) + ext;
 }
 
 bool SourceManager::try_install_native_file(const Id& source_id,

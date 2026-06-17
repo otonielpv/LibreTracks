@@ -104,8 +104,13 @@ std::vector<float> render_track_block(const SourceManager& manager,
 
 void require_audio_equal(const std::vector<float>& a, const std::vector<float>& b) {
     REQUIRE(a.size() == b.size());
+    // The PCM cache is 16-bit (like Ableton), so a float sample round-trips with
+    // up to one int16 quantization step (1/32768 ≈ 3.05e-5) of error. Use an
+    // absolute tolerance a bit above that — tight enough to catch real
+    // corruption/misalignment, loose enough for lossy-but-correct quantization.
+    constexpr float kInt16Step = 1.0f / 32768.0f;
     for (std::size_t i = 0; i < a.size(); ++i)
-        CHECK(a[i] == doctest::Approx(b[i]).epsilon(0.000001));
+        CHECK(std::abs(a[i] - b[i]) <= 2.0f * kInt16Step);
 }
 
 } // namespace
@@ -361,15 +366,25 @@ struct TestCacheDirStats {
     std::size_t total_bytes = 0;
 };
 
+// Matches a PCM cache file: the int16 .wav (current) or legacy float .rf64.
+static bool is_cache_file_name(const std::string& name) {
+    auto ends = [&](const char* e) {
+        const std::size_t n = std::strlen(e);
+        return name.size() >= n && name.compare(name.size() - n, n, e) == 0;
+    };
+    return ends(".wav") || ends(".rf64");
+}
+
 TestCacheDirStats stat_cache_dir(const std::string& dir) {
     TestCacheDirStats out;
 #if defined(_WIN32)
     WIN32_FIND_DATAA fd{};
-    const std::string pattern = dir + "\\*.rf64";
+    const std::string pattern = dir + "\\*";
     HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return out;
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
+        if (!is_cache_file_name(fd.cFileName)) continue;
         LARGE_INTEGER sz{};
         sz.LowPart = fd.nFileSizeLow;
         sz.HighPart = static_cast<LONG>(fd.nFileSizeHigh);
@@ -382,8 +397,7 @@ TestCacheDirStats stat_cache_dir(const std::string& dir) {
     if (!d) return out;
     while (auto* ent = ::readdir(d)) {
         const std::string name(ent->d_name);
-        if (name.size() < 5) continue;
-        if (name.compare(name.size() - 5, 5, ".rf64") != 0) continue;
+        if (!is_cache_file_name(name)) continue;
         const std::string full = dir + "/" + name;
         struct stat st{};
         if (::stat(full.c_str(), &st) != 0) continue;
@@ -420,11 +434,12 @@ public:
         const std::string sub = path_ + std::string(1, kTestPathSep) + "source-cache";
 #if defined(_WIN32)
         WIN32_FIND_DATAA fd{};
-        const std::string pattern = sub + "\\*.rf64";
+        const std::string pattern = sub + "\\*";
         HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
         if (h == INVALID_HANDLE_VALUE) return;
         do {
             if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
+            if (!is_cache_file_name(fd.cFileName)) continue;
             std::remove((sub + "\\" + fd.cFileName).c_str());
         } while (FindNextFileA(h, &fd));
         FindClose(h);
@@ -433,8 +448,7 @@ public:
         if (!d) return;
         while (auto* ent = ::readdir(d)) {
             const std::string name(ent->d_name);
-            if (name.size() < 5) continue;
-            if (name.compare(name.size() - 5, 5, ".rf64") != 0) continue;
+            if (!is_cache_file_name(name)) continue;
             std::remove((sub + "/" + name).c_str());
         }
         ::closedir(d);
