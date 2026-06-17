@@ -1967,6 +1967,11 @@ impl AudioController {
     /// done) — i.e. its streaming decode will produce the waveform peaks, so the
     /// UI must NOT enqueue a redundant full re-decode for it.
     pub fn source_is_known(&self, source_id: &str) -> bool {
+        // The engine knows sources by their normalized path (verbatim \\?\
+        // prefix stripped, forward slashes) — see song_with_resolved_audio_paths.
+        // The waveform lookup passes the raw resolved path which may still carry
+        // the prefix, so normalize before comparing or it never matches.
+        let needle = normalize_engine_audio_path(source_id);
         let mut state = match self.state.lock() {
             Ok(s) => s,
             Err(_) => return false,
@@ -1978,7 +1983,7 @@ impl AudioController {
             Ok(snap) => snap
                 .source_states
                 .iter()
-                .any(|s| s.source_id == source_id),
+                .any(|s| normalize_engine_audio_path(&s.source_id) == needle),
             Err(_) => false,
         }
     }
@@ -1993,9 +1998,11 @@ impl AudioController {
         source_id: &str,
         resolution_frames: usize,
     ) -> Option<lt_audio_engine_v2::SourcePeaks> {
+        // Normalize to the engine's source-id form (see source_is_known).
+        let source_id = normalize_engine_audio_path(source_id);
         let mut state = self.state.lock().ok()?;
         let engine = state.engine.as_mut()?;
-        engine.source_peaks(source_id, resolution_frames).ok()
+        engine.source_peaks(&source_id, resolution_frames).ok()
     }
 
     pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, _song: Song) {

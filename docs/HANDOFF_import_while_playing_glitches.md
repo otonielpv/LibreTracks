@@ -396,6 +396,36 @@ which is stateful and supports block-by-block processing.
   → import now does ONE decode per file (audio + peaks in the same pass), like
     Ableton. Needs user confirmation on prep speed + stutter.
 
+- **2026-06-16** — **Root cause of the persistent waveform re-decode: PATH
+  MISMATCH.** Console logs showed source_is_known() / source_peaks() always
+  failing, so every file still re-decoded. The waveform lookup builds the
+  source id via `resolve_audio_file_path` which keeps the Windows verbatim
+  `\\?\` prefix (`//?/C:/…` after to_string_lossy), but the engine knows sources
+  by `normalize_engine_audio_path` form (prefix stripped, forward slashes). The
+  strings never matched. Fix: normalize the looked-up id the same way in
+  `source_is_known` and `source_peaks` before comparing/querying the engine.
+  Should now: skip the redundant enqueue + let prime_waveforms_from_engine_peaks
+  write the cache on retry = ONE decode per file. NEEDS user test.
+
+- **2026-06-16** — **Ableton reverse-engineering (user).** User cleared Ableton's
+  cache and watched `…\Ableton\Cache\Cache\Decoding` while dragging MP3s: Ableton
+  writes a **.wav** per file as it decodes, paints waveforms **progressively**,
+  and — crucially — **audio playback is progressive and tied to the waveform**:
+  the part that's decoded plays; the not-yet-decoded part is SILENT; all files
+  decode concurrently but progressively (not file-by-file).
+  How LibreTracks compares:
+  - ✅ We already write PCM to a disk cache (RF64 == WAV for >4GB; same idea).
+  - ✅ Streaming decode writes in chunks; ✅ peaks computed in the same pass.
+  - ❌ **We mark a source `cache_ready` only AFTER the whole file decodes**
+    (decode_and_store_streaming sets status at the very end), so a clip is silent
+    until its ENTIRE file is done — vs Ableton playing each chunk as it lands.
+    The block cache + StreamingSource already CAN play partial data (reads fill
+    silence for missing blocks), so the missing piece is: publish the source as
+    playable early and let it fill progressively, instead of waiting for the end.
+  - DECISION: first confirm the path-mismatch fix kills the double-decode; if it
+    still stutters, do the progressive-availability redesign (publish source
+    early, play decoded chunks, silence elsewhere — Ableton model).
+
 ### Answer: do all actions avoid recreating the whole session? — YES (except open)
 - Import audio, add/remove/move tracks & clips, region/marker/timing edits →
   `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).

@@ -370,7 +370,10 @@ fn generate_native_waveform(
 ) -> Result<WaveformSummary, DesktopError> {
     let source_path = resolve_audio_file_path(song_dir, waveform_key);
     let source_path_string = source_path.to_string_lossy().to_string();
-    eprintln!("[LT_DIAG] waveform RE-DECODE (file_peaks) for {waveform_key} — this is the expensive path");
+    eprintln!(
+        "[LT_DIAG] waveform RE-DECODE (file_peaks, EXPENSIVE): {}",
+        waveform_key.rsplit('/').next().unwrap_or(waveform_key)
+    );
     let peaks =
         lt_audio_engine_v2::file_peaks(&source_path_string, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -411,10 +414,12 @@ fn prime_waveforms_from_engine_peaks(
         }
         let Some(peaks) = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
         else {
-            eprintln!("[LT_DIAG] waveform MISS (no same-pass peaks, will re-decode): {key}");
-            continue;  // not loaded / no same-pass peaks → leave to the worker
+            continue;  // not loaded yet / no same-pass peaks → retry will hit
         };
-        eprintln!("[LT_DIAG] waveform HIT from engine peaks (no re-decode): {key}");
+        eprintln!(
+            "[LT_DIAG] waveform HIT from engine peaks (no re-decode): {}",
+            key.rsplit('/').next().unwrap_or(&key)
+        );
         let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
         if duration_frames == 0 {
             continue;
