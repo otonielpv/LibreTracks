@@ -27,7 +27,9 @@ namespace {
 void configure_decode_worker_thread() {
 #if defined(_WIN32)
     // Keep cold project opens from starving the WebView/UI thread while large
-    // compressed sources are decoded and written to the RF64 cache.
+    // compressed sources are decoded and written to the WAV cache. With R3
+    // running several decode workers in parallel this matters more: they stay
+    // below-normal so the audio callback (realtime/MMCSS) and UI never yield.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 #endif
 }
@@ -215,8 +217,18 @@ DecodeWorkerPool::DecodeWorkerPool(int num_threads)
             if (parsed > 0 && parsed <= 16)
                 num_threads = parsed;
         }
-        if (num_threads <= 0)
-            num_threads = 2;
+        if (num_threads <= 0) {
+            // R3: decode N dropped/imported files in parallel (Ableton-style),
+            // not in waves of 2. Scale with the machine but leave at least one
+            // core for the audio callback + UI, and cap so a many-core box
+            // doesn't thrash disk I/O. Decode is I/O + libav bound, so we don't
+            // need a thread per core; min(cores-1, 6) is plenty and matches the
+            // typical 4-8 concurrent imports. Modest machines (2-4 cores) still
+            // get 2-3 workers — strictly better than the old fixed 2.
+            const unsigned hw = std::thread::hardware_concurrency();
+            const int cores   = hw > 0 ? static_cast<int>(hw) : 4;
+            num_threads = std::clamp(cores - 1, 2, 6);
+        }
     }
     for (int i = 0; i < num_threads; ++i) {
         impl_->threads.emplace_back([this]{ impl_->worker_loop(); });
