@@ -274,10 +274,6 @@ jobs:
           if ($env:VCPKG_OVERLAY_TRIPLETS) {
             $configureArgs += "-DVCPKG_OVERLAY_TRIPLETS=$env:VCPKG_OVERLAY_TRIPLETS"
           }
-          if (Get-Command sccache -ErrorAction SilentlyContinue) {
-            $configureArgs += "-DCMAKE_C_COMPILER_LAUNCHER=sccache"
-            $configureArgs += "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
-          }
           if ($env:LT_ASIO_SDK_DIR) {
             # Enables JUCE_ASIO=1 in dependencies.cmake. Without this the
             # Windows release builds without ASIO device support.

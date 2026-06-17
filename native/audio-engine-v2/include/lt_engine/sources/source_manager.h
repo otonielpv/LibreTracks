@@ -179,9 +179,10 @@ private:
     // BELOW_NORMAL decode worker that got descheduled mid-import, stalling
     // playback for 100s of ms. The member atomic uses per-object wait/notify.
     // See microsoft/STL#86.
-    // Apple libc++ rejects std::atomic<shared_ptr> in the CI toolchain, so use
-    // the standard shared_ptr atomic free functions there via the helpers below.
-#if defined(__APPLE__) && !defined(_MSC_VER)
+    // GCC 11/libstdc++ and Apple libc++ in CI reject std::atomic<shared_ptr>,
+    // so non-MSVC builds use the standard shared_ptr atomic free functions via
+    // the helpers below.
+#if !defined(_MSC_VER)
     std::shared_ptr<const EntryMap> entries_;
 #else
     std::atomic<std::shared_ptr<const EntryMap>> entries_;

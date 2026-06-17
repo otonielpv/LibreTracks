@@ -213,7 +213,7 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
 }
 
 std::shared_ptr<const Session> Mixer::load_session() const noexcept {
-#if defined(__APPLE__) && !defined(_MSC_VER)
+#if !defined(_MSC_VER)
     return std::atomic_load_explicit(&session_, std::memory_order_acquire);
 #else
     return session_.load(std::memory_order_acquire);
@@ -221,7 +221,7 @@ std::shared_ptr<const Session> Mixer::load_session() const noexcept {
 }
 
 void Mixer::store_session(std::shared_ptr<const Session> session) noexcept {
-#if defined(__APPLE__) && !defined(_MSC_VER)
+#if !defined(_MSC_VER)
     std::atomic_store_explicit(&session_, std::move(session), std::memory_order_release);
 #else
     session_.store(std::move(session), std::memory_order_release);

@@ -609,7 +609,7 @@ void SourceManager::publish_locked(EntryMap entries) {
 }
 
 std::shared_ptr<const SourceManager::EntryMap> SourceManager::load_entries() const noexcept {
-#if defined(__APPLE__) && !defined(_MSC_VER)
+#if !defined(_MSC_VER)
     return std::atomic_load_explicit(&entries_, std::memory_order_acquire);
 #else
     return entries_.load(std::memory_order_acquire);
@@ -617,7 +617,7 @@ std::shared_ptr<const SourceManager::EntryMap> SourceManager::load_entries() con
 }
 
 void SourceManager::store_entries(std::shared_ptr<const EntryMap> entries) noexcept {
-#if defined(__APPLE__) && !defined(_MSC_VER)
+#if !defined(_MSC_VER)
     std::atomic_store_explicit(&entries_, std::move(entries), std::memory_order_release);
 #else
     entries_.store(std::move(entries), std::memory_order_release);

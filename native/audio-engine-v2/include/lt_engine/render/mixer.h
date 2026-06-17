@@ -116,9 +116,10 @@ private:
     // priority-inverts the audio thread against the control thread's session
     // swaps during import. See microsoft/STL#86 and the matching note in
     // source_manager.h. The audio thread loads session_ every render block.
-    // Apple libc++ rejects std::atomic<shared_ptr> in the CI toolchain, so use
-    // the standard shared_ptr atomic free functions there via the helpers below.
-#if defined(__APPLE__) && !defined(_MSC_VER)
+    // GCC 11/libstdc++ and Apple libc++ in CI reject std::atomic<shared_ptr>,
+    // so non-MSVC builds use the standard shared_ptr atomic free functions via
+    // the helpers below.
+#if !defined(_MSC_VER)
     std::shared_ptr<const Session> session_;
 #else
     std::atomic<std::shared_ptr<const Session>> session_;
