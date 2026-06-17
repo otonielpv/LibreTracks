@@ -158,6 +158,15 @@ private:
         // second full decode for the UI's waveform — Ableton-style). When set,
         // source_peaks() returns these directly instead of re-reading the cache.
         std::shared_ptr<const SourcePeakOverview> cached_peaks;
+        // R5 progressive availability: while a streaming decode is in flight the
+        // source is published as playable (status "streaming") with the cache
+        // file still open for writing. This counts how many output frames have
+        // actually been written so far. The fill worker must NOT read past it
+        // from disk (the WAV header/data size isn't finalized until sf_close), so
+        // tail blocks beyond it stay absent and play silence — exactly Ableton's
+        // "decoded part plays, rest silent". shared_ptr so Entry stays copyable;
+        // flips to a final value and status "cache_ready" when the decode ends.
+        std::shared_ptr<std::atomic<Frame>> decoded_frames;
     };
 
     using EntryMap = std::unordered_map<Id, Entry>;

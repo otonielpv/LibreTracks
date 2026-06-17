@@ -868,8 +868,40 @@ Result<void> SourceManager::decode_and_store_streaming(
         return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
 
     const int block_frames = block_cache_.block_frames();
-    const int eager_blocks = eager_source_blocks_from_env();
     constexpr int kReadChunkFrames = 65536;
+
+    // R5 progressive availability: publish the source as PLAYABLE up front, with
+    // the projected duration, before the whole file is decoded. The decode loop
+    // fills blocks into the RAM cache as it produces them and advances
+    // `decoded_frames`; the play gate (playback_audio_window_ready) only waits on
+    // the playhead window's blocks, so playback starts on the decoded head while
+    // the tail keeps filling. Blocks past `decoded_frames` are absent → silence
+    // (Ableton's "decoded part plays, rest silent"). The disk fill worker is
+    // gated to not read past `decoded_frames` while status=="streaming" because
+    // the WAV header/data-chunk size isn't finalized until sf_close.
+    auto decoded_frames = std::make_shared<std::atomic<Frame>>(0);
+    {
+        std::lock_guard lock(write_mutex_);
+        EntryMap next = *entries_.load();
+        auto it = next.find(source_id);
+        if (it == next.end()) {
+            sf_close(sf);
+            return Result<void>::err("Source not registered: " + source_id);
+        }
+        auto& entry = it->second;
+        entry.cache_file_path = cache_file;
+        entry.channel_count = channel_count;
+        entry.sample_rate = sample_rate;
+        entry.duration_frames = projected_out_frames;
+        entry.decoded_frames = decoded_frames;
+        entry.source = std::make_shared<DecodedSource>(
+            source_id, channel_count, sample_rate, projected_out_frames,
+            &block_cache_,
+            [this](const Id& id, int block_index) { request_block(id, block_index); });
+        entry.status = "streaming";
+        entry.error_message.clear();
+        publish_locked(std::move(next));
+    }
 
     std::vector<float> in_chunk(static_cast<std::size_t>(kReadChunkFrames) * channel_count);
     std::vector<float> out_chunk;  // resampled interleaved output, reused per chunk
@@ -932,11 +964,16 @@ Result<void> SourceManager::decode_and_store_streaming(
                                              static_cast<sf_count_t>(n));
         if (w <= 0) return false;
         accumulate_peaks(out_chunk.data(), out_written, n);  // same-pass waveform
+        // R5: fill EVERY complete decoded block into the RAM block cache as it's
+        // produced (not just the first `eager_blocks`), so the progressively
+        // published source is audible from disk-free RAM while decoding. The
+        // block cache is a bounded LRU, so this can't grow unbounded — cold tail
+        // blocks get evicted and are re-fetched from the (by-then finalized)
+        // cache file on demand.
         const Frame chunk_start = out_written;
         for (Frame local = 0; local < n; ) {
             const Frame abs_frame = chunk_start + local;
             const int block_index = static_cast<int>(abs_frame / block_frames);
-            if (block_index >= eager_blocks) break;
             const Frame block_start = static_cast<Frame>(block_index) * block_frames;
             const int offset_in_block = static_cast<int>(abs_frame - block_start);
             const int frames_this_block = std::min(
@@ -949,6 +986,10 @@ Result<void> SourceManager::decode_and_store_streaming(
             local += frames_this_block;
         }
         out_written += n;
+        // Publish the new valid extent AFTER writing so readers/fill worker never
+        // see frames that aren't on disk yet (release so the writes above are
+        // visible to the audio/fill threads that acquire it).
+        decoded_frames->store(out_written, std::memory_order_release);
         return true;
     };
 
@@ -1049,6 +1090,10 @@ Result<void> SourceManager::decode_and_store_streaming(
             source_id, channel_count, sample_rate, duration_frames,
             &block_cache_,
             [this](const Id& id, int block_index) { request_block(id, block_index); });
+        // R5: the cache file is now closed and finalized — open the disk gate to
+        // the full length so the fill worker can fetch any (incl. evicted) block.
+        decoded_frames->store(duration_frames, std::memory_order_release);
+        entry.decoded_frames = decoded_frames;
         entry.status = "cache_ready";
         entry.error_message.clear();
         publish_locked(std::move(next));
@@ -1354,6 +1399,14 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
     if (entry.cache_file_path.empty() || entry.channel_count <= 0)
         return;
 
+    // R5: never read past the frames actually written so far. While a streaming
+    // decode is in flight the WAV's data-chunk size isn't finalized, so reading
+    // beyond `decoded_frames` would return garbage/short reads. Blocks past it
+    // simply stay absent (→ silence) until the decode catches up or finishes.
+    const Frame readable_frames = entry.decoded_frames
+        ? entry.decoded_frames->load(std::memory_order_acquire)
+        : entry.duration_frames;
+
     const int block_frames = block_cache_.block_frames();
     std::size_t cursor_index = 0;
     while (cursor_index < missing.size()) {
@@ -1374,6 +1427,14 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
             (static_cast<Frame>(last_block) + 1) * block_frames);
         const int frames = static_cast<int>(end - start);
         if (frames <= 0)
+            continue;
+        // R5: only fetch the contiguous run that is fully decoded on disk. A run
+        // that extends past `readable_frames` is skipped entirely (rather than
+        // partially filled) so the audio thread never sees a block marked present
+        // with stale/zero tail — it stays absent (silence) until decode advances.
+        // The final block (which legitimately ends at duration < a full block) is
+        // covered because at cache_ready `readable_frames == duration_frames`.
+        if (end > readable_frames)
             continue;
 
         std::vector<float> data(

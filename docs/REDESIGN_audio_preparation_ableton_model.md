@@ -176,26 +176,66 @@ decodes the moment a file is known, independent of the timeline.
   make availability progressive (publish playable before the whole file decodes).
 - 218 DSP tests pass; persistence didn't regress playback.
 
-### Phase R3 — real parallelism  ⏳
-- Raise decode pool toward hardware_concurrency (bounded, e.g. min(cores, 8)) so
-  all dropped files prepare at once instead of in waves of 2.
+### Phase R3 — real parallelism  ✅ DONE (needs user test)
+- Decode pool default raised from a fixed 2 to `clamp(hardware_concurrency-1,
+  2, 6)` (worker_pool.cpp:220) so N dropped/imported files decode at once, not
+  in ceil(N/2) waves. FIXED pool scaled by cores (Ableton's model), NOT one
+  thread per file: decode is I/O + libav bound, so a thread per file just
+  contends on disk. cores-1 leaves a core for the audio callback + UI; cap 6
+  avoids disk thrash on many-core boxes; modest 2-4 core machines get 2-3
+  workers (>= old 2). Workers stay BELOW_NORMAL so the realtime audio thread
+  never yields to them. `LIBRETRACKS_DECODE_WORKERS` still overrides (1..16).
 - **Measure:** N files prepare in ~max(file_time) not ~ceil(N/2)×file_time.
+- Note: Ableton runs a fixed core-scaled worker pool for prep AND a bounded
+  multi-thread audio renderer — never thread-per-track. R3 matches the prep
+  side; the render side is out of scope (single audio callback today).
+- 218 DSP tests pass.
 
-### Phase R4 — native sample rate (no import resample)  ⏳
-- Stop resampling on import; store native SR. Resample at PLAY only when source
-  SR ≠ device SR (extend the varispeed path).
-- **Measure:** cache shrinks more for 44.1 k files; import CPU drops; the
-  resampler-latency bugs disappear.
+### Phase R4 — native sample rate (no import resample)  ⏸ DEFERRED (decided 2026-06-17)
+- Ableton stores the cache at the file's native SR (44.1 k) and resamples at
+  PLAY per voice — this is the source of its 68 MB vs our 74 MB cache (exactly
+  the 48/44.1 ratio).
+- **Why deferred:** confirmed in code that doing this needs a STATEFUL resampler
+  inside `StreamingSource::read` (streaming_source.cpp:24), which receives
+  ARBITRARY `offset_frames` (seeks, loops, jumps). A stateful resampler can't do
+  random access without re-init + latency-flush on every seek → clicks exactly
+  on seek/loop, the central use case of this live-playback DAW. High risk for an
+  ~8% cache win on 44.1 k files only. (cf. [[project_liveshifter_conclusion]] —
+  audio-thread DSP must be block-synchronous; seek/loop with a stateful
+  resampler is the hard part.)
+- **If revisited:** the low-risk subset is "pass-through when SR matches" — if
+  file SR == device SR, store native (no resample, no audio-thread change); only
+  resample-on-import when they differ. Partial benefit, no read() change.
+- The full resample-at-play stays a possible future once the varispeed/Bungee
+  per-block path is generalized to cover the SR ratio with seek-safe re-priming.
 
-### Phase R5 — progressive availability + progressive frontend  ⏳
-- Engine: publish the source as playable before decode finishes; fill blocks as
-  they land; play gate waits only for the playhead window; emit per-source
-  "frames decoded" progress.
-- Frontend: paint the waveform progressively up to the decoded point + show a
-  "preparing" region for the rest (replaces the "Analyzing…" → pop). User sees
-  which part of each audio is ready (and audible).
-- **Measure:** time-to-first-audio ~instant; waveform tracks audio availability;
-  no stutter (missing blocks play silence, like Ableton).
+### Phase R5 — progressive availability  ✅ DONE (engine core; needs user test)
+- **Engine (done):** `decode_and_store_streaming` now publishes the source as
+  PLAYABLE up front (status `"streaming"`, projected duration) right after the
+  cache file is opened — not at the end. The decode loop fills EVERY complete
+  block into the RAM block cache as it's produced (was: only the first 64 eager
+  blocks) and advances an atomic `entry.decoded_frames`. The play gate
+  (`playback_audio_window_ready`) already waits only on the playhead window's
+  blocks, so playback starts on the decoded head while the tail keeps filling;
+  blocks past `decoded_frames` are absent → silence (Ableton's "decoded part
+  plays, rest silent"). At `sf_close` the status flips to `cache_ready` and
+  `decoded_frames` opens to the full length.
+- **Race safety:** the disk fill worker (`fill_blocks_from_disk`) is gated to
+  never read past `decoded_frames` — the WAV data-chunk size isn't finalized
+  until `sf_close`, so a half-written run is skipped entirely (not partially
+  filled) to keep the audio thread from seeing a present-but-stale block. The
+  RAM block cache is a bounded LRU, so filling all blocks can't grow unbounded;
+  evicted tail blocks are re-fetched from the (by-then finalized) cache file.
+- **Diagnostics:** a streaming source reports its real decode % (not 100) so the
+  UI shows it preparing while it's already audible — the hook R5/F needs.
+- The non-streaming `store_decoded_source` and cache-file-reuse paths leave
+  `decoded_frames` null → full availability, unchanged (218 DSP tests pass).
+- **Frontend progressive paint (R5/F) — still ⏳:** paint the waveform up to the
+  decoded point + a "preparing" region for the rest, driven by the per-source
+  decode %, replacing the "Analyzing…" → full-pop. Engine already exposes the
+  progress; this is purely frontend.
+- **Measure:** time-to-first-audio ~instant on a large import; missing tail
+  plays silence (no stutter); no re-decode.
 
 ### Phase R6 — cleanup  ⏳
 - Remove symptom patches (DecodeMemoryGate, working-set floor, MMCSS) + the
