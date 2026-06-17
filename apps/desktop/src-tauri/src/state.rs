@@ -5668,6 +5668,10 @@ impl DesktopSession {
             PlaybackState::Playing => {
                 self.engine.play()?;
                 match impact {
+                    AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {
+                        self.transport_clock
+                            .reanchor_playing(self.engine.position_seconds());
+                    }
                     // TimelineWindow / StructureRebuild already pushed the edit
                     // to the LIVE C++ session (update_live_timeline_window /
                     // upsert_song_tracks above) without disturbing its clock —
@@ -5677,22 +5681,21 @@ impl DesktopSession {
                     // the edit. By now the audio has advanced past it, so the
                     // seek drags the clock BACKWARD (and triggers the seek-fade /
                     // voice re-prime) — heard as the playback "rewinding" a few
-                    // times on each move (worse in debug, where the gap is
-                    // bigger). Just reanchor the Rust clock to the engine's
-                    // ACTUAL live position so the two stay in sync. A real seek
-                    // still goes through reposition_audio on the seek/jump paths.
-                    AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
-                    AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {}
+                    // times per edit (worse in debug, where the gap is bigger).
+                    // Instead, read the engine's ACTUAL live playhead and anchor
+                    // both the Rust model and clock to it so they stay in sync. A
+                    // real seek still goes through reposition_audio on the
+                    // seek/jump paths.
+                    AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
+                        let live_position = self
+                            .runtime_transport_position(audio)
+                            .map(|(pos, _)| pos)
+                            .unwrap_or(restored_position);
+                        self.engine
+                            .sync_position_preserving_transport_state(live_position)?;
+                        self.transport_clock.reanchor_playing(live_position);
+                    }
                 }
-                // Reanchor to the engine's live playhead (NOT restored_position),
-                // since the incremental edit left the C++ clock running.
-                let live_position = self
-                    .runtime_transport_position(audio)
-                    .map(|(pos, _)| pos)
-                    .unwrap_or_else(|| self.engine.position_seconds());
-                self.engine
-                    .sync_position_preserving_transport_state(live_position)?;
-                self.transport_clock.reanchor_playing(live_position);
             }
             PlaybackState::Paused => {
                 self.engine.pause()?;
