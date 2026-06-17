@@ -178,6 +178,11 @@ struct VoiceSpec {
     Id                   source_id;
     std::shared_ptr<const DecodedSource> source;
     Frame                source_frame = 0;  // where in the source we will start
+    // Raw clip placement (NOT playhead-relative) used to detect whether a
+    // clip's mapping actually changed across an edit, so retime only resets
+    // voices whose clip really moved. See retime_existing_for_session.
+    Frame                timeline_start_frame = 0;
+    Frame                source_start_frame = 0;
     Semitones            effective_semitones = 0;
     // Time-stretch ratio to use during warm + prefeed so Bungee's internal
     // speed state matches what track_renderer will request at runtime. 1.0
@@ -250,6 +255,8 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
                         static_cast<double>(timeline_offset) * spec_ratio)
                     : timeline_offset;
                 spec.source_frame = clip.source_start_frame + source_offset;
+                spec.timeline_start_frame = clip.timeline_start_frame;
+                spec.source_start_frame = clip.source_start_frame;
                 spec.effective_semitones = decision.effective_semitones;
                 spec.time_ratio = spec_ratio;
                 out.push_back(spec);
@@ -603,6 +610,8 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         }
         voice->reset_source_cursor(
             static_cast<long long>(spec.source_frame));
+        voice->set_clip_mapping(spec.timeline_start_frame,
+                                spec.source_start_frame, spec.time_ratio);
         // Voice is already primed with real audio above; ask for 0-frame
         // fade-in. If the source window was not ready (very rare: source not
         // yet decoded at session-build time), re-arm a short fade-in to mask
@@ -642,20 +651,21 @@ void BungeeVoiceManager::retime_existing_for_session(
 #if LT_ENGINE_HAVE_BUNGEE
     const auto specs = enumerate_voices(session, sources, playhead);
     auto current = std::atomic_load(&impl_->active);
-    // Tempo/warp edits during playback: keep Bungee's warm pipeline. Most BPM
-    // tweaks (especially when the playhead is at or near the start of the
-    // region) leave each voice's correct source frame within a few samples
-    // of where the cursor already sits, so resetting the cursor + dumping
-    // the output FIFO would force every voice to refill from scratch
-    // (~108 ms of structural latency at hop=-1) — that's the audible cut
-    // the user hears on every BPM change. Skip the cursor reset and FIFO
-    // clear when the drift is small; Bungee absorbs the new ratio at the
-    // next render_block via render_block(pitch_scale, time_ratio). Only fall
-    // back to a hard retime when the source frame jumps by more than a
-    // block's worth of samples (e.g. the user dragged a tempo marker and
-    // the playhead is mid-region — the new mapping genuinely points at a
-    // different sample).
-    constexpr long long kRetimeSoftDriftFrames = 256;
+    // A clip/track edit during playback (move clip, cut, duplicate, reorder
+    // tracks, tempo tweak) re-publishes the session, which calls us. We must
+    // NOT touch voices whose clip is unchanged: their Bungee pipeline is warm
+    // and the source_cursor already advances itself with the playhead, so
+    // resetting the cursor + clearing the output FIFO would force a refill from
+    // scratch (~108 ms structural latency at hop=-1) — heard as playback that
+    // "jumps back then recovers" on EVERY edit, even edits to other clips.
+    //
+    // Compare each voice's CLIP MAPPING (timeline start, source start, warp
+    // ratio it was last built/retimed for) against the new session's mapping
+    // for the same clip_id. Hard-retime only when the mapping genuinely changed
+    // (that clip was moved / its source window or warp ratio changed). An
+    // unchanged clip keeps its warm pipeline untouched, so editing one clip no
+    // longer glitches the others.
+    constexpr long long kMappingEpsilonFrames = 2;  // sub-ms rounding tolerance
     int retimed = 0;
     int retimed_soft = 0;
     int missing = 0;
@@ -665,18 +675,25 @@ void BungeeVoiceManager::retime_existing_for_session(
             ++missing;
             continue;
         }
-        const long long current_cursor = it->second->source_cursor();
-        const long long target_cursor = static_cast<long long>(spec.source_frame);
-        if (std::llabs(target_cursor - current_cursor) <= kRetimeSoftDriftFrames) {
-            // Soft retime: leave the warm pipeline alone. The next block
-            // will feed Bungee the new time_ratio and grain advance picks
-            // up the change without an audible discontinuity.
+        auto& voice = *it->second;
+        const bool timeline_changed =
+            std::llabs(static_cast<long long>(spec.timeline_start_frame)
+                       - voice.mapped_timeline_start()) > kMappingEpsilonFrames;
+        const bool source_changed =
+            std::llabs(static_cast<long long>(spec.source_start_frame)
+                       - voice.mapped_source_start()) > kMappingEpsilonFrames;
+        const bool ratio_changed =
+            std::abs(spec.time_ratio - voice.mapped_time_ratio()) > 1e-9;
+        if (!timeline_changed && !source_changed && !ratio_changed) {
+            // Unchanged clip: leave the warm pipeline completely alone.
             ++retimed_soft;
             continue;
         }
-        it->second->reset_source_cursor(target_cursor);
-        it->second->clear_queued_output();
-        it->second->arm_fade_in(3);
+        voice.reset_source_cursor(static_cast<long long>(spec.source_frame));
+        voice.clear_queued_output();
+        voice.arm_fade_in(3);
+        voice.set_clip_mapping(spec.timeline_start_frame,
+                               spec.source_start_frame, spec.time_ratio);
         ++retimed;
     }
     if (bungee_debug_enabled()) {
@@ -776,6 +793,8 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
             // (cursor + latency + compensation + queued) assumes this anchor.
             voice->reset_source_cursor(
                 static_cast<long long>(spec.source_frame));
+            voice->set_clip_mapping(spec.timeline_start_frame,
+                                    spec.source_start_frame, spec.time_ratio);
             voice->arm_fade_in(0);
             result.voice = std::move(voice);
             result.succeeded = true;
@@ -857,6 +876,8 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
         }
         voice->reset_source_cursor(
             static_cast<long long>(spec.source_frame));
+        voice->set_clip_mapping(spec.timeline_start_frame,
+                                spec.source_start_frame, spec.time_ratio);
         // This voice has already been prefed to the seek target; the mixer's
         // seek de-click ramp handles the boundary. Avoid an extra per-voice
         // gain ramp here because it can roughen transposed post-seek audio.

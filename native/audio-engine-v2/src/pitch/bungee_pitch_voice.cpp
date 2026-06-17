@@ -36,6 +36,12 @@ struct BungeePitchVoice::Impl {
     long long source_cursor = 0;
     double source_cursor_fraction = 0.0;
 
+    // Clip placement this voice was last built/retimed for. Compared by the
+    // manager so an unchanged clip's voice is never hard-retimed (see header).
+    long long mapped_timeline_start = 0;
+    long long mapped_source_start = 0;
+    double    mapped_time_ratio = 1.0;
+
     std::unique_ptr<Stretcher> stretcher;
     std::unique_ptr<Stream> stream;
 
@@ -331,6 +337,28 @@ void BungeePitchVoice::clear_queued_output() noexcept {
     if (impl_) impl_->clear_fifo();
 }
 
+void BungeePitchVoice::set_clip_mapping(long long timeline_start_frame,
+                                        long long source_start_frame,
+                                        double time_ratio) noexcept {
+    if (impl_) {
+        impl_->mapped_timeline_start = timeline_start_frame;
+        impl_->mapped_source_start = source_start_frame;
+        impl_->mapped_time_ratio = time_ratio;
+    }
+}
+
+long long BungeePitchVoice::mapped_timeline_start() const noexcept {
+    return impl_ ? impl_->mapped_timeline_start : 0;
+}
+
+long long BungeePitchVoice::mapped_source_start() const noexcept {
+    return impl_ ? impl_->mapped_source_start : 0;
+}
+
+double BungeePitchVoice::mapped_time_ratio() const noexcept {
+    return impl_ ? impl_->mapped_time_ratio : 1.0;
+}
+
 #else
 
 struct BungeePitchVoice::Impl {};
@@ -371,6 +399,10 @@ int BungeePitchVoice::render_block(const float* const*,
 void BungeePitchVoice::reset_source_cursor(long long) noexcept {}
 long long BungeePitchVoice::source_cursor() const noexcept { return 0; }
 void BungeePitchVoice::clear_queued_output() noexcept {}
+void BungeePitchVoice::set_clip_mapping(long long, long long, double) noexcept {}
+long long BungeePitchVoice::mapped_timeline_start() const noexcept { return 0; }
+long long BungeePitchVoice::mapped_source_start() const noexcept { return 0; }
+double BungeePitchVoice::mapped_time_ratio() const noexcept { return 1.0; }
 
 #endif
 

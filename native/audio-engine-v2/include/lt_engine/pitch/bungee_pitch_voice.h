@@ -127,6 +127,22 @@ public:
     long long source_cursor() const noexcept;
     void      clear_queued_output() noexcept;
 
+    // ── Applied clip mapping (for incremental retime) ────────────────────
+    //
+    // The manager records the clip placement this voice was last built/retimed
+    // for: timeline start, source start, and warp time-ratio (all in frames /
+    // unitless ratio). retime_existing_for_session() compares the live session's
+    // mapping for the same clip_id against these — and only hard-retimes (cursor
+    // reset + FIFO clear) when they actually CHANGED. A voice whose clip didn't
+    // move keeps its warm pipeline, so editing one clip never glitches the
+    // others' playback. Set by the manager right after configure/prime.
+    void set_clip_mapping(long long timeline_start_frame,
+                          long long source_start_frame,
+                          double time_ratio) noexcept;
+    long long mapped_timeline_start() const noexcept;
+    long long mapped_source_start() const noexcept;
+    double    mapped_time_ratio() const noexcept;
+
     // Re-arm the post-construction fade-in so the next `fade_ms` of OUTPUT
     // frames the caller receives are ramped from 0→1 (equal-power). Used by
     // BungeeVoiceManager after warm_voice() has consumed the initial fade
