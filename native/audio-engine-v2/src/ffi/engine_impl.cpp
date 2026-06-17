@@ -2402,14 +2402,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetSongTimelineWindow>) {
-            if (lt_env_flag_enabled("LIBRETRACKS_EDIT_DIAG")) {
-                lt_debug_log(
-                    "[LT_EDIT_DIAG] SetSongTimelineWindow live=%d clips=%zu playing=%d frame=%lld short_reads=%llu\n",
-                    c.live ? 1 : 0, c.clips.size(),
-                    (clock_ && clock_->position().state == TransportState::Playing) ? 1 : 0,
-                    clock_ ? static_cast<long long>(clock_->position().frame) : -1,
-                    static_cast<unsigned long long>(TrackRenderer::diagnostics().direct_short_read_count));
-            }
             if (session_) {
                 auto next_session = std::make_shared<Session>(*session_);
                 bool changed = false;
@@ -2701,14 +2693,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 }
             }
 
-            if (lt_env_flag_enabled("LIBRETRACKS_EDIT_DIAG")) {
-                lt_debug_log(
-                    "[LT_EDIT_DIAG] UpsertSongTracks tracks=%zu sources=%zu playing=%d frame=%lld short_reads=%llu\n",
-                    c.tracks.size(), c.sources.size(),
-                    (clock_ && clock_->position().state == TransportState::Playing) ? 1 : 0,
-                    clock_ ? static_cast<long long>(clock_->position().frame) : -1,
-                    static_cast<unsigned long long>(TrackRenderer::diagnostics().direct_short_read_count));
-            }
             // Bungee: retime existing voices for the new clip layout (cheap;
             // does not rebuild from scratch). New/unloaded sources are skipped
             // and picked up when they finish decoding.
