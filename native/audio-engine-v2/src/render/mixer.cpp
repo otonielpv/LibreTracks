@@ -321,7 +321,20 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
         }
     }
 
-    // Copy next into controls_ first so control_index_for_track can find them.
+    // Publish count=0 (release) BEFORE mutating controls_ in place. The audio
+    // thread's lookups (control_index_for_track / control_for_track /
+    // any_solo_active_in_slots) all bound their scan by control_count_ with
+    // acquire, so while it reads 0 they skip every slot and fall back to
+    // fallback_control_ — which render_timeline_span fills from the live track's
+    // own gain/pan/mute/solo. So during the rebuild a track still plays with its
+    // correct values instead of the audio thread reading a track_id (std::string)
+    // mid-move or a half-resolved parent_control_index. This is what removes the
+    // import-while-playing click: set_session used to mutate controls_ in place
+    // while the callback was actively scanning it. The window is a few hundred ns
+    // (a handful of string moves), well under one audio block.
+    control_count_.store(0, std::memory_order_release);
+
+    // Copy next into controls_ so control_index_for_track can find them.
     for (int i = 0; i < kMaxControlSlots; ++i) {
         auto& dst = controls_[static_cast<std::size_t>(i)];
         auto& src = next[static_cast<std::size_t>(i)];
@@ -339,17 +352,31 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
         dst.current_solo_gain = src.current_solo_gain;
         dst.initialized = src.initialized;
     }
-    control_count_.store(count, std::memory_order_release);
 
-    // Second pass: resolve parent_control_index for each slot.
+    // Resolve parent_control_index BEFORE publishing the new count, scanning the
+    // freshly written slots directly (control_index_for_track can't be used here:
+    // it bounds its scan by control_count_, which is still 0). Doing this before
+    // the release-store means the audio thread never sees a published slot with a
+    // stale/half-resolved parent index.
     for (int i = 0; i < count; ++i) {
         auto& slot = controls_[static_cast<std::size_t>(i)];
-        if (!slot.parent_track_id.empty()) {
-            slot.parent_control_index = control_index_for_track(slot.parent_track_id);
-        } else {
-            slot.parent_control_index = -1;
+        slot.parent_control_index = -1;
+        if (slot.parent_track_id.empty())
+            continue;
+        for (int j = 0; j < count; ++j) {
+            if (controls_[static_cast<std::size_t>(j)].initialized
+                && controls_[static_cast<std::size_t>(j)].track_id == slot.parent_track_id) {
+                slot.parent_control_index = j;
+                break;
+            }
         }
     }
+
+    // Publish the fully-built table in one release store. Audio-thread readers
+    // acquire control_count_, so they see every slot's track_id and resolved
+    // parent index consistently — or 0 (fallback) during the rebuild, never a
+    // half-written state.
+    control_count_.store(count, std::memory_order_release);
 }
 
 void Mixer::render_timeline_span(float** output_channels,
