@@ -179,7 +179,13 @@ private:
     // BELOW_NORMAL decode worker that got descheduled mid-import, stalling
     // playback for 100s of ms. The member atomic uses per-object wait/notify.
     // See microsoft/STL#86.
+    // Apple libc++ rejects std::atomic<shared_ptr> in the CI toolchain, so use
+    // the standard shared_ptr atomic free functions there via the helpers below.
+#if defined(__APPLE__) && !defined(_MSC_VER)
+    std::shared_ptr<const EntryMap> entries_;
+#else
     std::atomic<std::shared_ptr<const EntryMap>> entries_;
+#endif
     std::deque<std::shared_ptr<const EntryMap>> retired_entries_;
     SourceReadyCallback             source_ready_callback_;
     mutable BlockCache              block_cache_;
@@ -191,6 +197,8 @@ private:
     mutable std::thread             fill_thread_;
 
     void publish_locked(EntryMap entries);
+    std::shared_ptr<const EntryMap> load_entries() const noexcept;
+    void store_entries(std::shared_ptr<const EntryMap> entries) noexcept;
     void fill_worker_loop() const;
     void fill_blocks_from_disk(const Id& source_id, const std::vector<int>& block_indices) const;
     std::string cache_file_for(const Id& source_id, const std::string& file_path, int sample_rate) const;

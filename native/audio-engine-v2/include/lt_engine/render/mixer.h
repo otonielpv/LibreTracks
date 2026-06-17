@@ -116,7 +116,13 @@ private:
     // priority-inverts the audio thread against the control thread's session
     // swaps during import. See microsoft/STL#86 and the matching note in
     // source_manager.h. The audio thread loads session_ every render block.
+    // Apple libc++ rejects std::atomic<shared_ptr> in the CI toolchain, so use
+    // the standard shared_ptr atomic free functions there via the helpers below.
+#if defined(__APPLE__) && !defined(_MSC_VER)
+    std::shared_ptr<const Session> session_;
+#else
     std::atomic<std::shared_ptr<const Session>> session_;
+#endif
     const SourceManager* sources_;
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
@@ -265,6 +271,8 @@ private:
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;
     void rebuild_control_slots(std::shared_ptr<const Session> session, bool preserve_realtime_state);
+    std::shared_ptr<const Session> load_session() const noexcept;
+    void store_session(std::shared_ptr<const Session> session) noexcept;
 };
 
 } // namespace lt

@@ -195,7 +195,7 @@ Mixer::Mixer(const Session*       session,
     , clock_(clock)
     , scheduler_(scheduler)
 {
-    rebuild_control_slots(session_.load(), false);
+    rebuild_control_slots(load_session(), false);
     prepare_render_resources(kMaxBlockFrames);
 }
 
@@ -208,8 +208,24 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
     , clock_(clock)
     , scheduler_(scheduler)
 {
-    rebuild_control_slots(session_.load(), false);
+    rebuild_control_slots(load_session(), false);
     prepare_render_resources(kMaxBlockFrames);
+}
+
+std::shared_ptr<const Session> Mixer::load_session() const noexcept {
+#if defined(__APPLE__) && !defined(_MSC_VER)
+    return std::atomic_load_explicit(&session_, std::memory_order_acquire);
+#else
+    return session_.load(std::memory_order_acquire);
+#endif
+}
+
+void Mixer::store_session(std::shared_ptr<const Session> session) noexcept {
+#if defined(__APPLE__) && !defined(_MSC_VER)
+    std::atomic_store_explicit(&session_, std::move(session), std::memory_order_release);
+#else
+    session_.store(std::move(session), std::memory_order_release);
+#endif
 }
 
 bool Mixer::any_solo_active_in_slots() const noexcept {
@@ -571,7 +587,7 @@ void Mixer::render(float** output_channels,
     };
     auto phase_t = t0;
 
-    auto session = session_.load();
+    auto session = load_session();
     phase_mark(phase_t, phase_load_us_);  // shared_ptr atomic_load cost
 
     // Drain pending scheduler ops (at top of block, before clock advance).
@@ -925,14 +941,14 @@ void Mixer::start_master_fade(float target_gain, double duration_seconds) noexce
 }
 
 void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
-    session_.store(std::move(session));
-    rebuild_control_slots(session_.load(), preserve_realtime_state);
+    store_session(std::move(session));
+    rebuild_control_slots(load_session(), preserve_realtime_state);
     prepare_render_resources(kMaxBlockFrames);
     reset_track_meters();
 }
 
 void Mixer::swap_session_atomic(std::shared_ptr<const Session> session) noexcept {
-    session_.store(std::move(session));
+    store_session(std::move(session));
 }
 
 void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
@@ -940,7 +956,7 @@ void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
 }
 
 void Mixer::clear_session() {
-    session_.store(std::shared_ptr<const Session>{});
+    store_session(std::shared_ptr<const Session>{});
     reset_track_meters();
 }
 
@@ -1162,7 +1178,7 @@ MeterValues Mixer::meters() const noexcept {
 
 std::vector<TrackMeterValues> Mixer::track_meters() const {
     std::vector<TrackMeterValues> values;
-    auto session = session_.load();
+    auto session = load_session();
     if (!session) return values;
     Frame frame = clock_ ? clock_->position().frame : 0;
     const Song* active_song = nullptr;
