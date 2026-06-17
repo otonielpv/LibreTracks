@@ -9,6 +9,16 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Export compile commands for IDEs and tooling.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Statically link the MSVC C runtime (/MT instead of /MD) so the shipped DLL/EXE
+# does not depend on VCRUNTIME140*.dll / MSVCP140.dll being present on the user's
+# machine. Without this, users without the VC++ Redistributable hit
+# "VCRUNTIME140_1.dll not found" on launch. Set before any add_library /
+# FetchContent_MakeAvailable so it propagates to JUCE, libsndfile, r8brain, etc.
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        CACHE STRING "MSVC runtime: static (/MT, /MTd in Debug)" FORCE)
+endif()
+
 include(cmake/options.cmake)
 include(cmake/dependencies.cmake)
 
