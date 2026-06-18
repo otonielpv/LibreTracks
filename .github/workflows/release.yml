@@ -128,7 +128,18 @@ jobs:
 
       - name: Install macOS Rust targets
         if: matrix.platform == 'macos'
-        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+        # macos-latest ships the universal (x86_64 + arm64) bundle and needs
+        # both std targets. macos-15-intel is Intel validation-only and builds
+        # x86_64 ONLY (see CMAKE_OSX_ARCHITECTURES below), so it must NOT pull
+        # the arm64 std — that extra download is pure waste and was the single
+        # point that flaked here (a transient static.rust-lang.org DNS failure
+        # downloading rust-std-aarch64-apple-darwin). Install per-runner.
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          else
+            rustup target add x86_64-apple-darwin
+          fi
 
       - name: Setup compiler cache
         uses: mozilla-actions/sccache-action@v0.0.9

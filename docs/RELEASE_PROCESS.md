@@ -132,7 +132,51 @@ Pushing the tag triggers the release pipeline (macOS bundle validation,
 native lib linking, downloads counters). Confirm with the user before
 pushing the tag — it's hard to undo a published release.
 
-## 9. Update the knowledge graph
+## 9. Watch the CI and fix a failing job
+
+Pushing the tag kicks off `.github/workflows/release.yml`. Watch it and,
+if the user asked you to, fix any failing job, then re-trigger the run.
+
+Auth: `gh auth login` may reject the token in the Windows Credential
+Manager for missing the `read:org` scope. Don't fight it — pull the token
+and pass it per-command via `GH_TOKEN` instead (it skips scope validation):
+
+```bash
+export GH_TOKEN=$(printf "protocol=https\nhost=github.com\n\n" | git credential fill 2>/dev/null | sed -n 's/^password=//p')
+gh run list --limit 5
+gh run view <run-id>                 # per-job status; find the X
+```
+
+Reading logs of a job in an **in-progress** run: `gh run view --job
+<id> --log-failed` refuses until the whole run finishes ("logs will be
+available when it is complete"). Use the API endpoint instead, which
+serves a completed job's log even while sibling jobs still run:
+
+```bash
+gh api repos/otonielpv/LibreTracks/actions/jobs/<job-id>/logs | grep -iE 'error|##\[error\]'
+```
+
+Triage before "fixing": some jobs are `continue-on-error: true` (e.g. the
+`macos-15-intel` Intel validation build, `publish: false`) — those fail
+red but DO NOT block the release, which still publishes. Also separate a
+real code/workflow bug from a transient runner flake (DNS/network on a
+download step reads as a code error but isn't ours). Prefer a structural
+fix that removes the flaky work over a blind retry — e.g. the Intel runner
+was pulling the arm64 Rust std it never compiles with; scoping the target
+install per-runner deleted the download that flaked.
+
+Re-trigger after a fix: commit the fix, then MOVE the tag to the new
+commit and force-push it (the pipeline keys on the tag). The release-create
+step already deletes-then-recreates the GitHub release, so a moved tag
+regenerates it cleanly:
+
+```bash
+git push origin main
+git tag -f v<NEW>
+git push origin v<NEW> --force
+```
+
+## 10. Update the knowledge graph
 
 ```bash
 graphify update .
@@ -141,7 +185,7 @@ graphify update .
 (AST-only, no API cost. Per the project CLAUDE.md, run this after touching
 code so future sessions stay in sync.)
 
-## 10. Hand back a Facebook announcement draft
+## 11. Hand back a Facebook announcement draft
 
 End-user audience, natural language, minimal emojis, no version-bump
 jargon. Lead with the most relatable improvement (loading speed, new
