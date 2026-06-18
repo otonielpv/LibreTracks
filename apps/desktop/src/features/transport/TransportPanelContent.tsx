@@ -3841,17 +3841,20 @@ export function TransportPanelContent() {
     }
 
     const updateViewportWidth = () => {
-      const paneWidth =
-        rulerTrackRef.current?.clientWidth ??
-        laneAreaRef.current?.clientWidth ??
-        null;
-      const fallbackWidth = Math.max(
-        320,
-        (timelineScrollViewportRef.current?.clientWidth ??
-          shell.clientWidth ??
-          DEFAULT_TIMELINE_VIEWPORT_WIDTH) - HEADER_WIDTH,
-      );
-      setTimelineViewportWidth(Math.max(320, paneWidth ?? fallbackWidth));
+      // Measure the lane area from the *scrolling viewport*, which clips to the
+      // available space, minus the fixed track-headers column. We deliberately
+      // do NOT measure `rulerTrackRef`: its content (`.lt-ruler-content`) is
+      // sized to the current `laneViewportWidth` with `overflow: visible`, so
+      // its `clientWidth` just echoes back the width we last computed. That
+      // self-reference means the observer never converges on a *new* viewport
+      // width after a window/zoom resize — the lane stays frozen at the stale
+      // value and playhead centering drifts off-centre (toward ~75%).
+      const measuredViewport =
+        timelineScrollViewportRef.current?.clientWidth ??
+        shell.clientWidth ??
+        DEFAULT_TIMELINE_VIEWPORT_WIDTH;
+      const laneWidth = Math.max(320, measuredViewport - HEADER_WIDTH);
+      setTimelineViewportWidth(laneWidth);
 
       const viewportHeight =
         timelineScrollViewportRef.current?.clientHeight ?? 0;
@@ -3861,16 +3864,14 @@ export function TransportPanelContent() {
     updateViewportWidth();
 
     if (typeof ResizeObserver !== "undefined") {
+      // Observe only the elements that clip to the available space (the shell
+      // and the scrolling viewport). Observing the ruler track / lane area
+      // would re-fire on every `laneViewportWidth` change — their widths track
+      // that value — which is noise now that we no longer measure from them.
       const observer = new ResizeObserver(updateViewportWidth);
       observer.observe(shell);
       if (timelineScrollViewportRef.current) {
         observer.observe(timelineScrollViewportRef.current);
-      }
-      if (rulerTrackRef.current) {
-        observer.observe(rulerTrackRef.current);
-      }
-      if (laneAreaRef.current) {
-        observer.observe(laneAreaRef.current);
       }
       return () => observer.disconnect();
     }
