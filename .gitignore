@@ -33,3 +33,6 @@ build*
 !scripts/build-ffmpeg-universal.sh
 !scripts/build-ffmpeg-linux.sh
 bench-out*
+.graphify_detect_fast.json
+.graphify_detect.json
+.claude/scheduled_tasks.lock
