@@ -128,6 +128,10 @@ pub struct DesktopState {
     pub waveform_jobs: WaveformGenerationQueue,
     pub session: Mutex<DesktopSession>,
     pub project_load_progress: Mutex<Option<ProjectLoadProgressEvent>>,
+    /// OS resource sampler backing the top-bar CPU/RAM/disk meter. Independent
+    /// of the session lock so sampling can never be blocked by heavy session
+    /// work.
+    pub resource_monitor: crate::resource_monitor::ResourceMonitor,
 }
 
 impl Default for DesktopState {
@@ -143,6 +147,7 @@ impl Default for DesktopState {
             waveform_jobs,
             session: Mutex::new(DesktopSession::default()),
             project_load_progress: Mutex::new(None),
+            resource_monitor: crate::resource_monitor::ResourceMonitor::default(),
         }
     }
 }

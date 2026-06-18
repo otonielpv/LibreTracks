@@ -6486,3 +6486,157 @@ textarea {
 .lt-compact-clip-entry:hover {
   border-color: rgba(87, 241, 219, 0.35);
 }
+
+/* ---------------------------------------------------------------
+ * Resource meter (top bar, Ableton-style CPU/RAM/disk indicator)
+ *
+ * Catalina / old-Safari compatible on purpose: only rgba(), flexbox,
+ * percentage widths and data-attribute selectors — no color-mix(),
+ * no :has(), no rgb( / ) slash syntax.
+ * --------------------------------------------------------------- */
+.lt-resource-meter {
+  position: relative;
+  margin-left: auto; /* pin to the right of the menu row */
+  display: flex;
+  align-items: center;
+}
+
+.lt-resource-meter-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(186, 202, 197, 0.14);
+  border-radius: 3px;
+  cursor: pointer;
+  color: #d7ddda;
+  font: inherit;
+}
+
+.lt-resource-meter-trigger:hover,
+.lt-resource-meter.is-open .lt-resource-meter-trigger {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(186, 202, 197, 0.28);
+}
+
+.lt-resource-gauge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.lt-resource-gauge-label {
+  opacity: 0.7;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.lt-resource-gauge-bar {
+  position: relative;
+  width: 2.6rem;
+  height: 0.4rem;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.lt-resource-gauge-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: #57f1db;
+}
+
+.lt-resource-gauge-value {
+  min-width: 3.1rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.92;
+}
+
+/* Threshold colours — driven by data-severity so we never need color-mix. */
+.lt-resource-gauge[data-severity="warn"] .lt-resource-gauge-fill {
+  background: #e0c97e;
+}
+
+.lt-resource-gauge[data-severity="high"] .lt-resource-gauge-fill {
+  background: #e07e7e;
+}
+
+/* Expanded breakdown popover. Anchored to the right edge of the meter so it
+ * doesn't overflow off the right side of the window. */
+.lt-resource-meter-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 20rem;
+  max-width: min(26rem, calc(100vw - 4rem));
+  padding: 0.75rem;
+  border: 1px solid rgba(186, 202, 197, 0.16);
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 26%),
+    linear-gradient(180deg, rgba(24, 24, 24, 0.98), rgba(9, 9, 9, 0.98));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+}
+
+.lt-resource-meter-panel-header {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e8efec;
+}
+
+.lt-resource-meter-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.lt-resource-meter-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.74rem;
+}
+
+.lt-resource-meter-row dt {
+  opacity: 0.7;
+  margin: 0;
+}
+
+.lt-resource-meter-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  color: #d7ddda;
+}
+
+.lt-resource-meter-row[data-severity="warn"] dd {
+  color: #e0c97e;
+}
+
+.lt-resource-meter-row[data-severity="high"] dd {
+  color: #e07e7e;
+}
+
+.lt-resource-meter-hint {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  opacity: 0.55;
+}

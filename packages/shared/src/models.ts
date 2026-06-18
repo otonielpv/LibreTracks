@@ -309,6 +309,27 @@ export type DesktopPerformanceSnapshot = {
   cachedWaveforms: number;
 };
 
+/**
+ * Current OS resource usage for the top-bar resource meter. Mirrors the Rust
+ * `SystemResourceSnapshot`. CPU values are percentages (0..100);
+ * `processCpuPercent` is normalised across all cores to match Task Manager.
+ * Disk values are bytes per second (0 on the first sample — no baseline yet).
+ */
+export type SystemResourceSnapshot = {
+  processCpuPercent: number;
+  processMemoryBytes: number;
+  systemCpuPercent: number;
+  systemMemoryUsedBytes: number;
+  systemMemoryTotalBytes: number;
+  diskReadBytesPerSec: number;
+  diskWriteBytesPerSec: number;
+  /** Audio-callback load (Ableton-style CPU meter). >100% means dropouts.
+   * Only meaningful when `audioEngineActive` is true. */
+  audioLoadPercent: number;
+  audioUnderrunCount: number;
+  audioEngineActive: boolean;
+};
+
 function downsampleWaveformLod(
   lod: WaveformLodDto,
   targetResolutionFrames: number,

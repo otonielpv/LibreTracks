@@ -425,6 +425,39 @@ pub struct DesktopPerformanceSnapshot {
     pub cached_waveforms: usize,
 }
 
+/// Current operating-system resource usage, sampled on demand by the desktop
+/// `ResourceMonitor`. Surfaced in the top bar's resource meter (Ableton-style)
+/// so users — and us during support — can tell at a glance whether a slowdown
+/// is LibreTracks itself or the whole machine being saturated.
+///
+/// CPU values are percentages (0..100). `process_cpu_percent` is normalised
+/// across all logical cores so it matches what Task Manager / Activity Monitor
+/// reports for the process (sysinfo natively reports per-core, which can exceed
+/// 100%). Disk rates are bytes per second derived between consecutive samples;
+/// the first sample reports 0 because there is no baseline yet.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemResourceSnapshot {
+    pub process_cpu_percent: f32,
+    pub process_memory_bytes: u64,
+    pub system_cpu_percent: f32,
+    pub system_memory_used_bytes: u64,
+    pub system_memory_total_bytes: u64,
+    pub disk_read_bytes_per_sec: u64,
+    pub disk_write_bytes_per_sec: u64,
+    /// Audio-callback load as a percentage of the buffer time budget — the
+    /// equivalent of Ableton's transport "CPU meter". >100% means the audio
+    /// thread can't keep up and dropouts/crackles occur. `None`/absent until
+    /// the engine is running. Sourced from the engine snapshot, not sysinfo.
+    pub audio_load_percent: f64,
+    /// Buffer underruns counted by the engine since start. Any increase means
+    /// audible glitches happened.
+    pub audio_underrun_count: i32,
+    /// Whether the audio engine is currently running (audio fields are
+    /// meaningful only when true).
+    pub audio_engine_active: bool,
+}
+
 pub(crate) fn song_to_view(
     song: &Song,
     automation: &AutomationDocument,

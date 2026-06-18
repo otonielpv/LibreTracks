@@ -2,6 +2,7 @@ import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { getSongBaseBpm, type PlaybackState, type SongView } from "./desktopApi";
+import { ResourceMeter } from "./ResourceMeter";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -191,6 +192,8 @@ export function TimelineTopbar({
             ) : null}
           </div>
         </nav>
+
+        <ResourceMeter />
       </div>
 
       <div className="lt-topbar-main-row">

@@ -11,6 +11,7 @@ mod error_log;
 mod midi;
 mod models;
 mod remote;
+mod resource_monitor;
 mod settings;
 mod state;
 
@@ -136,6 +137,7 @@ fn main() {
             audio_engine::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,
             commands::system::get_desktop_performance_snapshot,
+            commands::system::get_system_resource_snapshot,
             commands::system::get_ownership_diagnostics,
             commands::system::append_debug_log,
             commands::system::read_error_log,
