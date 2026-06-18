@@ -107,6 +107,15 @@ public:
     CacheDiagnostics diagnostics() const;
     void             evict_lru(size_t target_blocks);
 
+    // Drop ALL cached blocks. Used when decoded sources are invalidated
+    // wholesale — e.g. a device sample-rate change re-decodes every source at
+    // the new rate, so blocks cached at the OLD rate (keyed only by
+    // source_id+block_index, NOT by sample rate) must be purged or the audio
+    // thread keeps serving stale samples → sudden speed-up / slow-down on
+    // already-buffered regions. Takes mtx_, so it is safe against the audio
+    // thread's read(); call it from the control thread.
+    void             clear();
+
     // --- Lock-contention diagnostics (LIBRETRACKS_AUDIO_DIAG) ---------------
     // Worst-case microseconds the audio thread (read) spent BLOCKED acquiring
     // mtx_, and the worst-case time a worker (fill/evict) HELD it. If the read
