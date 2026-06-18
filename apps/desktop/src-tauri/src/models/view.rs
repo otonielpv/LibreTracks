@@ -432,9 +432,12 @@ pub struct DesktopPerformanceSnapshot {
 ///
 /// CPU values are percentages (0..100). `process_cpu_percent` is normalised
 /// across all logical cores so it matches what Task Manager / Activity Monitor
-/// reports for the process (sysinfo natively reports per-core, which can exceed
-/// 100%). Disk rates are bytes per second derived between consecutive samples;
-/// the first sample reports 0 because there is no baseline yet.
+/// reports (sysinfo natively reports per-core, which can exceed 100%). The
+/// `process_*` fields aggregate our whole process family — the Rust core plus
+/// its WebView2 child processes — not just the core PID, so they reflect the
+/// app's real footprint. Disk rates are bytes per second derived between
+/// consecutive samples; the first sample reports 0 because there is no baseline
+/// yet.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemResourceSnapshot {
