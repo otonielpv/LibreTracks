@@ -1156,6 +1156,12 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
         }
     }
 
+    // Re-decode the voice-guide bank at the new rate too. Its clips are decoded
+    // to a fixed sample rate; after a device SR change the spoken count/section
+    // would otherwise drift against the beat grid (clips at 44.1k, render at
+    // 48k). Done before the early-returns below so it always runs on an SR change.
+    reload_voice_guide_bank_for_new_sample_rate();
+
     if (!source_manager_) return;
 
     // ALWAYS rebuild the prep queue at the new rate — even when no session is
@@ -1197,6 +1203,56 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
         source_manager_->register_source(src.id, src.file_path);
     }
     prep_queue_->enqueue_session(session_->sources, clock_->position().frame);
+}
+
+void EngineImpl::reload_voice_guide_bank_for_new_sample_rate() {
+    // No bank was ever loaded → nothing to re-decode.
+    if (voice_guide_voices_dir_.empty() || voice_guide_lang_.empty() || !mixer_)
+        return;
+    const int rate = clock_ && clock_->sample_rate() > 0 ? clock_->sample_rate() : 48000;
+    // Decode happens on the command thread (this is the dispatch thread, not the
+    // audio thread); the mixer swaps the bank in via an atomic shared_ptr.
+    auto bank = load_voice_guide_bank(voice_guide_voices_dir_, voice_guide_lang_, rate);
+    mixer_->set_voice_guide_clip_bank(std::move(bank));
+}
+
+void EngineImpl::rescale_session_for_new_sample_rate(int old_sr) {
+    // Nothing to re-bake without the source JSON or a clock.
+    if (current_project_json_.empty() || !clock_ || old_sr <= 0)
+        return;
+    const int new_sr = clock_->sample_rate();
+    if (new_sr <= 0 || new_sr == old_sr)
+        return;
+
+    // Wall-clock position of the playhead BEFORE the rate change. clock_ was
+    // already retuned to new_sr by the caller, which kept position_.frame in the
+    // OLD scale; recover real seconds from the old frame + old rate.
+    const Frame old_frame = clock_->position().frame;
+    const double playhead_seconds =
+        static_cast<double>(old_frame) / static_cast<double>(old_sr);
+
+    // Re-parse the timeline at the new rate. Pure JSON + arithmetic (no audio
+    // decode), so this is cheap (milliseconds) even for large sessions.
+    auto result = session_from_project_json(current_project_json_, new_sr);
+    if (result.is_err())
+        return;  // keep the existing (mis-scaled) session rather than dropping it
+    auto next_session = std::make_shared<Session>(result.take());
+
+    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+
+    // Move the playhead to the same wall-clock position in the new frame scale.
+    clock_->seek(static_cast<Frame>(std::llround(playhead_seconds * new_sr)));
+
+    if (mixer_) {
+        // Rebuild control slots for the freshly-parsed session; preserve live
+        // slider state (gain/pan/mute/solo) the user may be riding.
+        mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+        mixer_->set_bungee_voice_manager(bungee_voices_.get());
+    }
+    if (bungee_voices_ && bungee_voices_->is_available())
+        bungee_voices_->rebuild_for_session(
+            *next_session, *source_manager_, clock_->position().frame);
 }
 
 std::string EngineImpl::list_devices() const {
@@ -1262,6 +1318,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             auto result = session_from_project_json(c.project_json, sr);
             if (result.is_err())
                 return Result<void>::err(result.error());
+
+            // Keep the raw JSON so the timeline can be re-baked at a new SR if
+            // the device sample rate changes later (see
+            // rescale_session_for_new_sample_rate).
+            current_project_json_ = c.project_json;
 
             auto next_session = std::make_shared<Session>(result.take());
             // Log parsed session for pitch diagnostics.
@@ -1540,6 +1601,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             const int rate = clock_ && clock_->sample_rate() > 0
                 ? clock_->sample_rate()
                 : 48000;
+            // Remember the source params so the bank can be re-decoded at the
+            // new rate when the device sample rate changes (e.g. switching to
+            // an ASIO device running at a different SR). Without this the clips
+            // stay decoded at the old rate and the spoken count/section drift
+            // out of sync with the beat grid.
+            voice_guide_voices_dir_ = c.voices_dir;
+            voice_guide_lang_ = c.lang;
             auto bank = load_voice_guide_bank(c.voices_dir, c.lang, rate);
             if (mixer_) mixer_->set_voice_guide_clip_bank(std::move(bank));
             return Result<void>::ok();
@@ -2789,7 +2857,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // lock, so redundant reopens (re-applying unchanged settings) froze
             // playback. Require a device to actually be open (actual_sample_rate()
             // > 0) so the first real open after the silent default still proceeds.
+            //
+            // EXCEPTION: an empty device_id means "system default", which resolves
+            // to whatever the OS currently treats as the default endpoint. That
+            // underlying device can change (or differ from what's open) WITHOUT
+            // the id string changing, so the guard must never short-circuit it —
+            // otherwise picking "Default" while a different device is open does
+            // nothing (and the SR-change re-decode / voice-guide reload never
+            // fires). Only skip when a concrete, non-empty id matches.
             if (device_manager_->actual_sample_rate() > 0
+                && !req.device_id.empty()
                 && req.device_id == current_device_request_.device_id
                 && req.active_output_channels == current_device_request_.active_output_channels) {
                 return Result<void>::ok();
@@ -2833,6 +2910,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // Without this, switching 48k → 44.1k makes audio play ~9% slow.
             const int new_sr = clock_ ? clock_->sample_rate() : 0;
             if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
+                // Re-bake the timeline (markers/clips/regions/tempo) at the new
+                // rate FIRST — resample_sources re-registers session_->sources,
+                // so the rescaled session must be in place before it runs.
+                rescale_session_for_new_sample_rate(prev_sr);
                 resample_sources_for_new_sample_rate();
             }
             // Prearm: device change can alter the negotiated sample rate /
@@ -2879,6 +2960,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // re-prepare code below is now subsumed when the SR diff hits.
                 const int new_sr = clock_ ? clock_->sample_rate() : 0;
                 if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
+                    rescale_session_for_new_sample_rate(prev_sr);
                     resample_sources_for_new_sample_rate();
                 } else if (prearmed_jumps_) {
                     // SR didn't actually change; just keep the existing
@@ -2913,6 +2995,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // renegotiate it; handle SR-change identically to SetSampleRate.
                 const int new_sr = clock_ ? clock_->sample_rate() : 0;
                 if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
+                    rescale_session_for_new_sample_rate(prev_sr);
                     resample_sources_for_new_sample_rate();
                 } else if (prearmed_jumps_) {
                     prearmed_jumps_->clear();

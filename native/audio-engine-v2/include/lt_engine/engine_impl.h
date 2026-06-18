@@ -82,6 +82,21 @@ private:
     DeviceOpenRequest                   current_device_request_;
     MetronomeConfig                     metronome_config_;
     VoiceGuideConfig                    voice_guide_config_;
+    // Voice-guide bank source params, remembered so the bank can be re-decoded
+    // at the new rate when the device sample rate changes. The bank's clips are
+    // decoded to a fixed rate; if the device later runs at a different rate the
+    // spoken count/section drifts out of sync with the beat grid (the bank is at
+    // 44.1k while render is at 48k, or vice-versa). Empty until a bank is loaded.
+    std::string                         voice_guide_voices_dir_;
+    std::string                         voice_guide_lang_;
+    // The raw project JSON of the currently loaded session, kept so the whole
+    // timeline can be re-parsed at a new sample rate when the device changes.
+    // Markers/clips/regions/tempo are baked from seconds → frames using the SR
+    // active at load time (session_from_project_json); a later SR change would
+    // otherwise leave every timeline frame in the OLD rate's scale while render
+    // runs at the new rate, so anything that must land on a beat (voice-guide
+    // count, metronome, jumps) drifts. Empty when no session is loaded.
+    std::string                         current_project_json_;
     std::atomic<uint64_t>               session_generation_{0};
 
     // Cached snapshot string (rebuilt on snapshot request).
@@ -103,6 +118,17 @@ private:
     // the wrong speed (~9% slow when switching 48k → 44.1k device). Also
     // re-prepares Bungee + prearmed-jumps managers with the new dimensions.
     void resample_sources_for_new_sample_rate();
+
+    // Re-decode the voice-guide clip bank at the engine's current sample rate.
+    // No-op if no bank was ever loaded. Called on SR changes so the spoken
+    // count-in/section stays aligned with the beat grid after a device switch.
+    void reload_voice_guide_bank_for_new_sample_rate();
+
+    // Re-parse the loaded session's timeline (markers/clips/regions/tempo) at the
+    // engine's current sample rate from the saved project JSON, preserving the
+    // playhead's wall-clock position across the rate change. No-op if no session
+    // JSON is stored. `old_sr` is the rate the timeline was last baked at.
+    void rescale_session_for_new_sample_rate(int old_sr);
 
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;

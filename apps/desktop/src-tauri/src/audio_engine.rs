@@ -1550,6 +1550,28 @@ impl AudioController {
                         );
                     }
                 }
+            } else {
+                // No device id saved means the user selected "System default".
+                // Previously this branch did nothing, so picking "Default" while
+                // a concrete device was open left that device open and the change
+                // appeared to be ignored. Explicitly open the OS default device
+                // (empty device_id) so the engine switches to whatever Windows
+                // currently treats as the default endpoint.
+                let active_channels: Vec<i32> = settings
+                    .enabled_output_channels
+                    .iter()
+                    .map(|c| *c as i32)
+                    .collect();
+                if let Err(error) = engine.send_command(&EngineCommand::SetOutputDevice {
+                    device_id: String::new(),
+                    active_channels,
+                }) {
+                    eprintln!(
+                        "[libretracks-audio] failed to open system default output \
+                         device ({error}); transport may run silently until a device \
+                         is picked."
+                    );
+                }
             }
             // Sample rate / buffer size are also best-effort — bad combos
             // shouldn't kill startup either.
