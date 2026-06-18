@@ -43,6 +43,8 @@ Clip editing supports Ableton-style flows: Ctrl/Cmd+click and Shift+click for mu
 
 Folder tracks can act as grouped route owners: child tracks may leave their output on `Inherited (Folder)` so the whole group follows the folder bus automatically while keeping the same visual grouping in the desktop timeline and remote mixer.
 
+The top bar shows a live resource meter with current CPU and memory usage, so you can tell at a glance when a large session starts to push your machine.
+
 LibreTracks also notifies you in-app when a new version is published, with the changelog in the active app language and a shortcut to the downloads page. The check can be triggered manually from `Settings → General`.
 
 ## Main Areas

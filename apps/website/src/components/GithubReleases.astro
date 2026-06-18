@@ -15,9 +15,12 @@ type ReleaseAsset = {
 
 type Release = {
   tag_name: string;
+  name: string | null;
   published_at: string | null;
   html_url: string;
   body: string | null;
+  prerelease: boolean;
+  draft: boolean;
   assets: ReleaseAsset[];
 };
 
@@ -55,9 +58,14 @@ function extractReleaseNotesForLanguage(body: string, language: "es" | "en"): st
   }
   return collected.join("\n").trim();
 }
-const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
 
-let release: Release | null = null;
+// Fetch the FULL release list (latest first). The page features the newest
+// release but lets visitors switch to any previous version — older machines
+// sometimes need the exact build that last worked for them, and it's nicer
+// than hunting through GitHub's Releases tab.
+const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`;
+
+let releases: Release[] = [];
 let error: string | null = null;
 
 try {
@@ -71,16 +79,22 @@ try {
   if (!response.ok) {
     throw new Error(`GitHub returned ${response.status}`);
   }
-  release = await response.json();
+  const all = (await response.json()) as Release[];
+  // Hide drafts; keep prereleases (clearly labelled) so testers can grab them.
+  releases = all.filter((r) => !r.draft);
 } catch (caught) {
   error = caught instanceof Error ? caught.message : "Unknown error";
 }
 
 const labels = {
   currentVersion: isSpanish ? "Version actual" : "Current version",
+  latestBadge: isSpanish ? "Última" : "Latest",
+  prereleaseBadge: isSpanish ? "Preliminar" : "Pre-release",
   published: isSpanish ? "Publicado" : "Published",
   assets: isSpanish ? "Instaladores" : "Installers",
   notes: isSpanish ? "Notas de la version" : "Release notes",
+  olderTitle: isSpanish ? "Versiones anteriores" : "Older versions",
+  olderHint: isSpanish ? "Elige una versión para ver sus instaladores." : "Pick a version to see its installers.",
   supportTitle: isSpanish ? "Apoya LibreTracks" : "Support LibreTracks",
   supportText: isSpanish
     ? "LibreTracks es gratuito. Las donaciones voluntarias ayudan con mantenimiento, pruebas, documentacion, releases y desarrollo continuo."
@@ -95,22 +109,19 @@ const labels = {
     : "If the project is useful to you, you can support it with a voluntary donation on Ko-fi.",
   downloadClose: isSpanish ? "Ahora no, gracias" : "Not now, thanks",
   fallback: isSpanish
-    ? "No se pudo cargar la ultima release durante el build. Puedes abrir GitHub Releases directamente."
-    : "The latest release could not be loaded during the build. You can open GitHub Releases directly.",
+    ? "No se pudieron cargar las releases durante el build. Puedes abrir GitHub Releases directamente."
+    : "Releases could not be loaded during the build. You can open GitHub Releases directly.",
   noAssets: isSpanish ? "Esta release no contiene instaladores publicados." : "This release has no published installers.",
   open: isSpanish ? "Abrir en GitHub" : "Open on GitHub",
 };
 
-const releaseUrl = `https://github.com/${owner}/${repo}/releases/latest`;
+const releaseUrl = `https://github.com/${owner}/${repo}/releases`;
 const donationUrl = "https://ko-fi.com/otonielpv";
-const date = release?.published_at
-  ? new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(release.published_at))
-  : null;
 
-const localizedBody = release?.body
-  ? extractReleaseNotesForLanguage(release.body, isSpanish ? "es" : "en")
-  : "";
-const bodyHtml = localizedBody ? await marked.parse(localizedBody) : null;
+function formatDate(value: string | null): string | null {
+  if (!value) return null;
+  return new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(value));
+}
 
 function iconForAsset(name: string): string {
   if (/\.msi$|\.exe$/i.test(name)) return "🪟";
@@ -118,63 +129,113 @@ function iconForAsset(name: string): string {
   if (/\.deb$|\.AppImage$|\.rpm$/i.test(name)) return "🐧";
   return "📦";
 }
+
+// Pre-render each release panel server-side (notes → HTML). The newest is
+// shown by default; the rest are hidden and revealed by the client switcher.
+const panels = await Promise.all(
+  releases.map(async (release, index) => {
+    const localizedBody = release.body
+      ? extractReleaseNotesForLanguage(release.body, isSpanish ? "es" : "en")
+      : "";
+    return {
+      release,
+      index,
+      isLatest: index === 0,
+      date: formatDate(release.published_at),
+      bodyHtml: localizedBody ? await marked.parse(localizedBody) : null,
+    };
+  }),
+);
 ---
 
 <section class="download-panel">
-  {release ? (
+  {panels.length > 0 ? (
     <>
-      <div class="release-header">
-        <p class="eyebrow">{labels.currentVersion}</p>
-        <h1 class="release-version">{release.tag_name}</h1>
-        {date ? <p class="release-date">{labels.published}: {date}</p> : null}
-      </div>
-
-      <div class="release-layout">
-        {/* ── Assets column ── */}
-        <div class="release-assets">
-          <h3 class="release-section-title">{labels.assets}</h3>
-          {release.assets.length > 0 ? (
-            <div class="download-list">
-              {release.assets.map((asset) => (
-                <a class="download-card" href={asset.browser_download_url} target="_blank" rel="noopener noreferrer" data-download-asset>
-                  <span class="download-icon">{iconForAsset(asset.name)}</span>
-                  <span class="download-info">
-                    <strong>{asset.name}</strong>
-                    <span class="download-size">{Math.max(1, Math.round(asset.size / 1024 / 1024))} MB</span>
-                  </span>
-                  <span class="download-arrow">↓</span>
-                </a>
-              ))}
-            </div>
-          ) : <p>{labels.noAssets}</p>}
-          <div class="hero-actions" style="margin-top: 1.25rem;">
-            <a class="button-link" href={release.html_url}>{labels.open}</a>
+      {panels.map((panel) => (
+        <div
+          class="release-view"
+          data-release-view
+          data-release-tag={panel.release.tag_name}
+          hidden={!panel.isLatest}
+        >
+          <div class="release-header">
+            <p class="eyebrow">{labels.currentVersion}</p>
+            <h1 class="release-version">
+              {panel.release.tag_name}
+              {panel.isLatest ? <span class="release-badge latest">{labels.latestBadge}</span> : null}
+              {panel.release.prerelease ? <span class="release-badge pre">{labels.prereleaseBadge}</span> : null}
+            </h1>
+            {panel.date ? <p class="release-date">{labels.published}: {panel.date}</p> : null}
           </div>
-          <aside class="support-panel" aria-labelledby="support-title">
-            <h3 id="support-title">{labels.supportTitle}</h3>
-            <p>{labels.supportText}</p>
-            <p class="support-disclaimer">{labels.supportDisclaimer}</p>
-            <a class="button-link primary" href={donationUrl} target="_blank" rel="noreferrer">{labels.supportAction}</a>
-          </aside>
+
+          <div class="release-layout">
+            {/* ── Assets column ── */}
+            <div class="release-assets">
+              <h3 class="release-section-title">{labels.assets}</h3>
+              {panel.release.assets.length > 0 ? (
+                <div class="download-list">
+                  {panel.release.assets.map((asset) => (
+                    <a class="download-card" href={asset.browser_download_url} target="_blank" rel="noopener noreferrer" data-download-asset>
+                      <span class="download-icon">{iconForAsset(asset.name)}</span>
+                      <span class="download-info">
+                        <strong>{asset.name}</strong>
+                        <span class="download-size">{Math.max(1, Math.round(asset.size / 1024 / 1024))} MB</span>
+                      </span>
+                      <span class="download-arrow">↓</span>
+                    </a>
+                  ))}
+                </div>
+              ) : <p>{labels.noAssets}</p>}
+              <div class="hero-actions" style="margin-top: 1.25rem;">
+                <a class="button-link" href={panel.release.html_url}>{labels.open}</a>
+              </div>
+            </div>
+
+            {/* ── Release notes column ── */}
+            {panel.bodyHtml ? (
+              <div class="release-notes-panel">
+                <h3 class="release-section-title">{labels.notes}</h3>
+                <div class="release-notes-scroll">
+                  <div class="release-notes-body" set:html={panel.bodyHtml} />
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
+      ))}
 
-        {/* ── Release notes column ── */}
-        {bodyHtml ? (
-          <div class="release-notes-panel">
-            <h3 class="release-section-title">{labels.notes}</h3>
-            {/* The scroll wrapper is positioned so the notes never grow the
-                grid row past the downloads column; the body scrolls inside. */}
-            <div class="release-notes-scroll">
-              <div class="release-notes-body" set:html={bodyHtml} />
-            </div>
+      {panels.length > 1 ? (
+        <div class="older-releases">
+          <h3 class="release-section-title">{labels.olderTitle}</h3>
+          <p class="older-hint">{labels.olderHint}</p>
+          <div class="version-chip-list">
+            {panels.map((panel) => (
+              <button
+                type="button"
+                class={`version-chip${panel.isLatest ? " active" : ""}`}
+                data-version-chip={panel.release.tag_name}
+                aria-pressed={panel.isLatest ? "true" : "false"}
+              >
+                {panel.release.tag_name}
+                {panel.isLatest ? <span class="version-chip-tag">{labels.latestBadge}</span> : null}
+                {panel.release.prerelease ? <span class="version-chip-tag pre">{labels.prereleaseBadge}</span> : null}
+              </button>
+            ))}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
+
+      <aside class="support-panel" aria-labelledby="support-title">
+        <h3 id="support-title">{labels.supportTitle}</h3>
+        <p>{labels.supportText}</p>
+        <p class="support-disclaimer">{labels.supportDisclaimer}</p>
+        <a class="button-link primary" href={donationUrl} target="_blank" rel="noreferrer">{labels.supportAction}</a>
+      </aside>
     </>
   ) : (
     <>
       <p>{labels.fallback}</p>
-      <p style="color: #ffe2ab;">{error}</p>
+      {error ? <p style="color: #ffe2ab;">{error}</p> : null}
       <div class="hero-actions">
         <a class="button-link primary" href={releaseUrl}>{labels.open}</a>
       </div>
@@ -195,33 +256,62 @@ function iconForAsset(name: string): string {
 </dialog>
 
 <script>
+  // ── Version switcher ──────────────────────────────────────────────────────
+  // Every release panel is rendered server-side; the chips just toggle which
+  // one is visible. The donation reminder must be (re)bound after each switch
+  // because the visible download links change.
+  const views = Array.from(document.querySelectorAll<HTMLElement>("[data-release-view]"));
+  const chips = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-version-chip]"));
   const dialog = document.querySelector("[data-donation-dialog]");
-  const downloadLinks = document.querySelectorAll("[data-download-asset]");
-  const closeButtons = document.querySelectorAll("[data-donation-close]");
 
   function showDonationReminder() {
     if (!(dialog instanceof HTMLDialogElement) || dialog.open) return;
     dialog.showModal();
   }
 
-  downloadLinks.forEach((link) => {
-    link.addEventListener("click", (event) => {
-      if (!(link instanceof HTMLAnchorElement)) return;
-      if (event.defaultPrevented) return;
-      // Modifier-clicks / middle-click open in a new tab — let the
-      // browser handle them without intercepting.
-      const mouseEvent = event as MouseEvent;
-      if (mouseEvent.button !== 0 || mouseEvent.metaKey || mouseEvent.ctrlKey || mouseEvent.shiftKey || mouseEvent.altKey) return;
+  function bindDownloadLinks() {
+    document.querySelectorAll<HTMLAnchorElement>("[data-download-asset]").forEach((link) => {
+      if (link.dataset.bound === "1") return;
+      link.dataset.bound = "1";
+      link.addEventListener("click", (event) => {
+        if (!(link instanceof HTMLAnchorElement)) return;
+        if (event.defaultPrevented) return;
+        // Modifier-clicks / middle-click open in a new tab — let the browser
+        // handle them without intercepting.
+        const mouseEvent = event as MouseEvent;
+        if (mouseEvent.button !== 0 || mouseEvent.metaKey || mouseEvent.ctrlKey || mouseEvent.shiftKey || mouseEvent.altKey) return;
+        // Following the download URL in the same tab can move the page away
+        // before the modal paints. Keep LibreTracks open, show the reminder,
+        // and let the browser handle the GitHub asset separately.
+        event.preventDefault();
+        showDonationReminder();
+        window.open(link.href, "_blank", "noopener,noreferrer");
+      });
+    });
+  }
 
-      // On desktop, following the download URL in the same tab can move the
-      // page away before the modal paints. Keep LibreTracks open, show the
-      // reminder here, and let the browser handle the GitHub asset separately.
-      event.preventDefault();
-      showDonationReminder();
-      window.open(link.href, "_blank", "noopener,noreferrer");
+  function selectVersion(tag: string) {
+    views.forEach((view) => {
+      view.hidden = view.dataset.releaseTag !== tag;
+    });
+    chips.forEach((chip) => {
+      const active = chip.dataset.versionChip === tag;
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    bindDownloadLinks();
+  }
+
+  chips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const tag = chip.dataset.versionChip;
+      if (tag) selectVersion(tag);
     });
   });
 
+  bindDownloadLinks();
+
+  const closeButtons = document.querySelectorAll("[data-donation-close]");
   closeButtons.forEach((button) => {
     button.addEventListener("click", () => {
       if (dialog instanceof HTMLDialogElement) dialog.close();

@@ -592,6 +592,84 @@ h1 {
   margin: 0;
 }
 
+.release-badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.6rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font: 800 0.72rem/1 "Space Grotesk", ui-sans-serif, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.release-badge.latest {
+  color: #0c0c0c;
+  background: var(--lt-primary);
+}
+
+.release-badge.pre {
+  color: #ffe2ab;
+  background: color-mix(in srgb, #ffae3b 22%, transparent);
+  border: 1px solid color-mix(in srgb, #ffae3b 45%, transparent);
+}
+
+/* ── Older versions switcher ─────────────────────────────────────────────── */
+.older-releases {
+  margin-top: 2rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
+}
+
+.older-hint {
+  color: var(--lt-muted);
+  margin: 0 0 1rem;
+}
+
+.version-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.version-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 22%, transparent);
+  background: linear-gradient(180deg, #201f1f, #161515);
+  color: var(--lt-text, #e9e6e1);
+  font: 700 0.9rem/1 "Space Grotesk", ui-sans-serif, sans-serif;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.version-chip:hover {
+  border-color: color-mix(in srgb, var(--lt-primary) 55%, transparent);
+}
+
+.version-chip.active {
+  border-color: var(--lt-primary);
+  background: color-mix(in srgb, var(--lt-primary) 16%, #161515);
+}
+
+.version-chip-tag {
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #0c0c0c;
+  background: var(--lt-primary);
+}
+
+.version-chip-tag.pre {
+  color: #ffe2ab;
+  background: color-mix(in srgb, #ffae3b 28%, transparent);
+}
+
 .release-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
