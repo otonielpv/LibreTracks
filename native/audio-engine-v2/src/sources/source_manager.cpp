@@ -1370,6 +1370,12 @@ void SourceManager::clear() {
         fill_queue_.swap(empty);
         queued_blocks_.clear();
     }
+    // Drop all decoded PCM blocks too. They are keyed by source_id+block_index
+    // only (NOT by sample rate), so after a device SR change re-decodes the
+    // sources, the audio thread would otherwise keep serving stale blocks from
+    // the OLD rate for any region already buffered — heard as a sudden pitch /
+    // speed jump partway through playback. Clearing entries alone is not enough.
+    block_cache_.clear();
 }
 
 void SourceManager::fill_worker_loop() const {

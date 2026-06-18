@@ -19,6 +19,7 @@ import type {
   RemoteServerInfo,
   SongView,
   SongPackageImportResponse,
+  SystemResourceSnapshot,
   TrackKind,
   TransportLifecycleEvent,
   TransportSnapshot,
@@ -207,6 +208,10 @@ export async function getLibraryFolders(): Promise<string[]> {
 
 export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanceSnapshot> {
   return invokeCommand<DesktopPerformanceSnapshot>("get_desktop_performance_snapshot");
+}
+
+export async function getSystemResourceSnapshot(): Promise<SystemResourceSnapshot> {
+  return invokeCommand<SystemResourceSnapshot>("get_system_resource_snapshot");
 }
 
 export async function getSettings(): Promise<AppSettings> {

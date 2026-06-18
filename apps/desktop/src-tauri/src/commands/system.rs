@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::audio_engine::AudioDebugSnapshot;
 use crate::error::DesktopError;
 use crate::midi::get_midi_input_names;
-use crate::models::DesktopPerformanceSnapshot;
+use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
 use crate::remote;
 use crate::state::DesktopState;
 use libretracks_remote::RemoteServerInfo;
@@ -171,6 +171,29 @@ pub fn get_desktop_performance_snapshot(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     Ok(session.performance_snapshot())
+}
+
+/// Sample current OS resource usage (CPU / RAM / disk) for the top-bar meter.
+///
+/// Independent of the session lock — see `ResourceMonitor` — so polling this
+/// at ~1 Hz never contends with heavy session work.
+#[tauri::command]
+pub fn get_system_resource_snapshot(
+    state: State<'_, DesktopState>,
+) -> Result<SystemResourceSnapshot, String> {
+    let mut snapshot = state.resource_monitor.sample();
+
+    // Augment with the audio-callback load — the equivalent of Ableton's
+    // transport CPU meter. Best-effort: if the engine isn't running the
+    // snapshot is unavailable and the audio fields stay at their defaults
+    // (0 / inactive). Same source as get_ownership_diagnostics.
+    if let Ok(engine) = state.audio.engine_snapshot() {
+        snapshot.audio_load_percent = engine.cpu.callback_load_percent;
+        snapshot.audio_underrun_count = engine.cpu.underrun_count;
+        snapshot.audio_engine_active = true;
+    }
+
+    Ok(snapshot)
 }
 
 #[tauri::command]

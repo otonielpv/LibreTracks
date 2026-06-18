@@ -8,6 +8,7 @@
 #include <lt_engine/sources/io_throttle.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -631,6 +632,27 @@ Result<void> EngineImpl::initialize() {
         });
     }
 
+    // Rebuild the preparation queue at the *negotiated* device rate. It was
+    // constructed above with the clock's 48000 default — BEFORE the device was
+    // opened — because the worker pool + source manager must exist first. On a
+    // device whose native rate isn't 48000 (e.g. a 44.1kHz endpoint), leaving
+    // the queue at 48000 makes every source decode/resample to 48000 while the
+    // clock and hardware run at 44100. Playback then plays ~44100/48000 ≈ 0.92×
+    // — uniformly slow / low-pitched regardless of which SR the user picks,
+    // because the decode rate, not the requested rate, is what's wrong. The
+    // SR-change path (resample_sources_for_new_sample_rate) never fires on a
+    // fresh start because the rate never *changes* — the queue was simply born
+    // at the wrong rate. The queue is empty here (no session loaded yet), so
+    // rebuilding it is free.
+    {
+        const int decode_sr = clock_->sample_rate() > 0 ? clock_->sample_rate() : 48000;
+        prep_queue_ = std::make_unique<SourcePreparationQueue>(
+            source_manager_.get(),
+            worker_pool_.get(),
+            [this](EngineEvent ev){ push_event(std::move(ev)); },
+            decode_sr);
+    }
+
     // Prepare the Bungee voice manager with the negotiated (or default) audio
     // format. Safe to call again later if the device sample rate changes.
     if (bungee_voices_) {
@@ -1134,28 +1156,46 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
         }
     }
 
-    // The source re-decode step is only meaningful when a session exists.
-    // Without it there are no sources to re-decode.
-    if (!session_ || !source_manager_) return;
+    if (!source_manager_) return;
 
-    // Cancel any in-flight decode jobs from the previous rate.
+    // ALWAYS rebuild the prep queue at the new rate — even when no session is
+    // loaded yet. The Tauri startup flow is:
+    //   initialize()          → opens the OS-default device at SR_A
+    //   apply_settings        → SetOutputDevice(saved device) negotiates SR_B
+    //   user loads the song   → UpsertSongTracks / LoadSession enqueue sources
+    // The SR change (SR_A → SR_B) fires THIS function during apply_settings,
+    // BEFORE any session exists. If we returned early here (the old behaviour),
+    // prep_queue_ kept SR_A's rate, so when the user later loaded a project the
+    // sources were decoded/resampled to SR_A while the clock + hardware ran at
+    // SR_B → uniformly slowed-down / low-pitched playback (44100 content drained
+    // at 48000, or vice-versa). The queue is empty when there's no session, so
+    // rebuilding it is free; rebuilding it is what was missing.
     if (prep_queue_) {
         prep_queue_->cancel_all();
         prep_queue_.reset();
-    }
-    // Drop the cached decoded samples; the renderer will silence the
-    // affected clips until they're re-decoded.
-    source_manager_->clear();
-    // Re-register sources from the live session and enqueue all of them
-    // for decode at the new rate.
-    for (const auto& src : session_->sources) {
-        source_manager_->register_source(src.id, src.file_path);
     }
     prep_queue_ = std::make_unique<SourcePreparationQueue>(
         source_manager_.get(),
         worker_pool_.get(),
         [this](EngineEvent ev){ push_event(std::move(ev)); },
         new_sr);
+
+    // Drop ALL decoded samples + PCM blocks now — they're at the OLD rate.
+    // Done unconditionally (even with no session) so a later session can't
+    // inherit stale blocks: block_cache_ is keyed by source_id+block_index,
+    // not by sample rate, so a leftover block from a previous rate would be
+    // served as a cache hit and play back at the wrong speed. clear() is a
+    // no-op when nothing is cached.
+    source_manager_->clear();
+
+    // The source re-decode step is only meaningful when a session exists.
+    if (!session_) return;
+
+    // Re-register sources from the live session and enqueue all of them
+    // for decode at the new rate.
+    for (const auto& src : session_->sources) {
+        source_manager_->register_source(src.id, src.file_path);
+    }
     prep_queue_->enqueue_session(session_->sources, clock_->position().frame);
 }
 

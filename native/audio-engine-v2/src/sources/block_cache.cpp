@@ -234,4 +234,9 @@ void BlockCache::evict_lru(size_t target_blocks) {
     evict_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
+void BlockCache::clear() {
+    std::lock_guard<std::mutex> lk(mtx_);
+    blocks_.clear();
+}
+
 } // namespace lt
