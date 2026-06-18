@@ -1550,8 +1550,11 @@ button {
     font-size: 0.64rem;
   }
 
-  .marker-grid {
-    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  .marker-grid,
+  .remote-shell.is-large-controls .marker-grid,
+  .remote-shell.remote-size-2 .marker-grid,
+  .remote-shell.remote-size-3 .marker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .jump-toolbar {
@@ -1587,7 +1590,8 @@ button {
   .remote-global-cancel-button {
     width: auto;
     flex: 1 1 calc(50% - 0.32rem);
-    min-height: 2.5rem;
+    min-height: 1.85rem;
+    padding-block: 0.22rem;
     order: 10;
   }
 
@@ -1660,19 +1664,24 @@ button {
   }
 
   .region-actions-row {
-    gap: 0.28rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
   }
 
   .region-carousel {
     gap: 0.28rem;
     padding: 0.12rem 0;
+    width: 100%;
   }
 
   .selected-region-actions {
     flex: 0 0 auto;
+    justify-content: space-between;
   }
 
   .region-jump-button {
+    flex: 1 1 auto;
     min-height: 2.2rem;
     padding-inline: 0.5rem;
   }
