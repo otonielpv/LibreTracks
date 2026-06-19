@@ -22,9 +22,10 @@ use libretracks_project::{
     append_wav_files_to_song, global_waveform_file_path,
     import_song_package as import_song_package_into_project, import_wav_files_to_library,
     load_global_waveform, load_or_generate_global_waveform, load_song_from_file,
-    read_audio_metadata, save_song_to_file, waveform_summary_from_channel_peaks,
-    write_global_waveform, ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry,
-    ProjectError, WaveformSummary, SONG_FILE_NAME,
+    merge_extracted_song_package, read_audio_metadata, save_song_to_file,
+    waveform_summary_from_channel_peaks, write_global_waveform, ExtractedSongPackage,
+    ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary,
+    SONG_FILE_NAME,
 };
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use rayon::prelude::*;
@@ -1159,11 +1160,27 @@ impl DesktopSession {
     /// its sources. Split out from the native dialog so the command layer can
     /// run it on a worker thread instead of freezing the macOS main run loop.
     /// See [`create_song_at_path`](Self::create_song_at_path).
-    pub fn import_song_from_path(
+    /// Read the destination dir for a package import. The caller uses this to
+    /// run the slow decompression (`extract_song_package`) WITHOUT holding the
+    /// session lock — see `start_import_song_package_from_path`.
+    pub fn package_import_song_dir(&self) -> Result<PathBuf, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        // Confirm a song is loaded now so the caller fails fast before doing the
+        // expensive extraction; we re-clone the (possibly newer) song under the
+        // lock when applying.
+        self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
+        Ok(song_dir)
+    }
+
+    /// Merge an already-decompressed package (`extract_song_package`) into the
+    /// current song. This is the fast, session-bound half of an import; the
+    /// caller holds the session lock only for this call, never for the
+    /// decompression that precedes it.
+    pub fn import_song_from_extracted(
         &mut self,
         app: &AppHandle,
         audio: &AudioController,
-        package_file: PathBuf,
+        extracted: ExtractedSongPackage,
         insert_at_seconds: f64,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.song_dir.as_ref().ok_or(DesktopError::NoSongLoaded)?;
@@ -1172,22 +1189,16 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        let package_path = package_file.to_string_lossy().into_owned();
-        emit_project_load_progress(app, 5, "Leyendo paquete...".into(), 0, 0, 0, 0);
-        // Import the package WITHOUT blocking on source decode. The no_wait phase
-        // unzips, copies audio, persists the structure (StructureRebuild → the
-        // engine's incremental upsert), and primes the waveform cache — all of
-        // which is fast and gives the frontend a complete song (tracks + clips +
-        // waveform placeholders). The sources are enqueued for background decode
-        // by the upsert; we do NOT wait for them here. This matches the audio
-        // import flow: the timeline shows the new tracks immediately, waveforms
-        // fill in as they decode, and play is progressive (decoded head audible,
-        // rest silent — R5). Previously this called
-        // wait_for_project_audio_preparation, which held the session lock until
-        // every source finished decoding and kept the UI behind a blocking
-        // overlay for the whole import.
+        // Merge WITHOUT blocking on source decode. This phase repoints copied
+        // audio, persists the structure (StructureRebuild → the engine's
+        // incremental upsert), and primes the waveform cache — all fast — giving
+        // the frontend a complete song (tracks + clips + waveform placeholders).
+        // The sources are enqueued for background decode by the upsert; we do
+        // NOT wait for them here. Play is progressive (decoded head audible, rest
+        // silent — R5). Previously this also unzipped under the session lock,
+        // which froze the UI for the whole import of a large package.
         let inserted =
-            self.import_song_package_no_wait(app, &package_path, insert_at_seconds, audio)?;
+            self.import_song_package_no_wait(app, extracted, insert_at_seconds, audio)?;
 
         Ok(inserted.snapshot)
     }
@@ -4390,7 +4401,7 @@ impl DesktopSession {
     fn import_song_package_no_wait(
         &mut self,
         app: &AppHandle,
-        package_path: &str,
+        extracted: ExtractedSongPackage,
         insert_at_seconds: f64,
         audio: &AudioController,
     ) -> Result<SongPackageImportResponse, DesktopError> {
@@ -4400,18 +4411,15 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        emit_project_load_progress(app, 7, "Descomprimiendo paquete...".into(), 0, 0, 0, 0);
-        let mut imported = import_song_package_into_project(
-            &song_dir,
-            &song,
-            Path::new(package_path),
-            insert_at_seconds,
-        )?;
-        emit_project_load_progress(app, 10, "Copiando audio del paquete...".into(), 0, 0, 0, 0);
+        // The package is already decompressed (see `extract_song_package`, run
+        // off the lock by the caller, which owns the 7..40% progress band);
+        // merging it into the song is fast, so this phase owns 42..50%.
+        let mut imported = merge_extracted_song_package(&song, extracted, insert_at_seconds)?;
+        emit_project_load_progress(app, 42, "Copiando audio del paquete...".into(), 0, 0, 0, 0);
         place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
         emit_project_load_progress(
             app,
-            13,
+            45,
             "Actualizando libreria de la sesion...".into(),
             0,
             0,
@@ -4428,7 +4436,7 @@ impl DesktopSession {
         write_library_manifest_assets(&song_dir, &library_assets)?;
         emit_project_load_progress(
             app,
-            16,
+            47,
             "Aplicando cambios al proyecto...".into(),
             0,
             0,
@@ -4446,7 +4454,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        emit_project_load_progress(app, 18, "Preparando formas de onda...".into(), 0, 0, 0, 0);
+        emit_project_load_progress(app, 50, "Preparando formas de onda...".into(), 0, 0, 0, 0);
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
         Ok(SongPackageImportResponse {
             snapshot: self.snapshot(),
@@ -4863,15 +4871,49 @@ impl DesktopSession {
         track_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.delete_tracks(&[track_id.to_string()], audio)
+    }
+
+    /// Delete every track in `track_ids` in a single transaction: repair the
+    /// folder hierarchy for each, drop the clips of any deleted audio track, and
+    /// persist ONE `StructureRebuild`. Deleting a multi-track selection used to
+    /// loop `delete_track` per id from the frontend — N engine syncs + N
+    /// snapshots + N history entries — which made the tracks vanish one by one
+    /// and felt sluggish on big selections. Mirrors the batched `delete_clips`.
+    pub fn delete_tracks(
+        &mut self,
+        track_ids: &[String],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if track_ids.is_empty() {
+            return Ok(self.snapshot());
+        }
+
         let mut song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let deleted_track = delete_track_and_repair_hierarchy(&mut song.tracks, track_id)?;
 
-        if deleted_track.kind == TrackKind::Audio {
-            song.clips.retain(|clip| clip.track_id != track_id);
+        let mut any_audio_deleted = false;
+        for track_id in track_ids {
+            // A track may already be gone if it was a child of a folder deleted
+            // earlier in this batch (the hierarchy repair reparents/removes
+            // descendants). Treat a now-missing id as a no-op so the whole batch
+            // doesn't fail because of selection overlap.
+            match delete_track_and_repair_hierarchy(&mut song.tracks, track_id) {
+                Ok(deleted_track) => {
+                    if deleted_track.kind == TrackKind::Audio {
+                        song.clips.retain(|clip| &clip.track_id != track_id);
+                        any_audio_deleted = true;
+                    }
+                }
+                Err(DesktopError::TrackNotFound(_)) => continue,
+                Err(error) => return Err(error),
+            }
+        }
+
+        if any_audio_deleted {
             refresh_song_duration(&mut song);
         }
 
@@ -6570,6 +6612,13 @@ pub(crate) fn emit_library_import_progress(app: &AppHandle, percent: u8, message
     if let Err(error) = app.emit(LIBRARY_IMPORT_PROGRESS_EVENT, payload) {
         eprintln!("[libretracks-library] failed to emit import progress: {error}");
     }
+}
+
+/// Emit a project-load progress update carrying only a percent + message (the
+/// source/cache counters stay 0). Used by the off-lock package decompression
+/// phase to drive the same progress overlay as the rest of the import.
+pub(crate) fn emit_project_load_message(app: &AppHandle, percent: u8, message: String) {
+    emit_project_load_progress(app, percent, message, 0, 0, 0, 0);
 }
 
 fn emit_project_load_progress(

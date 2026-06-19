@@ -80,6 +80,9 @@ pub struct OwnershipDiagnostics {
     pub callback_duration_ms: f64,
     pub callback_load_percent: f64,
     pub underrun_count: i32,
+    /// Frames played as silence due to streaming prebuffer starvation. Nonzero
+    /// is the "audio silent until it catches up" symptom on slow machines.
+    pub source_cache_miss_frames: u64,
 }
 
 #[tauri::command]
@@ -148,6 +151,7 @@ pub fn get_ownership_diagnostics(
         callback_duration_ms: cpu.map(|c| c.callback_duration_ms).unwrap_or(0.0),
         callback_load_percent: cpu.map(|c| c.callback_load_percent).unwrap_or(0.0),
         underrun_count: cpu.map(|c| c.underrun_count).unwrap_or(0),
+        source_cache_miss_frames: cpu.map(|c| c.source_cache_miss_frames).unwrap_or(0),
     })
 }
 

@@ -321,6 +321,7 @@ const es = {
     status: {
       loadingSession: "Cargando sesion...",
       preparingAudio: "Preparando audio...",
+      unpackingPackage: "Descomprimiendo paquete...",
       tracksReady: "{{ready}}/{{total}} pistas listas",
       sourcesFailed: "{{count}} pista(s) no se pudieron cargar",
       error: "Error: {{message}}",

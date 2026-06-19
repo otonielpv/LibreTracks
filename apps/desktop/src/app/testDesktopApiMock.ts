@@ -1930,4 +1930,31 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  deleteTracks: async (trackIds: string[]) => {
+    for (const trackId of trackIds) {
+      const track = getTrack(trackId);
+      if (!track) {
+        continue;
+      }
+      const nextTracks = state.song.tracks
+        .filter((entry) => entry.id !== trackId)
+        .map((entry) =>
+          entry.parentTrackId === trackId
+            ? {
+                ...entry,
+                parentTrackId: track.parentTrackId ?? null,
+              }
+            : entry,
+        );
+      replaceSong({
+        ...state.song,
+        tracks: nextTracks,
+        clips:
+          track.kind === "audio"
+            ? state.song.clips.filter((clip) => clip.trackId !== trackId)
+            : state.song.clips,
+      });
+    }
+    return clone(buildSnapshot());
+  },
 };

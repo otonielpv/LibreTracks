@@ -22,6 +22,24 @@ use state::DesktopState;
 
 use commands::engine_v2::EngineV2State;
 
+/// Resolve the directory where the C++ engine's `lt_audio_debug.log` should
+/// live in a packaged build: `%LOCALAPPDATA%\LibreTracks` on Windows (where the
+/// other diagnostic logs already go), falling back to Tauri's local/roaming app
+/// data dir. Mirrors `commands::system::append_debug_log`'s resolution so all
+/// logs land in the same folder.
+fn resolve_engine_log_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            return Some(std::path::PathBuf::from(local).join("LibreTracks"));
+        }
+    }
+    app.path()
+        .app_local_data_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .ok()
+}
+
 fn main() {
     // Install the error-log panic hook before anything else so panics during
     // plugin init / setup are captured too. Until error_log::init runs (in
@@ -49,6 +67,22 @@ fn main() {
             // rather than aborting startup.
             if let Ok(app_data_dir) = app.handle().path().app_data_dir() {
                 error_log::init(app_data_dir);
+            }
+
+            // Point the C++ engine's debug/diagnostic log at a KNOWN, writable
+            // path before the engine is first used. Without this, a packaged
+            // release falls back to "lt_audio_debug.log" relative to the process
+            // CWD (unpredictable, often Program Files / not writable), so the
+            // [LT_STARVATION] and other diagnostics couldn't be found in release.
+            // Only set it when unset, so the dev scripts' override still wins.
+            if std::env::var_os("LIBRETRACKS_AUDIO_DEBUG_LOG").is_none() {
+                if let Some(log_dir) = resolve_engine_log_dir(&app.handle()) {
+                    let _ = std::fs::create_dir_all(&log_dir);
+                    std::env::set_var(
+                        "LIBRETRACKS_AUDIO_DEBUG_LOG",
+                        log_dir.join("lt_audio_debug.log"),
+                    );
+                }
             }
 
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
@@ -228,6 +262,7 @@ fn main() {
             commands::timeline::update_track_color,
             commands::timeline::update_track_transpose_enabled,
             commands::timeline::delete_track,
+            commands::timeline::delete_tracks,
             // ── Engine v2 commands (only available with `audio-engine-v2` feature) ──
             commands::engine_v2::engine_v2_initialize,
             commands::engine_v2::engine_v2_shutdown,

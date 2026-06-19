@@ -4,7 +4,7 @@ import {
   cancelMarkerJump,
   deleteClip,
   deleteClips,
-  deleteTrack,
+  deleteTracks,
   pauseTransport,
   playTransport,
   redoAction,
@@ -303,18 +303,18 @@ export function useTimelineKeyboardShortcuts({
             setStatus(t("transport.status.clipDeleted"));
           });
         } else if (selectedTrackIds.length > 0) {
+          // Batched: one backend call deletes the whole selection in a single
+          // engine sync + snapshot + history entry. The old per-id loop made
+          // the tracks vanish one by one and felt sluggish on big selections
+          // (same fix as the multi-clip deleteClips path above).
+          const idsToDelete = [...selectedTrackIds];
           void runAction(async () => {
-            let lastSnapshot: TransportSnapshot | null = null;
-            for (const trackId of selectedTrackIds) {
-              lastSnapshot = await deleteTrack(trackId);
-            }
-            if (lastSnapshot) {
-              applyPlaybackSnapshot(lastSnapshot);
-            }
+            const nextSnapshot = await deleteTracks(idsToDelete);
+            applyPlaybackSnapshot(nextSnapshot);
             clearSelection();
             setStatus(
               t("transport.status.tracksDeleted", {
-                count: selectedTrackIds.length,
+                count: idsToDelete.length,
               }),
             );
           });

@@ -103,6 +103,7 @@ fn cpu_diagnostics_round_trip() {
         track_renderer_scratch_resize_in_audio_thread_count: 0,
         track_renderer_block_too_large_count: 0,
         track_renderer_scratch_capacity_frames: 4096,
+        source_cache_miss_frames: 0,
     };
     let rt = round_trip(&snap);
     assert!((rt.cpu.callback_duration_ms - 1.23).abs() < 1e-9);

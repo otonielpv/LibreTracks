@@ -334,24 +334,105 @@ pub fn export_region_as_package(
     })
 }
 
+/// Inflate the bundled payload (source audio kept in memory, `.ltpeaks`
+/// written into the project's waveform staging dir) and report progress once
+/// per entry. This is the expensive, session-independent half of an import —
+/// the caller runs it without holding the session lock so the UI stays
+/// responsive while a large package decompresses.
+fn extract_package_payload<R: Read + Seek>(
+    song_dir: &Path,
+    archive: &mut ZipArchive<R>,
+    mut on_progress: impl FnMut(usize, usize),
+) -> Result<std::collections::HashMap<String, Vec<u8>>, ProjectError> {
+    // The package still ships its `.ltpeaks`; we extract them into the legacy
+    // project staging dir. The waveform loader's lazy migration then copies each
+    // into the per-file global cache the first time the clip is loaded (keyed by
+    // the audio's path+size+mtime on THIS machine), so a freshly imported
+    // package opens without re-analysing on the destination.
+    let waveform_dir = song_dir.join("cache").join("waveforms");
+    fs::create_dir_all(&waveform_dir)?;
+
+    let mut bundled_audio: std::collections::HashMap<String, Vec<u8>> =
+        std::collections::HashMap::new();
+    let entry_total = archive.len();
+    for index in 0..entry_total {
+        let mut zip_file = archive
+            .by_index(index)
+            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        let entry_name = zip_file.name().to_string();
+
+        // Bundled source audio (full packages): keep the bytes for the caller to
+        // place into the destination project's audio/ folder.
+        if let Some(file_name) = entry_name
+            .strip_prefix("audio/")
+            .filter(|name| !name.is_empty() && !name.contains('/') && !name.contains('\\'))
+        {
+            let file_name = file_name.to_string();
+            let mut bytes = Vec::new();
+            zip_file.read_to_end(&mut bytes)?;
+            bundled_audio.insert(file_name, bytes);
+            on_progress(index + 1, entry_total);
+            continue;
+        }
+
+        if let Some(file_name) = entry_name
+            .strip_prefix("waveforms/")
+            .filter(|file_name| {
+                !file_name.is_empty() && !file_name.contains('/') && !file_name.contains('\\')
+            })
+        {
+            let destination_path = waveform_dir.join(file_name);
+            let mut bytes = Vec::new();
+            zip_file.read_to_end(&mut bytes)?;
+            fs::write(&destination_path, bytes)?;
+        }
+        on_progress(index + 1, entry_total);
+    }
+
+    Ok(bundled_audio)
+}
+
+/// The decompressed payload of a `.ltpkg`, before it is merged into a session.
+///
+/// Produced by [`extract_song_package`] (the slow, session-independent half of
+/// an import) and consumed by [`merge_extracted_song_package`] (the fast half
+/// that needs the current song). Splitting the two lets the desktop import run
+/// decompression OUTSIDE the session lock, keeping the UI responsive while a
+/// large package inflates.
+#[derive(Debug, Clone)]
+pub struct ExtractedSongPackage {
+    manifest: SongPackageManifest,
+    /// Source audio bundled in a full package, keyed by original file name.
+    /// Empty for light packages.
+    pub bundled_audio: std::collections::HashMap<String, Vec<u8>>,
+}
+
 pub fn import_song_package(
     song_dir: &Path,
     song: &Song,
     package_path: &Path,
     insert_at_seconds: f64,
 ) -> Result<SongPackageImportResult, ProjectError> {
+    let extracted = extract_song_package(song_dir, package_path, |_, _| {})?;
+    merge_extracted_song_package(song, extracted, insert_at_seconds)
+}
+
+/// Decompress a `.ltpkg`: validate the manifest, inflate bundled audio into
+/// memory, and stage `.ltpeaks` waveforms into the project's cache dir. This is
+/// the expensive half of an import and touches only `song_dir` (not the current
+/// song), so the desktop app runs it WITHOUT holding the session lock.
+///
+/// `on_extract_progress(done, total)` fires once per zip entry as it inflates;
+/// it runs on the calling thread and must be cheap.
+pub fn extract_song_package(
+    song_dir: &Path,
+    package_path: &Path,
+    on_extract_progress: impl FnMut(usize, usize),
+) -> Result<ExtractedSongPackage, ProjectError> {
     let file = File::open(package_path)?;
     let mut archive =
         ZipArchive::new(file).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-    import_song_package_from_archive(song_dir, song, &mut archive, insert_at_seconds)
-}
 
-fn import_song_package_from_archive<R: Read + Seek>(
-    song_dir: &Path,
-    song: &Song,
-    archive: &mut ZipArchive<R>,
-    insert_at_seconds: f64,
-) -> Result<SongPackageImportResult, ProjectError> {
     let mut manifest_json = String::new();
     archive
         .by_name("manifest.json")
@@ -366,15 +447,28 @@ fn import_song_package_from_archive<R: Read + Seek>(
             manifest.region_transpose_semitones
         )));
     }
-    let library_meta = manifest.library_meta.clone();
 
-    // The package still ships its `.ltpeaks`; we extract them into the legacy
-    // project staging dir. The waveform loader's lazy migration then copies each
-    // into the per-file global cache the first time the clip is loaded (keyed by
-    // the audio's path+size+mtime on THIS machine), so a freshly imported
-    // package opens without re-analysing on the destination.
-    let waveform_dir = song_dir.join("cache").join("waveforms");
-    fs::create_dir_all(&waveform_dir)?;
+    let bundled_audio = extract_package_payload(song_dir, &mut archive, on_extract_progress)?;
+    Ok(ExtractedSongPackage {
+        manifest,
+        bundled_audio,
+    })
+}
+
+/// Merge an already-[`extract_song_package`]ed payload into `song`, producing
+/// the updated song plus the metadata the caller needs to place audio and the
+/// library entries. Fast and session-bound — the desktop app holds the session
+/// lock only for this half.
+pub fn merge_extracted_song_package(
+    song: &Song,
+    extracted: ExtractedSongPackage,
+    insert_at_seconds: f64,
+) -> Result<SongPackageImportResult, ProjectError> {
+    let ExtractedSongPackage {
+        manifest,
+        bundled_audio,
+    } = extracted;
+    let library_meta = manifest.library_meta.clone();
 
     let mut next_song = song.clone();
     // Names that already exist in the destination session. A package track
@@ -399,45 +493,6 @@ fn import_song_package_from_archive<R: Read + Seek>(
         .collect::<HashSet<_>>();
     let insert_at_seconds = insert_at_seconds.max(0.0);
     let is_empty_session = next_song.tracks.is_empty() && next_song.clips.is_empty();
-
-    let mut bundled_audio: std::collections::HashMap<String, Vec<u8>> =
-        std::collections::HashMap::new();
-    for index in 0..archive.len() {
-        let mut zip_file = archive
-            .by_index(index)
-            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-        let entry_name = zip_file.name().to_string();
-
-        // Bundled source audio (full packages): keep the bytes for the caller to
-        // place into the destination project's audio/ folder.
-        if let Some(file_name) = entry_name
-            .strip_prefix("audio/")
-            .filter(|name| !name.is_empty() && !name.contains('/') && !name.contains('\\'))
-        {
-            let file_name = file_name.to_string();
-            let mut bytes = Vec::new();
-            zip_file.read_to_end(&mut bytes)?;
-            bundled_audio.insert(file_name, bytes);
-            continue;
-        }
-
-        let file_name = match entry_name
-            .strip_prefix("waveforms/")
-            .filter(|file_name| !file_name.is_empty() && !file_name.contains('/'))
-        {
-            Some(file_name) => file_name.to_string(),
-            None => {
-                continue;
-            }
-        };
-        if file_name.contains('\\') {
-            continue;
-        }
-        let destination_path = waveform_dir.join(&file_name);
-        let mut bytes = Vec::new();
-        zip_file.read_to_end(&mut bytes)?;
-        fs::write(&destination_path, bytes)?;
-    }
 
     // Resolve every manifest track to a destination track, keyed by the
     // manifest's own track id (unique within the package). This is what clips

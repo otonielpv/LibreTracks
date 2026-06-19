@@ -840,3 +840,21 @@ pub fn delete_track(
         .delete_track(&track_id, &state.audio)
         .map_err(|error| error.to_string())
 }
+
+/// Delete a multi-track selection in one transaction (single engine sync +
+/// snapshot + history entry), instead of the frontend looping `delete_track`
+/// per id, which made the tracks disappear one by one.
+#[tauri::command]
+pub fn delete_tracks(
+    track_ids: Vec<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_tracks(&track_ids, &state.audio)
+        .map_err(|error| error.to_string())
+}

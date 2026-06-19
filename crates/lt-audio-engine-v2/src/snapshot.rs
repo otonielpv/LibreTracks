@@ -137,6 +137,11 @@ pub struct CpuDiagnostics {
     pub track_renderer_block_too_large_count: u64,
     #[serde(default)]
     pub track_renderer_scratch_capacity_frames: i32,
+    /// Total frames played as silence because a streaming block wasn't cached in
+    /// time (prebuffer starvation) — the measurable form of "audio is silent
+    /// until it catches up" on slow machines.
+    #[serde(default)]
+    pub source_cache_miss_frames: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

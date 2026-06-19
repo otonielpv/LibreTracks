@@ -43,16 +43,16 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
     };
 
     spawn_project_work(&app, move |worker_app, state| {
-        let mut session = state
-            .session
-            .lock()
-            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-        // The file-menu import inserts at the current playhead, matching the old
-        // behavior before insert_at_seconds was threaded through.
-        let insert_at = session.current_position();
-        session
-            .import_song_from_path(worker_app, &state.audio, package_file, insert_at)
-            .map_err(|error| error.to_string())
+        // The file-menu import inserts at the current playhead. Read it under a
+        // brief lock, then do the heavy decompression unlocked.
+        let insert_at = {
+            let session = state
+                .session
+                .lock()
+                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+            session.current_position()
+        };
+        import_package_off_lock(worker_app, state, package_file, insert_at)
     });
 
     Ok(true)
@@ -72,16 +72,59 @@ pub fn start_import_song_package_from_path(
 ) -> Result<bool, String> {
     let package_file = std::path::PathBuf::from(package_path);
     spawn_project_work(&app, move |worker_app, state| {
-        let mut session = state
+        import_package_off_lock(worker_app, state, package_file, insert_at_seconds)
+    });
+
+    Ok(true)
+}
+
+/// Shared import body: decompress the `.ltpkg` WITHOUT the session lock (the
+/// slow part — a multitrack package can hold tens of MB of audio), emitting
+/// per-entry progress so the UI stays responsive, then take the lock only for
+/// the fast merge/persist. Previously the whole import (decompression included)
+/// ran under the session lock, freezing every other frontend command — the user
+/// saw the window go "not responding" for the duration of a large import.
+fn import_package_off_lock(
+    app: &AppHandle,
+    state: &DesktopState,
+    package_file: std::path::PathBuf,
+    insert_at_seconds: f64,
+) -> Result<TransportSnapshot, String> {
+    use libretracks_project::extract_song_package;
+
+    // Resolve the destination dir under a brief lock; release it before the
+    // expensive extraction.
+    let song_dir = {
+        let session = state
             .session
             .lock()
             .map_err(|_| DesktopError::StatePoisoned.to_string())?;
         session
-            .import_song_from_path(worker_app, &state.audio, package_file, insert_at_seconds)
-            .map_err(|error| error.to_string())
-    });
+            .package_import_song_dir()
+            .map_err(|error| error.to_string())?
+    };
 
-    Ok(true)
+    crate::state::emit_project_load_message(app, 5, "Leyendo paquete...".into());
+    // Decompress off-lock, mapping per-entry progress onto the 7..40% band so
+    // the bar moves for large packages (the merge/decode phases own 40..100%).
+    let extracted = extract_song_package(&song_dir, &package_file, |done, total| {
+        let percent = if total == 0 {
+            7
+        } else {
+            7 + ((done as u64 * 33) / total as u64) as u8
+        };
+        crate::state::emit_project_load_message(app, percent, "Descomprimiendo paquete...".into());
+    })
+    .map_err(|error| error.to_string())?;
+
+    // Fast, session-bound half: merge + persist under the lock.
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .import_song_from_extracted(app, &state.audio, extracted, insert_at_seconds)
+        .map_err(|error| error.to_string())
 }
 
 /// Spawn the heavy half of a dialog-driven project operation on a worker

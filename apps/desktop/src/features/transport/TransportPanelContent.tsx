@@ -587,6 +587,16 @@ export function TransportPanelContent() {
   const [sourcesPrepareUiState, setSourcesPrepareUiState] =
     useState<SourcesPrepareUiState>(SOURCES_PREPARE_INITIAL);
   const [sourcesPreparing, setSourcesPreparing] = useState(false);
+  // Non-modal "Descomprimiendo paquete…" indicator for the non-blocking .ltpkg
+  // import (same style as the "Preparing audio…" indicator). The import no
+  // longer raises the shell overlay, so without this the user sees nothing
+  // happen while a large package decompresses and thinks the import failed.
+  // `active` is owned by handleDroppedSongPackagePath (the common entry point);
+  // `percent` is fed by the project:load-progress listener.
+  const [packageUnpackUiState, setPackageUnpackUiState] = useState<{
+    active: boolean;
+    percent: number;
+  }>({ active: false, percent: 0 });
   const sourcesShowTimerRef = useRef<number | null>(null);
   useEffect(
     () => () => {
@@ -1472,6 +1482,14 @@ export function TransportPanelContent() {
         percent: event.percent,
         detail,
       });
+      // Feed the non-modal unpack indicator while a non-blocking package import
+      // is in flight (the modal overlay isn't shown for those). Only updates the
+      // percent when active; visibility is owned by handleDroppedSongPackagePath.
+      setPackageUnpackUiState((prev) =>
+        prev.active
+          ? { active: true, percent: Math.max(prev.percent, event.percent) }
+          : prev,
+      );
     });
   }, []);
 
@@ -3520,39 +3538,44 @@ export function TransportPanelContent() {
   // File-dialog entry point for "Importar canción…" in the compact view.
   // Opens the same .ltpkg picker the DAW context-menu export uses, then
   // appends the chosen package at the end of the project.
+  //
+  // Non-blocking: NO `busy: true`. The package import (decompression +
+  // structure persist) runs off the session lock and reports progress through
+  // the load-progress events; raising the blocking shell overlay here would
+  // freeze the whole UI behind a "Descomprimiendo…" screen for the duration of
+  // a large package, which is exactly what we want to avoid. Mirrors
+  // handleImportSongClick (the file-menu entry point).
   const handleCompactImportSongPackageFromDialog = useCallback(() => {
-    void runAction(
-      async () => {
-        const picked = await open({
-          multiple: false,
-          directory: false,
-          filters: [{ name: "LibreTracks Package", extensions: ["ltpkg"] }],
-        });
-        const path = typeof picked === "string" ? picked : null;
-        if (!path) return;
-        await runCompactSongPackageImport(path);
-      },
-      { busy: true },
-    );
+    void runAction(async () => {
+      const picked = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "LibreTracks Package", extensions: ["ltpkg"] }],
+      });
+      const path = typeof picked === "string" ? picked : null;
+      if (!path) return;
+      await runCompactSongPackageImport(path);
+    });
   }, [runAction, runCompactSongPackageImport]);
 
   // OS-drag of a .ltpkg dropped anywhere over the compact song strip.
   // When running under Tauri we can resolve the absolute path; in the
   // browser fallback we'd have no path to feed import_song_package, so
   // we silently no-op there.
+  //
+  // Non-blocking (no `busy: true`) for the same reason as
+  // handleCompactImportSongPackageFromDialog — the import runs off the session
+  // lock and must not raise the freezing shell overlay.
   const handleCompactImportSongPackageFromOsFile = useCallback(
     (file: File) => {
-      void runAction(
-        async () => {
-          const payloads = isTauriApp
-            ? resolveNativeAudioImportPayloads([file])
-            : null;
-          const nativePath = payloads?.[0]?.sourcePath;
-          if (!nativePath) return;
-          await runCompactSongPackageImport(nativePath);
-        },
-        { busy: true },
-      );
+      void runAction(async () => {
+        const payloads = isTauriApp
+          ? resolveNativeAudioImportPayloads([file])
+          : null;
+        const nativePath = payloads?.[0]?.sourcePath;
+        if (!nativePath) return;
+        await runCompactSongPackageImport(nativePath);
+      });
     },
     [runAction, runCompactSongPackageImport],
   );
@@ -3595,6 +3618,7 @@ export function TransportPanelContent() {
     t,
     setStatus,
     setActiveSidebarTab,
+    setPackageUnpackUiState,
   });
 
   const {
@@ -8667,6 +8691,10 @@ export function TransportPanelContent() {
     // silent). The user keeps full use of the UI throughout, like the audio
     // import. (Previously this sat behind the busy overlay until every source
     // finished decoding.)
+    // Show the non-modal "Descomprimiendo paquete…" indicator for the duration
+    // (the percent is fed by the load-progress listener). Cleared in `finally`
+    // whether the import succeeds, is cancelled, or throws.
+    setPackageUnpackUiState({ active: true, percent: 0 });
     try {
       const snapshot = await importSongPackageFromPathWithProgress(
         packagePath,
@@ -8675,6 +8703,12 @@ export function TransportPanelContent() {
       if (!snapshot) {
         return;
       }
+      // The backend only emits up to ~50% (decompress + merge); decode of the
+      // sources is async and handed off to the "Preparing audio…" indicator. So
+      // when the import call resolves the unpack phase is done — show 100% so it
+      // doesn't visibly vanish at 40%. The refreshes below give it a frame to
+      // paint before `finally` clears it.
+      setPackageUnpackUiState({ active: true, percent: 100 });
       applyPlaybackSnapshot(snapshot);
       const refreshedAssets = await refreshLibraryState();
       mergeLibraryAssets(refreshedAssets);
@@ -8686,6 +8720,8 @@ export function TransportPanelContent() {
       );
     } catch (error) {
       setStatus(formatErrorStatus(error));
+    } finally {
+      setPackageUnpackUiState({ active: false, percent: 0 });
     }
   }
 
@@ -8909,20 +8945,22 @@ export function TransportPanelContent() {
     }
 
     if (classification.kind === "package") {
-      void runAction(
-        async () => {
-          const packagePath = (
-            classification.packageFile as NativeDroppedFile | null
-          )?.path?.trim();
-          if (!packagePath) {
-            rejectExternalDrop("unsupported");
-            return;
-          }
+      // Non-blocking: no `busy: true`. The package import decompresses off the
+      // session lock and reports progress in the status bar; raising the shell
+      // overlay would freeze the UI behind the "Descomprimiendo…" screen for a
+      // large package — the very thing we're avoiding. Matches the file-menu /
+      // compact import entry points.
+      void runAction(async () => {
+        const packagePath = (
+          classification.packageFile as NativeDroppedFile | null
+        )?.path?.trim();
+        if (!packagePath) {
+          rejectExternalDrop("unsupported");
+          return;
+        }
 
-          await handleDroppedSongPackagePath(packagePath, dropSeconds);
-        },
-        { busy: true },
-      );
+        await handleDroppedSongPackagePath(packagePath, dropSeconds);
+      });
       return;
     }
 
@@ -8953,15 +8991,14 @@ export function TransportPanelContent() {
     }
 
     if (classification.kind === "package") {
-      void runAction(
-        async () => {
-          await handleDroppedSongPackagePath(
-            classification.packagePath,
-            dropSeconds,
-          );
-        },
-        { busy: true },
-      );
+      // Non-blocking (no `busy: true`) — see handleExternalTimelineDrop. The
+      // import runs off the session lock and must not raise the shell overlay.
+      void runAction(async () => {
+        await handleDroppedSongPackagePath(
+          classification.packagePath,
+          dropSeconds,
+        );
+      });
       return;
     }
 
@@ -9137,10 +9174,12 @@ export function TransportPanelContent() {
     if (compactHit.hit) {
       const classification = classifyDroppedPaths(args.paths);
       if (classification.kind === "package") {
-        void runAction(
-          async () =>
-            runCompactSongPackageImport(classification.packagePath),
-          { busy: true },
+        // Non-blocking (no `busy: true`) — the import decompresses off the
+        // session lock and reports progress in the status bar; the shell
+        // overlay would freeze the UI for a large package. Matches the other
+        // .ltpkg entry points.
+        void runAction(async () =>
+          runCompactSongPackageImport(classification.packagePath),
         );
         return;
       }
@@ -10629,6 +10668,33 @@ export function TransportPanelContent() {
                 </span>
                 Faltan archivos multimedia
               </button>
+            ) : null}
+
+            {packageUnpackUiState.active ? (
+              <div
+                className="lt-source-prep-indicator"
+                aria-live="polite"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(packageUnpackUiState.percent)}
+              >
+                <div className="lt-source-prep-line">
+                  <span className="lt-source-prep-label">
+                    {t("transport.status.unpackingPackage")}
+                  </span>
+                  <span className="lt-source-prep-detail">
+                    {Math.round(packageUnpackUiState.percent)}%
+                  </span>
+                </div>
+                <div className="lt-source-prep-bar">
+                  <span
+                    style={{
+                      width: `${Math.max(0, Math.min(100, packageUnpackUiState.percent))}%`,
+                    }}
+                  />
+                </div>
+              </div>
             ) : null}
 
             {sourcesPrepareUiState.active ? (

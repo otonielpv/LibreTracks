@@ -434,9 +434,11 @@ export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
 // Path-based package import used by the compact view and the timeline drop of a
 // .ltpkg from the file explorer. Routes through the SAME progress-emitting
 // worker flow as pickAndImportSong (start_import_song_package_from_path →
-// import_song_from_path), so these entry points show real percent + source
-// progress instead of a frozen overlay. Returns the snapshot once the backend
-// has finished decoding; callers refresh the library separately.
+// import_package_off_lock), which decompresses the package OFF the session lock
+// so a large package doesn't freeze the UI, then merges under the lock. These
+// entry points show real percent + source progress instead of a frozen overlay.
+// Returns the snapshot once the backend has finished decoding; callers refresh
+// the library separately.
 export async function importSongPackageFromPathWithProgress(
   packagePath: string,
   insertAtSeconds: number,
@@ -1065,4 +1067,13 @@ export async function setVoiceGuideConfigRealtime(
 
 export async function deleteTrack(trackId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_track", { trackId });
+}
+
+// Deletes a multi-track selection in a single backend call (one engine sync +
+// snapshot + history entry), so the tracks vanish together instead of one by
+// one. Mirrors deleteClips for the multi-clip case.
+export async function deleteTracks(
+  trackIds: string[],
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("delete_tracks", { trackIds });
 }

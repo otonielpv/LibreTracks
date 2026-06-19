@@ -34,6 +34,9 @@ type UseProjectActionsProps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   setStatus: (status: string) => void;
   setActiveSidebarTab: (tab: SidebarTab | null) => void;
+  setPackageUnpackUiState: (
+    state: { active: boolean; percent: number },
+  ) => void;
 };
 
 export function useProjectActions({
@@ -47,6 +50,7 @@ export function useProjectActions({
   t,
   setStatus,
   setActiveSidebarTab,
+  setPackageUnpackUiState,
 }: UseProjectActionsProps) {
   function applyProjectProgressFeedback(event: ProjectLoadProgressEvent) {
     const detail =
@@ -181,16 +185,28 @@ export function useProjectActions({
           defaultValue: "Importing project...",
         }),
       );
-      const nextSnapshot = await pickAndImportSong();
-      if (!nextSnapshot) {
-        return;
-      }
-      const nextSong = await refreshSongView({ sync: true });
-      applyPlaybackSnapshot(nextSnapshot);
-      await refreshLibraryState();
-      setActiveSidebarTab(null);
-      if (nextSong) {
-        setStatus(t("transport.status.songImported"));
+      // Non-modal "Descomprimiendo paquete…" indicator (percent fed by the
+      // project:load-progress listener), so the user sees the import is working
+      // even though we don't raise the blocking overlay. Cleared in `finally`.
+      setPackageUnpackUiState({ active: true, percent: 0 });
+      try {
+        const nextSnapshot = await pickAndImportSong();
+        if (!nextSnapshot) {
+          return;
+        }
+        // Backend emits up to ~50% (decompress + merge); source decode is async
+        // and shown by the "Preparing audio…" indicator. The unpack phase is
+        // done once the call resolves — show 100% so it doesn't vanish mid-bar.
+        setPackageUnpackUiState({ active: true, percent: 100 });
+        const nextSong = await refreshSongView({ sync: true });
+        applyPlaybackSnapshot(nextSnapshot);
+        await refreshLibraryState();
+        setActiveSidebarTab(null);
+        if (nextSong) {
+          setStatus(t("transport.status.songImported"));
+        }
+      } finally {
+        setPackageUnpackUiState({ active: false, percent: 0 });
       }
     });
   }
