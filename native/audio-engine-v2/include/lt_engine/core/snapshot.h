@@ -48,6 +48,10 @@ struct CpuDiagnostics {
     uint64_t track_renderer_scratch_resize_in_audio_thread_count = 0;
     uint64_t track_renderer_block_too_large_count = 0;
     int track_renderer_scratch_capacity_frames = 0;
+    // Total frames played as silence because a streaming block wasn't cached in
+    // time (prebuffer starvation). The measurable form of "audio is silent
+    // until it catches up" on slow machines. Surfaced in release diagnostics.
+    uint64_t source_cache_miss_frames = 0;
 };
 
 struct MeterValues {

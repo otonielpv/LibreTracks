@@ -426,6 +426,30 @@ which is stateful and supports block-by-block processing.
     still stutters, do the progressive-availability redesign (publish source
     early, play decoded chunks, silence elsewhere — Ableton model).
 
+- **2026-06-19** — **Reframed by the user: this is NOT import-while-playing.**
+  On a slower PC, the user imports, the prep indicator finishes ("preparación
+  terminó"), then on playback **parts are silent and only start sounding after a
+  while**. "después de un tiempo empezaron a escucharse" rules out `failed`
+  sources (those never recover) and confirms **transient streaming starvation**:
+  the file IS fully decoded to the disk cache, but playback reads blocks via
+  `DecodedSource::read` → `BlockCache`; on a miss it fills SILENCE and requests
+  the block (decoded_source.cpp:71-86). The single `PrebufferWorker` thread
+  (`kLookaheadBlocks=8`, "can be extended to a pool") can't keep up on a slow
+  CPU/disk, so blocks aren't ready in time → audible silence until it catches up.
+  The prep indicator already went away because "ready/cache_ready" means the
+  source is published as playable, not that every block is hot in the cache.
+  - **Instrumented it (release-visible, per user request):** added
+    `DecodedSource::cache_miss_frames()` (counts silenced frames on a cache
+    miss, no debug gate), aggregated via `SourceManager::total_cache_miss_frames()`,
+    surfaced as `CpuDiagnostics.source_cache_miss_frames` in the snapshot (C++
+    → Rust `snapshot.rs` → `OwnershipDiagnostics`), AND a periodic
+    `[LT_STARVATION]` line in `lt_audio_debug.log` (always written, NOT gated on
+    LIBRETRACKS_AUDIO_DIAG) reporting +frames/~ms silenced per window.
+  - **Next (fix options, once user confirms `source_cache_miss_frames` > 0 on the
+    slow PC):** (a) raise `kLookaheadBlocks` / prebuffer depth; (b) make
+    `PrebufferWorker` a thread pool so tracks fill in parallel; (c) gate playback
+    start until the head N seconds are cached. The counter tells us which.
+
 ### Answer: do all actions avoid recreating the whole session? — YES (except open)
 - Import audio, add/remove/move tracks & clips, region/marker/timing edits →
   `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).

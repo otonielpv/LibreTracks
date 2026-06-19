@@ -61,12 +61,23 @@ public:
 
     SourcePeakOverview peaks(int resolution_frames) const;
 
+    // Total frames that were played as silence because the requested block
+    // wasn't in the cache yet (streaming starvation). Nonzero means the
+    // prebuffer couldn't keep up with playback for this source — the audible
+    // "silent until it catches up" symptom. Monotonic; read off the audio
+    // thread via the snapshot poll. Always tracked (no debug gate) so it shows
+    // up in release diagnostics.
+    Frame cache_miss_frames() const noexcept {
+        return cache_miss_frames_.load(std::memory_order_relaxed);
+    }
+
 private:
     Id                 source_id_;
     std::vector<float> samples_;
     BlockCache*        cache_ = nullptr;
     std::function<void(const Id&, int)> request_block_;
     mutable std::atomic<int> read_ahead_anchor_block_{-1};
+    mutable std::atomic<Frame> cache_miss_frames_{0};
     int    channel_count_   = 0;
     int    sample_rate_      = 0;
     Frame  duration_frames_  = 0;

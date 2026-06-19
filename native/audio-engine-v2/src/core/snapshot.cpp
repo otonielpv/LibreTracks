@@ -63,6 +63,7 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"track_renderer_scratch_resize_in_audio_thread_count", snap.cpu.track_renderer_scratch_resize_in_audio_thread_count},
         {"track_renderer_block_too_large_count", snap.cpu.track_renderer_block_too_large_count},
         {"track_renderer_scratch_capacity_frames", snap.cpu.track_renderer_scratch_capacity_frames},
+        {"source_cache_miss_frames", snap.cpu.source_cache_miss_frames},
     };
 
     j["meters"] = {

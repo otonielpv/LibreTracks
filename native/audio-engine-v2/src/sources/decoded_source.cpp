@@ -83,6 +83,9 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                     request_block_(source_id_, block_index);
                 for (int ch = 0; ch < out_channels; ++ch)
                     std::fill(out[ch] + copied, out[ch] + copied + chunk, 0.f);
+                // Count the silenced frames (streaming starvation) so the
+                // snapshot can surface it in release builds.
+                cache_miss_frames_.fetch_add(chunk, std::memory_order_relaxed);
                 missed_current_block = true;
             }
             if (request_block_) {

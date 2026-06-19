@@ -910,6 +910,18 @@ void Mixer::render(float** output_channels,
     const bool over_budget = budget_ms > 0.0 && dur > budget_ms * 0.75;
     if (over_budget)
         callback_over_budget_count_.fetch_add(1, std::memory_order_relaxed);
+
+    // Callback load = fraction of the per-buffer time budget spent rendering,
+    // as a percentage (Ableton's transport "CPU meter"; >100% => dropouts).
+    // Smoothed with the same EMA as the duration so the meter doesn't jitter.
+    // Computed here, where num_frames and the real sample rate are known,
+    // rather than from device_info which may not match the live callback size.
+    if (budget_ms > 0.0) {
+        double load = (dur / budget_ms) * 100.0;
+        double prev_load = callback_load_percent_.load(std::memory_order_relaxed);
+        callback_load_percent_.store(0.9 * prev_load + 0.1 * load,
+                                     std::memory_order_relaxed);
+    }
 }
 
 void Mixer::set_track_gain(const Id& track_id, Gain gain) {
@@ -1221,6 +1233,7 @@ void Mixer::reset_track_meters() noexcept {
 int    Mixer::callback_count()       const noexcept { return callback_count_.load(std::memory_order_relaxed); }
 double Mixer::callback_duration_ms() const noexcept { return callback_duration_ms_.load(std::memory_order_relaxed); }
 double Mixer::callback_duration_max_ms() const noexcept { return callback_duration_max_ms_.load(std::memory_order_relaxed); }
+double Mixer::callback_load_percent() const noexcept { return callback_load_percent_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::callback_over_budget_count() const noexcept { return callback_over_budget_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::rendered_track_count() const noexcept { return rendered_track_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::skipped_track_count() const noexcept { return skipped_track_count_.load(std::memory_order_relaxed); }

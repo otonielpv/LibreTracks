@@ -1361,6 +1361,16 @@ std::vector<SourceDiagnostics> SourceManager::diagnostics() const {
     return out;
 }
 
+Frame SourceManager::total_cache_miss_frames() const noexcept {
+    Frame total = 0;
+    auto entries = load_entries();
+    for (const auto& [id, entry] : *entries) {
+        if (entry.source)
+            total += entry.source->cache_miss_frames();
+    }
+    return total;
+}
+
 void SourceManager::clear() {
     std::lock_guard lock(write_mutex_);
     publish_locked(EntryMap{});

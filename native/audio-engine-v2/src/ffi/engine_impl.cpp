@@ -874,6 +874,11 @@ std::string EngineImpl::get_snapshot() const {
         snap.region_meters     = mixer_->region_meters();
         snap.cpu.callback_duration_ms = mixer_->callback_duration_ms();
         snap.cpu.callback_duration_max_ms = mixer_->callback_duration_max_ms();
+        // Audio-thread load as a % of the per-buffer time budget (Ableton's
+        // transport "CPU meter"). Computed in the mixer callback from the real
+        // num_frames/sample_rate. Without this the meter was stuck at 0%: the
+        // snapshot only carried the raw duration, never the ratio.
+        snap.cpu.callback_load_percent = mixer_->callback_load_percent();
         snap.cpu.callback_count       = mixer_->callback_count();
         snap.cpu.callback_over_budget_count = mixer_->callback_over_budget_count();
         snap.cpu.mixer_rendered_track_count = mixer_->rendered_track_count();
@@ -956,6 +961,36 @@ std::string EngineImpl::get_snapshot() const {
         for (const auto& d : source_manager_->diagnostics())
             disk_bytes += d.disk_cache_bytes;
         snap.source_cache.disk_bytes_used = disk_bytes;
+        snap.cpu.source_cache_miss_frames =
+            static_cast<uint64_t>(source_manager_->total_cache_miss_frames());
+    }
+
+    // Release-visible starvation log: whenever the streaming prebuffer fails to
+    // keep up and the audio thread plays silence, record it to lt_audio_debug.log
+    // (always written, no LIBRETRACKS_AUDIO_DIAG gate) so the "silent until it
+    // catches up" symptom on slow machines is diagnosable from a shipped build.
+    // Throttled to once per 500ms and only when the count grew this window.
+    {
+        static std::chrono::steady_clock::time_point s_last_starve_log;
+        static uint64_t s_prev_miss_frames = 0;
+        const uint64_t miss_now = snap.cpu.source_cache_miss_frames;
+        const auto now = std::chrono::steady_clock::now();
+        if (miss_now > s_prev_miss_frames &&
+            now - s_last_starve_log >= std::chrono::milliseconds(500)) {
+            // Delta accumulates across throttled windows: baseline only advances
+            // when we actually log, so no silenced frames go unreported.
+            const uint64_t delta = miss_now - s_prev_miss_frames;
+            const int sr = snap.device.sample_rate > 0 ? snap.device.sample_rate : 48000;
+            lt_debug_log(
+                "[LT_STARVATION] streaming prebuffer behind: +%llu silenced frames "
+                "(~%.0f ms) since last log, %llu total. The audio thread played silence "
+                "because blocks weren't cached in time (slow disk/CPU can't keep up).\n",
+                static_cast<unsigned long long>(delta),
+                (static_cast<double>(delta) / sr) * 1000.0,
+                static_cast<unsigned long long>(miss_now));
+            s_last_starve_log = now;
+            s_prev_miss_frames = miss_now;
+        }
     }
 
     // Playback-starvation diagnostics — enabled by LIBRETRACKS_AUDIO_DIAG=1.

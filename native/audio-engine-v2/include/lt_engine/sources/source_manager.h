@@ -140,6 +140,12 @@ public:
     // Diagnostics for snapshot.
     std::vector<SourceDiagnostics> diagnostics() const;
 
+    // Total frames played as silence across all streaming sources because a
+    // block wasn't cached in time (prebuffer starvation). Nonzero is the
+    // measurable form of the "silent until it catches up" symptom on slow
+    // machines. Summed over the live sources; safe to read off the audio thread.
+    Frame total_cache_miss_frames() const noexcept;
+
     // Unload all sources (e.g. session close).
     void clear();
 

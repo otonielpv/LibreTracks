@@ -89,6 +89,9 @@ public:
     int    callback_count()          const noexcept;
     double callback_duration_ms()    const noexcept;
     double callback_duration_max_ms() const noexcept;
+    // Smoothed audio-thread load as a % of the per-buffer time budget
+    // (Ableton's transport CPU meter; >100% means dropouts).
+    double callback_load_percent()   const noexcept;
     // Read-and-reset the worst callback duration; lets a periodic diagnostic
     // report the peak per window instead of the stuck session-wide maximum.
     double take_callback_duration_max_ms() noexcept {
@@ -206,6 +209,7 @@ private:
     std::atomic<int>    callback_count_{0};
     std::atomic<double> callback_duration_ms_{0.0};
     std::atomic<double> callback_duration_max_ms_{0.0};
+    std::atomic<double> callback_load_percent_{0.0};
 
 public:
     // Phase breakdown (LIBRETRACKS_AUDIO_DIAG) — worst µs spent in each phase of
