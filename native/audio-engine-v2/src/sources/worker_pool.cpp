@@ -1,6 +1,8 @@
 #include <lt_engine/sources/worker_pool.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
+#include <lt_engine/core/thread_policy.h>
+#include <lt_engine/debug/logging.h>
 
 #include <algorithm>
 #include <atomic>
@@ -218,18 +220,18 @@ DecodeWorkerPool::DecodeWorkerPool(int num_threads)
                 num_threads = parsed;
         }
         if (num_threads <= 0) {
-            // R3: decode N dropped/imported files in parallel (Ableton-style),
-            // not in waves of 2. Scale with the machine but leave at least one
-            // core for the audio callback + UI, and cap so a many-core box
-            // doesn't thrash disk I/O. Decode is I/O + libav bound, so we don't
-            // need a thread per core; min(cores-1, 6) is plenty and matches the
-            // typical 4-8 concurrent imports. Modest machines (2-4 cores) still
-            // get 2-3 workers — strictly better than the old fixed 2.
-            const unsigned hw = std::thread::hardware_concurrency();
-            const int cores   = hw > 0 ? static_cast<int>(hw) : 4;
-            num_threads = std::clamp(cores - 1, 2, 6);
+            // Scale with the machine (cores AND RAM) via the shared policy, so
+            // decode runs N files in parallel (Ableton-style) on capable boxes
+            // but stays tiny on a modest / low-RAM PC where too many concurrent
+            // decoders would page-thrash. See thread_policy.h.
+            num_threads = lt_recommend_worker_threads(WorkerRole::Decode);
         }
     }
+    lt_debug_log(
+        "[LT_THREADS] decode pool: %d worker(s) (cores=%u, ram=%.1fGB)\n",
+        num_threads,
+        std::thread::hardware_concurrency(),
+        lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
     for (int i = 0; i < num_threads; ++i) {
         impl_->threads.emplace_back([this]{ impl_->worker_loop(); });
     }

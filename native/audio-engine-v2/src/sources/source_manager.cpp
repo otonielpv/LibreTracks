@@ -2,6 +2,8 @@
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
 #include <lt_engine/sources/resampler.h>
+#include <lt_engine/core/thread_policy.h>
+#include <lt_engine/debug/logging.h>
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -571,10 +573,10 @@ SourcePeakOverview analyze_file_peaks(const std::string& file_path,
     return overview;
 }
 
-// How many block-fill worker threads to run. Defaults to min(cores-1, 4) so a
-// modest dual/quad-core keeps one core for the audio callback + UI, while a
-// bigger machine refills several tracks in parallel. Always >= 1. Override with
-// LIBRETRACKS_FILL_THREADS for A/B testing.
+// How many block-fill worker threads to run. Scaled to the machine (cores AND
+// RAM) by the shared thread policy so a modest / low-RAM PC stays conservative
+// (keeps a core for the audio callback + UI) while a bigger box refills several
+// tracks in parallel. Override with LIBRETRACKS_FILL_THREADS for A/B testing.
 static unsigned fill_thread_count_from_env() {
     if (std::string raw = read_env("LIBRETRACKS_FILL_THREADS"); !raw.empty()) {
         try {
@@ -583,9 +585,7 @@ static unsigned fill_thread_count_from_env() {
         } catch (...) {
         }
     }
-    unsigned cores = std::thread::hardware_concurrency();
-    if (cores <= 1) return 1;
-    return std::min(cores - 1, 4u);
+    return static_cast<unsigned>(lt_recommend_worker_threads(WorkerRole::Fill));
 }
 
 SourceManager::SourceManager()
@@ -593,6 +593,11 @@ SourceManager::SourceManager()
     , block_cache_(kDefaultBlockFrames, source_cache_blocks_from_env())
 {
     const unsigned count = fill_thread_count_from_env();
+    lt_debug_log(
+        "[LT_THREADS] fill pool: %u worker(s) (cores=%u, ram=%.1fGB)\n",
+        count,
+        std::thread::hardware_concurrency(),
+        lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
     fill_threads_.reserve(count);
     for (unsigned i = 0; i < count; ++i)
         fill_threads_.emplace_back([this] { fill_worker_loop(); });
