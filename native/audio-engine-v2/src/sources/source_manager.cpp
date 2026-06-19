@@ -571,11 +571,31 @@ SourcePeakOverview analyze_file_peaks(const std::string& file_path,
     return overview;
 }
 
+// How many block-fill worker threads to run. Defaults to min(cores-1, 4) so a
+// modest dual/quad-core keeps one core for the audio callback + UI, while a
+// bigger machine refills several tracks in parallel. Always >= 1. Override with
+// LIBRETRACKS_FILL_THREADS for A/B testing.
+static unsigned fill_thread_count_from_env() {
+    if (std::string raw = read_env("LIBRETRACKS_FILL_THREADS"); !raw.empty()) {
+        try {
+            int n = std::stoi(raw);
+            if (n >= 1) return static_cast<unsigned>(n);
+        } catch (...) {
+        }
+    }
+    unsigned cores = std::thread::hardware_concurrency();
+    if (cores <= 1) return 1;
+    return std::min(cores - 1, 4u);
+}
+
 SourceManager::SourceManager()
     : entries_(std::make_shared<EntryMap>())
     , block_cache_(kDefaultBlockFrames, source_cache_blocks_from_env())
 {
-    fill_thread_ = std::thread([this] { fill_worker_loop(); });
+    const unsigned count = fill_thread_count_from_env();
+    fill_threads_.reserve(count);
+    for (unsigned i = 0; i < count; ++i)
+        fill_threads_.emplace_back([this] { fill_worker_loop(); });
 }
 
 SourceManager::~SourceManager() {
@@ -584,8 +604,9 @@ SourceManager::~SourceManager() {
         fill_stop_ = true;
     }
     fill_cv_.notify_all();
-    if (fill_thread_.joinable())
-        fill_thread_.join();
+    for (auto& t : fill_threads_)
+        if (t.joinable())
+            t.join();
 }
 
 void SourceManager::set_source_ready_callback(SourceReadyCallback callback) {

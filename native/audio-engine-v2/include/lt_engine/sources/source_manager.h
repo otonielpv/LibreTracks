@@ -201,7 +201,13 @@ private:
     mutable std::queue<CacheKey>    fill_queue_;
     mutable std::unordered_map<CacheKey, bool, CacheKeyHash> queued_blocks_;
     mutable bool                    fill_stop_ = false;
-    mutable std::thread             fill_thread_;
+    // Pool of block-fill workers. A single worker can't repopulate evicted
+    // blocks from the WAV cache fast enough on a modest CPU with several tracks
+    // playing — the playhead outruns it and the audio thread plays silence
+    // (starvation). Decoding/refilling concurrently across tracks mirrors how
+    // Ableton keeps the streamed audio fed. Count is min(cores-1, kMaxFill) and
+    // overridable via LIBRETRACKS_FILL_THREADS for A/B.
+    mutable std::vector<std::thread> fill_threads_;
 
     void publish_locked(EntryMap entries);
     std::shared_ptr<const EntryMap> load_entries() const noexcept;

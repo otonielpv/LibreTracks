@@ -450,6 +450,30 @@ which is stateful and supports block-by-block processing.
     `PrebufferWorker` a thread pool so tracks fill in parallel; (c) gate playback
     start until the head N seconds are cached. The counter tells us which.
 
+- **2026-06-19** — **Confirmed on the slow PC + fixed (option b).** The
+  `[LT_STARVATION]` log showed escalating silence: a few tens of ms at first,
+  then sustained **1.2s → 3.5s** windows (total ~10.5s silenced). Also in the
+  log: `MMCSS promotion FAILED (err=1552)` (audio thread falls back to
+  TIME_CRITICAL) and `SetProcessWorkingSetSizeEx min=4063MB` (forcing a 4GB
+  working set on a low-RAM PC causes paging — counterproductive). Root cause of
+  the silence: the block-fill path that repopulates evicted WAV-cache blocks for
+  the PLAYING tracks ran on **a single `fill_thread_`** with a **FIFO** queue —
+  on a modest CPU with several tracks it can't keep up and the playhead outruns
+  it. The on-disk cache IS WAV (RF64 only as the >4GB container) and playback is
+  already progressive (decoded head plays, tail silent — the Ableton model); the
+  bug was purely the single-threaded refill.
+  - **Fix:** `SourceManager` now runs a **pool** of fill workers
+    (`fill_threads_`), `min(cores-1, 4)`, overridable via
+    `LIBRETRACKS_FILL_THREADS`. Multiple tracks refill from the WAV cache
+    concurrently (Ableton's concurrent-decode model). The shared FIFO queue +
+    `queued_blocks_` dedupe + idempotent `fill_blocks_from_disk` (re-checks
+    `append_missing_blocks`) make multi-consumer safe. 218/218 DSP tests pass.
+  - **Still TODO / follow-ups:** (1) the queue is still FIFO, not prioritized by
+    distance to the playhead — under extreme load the head block can wait behind
+    read-ahead; consider a priority queue keyed by |block - playhead|. (2) make
+    the 4GB working-set floor proportional to installed RAM (or skip on low-RAM).
+    (3) user must confirm the pool kills the silence on the slow PC.
+
 ### Answer: do all actions avoid recreating the whole session? — YES (except open)
 - Import audio, add/remove/move tracks & clips, region/marker/timing edits →
   `CmdUpsertSongTracks` (incremental, no clear, no re-decode, no restart).
