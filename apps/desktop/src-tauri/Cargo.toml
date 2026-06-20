@@ -1,6 +1,6 @@
 [package]
 name = "libretracks-desktop"
-version = "1.4.2"
+version = "1.4.3"
 edition = "2021"
 default-run = "libretracks-desktop"
 autobins = false

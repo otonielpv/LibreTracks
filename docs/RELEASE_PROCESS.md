@@ -46,8 +46,32 @@ File: `docs/releases/v<NEW>.md`. Follow the existing structure:
 ```
 
 Rules:
-- Bullets target end users, not developers. "Faster project loading" beats
-  "PCM cache reused across sessions".
+- Bullets target end users, not developers. The reader is a musician, not a
+  programmer: they do NOT know (and must not be told) what a thread pool, a
+  block cache, a decoder, streaming starvation, an FFI boundary, or a worker
+  is. Every bullet describes a change in **what the user feels**, never how it
+  works under the hood.
+- Translate the engineering change into the lived benefit. The pattern is:
+  *"what annoying thing stops happening" / "what now works"* — not the fix.
+  - "RAM+core-aware thread sizing for the fill pool" → "LibreTracks now adapts
+    to your computer and runs smoother on modest PCs."
+  - "pool of block-fill workers stops playback starvation" → "No more dropouts
+    or silences during playback on slower machines."
+  - "non-blocking .ltpkg import" → "Importing a song no longer freezes the app —
+    you can keep working while it loads."
+  - "batched track deletion" → "Deleting several tracks at once is now instant."
+- Performance work especially must be reframed as a felt improvement. Never
+  ship a bullet that names the mechanism (cache, pool, worker, decoder, meter
+  internals). Say what the user now experiences: faster, smoother, no
+  stutters, doesn't freeze, works well even on older/modest computers. When a
+  change mainly helps lower-end hardware, say so in plain terms ("even on
+  modest PCs" / "on older or slower computers") — it's a selling point users
+  understand.
+- If a commit has NO user-perceivable effect (pure refactor, internal
+  diagnostics, dev-only logging), leave it OUT of the notes entirely. Don't
+  invent a benefit for it. Diagnostics/telemetry that the user never sees is
+  not a release-note item.
+- "Faster project loading" beats "PCM cache reused across sessions".
 - ES and EN sections MUST exist (the in-app update modal parses them by
   language — see `apps/desktop/src/shared/updateCheck.ts:SECTION_HEADINGS`).
 - Headings must start with `## Novedades de v<NEW>` and `## What's New in v<NEW>` literally — the parser matches these.
@@ -132,20 +156,36 @@ Pushing the tag triggers the release pipeline (macOS bundle validation,
 native lib linking, downloads counters). Confirm with the user before
 pushing the tag — it's hard to undo a published release.
 
-## 9. Watch the CI and fix a failing job
+Once the tag is pushed you own the pipeline until it's green: go straight to
+step 9 and stay on it (monitor → fix → move tag → repeat) until CI passes.
 
-Pushing the tag kicks off `.github/workflows/release.yml`. Watch it and,
-if the user asked you to, fix any failing job, then re-trigger the run.
+## 9. Watch the CI and fix until it's green (mandatory)
 
-Auth: `gh auth login` may reject the token in the Windows Credential
-Manager for missing the `read:org` scope. Don't fight it — pull the token
-and pass it per-command via `GH_TOKEN` instead (it skips scope validation):
+Pushing the tag kicks off `.github/workflows/release.yml`. **This is not
+fire-and-forget.** After pushing the tag you MUST monitor the run to
+completion and keep iterating — fix the failure, move the tag, re-watch —
+until the release pipeline goes green. A pushed tag with a red pipeline is an
+unfinished release. The loop is:
+
+1. Watch the run.
+2. If a (non-`continue-on-error`) job fails, read its logs and fix the cause.
+3. Commit the fix, MOVE the tag to the new commit, force-push it (see below).
+4. Go back to step 1. Repeat until the pipeline succeeds.
+
+Auth — the GitHub token lives in the Windows Credential Manager; pull it from
+there. `gh auth login` may reject that token for missing the `read:org`
+scope. Don't fight it — extract the token and pass it per-command via
+`GH_TOKEN` instead (it skips scope validation):
 
 ```bash
 export GH_TOKEN=$(printf "protocol=https\nhost=github.com\n\n" | git credential fill 2>/dev/null | sed -n 's/^password=//p')
 gh run list --limit 5
 gh run view <run-id>                 # per-job status; find the X
 ```
+
+If `git credential fill` returns nothing, the token isn't cached under
+`github.com`; fall back to whatever PAT the user provides, but the credential
+manager is the default source — don't ask the user first, try it.
 
 Reading logs of a job in an **in-progress** run: `gh run view --job
 <id> --log-failed` refuses until the whole run finishes ("logs will be
