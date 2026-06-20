@@ -791,6 +791,23 @@ h1 {
   .release-layout {
     grid-template-columns: 1fr;
   }
+
+  /* Once the layout stacks, the notes panel no longer borrows a definite
+     height from the (now non-existent) sibling column, so `flex: 1` on the
+     scroll wrapper collapses to 0 and the absolutely-positioned body becomes
+     invisible. Drop the equal-height/inner-scroll trick on mobile and let the
+     notes flow naturally so they're actually readable. */
+  .release-notes-scroll {
+    position: static;
+    flex: none;
+  }
+
+  .release-notes-body {
+    position: static;
+    inset: auto;
+    overflow-y: visible;
+    padding-right: 0;
+  }
 }
 
 .sl-markdown-content img {
