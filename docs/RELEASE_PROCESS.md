@@ -145,7 +145,11 @@ git tag v<NEW>
 Tag name format: `v<NEW>` (with the `v` prefix). The GitHub Releases page
 and the in-app update check both rely on this format.
 
-## 8. Push (only if user authorized it this session)
+## 8. Push (the default end-to-end flow)
+
+The normal release flow is **commit → tag → push both**, not stopping at
+local commits. Unless the user explicitly says "local only" / "don't push",
+push `main` and the tag:
 
 ```bash
 git push origin main
@@ -153,8 +157,10 @@ git push origin v<NEW>
 ```
 
 Pushing the tag triggers the release pipeline (macOS bundle validation,
-native lib linking, downloads counters). Confirm with the user before
-pushing the tag — it's hard to undo a published release.
+native lib linking, downloads counters). It's hard to undo a *published*
+release, so the gate is: do the local commit + tag, and push as part of the
+same release request unless told otherwise — don't ask again mid-flow once
+the user has asked for a release.
 
 Once the tag is pushed you own the pipeline until it's green: go straight to
 step 9 and stay on it (monitor → fix → move tag → repeat) until CI passes.
