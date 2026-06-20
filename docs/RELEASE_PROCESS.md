@@ -174,9 +174,22 @@ until the release pipeline goes green. A pushed tag with a red pipeline is an
 unfinished release. The loop is:
 
 1. Watch the run.
-2. If a (non-`continue-on-error`) job fails, read its logs and fix the cause.
+2. If a (non-`continue-on-error`) job fails, **cancel the whole run
+   immediately** — don't wait for the sibling jobs to finish, they're now
+   wasted minutes on a release that won't ship as-is. Then read the failed
+   job's logs and fix the cause:
+
+   ```bash
+   gh run cancel <run-id>
+   ```
+
 3. Commit the fix, MOVE the tag to the new commit, force-push it (see below).
+   That starts a fresh run.
 4. Go back to step 1. Repeat until the pipeline succeeds.
+
+Note: only cancel for a *real* failure on a blocking job. A `continue-on-error`
+job going red (e.g. the `macos-15-intel` validation build) does NOT fail the
+release — don't cancel for those; let the run finish and publish.
 
 Auth — the GitHub token lives in the Windows Credential Manager; pull it from
 there. `gh auth login` may reject that token for missing the `read:org`
