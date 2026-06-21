@@ -73,4 +73,30 @@ describe("App / app.render", () => {
     expect(await screen.findByText("paused")).toBeTruthy();
   });
 
+  it("stops playback with Shift+Space", async () => {
+    await renderApp();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Space", key: " " });
+    });
+    expect(await screen.findByText("playing")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Space", key: " ", shiftKey: true });
+    });
+
+    expect(await screen.findByText(textMatcher(en.transport.status.playbackStopped))).toBeTruthy();
+    expect(await screen.findByText("stopped")).toBeTruthy();
+  });
+
+  it("jumps to the start with the Home key", async () => {
+    await renderApp();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Home", key: "Home" });
+    });
+
+    expect(await screen.findByText(textMatcher(en.transport.status.movedToStart))).toBeTruthy();
+  });
+
 });

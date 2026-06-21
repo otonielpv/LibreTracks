@@ -8,6 +8,8 @@ import {
   pauseTransport,
   playTransport,
   redoAction,
+  seekTransport,
+  stopTransport,
   undoAction,
 } from "../desktopApi";
 import {
@@ -104,6 +106,20 @@ export function useTimelineKeyboardShortcuts({
         }
 
         event.preventDefault();
+
+        // Shift+Space is Stop (halt + rewind to the start), distinct from the
+        // plain Space toggle which pauses in place. Ableton uses Space itself
+        // for stop; we keep Space as play/pause and put the dedicated stop on
+        // Shift+Space so both behaviours are available.
+        if (event.shiftKey) {
+          void runAction(async () => {
+            const nextSnapshot = await stopTransport();
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(t("transport.status.playbackStopped"));
+          });
+          return;
+        }
+
         void runAction(async () => {
           if (snapshotRef.current?.playbackState === "playing") {
             const nextSnapshot = await pauseTransport();
@@ -115,6 +131,23 @@ export function useTimelineKeyboardShortcuts({
           const nextSnapshot = await playTransport();
           applyPlaybackSnapshot(nextSnapshot);
           setStatus(t("transport.status.playbackStarted"));
+        });
+        return;
+      }
+
+      // Home jumps the playhead to the very start of the timeline. Seek keeps
+      // the current play/stop state (it re-anchors playback if running), so
+      // this is the non-stopping "go to start", unlike Shift+Space.
+      if (event.key === "Home") {
+        if (isTextEntryTarget(event.target)) {
+          return;
+        }
+
+        event.preventDefault();
+        void runAction(async () => {
+          const nextSnapshot = await seekTransport(0);
+          applyPlaybackSnapshot(nextSnapshot);
+          setStatus(t("transport.status.movedToStart"));
         });
         return;
       }

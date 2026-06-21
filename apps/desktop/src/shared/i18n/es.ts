@@ -331,6 +331,7 @@ const es = {
       playbackPaused: "Reproduccion pausada.",
       playbackStarted: "Reproduccion iniciada.",
       playbackStopped: "Reproduccion detenida.",
+      movedToStart: "Movido al inicio.",
       interfaceZoomChanged: "Tamano de interfaz: {{percent}}%",
       actionUndone: "Accion deshecha.",
       actionRedone: "Accion rehecha.",

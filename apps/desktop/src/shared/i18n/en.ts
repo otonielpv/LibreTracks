@@ -315,6 +315,7 @@ const en = {
       playbackPaused: "Playback paused.",
       playbackStarted: "Playback started.",
       playbackStopped: "Playback stopped.",
+      movedToStart: "Moved to start.",
       interfaceZoomChanged: "Interface size: {{percent}}%",
       actionUndone: "Action undone.",
       actionRedone: "Action redone.",
