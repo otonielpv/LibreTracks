@@ -267,9 +267,16 @@ export function resolveNativeAudioImportPayloads(files: File[]) {
 
 export function humanizeLibraryTrackName(filePath: string) {
   return (
+    // NFC-normalize first so a decomposed accent ("a" + U+0301, the form macOS
+    // filesystems hand back) collapses into a single precomposed letter ("á").
+    // Otherwise the bare combining mark survives splitting/casing and renders as
+    // a missing glyph on the timeline canvas.
     libraryAssetFileName(filePath)
+      .normalize("NFC")
       .replace(/\.[^.]+$/, "")
-      .split(/[^a-zA-Z0-9]+/)
+      // Split on runs that are neither letters (incl. accented, \p{L}) nor
+      // digits, so "canción" stays whole instead of breaking on "ó".
+      .split(/[^\p{L}\p{N}]+/u)
       .filter(Boolean)
       .map(
         (part) =>

@@ -3,6 +3,7 @@
 #include <lt_engine/sources/io_throttle.h>
 #include <lt_engine/sources/resampler.h>
 #include <lt_engine/core/thread_policy.h>
+#include <lt_engine/core/fs_path.h>
 #include <lt_engine/debug/logging.h>
 #include <algorithm>
 #include <cerrno>
@@ -40,6 +41,9 @@
 #endif
 
 #if LT_ENGINE_USE_LIBSNDFILE
+// Must be set before <sndfile.h> so it declares sf_wchar_open() (the UTF-16
+// path entry point lt_sf_open() uses on Windows for accented file names).
+#define ENABLE_SNDFILE_WINDOWS_PROTOTYPES 1
 #include <sndfile.h>
 #endif
 
@@ -89,6 +93,18 @@ size_t source_cache_blocks_from_env() {
 }
 
 #if LT_ENGINE_USE_LIBSNDFILE
+// Open a UTF-8 path with libsndfile. On Windows sf_open() treats the narrow
+// path as the ANSI codepage, so accented names (the user's "canción.wav" or a
+// "C:\Users\José\..." cache path) fail to open; sf_wchar_open() with a UTF-16
+// path fixes that. See lt_engine/core/fs_path.h.
+inline SNDFILE* lt_sf_open(const std::string& path, int mode, SF_INFO* info) {
+#if defined(_WIN32)
+    return sf_wchar_open(to_wide(path).c_str(), mode, info);
+#else
+    return sf_open(path.c_str(), mode, info);
+#endif
+}
+
 // PCM cache file format. We store 16-bit PCM in a standard WAV container — the
 // same as Ableton's decoding cache: half the size (and disk I/O) of float32,
 // and int16 is plenty for playback. libsndfile transparently converts between
@@ -757,7 +773,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         info.samplerate = sample_rate;
         info.format = cache_container_format(duration_frames, channel_count)
                     | cache_sample_format();
-        SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
+        SNDFILE* sf = lt_sf_open(cache_file, SFM_WRITE, &info);
         if (!sf)
             return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
         sf_count_t written = 0;
@@ -906,7 +922,7 @@ Result<void> SourceManager::decode_and_store_streaming(
     info.samplerate = sample_rate;
     info.format = cache_container_format(projected_out_frames, channel_count)
                 | cache_sample_format();
-    SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
+    SNDFILE* sf = lt_sf_open(cache_file, SFM_WRITE, &info);
     if (!sf)
         return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
 
@@ -1274,7 +1290,7 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
     Frame cursor = 0;
 #if LT_ENGINE_USE_LIBSNDFILE
     SF_INFO info{};
-    SNDFILE* sf = sf_open(entry.cache_file_path.c_str(), SFM_READ, &info);
+    SNDFILE* sf = lt_sf_open(entry.cache_file_path, SFM_READ, &info);
     if (!sf)
         return overview;
     if (info.channels != entry.channel_count) {
@@ -1515,7 +1531,7 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
         int frames_read = 0;
 #if LT_ENGINE_USE_LIBSNDFILE
         SF_INFO info{};
-        SNDFILE* sf = sf_open(entry.cache_file_path.c_str(), SFM_READ, &info);
+        SNDFILE* sf = lt_sf_open(entry.cache_file_path, SFM_READ, &info);
         if (!sf)
             continue;
         if (info.channels != entry.channel_count) {
@@ -1608,7 +1624,7 @@ bool SourceManager::try_install_native_file(const Id& source_id,
         return false;
 
     SF_INFO info{};
-    SNDFILE* sf = sf_open(file_path.c_str(), SFM_READ, &info);
+    SNDFILE* sf = lt_sf_open(file_path, SFM_READ, &info);
     if (!sf)
         return false;
 
@@ -1690,7 +1706,7 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
     const std::string cache_file =
         cache_file_for(source_id, file_path, engine_sample_rate);
     SF_INFO info{};
-    SNDFILE* sf = sf_open(cache_file.c_str(), SFM_READ, &info);
+    SNDFILE* sf = lt_sf_open(cache_file, SFM_READ, &info);
     if (!sf)
         return false;
     if (info.samplerate != engine_sample_rate ||

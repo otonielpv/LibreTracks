@@ -1,6 +1,7 @@
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/resampler.h>
 #include <lt_engine/sources/io_throttle.h>
+#include <lt_engine/core/fs_path.h>
 
 #include <algorithm>
 #include <cctype>
@@ -13,6 +14,9 @@
 // Backend selection
 // ---------------------------------------------------------------------------
 #if LT_ENGINE_USE_LIBSNDFILE
+// Must be set before <sndfile.h> so it declares sf_wchar_open() (the UTF-16
+// path entry point we use on Windows for accented file names).
+#  define ENABLE_SNDFILE_WINDOWS_PROTOTYPES 1
 #  include <sndfile.h>
 #  define DR_MP3_IMPLEMENTATION
 #  include "dr_mp3.h"
@@ -48,7 +52,13 @@ public:
     Result<void> open(const std::string& path, DecodeProgressCallback on_progress = {}) override {
         (void)on_progress;
         SF_INFO info{};
+#if defined(_WIN32)
+        // sf_open uses the ANSI codepage for narrow paths; pass UTF-16 so
+        // accented file names (e.g. "canción.wav") open correctly.
+        sndfile_ = sf_wchar_open(to_wide(path).c_str(), SFM_READ, &info);
+#else
         sndfile_ = sf_open(path.c_str(), SFM_READ, &info);
+#endif
         if (!sndfile_)
             return Result<void>::err(std::string("sndfile: ") + sf_strerror(nullptr));
         info_           = {};
@@ -104,7 +114,11 @@ public:
 
     Result<void> open(const std::string& path, DecodeProgressCallback on_progress = {}) override {
         (void)on_progress;
+#if defined(_WIN32)
+        if (!drmp3_init_file_w(&mp3_, to_wide(path).c_str(), nullptr))
+#else
         if (!drmp3_init_file(&mp3_, path.c_str(), nullptr))
+#endif
             return Result<void>::err("dr_mp3: failed to open " + path);
 
         info_.file_path = path;
@@ -150,7 +164,11 @@ public:
 
     Result<void> open(const std::string& path, DecodeProgressCallback on_progress = {}) override {
         (void)on_progress;
+#if defined(_WIN32)
+        flac_ = drflac_open_file_w(to_wide(path).c_str(), nullptr);
+#else
         flac_ = drflac_open_file(path.c_str(), nullptr);
+#endif
         if (!flac_)
             return Result<void>::err("dr_flac: failed to open " + path);
 

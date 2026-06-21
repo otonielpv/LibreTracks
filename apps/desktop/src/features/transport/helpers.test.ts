@@ -333,6 +333,23 @@ describe("file name helpers", () => {
     expect(humanizeLibraryTrackName("C:/x/___.wav")).toBe("Audio");
   });
 
+  it("keeps accented letters instead of splitting on them", () => {
+    expect(humanizeLibraryTrackName("C:/x/canción.wav")).toBe("Canción");
+    expect(humanizeLibraryTrackName("C:/x/guitarra-española.wav")).toBe(
+      "Guitarra Española",
+    );
+  });
+
+  it("normalizes decomposed (NFD) accents to a single precomposed glyph", () => {
+    // macOS filesystems hand back NFD: the o-acute is "o" + combining acute
+    // (U+0301). The humanized name must be precomposed (NFC) so the accent has
+    // a glyph in the canvas font subset; a bare combining mark renders missing.
+    const nfd = "C:/x/canción.wav";
+    const result = humanizeLibraryTrackName(nfd);
+    expect(result.normalize("NFC")).toBe(result); // output is already NFC
+    expect(result).toBe("Canción"); // single precomposed o-acute
+  });
+
   it("uses the humanized clip name, falling back to track name", () => {
     expect(
       clipDisplayName({ filePath: "C:/x/verse.wav", trackName: "T" }),
