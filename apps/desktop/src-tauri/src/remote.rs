@@ -238,6 +238,25 @@ async fn run_remote_command_bridge(
             } => {
                 session.update_song_region_transpose(region_id, *transpose_semitones, &state.audio)
             }
+            RemoteCommand::UpdateRegionMasterGainLive {
+                region_id,
+                master_gain,
+            } => {
+                // Category A bridge: stream straight to C++ during the fader
+                // drag, no model mutation, no undo. Commit lands on release.
+                if state
+                    .audio
+                    .update_live_region_master_gain(region_id, *master_gain as f32)
+                    .is_err()
+                {
+                    continue;
+                }
+                session.snapshot_with_sync(&state.audio)
+            }
+            RemoteCommand::UpdateRegionMasterGain {
+                region_id,
+                master_gain,
+            } => session.update_song_region_master_gain(region_id, *master_gain, &state.audio),
             RemoteCommand::UpdateTrackTransposeEnabled {
                 track_id,
                 transpose_enabled,

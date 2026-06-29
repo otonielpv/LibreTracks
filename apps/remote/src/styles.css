@@ -198,8 +198,69 @@ button {
 .mixer-filter-bar {
   flex: 0 0 auto;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0 0 0.5rem;
+}
+
+.song-master {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.song-master.is-disabled {
+  opacity: 0.42;
+}
+
+.song-master-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.song-master-label small {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.song-master-label strong {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.song-master-fader {
+  flex: 1 1 auto;
+  min-width: 4rem;
+  touch-action: none;
+}
+
+.song-master-reset {
+  flex: 0 0 auto;
+  min-height: 1.85rem;
+  border-radius: 4px;
+  border: 1px solid rgb(87 241 219 / 0.14);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--muted);
+  padding: 0.3rem 0.6rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.song-master-reset:disabled {
+  opacity: 0.38;
 }
 
 .mixer-filter-toggle {

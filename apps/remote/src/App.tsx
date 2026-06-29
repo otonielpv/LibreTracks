@@ -11,6 +11,7 @@ import {
   markerKindCategory,
   type AppSettings,
   type AudioMeterLevel,
+  type SongRegionSummary,
   type SongView,
   type TrackSummary,
   type TransportSnapshot,
@@ -117,6 +118,13 @@ type RgbColor = {
 
 const CHROME_TIMELINE_PIXELS_PER_SECOND = BASE_PIXELS_PER_SECOND * 2.35;
 const PAN_CENTER_MAGNET = 0.08;
+// Song master fader: linear gain 0..2, snapping to unity (1.0) within ±3% of
+// the range. Mirrors the desktop master fader (TimelineToolbar) so the remote
+// and desktop feel identical.
+const MASTER_GAIN_MIN = 0;
+const MASTER_GAIN_MAX = 2;
+const MASTER_SNAP_TARGET = 1.0;
+const MASTER_SNAP_THRESHOLD = MASTER_GAIN_MAX * 0.03;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
 const MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY = "libretracks.remote.mixerFilterActiveSong";
 const MAX_REMOTE_SIZE_LEVEL = 3;
@@ -350,6 +358,18 @@ type RemotePanelKey = "jump" | "vamp" | "song";
 
 function magnetizePanValue(value: number) {
   return Math.abs(value) <= PAN_CENTER_MAGNET ? 0 : value;
+}
+
+function snapMasterGain(value: number) {
+  return Math.abs(value - MASTER_SNAP_TARGET) <= MASTER_SNAP_THRESHOLD
+    ? MASTER_SNAP_TARGET
+    : value;
+}
+
+function formatMasterGainSummary(gain: number) {
+  const db = gain > 0 ? 20 * Math.log10(gain) : Number.NEGATIVE_INFINITY;
+  const dbLabel = Number.isFinite(db) ? `${db.toFixed(1)} dB` : "-∞ dB";
+  return `${gain.toFixed(2)}× (${dbLabel})`;
 }
 
 function clampColorChannel(value: number) {
@@ -2027,6 +2047,88 @@ function useActiveRegionId(): string | null {
   return activeRegionId;
 }
 
+/**
+ * Master fader for the song the playhead is currently inside. Controls the
+ * active region's `master.gain` (linear 0..2), mirroring the desktop's
+ * per-song master fader. When the playhead is between songs there is no
+ * active region, so the fader is disabled. The thumb tracks the pointer via
+ * an optimistic draft and only commits (persists + undo entry) on release.
+ */
+function SongMasterFader({ region }: { region: SongRegionSummary | null }) {
+  const regionGain = region?.master?.gain ?? MASTER_SNAP_TARGET;
+  const [draftGain, setDraftGain] = useState(regionGain);
+  const interactionRef = useRef(false);
+  const disabled = region === null;
+
+  useEffect(() => {
+    if (!interactionRef.current) {
+      setDraftGain(regionGain);
+    }
+  }, [regionGain]);
+
+  const streamGain = (value: number) => {
+    if (!region) {
+      return;
+    }
+    const nextGain = snapMasterGain(value);
+    interactionRef.current = true;
+    setDraftGain(nextGain);
+    sendCommand({
+      cmd: "updateRegionMasterGainLive",
+      regionId: region.id,
+      masterGain: nextGain,
+    });
+  };
+
+  const commitGain = (value: number) => {
+    if (!region) {
+      return;
+    }
+    const nextGain = snapMasterGain(value);
+    interactionRef.current = false;
+    setDraftGain(nextGain);
+    sendCommand({
+      cmd: "updateRegionMasterGain",
+      regionId: region.id,
+      masterGain: nextGain,
+    });
+  };
+
+  return (
+    <div className={`song-master ${disabled ? "is-disabled" : ""}`}>
+      <div className="song-master-label">
+        <small>{STRINGS.songMaster}</small>
+        <strong>{region ? formatMasterGainSummary(draftGain) : STRINGS.songMasterNoSong}</strong>
+      </div>
+      <input
+        className="song-master-fader"
+        type="range"
+        min={MASTER_GAIN_MIN}
+        max={MASTER_GAIN_MAX}
+        step={0.01}
+        value={draftGain}
+        disabled={disabled}
+        onChange={(event) => streamGain(Number(event.currentTarget.value))}
+        onInput={(event) => streamGain(Number(event.currentTarget.value))}
+        onPointerDown={() => {
+          interactionRef.current = true;
+        }}
+        onPointerUp={(event) => commitGain(Number(event.currentTarget.value))}
+        onPointerCancel={(event) => commitGain(Number(event.currentTarget.value))}
+        onLostPointerCapture={(event) => commitGain(Number(event.currentTarget.value))}
+      />
+      <button
+        type="button"
+        className="song-master-reset"
+        disabled={disabled}
+        onClick={() => commitGain(MASTER_SNAP_TARGET)}
+      >
+        0 dB
+      </button>
+    </div>
+  );
+}
+
 function MixerView() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const tracks = songView?.tracks ?? [];
@@ -2034,6 +2136,10 @@ function MixerView() {
 
   const [filterActiveSong, setFilterActiveSong] = useState(readMixerFilterActiveSong);
   const activeRegionId = useActiveRegionId();
+  const activeRegion = useMemo(
+    () => songView?.regions.find((region) => region.id === activeRegionId) ?? null,
+    [songView, activeRegionId],
+  );
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -2085,6 +2191,7 @@ function MixerView() {
         >
           {STRINGS.activeSongOnly}
         </button>
+        <SongMasterFader region={activeRegion} />
       </div>
       <div className="mixer-scroll">
         {visibleTracks.map((track) => {

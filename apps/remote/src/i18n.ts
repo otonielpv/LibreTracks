@@ -76,6 +76,8 @@ const STRINGS = {
     activeSongOnly: "Active song only",
     activeSongFilterOn: "Showing only tracks in the active song",
     activeSongFilterOff: "Show only tracks in the active song",
+    songMaster: "Song master",
+    songMasterNoSong: "No active song",
   },
   es: {
     appTitle: "Remote",
@@ -129,6 +131,8 @@ const STRINGS = {
     activeSongOnly: "Solo canción activa",
     activeSongFilterOn: "Mostrando solo los tracks de la canción activa",
     activeSongFilterOff: "Mostrar solo los tracks de la canción activa",
+    songMaster: "Master de la canción",
+    songMasterNoSong: "Sin canción activa",
   },
 } as const;
 

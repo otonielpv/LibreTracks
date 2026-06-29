@@ -116,6 +116,18 @@ pub enum RemoteCommand {
         region_id: String,
         transpose_semitones: i32,
     },
+    /// Realtime master-gain stream during a fader drag on the remote. Bridge
+    /// only: forwarded straight to the engine, no model mutation or undo entry.
+    UpdateRegionMasterGainLive {
+        region_id: String,
+        master_gain: f64,
+    },
+    /// Committed master gain for a song region (fader release on the remote).
+    /// Mutates the model and persists, mirroring the desktop master fader.
+    UpdateRegionMasterGain {
+        region_id: String,
+        master_gain: f64,
+    },
     UpdateTrackTransposeEnabled {
         track_id: String,
         transpose_enabled: bool,
@@ -551,6 +563,28 @@ mod tests {
                 assert_eq!(transpose_semitones, -5);
             }
             other => panic!("expected updateRegionTranspose, got {other:?}"),
+        }
+
+        match parse(r#"{"cmd":"updateRegionMasterGainLive","regionId":"r1","masterGain":0.5}"#) {
+            RemoteCommand::UpdateRegionMasterGainLive {
+                region_id,
+                master_gain,
+            } => {
+                assert_eq!(region_id, "r1");
+                assert_eq!(master_gain, 0.5);
+            }
+            other => panic!("expected updateRegionMasterGainLive, got {other:?}"),
+        }
+
+        match parse(r#"{"cmd":"updateRegionMasterGain","regionId":"r1","masterGain":1.25}"#) {
+            RemoteCommand::UpdateRegionMasterGain {
+                region_id,
+                master_gain,
+            } => {
+                assert_eq!(region_id, "r1");
+                assert_eq!(master_gain, 1.25);
+            }
+            other => panic!("expected updateRegionMasterGain, got {other:?}"),
         }
     }
 
