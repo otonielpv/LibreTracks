@@ -142,7 +142,9 @@ import {
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import {
-  MARKER_KINDS,
+  MARKER_KINDS as SECTION_KINDS,
+  CUE_KINDS,
+  markerKindCategory,
   markerKindColor,
   markerKindLabel,
   markerKindVariants,
@@ -6384,14 +6386,20 @@ export function TransportPanelContent() {
     });
   }
 
-  function openMarkerKindMenu(section: SectionMarkerSummary) {
+  // Submenu listing a set of kinds (sections or cues). Sections may open a
+  // further variant submenu; cues apply directly (no numbered variants).
+  function openMarkerKindList(
+    section: SectionMarkerSummary,
+    kinds: readonly MarkerKind[],
+    title: string,
+  ) {
     const currentKind = section.kind ?? "custom";
     const next = bumpContextMenuPosition();
     setContextMenu({
       x: next.x,
       y: next.y,
-      title: t("transport.menu.markerKind"),
-      actions: MARKER_KINDS.map((kind) => {
+      title,
+      actions: kinds.map((kind) => {
         const hasVariants = markerKindVariants(kind).length > 0;
         return {
           label: `${markerKindLabel(kind, t)}${hasVariants ? " ▸" : ""}${
@@ -6404,6 +6412,44 @@ export function TransportPanelContent() {
               : applyMarkerKind(section, kind, null),
         };
       }),
+    });
+  }
+
+  function openMarkerKindMenu(section: SectionMarkerSummary) {
+    const currentKind = section.kind ?? "custom";
+    const currentIsCue = markerKindCategory(currentKind) === "cue";
+    const next = bumpContextMenuPosition();
+    // Top level splits the long vocabulary into Sections vs Cues (Playback-style
+    // "dynamic cues"), each opening its own list. A ✓ marks which group the
+    // marker currently belongs to.
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: t("transport.menu.markerKind"),
+      actions: [
+        {
+          label: `${t("transport.menu.markerKindSectionsGroup")} ▸${
+            currentIsCue ? "" : " ✓"
+          }`,
+          onSelect: () =>
+            openMarkerKindList(
+              section,
+              SECTION_KINDS,
+              t("transport.menu.markerKindSectionsGroup"),
+            ),
+        },
+        {
+          label: `${t("transport.menu.markerKindCuesGroup")} ▸${
+            currentIsCue ? " ✓" : ""
+          }`,
+          onSelect: () =>
+            openMarkerKindList(
+              section,
+              CUE_KINDS,
+              t("transport.menu.markerKindCuesGroup"),
+            ),
+        },
+      ],
     });
   }
 

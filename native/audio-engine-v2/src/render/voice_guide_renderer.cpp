@@ -114,6 +114,25 @@ std::string kind_token(MarkerKind kind) noexcept {
         case MarkerKind::Exhortation: return "exhortation";
         case MarkerKind::Rap: return "rap";
         case MarkerKind::Turnaround: return "turnaround";
+        case MarkerKind::AdLib: return "ad_lib";
+        case MarkerKind::AllIn: return "all_in";
+        case MarkerKind::Bass: return "bass";
+        case MarkerKind::BigEnding: return "big_ending";
+        case MarkerKind::Break: return "break";
+        case MarkerKind::Build: return "build";
+        case MarkerKind::DrumsIn: return "drums_in";
+        case MarkerKind::Drums: return "drums";
+        case MarkerKind::Guitar: return "guitar";
+        case MarkerKind::Hits: return "hits";
+        case MarkerKind::Hold: return "hold";
+        case MarkerKind::KeyChangeDown: return "key_change_down";
+        case MarkerKind::KeyChangeUp: return "key_change_up";
+        case MarkerKind::Keys: return "keys";
+        case MarkerKind::LastTime: return "last_time";
+        case MarkerKind::SlowlyBuild: return "slowly_build";
+        case MarkerKind::Softly: return "softly";
+        case MarkerKind::Swell: return "swell";
+        case MarkerKind::WorshipFreely: return "worship_freely";
         case MarkerKind::Custom: default: return "custom";
     }
 }
@@ -137,6 +156,13 @@ const VoiceGuideClip* VoiceGuideClipBank::section_for(MarkerKind kind, int varia
 const VoiceGuideClip* VoiceGuideClipBank::count_for(int beat_number) const noexcept {
     if (beat_number < 0 || beat_number >= kMaxCount) return nullptr;
     const VoiceGuideClip& clip = counts[static_cast<std::size_t>(beat_number)];
+    return clip.samples.empty() ? nullptr : &clip;
+}
+
+const VoiceGuideClip* VoiceGuideClipBank::cue_for(MarkerKind kind) const noexcept {
+    const int idx = static_cast<int>(kind);
+    if (idx < 0 || idx >= kKindCount) return nullptr;
+    const VoiceGuideClip& clip = cues[static_cast<std::size_t>(idx)];
     return clip.samples.empty() ? nullptr : &clip;
 }
 
@@ -216,7 +242,35 @@ const char* section_filename(int kind_index) noexcept {
         case MarkerKind::Exhortation: return "exhortation";
         case MarkerKind::Rap: return "rap";
         case MarkerKind::Turnaround: return "turnaround";
-        case MarkerKind::Custom: default: return nullptr;  // no recording
+        // Cue kinds and Custom have no entry in the sections tree.
+        default: return nullptr;
+    }
+}
+
+// Filename stem for a dynamic-cue kind under voices/<lang>/cues/. Returns
+// nullptr for section kinds and Custom (no cue recording).
+const char* cue_filename(int kind_index) noexcept {
+    switch (static_cast<MarkerKind>(kind_index)) {
+        case MarkerKind::AdLib: return "ad_lib";
+        case MarkerKind::AllIn: return "all_in";
+        case MarkerKind::Bass: return "bass";
+        case MarkerKind::BigEnding: return "big_ending";
+        case MarkerKind::Break: return "break";
+        case MarkerKind::Build: return "build";
+        case MarkerKind::DrumsIn: return "drums_in";
+        case MarkerKind::Drums: return "drums";
+        case MarkerKind::Guitar: return "guitar";
+        case MarkerKind::Hits: return "hits";
+        case MarkerKind::Hold: return "hold";
+        case MarkerKind::KeyChangeDown: return "key_change_down";
+        case MarkerKind::KeyChangeUp: return "key_change_up";
+        case MarkerKind::Keys: return "keys";
+        case MarkerKind::LastTime: return "last_time";
+        case MarkerKind::SlowlyBuild: return "slowly_build";
+        case MarkerKind::Softly: return "softly";
+        case MarkerKind::Swell: return "swell";
+        case MarkerKind::WorshipFreely: return "worship_freely";
+        default: return nullptr;
     }
 }
 
@@ -244,6 +298,15 @@ std::shared_ptr<VoiceGuideClipBank> load_voice_guide_bank(
     for (int n = 1; n < VoiceGuideClipBank::kMaxCount; ++n) {
         bank->counts[static_cast<std::size_t>(n)].samples =
             decode_mono(base + "/counts/" + std::to_string(n) + ".wav", target_sample_rate);
+    }
+    // Dynamic cues: one file per cue kind under <lang>/cues/. No variants, no
+    // count-in. A missing file (e.g. an English-only cue) leaves the slot empty.
+    const std::string cues_dir = base + "/cues/";
+    for (int k = 0; k < VoiceGuideClipBank::kKindCount; ++k) {
+        const char* name = cue_filename(k);
+        if (!name) continue;
+        bank->cues[static_cast<std::size_t>(k)].samples =
+            decode_mono(cues_dir + name + ".wav", target_sample_rate);
     }
     return bank;
 }
@@ -361,13 +424,27 @@ void VoiceGuideRenderer::reset_voices() noexcept {
     }
     last_section_frame_ = -1;
     last_count_frame_ = -1;
+    last_cue_frame_ = -1;
+    last_chained_cue_frame_ = -1;
 }
 
 const Marker* VoiceGuideRenderer::upcoming_marker(const Song* song, Frame frame) noexcept {
     if (!song) return nullptr;
     const Marker* best = nullptr;
     for (const auto& marker : song->markers) {
-        if (marker.kind == MarkerKind::Custom) continue;  // no recording
+        if (marker.kind == MarkerKind::Custom) continue;       // no recording
+        if (marker_kind_is_cue(marker.kind)) continue;         // cues aren't downbeat targets
+        if (marker.frame < frame) continue;
+        if (!best || marker.frame < best->frame) best = &marker;
+    }
+    return best;
+}
+
+const Marker* VoiceGuideRenderer::upcoming_cue(const Song* song, Frame frame) noexcept {
+    if (!song) return nullptr;
+    const Marker* best = nullptr;
+    for (const auto& marker : song->markers) {
+        if (!marker_kind_is_cue(marker.kind)) continue;
         if (marker.frame < frame) continue;
         if (!best || marker.frame < best->frame) best = &marker;
     }
@@ -482,20 +559,77 @@ void VoiceGuideRenderer::render(float** output_channels,
                         // Layout (no overlap — Playback-style):
                         //   count bar  = the `lead_bars` bars immediately before
                         //               the target downbeat; full count "1..N".
-                        //   section    = spoken name placed to END right at the
-                        //               start of the count bar.
+                        //   cues       = any dynamic-cue markers that fall in the
+                        //               lead window [count_bar_start, target] are
+                        //               chained right before the count, stacked
+                        //               backward so they END at count_bar_start.
+                        //   section    = spoken name placed to END where the first
+                        //               chained cue begins (or at count_bar_start
+                        //               when there are no cues).
                         const Frame count_bar_start = target_frame
                             - static_cast<Frame>(
                                   std::llround(beats_per_bar * lead_bars * beat_frames));
 
+                        // Gather cues in the lead window, in timeline order, and
+                        // compute where the chained block of cue audio begins. The
+                        // cues speak back-to-back ending at count_bar_start, so the
+                        // earliest cue's start is the section name's end point.
+                        // (kMaxChainedCues caps the stack so a pile of cues on one
+                        // downbeat can't run unbounded; extras are dropped.)
+                        constexpr int kMaxChainedCues = 3;
+                        const VoiceGuideClip* chained[kMaxChainedCues] = {};
+                        Frame chained_marker_frame[kMaxChainedCues] = {};
+                        int chained_count = 0;
+                        for (const auto& cue : song->markers) {
+                            if (!marker_kind_is_cue(cue.kind)) continue;
+                            if (cue.frame < count_bar_start || cue.frame > target_frame)
+                                continue;
+                            const VoiceGuideClip* clip = bank->cue_for(cue.kind);
+                            if (!clip) continue;            // no recording in this lang
+                            if (chained_count >= kMaxChainedCues) break;
+                            // Insertion sort by marker frame (small N).
+                            int pos = chained_count;
+                            while (pos > 0
+                                   && chained_marker_frame[pos - 1] > cue.frame) {
+                                chained[pos] = chained[pos - 1];
+                                chained_marker_frame[pos] = chained_marker_frame[pos - 1];
+                                --pos;
+                            }
+                            chained[pos] = clip;
+                            chained_marker_frame[pos] = cue.frame;
+                            ++chained_count;
+                        }
+
+                        // Walk the chained cues from last to first, assigning each
+                        // an end frame (the previous block's start) and firing it
+                        // when its start lands on this frame. block_start ends up
+                        // as the earliest cue's start = the section name's end.
+                        // Firing keys off `cue_start == abs_frame`, which each
+                        // absolute frame hits exactly once across contiguous blocks
+                        // (abs_frame is monotonic), so no scalar guard is needed to
+                        // fire-once. We still record the latest chained marker frame
+                        // for the loose-cue path's belt-and-suspenders dedup.
+                        Frame block_start = count_bar_start;
+                        for (int i = chained_count - 1; i >= 0; --i) {
+                            const Frame cue_start =
+                                block_start - static_cast<Frame>(chained[i]->samples.size());
+                            if (cue_start == abs_frame && cue_start >= timeline_frame) {
+                                trigger_clip(chained[i], 0.9f, sample_rate);
+                                last_chained_cue_frame_ = chained_marker_frame[i];
+                                announcements_fired_.fetch_add(1, std::memory_order_relaxed);
+                            }
+                            block_start = cue_start;
+                        }
+
                         // Section announcement: fire so its (trimmed) length ends
-                        // at count_bar_start. Best-effort — only if it still fits
-                        // ahead of the current block (short jumps may leave no
-                        // room for the name; the count below always plays).
+                        // at block_start (= count_bar_start when no cues chained).
+                        // Best-effort — only if it still fits ahead of the current
+                        // block (short jumps may leave no room; the count always
+                        // plays).
                         if (const VoiceGuideClip* section =
                                 bank->section_for(kind, variant)) {
                             const Frame section_start =
-                                count_bar_start - static_cast<Frame>(section->samples.size());
+                                block_start - static_cast<Frame>(section->samples.size());
                             if (section_start == abs_frame
                                 && section_start >= timeline_frame
                                 && section_start != last_section_frame_) {
@@ -552,6 +686,41 @@ void VoiceGuideRenderer::render(float** output_channels,
                 }
                 if (marker && marker_frame > abs_frame && marker_frame != jump_frame) {
                     announce_target(marker_frame, marker->kind, marker->variant);
+                }
+
+                // Loose dynamic cues: a cue that is NOT inside the lead window of
+                // the upcoming section/jump downbeat fires as a one-shot, spoken
+                // right at its own frame (no count-in). Cues inside a lead window
+                // were already chained above; skip them here so they aren't
+                // doubled (the chained one keyed off last_chained_cue_frame_).
+                const Marker* cue = upcoming_cue(song, abs_frame);
+                if (cue && cue->frame == abs_frame
+                    && cue->frame != last_cue_frame_
+                    && cue->frame != last_chained_cue_frame_) {
+                    // Is this cue chained into a nearby downbeat's lead-in? If so,
+                    // it has already been (or will be) spoken earlier; don't also
+                    // one-shot it. A cue is "chained" when it sits within the lead
+                    // window before a section or jump downbeat.
+                    auto in_lead_window = [&](Frame downbeat) {
+                        if (downbeat <= abs_frame) return false;
+                        const Frame win_start = downbeat
+                            - static_cast<Frame>(
+                                  std::llround(beats_per_bar * lead_bars * beat_frames));
+                        return cue->frame >= win_start && cue->frame <= downbeat;
+                    };
+                    const bool chained =
+                        (marker_frame > abs_frame && in_lead_window(marker_frame))
+                        || (jump_frame > abs_frame && in_lead_window(jump_frame));
+                    if (!chained) {
+                        // Only count an announcement when there is actually a clip
+                        // for this cue in the loaded language (an absent recording
+                        // is a silent slot, not a fired announcement).
+                        if (const VoiceGuideClip* clip = bank->cue_for(cue->kind)) {
+                            trigger_clip(clip, 0.9f, sample_rate);
+                            announcements_fired_.fetch_add(1, std::memory_order_relaxed);
+                        }
+                        last_cue_frame_ = cue->frame;
+                    }
                 }
             }
         }

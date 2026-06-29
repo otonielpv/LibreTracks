@@ -28,6 +28,43 @@ export const MARKER_KINDS: readonly MarkerKind[] = [
   "custom",
 ] as const;
 
+/** Dynamic guide cues: one-shot spoken instructions that happen *within* a
+ * section (not a section themselves), e.g. "Build", "All In", "Drums In". Shown
+ * in a separate group from the section kinds in the marker "Type" menu. The
+ * order roughly groups instruments / dynamics / structure for readability. */
+export const CUE_KINDS: readonly MarkerKind[] = [
+  "build",
+  "slowly_build",
+  "all_in",
+  "drums_in",
+  "break",
+  "hold",
+  "softly",
+  "swell",
+  "hits",
+  "last_time",
+  "big_ending",
+  "key_change_up",
+  "key_change_down",
+  "drums",
+  "bass",
+  "guitar",
+  "keys",
+  "ad_lib",
+  "worship_freely",
+] as const;
+
+const CUE_KIND_SET: ReadonlySet<MarkerKind> = new Set(CUE_KINDS);
+
+/** Whether a kind is a dynamic cue or a song section. Derived from the kind
+ * (mirrors Rust `MarkerKind::category`); drives the marker menu grouping and
+ * the voice-guide behaviour. `custom` is treated as a section. */
+export function markerKindCategory(
+  kind: MarkerKind | undefined,
+): "section" | "cue" {
+  return kind && CUE_KIND_SET.has(kind) ? "cue" : "section";
+}
+
 /** Resting-state colour for a marker of each kind, used when the marker is not
  * armed/selected/current (those states keep their own meaningful colours). The
  * palette is chosen so adjacent song sections read as distinct at a glance.
@@ -55,6 +92,27 @@ const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
   rap: "#c77dd4",
   turnaround: "#7fa8d0",
   custom: "#bacac5",
+  // Cues share a warmer, desaturated accent family so they read as a distinct
+  // class from the section colours above.
+  build: "#e0894a",
+  slowly_build: "#d98f5c",
+  all_in: "#e07a4a",
+  drums_in: "#d4924a",
+  break: "#8a96a0",
+  hold: "#9aa6b0",
+  softly: "#9fb0bd",
+  swell: "#c0a06a",
+  hits: "#e06a6a",
+  last_time: "#cf8a5a",
+  big_ending: "#d9665a",
+  key_change_up: "#6fbf9b",
+  key_change_down: "#6fa8bf",
+  drums: "#caa06a",
+  bass: "#b0926a",
+  guitar: "#c2a072",
+  keys: "#b89a72",
+  ad_lib: "#c79a8a",
+  worship_freely: "#b89ad0",
 };
 
 /** English fallback labels, used when no translation function is supplied (or a
@@ -82,6 +140,25 @@ const MARKER_KIND_LABELS: Record<MarkerKind, string> = {
   rap: "Rap",
   turnaround: "Turnaround",
   custom: "Custom",
+  build: "Build",
+  slowly_build: "Slowly Build",
+  all_in: "All In",
+  drums_in: "Drums In",
+  break: "Break",
+  hold: "Hold",
+  softly: "Softly",
+  swell: "Swell",
+  hits: "Hits",
+  last_time: "Last Time",
+  big_ending: "Big Ending",
+  key_change_up: "Key Change Up",
+  key_change_down: "Key Change Down",
+  drums: "Drums",
+  bass: "Bass",
+  guitar: "Guitar",
+  keys: "Keys",
+  ad_lib: "Ad Lib",
+  worship_freely: "Worship Freely",
 };
 
 /** Resting-state colour as an `rgb`/hex string. Falls back to the custom grey

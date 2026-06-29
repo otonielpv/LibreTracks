@@ -37,7 +37,34 @@ export type MarkerKind =
   | "exhortation"
   | "rap"
   | "turnaround"
+  // Dynamic guide cues (Build, All In, Drums In, ...): one-shot spoken
+  // instructions within a section, no count-in. Appended after the sections;
+  // the C++ clip bank indexes by order, so never reorder, only append.
+  | "ad_lib"
+  | "all_in"
+  | "bass"
+  | "big_ending"
+  | "break"
+  | "build"
+  | "drums_in"
+  | "drums"
+  | "guitar"
+  | "hits"
+  | "hold"
+  | "key_change_down"
+  | "key_change_up"
+  | "keys"
+  | "last_time"
+  | "slowly_build"
+  | "softly"
+  | "swell"
+  | "worship_freely"
   | "custom";
+
+/** Whether a {@link MarkerKind} is a song section (Verse, Chorus — name +
+ * count-in) or a dynamic cue (Build, All In — one-shot, no count-in). Derived
+ * from the kind, never stored. */
+export type MarkerCategory = "section" | "cue";
 
 export type SectionMarkerSummary = {
   id: string;

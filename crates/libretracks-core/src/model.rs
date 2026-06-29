@@ -172,10 +172,47 @@ pub enum MarkerKind {
     Exhortation,
     Rap,
     Turnaround,
+    // Dynamic guide cues (worship/band arrangements): short spoken instructions
+    // that happen *within* a section rather than marking one — "Build", "All In",
+    // "Drums In", "Key Change Up". Unlike sections they are not counted in; they
+    // fire as one-shots (chained into a nearby section's lead-in when close, see
+    // the voice-guide renderer). Appended after the section kinds — same ABI rule
+    // (the C++ clip bank indexes by this integer): append before Custom only.
+    AdLib,
+    AllIn,
+    Bass,
+    BigEnding,
+    Break,
+    Build,
+    DrumsIn,
+    Drums,
+    Guitar,
+    Hits,
+    Hold,
+    KeyChangeDown,
+    KeyChangeUp,
+    Keys,
+    LastTime,
+    SlowlyBuild,
+    Softly,
+    Swell,
+    WorshipFreely,
     /// User-defined section with no pre-recorded voice clip; the announcement
     /// falls back to silence (or TTS, if added later).
     #[default]
     Custom,
+}
+
+/// Whether a [`MarkerKind`] marks a song *section* (Verse, Chorus — announced
+/// with a name + rhythmic count-in) or is a dynamic *cue* (Build, All In — a
+/// one-shot spoken instruction within a section, no count-in). Derived from the
+/// kind, never stored: a kind belongs to exactly one category, so there is no
+/// such thing as an invalid combination.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MarkerCategory {
+    Section,
+    Cue,
 }
 
 impl MarkerKind {
@@ -203,7 +240,54 @@ impl MarkerKind {
             MarkerKind::Exhortation => "exhortation",
             MarkerKind::Rap => "rap",
             MarkerKind::Turnaround => "turnaround",
+            MarkerKind::AdLib => "ad_lib",
+            MarkerKind::AllIn => "all_in",
+            MarkerKind::Bass => "bass",
+            MarkerKind::BigEnding => "big_ending",
+            MarkerKind::Break => "break",
+            MarkerKind::Build => "build",
+            MarkerKind::DrumsIn => "drums_in",
+            MarkerKind::Drums => "drums",
+            MarkerKind::Guitar => "guitar",
+            MarkerKind::Hits => "hits",
+            MarkerKind::Hold => "hold",
+            MarkerKind::KeyChangeDown => "key_change_down",
+            MarkerKind::KeyChangeUp => "key_change_up",
+            MarkerKind::Keys => "keys",
+            MarkerKind::LastTime => "last_time",
+            MarkerKind::SlowlyBuild => "slowly_build",
+            MarkerKind::Softly => "softly",
+            MarkerKind::Swell => "swell",
+            MarkerKind::WorshipFreely => "worship_freely",
             MarkerKind::Custom => "custom",
+        }
+    }
+
+    /// Whether this kind is a song section or a dynamic cue. Drives voice-guide
+    /// behaviour (sections get a name + count-in; cues are one-shots) and the
+    /// UI grouping. Custom counts as a section (it is an untyped section marker).
+    pub fn category(self) -> MarkerCategory {
+        match self {
+            MarkerKind::AdLib
+            | MarkerKind::AllIn
+            | MarkerKind::Bass
+            | MarkerKind::BigEnding
+            | MarkerKind::Break
+            | MarkerKind::Build
+            | MarkerKind::DrumsIn
+            | MarkerKind::Drums
+            | MarkerKind::Guitar
+            | MarkerKind::Hits
+            | MarkerKind::Hold
+            | MarkerKind::KeyChangeDown
+            | MarkerKind::KeyChangeUp
+            | MarkerKind::Keys
+            | MarkerKind::LastTime
+            | MarkerKind::SlowlyBuild
+            | MarkerKind::Softly
+            | MarkerKind::Swell
+            | MarkerKind::WorshipFreely => MarkerCategory::Cue,
+            _ => MarkerCategory::Section,
         }
     }
 }

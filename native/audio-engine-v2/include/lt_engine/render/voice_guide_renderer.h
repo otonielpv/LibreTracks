@@ -38,17 +38,24 @@ struct VoiceGuideSection {
 };
 
 struct VoiceGuideClipBank {
-    static constexpr int kKindCount = 21;   // MarkerKind values incl. Custom
+    static constexpr int kKindCount = 40;   // MarkerKind values incl. cues + Custom
     static constexpr int kMaxCount  = 17;   // supports up to 16-beat bars + slack
 
     double sample_rate = 0.0;               // sample rate the clips were decoded at
     std::array<VoiceGuideSection, kKindCount> sections{};
     std::array<VoiceGuideClip, kMaxCount>     counts{};
+    // Dynamic-cue clips, indexed by MarkerKind value. Only cue kinds populate a
+    // slot (sections/Custom stay empty); a one-shot spoken instruction with no
+    // numbered variants and no count-in.
+    std::array<VoiceGuideClip, kKindCount>    cues{};
 
     // Resolve a section's clip for the given variant, falling back to the base
     // clip when the numbered variant is absent. `variant <= 0` means base.
     const VoiceGuideClip* section_for(MarkerKind kind, int variant) const noexcept;
     const VoiceGuideClip* count_for(int beat_number) const noexcept;
+    // Resolve a dynamic cue's clip, or nullptr when the kind is not a cue or has
+    // no recording in this bank (e.g. an English-only or Spanish-only cue).
+    const VoiceGuideClip* cue_for(MarkerKind kind) const noexcept;
 };
 
 // Decode a language's voice bank from disk into memory. Expects the asset tree
@@ -144,15 +151,19 @@ private:
         int fade_total = 0;
         bool active() const noexcept { return samples != nullptr && index < total; }
     };
-    static constexpr int kVoiceCount = 4;
+    static constexpr int kVoiceCount = 6;
 
     void trigger_clip(const VoiceGuideClip* clip, float gain, double sample_rate) noexcept;
     void choke_active_voices(double sample_rate) noexcept;
     void reset_voices() noexcept;
 
-    // Resolve the first marker at or after `frame` that has a non-Custom kind
-    // (Custom has no recording). Returns nullptr if none.
+    // Resolve the first SECTION marker at or after `frame` (non-Custom, not a
+    // cue). This is the count-in downbeat target. Returns nullptr if none.
     static const Marker* upcoming_marker(const Song* song, Frame frame) noexcept;
+
+    // Resolve the first dynamic-CUE marker at or after `frame`. Cues are
+    // announced as one-shots (or chained into a nearby section's lead-in).
+    static const Marker* upcoming_cue(const Song* song, Frame frame) noexcept;
 
     std::atomic<bool> enabled_{false};
     std::atomic<float> volume_{1.0f};
@@ -171,6 +182,12 @@ private:
     // so a clip fires exactly once even across block boundaries.
     Frame last_section_frame_ = -1;
     Frame last_count_frame_ = -1;
+    // The frame at which we last started a one-shot cue, so a loose cue fires
+    // exactly once across block boundaries (chained cues key off the section).
+    Frame last_cue_frame_ = -1;
+    // Frame of the most recent cue chained into a section's lead-in, so the
+    // same cue is not also fired as a loose one-shot.
+    Frame last_chained_cue_frame_ = -1;
     std::array<Voice, kVoiceCount> voices_{};
     float current_output_gain_ = 0.0f;
 

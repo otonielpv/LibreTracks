@@ -120,12 +120,38 @@ enum class MarkerKind : int {
     Exhortation = 17,
     Rap = 18,
     Turnaround = 19,
-    Custom = 20,
+    // Dynamic guide cues (one-shot spoken instructions within a section, no
+    // count-in). Appended after the section kinds; these integers index the
+    // voice-guide cue clip bank — append before Custom, never reorder.
+    AdLib = 20,
+    AllIn = 21,
+    Bass = 22,
+    BigEnding = 23,
+    Break = 24,
+    Build = 25,
+    DrumsIn = 26,
+    Drums = 27,
+    Guitar = 28,
+    Hits = 29,
+    Hold = 30,
+    KeyChangeDown = 31,
+    KeyChangeUp = 32,
+    Keys = 33,
+    LastTime = 34,
+    SlowlyBuild = 35,
+    Softly = 36,
+    Swell = 37,
+    WorshipFreely = 38,
+    Custom = 39,
 };
 
 // Map a serialized snake_case kind token (as sent by Rust/TS) to the enum.
 // Unknown or empty tokens fall back to Custom.
 MarkerKind marker_kind_from_string(const std::string& token) noexcept;
+
+// True when the kind is a dynamic cue (Build, All In, ...) rather than a song
+// section. Cues are announced as one-shots without a count-in.
+bool marker_kind_is_cue(MarkerKind kind) noexcept;
 
 struct Marker {
     Id          id;

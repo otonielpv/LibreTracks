@@ -451,3 +451,123 @@ TEST_CASE("a jump landing on the same frame as a marker fires once, not twice") 
     CHECK(diag.announcements_fired == 1);
     CHECK(diag.counts_fired == 4);
 }
+
+// ── Dynamic cues ─────────────────────────────────────────────────────────────
+// Cues (Build, All In, ...) are one-shot spoken instructions. A loose cue (away
+// from any section downbeat) fires at its own frame with NO count-in. A cue that
+// falls inside a section's lead window is chained before the count (name → cue →
+// "1,2,3,4"), the count still landing intact on the downbeat.
+
+// Give every cue slot a distinct amplitude (0.30) so a test can pick cue audio
+// apart from sections (0.50) and counts (0.10*n).
+void add_cue_clips(VoiceGuideClipBank& bank, int len = 240) {
+    for (int k = 0; k < VoiceGuideClipBank::kKindCount; ++k)
+        if (marker_kind_is_cue(static_cast<MarkerKind>(k)))
+            bank.cues[static_cast<std::size_t>(k)].samples.assign(len, 0.30f);
+}
+
+// A song with one section marker and one cue marker at the given times.
+Session make_session_section_and_cue(MarkerKind section_kind, double section_seconds,
+                                     MarkerKind cue_kind, double cue_seconds,
+                                     double bpm = 120.0) {
+    auto session = make_session(section_kind, section_seconds, bpm);
+    Marker cue;
+    cue.id = "cue1";
+    cue.name = "Cue";
+    cue.kind = cue_kind;
+    cue.frame = static_cast<Frame>(std::llround(cue_seconds * kSampleRate));
+    session.songs[0].markers.push_back(cue);
+    return session;
+}
+
+TEST_CASE("a loose dynamic cue fires once as a one-shot with no count-in") {
+    auto bank = make_marked_bank();
+    add_cue_clips(*bank);
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // Only a cue at 4s, far from any section. It should speak once at 4s and not
+    // trigger any count (counts are a section-only behaviour).
+    Session session = make_song_no_markers();
+    Marker cue;
+    cue.id = "cue1";
+    cue.name = "Build";
+    cue.kind = MarkerKind::Build;
+    cue.frame = static_cast<Frame>(kSampleRate) * 4;
+    session.songs[0].markers.push_back(cue);
+
+    auto ch = render_all(r, session, kSampleRate * 6);
+    auto diag = r.diagnostics();
+    CHECK(onsets(ch[2]) == 1);          // exactly one spoken clip
+    CHECK(diag.counts_fired == 0);      // no count-in for a cue
+    CHECK(diag.announcements_fired == 1);
+}
+
+TEST_CASE("a cue kind with no recording in this bank stays silent") {
+    // No cue clips loaded (English-only cue absent in this language, say).
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());   // sections+counts only, no cues
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    Session session = make_song_no_markers();
+    Marker cue;
+    cue.id = "cue1";
+    cue.kind = MarkerKind::WorshipFreely;
+    cue.frame = static_cast<Frame>(kSampleRate) * 4;
+    session.songs[0].markers.push_back(cue);
+    auto ch = render_all(r, session, kSampleRate * 6);
+    CHECK(peak(ch[2]) == doctest::Approx(0.0f));
+    CHECK(r.diagnostics().announcements_fired == 0);
+}
+
+TEST_CASE("a cue in a section's lead window is chained before the intact count") {
+    auto bank = make_marked_bank();
+    add_cue_clips(*bank);
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // Section (Chorus) at 4s; cue (Build) at the same downbeat (4s). 120 BPM 4/4:
+    // count bar [2s,4s). The cue is chained into the lead-in, so the count must
+    // STILL be a full "1,2,3,4" landing on the 4s downbeat — unchanged by the cue.
+    auto session =
+        make_session_section_and_cue(MarkerKind::Chorus, 4.0, MarkerKind::Build, 4.0);
+    auto ch = render_all(r, session, kSampleRate * 6);
+    auto diag = r.diagnostics();
+    CHECK(diag.counts_fired == 4);                 // count unchanged by the cue
+    // Section name + chained cue both spoke (2 announcements). The cue must NOT
+    // also fire as a loose one-shot (that would be a 3rd).
+    CHECK(diag.announcements_fired == 2);
+    // Cue audio (0.30) is present somewhere before the count bar.
+    bool cue_audio = false;
+    for (int i = 0; i < static_cast<int>(kSampleRate * 2.0); ++i)
+        if (std::abs(ch[2][static_cast<std::size_t>(i)]) > 0.25f
+            && std::abs(ch[2][static_cast<std::size_t>(i)]) < 0.35f)
+            cue_audio = true;
+    CHECK(cue_audio);
+}
+
+TEST_CASE("the chained cue does not displace the count off the downbeat") {
+    auto bank = make_marked_bank();
+    add_cue_clips(*bank);
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, false}); // section+cue only, no count noise
+    auto session =
+        make_session_section_and_cue(MarkerKind::Verse, 4.0, MarkerKind::AllIn, 4.0);
+    auto ch = render_all(r, session, kSampleRate * 6);
+    // Both the section (amplitude ~0.50) and the cue (~0.30) speak. They play
+    // back-to-back (Playback-style, no gap), so rather than counting onsets we
+    // assert both distinct amplitudes appear in the output, and that all audio
+    // lands before the 4s downbeat (count-in off → nothing after it).
+    bool saw_section = false;
+    bool saw_cue = false;
+    int last_audible = -1;
+    for (int i = 0; i < static_cast<int>(ch[2].size()); ++i) {
+        const float a = std::abs(ch[2][static_cast<std::size_t>(i)]);
+        if (a > 0.02f) last_audible = i;
+        if (a > 0.40f) saw_section = true;            // 0.50 * 0.9 ≈ 0.45
+        if (a > 0.20f && a < 0.35f) saw_cue = true;   // 0.30 * 0.9 ≈ 0.27
+    }
+    CHECK(saw_section);
+    CHECK(saw_cue);
+    CHECK(last_audible <= static_cast<int>(kSampleRate * 4.0));
+}

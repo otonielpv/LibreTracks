@@ -28,7 +28,31 @@ MarkerKind marker_kind_from_string(const std::string& token) noexcept {
     if (token == "exhortation") return MarkerKind::Exhortation;
     if (token == "rap") return MarkerKind::Rap;
     if (token == "turnaround") return MarkerKind::Turnaround;
+    if (token == "ad_lib") return MarkerKind::AdLib;
+    if (token == "all_in") return MarkerKind::AllIn;
+    if (token == "bass") return MarkerKind::Bass;
+    if (token == "big_ending") return MarkerKind::BigEnding;
+    if (token == "break") return MarkerKind::Break;
+    if (token == "build") return MarkerKind::Build;
+    if (token == "drums_in") return MarkerKind::DrumsIn;
+    if (token == "drums") return MarkerKind::Drums;
+    if (token == "guitar") return MarkerKind::Guitar;
+    if (token == "hits") return MarkerKind::Hits;
+    if (token == "hold") return MarkerKind::Hold;
+    if (token == "key_change_down") return MarkerKind::KeyChangeDown;
+    if (token == "key_change_up") return MarkerKind::KeyChangeUp;
+    if (token == "keys") return MarkerKind::Keys;
+    if (token == "last_time") return MarkerKind::LastTime;
+    if (token == "slowly_build") return MarkerKind::SlowlyBuild;
+    if (token == "softly") return MarkerKind::Softly;
+    if (token == "swell") return MarkerKind::Swell;
+    if (token == "worship_freely") return MarkerKind::WorshipFreely;
     return MarkerKind::Custom;
+}
+
+bool marker_kind_is_cue(MarkerKind kind) noexcept {
+    return static_cast<int>(kind) >= static_cast<int>(MarkerKind::AdLib)
+        && static_cast<int>(kind) <= static_cast<int>(MarkerKind::WorshipFreely);
 }
 
 // ---------------------------------------------------------------------------
