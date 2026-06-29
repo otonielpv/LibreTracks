@@ -284,6 +284,9 @@ type TimelineCanvasPaneProps = {
   onPreviewPositionChange: (positionSeconds: number) => void;
   onSeekIntent: (positionSeconds: number) => void;
   onPlayheadSeekCommit: (positionSeconds: number) => void;
+  /** Pan the camera by `deltaPx` when the playhead is dragged to the viewport
+   * edge; returns the clamped camera offset. */
+  onPlayheadEdgeAutoScroll: (deltaPx: number) => number;
   onTrackListContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onTrackLaneMouseDown: (
     event: ReactMouseEvent<HTMLDivElement>,
@@ -380,6 +383,7 @@ export function TimelineCanvasPane({
   onPreviewPositionChange,
   onSeekIntent,
   onPlayheadSeekCommit,
+  onPlayheadEdgeAutoScroll,
   onTrackListContextMenu,
   onTrackLaneMouseDown,
   onTimelineBackgroundMouseDown,
@@ -1275,6 +1279,7 @@ export function TimelineCanvasPane({
             onPreviewPositionChange={onPreviewPositionChange}
             onSeekIntent={onSeekIntent}
             onSeekCommit={onPlayheadSeekCommit}
+            onEdgeAutoScroll={onPlayheadEdgeAutoScroll}
           />
         </div>
       </div>

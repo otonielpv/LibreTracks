@@ -44,7 +44,35 @@ type PlayheadOverlayProps = {
   onSeekCommit?: (positionSeconds: number) => void | Promise<void>;
   positionBoundsRef?: MutableRefObject<HTMLDivElement | null>;
   scrollContainerRef?: MutableRefObject<HTMLDivElement | null>;
+  /**
+   * Scroll the timeline camera by `deltaPx` while the playhead is dragged into
+   * the viewport edge. Wiring this enables edge auto-scroll: dragging the
+   * playhead to the left/right border pans the timeline in that direction so
+   * the user can seek past the visible range without releasing. The callback
+   * returns the actual camera offset after clamping so the overlay knows when
+   * scrolling has bottomed out at the content bounds.
+   */
+  onEdgeAutoScroll?: (deltaPx: number) => number;
 };
+
+/** Distance from the viewport edge (px) at which playhead auto-scroll kicks in. */
+const PLAYHEAD_EDGE_BUFFER_PX = 48;
+/** Peak auto-scroll speed (px per frame) at the very edge of the viewport. */
+const PLAYHEAD_MAX_SCROLL_SPEED_PX = 24;
+
+/**
+ * Eased scroll speed for a pointer `distancePx` from the edge: zero outside the
+ * buffer, ramping up quadratically as the pointer nears the border.
+ */
+function resolvePlayheadAutoScrollSpeed(distancePx: number) {
+  if (distancePx >= PLAYHEAD_EDGE_BUFFER_PX) {
+    return 0;
+  }
+  const intensity =
+    (PLAYHEAD_EDGE_BUFFER_PX - Math.max(0, distancePx)) /
+    PLAYHEAD_EDGE_BUFFER_PX;
+  return Math.max(1, intensity * intensity * PLAYHEAD_MAX_SCROLL_SPEED_PX);
+}
 
 type PlaybackSnapshotState = {
   playbackState: TransportSnapshot["playbackState"] | "empty";
@@ -113,6 +141,7 @@ export function PlayheadOverlay({
   onSeekCommit,
   positionBoundsRef,
   scrollContainerRef,
+  onEdgeAutoScroll,
 }: PlayheadOverlayProps) {
   useRenderCounter("PlayheadOverlay");
   const playheadRef = useRef<HTMLDivElement | null>(null);
@@ -136,6 +165,7 @@ export function PlayheadOverlay({
     onSeekCommit,
     positionBoundsRef,
     scrollContainerRef,
+    onEdgeAutoScroll,
   });
   const dragCleanupRef = useRef<(() => void) | null>(null);
 
@@ -151,6 +181,7 @@ export function PlayheadOverlay({
     onSeekCommit,
     positionBoundsRef,
     scrollContainerRef,
+    onEdgeAutoScroll,
   };
 
   useEffect(() => {
@@ -282,44 +313,22 @@ export function PlayheadOverlay({
     event.preventDefault();
     event.stopPropagation();
 
-    const rawStartSeconds = clamp(
-      clientXToTimelineSecondsFromCamera(
-        event.clientX,
-        boundsElement,
-        latestPropsRef.current.cameraXRef?.current ??
-          latestPropsRef.current.scrollContainerRef?.current?.scrollLeft ??
-          0,
-        latestPropsRef.current.livePixelsPerSecondRef?.current ??
-          latestPropsRef.current.pixelsPerSecond,
-      ),
-      0,
-      Math.max(0, latestPropsRef.current.durationSeconds),
-    );
-    // Alt held while dragging suppresses snap-to-grid for the playhead,
-    // matching the convention used by clip-drag and region-resize.
-    const startAllowSnap = !event.altKey;
-    const startSeconds = latestPropsRef.current.normalizePositionSeconds
-      ? latestPropsRef.current.normalizePositionSeconds(rawStartSeconds, {
-          allowSnap: startAllowSnap,
-        })
-      : rawStartSeconds;
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      currentSeconds: startSeconds,
-    };
-    playheadRef.current?.classList.add("is-dragging");
-    onPreviewPositionChange?.(startSeconds);
-    latestPropsRef.current.onSeekIntent?.(startSeconds);
+    // Latest pointer state, shared between the move handler and the
+    // edge-autoscroll rAF loop (which re-evaluates the seek as the camera pans
+    // even when the pointer is held still at the edge).
+    let latestClientX = event.clientX;
+    let latestAltKey = event.altKey;
+    let autoScrollFrameId: number | null = null;
 
-    const onPointerMove = (pointerEvent: PointerEvent) => {
+    // Resolve the current pointer X to a normalized timeline position and push
+    // it to the drag state + preview/intent callbacks. Reads the live cameraX
+    // each call so it stays correct while the timeline auto-scrolls.
+    const applySeekAtClientX = () => {
       const activeDrag = dragStateRef.current;
-      if (!activeDrag || pointerEvent.pointerId !== activeDrag.pointerId) {
-        return;
-      }
-
-      const nextSeconds = clamp(
+      if (!activeDrag) return;
+      const rawSeconds = clamp(
         clientXToTimelineSecondsFromCamera(
-          pointerEvent.clientX,
+          latestClientX,
           boundsElement,
           latestPropsRef.current.cameraXRef?.current ??
             latestPropsRef.current.scrollContainerRef?.current?.scrollLeft ??
@@ -330,21 +339,93 @@ export function PlayheadOverlay({
         0,
         Math.max(0, latestPropsRef.current.durationSeconds),
       );
-      // Re-evaluate Alt on every move so the user can hold/release it
-      // mid-drag to toggle snap behaviour live.
-      const moveAllowSnap = !pointerEvent.altKey;
+      // Alt held while dragging suppresses snap-to-grid for the playhead,
+      // matching the convention used by clip-drag and region-resize.
       const normalizedSeconds = latestPropsRef.current.normalizePositionSeconds
-        ? latestPropsRef.current.normalizePositionSeconds(nextSeconds, {
-            allowSnap: moveAllowSnap,
+        ? latestPropsRef.current.normalizePositionSeconds(rawSeconds, {
+            allowSnap: !latestAltKey,
           })
-        : nextSeconds;
-
+        : rawSeconds;
       dragStateRef.current = {
         ...activeDrag,
         currentSeconds: normalizedSeconds,
       };
       onPreviewPositionChange?.(normalizedSeconds);
       latestPropsRef.current.onSeekIntent?.(normalizedSeconds);
+    };
+
+    const stopAutoScroll = () => {
+      if (autoScrollFrameId !== null) {
+        window.cancelAnimationFrame(autoScrollFrameId);
+        autoScrollFrameId = null;
+      }
+    };
+
+    // Pan the timeline while the pointer sits near a viewport edge, then
+    // re-seek so the playhead keeps following the (now off-screen) cursor.
+    const tickAutoScroll = () => {
+      const edgeScroll = latestPropsRef.current.onEdgeAutoScroll;
+      const bounds = boundsElement.getBoundingClientRect();
+      const distanceToLeft = latestClientX - bounds.left;
+      const distanceToRight = bounds.right - latestClientX;
+      let velocity = 0;
+      if (distanceToLeft < PLAYHEAD_EDGE_BUFFER_PX) {
+        velocity = -resolvePlayheadAutoScrollSpeed(distanceToLeft);
+      } else if (distanceToRight < PLAYHEAD_EDGE_BUFFER_PX) {
+        velocity = resolvePlayheadAutoScrollSpeed(distanceToRight);
+      }
+
+      if (!velocity || !edgeScroll) {
+        autoScrollFrameId = null;
+        return;
+      }
+
+      // edgeScroll clamps to the content bounds and returns the camera offset
+      // it actually landed on; an unchanged offset means we've hit the end and
+      // there's nothing left to scroll, so stop spinning the loop.
+      const beforeX = latestPropsRef.current.cameraXRef?.current ?? 0;
+      const afterX = edgeScroll(velocity);
+      applySeekAtClientX();
+      if (Math.abs(afterX - beforeX) < 0.5) {
+        autoScrollFrameId = null;
+        return;
+      }
+      autoScrollFrameId = window.requestAnimationFrame(tickAutoScroll);
+    };
+
+    const maybeStartAutoScroll = () => {
+      if (!latestPropsRef.current.onEdgeAutoScroll) return;
+      const bounds = boundsElement.getBoundingClientRect();
+      const nearEdge =
+        latestClientX - bounds.left < PLAYHEAD_EDGE_BUFFER_PX ||
+        bounds.right - latestClientX < PLAYHEAD_EDGE_BUFFER_PX;
+      if (nearEdge) {
+        if (autoScrollFrameId === null) {
+          autoScrollFrameId = window.requestAnimationFrame(tickAutoScroll);
+        }
+      } else {
+        stopAutoScroll();
+      }
+    };
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      currentSeconds: 0,
+    };
+    playheadRef.current?.classList.add("is-dragging");
+    applySeekAtClientX();
+
+    const onPointerMove = (pointerEvent: PointerEvent) => {
+      const activeDrag = dragStateRef.current;
+      if (!activeDrag || pointerEvent.pointerId !== activeDrag.pointerId) {
+        return;
+      }
+      latestClientX = pointerEvent.clientX;
+      // Re-evaluate Alt on every move so the user can hold/release it
+      // mid-drag to toggle snap behaviour live.
+      latestAltKey = pointerEvent.altKey;
+      applySeekAtClientX();
+      maybeStartAutoScroll();
     };
 
     const finishDrag = (pointerEvent: PointerEvent) => {
@@ -362,6 +443,7 @@ export function PlayheadOverlay({
     };
 
     const cleanup = () => {
+      stopAutoScroll();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", finishDrag);
       window.removeEventListener("pointercancel", finishDrag);

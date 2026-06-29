@@ -270,7 +270,7 @@ const es = {
       addFolderTrack: "Add folder track",
       splitClipAtCursor: "Cortar en cursor",
       duplicateClip: "Duplicar",
-      jumpToMarker: "Jump to this marker",
+      jumpToMarker: "Saltar a esta marca",
       markerKind: "Tipo de marca...",
       markerKindSectionsGroup: "Secciones",
       markerKindCuesGroup: "Avisos",

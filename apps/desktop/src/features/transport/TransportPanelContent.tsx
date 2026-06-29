@@ -152,6 +152,7 @@ import {
   markerKindVariants,
 } from "./markerKinds";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
+import { HorizontalScrollbar } from "./HorizontalScrollbar";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./CompactView";
 import { TimelineToolbar } from "./TimelineToolbar";
@@ -5010,14 +5011,8 @@ export function TransportPanelContent() {
     if (shell && Math.abs(shell.scrollLeft - clampedCameraX) > 0.5) {
       shell.scrollLeft = clampedCameraX;
     }
-
-    const horizontalScrollbar = horizontalScrollbarRef.current;
-    if (
-      horizontalScrollbar &&
-      Math.abs(horizontalScrollbar.scrollLeft - clampedCameraX) > 0.5
-    ) {
-      horizontalScrollbar.scrollLeft = clampedCameraX;
-    }
+    // The custom horizontal scrollbar reads cameraXRef directly each frame, so
+    // it needs no imperative scrollLeft sync here.
 
     if (options?.syncPlayhead !== false) {
       syncLivePosition(
@@ -10621,6 +10616,12 @@ export function TransportPanelContent() {
                               await performSeek(positionSeconds);
                             });
                           }}
+                          onPlayheadEdgeAutoScroll={(deltaPx) => {
+                            updateCameraX(cameraXRef.current + deltaPx, {
+                              commitToStore: false,
+                            });
+                            return cameraXRef.current;
+                          }}
                           onTrackListContextMenu={handleTrackListContextMenu}
                           onTrackLaneMouseDown={handleTrackLaneMouseDown}
                           onTimelineBackgroundMouseDown={(event) => {
@@ -10650,24 +10651,16 @@ export function TransportPanelContent() {
                     >
                       <div className="lt-horizontal-scrollbar-spacer" />
                       <div className="lt-horizontal-scrollbar">
-                        <div
-                          ref={horizontalScrollbarRef}
-                          className="lt-horizontal-scrollbar-rail"
-                          aria-label={t("transport.shell.horizontalScroll")}
-                          onScroll={(event) => {
-                            const scrollLeft = event.currentTarget.scrollLeft;
-                            updateCameraX(scrollLeft, {
+                        <HorizontalScrollbar
+                          ariaLabel={t("transport.shell.horizontalScroll")}
+                          cameraXRef={cameraXRef}
+                          maxCameraX={maxTimelineCameraX}
+                          onScrollTo={(nextCameraX) => {
+                            updateCameraX(nextCameraX, {
                               commitToStore: false,
                             });
                           }}
-                        >
-                          <div
-                            className="lt-horizontal-scrollbar-content"
-                            style={{
-                              width: laneViewportWidth + maxTimelineCameraX,
-                            }}
-                          />
-                        </div>
+                        />
                       </div>
                     </div>
                   </div>
