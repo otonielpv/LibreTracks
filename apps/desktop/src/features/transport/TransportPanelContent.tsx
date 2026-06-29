@@ -113,6 +113,7 @@ import {
   splitClip,
   splitClips,
   setSectionMarkerKind,
+  setSectionMarkerColor,
   stopTransport,
   updateClipColor,
   updateAudioSettings,
@@ -144,6 +145,7 @@ import { getSystemLanguage } from "../../shared/i18n";
 import {
   MARKER_KINDS as SECTION_KINDS,
   CUE_KINDS,
+  markerColor,
   markerKindCategory,
   markerKindColor,
   markerKindLabel,
@@ -5653,6 +5655,7 @@ export function TransportPanelContent() {
     }
 
     const nextMarker = [...currentSong.sectionMarkers]
+      .filter((marker) => markerKindCategory(marker.kind) === "section")
       .sort((left, right) => left.startSeconds - right.startSeconds)
       .find((marker) => marker.startSeconds > positionSeconds + 0.01);
     if (nextMarker) {
@@ -5664,7 +5667,9 @@ export function TransportPanelContent() {
       return { kind: "region", regionId: firstRegion.id };
     }
 
-    const firstMarker = currentSong.sectionMarkers[0];
+    const firstMarker = currentSong.sectionMarkers.find(
+      (marker) => markerKindCategory(marker.kind) === "section",
+    );
     if (firstMarker) {
       return { kind: "marker", markerId: firstMarker.id };
     }
@@ -5854,36 +5859,38 @@ export function TransportPanelContent() {
     positionSeconds: number,
     timelineRange: TimelineRangeSelection | null,
   ): ContextMenuAction[] {
+    const createMarkerAction: ContextMenuAction = timelineRange
+      ? {
+          label: t("transport.menu.createSongRegionFromSelection"),
+          onSelect: async () => {
+            await runAction(async () => {
+              const nextSnapshot = await createSongRegion(
+                timelineRange.startSeconds,
+                timelineRange.endSeconds,
+              );
+              applyPlaybackSnapshot(nextSnapshot);
+              clearSelection();
+              setSelectedRegionId(null);
+              setSelectedTimelineRange(null);
+              setStatus(
+                t("transport.status.songCreatedInRange", {
+                  start: formatClock(timelineRange.startSeconds),
+                  end: formatClock(timelineRange.endSeconds),
+                }),
+              );
+            });
+          },
+        }
+      : {
+          // Creating a marker opens a Section / Cue / Custom chooser so the
+          // marker is born already typed and named — a cue lands in the cue
+          // lane instead of stacking on a section at the same position.
+          label: t("transport.menu.createMarker"),
+          onSelect: () => openCreateMarkerKindMenu(positionSeconds),
+        };
+
     return [
-      {
-        label: timelineRange
-          ? t("transport.menu.createSongRegionFromSelection")
-          : t("transport.menu.createMarker"),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = timelineRange
-              ? await createSongRegion(
-                  timelineRange.startSeconds,
-                  timelineRange.endSeconds,
-                )
-              : await createSectionMarker(positionSeconds);
-            applyPlaybackSnapshot(nextSnapshot);
-            clearSelection();
-            setSelectedRegionId(null);
-            setSelectedTimelineRange(null);
-            setStatus(
-              timelineRange
-                ? t("transport.status.songCreatedInRange", {
-                    start: formatClock(timelineRange.startSeconds),
-                    end: formatClock(timelineRange.endSeconds),
-                  })
-                : t("transport.status.markerCreatedAt", {
-                    time: formatClock(positionSeconds),
-                  }),
-            );
-          });
-        },
-      },
+      createMarkerAction,
       {
         label: t("transport.menu.changeTimelineBpm"),
         disabled: !song,
@@ -6360,6 +6367,123 @@ export function TransportPanelContent() {
     const next = { x: position.x + 12, y: position.y + 12 };
     contextMenuPositionRef.current = next;
     return next;
+  }
+
+  // Create a new marker already typed and named after its kind. A null kind
+  // creates an untyped (Custom) marker with the backend's generic name.
+  function createTypedMarker(
+    positionSeconds: number,
+    kind: MarkerKind | null,
+    variant: number | null,
+  ) {
+    void runAction(async () => {
+      const name =
+        kind && kind !== "custom"
+          ? variant
+            ? `${markerKindLabel(kind, t)} ${variant}`
+            : markerKindLabel(kind, t)
+          : undefined;
+      const nextSnapshot = await createSectionMarker(positionSeconds, {
+        kind: kind ?? undefined,
+        variant,
+        name,
+      });
+      applyPlaybackSnapshot(nextSnapshot);
+      clearSelection();
+      setSelectedRegionId(null);
+      setSelectedTimelineRange(null);
+      setStatus(
+        t("transport.status.markerCreatedAt", {
+          time: formatClock(positionSeconds),
+        }),
+      );
+    });
+  }
+
+  // Variant chooser used when creating a numbered section (Verse 1-6, ...).
+  function openCreateMarkerVariantMenu(
+    positionSeconds: number,
+    kind: MarkerKind,
+  ) {
+    const variants = markerKindVariants(kind);
+    const next = bumpContextMenuPosition();
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: markerKindLabel(kind, t),
+      actions: [
+        {
+          label: markerKindLabel(kind, t),
+          swatch: markerKindColor(kind),
+          onSelect: () => createTypedMarker(positionSeconds, kind, null),
+        },
+        ...variants.map((n) => ({
+          label: `${markerKindLabel(kind, t)} ${n}`,
+          swatch: markerKindColor(kind),
+          onSelect: () => createTypedMarker(positionSeconds, kind, n),
+        })),
+      ],
+    });
+  }
+
+  // Submenu listing section or cue kinds to create a new marker of that type.
+  function openCreateMarkerKindList(
+    positionSeconds: number,
+    kinds: readonly MarkerKind[],
+    title: string,
+  ) {
+    const next = bumpContextMenuPosition();
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title,
+      actions: kinds.map((kind) => {
+        const hasVariants = markerKindVariants(kind).length > 0;
+        return {
+          label: `${markerKindLabel(kind, t)}${hasVariants ? " ▸" : ""}`,
+          swatch: markerKindColor(kind),
+          onSelect: () =>
+            hasVariants
+              ? openCreateMarkerVariantMenu(positionSeconds, kind)
+              : createTypedMarker(positionSeconds, kind, null),
+        };
+      }),
+    });
+  }
+
+  // Top-level chooser shown when creating a marker: Section / Cue / Custom.
+  function openCreateMarkerKindMenu(positionSeconds: number) {
+    const next = bumpContextMenuPosition();
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: t("transport.menu.createMarker"),
+      actions: [
+        {
+          label: `${t("transport.menu.markerKindSectionsGroup")} ▸`,
+          onSelect: () =>
+            openCreateMarkerKindList(
+              positionSeconds,
+              SECTION_KINDS.filter((kind) => kind !== "custom"),
+              t("transport.menu.markerKindSectionsGroup"),
+            ),
+        },
+        {
+          label: `${t("transport.menu.markerKindCuesGroup")} ▸`,
+          onSelect: () =>
+            openCreateMarkerKindList(
+              positionSeconds,
+              CUE_KINDS,
+              t("transport.menu.markerKindCuesGroup"),
+            ),
+        },
+        {
+          label: markerKindLabel("custom", t),
+          swatch: markerKindColor("custom"),
+          onSelect: () => createTypedMarker(positionSeconds, null, null),
+        },
+      ],
+    });
   }
 
   // Variant chooser for kinds that ship numbered recordings (Verse 1-6, ...).
@@ -7393,10 +7517,35 @@ export function TransportPanelContent() {
       },
       {
         label: t("transport.menu.markerKind"),
-        swatch: markerKindColor(section.kind),
+        swatch: markerColor(section),
         disabled: !canEditMarker,
         onSelect: () => openMarkerKindMenu(section),
       },
+      // Colour is only user-editable for Custom markers — typed sections/cues
+      // take their colour from the kind palette.
+      ...(markerKindCategory(section.kind) === "section" &&
+      (section.kind ?? "custom") === "custom"
+        ? [
+            {
+              label: t("transport.menu.markerColor"),
+              swatch: markerColor(section),
+              disabled: !canEditMarker,
+              onSelect: () =>
+                openColorMenu(
+                  t("transport.menu.markerColor"),
+                  section.color,
+                  (color) =>
+                    runAction(async () => {
+                      const nextSnapshot = await setSectionMarkerColor(
+                        section.id,
+                        color,
+                      );
+                      applyPlaybackSnapshot(nextSnapshot);
+                    }),
+                ),
+            },
+          ]
+        : []),
       {
         label: t("common.delete"),
         disabled: !canEditMarker,

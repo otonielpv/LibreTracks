@@ -306,6 +306,11 @@ pub struct Marker {
     /// present, falling back to the base `<kind>.wav`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant: Option<u8>,
+    /// Optional user-chosen colour (CSS string) overriding the kind's default
+    /// colour. Mainly for Custom markers, which have no semantic kind colour, but
+    /// allowed on any marker. `None` falls back to the kind palette.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -479,6 +484,7 @@ mod tests {
             digit,
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         }
     }
 
@@ -614,6 +620,7 @@ mod tests {
             digit: Some(3),
             kind: MarkerKind::Chorus,
             variant: None,
+            color: None,
         };
         let json = serde_json::to_string(&marker).expect("serialize");
         // Enum serializes snake_case to match the camelCase session schema style.
@@ -631,8 +638,10 @@ mod tests {
             digit: None,
             kind: MarkerKind::PreChorus,
             variant: None,
+            color: None,
         };
         let json = serde_json::to_string(&marker).expect("serialize");
         assert!(json.contains("\"kind\":\"pre_chorus\""), "got: {json}");
     }
 }
+

@@ -419,6 +419,25 @@ button {
   white-space: nowrap;
   font-size: 0.66rem;
   pointer-events: none;
+  /* The marker colour shows clearly: dark translucent layer over the solid
+     marker colour (no color-mix), plus a matching border and a leading dot. */
+  background:
+    linear-gradient(180deg, rgb(18 18 18 / 0.7), rgb(12 12 12 / 0.78)),
+    var(--marker-color, #bacac5);
+  border: 1.5px solid var(--marker-color, #bacac5);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.timeline-marker-mini::before {
+  content: "";
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.3rem;
+  border-radius: 999px;
+  background: var(--marker-color, #bacac5);
+  vertical-align: middle;
 }
 
 .timeline-header-row {
@@ -969,15 +988,24 @@ button {
   flex-direction: column;
   gap: 0.12rem;
   min-height: 3.45rem;
-  border-radius: 5px;
-  background: linear-gradient(180deg, rgb(42 42 42 / 0.92), rgb(24 24 24 / 0.96));
+  border-radius: 6px;
   color: var(--text);
-  padding: 0.52rem 0.58rem;
+  padding: 0.52rem 0.58rem 0.52rem 0.78rem;
   text-align: left;
+  /* The marker colour shows through prominently: a translucent dark gradient is
+     layered OVER the solid marker colour, so the card reads tinted toward the
+     colour without needing color-mix (old-browser safe). A thick left bar makes
+     it unmistakable even at a glance. */
+  background:
+    linear-gradient(180deg, rgb(20 20 20 / 0.78), rgb(14 14 14 / 0.86)),
+    var(--marker-color, #bacac5);
+  border-left: 6px solid var(--marker-color, #bacac5);
 }
 
 .marker-card strong {
   font-size: 0.78rem;
+  /* Title takes the marker colour so it pops; brightened by a text-shadow base. */
+  color: var(--marker-color, var(--text));
 }
 
 .marker-card span,

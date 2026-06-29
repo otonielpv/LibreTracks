@@ -5,7 +5,7 @@ import type {
   TempoMarkerSummary,
 } from "../desktopApi";
 import type { TimelineGrid } from "../timelineMath";
-import { markerKindColor } from "../markerKinds";
+import { markerColor, markerKindCategory } from "../markerKinds";
 import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
 
 /** Convert a `#rrggbb` colour to an `rgba(...)` string at the given alpha. Used
@@ -22,6 +22,15 @@ const MIN_LABEL_WIDTH_PX = 112;
 
 export const LANE_REGIONS = {
   top: 0,
+  height: 22,
+} as const;
+
+// Dynamic-cue markers (Build, All In, ...) get their own lane just above the
+// section lane, in the previously-empty 22-48px gap. This keeps a cue and a
+// section that share a timeline position vertically separated so both stay
+// visible and clickable instead of stacking on the same pixel.
+export const LANE_CUES = {
+  top: 24,
   height: 22,
 } as const;
 
@@ -377,12 +386,15 @@ export function drawRulerMarker(
   );
   const labelHeight = 16;
   const snappedX = Math.round(x) + 0.5;
-  const stemTop = LANE_SECTIONS.top + 2;
-  const stemBottom = LANE_SECTIONS.top + LANE_SECTIONS.height - 2;
+  // Cues draw in their own lane above the section lane; sections keep theirs.
+  const lane =
+    markerKindCategory(marker.kind) === "cue" ? LANE_CUES : LANE_SECTIONS;
+  const stemTop = lane.top + 2;
+  const stemBottom = lane.top + lane.height - 2;
   const alignRight = snappedX > width - labelWidth - 12;
   const flagLeft = alignRight ? snappedX - labelWidth - 2 : snappedX + 2;
   const flagRight = flagLeft + labelWidth;
-  const flagTop = LANE_SECTIONS.top + 1;
+  const flagTop = lane.top + 1;
   const flagBottom = flagTop + labelHeight;
 
   if (flagRight < -20 || flagLeft > width + 20) {
@@ -391,7 +403,7 @@ export function drawRulerMarker(
 
   // Armed/selected/current keep their meaningful live-playback colours; only the
   // resting state takes on the marker kind's colour so sections read distinctly.
-  const kindColor = markerKindColor(marker.kind);
+  const kindColor = markerColor(marker);
   const strokeStyle = options.isArmed
     ? `rgba(87, 241, 219, ${options.pulseAlpha})`
     : options.isSelected

@@ -299,7 +299,14 @@ fn dispatch_midi_action(
             .song()
             .cloned()
             .ok_or_else(|| "no song loaded".to_string())?;
-        let mut markers = song.section_markers.iter().collect::<Vec<_>>();
+        // jump_marker_N targets only song sections — dynamic cues (Build, All
+        // In, ...) are not navigation targets. Filter them out before indexing
+        // so the index matches the section-only list the UI exposes.
+        let mut markers = song
+            .section_markers
+            .iter()
+            .filter(|marker| marker.kind.category() == libretracks_core::MarkerCategory::Section)
+            .collect::<Vec<_>>();
         markers.sort_by(|left, right| {
             left.start_seconds
                 .partial_cmp(&right.start_seconds)
@@ -609,7 +616,7 @@ fn dispatch_midi_action(
                 .map_err(|error| error.to_string())?;
             let position_seconds = snapshot.position_seconds;
             let snapshot = session
-                .create_section_marker(position_seconds, &state.audio)
+                .create_section_marker(position_seconds, None, None, None, &state.audio)
                 .map_err(|error| error.to_string())?;
             emit_transport_lifecycle_event(app, "sync", &snapshot);
             snapshot

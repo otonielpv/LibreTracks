@@ -258,6 +258,7 @@ const en = {
       markerKind: "Marker type...",
       markerKindSectionsGroup: "Sections",
       markerKindCuesGroup: "Cues",
+      markerColor: "Color...",
     },
     markerKind: {
       intro: "Intro",

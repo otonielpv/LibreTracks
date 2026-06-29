@@ -3,9 +3,9 @@ pub mod validation;
 pub mod warp;
 
 pub use model::{
-    default_audio_to, parse_audio_output_route, Clip, Marker, MarkerKind, Project, Song,
-    SongMaster, SongRegion, TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker, Track,
-    TrackKind,
+    default_audio_to, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, Project,
+    Song, SongMaster, SongRegion, TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker,
+    Track, TrackKind,
 };
 pub use validation::{
     validate_song, DomainError, MAX_TRANSPOSE_SEMITONES, MAX_WARP_SOURCE_BPM,
@@ -94,6 +94,7 @@ mod tests {
                 digit: Some(1),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             }],
         }
     }
@@ -362,6 +363,7 @@ mod tests {
             digit: Some(1),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
 
         let error = validate_song(&song).expect_err("song should be invalid");
@@ -378,6 +380,7 @@ mod tests {
             digit: Some(2),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
 
         assert!(validate_song(&song).is_ok());
@@ -394,6 +397,7 @@ mod tests {
                 digit: Some(2),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
             Marker {
                 id: "section_outro".into(),
@@ -402,6 +406,7 @@ mod tests {
                 digit: Some(3),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
         ];
 
@@ -425,6 +430,7 @@ mod tests {
                 digit: Some(2),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
             Marker {
                 id: "section_outro".into(),
@@ -433,6 +439,7 @@ mod tests {
                 digit: Some(3),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
         ];
 
@@ -454,6 +461,7 @@ mod tests {
             digit: Some(2),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
 
         assert_eq!(song.next_marker_name(), "Marker 2");

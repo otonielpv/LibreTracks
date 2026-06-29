@@ -259,6 +259,9 @@ pub fn redo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, 
 #[tauri::command]
 pub fn create_section_marker(
     start_seconds: f64,
+    kind: Option<MarkerKind>,
+    variant: Option<u8>,
+    name: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -267,7 +270,7 @@ pub fn create_section_marker(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .create_section_marker(start_seconds, &state.audio)
+        .create_section_marker(start_seconds, kind, variant, name, &state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -589,6 +592,22 @@ pub fn set_section_marker_kind(
 
     session
         .set_section_marker_kind(&section_id, kind, variant, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_section_marker_color(
+    section_id: String,
+    color: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_section_marker_color(&section_id, color, &state.audio)
         .map_err(|error| error.to_string())
 }
 

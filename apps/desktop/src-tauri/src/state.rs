@@ -3196,6 +3196,9 @@ impl DesktopSession {
     pub fn create_section_marker(
         &mut self,
         start_seconds: f64,
+        kind: Option<MarkerKind>,
+        variant: Option<u8>,
+        name: Option<String>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -3209,15 +3212,22 @@ impl DesktopSession {
         // will land at the wrong stored offset inside or after a
         // stretched region.
         let start_seconds = source_seconds_at_view(&song, start_seconds).max(0.0);
-        let marker_name = song.next_marker_name();
+        // The caller may create the marker already typed (Section or Cue) and
+        // named — the frontend supplies the localized name. Otherwise it falls
+        // back to an untyped Custom marker with a generic generated name.
+        let kind = kind.unwrap_or(MarkerKind::Custom);
+        let marker_name = name
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| song.next_marker_name());
         song.section_markers.push(Marker {
             id: format!("section_{}", timestamp_suffix()),
             name: marker_name,
             start_seconds,
             digit: None,
-            // New markers start untyped; the user picks a kind in the editor.
-            kind: MarkerKind::Custom,
-            variant: None,
+            kind,
+            variant,
+            color: None,
         });
         song.section_markers.sort_by(|left, right| {
             left.start_seconds
@@ -4138,6 +4148,37 @@ impl DesktopSession {
         // Section markers ARE read by the engine voice guide (kind+variant pick
         // the announcement clip), so push them live as well as persisting.
         audio.update_live_section_markers(&song)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    /// Set (or clear, with `None`) a marker's colour override. Only meaningful
+    /// for Custom markers — typed sections/cues take their colour from the kind
+    /// palette — but the backend just stores whatever the caller sends. Colour
+    /// is presentation-only (the engine never reads it), so this does not touch
+    /// the live voice-guide markers.
+    pub fn set_section_marker_color(
+        &mut self,
+        section_id: &str,
+        color: Option<String>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let marker = song
+            .section_markers
+            .iter_mut()
+            .find(|section| section.id == section_id)
+            .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
+        marker.color = color
+            .map(|c| c.trim().to_string())
+            .filter(|c| !c.is_empty());
+
         self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
@@ -8822,6 +8863,7 @@ mod tests {
             digit: Some(1),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
         song
     }
@@ -8899,6 +8941,7 @@ mod tests {
             digit: Some(2),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
         song
     }
@@ -8912,6 +8955,7 @@ mod tests {
             digit: Some(3),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
         song
     }
@@ -8965,6 +9009,7 @@ mod tests {
                 digit: Some(1),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
             Marker {
                 id: "section_2".into(),
@@ -8973,6 +9018,7 @@ mod tests {
                 digit: Some(2),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
         ];
         song
@@ -9295,6 +9341,7 @@ mod tests {
             digit: Some(1),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
         let expected_execute_seconds = warp_timeline_seconds_at(&song, 18.0);
         let mut session = DesktopSession::default();
@@ -10876,7 +10923,7 @@ mod tests {
 
         let audio = crate::audio_engine::AudioController::default();
         let snapshot = session
-            .create_section_marker(2.0, &audio)
+            .create_section_marker(2.0, None, None, None, &audio)
             .expect("section marker should be created");
         let song_view = session
             .song_view()
@@ -10938,6 +10985,7 @@ mod tests {
             digit: None,
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         });
         save_song(&song_dir, &song).expect("song should save");
 
@@ -11829,7 +11877,7 @@ mod tests {
         let audio = crate::audio_engine::AudioController::default();
 
         let snapshot = session
-            .create_section_marker(24.0, &audio)
+            .create_section_marker(24.0, None, None, None, &audio)
             .expect("section marker should be created beyond song duration");
         let song_view = session
             .song_view()
@@ -11873,7 +11921,7 @@ mod tests {
         let initial_revision = session.snapshot().project_revision;
 
         let snapshot = session
-            .create_section_marker(2.5, &audio)
+            .create_section_marker(2.5, None, None, None, &audio)
             .expect("section marker should be created");
 
         let diagnostics = audio.realtime_control_diagnostics();

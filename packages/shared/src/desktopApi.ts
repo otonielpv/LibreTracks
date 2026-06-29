@@ -875,8 +875,16 @@ export async function deleteMixScene(sceneId: string): Promise<TransportSnapshot
   return invokeCommand<TransportSnapshot>("delete_mix_scene", { sceneId });
 }
 
-export async function createSectionMarker(startSeconds: number): Promise<TransportSnapshot> {
-  return invokeCommand<TransportSnapshot>("create_section_marker", { startSeconds });
+export async function createSectionMarker(
+  startSeconds: number,
+  options?: { kind?: MarkerKind; variant?: number | null; name?: string },
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("create_section_marker", {
+    startSeconds,
+    kind: options?.kind ?? null,
+    variant: options?.variant ?? null,
+    name: options?.name ?? null,
+  });
 }
 
 export async function updateSectionMarker(
@@ -911,6 +919,16 @@ export async function setSectionMarkerKind(
     sectionId,
     kind,
     variant: variant ?? null,
+  });
+}
+
+export async function setSectionMarkerColor(
+  sectionId: string,
+  color: string | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_section_marker_color", {
+    sectionId,
+    color,
   });
 }
 

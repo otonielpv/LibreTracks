@@ -33,10 +33,12 @@ import { buildSongTempoRegions } from "@libretracks/shared/models";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
+  LANE_CUES,
   LANE_REGIONS,
   LANE_SECTIONS,
   LANE_TEMPO_METRIC,
 } from "./Renderer/drawBackground";
+import { markerKindCategory } from "./markerKinds";
 import {
   BASE_PIXELS_PER_SECOND,
   getElementScaleX,
@@ -1139,7 +1141,14 @@ export function TimelineCanvasPane({
               />
             ) : null}
 
-            {song?.sectionMarkers.map((section) => (
+            {song?.sectionMarkers.map((section) => {
+              // Cue markers live in their own lane above the section lane so a
+              // cue and a section sharing a position don't stack on one pixel.
+              const lane =
+                markerKindCategory(section.kind) === "cue"
+                  ? LANE_CUES
+                  : LANE_SECTIONS;
+              return (
               <button
                 key={section.id}
                 type="button"
@@ -1148,8 +1157,8 @@ export function TimelineCanvasPane({
                 title={`Carril central: ${section.name}`}
                 style={{
                   left: section.startSeconds * pixelsPerSecond,
-                  top: LANE_SECTIONS.top,
-                  height: LANE_SECTIONS.height,
+                  top: lane.top,
+                  height: lane.height,
                 }}
                 onMouseDown={(event) => {
                   event.preventDefault();
@@ -1159,11 +1168,20 @@ export function TimelineCanvasPane({
                   event.preventDefault();
                   event.stopPropagation();
                   if (midiLearnMode !== null) {
+                    // jump_marker_N indexes only section markers (cues are not
+                    // jump targets), so the index must match the section-only,
+                    // time-sorted order the jump dispatch uses.
                     const chronologicalMarkers = [
                       ...(song?.sectionMarkers ?? []),
-                    ].sort(
-                      (left, right) => left.startSeconds - right.startSeconds,
-                    );
+                    ]
+                      .filter(
+                        (candidate) =>
+                          markerKindCategory(candidate.kind) === "section",
+                      )
+                      .sort(
+                        (left, right) =>
+                          left.startSeconds - right.startSeconds,
+                      );
                     const markerIndex = chronologicalMarkers.findIndex(
                       (candidate) => candidate.id === section.id,
                     );
@@ -1183,7 +1201,8 @@ export function TimelineCanvasPane({
               >
                 <span className="lt-sr-only">{section.name}</span>
               </button>
-            ))}
+              );
+            })}
 
             {song?.tempoMarkers.map((marker) => (
               <button

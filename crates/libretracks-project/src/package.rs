@@ -747,6 +747,7 @@ mod tests {
                 digit: None,
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             }],
         }
     }

@@ -274,6 +274,7 @@ const es = {
       markerKind: "Tipo de marca...",
       markerKindSectionsGroup: "Secciones",
       markerKindCuesGroup: "Avisos",
+      markerColor: "Color...",
     },
     markerKind: {
       intro: "Intro",

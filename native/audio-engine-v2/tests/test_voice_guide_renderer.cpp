@@ -571,3 +571,94 @@ TEST_CASE("the chained cue does not displace the count off the downbeat") {
     CHECK(saw_cue);
     CHECK(last_audible <= static_cast<int>(kSampleRate * 4.0));
 }
+
+TEST_CASE("a scheduled jump chains a cue attached to its destination marker") {
+    auto bank = make_marked_bank();
+    add_cue_clips(*bank);
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // The jump TRIGGERS at 4s (count bar [2s,4s)) and lands on a Solo whose
+    // marker sits at 10s with a Guitar cue on the same downbeat. The cue lives
+    // near the DESTINATION (10s), far from the trigger, yet it must still be
+    // chained into the announcement — this is the "jump to Solo+Guitar only
+    // said Solo" bug. The count still lands intact at the 4s trigger.
+    Session session = make_song_no_markers();
+    Marker cue;
+    cue.id = "cue1";
+    cue.kind = MarkerKind::Guitar;
+    cue.frame = static_cast<Frame>(kSampleRate) * 10;
+    session.songs[0].markers.push_back(cue);
+
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 4;        // trigger
+    jump.destination_frame = static_cast<Frame>(kSampleRate) * 10; // lands here
+    jump.kind = MarkerKind::Solo;
+    auto ch = render_all(r, session, kSampleRate * 6, 1024, jump);
+    auto diag = r.diagnostics();
+    CHECK(diag.counts_fired == 4);          // count unchanged by the cue
+    // Section name (Solo) AND the chained Guitar cue both speak (2 announcements).
+    CHECK(diag.announcements_fired == 2);
+    bool saw_cue = false;
+    for (int i = 0; i < static_cast<int>(kSampleRate * 2.0); ++i) {
+        const float a = std::abs(ch[2][static_cast<std::size_t>(i)]);
+        if (a > 0.20f && a < 0.35f) saw_cue = true; // cue amplitude 0.30 * 0.9
+    }
+    CHECK(saw_cue);
+}
+
+TEST_CASE("a jump-chained cue is NOT re-announced when the playhead reaches it") {
+    auto bank = make_marked_bank();
+    add_cue_clips(*bank);
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    // Sequence: announce a jump to Solo@10s (with a Guitar cue@10s) during the
+    // lead-in before the 4s trigger; the cue is spoken chained. Then the jump
+    // fires — the playhead jumps to 10s — and plays linearly THROUGH the cue's
+    // real position. The Guitar cue must not be spoken a second time.
+    Session session = make_song_no_markers();
+    Marker cue;
+    cue.id = "cue1";
+    cue.kind = MarkerKind::Guitar;
+    cue.frame = static_cast<Frame>(kSampleRate) * 10;
+    session.songs[0].markers.push_back(cue);
+    // Make the song long enough to contain frame 10s + a bit.
+    session.songs[0].end_frame = static_cast<Frame>(kSampleRate) * 20;
+
+    const int block = 1024;
+    const double sr = static_cast<double>(kSampleRate);
+    auto render_window = [&](Frame start, Frame count, const VoiceGuideTarget& jt) {
+        std::array<std::vector<float>, 4> ch;
+        for (auto& c : ch) c.assign(static_cast<std::size_t>(count), 0.0f);
+        for (Frame off = 0; off < count; off += block) {
+            const int frames =
+                static_cast<int>(std::min<Frame>(block, count - off));
+            float* out[4] = {ch[0].data() + off, ch[1].data() + off,
+                             ch[2].data() + off, ch[3].data() + off};
+            r.render(out, 4, frames, sr, start + off, &session, jt);
+        }
+        return ch;
+    };
+
+    // 1) Lead-in + trigger: render [0, 4.1s) with the jump active. The cue is
+    //    chained here.
+    VoiceGuideTarget jump;
+    jump.active = true;
+    jump.at_frame = static_cast<Frame>(kSampleRate) * 4;
+    jump.destination_frame = static_cast<Frame>(kSampleRate) * 10;
+    jump.kind = MarkerKind::Solo;
+    render_window(0, static_cast<Frame>(kSampleRate * 4.1), jump);
+    const uint64_t after_leadin = r.diagnostics().announcements_fired;
+    CHECK(after_leadin >= 2); // Solo + Guitar chained
+
+    // 2) Jump executes: playhead lands at 10s (discontinuity → reset_voices).
+    //    Render [10s, 11s) linearly with NO active jump. The cue at 10s must be
+    //    suppressed exactly once, so announcements_fired does NOT grow.
+    VoiceGuideTarget none;
+    auto ch2 =
+        render_window(static_cast<Frame>(kSampleRate) * 10, kSampleRate, none);
+    CHECK(r.diagnostics().announcements_fired == after_leadin); // no repeat
+    CHECK(peak(ch2[2]) == doctest::Approx(0.0f));               // silence
+}

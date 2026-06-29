@@ -1173,6 +1173,10 @@ VoiceGuideTarget Mixer::announceable_jump_target(const Session* session) const n
         // The count lands at the jump's TRIGGER frame (the moment of the jump,
         // in the current playback position) while naming the DESTINATION section.
         target.at_frame = jump->trigger_frame;
+        // Where the destination marker sits on the timeline — used to pick up any
+        // dynamic cues attached to it so they are announced too (e.g. jumping to
+        // a "Solo" that has a "Guitar" cue on the same downbeat).
+        target.destination_frame = jump->target_frame;
         target.kind = jump->target_kind;
         target.variant = jump->target_variant;
     }

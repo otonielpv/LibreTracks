@@ -243,6 +243,7 @@ fn main() {
             commands::timeline::delete_mix_scene,
             commands::timeline::assign_section_marker_digit,
             commands::timeline::set_section_marker_kind,
+            commands::timeline::set_section_marker_color,
             commands::timeline::update_song_tempo,
             commands::timeline::upsert_song_tempo_marker,
             commands::timeline::delete_song_tempo_marker,

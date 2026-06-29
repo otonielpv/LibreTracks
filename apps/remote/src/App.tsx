@@ -7,6 +7,8 @@ import {
   getSongRegionAtPosition,
   getSongTempoRegionAtPosition,
   formatTransposeSemitones,
+  markerColor,
+  markerKindCategory,
   type AppSettings,
   type AudioMeterLevel,
   type SongView,
@@ -837,6 +839,9 @@ const SharedTimeline = memo(function SharedTimeline({
     () =>
       markers.filter(
         (marker) =>
+          // Dynamic cues (Build, All In, ...) are not navigation targets; the
+          // remote only shows sections, so the cinta stays uncluttered on stage.
+          markerKindCategory(marker.kind) === "section" &&
           marker.startSeconds >= renderWindowStartSeconds - viewportDurationSeconds * 0.25 &&
           marker.startSeconds <= renderWindowEndSeconds + viewportDurationSeconds * 0.25,
       ),
@@ -1056,7 +1061,10 @@ const SharedTimeline = memo(function SharedTimeline({
               className={`timeline-marker timeline-marker-mini ${pendingJumpTargetId === marker.id ? "is-target" : ""}`}
               style={{
                 left: `${secondsToAbsoluteX(marker.startSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px`,
-              }}
+                // Tint the marker with its kind/custom colour so the remote
+                // reads the same as the desktop timeline.
+                "--marker-color": markerColor(marker),
+              } as CSSProperties}
             >
               {marker.name}
             </span>
@@ -1222,7 +1230,11 @@ function TransportView() {
   const setVampMode = useRemoteJumpStore((state) => state.setVampMode);
   const setVampBars = useRemoteJumpStore((state) => state.setVampBars);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
-  const markers = songView?.sectionMarkers ?? [];
+  // Only section markers are navigable from the remote — dynamic cues (Build,
+  // All In, ...) are spoken by the voice guide, not jump destinations.
+  const markers = (songView?.sectionMarkers ?? []).filter(
+    (marker) => markerKindCategory(marker.kind) === "section",
+  );
   const regions = songView?.regions ?? [];
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
@@ -1661,6 +1673,7 @@ function TransportView() {
           <button
             key={marker.id}
             className={`marker-card ${pendingJumpTargetId === marker.id ? "is-pending" : ""}`}
+            style={{ "--marker-color": markerColor(marker) } as CSSProperties}
             onClick={() => {
               if (pendingJump?.targetMarkerId === marker.id) {
                 cancelJump();

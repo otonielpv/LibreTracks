@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { drawRulerMarker, LANE_SECTIONS } from "./drawBackground";
+import { drawRulerMarker, LANE_CUES, LANE_SECTIONS } from "./drawBackground";
+import type { MarkerKind } from "@libretracks/shared/models";
 import type { SectionMarkerSummary } from "../desktopApi";
 
 type Pt = { x: number; y: number };
@@ -58,13 +59,16 @@ function flagBody(paths: Pt[][]): Pt[] {
   return body;
 }
 
-function marker(startSeconds: number): SectionMarkerSummary {
+function marker(
+  startSeconds: number,
+  kind: MarkerKind = "verse",
+): SectionMarkerSummary {
   return {
     id: "m1",
     name: "SOLO GUITARRA",
     digit: null,
     startSeconds,
-    kind: "section",
+    kind,
   } as unknown as SectionMarkerSummary;
 }
 
@@ -121,5 +125,28 @@ describe("drawRulerMarker flag geometry", () => {
         (p) => Math.abs(p.y - (flagTop + labelHeight - 1)) < 1.2,
       ),
     ).toBe(true);
+  });
+
+  it("draws a section marker in the section lane", () => {
+    const { ctx, paths } = createContextSpy();
+    drawRulerMarker(ctx, marker(1, "chorus"), WIDTH, HEIGHT, CAMERA_X, PPS, OPTS);
+    const body = flagBody(paths);
+    const ys = body.map((p) => p.y);
+    // All flag vertices sit within the section lane's vertical band.
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(LANE_SECTIONS.top);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(
+      LANE_SECTIONS.top + LANE_SECTIONS.height,
+    );
+  });
+
+  it("draws a cue marker in the cue lane, above the section lane", () => {
+    const { ctx, paths } = createContextSpy();
+    // "build" is a dynamic cue → it must render in LANE_CUES, not LANE_SECTIONS.
+    drawRulerMarker(ctx, marker(1, "build"), WIDTH, HEIGHT, CAMERA_X, PPS, OPTS);
+    const body = flagBody(paths);
+    const ys = body.map((p) => p.y);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(LANE_CUES.top);
+    // The whole cue flag sits above where the section lane starts.
+    expect(Math.max(...ys)).toBeLessThanOrEqual(LANE_SECTIONS.top);
   });
 });

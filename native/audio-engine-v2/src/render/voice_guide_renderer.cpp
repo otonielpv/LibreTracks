@@ -553,36 +553,43 @@ void VoiceGuideRenderer::render(float** output_channels,
                 // guard keys off the absolute frame, so distinct targets that
                 // happen to share this block fire on their own frames.
                 auto announce_target =
-                    [&](Frame target_frame, MarkerKind kind, int variant) {
+                    [&](Frame target_frame, MarkerKind kind, int variant,
+                        Frame cue_anchor_frame, bool is_jump) {
                         if (target_frame <= abs_frame) return;
 
                         // Layout (no overlap — Playback-style):
                         //   count bar  = the `lead_bars` bars immediately before
                         //               the target downbeat; full count "1..N".
-                        //   cues       = any dynamic-cue markers that fall in the
-                        //               lead window [count_bar_start, target] are
+                        //   cues       = dynamic-cue markers attached to the
+                        //               destination (within a lead-window-sized
+                        //               span ending at `cue_anchor_frame`) are
                         //               chained right before the count, stacked
                         //               backward so they END at count_bar_start.
                         //   section    = spoken name placed to END where the first
                         //               chained cue begins (or at count_bar_start
                         //               when there are no cues).
-                        const Frame count_bar_start = target_frame
-                            - static_cast<Frame>(
-                                  std::llround(beats_per_bar * lead_bars * beat_frames));
+                        // For a linear marker, cue_anchor_frame == target_frame. For
+                        // a jump, target_frame is the TRIGGER (where the count lands)
+                        // while cue_anchor_frame is the DESTINATION marker, so cues
+                        // attached to the jump's destination still get announced.
+                        const Frame lead_span = static_cast<Frame>(
+                            std::llround(beats_per_bar * lead_bars * beat_frames));
+                        const Frame count_bar_start = target_frame - lead_span;
+                        const Frame cue_window_start = cue_anchor_frame - lead_span;
 
-                        // Gather cues in the lead window, in timeline order, and
-                        // compute where the chained block of cue audio begins. The
-                        // cues speak back-to-back ending at count_bar_start, so the
-                        // earliest cue's start is the section name's end point.
-                        // (kMaxChainedCues caps the stack so a pile of cues on one
-                        // downbeat can't run unbounded; extras are dropped.)
+                        // Gather cues attached to the destination, in timeline
+                        // order, and compute where the chained block of cue audio
+                        // begins. The cues speak back-to-back ending at
+                        // count_bar_start, so the earliest cue's start is the
+                        // section name's end point. (kMaxChainedCues caps the stack
+                        // so a pile of cues on one downbeat can't run unbounded.)
                         constexpr int kMaxChainedCues = 3;
                         const VoiceGuideClip* chained[kMaxChainedCues] = {};
                         Frame chained_marker_frame[kMaxChainedCues] = {};
                         int chained_count = 0;
                         for (const auto& cue : song->markers) {
                             if (!marker_kind_is_cue(cue.kind)) continue;
-                            if (cue.frame < count_bar_start || cue.frame > target_frame)
+                            if (cue.frame < cue_window_start || cue.frame > cue_anchor_frame)
                                 continue;
                             const VoiceGuideClip* clip = bank->cue_for(cue.kind);
                             if (!clip) continue;            // no recording in this lang
@@ -616,6 +623,12 @@ void VoiceGuideRenderer::render(float** output_channels,
                             if (cue_start == abs_frame && cue_start >= timeline_frame) {
                                 trigger_clip(chained[i], 0.9f, sample_rate);
                                 last_chained_cue_frame_ = chained_marker_frame[i];
+                                // For a jump, remember the destination cue's REAL
+                                // frame so the later linear pass over it doesn't
+                                // re-announce what we just spoke in the lead-in.
+                                // (Survives the post-jump reset_voices.)
+                                if (is_jump)
+                                    jump_chained_cue_frame_ = chained_marker_frame[i];
                                 announcements_fired_.fetch_add(1, std::memory_order_relaxed);
                             }
                             block_start = cue_start;
@@ -680,12 +693,19 @@ void VoiceGuideRenderer::render(float** output_channels,
 
                 // The jump destination's section wins on its own downbeat; the
                 // marker is announced independently unless it lands on that exact
-                // frame (same downbeat — fire once).
+                // frame (same downbeat — fire once). For the jump the cue anchor is
+                // the DESTINATION marker (where attached cues live), distinct from
+                // the trigger frame; for a linear marker the anchor is itself.
                 if (jump_frame > abs_frame) {
-                    announce_target(jump_frame, jump_target.kind, jump_target.variant);
+                    const Frame jump_dest = jump_target.destination_frame > 0
+                        ? jump_target.destination_frame
+                        : jump_frame;
+                    announce_target(jump_frame, jump_target.kind, jump_target.variant,
+                                    jump_dest, /*is_jump=*/true);
                 }
                 if (marker && marker_frame > abs_frame && marker_frame != jump_frame) {
-                    announce_target(marker_frame, marker->kind, marker->variant);
+                    announce_target(marker_frame, marker->kind, marker->variant,
+                                    marker_frame, /*is_jump=*/false);
                 }
 
                 // Loose dynamic cues: a cue that is NOT inside the lead window of
@@ -694,7 +714,15 @@ void VoiceGuideRenderer::render(float** output_channels,
                 // were already chained above; skip them here so they aren't
                 // doubled (the chained one keyed off last_chained_cue_frame_).
                 const Marker* cue = upcoming_cue(song, abs_frame);
+                // A cue spoken in a jump destination's lead-in must not be repeated
+                // when the playhead later passes its real position. Suppress that
+                // one occurrence, then forget it so a subsequent loop announces it
+                // normally.
                 if (cue && cue->frame == abs_frame
+                    && cue->frame == jump_chained_cue_frame_) {
+                    last_cue_frame_ = cue->frame;
+                    jump_chained_cue_frame_ = -1;
+                } else if (cue && cue->frame == abs_frame
                     && cue->frame != last_cue_frame_
                     && cue->frame != last_chained_cue_frame_) {
                     // Is this cue chained into a nearby downbeat's lead-in? If so,

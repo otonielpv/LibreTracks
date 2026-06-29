@@ -338,6 +338,9 @@ pub struct MarkerSummary {
     pub kind: MarkerKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variant: Option<u8>,
+    /// User-chosen colour override (Custom markers). `None` → kind palette.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -857,6 +860,7 @@ pub(crate) fn marker_to_warped_summary(song: &Song, marker: &Marker) -> MarkerSu
         digit: marker.digit,
         kind: marker.kind,
         variant: marker.variant,
+        color: marker.color.clone(),
     }
 }
 
@@ -1196,6 +1200,7 @@ mod tests {
                 digit: Some(1),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             }],
         }
     }

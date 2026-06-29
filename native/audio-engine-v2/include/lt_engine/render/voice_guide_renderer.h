@@ -97,6 +97,11 @@ struct VoiceGuideDiagnostics {
 struct VoiceGuideTarget {
     bool       active = false;     // false = no scheduled-jump announcement
     Frame      at_frame = 0;       // frame at which the section "lands" (jump fires)
+    // Frame of the destination MARKER on the timeline. For a jump this differs
+    // from `at_frame` (the trigger position): the count plays at `at_frame`, but
+    // any dynamic cues attached to the destination marker live near
+    // `destination_frame` and are chained into the announcement too.
+    Frame      destination_frame = 0;
     MarkerKind kind = MarkerKind::Custom;
     int        variant = 0;
 };
@@ -188,6 +193,13 @@ private:
     // Frame of the most recent cue chained into a section's lead-in, so the
     // same cue is not also fired as a loose one-shot.
     Frame last_chained_cue_frame_ = -1;
+    // Frame of a cue chained into a JUMP destination's announcement. Unlike the
+    // fields above, this SURVIVES reset_voices() (which fires on the post-jump
+    // discontinuity): after jumping to a section whose cue was already spoken in
+    // the lead-in, the linear pass over that cue's real position must NOT
+    // re-announce it. Cleared once that position is passed so a later loop says
+    // it again normally.
+    Frame jump_chained_cue_frame_ = -1;
     std::array<Voice, kVoiceCount> voices_{};
     float current_output_gain_ = 0.0f;
 

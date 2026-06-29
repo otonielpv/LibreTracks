@@ -66,6 +66,103 @@ export type MarkerKind =
  * from the kind, never stored. */
 export type MarkerCategory = "section" | "cue";
 
+/** The dynamic-cue kinds. Single source of truth shared by every surface
+ * (desktop editor, voice-guide labels, and the remote, which must NOT offer
+ * cues as jump targets). Mirrors the cue half of the Rust `MarkerKind` enum. */
+export const CUE_KINDS: readonly MarkerKind[] = [
+  "build",
+  "slowly_build",
+  "all_in",
+  "drums_in",
+  "break",
+  "hold",
+  "softly",
+  "swell",
+  "hits",
+  "last_time",
+  "big_ending",
+  "key_change_up",
+  "key_change_down",
+  "drums",
+  "bass",
+  "guitar",
+  "keys",
+  "ad_lib",
+  "worship_freely",
+] as const;
+
+const CUE_KIND_SET: ReadonlySet<MarkerKind> = new Set(CUE_KINDS);
+
+/** Whether a kind is a dynamic cue or a song section (mirrors Rust
+ * `MarkerKind::category`). `custom` and any unknown value count as a section. */
+export function markerKindCategory(
+  kind: MarkerKind | undefined,
+): MarkerCategory {
+  return kind && CUE_KIND_SET.has(kind) ? "cue" : "section";
+}
+
+/** Resting-state colour per marker kind. Sections read as distinct hues;
+ * cues share a warmer accent family; `custom` is a neutral grey. Single source
+ * of truth shared by the desktop timeline and the remote. */
+const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
+  intro: "#8ea3b0",
+  verse: "#5aa9e6",
+  pre_chorus: "#7ec4cf",
+  chorus: "#f6a14c",
+  post_chorus: "#f4c95d",
+  bridge: "#b08be0",
+  breakdown: "#9b8cff",
+  drop: "#e8607a",
+  solo: "#e0d35a",
+  outro: "#8ea3b0",
+  acapella: "#d98fb0",
+  instrumental: "#6fbf9b",
+  interlude: "#88c0a8",
+  refrain: "#6ec0d6",
+  tag: "#c9a26b",
+  vamp: "#a6c47e",
+  ending: "#9aa0a8",
+  exhortation: "#d4a05a",
+  rap: "#c77dd4",
+  turnaround: "#7fa8d0",
+  custom: "#bacac5",
+  build: "#e0894a",
+  slowly_build: "#d98f5c",
+  all_in: "#e07a4a",
+  drums_in: "#d4924a",
+  break: "#8a96a0",
+  hold: "#9aa6b0",
+  softly: "#9fb0bd",
+  swell: "#c0a06a",
+  hits: "#e06a6a",
+  last_time: "#cf8a5a",
+  big_ending: "#d9665a",
+  key_change_up: "#6fbf9b",
+  key_change_down: "#6fa8bf",
+  drums: "#caa06a",
+  bass: "#b0926a",
+  guitar: "#c2a072",
+  keys: "#b89a72",
+  ad_lib: "#c79a8a",
+  worship_freely: "#b89ad0",
+};
+
+/** Resting-state colour for a kind. Falls back to the custom grey for unknown
+ * values (e.g. a snapshot from a newer build). */
+export function markerKindColor(kind: MarkerKind | undefined): string {
+  return MARKER_KIND_COLORS[kind ?? "custom"] ?? MARKER_KIND_COLORS.custom;
+}
+
+/** Effective colour of a marker: an explicit per-marker `color` override (used
+ * by Custom markers) wins; otherwise the kind palette. Shared by desktop and
+ * remote so both render the same colour. */
+export function markerColor(marker: {
+  kind?: MarkerKind;
+  color?: string | null;
+}): string {
+  return marker.color ?? markerKindColor(marker.kind);
+}
+
 export type SectionMarkerSummary = {
   id: string;
   name: string;
@@ -76,6 +173,9 @@ export type SectionMarkerSummary = {
   kind?: MarkerKind;
   /** Numbered section variant (Verse 2, Chorus 3). Absent = unnumbered base. */
   variant?: number | null;
+  /** User-chosen colour override (Custom markers). Absent = use the kind
+   * palette. */
+  color?: string | null;
 };
 
 export type SongMasterSummary = {

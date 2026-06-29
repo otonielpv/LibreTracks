@@ -574,6 +574,7 @@ mod tests {
             digit: None,
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         }];
         assert!(matches!(
             validate_song(&song),
@@ -592,6 +593,7 @@ mod tests {
                 digit: None,
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
             Marker {
                 id: "m2".into(),
@@ -600,6 +602,7 @@ mod tests {
                 digit: None,
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             },
         ];
         assert!(matches!(
@@ -618,6 +621,7 @@ mod tests {
             digit: Some(10),
             kind: MarkerKind::Custom,
             variant: None,
+            color: None,
         }];
         assert!(matches!(
             validate_song(&song),

@@ -97,6 +97,7 @@ mod tests {
                 digit: Some(1),
                 kind: MarkerKind::Custom,
                 variant: None,
+                color: None,
             }],
         }
     }
