@@ -106,6 +106,18 @@ Update ALL of these to the new version string (use Edit tool on each):
 with the rest (it historically lagged, but it should now stay in lockstep).
 Don't touch other crates' versions unless something forced a bump there.
 
+### Custom NSIS template (Windows)
+
+`apps/desktop/src-tauri/installer/nsis-installer.nsi` is a **vendored copy** of
+Tauri's official NSIS template with two local changes (search for `LibreTracks:`):
+per-file-type icons (via `installer/nsis-hooks.nsh`) and skipping the
+reinstall/uninstall page on a normal version upgrade (installs in place,
+preserves user data). When bumping the Tauri CLI/bundler to a new minor, re-diff
+this file against the upstream template for that version
+(`crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi` in the
+`tauri-apps/tauri` repo at the matching tag) and re-apply the two `LibreTracks:`
+edits, so we don't drift from upstream installer fixes.
+
 ## 5. Update web docs (only if user-visible behavior changed)
 
 Files: `apps/website/src/content/docs/docs/index.md` and

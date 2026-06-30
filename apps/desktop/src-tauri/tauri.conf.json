@@ -31,11 +31,54 @@
       "resources/voices": "voices",
       "../../../LICENSE": "licenses/LICENSE",
       "../../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
-      "../../../licenses/*": "licenses"
+      "../../../licenses/*": "licenses",
+      "icons/file-types/ltsession.ico": "file-types/ltsession.ico",
+      "icons/file-types/ltpkg.ico": "file-types/ltpkg.ico",
+      "icons/file-types/ltset.ico": "file-types/ltset.ico"
     },
+    "fileAssociations": [
+      {
+        "ext": ["ltsession"],
+        "name": "LibreTracks.Session",
+        "description": "Proyecto/sesión de LibreTracks",
+        "mimeType": "application/x-libretracks-session",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "com.libretracks.session",
+          "conformsTo": ["public.data", "public.content"]
+        }
+      },
+      {
+        "ext": ["ltpkg"],
+        "name": "LibreTracks.SongPackage",
+        "description": "Paquete de canción de LibreTracks",
+        "mimeType": "application/x-libretracks-package",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "com.libretracks.songpackage",
+          "conformsTo": ["public.data", "public.archive"]
+        }
+      },
+      {
+        "ext": ["ltset"],
+        "name": "LibreTracks.Set",
+        "description": "Sesión completa de LibreTracks",
+        "mimeType": "application/x-libretracks-set",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "com.libretracks.set",
+          "conformsTo": ["public.data", "public.archive"]
+        }
+      }
+    ],
     "windows": {
       "nsis": {
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "template": "installer/nsis-installer.nsi",
+        "installerHooks": "installer/nsis-hooks.nsh"
       }
     },
     "linux": {
