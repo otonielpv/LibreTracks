@@ -54,4 +54,4 @@ LibreTracks also notifies you in-app when a new version is published, with the c
 - `Timeline (DAW view)`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, [automation cues](./automation), and color-coded organization. The whole interface can be zoomed and fit to small displays, and the timeline can follow the playhead during playback.
 - `Compact View`: Session-style projection of the same model — one column per song with its own master fader, a shared horizontal mixer at the bottom, drag-and-drop assets / `.ltpkg` packages, and multi-select track reordering. See [Compact View](./compact-view).
 - `Remote`: local web control surface for transport, jumps, Vamp, transpose, and a mixer with meters and grouped track color cues.
-- `File`: import songs/packages and export prepared songs.
+- `File`: import songs/packages, import or export a whole session as a portable `.ltset`, and export prepared songs. See [Integration & Ecosystem](./integration-ecosystem#export-and-import-full-sessions).

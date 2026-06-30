@@ -30,7 +30,19 @@ Para exportar la sesion completa, abre el menu superior `Archivo` y elige `Expor
 - **Completo**: incluye tambien los audios usados por tus clips, de modo que el set es autocontenido y se abre en otro PC sin los archivos originales.
 - **Ligero**: solo el proyecto y las ondas; referencia los audios por su ruta. Mas pequeno, para reusar en el mismo equipo.
 
+Un indicador de progreso muestra cuanto lleva la exportacion —util en un set completo grande, donde empaquetar todos los audios puede tardar— y puedes seguir trabajando mientras se exporta.
+
 Para importar una sesion, elige `Importar sesion…` en el menu `Archivo`, o usa el boton **Importar sesion** de la pantalla inicial —no necesitas tener una sesion abierta primero. Selecciona el `.ltset`, elige donde guardarlo, y LibreTracks crea una carpeta de proyecto nueva y la abre como sesion fresca (reemplaza lo que tengas cargado en lugar de fusionarlo).
+
+## Tipos De Archivo Y Abrir Desde El Equipo
+
+LibreTracks registra sus propios tipos de archivo para que sean faciles de reconocer y abrir:
+
+- `.ltsession` — un proyecto/sesion en el que estas trabajando.
+- `.ltpkg` — un paquete de una sola cancion exportada.
+- `.ltset` — una sesion entera exportada.
+
+Tras instalar en Windows, estos archivos muestran su propio icono en el Explorador en lugar del icono blanco generico, asi distingues de un vistazo un paquete de cancion de un set completo. En macOS y Linux los tipos quedan registrados como archivos de LibreTracks, aunque alli comparten el icono de la app.
 
 ## Arquitectura Del Remote Movil
 

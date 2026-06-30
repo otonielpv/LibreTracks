@@ -54,4 +54,4 @@ LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, m
 - `Timeline (vista DAW)`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla, [senales de automatizacion](./automation) y organizacion por color. Toda la interfaz se puede ampliar y ajustar a pantallas pequenas, y el timeline puede seguir al cursor de reproduccion.
 - `Vista Compacta`: proyeccion estilo Session del mismo modelo — una columna por cancion con su propio fader Master, mixer horizontal compartido abajo, drag-and-drop de audio y paquetes `.ltpkg`, y reordenacion de pistas con multi-seleccion. Ver [Vista Compacta](./compact-view).
 - `Remote`: superficie web local para transporte, saltos, Vamp, transposicion y un mixer con medidores y pistas agrupadas visualmente.
-- `Archivo`: importar canciones/paquetes y exportar canciones preparadas.
+- `Archivo`: importar canciones/paquetes, importar o exportar una sesion entera como un `.ltset` portable, y exportar canciones preparadas. Ver [Integracion Y Ecosistema](./integration-ecosystem#exportar-e-importar-sesiones-completas).

@@ -30,7 +30,19 @@ To export the whole session, open the top `File` menu and choose `Export session
 - **Full**: also bundles the audio used by your clips, so the set is self-contained and opens on another PC without the original files.
 - **Light**: only the project and waveforms, referencing audio by path. Smaller, for reuse on the same machine.
 
+A progress indicator shows how far the export has got — useful for a large full set, where bundling every audio file can take a while — and you can keep working while it runs.
+
 To import a session, choose `Import session…` from the `File` menu, or use the **Import session** button on the start screen — you do not need a session open first. Pick the `.ltset`, choose where to save it, and LibreTracks creates a new project folder and opens it as a fresh session (it replaces what is loaded rather than merging into it).
+
+## File Types And Opening From Your Computer
+
+LibreTracks registers its own file types so they are easy to recognize and open:
+
+- `.ltsession` — a project/session you are working on.
+- `.ltpkg` — a single exported song package.
+- `.ltset` — a whole exported session.
+
+After installing on Windows, these files show their own icons in Explorer instead of the blank generic file icon, so you can tell a song package from a full set at a glance. On macOS and Linux the types are registered as LibreTracks files, though they share the app icon there.
 
 ## Mobile Remote Architecture
 
