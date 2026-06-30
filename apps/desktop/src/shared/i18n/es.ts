@@ -53,6 +53,8 @@ const es = {
       importSession: "Importar sesión",
       importingSession: "Importando sesión...",
       exportingSession: "Exportando sesión...",
+      choosingProjectLocation:
+        "Elige donde guardar el proyecto importado...",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Seleccion {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",
@@ -483,6 +485,14 @@ const es = {
       libraryImportStarting: "Preparando importacion de assets...",
       songImported: "Cancion importada en la sesion actual.",
       sessionExported: "Sesión exportada.",
+      externalProjectImported:
+        "Proyecto de Reaper/Ableton importado en la sesion actual.",
+      externalProjectImportedAndSaved:
+        "Proyecto de Reaper/Ableton importado y guardado.",
+      externalProjectImportedAndSavedAt:
+        "Proyecto de Reaper/Ableton importado y guardado en {{path}}.",
+      externalProjectImportedNeedsSave:
+        "Proyecto de Reaper/Ableton importado. Guardalo con Guardar como cuando quieras.",
       packageImportedAt: "Paquete importado en {{time}}.",
       externalDropMixed:
         "Suelta un paquete de cancion o archivos de audio, no ambos.",
@@ -614,6 +624,7 @@ const es = {
     importSong: "Importar cancion",
     importSession: "Importar sesión…",
     exportSession: "Exportar sesión…",
+    importExternalProject: "Importar Reaper/Ableton",
     save: "Guardar",
     saveAs: "Guardar como",
     bpmLabel: "BPM",

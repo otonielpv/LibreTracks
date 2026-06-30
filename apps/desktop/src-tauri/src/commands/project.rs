@@ -127,6 +127,133 @@ fn import_package_off_lock(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub fn pick_and_import_external_project_from_dialog(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<Option<SongPackageImportResponse>, String> {
+    eprintln!("[libretracks-import] command wizard import start");
+    let target_pick = FileDialog::new()
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_title("Elige donde guardar el proyecto importado")
+        .set_file_name("Proyecto importado.ltsession")
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        eprintln!("[libretracks-import] command wizard import cancelled at save target picker");
+        return Ok(None);
+    };
+    eprintln!(
+        "[libretracks-import] wizard target selected={} ",
+        target_pick.to_string_lossy()
+    );
+
+    let picked_file = FileDialog::new()
+        .add_filter("Proyecto Reaper/Ableton", &["rpp", "als"])
+        .add_filter("Proyecto Reaper", &["rpp"])
+        .add_filter("Proyecto Ableton Live", &["als"])
+        .set_title("Selecciona un proyecto externo (.rpp o .als)")
+        .pick_file();
+
+    let Some(project_file) = picked_file else {
+        eprintln!("[libretracks-import] command wizard import cancelled at external project picker");
+        return Ok(None);
+    };
+    eprintln!(
+        "[libretracks-import] wizard source selected={} ",
+        project_file.to_string_lossy()
+    );
+
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .ensure_song_loaded_for_external_import(&app, &state.audio)
+        .map_err(|error| error.to_string())?;
+    let insert_at_seconds = session.transport_position_seconds();
+    session
+        .import_external_project(
+            project_file.to_string_lossy().as_ref(),
+            insert_at_seconds,
+            &state.audio,
+        )
+        .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] wizard waiting for post-import audio preparation");
+    session
+        .finalize_project_audio_preparation(&app, &state.audio)
+        .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] wizard post-import audio preparation completed");
+    eprintln!("[libretracks-import] wizard import_external_project finished; saving-as target");
+    let snapshot = session
+        .save_project_as_to_path(target_pick)
+        .map_err(|error| error.to_string())?;
+    eprintln!(
+        "[libretracks-import] wizard save_project_as_to_path finished revision={}",
+        snapshot.project_revision
+    );
+    let library_assets = session
+        .get_library_assets()
+        .map_err(|error| error.to_string())?;
+    eprintln!(
+        "[libretracks-import] command wizard import done assets={}",
+        library_assets.len()
+    );
+
+    Ok(Some(SongPackageImportResponse {
+        snapshot,
+        library_assets,
+    }))
+}
+
+#[tauri::command]
+pub fn pick_and_import_external_project_into_session_from_dialog(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<Option<SongPackageImportResponse>, String> {
+    eprintln!("[libretracks-import] command session import start");
+    let picked_file = FileDialog::new()
+        .add_filter("Proyecto Reaper/Ableton", &["rpp", "als"])
+        .add_filter("Proyecto Reaper", &["rpp"])
+        .add_filter("Proyecto Ableton Live", &["als"])
+        .set_title("Selecciona un proyecto externo (.rpp o .als)")
+        .pick_file();
+
+    let Some(project_file) = picked_file else {
+        eprintln!("[libretracks-import] command session import cancelled at external project picker");
+        return Ok(None);
+    };
+    eprintln!(
+        "[libretracks-import] session source selected={} ",
+        project_file.to_string_lossy()
+    );
+
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    let insert_at_seconds = session.transport_position_seconds();
+    let response = session
+        .import_external_project(
+            project_file.to_string_lossy().as_ref(),
+            insert_at_seconds,
+            &state.audio,
+        )
+        .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] session waiting for post-import audio preparation");
+    session
+        .finalize_project_audio_preparation(&app, &state.audio)
+        .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] session post-import audio preparation completed");
+    eprintln!(
+        "[libretracks-import] command session import done revision={} assets={}",
+        response.snapshot.project_revision,
+        response.library_assets.len()
+    );
+
+    Ok(Some(response))
+}
+
 /// Spawn the heavy half of a dialog-driven project operation on a worker
 /// thread, emitting `project:load-complete` when it finishes. The native rfd
 /// dialog must run on the calling (main) thread on macOS, but the lock + engine
@@ -996,4 +1123,20 @@ fn session_dir_from_pick(target_pick: &std::path::Path) -> Result<std::path::Pat
         .filter(|name| !name.is_empty())
         .ok_or_else(|| "el nombre del proyecto no es valido".to_string())?;
     Ok(parent_dir.join(project_name))
+}
+
+#[tauri::command]
+pub fn import_external_project(
+    project_path: String,
+    insert_at_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<SongPackageImportResponse, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .import_external_project(&project_path, insert_at_seconds, &state.audio)
+        .map_err(|error| error.to_string())
 }

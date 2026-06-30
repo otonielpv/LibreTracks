@@ -444,6 +444,18 @@ export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_pick_and_import_song_from_dialog");
 }
 
+export async function pickAndImportExternalProject(): Promise<SongPackageImportResponse | null> {
+  return invokeCommand<SongPackageImportResponse | null>(
+    "pick_and_import_external_project_from_dialog",
+  );
+}
+
+export async function pickAndImportExternalProjectIntoSession(): Promise<SongPackageImportResponse | null> {
+  return invokeCommand<SongPackageImportResponse | null>(
+    "pick_and_import_external_project_into_session_from_dialog",
+  );
+}
+
 // Path-based package import used by the compact view and the timeline drop of a
 // .ltpkg from the file explorer. Routes through the SAME progress-emitting
 // worker flow as pickAndImportSong (start_import_song_package_from_path →

@@ -8,6 +8,7 @@ mod automation;
 mod commands;
 mod error;
 mod error_log;
+mod external_project;
 mod midi;
 mod models;
 mod remote;
@@ -189,6 +190,7 @@ fn main() {
             commands::project::import_song_package,
             commands::project::export_session_package,
             commands::project::start_import_session_package_from_dialog,
+            commands::project::import_external_project,
             commands::project::resolve_missing_file,
             commands::library::delete_library_asset,
             commands::library::move_library_asset,
@@ -201,6 +203,8 @@ fn main() {
             commands::project::start_open_project_from_dialog,
             commands::project::start_pick_and_import_song_from_dialog,
             commands::project::start_import_song_package_from_path,
+            commands::project::pick_and_import_external_project_from_dialog,
+            commands::project::pick_and_import_external_project_into_session_from_dialog,
             commands::transport::play_transport,
             commands::transport::pause_transport,
             commands::transport::stop_transport,

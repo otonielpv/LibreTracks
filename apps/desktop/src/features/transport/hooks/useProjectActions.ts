@@ -10,6 +10,8 @@ import {
   importSessionPackage,
   listenToSessionExportProgress,
   openProject,
+  pickAndImportExternalProject,
+  pickAndImportExternalProjectIntoSession,
   pickAndImportSong,
   saveProject,
   saveProjectAs,
@@ -307,6 +309,110 @@ export function useProjectActions({
     });
   }
 
+  function handleImportExternalProjectClick() {
+    void runAction(
+      async () => {
+        let unlistenProjectProgress: (() => void) | null = null;
+        setProjectViewHydrating(true);
+        setBusyFeedback({
+          message: t("transport.shell.importingProject", {
+            defaultValue: "Importing project...",
+          }),
+          percent: 2,
+        });
+        try {
+          unlistenProjectProgress = await registerProjectLoadProgressListener();
+          const result = await pickAndImportExternalProjectIntoSession();
+          if (!result) {
+            setProjectViewHydrating(false);
+            setBusyFeedback(null);
+            return;
+          }
+
+          setBusyFeedback({
+            message: t("transport.shell.loadingProjectView", {
+              defaultValue: "Loading project view...",
+            }),
+            percent: 96,
+          });
+
+          const nextSong = await refreshSongView({ sync: true });
+          applyPlaybackSnapshot(result.snapshot);
+          await refreshLibraryState({ preserveAssets: result.libraryAssets ?? undefined });
+          setActiveSidebarTab(null);
+          setStatus(t("transport.status.externalProjectImported"));
+
+          if (nextSong) {
+            await nextPaint();
+            setProjectViewHydrating(false);
+          }
+        } catch (error) {
+          setProjectViewHydrating(false);
+          setBusyFeedback(null);
+          throw error;
+        } finally {
+          unlistenProjectProgress?.();
+        }
+      },
+      { busy: true },
+    );
+  }
+
+  function handleImportExternalProjectWizardClick() {
+    void runAction(
+      async () => {
+        let unlistenProjectProgress: (() => void) | null = null;
+        setProjectViewHydrating(true);
+        setBusyFeedback({
+          message: t("transport.shell.importingProject", {
+            defaultValue: "Importing project...",
+          }),
+          percent: 2,
+        });
+        try {
+          unlistenProjectProgress = await registerProjectLoadProgressListener();
+          const result = await pickAndImportExternalProject();
+          if (!result) {
+            setProjectViewHydrating(false);
+            setBusyFeedback(null);
+            return;
+          }
+
+          setBusyFeedback({
+            message: t("transport.shell.loadingProjectView", {
+              defaultValue: "Loading project view...",
+            }),
+            percent: 96,
+          });
+
+          const nextSong = await refreshSongView({ sync: true });
+          applyPlaybackSnapshot(result.snapshot);
+          await refreshLibraryState({ preserveAssets: result.libraryAssets ?? undefined });
+          setActiveSidebarTab(null);
+          setStatus(
+            result.snapshot.songFilePath
+              ? t("transport.status.externalProjectImportedAndSavedAt", {
+                  path: result.snapshot.songFilePath,
+                })
+              : t("transport.status.externalProjectImportedAndSaved"),
+          );
+
+          if (nextSong) {
+            await nextPaint();
+            setProjectViewHydrating(false);
+          }
+        } catch (error) {
+          setProjectViewHydrating(false);
+          setBusyFeedback(null);
+          throw error;
+        } finally {
+          unlistenProjectProgress?.();
+        }
+      },
+      { busy: true },
+    );
+  }
+
   function handleSaveProjectClick() {
     void runAction(
       async () => {
@@ -351,6 +457,8 @@ export function useProjectActions({
     handleImportSongClick,
     handleImportSessionClick,
     handleExportSessionConfirm,
+    handleImportExternalProjectClick,
+    handleImportExternalProjectWizardClick,
     handleSaveProjectClick,
     handleSaveProjectAsClick,
   };

@@ -53,6 +53,7 @@ const en = {
       importSession: "Import session",
       importingSession: "Importing session...",
       exportingSession: "Exporting session...",
+      choosingProjectLocation: "Choose where to save the imported project...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",
@@ -459,6 +460,14 @@ const en = {
       libraryImportStarting: "Preparing asset import...",
       songImported: "Song imported into the current session.",
       sessionExported: "Session exported.",
+      externalProjectImported:
+        "Reaper/Ableton project imported into the current session.",
+      externalProjectImportedAndSaved:
+        "Reaper/Ableton project imported and saved.",
+      externalProjectImportedAndSavedAt:
+        "Reaper/Ableton project imported and saved to {{path}}.",
+      externalProjectImportedNeedsSave:
+        "Reaper/Ableton project imported. Save it with Save As when ready.",
       packageImportedAt: "Package imported at {{time}}.",
       externalDropMixed: "Drop either a song package or audio files, not both.",
       externalDropUnsupported:
@@ -589,6 +598,7 @@ const en = {
     importSong: "Import song",
     importSession: "Import session…",
     exportSession: "Export session…",
+    importExternalProject: "Import Reaper/Ableton",
     save: "Save",
     saveAs: "Save as",
     bpmLabel: "BPM",
