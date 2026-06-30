@@ -383,20 +383,12 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
     normalize_tempo_markers(&mut tempo_markers);
     normalize_time_signature_markers(&mut time_signature_markers);
 
-    // Reaper REGIONs are sections of a single song, not separate songs — same as
-    // its MARKERs and the same as Ableton locators. A LibreTracks region is a
-    // whole song (a clip may not cross between two), so fold each Reaper region's
-    // START into a section marker and collapse to a single song region below.
-    // This keeps long continuous clips legal (they used to trip "clip spans the
-    // boundary between region X and the next").
-    for region in &regions {
-        section_markers.push(ReaperSectionMarker {
-            name: region.name.clone(),
-            start_seconds: region.start_seconds,
-        });
-    }
-    regions.clear();
-    normalize_section_markers(&mut section_markers);
+    // A Reaper REGION is a whole song on the setlist (a clip may not cross
+    // between two regions), so each REGION is imported as its own SongRegion at
+    // its original position. Reaper MARKERs (no end) stay as section markers
+    // INSIDE a song. If the project has no regions at all, `regions` is empty and
+    // import_reaper_project wraps the whole thing in a single full-span song.
+    // (Ableton has no regions, so parse_ableton_project always collapses to one.)
 
     if bpm.is_none() {
         bpm = tempo_markers
@@ -452,13 +444,9 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         .unwrap_or("Reaper Import")
         .to_string();
 
-    // One imported project = one song = one region spanning the whole
-    // arrangement (the Reaper regions became section markers above).
-    let regions = vec![ReaperRegion {
-        name: title.clone(),
-        start_seconds: 0.0,
-        end_seconds: duration_seconds,
-    }];
+    // `regions` carries the real Reaper REGIONs (one SongRegion per song), or is
+    // empty when the project only has MARKERs — import_reaper_project then wraps
+    // it in a single full-span region.
 
     Ok(ReaperProject {
         title,
@@ -1575,20 +1563,16 @@ mod tests {
         let parsed = parse_reaper_project(&project_path).expect("parse");
         assert_eq!(parsed.bpm, Some(128.0));
         assert_eq!(parsed.time_signature.as_deref(), Some("4/4"));
-        // A Reaper REGION is a section of the song, not a separate song: "Verse"
-        // (the explicit region at 8s) becomes a section marker alongside "Intro",
-        // and the import is a single full-span region.
-        assert_eq!(parsed.section_markers.len(), 2);
-        assert!(parsed
-            .section_markers
-            .iter()
-            .any(|m| m.name == "Intro" && (m.start_seconds - 4.0).abs() < 0.0001));
-        assert!(parsed
-            .section_markers
-            .iter()
-            .any(|m| m.name == "Verse" && (m.start_seconds - 8.0).abs() < 0.0001));
+        // A Reaper REGION is its own song; a plain MARKER is a section inside a
+        // song. "Verse" (the explicit region at 8→16) becomes a SongRegion;
+        // "Intro" (a marker) becomes a section marker.
+        assert_eq!(parsed.section_markers.len(), 1);
+        assert_eq!(parsed.section_markers[0].name, "Intro");
+        assert_eq!(parsed.section_markers[0].start_seconds, 4.0);
         assert_eq!(parsed.regions.len(), 1);
-        assert_eq!(parsed.regions[0].start_seconds, 0.0);
+        assert_eq!(parsed.regions[0].name, "Verse");
+        assert_eq!(parsed.regions[0].start_seconds, 8.0);
+        assert_eq!(parsed.regions[0].end_seconds, 16.0);
         assert_eq!(parsed.tempo_markers.len(), 2);
         assert_eq!(parsed.tempo_markers[0].start_seconds, 0.0);
         assert_eq!(parsed.tempo_markers[0].bpm, 128.0);
@@ -1676,30 +1660,26 @@ mod tests {
 
                 let parsed = parse_reaper_project(&project_path).expect("parse");
                 assert_eq!(parsed.bpm, Some(130.0));
-                // Reaper regions become section markers: "Song Name" (the region at
-                // 0), plus the two MARKERs "Intro" and "Verso". The phantom numeric
-                // "1" at the region end must still be filtered out.
-                assert!(parsed
-                    .section_markers
-                    .iter()
-                    .any(|marker| marker.name == "Intro"));
+                // "Song Name" is a REGION → its own song. "Intro"/"Verso" are
+                // MARKERs → sections. The phantom numeric "1" at the region end
+                // must still be filtered out (the empty-quoted-token fix).
+                assert_eq!(parsed.section_markers.len(), 2);
+                assert_eq!(parsed.section_markers[0].name, "Intro");
                 assert!(parsed
                     .section_markers
                     .iter()
                     .any(|marker| marker.name == "Verso"));
-                assert!(parsed
-                    .section_markers
-                    .iter()
-                    .any(|marker| marker.name == "Song Name"));
                 assert!(
                     !parsed
                         .section_markers
                         .iter()
                         .any(|marker| marker.name.trim() == "1")
                 );
-                // One full-span song region (regions are not separate songs).
+                // The region "Song Name" is preserved with its real bounds.
                 assert_eq!(parsed.regions.len(), 1);
+                assert_eq!(parsed.regions[0].name, "Song Name");
                 assert!((parsed.regions[0].start_seconds - 0.0).abs() < 0.0001);
+                assert!((parsed.regions[0].end_seconds - 252.92307692307693).abs() < 0.001);
         }
 
         #[test]
@@ -1741,14 +1721,12 @@ mod tests {
 
                 let parsed = parse_reaper_project(&project_path).expect("parse");
 
-                // The user section "Estrofa" survives. "Cancion" (the region) is now
-                // a section marker at 0. Crucially there is NO phantom marker at/near
-                // the region end (180.0 / item length 181.5) — that was the bug.
-                assert!(parsed
-                    .section_markers
-                    .iter()
-                    .any(|marker| marker.name == "Estrofa"
-                        && (marker.start_seconds - 8.0).abs() < 0.0001));
+                // "Cancion" is a REGION → its own song. "Estrofa" is a MARKER →
+                // a section. Crucially there is NO phantom marker at/near the
+                // region end (180.0 / item length 181.5) — that was the bug.
+                assert_eq!(parsed.section_markers.len(), 1);
+                assert_eq!(parsed.section_markers[0].name, "Estrofa");
+                assert!((parsed.section_markers[0].start_seconds - 8.0).abs() < 0.0001);
                 assert!(
                     !parsed
                         .section_markers
@@ -1757,9 +1735,69 @@ mod tests {
                     "no section marker should land at/after the region end"
                 );
 
-                // One full-span song region.
+                // The region "Cancion" is preserved (0 → end boundary 180.0).
                 assert_eq!(parsed.regions.len(), 1);
+                assert_eq!(parsed.regions[0].name, "Cancion");
                 assert!((parsed.regions[0].start_seconds - 0.0).abs() < 0.0001);
+                assert!((parsed.regions[0].end_seconds - 180.0).abs() < 0.001);
+        }
+
+        #[test]
+        fn parses_reaper_multiple_regions_as_separate_songs() {
+                // A .rpp setlist: two explicit REGIONs (each a song) plus a plain
+                // MARKER acting as a section inside the first one. The regions must
+                // come through as two SongRegions at their original positions; the
+                // marker stays a section marker.
+                let temp = tempfile::tempdir().expect("tempdir");
+                let project_path = temp.path().join("setlist.rpp");
+                let source_path = temp.path().join("audio").join("stem.wav");
+                fs::create_dir_all(source_path.parent().expect("audio dir")).expect("mkdir");
+                fs::write(&source_path, b"wav").expect("write wav");
+
+                let rpp = r#"
+<REAPER_PROJECT 0.1 "7.0/x64" 1710000000
+    TEMPO 120 4 4
+    MARKER 1 0 "Tema A" 1 0 1 R {AAAA} 0
+    MARKER 1 100.0 "" 1
+    MARKER 2 20.0 "Verso" 0 0 1 R {BBBB} 0
+    MARKER 3 100.0 "Tema B" 1 0 1 R {CCCC} 0
+    MARKER 3 200.0 "" 1
+    <TRACK
+        NAME "GUIA"
+        <ITEM
+            POSITION 0
+            LENGTH 200.0
+            SOFFS 0
+            <SOURCE WAVE
+                FILE "audio/stem.wav"
+            >
+        >
+    >
+>
+"#;
+                fs::write(&project_path, rpp).expect("write rpp");
+
+                let parsed = parse_reaper_project(&project_path).expect("parse");
+
+                // Two songs, in order, at their original positions.
+                assert_eq!(parsed.regions.len(), 2);
+                assert_eq!(parsed.regions[0].name, "Tema A");
+                assert!((parsed.regions[0].start_seconds - 0.0).abs() < 0.001);
+                assert!((parsed.regions[0].end_seconds - 100.0).abs() < 0.001);
+                assert_eq!(parsed.regions[1].name, "Tema B");
+                assert!((parsed.regions[1].start_seconds - 100.0).abs() < 0.001);
+                assert!((parsed.regions[1].end_seconds - 200.0).abs() < 0.001);
+
+                // The lone MARKER "Verso" is a section, not a song.
+                assert!(parsed
+                    .section_markers
+                    .iter()
+                    .any(|marker| marker.name == "Verso"
+                        && (marker.start_seconds - 20.0).abs() < 0.001));
+                assert!(!parsed
+                    .section_markers
+                    .iter()
+                    .any(|marker| marker.name == "Tema A" || marker.name == "Tema B"));
         }
 
         #[test]
