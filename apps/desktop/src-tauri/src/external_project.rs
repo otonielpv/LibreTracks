@@ -595,10 +595,10 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
         });
     }
 
-    normalize_section_markers(&mut section_markers);
-    normalize_tempo_markers(&mut tempo_markers);
-    normalize_time_signature_markers(&mut time_signature_markers);
-
+    // Resolve the project tempo BEFORE converting any timing. Ableton stores ALL
+    // arrangement positions (clip start/end, locator times, tempo/time-signature
+    // event times) in BEATS, not seconds — so until now every value above is a
+    // beat count. We need the BPM to turn them into seconds.
     if bpm.is_none() {
         bpm = tempo_markers
             .iter()
@@ -606,6 +606,34 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
             .map(|marker| marker.bpm)
             .or_else(|| tempo_markers.first().map(|marker| marker.bpm));
     }
+
+    // Convert the whole project from beats to seconds. We use the base tempo for
+    // the linear mapping `seconds = beats * 60 / bpm`. Tempo automation (a
+    // changing BPM across the arrangement) would need piecewise integration of
+    // the tempo map; that is a TODO — single-tempo projects (the common case)
+    // are exact, variable-tempo projects are approximate but no longer wildly
+    // wrong (they used to be off by a factor of `bpm/60`).
+    let beats_to_seconds = 60.0 / bpm.unwrap_or(120.0).max(20.0);
+    for track in &mut tracks {
+        for item in &mut track.items {
+            item.position_seconds *= beats_to_seconds;
+            item.length_seconds *= beats_to_seconds;
+            item.source_start_seconds *= beats_to_seconds;
+        }
+    }
+    for marker in &mut section_markers {
+        marker.start_seconds *= beats_to_seconds;
+    }
+    for marker in &mut tempo_markers {
+        marker.start_seconds *= beats_to_seconds;
+    }
+    for marker in &mut time_signature_markers {
+        marker.start_seconds *= beats_to_seconds;
+    }
+
+    normalize_section_markers(&mut section_markers);
+    normalize_tempo_markers(&mut tempo_markers);
+    normalize_time_signature_markers(&mut time_signature_markers);
 
     let time_signature = time_signature_markers
         .iter()
@@ -920,7 +948,16 @@ fn handle_ableton_node(
             }
         }
 
-        if tag.eq_ignore_ascii_case("Name") && stack_contains(stack, "LiveSet") {
+        // Project title: a top-level `Name` directly under LiveSet. Guard
+        // against the many other `Name` nodes nested under tracks, clips and
+        // locators (they all sit under LiveSet too) — otherwise the first
+        // locator/track name was being grabbed as the project title.
+        if tag.eq_ignore_ascii_case("Name")
+            && parent_is(stack, "LiveSet")
+            && current_track.is_none()
+            && current_clip.is_none()
+            && current_locator.is_none()
+        {
             if title.is_none() && !node_value.trim().is_empty() {
                 *title = Some(node_value.trim().to_string());
             }
@@ -1762,11 +1799,86 @@ mod tests {
                 assert_eq!(parsed.tracks.len(), 1);
                 assert_eq!(parsed.tracks[0].name, "Pad");
                 assert_eq!(parsed.tracks[0].items.len(), 1);
-                assert_eq!(parsed.tracks[0].items[0].position_seconds, 8.0);
-                assert_eq!(parsed.tracks[0].items[0].length_seconds, 8.0);
+                // Ableton positions are in BEATS. At 123 BPM one beat is 60/123 s,
+                // so the clip at beat 8 lands at 8 * 60/123 ≈ 3.902 s and its 8-beat
+                // length is ≈ 3.902 s. Asserting seconds (not beats) is the whole
+                // point — the importer must apply the beats→seconds conversion.
+                let beat = 60.0 / 123.0;
+                assert!(
+                    (parsed.tracks[0].items[0].position_seconds - 8.0 * beat).abs() < 0.001,
+                    "clip start should be converted from beats to seconds, got {}",
+                    parsed.tracks[0].items[0].position_seconds
+                );
+                assert!(
+                    (parsed.tracks[0].items[0].length_seconds - 8.0 * beat).abs() < 0.001,
+                    "clip length should be converted from beats to seconds, got {}",
+                    parsed.tracks[0].items[0].length_seconds
+                );
                 assert_eq!(parsed.section_markers.len(), 2);
                 assert_eq!(parsed.section_markers[0].name, "Intro");
+                // Locator at beat 4 → 4 * 60/123 ≈ 1.951 s.
+                assert!(
+                    (parsed.section_markers[0].start_seconds - 4.0 * beat).abs() < 0.001,
+                    "locator time should be converted from beats to seconds, got {}",
+                    parsed.section_markers[0].start_seconds
+                );
                 assert_eq!(parsed.regions.len(), 1);
                 assert_eq!(parsed.regions[0].name, "Intro");
+        }
+
+        #[test]
+        fn ableton_reads_gzip_compressed_als() {
+                // A real `.als` saved by Live is gzip-compressed, not plain XML.
+                // The importer must transparently decompress it.
+                use flate2::write::GzEncoder;
+                use flate2::Compression;
+                use std::io::Write;
+
+                let temp = tempfile::tempdir().expect("tempdir");
+                let project_path = temp.path().join("compressed.als");
+                let source_path = temp.path().join("audio").join("kick.wav");
+                fs::create_dir_all(source_path.parent().expect("audio dir")).expect("mkdir");
+                fs::write(&source_path, b"wav").expect("write wav");
+
+                let als = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5" MinorVersion="11.0_11300" Creator="Ableton Live 11.3">
+    <LiveSet>
+        <MasterTrack>
+            <DeviceChain><Mixer><Tempo><Manual Value="120.0"/></Tempo></Mixer></DeviceChain>
+        </MasterTrack>
+        <Tracks>
+            <AudioTrack>
+                <Name><EffectiveName Value="Drums"/></Name>
+                <DeviceChain>
+                    <MainSequencer><Sample><ArrangerAutomation><Events>
+                        <AudioClip>
+                            <CurrentStart Value="0"/>
+                            <CurrentEnd Value="8"/>
+                            <SampleRef><FileRef><Path Value="audio/kick.wav"/></FileRef></SampleRef>
+                        </AudioClip>
+                    </Events></ArrangerAutomation></Sample></MainSequencer>
+                </DeviceChain>
+            </AudioTrack>
+        </Tracks>
+    </LiveSet>
+</Ableton>
+"#;
+
+                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+                encoder.write_all(als.as_bytes()).expect("gzip write");
+                let compressed = encoder.finish().expect("gzip finish");
+                fs::write(&project_path, compressed).expect("write als");
+
+                let parsed = parse_ableton_project(&project_path).expect("parse gzip ableton");
+                assert_eq!(parsed.bpm, Some(120.0));
+                assert_eq!(parsed.tracks.len(), 1);
+                assert_eq!(parsed.tracks[0].name, "Drums");
+                assert_eq!(parsed.tracks[0].items.len(), 1);
+                // 8 beats at 120 BPM = 8 * 0.5 = 4.0 s.
+                assert!(
+                    (parsed.tracks[0].items[0].length_seconds - 4.0).abs() < 0.001,
+                    "got {}",
+                    parsed.tracks[0].items[0].length_seconds
+                );
         }
 }
