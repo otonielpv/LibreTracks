@@ -13,6 +13,7 @@ Esto es lo mas importante de interiorizar antes de leer el resto. Cuando piensas
 - Reordenar el setlist significa **mover canciones**, lo que arrastra sus clips, marcas, tempo y cambios de compas de forma atomica.
 - Tempo, tonalidad y ganancia master son **propiedades por cancion** (`Region Warp`, `Region Transpose`, fader master por cancion), no globales.
 - Hacer copia o compartir una pieza del show significa **exportar un `.ltpkg`** de una o varias canciones, que se puede importar en cualquier otro proyecto.
+- Llevarte el **show entero** entre ordenadores significa **exportar un `.ltset`** de la sesion completa, que se abre como sesion nueva en el equipo destino. Ver [Integracion Y Ecosistema](./integration-ecosystem#exportar-e-importar-sesiones-completas).
 
 La referencia sobre como se comportan las canciones como contenedores — limites, BPM efectivo, transpose, warp — esta en la seccion [Regiones De Cancion](#regiones-de-cancion--el-contenedor-principal) mas abajo. El flujo orientado a canciones en si (canciones como columnas, drag-and-drop de audio y paquetes, mixer por cancion) vive en [Vista Compacta](./compact-view).
 

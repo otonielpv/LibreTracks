@@ -21,6 +21,17 @@ Usa `Import song` desde la seccion superior `Archivo` cuando quieras traer otra 
 
 Para la preparacion diaria, la sesion tambien admite drops externos de forma mas directa: los archivos de audio pueden entrar en el flujo de arreglo y las carpetas de Biblioteca ayudan a mantener los assets ordenados por cancion o bloque del show.
 
+## Exportar E Importar Sesiones Completas
+
+Mientras que un paquete `.ltpkg` lleva una sola cancion que se fusiona en la sesion que ya tienes abierta, un archivo `.ltset` lleva la **sesion entera** —todas las canciones, la biblioteca, la automatizacion y las ondas— en un unico archivo portable. Usalo para preparar el set en el PC de casa y abrirlo tal cual en el equipo donde tocas en directo, sin tener que configurarlo todo de nuevo.
+
+Para exportar la sesion completa, abre el menu superior `Archivo` y elige `Exportar sesion…`. El dialogo ofrece los mismos dos modos que la exportacion de canciones:
+
+- **Completo**: incluye tambien los audios usados por tus clips, de modo que el set es autocontenido y se abre en otro PC sin los archivos originales.
+- **Ligero**: solo el proyecto y las ondas; referencia los audios por su ruta. Mas pequeno, para reusar en el mismo equipo.
+
+Para importar una sesion, elige `Importar sesion…` en el menu `Archivo`, o usa el boton **Importar sesion** de la pantalla inicial —no necesitas tener una sesion abierta primero. Selecciona el `.ltset`, elige donde guardarlo, y LibreTracks crea una carpeta de proyecto nueva y la abre como sesion fresca (reemplaza lo que tengas cargado en lugar de fusionarlo).
+
 ## Arquitectura Del Remote Movil
 
 El remote controla estado; no reproduce audio. El audio permanece en el runtime desktop, lo que mantiene el rig de directo predecible y evita la complejidad de dispositivos de audio en navegador.

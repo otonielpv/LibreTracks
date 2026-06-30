@@ -204,6 +204,7 @@ import {
   ExportSongModal,
   type ExportSongTarget,
 } from "./panels/ExportSongModal";
+import { ExportSessionModal } from "./panels/ExportSessionModal";
 import {
   AutomationCueModal,
   type AutomationCueDraft,
@@ -602,6 +603,13 @@ export function TransportPanelContent() {
     active: boolean;
     percent: number;
   }>({ active: false, percent: 0 });
+  // Non-modal progress while a whole-session .ltset export runs (can be slow for
+  // a large full export). `message` carries the live backend status.
+  const [sessionExportUiState, setSessionExportUiState] = useState<{
+    active: boolean;
+    percent: number;
+    message: string;
+  }>({ active: false, percent: 0, message: "" });
   const sourcesShowTimerRef = useRef<number | null>(null);
   useEffect(
     () => () => {
@@ -740,6 +748,9 @@ export function TransportPanelContent() {
   // When set, the export-mode chooser (Light / Full) is shown for this song.
   const [exportSongTarget, setExportSongTarget] =
     useState<ExportSongTarget | null>(null);
+  // True while the whole-session export-mode chooser (Light / Full) is shown.
+  const [isExportSessionModalOpen, setIsExportSessionModalOpen] =
+    useState(false);
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
   const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
@@ -3612,6 +3623,8 @@ export function TransportPanelContent() {
     handleCreateSongClick,
     handleOpenProjectClick,
     handleImportSongClick,
+    handleImportSessionClick,
+    handleExportSessionConfirm,
   } = useProjectActions({
     runAction,
     applyPlaybackSnapshot,
@@ -3624,6 +3637,7 @@ export function TransportPanelContent() {
     setStatus,
     setActiveSidebarTab,
     setPackageUnpackUiState,
+    setSessionExportUiState,
   });
 
   const {
@@ -9748,6 +9762,8 @@ export function TransportPanelContent() {
           onCreateSong={handleCreateSongClick}
           onOpenProject={handleOpenProjectClick}
           onImportSong={handleImportSongClick}
+          onImportSession={handleImportSessionClick}
+          onExportSession={() => setIsExportSessionModalOpen(true)}
           onSaveProject={handleSaveProjectClick}
           onSaveProjectAs={handleSaveProjectAsClick}
           onStopTransport={() =>
@@ -9919,6 +9935,11 @@ export function TransportPanelContent() {
                       </button>
                       <button type="button" onClick={handleOpenProjectClick}>
                         {t("common.open")}
+                      </button>
+                      <button type="button" onClick={handleImportSessionClick}>
+                        {t("transport.shell.importSession", {
+                          defaultValue: "Importar sesión",
+                        })}
                       </button>
                     </div>
                   </div>
@@ -10812,6 +10833,16 @@ export function TransportPanelContent() {
               onConfirm={handleConfirmExportSong}
             />
 
+            <ExportSessionModal
+              isOpen={isExportSessionModalOpen}
+              sessionTitle={song?.title ?? ""}
+              onCancel={() => setIsExportSessionModalOpen(false)}
+              onConfirm={(includeAudio) => {
+                setIsExportSessionModalOpen(false);
+                handleExportSessionConfirm(includeAudio);
+              }}
+            />
+
             {automationCueDraft ? (
               <AutomationCueModal
                 draft={automationCueDraft}
@@ -10879,6 +10910,36 @@ export function TransportPanelContent() {
                   <span
                     style={{
                       width: `${Math.max(0, Math.min(100, packageUnpackUiState.percent))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {sessionExportUiState.active ? (
+              <div
+                className="lt-source-prep-indicator"
+                aria-live="polite"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(sessionExportUiState.percent)}
+              >
+                <div className="lt-source-prep-line">
+                  <span className="lt-source-prep-label">
+                    {sessionExportUiState.message ||
+                      t("transport.shell.exportingSession", {
+                        defaultValue: "Exportando sesión...",
+                      })}
+                  </span>
+                  <span className="lt-source-prep-detail">
+                    {Math.round(sessionExportUiState.percent)}%
+                  </span>
+                </div>
+                <div className="lt-source-prep-bar">
+                  <span
+                    style={{
+                      width: `${Math.max(0, Math.min(100, sessionExportUiState.percent))}%`,
                     }}
                   />
                 </div>

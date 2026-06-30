@@ -21,6 +21,17 @@ Use `Import song` from the top `File` section when you want to bring another Lib
 
 For day-to-day prep, the session can also accept external drops more directly: audio files can be imported into the arrangement flow, while library folders help keep assets organized by song or show block.
 
+## Export And Import Full Sessions
+
+Where a `.ltpkg` package carries a single song that merges into the session you already have open, a `.ltset` file carries the **entire session** — every song, the library, automation, and waveforms — as one portable file. Use it to build a set on your home computer and open it unchanged on the machine you play live on, without configuring everything again.
+
+To export the whole session, open the top `File` menu and choose `Export session…`. The dialog offers the same two modes as song export:
+
+- **Full**: also bundles the audio used by your clips, so the set is self-contained and opens on another PC without the original files.
+- **Light**: only the project and waveforms, referencing audio by path. Smaller, for reuse on the same machine.
+
+To import a session, choose `Import session…` from the `File` menu, or use the **Import session** button on the start screen — you do not need a session open first. Pick the `.ltset`, choose where to save it, and LibreTracks creates a new project folder and opens it as a fresh session (it replaces what is loaded rather than merging into it).
+
 ## Mobile Remote Architecture
 
 The remote controls state; it does not play audio. Audio remains in the desktop runtime, keeping the live rig predictable and avoiding browser audio-device complexity.

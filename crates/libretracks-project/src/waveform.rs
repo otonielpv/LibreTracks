@@ -222,7 +222,7 @@ fn legacy_waveform_json_file_path(
         .join(format!("{file_stem}.waveform.json"))
 }
 
-fn waveform_cache_file_stem(audio_path: &Path) -> String {
+pub(crate) fn waveform_cache_file_stem(audio_path: &Path) -> String {
     let stem = audio_path
         .file_stem()
         .and_then(|value| value.to_str())

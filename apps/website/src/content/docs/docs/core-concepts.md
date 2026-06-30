@@ -13,6 +13,7 @@ This is the single most important thing to internalise before reading the rest. 
 - Reordering the setlist means **moving songs**, which carries their clips, markers, tempo and meter changes along atomically.
 - Tempo, key and master gain are **per-song properties** (`Region Warp`, `Region Transpose`, per-song master fader), not global ones.
 - Backing up or sharing a piece of the show means **exporting a `.ltpkg`** of one or more songs, which round-trips into any other project.
+- Moving the **whole show** between computers means **exporting a `.ltset`** of the entire session, which opens as a fresh session on the target machine. See [Integration & Ecosystem](./integration-ecosystem#export-and-import-full-sessions).
 
 The reference for how songs behave as containers — boundaries, effective BPM, transpose, warp — is the [Song Regions](#song-regions--the-primary-container) section below. The song-first workflow itself (songs as columns, drag-and-drop of audio and packages, per-song mixer) lives in [Compact View](./compact-view).
 

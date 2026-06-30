@@ -2,6 +2,7 @@
 
 mod importer;
 mod package;
+mod session_package;
 mod song_store;
 mod waveform;
 
@@ -16,9 +17,13 @@ pub use package::{
     merge_extracted_song_package, ExtractedSongPackage, PackageLibraryAssetEntry,
     SongPackageExport, SongPackageImportResult,
 };
+pub use session_package::{
+    export_session_as_package, extract_session_package, ExtractedSessionPackage,
+    SessionPackageExport, SidecarFile,
+};
 pub use song_store::{
     create_song_folder, load_song, load_song_from_file, save_song, save_song_to_file,
-    song_file_path, ProjectError, SONG_FILE_NAME,
+    serialize_song_document, song_file_path, ProjectError, SONG_FILE_NAME,
 };
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, global_waveform_file_path, is_waveform_fresh,

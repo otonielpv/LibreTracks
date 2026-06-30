@@ -19,13 +19,13 @@ use libretracks_core::{
     MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
-    append_wav_files_to_song, global_waveform_file_path,
-    import_song_package as import_song_package_into_project, import_wav_files_to_library,
-    load_global_waveform, load_or_generate_global_waveform, load_song_from_file,
-    merge_extracted_song_package, read_audio_metadata, save_song_to_file,
-    waveform_summary_from_channel_peaks, write_global_waveform, ExtractedSongPackage,
-    ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary,
-    SONG_FILE_NAME,
+    append_wav_files_to_song, extract_session_package, global_waveform_file_path,
+    import_song_package as import_song_package_into_project,
+    import_wav_files_to_library, load_global_waveform, load_or_generate_global_waveform,
+    load_song_from_file, merge_extracted_song_package, read_audio_metadata, save_song_to_file,
+    waveform_summary_from_channel_peaks, write_global_waveform, ExtractedSessionPackage,
+    ExtractedSongPackage, ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry,
+    ProjectError, SidecarFile, WaveformSummary, SONG_FILE_NAME,
 };
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use rayon::prelude::*;
@@ -40,7 +40,7 @@ use crate::audio_engine::{
 };
 use crate::automation::{
     load_automation, save_automation, AutomationAction, AutomationCue, AutomationDocument,
-    AutomationJumpTarget, AutomationTransitionMode, MixScene,
+    AutomationJumpTarget, AutomationTransitionMode, MixScene, AUTOMATION_FILE_NAME,
 };
 use crate::error::DesktopError;
 use crate::midi::MidiManager;
@@ -61,6 +61,7 @@ use crate::settings::AppSettings;
 const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
 const LIBRARY_IMPORT_PROGRESS_EVENT: &str = "library:import-progress";
 const PROJECT_LOAD_PROGRESS_EVENT: &str = "project:load-progress";
+const SESSION_EXPORT_PROGRESS_EVENT: &str = "session:export-progress";
 pub const WAVEFORM_READY_EVENT: &str = "waveform:ready";
 const TRANSPORT_RUNTIME_SYNC_INTERVAL: Duration = Duration::from_millis(250);
 const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
@@ -70,6 +71,37 @@ const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
 struct LibraryImportProgressEvent {
     percent: u8,
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionExportProgressEvent {
+    percent: u8,
+    message: String,
+    /// True on the terminal event (success or failure) so the UI can dismiss the
+    /// overlay; `error` is set when the export failed.
+    done: bool,
+    error: Option<String>,
+}
+
+/// Emit whole-session export progress to the frontend overlay. `percent` is
+/// clamped; the terminal event carries `done = true` (and `error` on failure).
+pub(crate) fn emit_session_export_progress(
+    app: &AppHandle,
+    percent: u8,
+    message: String,
+    done: bool,
+    error: Option<String>,
+) {
+    let payload = SessionExportProgressEvent {
+        percent: percent.min(100),
+        message,
+        done,
+        error,
+    };
+    if let Err(emit_error) = app.emit(SESSION_EXPORT_PROGRESS_EVENT, payload) {
+        eprintln!("[libretracks-project] failed to emit export progress: {emit_error}");
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1092,6 +1124,86 @@ impl DesktopSession {
         self.song_file_path = Some(target_song_file);
         self.prime_waveform_cache(&target_song_dir, &song)?;
 
+        Ok(self.snapshot())
+    }
+
+    /// Resolve the source data for a whole-session `.ltset` export: the live
+    /// song dir, the in-memory song (so unsaved edits are captured), and the
+    /// sidecar files that must travel with it. Automation is flushed to disk
+    /// first so its sidecar reflects the current state, mirroring `save_project`.
+    pub fn prepare_session_package_export(
+        &self,
+    ) -> Result<(PathBuf, Song, Vec<SidecarFile>), DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        // Flush automation so the bundled sidecar matches the live session.
+        save_automation(&song_dir, &self.automation)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+
+        let sidecars = vec![
+            SidecarFile {
+                file_name: LIBRARY_MANIFEST_FILE_NAME.to_string(),
+            },
+            SidecarFile {
+                file_name: AUTOMATION_FILE_NAME.to_string(),
+            },
+        ];
+
+        Ok((song_dir, song, sidecars))
+    }
+
+    /// Inflate a `.ltset` into a freshly created project folder and open it as a
+    /// new session, replacing whatever was loaded. This is the "create at home,
+    /// open at the venue" flow — it does NOT merge into the current session.
+    ///
+    /// `target_song_dir` must not already exist (the caller picks a name/location
+    /// and we own the folder). The slow decompression runs on the calling
+    /// thread; callers run this off the session lock.
+    pub fn import_session_package_as_new(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+        package_path: &Path,
+        target_song_dir: &Path,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if target_song_dir.exists() {
+            return Err(DesktopError::AudioCommand(format!(
+                "ya existe una carpeta llamada \"{}\" en esa ubicacion. Elige otro nombre.",
+                target_song_dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("proyecto")
+            )));
+        }
+
+        emit_project_load_progress(app, 8, "Descomprimiendo sesion...".into(), 0, 0, 0, 0);
+        let extracted: ExtractedSessionPackage = extract_session_package(
+            target_song_dir,
+            package_path,
+            |done, total| {
+                if total > 0 {
+                    // Decompression occupies the 8–40% band; audio prep takes over after.
+                    let percent = (8 + ((done as f64 / total as f64) * 32.0) as u32).min(40) as u8;
+                    emit_project_load_progress(
+                        app,
+                        percent,
+                        "Descomprimiendo sesion...".into(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
+                }
+            },
+        )
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+
+        self.begin_open_project_from_path(app, audio, extracted.song_file)?;
         Ok(self.snapshot())
     }
 

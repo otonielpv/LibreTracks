@@ -1062,6 +1062,15 @@ export type LibraryImportProgressEvent = {
   message: string;
 };
 
+export type SessionExportProgressEvent = {
+  percent: number;
+  message: string;
+  /** True on the terminal event (success or failure). */
+  done: boolean;
+  /** Set when the export failed. */
+  error: string | null;
+};
+
 export type LibraryImportCompleteEvent = {
   assets: LibraryAssetSummary[] | null;
   error: string | null;

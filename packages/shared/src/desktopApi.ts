@@ -17,6 +17,7 @@ import type {
   ProjectLoadProgressEvent,
   RegionMeterLevel,
   RemoteServerInfo,
+  SessionExportProgressEvent,
   SongView,
   SongPackageImportResponse,
   SystemResourceSnapshot,
@@ -100,6 +101,18 @@ export async function listenToLibraryImportProgress(
   return listen<LibraryImportProgressEvent>("library:import-progress", (event) => {
     handler(event.payload);
   });
+}
+
+export async function listenToSessionExportProgress(
+  handler: (event: SessionExportProgressEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<SessionExportProgressEvent>(
+    "session:export-progress",
+    (event) => {
+      handler(event.payload);
+    },
+  );
 }
 
 export async function listenToProjectLoadProgress(
@@ -517,6 +530,29 @@ export async function exportRegionAsPackage(
 
 export async function exportRegionRenderedAudio(regionId: string): Promise<void> {
   await invokeCommand("export_region_rendered_audio", { regionId });
+}
+
+// Export the WHOLE session as a single portable .ltset (every region + library
+// + automation + waveforms, and — in full mode — the clip audio). The "build it
+// at home, open it at the venue" flow. The native save dialog runs on the Rust
+// side; this resolves once the archive is written.
+// Starts the whole-session export on a worker thread. Returns false if the user
+// cancels the save dialog. Progress streams via `listenToSessionExportProgress`
+// and ends with a terminal `done` event (carrying `error` on failure), so the
+// caller registers that listener before awaiting this.
+export async function exportSessionPackage(
+  includeAudio: boolean,
+): Promise<boolean> {
+  return invokeCommand<boolean>("export_session_package", { includeAudio });
+}
+
+// Import a .ltset as a brand-new session. The backend opens two dialogs (pick
+// the .ltset, then choose where to save the new project folder), inflates it,
+// and opens it — replacing whatever is loaded. Routes through the same
+// progress-emitting worker flow as openProject so a large set doesn't freeze the
+// UI. No session needs to be open first (wired to the empty-state landing too).
+export async function importSessionPackage(): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_import_session_package_from_dialog");
 }
 
 export async function importSongPackage(

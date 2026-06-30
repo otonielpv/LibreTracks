@@ -26,6 +26,8 @@ type TimelineTopbarProps = {
   onCreateSong: () => void;
   onOpenProject: () => void;
   onImportSong: () => void;
+  onImportSession: () => void;
+  onExportSession: () => void;
   onSaveProject: () => void;
   onSaveProjectAs: () => void;
   onStopTransport: () => void;
@@ -66,6 +68,8 @@ export function TimelineTopbar({
   onCreateSong,
   onOpenProject,
   onImportSong,
+  onImportSession,
+  onExportSession,
   onSaveProject,
   onSaveProjectAs,
   onStopTransport,
@@ -156,6 +160,29 @@ export function TimelineTopbar({
                   }}
                 >
                   <span>{t("timelineTopbar.importSong")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onTopMenuAction(onImportSession)}
+                >
+                  <span>
+                    {t("timelineTopbar.importSession", {
+                      defaultValue: "Importar sesión…",
+                    })}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canPersistProject && !learnModeActive}
+                  onClick={() => onTopMenuAction(onExportSession)}
+                >
+                  <span>
+                    {t("timelineTopbar.exportSession", {
+                      defaultValue: "Exportar sesión…",
+                    })}
+                  </span>
                 </button>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
                 <button

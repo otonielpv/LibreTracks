@@ -50,6 +50,9 @@ const en = {
       emptyTitle: "Create or open a session",
       emptyDescription:
         "Start a new session or open an existing one. Import WAV assets later from the Library panel and drag them onto the timeline only when you want to arrange them.",
+      importSession: "Import session",
+      importingSession: "Importing session...",
+      exportingSession: "Exporting session...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",
@@ -228,6 +231,19 @@ const en = {
       title: "Export song",
       description: "{{name}}",
       fullTitle: "Full (for sharing)",
+      fullDescription:
+        "Includes the used audio files and waveforms. Self-contained: opens on another PC without the original files.",
+      lightTitle: "Light",
+      lightDescription:
+        "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
+      cancel: "Cancel",
+      confirm: "Export",
+    },
+    exportSessionModal: {
+      eyebrow: "Export session",
+      title: "Export full session",
+      description: "{{name}}",
+      fullTitle: "Full (to take with you)",
       fullDescription:
         "Includes the used audio files and waveforms. Self-contained: opens on another PC without the original files.",
       lightTitle: "Light",
@@ -442,6 +458,7 @@ const en = {
       settingsLanguageSystem: "Language set to the system default.",
       libraryImportStarting: "Preparing asset import...",
       songImported: "Song imported into the current session.",
+      sessionExported: "Session exported.",
       packageImportedAt: "Package imported at {{time}}.",
       externalDropMixed: "Drop either a song package or audio files, not both.",
       externalDropUnsupported:
@@ -570,6 +587,8 @@ const en = {
     newProject: "New project",
     open: "Open",
     importSong: "Import song",
+    importSession: "Import session…",
+    exportSession: "Export session…",
     save: "Save",
     saveAs: "Save as",
     bpmLabel: "BPM",

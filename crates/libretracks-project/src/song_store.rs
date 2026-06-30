@@ -140,8 +140,6 @@ pub fn save_song_to_file(
     song_file: impl AsRef<Path>,
     song: &Song,
 ) -> Result<PathBuf, ProjectError> {
-    validate_song(song)?;
-
     let song_file = song_file.as_ref();
     let song_dir = song_file.parent().ok_or_else(|| {
         ProjectError::Io(std::io::Error::new(
@@ -151,15 +149,23 @@ pub fn save_song_to_file(
     })?;
     fs::create_dir_all(song_dir)?;
 
+    let json = serialize_song_document(song)?;
+    fs::write(song_file, json)?;
+
+    Ok(song_file.to_path_buf())
+}
+
+/// Serialize a song into the current versioned on-disk document (the same bytes
+/// [`save_song_to_file`] writes), validating it first. Exposed so a `.ltset`
+/// export can embed an in-memory session as a valid `session.ltsession` without
+/// writing it to the live project folder.
+pub fn serialize_song_document(song: &Song) -> Result<String, ProjectError> {
+    validate_song(song)?;
     let document = SongDocument {
         version: SONG_FORMAT_VERSION,
         song: song.clone(),
     };
-
-    let json = serde_json::to_string_pretty(&document)?;
-    fs::write(song_file, json)?;
-
-    Ok(song_file.to_path_buf())
+    Ok(serde_json::to_string_pretty(&document)?)
 }
 
 pub fn load_song(song_dir: impl AsRef<Path>) -> Result<Song, ProjectError> {

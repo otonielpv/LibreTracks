@@ -787,3 +787,213 @@ pub fn import_song_package(
         .import_song_package(&package_path, insert_at_seconds, &state.audio)
         .map_err(|error| crate::error_log::log_command_err("import_song_package", error))
 }
+
+/// Export the ENTIRE session as a single portable `.ltset` archive (every
+/// region, the library, automation, waveforms, and — in full mode — the audio
+/// used by clips). The "create at home, play live elsewhere" flow.
+///
+/// Runs on a worker thread and streams progress to the UI via the
+/// `session:export-progress` event (a large full export of a big set can take a
+/// while), ending with a terminal `done` event (with `error` on failure).
+/// Returns `false` if the user cancels the save dialog.
+#[tauri::command]
+pub fn export_session_package(
+    app: AppHandle,
+    include_audio: bool,
+    state: State<'_, DesktopState>,
+) -> Result<bool, String> {
+    let (song_dir, song, sidecars) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .prepare_session_package_export()
+            .map_err(|error| error.to_string())?
+    };
+
+    let output_path = FileDialog::new()
+        .add_filter("LibreTracks Set", &["ltset"])
+        .set_title("Exportar sesion")
+        .set_file_name(&format!("{}.ltset", crate::state::slugify(&song.title)))
+        .save_file();
+
+    let Some(path) = output_path else {
+        return Ok(false);
+    };
+
+    let cache_root = crate::state::decoding_cache_root();
+    let worker_app = app.clone();
+    thread::spawn(move || {
+        crate::state::emit_session_export_progress(
+            &worker_app,
+            2,
+            "Preparando exportacion...".into(),
+            false,
+            None,
+        );
+        let result = libretracks_project::export_session_as_package(
+            &cache_root,
+            &song_dir,
+            &song,
+            &sidecars,
+            &path,
+            include_audio,
+            |done, total| {
+                if total > 0 {
+                    // Per-source work is the bulk of the export (audio + waveform
+                    // in a full package, waveform only in a light one); map it to
+                    // a 5–98% band, leaving room for the final zip flush. Both
+                    // modes report here — a light export of a big set can still
+                    // take a while resolving/bundling every waveform.
+                    let percent = 5 + ((done as f64 / total as f64) * 93.0) as u8;
+                    let message = if include_audio {
+                        format!("Empaquetando audio... {done}/{total}")
+                    } else {
+                        format!("Empaquetando sesion... {done}/{total}")
+                    };
+                    crate::state::emit_session_export_progress(
+                        &worker_app,
+                        percent.min(98),
+                        message,
+                        false,
+                        None,
+                    );
+                }
+            },
+        );
+
+        match result {
+            Ok(_) => crate::state::emit_session_export_progress(
+                &worker_app,
+                100,
+                "Sesion exportada.".into(),
+                true,
+                None,
+            ),
+            Err(error) => {
+                let message = error.to_string();
+                crate::error_log::write_error(&format!("session export failed: {message}"));
+                crate::state::emit_session_export_progress(
+                    &worker_app,
+                    100,
+                    "La exportacion fallo.".into(),
+                    true,
+                    Some(message),
+                );
+            }
+        }
+    });
+
+    Ok(true)
+}
+
+/// Pick a `.ltset`, choose where to save the new project folder, then inflate
+/// and open it as a fresh session — no session needs to be open first, so this
+/// is wired to the empty-state landing screen as well as the menu. Replaces
+/// whatever is currently loaded (it does NOT merge).
+#[tauri::command]
+pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, String> {
+    let package_file = FileDialog::new()
+        .add_filter("LibreTracks Set", &["ltset"])
+        .set_title("Importar sesion (.ltset)")
+        .pick_file();
+
+    let Some(package_file) = package_file else {
+        return Ok(false);
+    };
+
+    // Default the new project folder to <app_data>/songs/<set-name>, but let the
+    // user place it anywhere. The picked file name (sans extension) becomes the
+    // project folder name, matching Create/Save-As.
+    let default_directory = crate::state::create_song_default_directory(&app);
+    let default_name = package_file
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("sesion-importada")
+        .to_string();
+    let target_pick = FileDialog::new()
+        .set_title("Guardar sesion importada como")
+        .set_directory(&default_directory)
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_file_name(&crate::state::default_project_file_name(&default_name))
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        return Ok(false);
+    };
+
+    let target_song_dir = match session_dir_from_pick(&target_pick) {
+        Ok(dir) => dir,
+        Err(error) => return Err(error),
+    };
+
+    let worker_app = app.clone();
+    thread::spawn(move || {
+        let state = worker_app.state::<DesktopState>();
+        let result = (|| -> Result<TransportSnapshot, String> {
+            {
+                let mut session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+                session
+                    .import_session_package_as_new(
+                        &worker_app,
+                        &state.audio,
+                        &package_file,
+                        &target_song_dir,
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            let snapshot = DesktopSession::wait_for_project_audio_preparation_unlocked(
+                &worker_app,
+                &state,
+                &state.audio,
+            )
+            .map_err(|error| error.to_string())?;
+            Ok(snapshot)
+        })();
+
+        match result {
+            Ok(snapshot) => {
+                emit_transport_lifecycle_event(&worker_app, "sync", &snapshot);
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: Some(snapshot),
+                        error: None,
+                    },
+                );
+            }
+            Err(error) => {
+                crate::error_log::write_error(&format!("session import failed: {error}"));
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: None,
+                        error: Some(error),
+                    },
+                );
+            }
+        }
+    });
+
+    Ok(true)
+}
+
+/// Turn the save dialog's `<name>.ltsession` pick into the project FOLDER we
+/// inflate into (`<parent>/<name>/`), matching Create and Save-As, which place
+/// the session file inside a same-named folder.
+fn session_dir_from_pick(target_pick: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let parent_dir = target_pick
+        .parent()
+        .ok_or_else(|| "no se pudo determinar la carpeta destino".to_string())?;
+    let project_name = target_pick
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "el nombre del proyecto no es valido".to_string())?;
+    Ok(parent_dir.join(project_name))
+}

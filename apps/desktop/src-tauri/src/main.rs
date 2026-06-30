@@ -187,6 +187,8 @@ fn main() {
             commands::project::export_region_as_package,
             commands::project::export_region_rendered_audio,
             commands::project::import_song_package,
+            commands::project::export_session_package,
+            commands::project::start_import_session_package_from_dialog,
             commands::project::resolve_missing_file,
             commands::library::delete_library_asset,
             commands::library::move_library_asset,

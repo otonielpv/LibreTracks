@@ -5,7 +5,10 @@ import type {
 } from "@libretracks/shared/models";
 import {
   createSong,
+  exportSessionPackage,
   getProjectLoadProgressSnapshot,
+  importSessionPackage,
+  listenToSessionExportProgress,
   openProject,
   pickAndImportSong,
   saveProject,
@@ -37,6 +40,9 @@ type UseProjectActionsProps = {
   setPackageUnpackUiState: (
     state: { active: boolean; percent: number },
   ) => void;
+  setSessionExportUiState: (
+    state: { active: boolean; percent: number; message: string },
+  ) => void;
 };
 
 export function useProjectActions({
@@ -51,6 +57,7 @@ export function useProjectActions({
   setStatus,
   setActiveSidebarTab,
   setPackageUnpackUiState,
+  setSessionExportUiState,
 }: UseProjectActionsProps) {
   function applyProjectProgressFeedback(event: ProjectLoadProgressEvent) {
     const detail =
@@ -115,29 +122,32 @@ export function useProjectActions({
     );
   }
 
-  function handleOpenProjectClick() {
+  // Shared body for the two flows that REPLACE the loaded session and wait for
+  // the engine to finish preparing audio: "Open project" and "Import session
+  // (.ltset)". Both raise the blocking hydrate overlay with live progress, then
+  // resolve only once the backend has decoded all sources and prearmed voices.
+  // `loadingMessage` lets the import flow say "Importando sesión…" instead.
+  function runProjectLoadFlow(
+    loader: () => Promise<TransportSnapshot | null>,
+    loadingMessage: string,
+  ) {
     void runAction(
       async () => {
         let unlistenProjectProgress: (() => void) | null = null;
         let stopProjectProgressPolling: (() => void) | null = null;
         const progressStartedAt = Date.now();
         setProjectViewHydrating(true);
-        setBusyFeedback({
-          message: t("transport.shell.loadingProject", {
-            defaultValue: "Opening project...",
-          }),
-          percent: 2,
-        });
+        setBusyFeedback({ message: loadingMessage, percent: 2 });
         try {
           unlistenProjectProgress = await registerProjectLoadProgressListener();
           stopProjectProgressPolling = startProjectProgressPolling(progressStartedAt);
           await nextPaint();
-          // openProject() returns null if the user cancels the native dialog.
+          // The loader returns null if the user cancels the native dialog.
           // Otherwise it returns only after the backend has finished decoding
           // all sources AND prearmed Bungee voices; see
           // wait_for_project_audio_preparation in state.rs. So by the time we
           // continue, the engine is ready to Play instantly.
-          const nextSnapshot = await openProject();
+          const nextSnapshot = await loader();
           if (!nextSnapshot) {
             setProjectViewHydrating(false);
             setBusyFeedback(null);
@@ -169,6 +179,92 @@ export function useProjectActions({
       },
       { busy: true },
     );
+  }
+
+  function handleOpenProjectClick() {
+    runProjectLoadFlow(
+      openProject,
+      t("transport.shell.loadingProject", {
+        defaultValue: "Opening project...",
+      }),
+    );
+  }
+
+  // Import a whole session (.ltset) and open it as a NEW session, replacing the
+  // current one — the "create at home, play live elsewhere" flow. Works from the
+  // empty-state landing too (no session needs to be open first). The native
+  // dialogs (pick .ltset, choose destination folder) run backend-side.
+  function handleImportSessionClick() {
+    runProjectLoadFlow(
+      importSessionPackage,
+      t("transport.shell.importingSession", {
+        defaultValue: "Importando sesión...",
+      }),
+    );
+  }
+
+  // Export the whole session as a portable .ltset. The mode (full/light) is
+  // chosen in the ExportSessionModal before this runs; the native save dialog
+  // opens backend-side. The export runs on a worker thread and streams progress
+  // via the session:export-progress event into a non-modal indicator, so a large
+  // full export shows real percent (and the user keeps using the UI). We resolve
+  // on the terminal `done` event.
+  function handleExportSessionConfirm(includeAudio: boolean) {
+    void runAction(async () => {
+      // Register the progress listener BEFORE invoking the command so we don't
+      // miss early events. `finished` resolves on the terminal `done` event.
+      let resolveFinished: (() => void) | null = null;
+      let rejectFinished: ((error: Error) => void) | null = null;
+      const finished = new Promise<void>((resolve, reject) => {
+        resolveFinished = resolve;
+        rejectFinished = reject;
+      });
+      const unlisten = await listenToSessionExportProgress((event) => {
+        setSessionExportUiState({
+          active: !event.done || Boolean(event.error),
+          percent: event.percent,
+          message: event.message,
+        });
+        if (event.done) {
+          if (event.error) {
+            rejectFinished?.(new Error(event.error));
+          } else {
+            resolveFinished?.();
+          }
+        }
+      });
+
+      try {
+        setSessionExportUiState({
+          active: true,
+          percent: 0,
+          message: t("transport.shell.exportingSession", {
+            defaultValue: "Exportando sesión...",
+          }),
+        });
+        const started = await exportSessionPackage(includeAudio);
+        if (!started) {
+          // User cancelled the save dialog: no terminal event will arrive.
+          setSessionExportUiState({ active: false, percent: 0, message: "" });
+          return;
+        }
+        await finished;
+        setStatus(
+          t("transport.status.sessionExported", {
+            defaultValue: "Sesión exportada.",
+          }),
+        );
+        // Briefly leave the 100% indicator up, then clear it.
+        window.setTimeout(() => {
+          setSessionExportUiState({ active: false, percent: 0, message: "" });
+        }, 1200);
+      } catch (error) {
+        setSessionExportUiState({ active: false, percent: 0, message: "" });
+        throw error;
+      } finally {
+        unlisten();
+      }
+    });
   }
 
   function handleImportSongClick() {
@@ -253,6 +349,8 @@ export function useProjectActions({
     handleCreateSongClick,
     handleOpenProjectClick,
     handleImportSongClick,
+    handleImportSessionClick,
+    handleExportSessionConfirm,
     handleSaveProjectClick,
     handleSaveProjectAsClick,
   };
