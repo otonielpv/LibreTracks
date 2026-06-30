@@ -12,19 +12,33 @@ export const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set(["wav", "mp3", "flac", "ogg", "aiff", "aif", "m4a"]);
 
+// Reaper / Ableton project files: dropping one imports it as a song, like a
+// .ltpkg. Single-file only (mixing with audio/other files is rejected).
+const EXTERNAL_PROJECT_EXTENSIONS = new Set(["rpp", "als"]);
+
 /** True for file names the compact + DAW drop pipelines actually
- * accept (any supported audio extension, or a LibreTracks package).
- * Used to reject unsupported drops at the entry point so the user
- * doesn't see misleading "imported" feedback for files we'd silently
- * drop on the floor. */
+ * accept (any supported audio extension, a LibreTracks package, or a
+ * Reaper/Ableton project). Used to reject unsupported drops at the entry
+ * point so the user doesn't see misleading "imported" feedback for files
+ * we'd silently drop on the floor. */
 export function isAcceptedDroppedFileName(name: string): boolean {
   const dot = name.lastIndexOf(".");
   if (dot < 0) return false;
   const ext = name.slice(dot + 1).toLowerCase();
-  return ext === "ltpkg" || SUPPORTED_AUDIO_EXTENSIONS.has(ext);
+  return (
+    ext === "ltpkg" ||
+    SUPPORTED_AUDIO_EXTENSIONS.has(ext) ||
+    EXTERNAL_PROJECT_EXTENSIONS.has(ext)
+  );
 }
 
-export type ExternalDropKind = "package" | "audio" | "mixed" | "unsupported" | "unknown";
+export type ExternalDropKind =
+  | "package"
+  | "external"
+  | "audio"
+  | "mixed"
+  | "unsupported"
+  | "unknown";
 
 export type ExternalDropPreview = {
   kind: ExternalDropKind;
@@ -129,6 +143,7 @@ export type DroppedFileClassification = {
   kind: ExternalDropKind;
   files: File[];
   packageFile: File | null;
+  externalFile: File | null;
   audioFiles: File[];
   unsupportedFiles: File[];
 };
@@ -137,6 +152,10 @@ export type NativeDroppedPathClassification =
   | {
       kind: "package";
       packagePath: string;
+    }
+  | {
+      kind: "external";
+      externalPath: string;
     }
   | {
       kind: "audio";
@@ -202,6 +221,7 @@ export function getDroppedFiles(dataTransfer: DataTransfer | null) {
 
 export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
   const packageFiles: File[] = [];
+  const externalFiles: File[] = [];
   const audioFiles: File[] = [];
   const unsupportedFiles: File[] = [];
 
@@ -209,6 +229,11 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
     const extension = fileExtension(file.name);
     if (extension === "ltpkg") {
       packageFiles.push(file);
+      continue;
+    }
+
+    if (EXTERNAL_PROJECT_EXTENSIONS.has(extension)) {
+      externalFiles.push(file);
       continue;
     }
 
@@ -220,21 +245,46 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
     unsupportedFiles.push(file);
   }
 
-  if (packageFiles.length === 1 && audioFiles.length === 0 && unsupportedFiles.length === 0 && files.length === 1) {
+  if (
+    packageFiles.length === 1 &&
+    externalFiles.length === 0 &&
+    audioFiles.length === 0 &&
+    unsupportedFiles.length === 0 &&
+    files.length === 1
+  ) {
     return {
       kind: "package",
       files,
       packageFile: packageFiles[0],
+      externalFile: null,
       audioFiles: [],
       unsupportedFiles: [],
     };
   }
 
-  if (packageFiles.length > 0) {
+  if (
+    externalFiles.length === 1 &&
+    packageFiles.length === 0 &&
+    audioFiles.length === 0 &&
+    unsupportedFiles.length === 0 &&
+    files.length === 1
+  ) {
+    return {
+      kind: "external",
+      files,
+      packageFile: null,
+      externalFile: externalFiles[0],
+      audioFiles: [],
+      unsupportedFiles: [],
+    };
+  }
+
+  if (packageFiles.length > 0 || externalFiles.length > 0) {
     return {
       kind: "mixed",
       files,
       packageFile: packageFiles[0] ?? null,
+      externalFile: externalFiles[0] ?? null,
       audioFiles,
       unsupportedFiles,
     };
@@ -245,6 +295,7 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
       kind: "audio",
       files,
       packageFile: null,
+      externalFile: null,
       audioFiles,
       unsupportedFiles: [],
     };
@@ -254,6 +305,7 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
     kind: "unsupported",
     files,
     packageFile: null,
+    externalFile: null,
     audioFiles,
     unsupportedFiles,
   };
@@ -261,6 +313,7 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
 
 export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassification {
   const packagePaths: string[] = [];
+  const externalPaths: string[] = [];
   const audioPaths: string[] = [];
   const unsupportedPaths: string[] = [];
 
@@ -268,6 +321,11 @@ export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassifi
     const extension = fileExtension(pathFileName(path));
     if (extension === "ltpkg") {
       packagePaths.push(path);
+      continue;
+    }
+
+    if (EXTERNAL_PROJECT_EXTENSIONS.has(extension)) {
+      externalPaths.push(path);
       continue;
     }
 
@@ -281,6 +339,7 @@ export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassifi
 
   if (
     packagePaths.length === 1 &&
+    externalPaths.length === 0 &&
     audioPaths.length === 0 &&
     unsupportedPaths.length === 0 &&
     paths.length === 1
@@ -291,7 +350,20 @@ export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassifi
     };
   }
 
-  if (packagePaths.length > 0) {
+  if (
+    externalPaths.length === 1 &&
+    packagePaths.length === 0 &&
+    audioPaths.length === 0 &&
+    unsupportedPaths.length === 0 &&
+    paths.length === 1
+  ) {
+    return {
+      kind: "external",
+      externalPath: externalPaths[0],
+    };
+  }
+
+  if (packagePaths.length > 0 || externalPaths.length > 0) {
     return {
       kind: "mixed",
       paths,

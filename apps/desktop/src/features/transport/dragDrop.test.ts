@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   LIBRARY_ASSET_DRAG_MIME,
   classifyDroppedFiles,
+  classifyDroppedPaths,
   getDroppedFiles,
+  isAcceptedDroppedFileName,
   isExternalFileDrag,
   isInternalLibraryDrag,
 } from "./dragDrop";
@@ -59,6 +61,32 @@ describe("dragDrop helpers", () => {
   it("classifies unsupported files", () => {
     const files = [new File([new Uint8Array([1])], "notes.txt")];
     expect(classifyDroppedFiles(files).kind).toBe("unsupported");
+  });
+
+  it("classifies a Reaper/Ableton project drop as external", () => {
+    const rpp = classifyDroppedFiles([
+      new File([new Uint8Array([1])], "song.rpp"),
+    ]);
+    expect(rpp.kind).toBe("external");
+    expect(rpp.externalFile?.name).toBe("song.rpp");
+
+    const als = classifyDroppedPaths(["C:/songs/track.als"]);
+    expect(als.kind).toBe("external");
+    expect(als.kind === "external" && als.externalPath).toBe(
+      "C:/songs/track.als",
+    );
+
+    // A project mixed with audio is rejected (single-file only).
+    expect(
+      classifyDroppedFiles([
+        new File([new Uint8Array([1])], "song.als"),
+        new File([new Uint8Array([2])], "stem.wav"),
+      ]).kind,
+    ).toBe("mixed");
+
+    // .rpp/.als are accepted by the drop gate.
+    expect(isAcceptedDroppedFileName("a.rpp")).toBe(true);
+    expect(isAcceptedDroppedFileName("a.als")).toBe(true);
   });
 
   it("returns dropped files from the transfer payload", () => {

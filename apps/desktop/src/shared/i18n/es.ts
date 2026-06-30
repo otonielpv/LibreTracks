@@ -496,6 +496,7 @@ const es = {
       externalProjectImportedNeedsSave:
         "Proyecto de Reaper/Ableton importado. Guardalo con Guardar como cuando quieras.",
       packageImportedAt: "Paquete importado en {{time}}.",
+      externalProjectImportedAt: "Proyecto Reaper/Ableton importado en {{time}}.",
       externalDropMixed:
         "Suelta un paquete de cancion o archivos de audio, no ambos.",
       externalDropUnsupported:

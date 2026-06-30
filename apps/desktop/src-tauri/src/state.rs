@@ -4674,12 +4674,30 @@ impl DesktopSession {
         insert_at_seconds: f64,
         audio: &AudioController,
     ) -> Result<SongPackageImportResponse, DesktopError> {
+        // Callers that already resolved the insert point (the dialog flows) keep
+        // the position as-is.
+        self.import_external_project_at(project_path, insert_at_seconds, false, audio)
+    }
+
+    /// Import an external project at `desired_seconds`. When `resolve_overlap` is
+    /// true (the timeline OS-drag), the desired position is checked against the
+    /// existing songs and bumped to the setlist end if it would overlap (a whole
+    /// project becomes song region(s), which may not overlap). When false, the
+    /// position is used verbatim.
+    pub fn import_external_project_at(
+        &mut self,
+        project_path: &str,
+        desired_seconds: f64,
+        resolve_overlap: bool,
+        audio: &AudioController,
+    ) -> Result<SongPackageImportResponse, DesktopError> {
         let started_at = Instant::now();
         let project_path = Path::new(project_path);
         eprintln!(
-            "[libretracks-import] begin external import path={} insert_at_seconds={:.3}",
+            "[libretracks-import] begin external import path={} desired_seconds={:.3} resolve_overlap={}",
             project_path.to_string_lossy(),
-            insert_at_seconds
+            desired_seconds,
+            resolve_overlap
         );
         let audio_debug_raw = std::env::var("LIBRETRACKS_AUDIO_DEBUG")
             .ok()
@@ -4712,7 +4730,12 @@ impl DesktopSession {
                     parsed.duration_seconds,
                     parse_started.elapsed().as_millis()
                 );
-                self.import_reaper_project(parsed, insert_at_seconds, audio)
+                let insert = if resolve_overlap {
+                    self.resolve_external_insert_seconds(desired_seconds, parsed.duration_seconds)
+                } else {
+                    desired_seconds
+                };
+                self.import_reaper_project(parsed, insert, audio)
             }
             ExternalProjectKind::Ableton => {
                 let parse_started = Instant::now();
@@ -4729,7 +4752,12 @@ impl DesktopSession {
                     parsed.duration_seconds,
                     parse_started.elapsed().as_millis()
                 );
-                self.import_reaper_project(parsed, insert_at_seconds, audio)
+                let insert = if resolve_overlap {
+                    self.resolve_external_insert_seconds(desired_seconds, parsed.duration_seconds)
+                } else {
+                    desired_seconds
+                };
+                self.import_reaper_project(parsed, insert, audio)
             }
         };
 
@@ -6751,6 +6779,35 @@ impl DesktopSession {
         // snapped to the next downbeat so the new song starts on the grid.
         let gap_target = last_end + bar_seconds_at(song, last_end);
         next_downbeat_after_in_song(song, gap_target)
+    }
+
+    /// Where to drop an imported external project that wants to land at
+    /// `desired_seconds` (e.g. the X position of a timeline drop). A whole
+    /// imported project becomes one or more songs (regions), and the engine
+    /// rejects overlapping songs — so if `[desired, desired + project_duration]`
+    /// would intersect any existing region, fall back to appending after the
+    /// current setlist (`setlist_end_seconds`). With no song / no regions the
+    /// desired position is used as-is (clamped to >= 0).
+    pub fn resolve_external_insert_seconds(
+        &self,
+        desired_seconds: f64,
+        project_duration_seconds: f64,
+    ) -> f64 {
+        let desired = desired_seconds.max(0.0);
+        let Some(song) = self.engine.song() else {
+            return desired;
+        };
+        let desired_end = desired + project_duration_seconds.max(0.0);
+        let overlaps = song.regions.iter().any(|region| {
+            // Half-open ranges; touching at an edge is fine (no overlap).
+            desired < region.end_seconds - 0.0001
+                && desired_end > region.start_seconds + 0.0001
+        });
+        if overlaps {
+            self.setlist_end_seconds()
+        } else {
+            desired
+        }
     }
 
     pub(crate) fn current_position(&self) -> f64 {
@@ -12683,6 +12740,26 @@ mod tests {
             .expect("song view should build")
             .expect("song summary should exist");
         assert_eq!(song_view.regions.len(), 3);
+    }
+
+    #[test]
+    fn resolve_external_insert_keeps_free_position_but_bumps_overlap_to_setlist_end() {
+        // Regions span [0,8], [8,14], [14,18] (duration 18).
+        let session = session_with_song_dir(
+            "external-insert-resolve",
+            demo_song_with_region_changes_and_sections(),
+        );
+
+        // A 5s project dropped at 30s is past everything → no overlap → kept.
+        assert!((session.resolve_external_insert_seconds(30.0, 5.0) - 30.0).abs() < 0.0001);
+
+        // A 5s project dropped at 10s would cover [10,15], overlapping region_2
+        // and region_3 → bumped to the setlist end (> 18).
+        let bumped = session.resolve_external_insert_seconds(10.0, 5.0);
+        assert!(
+            bumped >= 18.0,
+            "overlap should push the insert past the setlist end (18s), got {bumped}"
+        );
     }
 
     #[test]

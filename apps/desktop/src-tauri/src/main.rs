@@ -203,6 +203,7 @@ fn main() {
             commands::project::start_open_project_from_dialog,
             commands::project::start_pick_and_import_song_from_dialog,
             commands::project::start_import_song_package_from_path,
+            commands::project::start_import_external_project_from_path,
             commands::project::pick_and_import_external_project_from_dialog,
             commands::project::pick_and_import_external_project_into_session_from_dialog,
             commands::transport::play_transport,

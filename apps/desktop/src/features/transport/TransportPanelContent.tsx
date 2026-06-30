@@ -85,6 +85,7 @@ import {
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
   importSongPackageFromPathWithProgress,
+  importExternalProjectFromPathWithProgress,
   isTauriApp,
   listenToMidiRawMessage,
   listenToProjectLoadProgress,
@@ -9061,6 +9062,41 @@ export function TransportPanelContent() {
     }
   }
 
+  // A Reaper/Ableton project dropped on the timeline from the OS file explorer.
+  // Mirrors handleDroppedSongPackagePath (non-blocking, progress in the status
+  // bar). The backend lands it at dropSeconds unless that overlaps an existing
+  // song, in which case it appends after the setlist.
+  async function handleDroppedExternalProjectPath(
+    projectPath: string,
+    dropSeconds: number,
+  ) {
+    setPackageUnpackUiState({ active: true, percent: 0 });
+    try {
+      const snapshot = await importExternalProjectFromPathWithProgress(
+        projectPath,
+        dropSeconds,
+      );
+      if (!snapshot) {
+        return;
+      }
+      setPackageUnpackUiState({ active: true, percent: 100 });
+      applyPlaybackSnapshot(snapshot);
+      const refreshedAssets = await refreshLibraryState();
+      mergeLibraryAssets(refreshedAssets);
+      await refreshSongView({ sync: true });
+      setStatus(
+        t("transport.status.externalProjectImportedAt", {
+          time: formatClock(dropSeconds),
+          defaultValue: "Proyecto Reaper/Ableton importado en {{time}}.",
+        }),
+      );
+    } catch (error) {
+      setStatus(formatErrorStatus(error));
+    } finally {
+      setPackageUnpackUiState({ active: false, percent: 0 });
+    }
+  }
+
   async function createRealTracksAndClipsForImportedAssets(args: {
     importedAssets: LibraryAssetSummary[];
     dropSeconds: number;
@@ -9300,6 +9336,21 @@ export function TransportPanelContent() {
       return;
     }
 
+    if (classification.kind === "external") {
+      void runAction(async () => {
+        const projectPath = (
+          classification.externalFile as NativeDroppedFile | null
+        )?.path?.trim();
+        if (!projectPath) {
+          rejectExternalDrop("unsupported");
+          return;
+        }
+
+        await handleDroppedExternalProjectPath(projectPath, dropSeconds);
+      });
+      return;
+    }
+
     handleDroppedAudioFiles(classification.audioFiles, dropSeconds);
   }
 
@@ -9332,6 +9383,16 @@ export function TransportPanelContent() {
       void runAction(async () => {
         await handleDroppedSongPackagePath(
           classification.packagePath,
+          dropSeconds,
+        );
+      });
+      return;
+    }
+
+    if (classification.kind === "external") {
+      void runAction(async () => {
+        await handleDroppedExternalProjectPath(
+          classification.externalPath,
           dropSeconds,
         );
       });
@@ -9557,6 +9618,18 @@ export function TransportPanelContent() {
                 }),
           );
         });
+        return;
+      }
+      if (classification.kind === "external") {
+        // A Reaper/Ableton project dropped on the compact strip imports as a
+        // song appended to the setlist (the drop position has no meaning on the
+        // strip, so the backend's overlap fallback lands it at the end).
+        void runAction(async () =>
+          handleDroppedExternalProjectPath(
+            classification.externalPath,
+            song?.durationSeconds ?? 0,
+          ),
+        );
         return;
       }
       // mixed / unsupported / package-but-no-region (theoretically

@@ -127,6 +127,59 @@ fn import_package_off_lock(
         .map_err(|error| error.to_string())
 }
 
+/// Path-based external-project import for the timeline OS-drag (sibling of
+/// [`start_import_song_package_from_path`]). The frontend resolves the `.rpp`/
+/// `.als` path and the drop position; we run the same progress-emitting worker
+/// flow so the import shows real progress instead of a frozen overlay. The
+/// dropped project lands at `insert_at_seconds` (the drop X) UNLESS that would
+/// overlap an existing song, in which case it appends after the setlist (a
+/// whole project becomes song region(s), and the engine rejects overlap).
+#[tauri::command]
+pub fn start_import_external_project_from_path(
+    app: AppHandle,
+    project_path: String,
+    insert_at_seconds: f64,
+) -> Result<bool, String> {
+    spawn_project_work(&app, move |worker_app, state| {
+        import_external_project_off_lock(worker_app, state, &project_path, insert_at_seconds)
+    });
+
+    Ok(true)
+}
+
+fn import_external_project_off_lock(
+    app: &AppHandle,
+    state: &DesktopState,
+    project_path: &str,
+    insert_at_seconds: f64,
+) -> Result<TransportSnapshot, String> {
+    crate::state::emit_project_load_message(app, 5, "Leyendo proyecto externo...".into());
+
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    // Make sure there is a song to append into (the timeline drop can happen on
+    // an empty session too — same bootstrap the wizard import uses).
+    session
+        .ensure_song_loaded_for_external_import(app, &state.audio)
+        .map_err(|error| error.to_string())?;
+
+    // The drop X is the DESIRED position; import_external_project resolves it
+    // against existing songs (falling back to the setlist end if it would
+    // overlap), since a whole project becomes song region(s) that may not
+    // overlap.
+    let response = session
+        .import_external_project_at(project_path, insert_at_seconds, true, &state.audio)
+        .map_err(|error| error.to_string())?;
+    session
+        .finalize_project_audio_preparation(app, &state.audio)
+        .map_err(|error| error.to_string())?;
+
+    Ok(response.snapshot)
+}
+
 #[tauri::command]
 pub fn pick_and_import_external_project_from_dialog(
     app: AppHandle,

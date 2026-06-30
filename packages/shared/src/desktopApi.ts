@@ -474,6 +474,20 @@ export async function importSongPackageFromPathWithProgress(
   });
 }
 
+// Path-based external project (.rpp/.als) import for the timeline OS-drag.
+// Same progress-emitting worker flow as the .ltpkg path import. The dropped
+// project lands at `insertAtSeconds` unless that would overlap an existing
+// song, in which case the backend appends it after the setlist.
+export async function importExternalProjectFromPathWithProgress(
+  projectPath: string,
+  insertAtSeconds: number,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_import_external_project_from_path", {
+    projectPath,
+    insertAtSeconds,
+  });
+}
+
 // Mirrors `runProjectLoadCommand`: the native dialog opens on the macOS main
 // thread, the heavy import runs on a Rust worker thread, and the result arrives
 // via the `library:import-complete` event so the window never freezes. The

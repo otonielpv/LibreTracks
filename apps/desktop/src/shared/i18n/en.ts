@@ -471,6 +471,7 @@ const en = {
       externalProjectImportedNeedsSave:
         "Reaper/Ableton project imported. Save it with Save As when ready.",
       packageImportedAt: "Package imported at {{time}}.",
+      externalProjectImportedAt: "Reaper/Ableton project imported at {{time}}.",
       externalDropMixed: "Drop either a song package or audio files, not both.",
       externalDropUnsupported:
         "Unsupported file type. Drop audio files or a .ltpkg package.",
