@@ -4109,12 +4109,19 @@ export function TransportPanelContent() {
       }
 
       const summaries = await getLibraryWaveformSummaries(batchKeys);
-      if (!active || !summaries.length) {
+      if (!active) {
         return;
       }
 
-      for (const summary of summaries) {
-        inFlightWaveformKeysRef.current.delete(summary.waveformKey);
+      // Clear in-flight for the WHOLE batch (see loadMissingWaveforms): a cache
+      // miss is generated in the background and not returned here, so leaving it
+      // in-flight would strand it until a full refresh.
+      for (const waveformKey of batchKeys) {
+        inFlightWaveformKeysRef.current.delete(waveformKey);
+      }
+
+      if (!summaries.length) {
+        return;
       }
 
       setWaveformCache((current) => ({
@@ -4189,58 +4196,94 @@ export function TransportPanelContent() {
   }, [song, song?.projectRevision, activeTempoRegionKey]);
 
   useEffect(() => {
-    let active = true;
-
-    async function loadMissingWaveforms() {
-      if (!song) {
-        return;
-      }
-
-      const missingWaveformKeys = song.clips
-        .map((clip) => clip.waveformKey)
-        .filter(
-          (waveformKey, index, keys) => keys.indexOf(waveformKey) === index,
-        )
-        .filter((waveformKey) => {
-          const summary = waveformCache[waveformKey];
-          return !summary && !inFlightWaveformKeysRef.current.has(waveformKey);
-        });
-
-      if (!missingWaveformKeys.length) {
-        return;
-      }
-
-      const batchKeys = missingWaveformKeys.slice(0, WAVEFORM_REQUEST_BATCH_SIZE);
-      for (const waveformKey of batchKeys) {
-        inFlightWaveformKeysRef.current.add(waveformKey);
-      }
-
-      const summaries = await getWaveformSummaries(batchKeys);
-      if (!active) {
-        return;
-      }
-      if (!summaries.length) {
-        return;
-      }
-
-      for (const summary of summaries) {
-        inFlightWaveformKeysRef.current.delete(summary.waveformKey);
-      }
-
-      setWaveformCache((current) => ({
-        ...current,
-        ...Object.fromEntries(
-          summaries.map((summary) => [summary.waveformKey, summary]),
-        ),
-      }));
+    if (!song) {
+      return () => {};
     }
 
-    void loadMissingWaveforms();
+    let active = true;
+
+    // Distinct source keys this song needs a waveform for.
+    const clipKeys = song.clips
+      .map((clip) => clip.waveformKey)
+      .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index);
+
+    // Self-contained loop that drives ALL missing waveforms to completion. We
+    // deliberately do NOT depend on `waveformCache` here: depending on it AND
+    // calling setWaveformCache inside restarted the effect mid-flight, so two
+    // overlapping runs raced on the functional state update and whole batches
+    // were lost (e.g. the first 4 summaries never landed in the cache — that was
+    // the "only the last 3 waveforms appear" bug). Instead this single run owns
+    // the work from start to finish, requesting in batches and polling for keys
+    // still being generated in the background (the live waveform:ready event is
+    // unreliable right after an import — it can fire before the frontend knows
+    // the new session's songDir).
+    // Seed with waveforms the song already carries (embedded summaries from the
+    // snapshot) so we don't re-request those.
+    const resolved = new Set<string>(
+      (song.waveforms ?? []).map((summary) => summary.waveformKey),
+    );
+    let pollAttempts = 0;
+    // Generation after a decode is quick; cap the polling so a genuinely
+    // ungeneratable source can't spin forever (~30s of 600ms ticks).
+    const MAX_POLL_ATTEMPTS = 50;
+
+    async function drainWaveforms() {
+      while (active) {
+        const missing = clipKeys.filter((key) => !resolved.has(key));
+        if (!missing.length) {
+          return;
+        }
+
+        let progressed = false;
+        // Walk the whole missing set in batches in THIS pass.
+        for (let i = 0; i < missing.length; i += WAVEFORM_REQUEST_BATCH_SIZE) {
+          if (!active) {
+            return;
+          }
+          const batchKeys = missing.slice(i, i + WAVEFORM_REQUEST_BATCH_SIZE);
+          const summaries = await getWaveformSummaries(batchKeys);
+          if (!active) {
+            return;
+          }
+          if (summaries.length) {
+            progressed = true;
+            for (const summary of summaries) {
+              resolved.add(summary.waveformKey);
+            }
+            setWaveformCache((current) => ({
+              ...current,
+              ...Object.fromEntries(
+                summaries.map((summary) => [summary.waveformKey, summary]),
+              ),
+            }));
+          }
+        }
+
+        // Everything resolved this pass? Done.
+        if (clipKeys.every((key) => resolved.has(key))) {
+          return;
+        }
+        // Some keys are still being generated in the background. Wait, then
+        // re-request only the ones we don't have yet. If nothing progressed for
+        // too many consecutive polls, give up (likely an ungeneratable source).
+        if (!progressed) {
+          pollAttempts += 1;
+          if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+            return;
+          }
+        } else {
+          pollAttempts = 0;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    }
+
+    void drainWaveforms();
 
     return () => {
       active = false;
     };
-  }, [song, waveformCache]);
+  }, [song]);
 
   useEffect(() => {
     if (playbackState === "playing") {

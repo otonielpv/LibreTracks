@@ -383,6 +383,21 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
     normalize_tempo_markers(&mut tempo_markers);
     normalize_time_signature_markers(&mut time_signature_markers);
 
+    // Reaper REGIONs are sections of a single song, not separate songs — same as
+    // its MARKERs and the same as Ableton locators. A LibreTracks region is a
+    // whole song (a clip may not cross between two), so fold each Reaper region's
+    // START into a section marker and collapse to a single song region below.
+    // This keeps long continuous clips legal (they used to trip "clip spans the
+    // boundary between region X and the next").
+    for region in &regions {
+        section_markers.push(ReaperSectionMarker {
+            name: region.name.clone(),
+            start_seconds: region.start_seconds,
+        });
+    }
+    regions.clear();
+    normalize_section_markers(&mut section_markers);
+
     if bpm.is_none() {
         bpm = tempo_markers
             .iter()
@@ -436,6 +451,14 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         .filter(|value| !value.is_empty())
         .unwrap_or("Reaper Import")
         .to_string();
+
+    // One imported project = one song = one region spanning the whole
+    // arrangement (the Reaper regions became section markers above).
+    let regions = vec![ReaperRegion {
+        name: title.clone(),
+        start_seconds: 0.0,
+        end_seconds: duration_seconds,
+    }];
 
     Ok(ReaperProject {
         title,
@@ -645,16 +668,6 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
                 .map(|marker| marker.signature.clone())
         });
 
-    let mut regions = section_markers
-        .windows(2)
-        .map(|pair| ReaperRegion {
-            name: pair[0].name.clone(),
-            start_seconds: pair[0].start_seconds,
-            end_seconds: pair[1].start_seconds.max(pair[0].start_seconds + 0.001),
-        })
-        .collect::<Vec<_>>();
-    normalize_regions(&mut regions);
-
     let duration_seconds = tracks
         .iter()
         .flat_map(|track| track.items.iter())
@@ -680,18 +693,24 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
         )
         .max(1.0);
 
-    if regions.is_empty() {
-        let project_title = title
-            .as_ref()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "Ableton Import".to_string());
-        regions.push(ReaperRegion {
-            name: project_title,
-            start_seconds: 0.0,
-            end_seconds: duration_seconds,
-        });
-    }
+    let project_title = title
+        .as_ref()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "Ableton Import".to_string());
+
+    // A LibreTracks `SongRegion` is a whole SONG on the session timeline, and a
+    // clip may not straddle the boundary between two of them. Ableton locators
+    // are NOT songs — they are section markers (Intro/Verse/Chorus...) inside a
+    // single song, and they are already imported as section markers above. So an
+    // imported Ableton project is exactly ONE region spanning the whole
+    // arrangement; mapping locators to regions would slice the song into pieces
+    // that the long, continuous clips then illegally cross.
+    let regions = vec![ReaperRegion {
+        name: project_title,
+        start_seconds: 0.0,
+        end_seconds: duration_seconds,
+    }];
 
     let title = title
         .map(|value| value.trim().to_string())
@@ -1556,12 +1575,20 @@ mod tests {
         let parsed = parse_reaper_project(&project_path).expect("parse");
         assert_eq!(parsed.bpm, Some(128.0));
         assert_eq!(parsed.time_signature.as_deref(), Some("4/4"));
-        assert_eq!(parsed.section_markers.len(), 1);
-        assert_eq!(parsed.section_markers[0].name, "Intro");
+        // A Reaper REGION is a section of the song, not a separate song: "Verse"
+        // (the explicit region at 8s) becomes a section marker alongside "Intro",
+        // and the import is a single full-span region.
+        assert_eq!(parsed.section_markers.len(), 2);
+        assert!(parsed
+            .section_markers
+            .iter()
+            .any(|m| m.name == "Intro" && (m.start_seconds - 4.0).abs() < 0.0001));
+        assert!(parsed
+            .section_markers
+            .iter()
+            .any(|m| m.name == "Verse" && (m.start_seconds - 8.0).abs() < 0.0001));
         assert_eq!(parsed.regions.len(), 1);
-        assert_eq!(parsed.regions[0].name, "Verse");
-        assert_eq!(parsed.regions[0].start_seconds, 8.0);
-        assert_eq!(parsed.regions[0].end_seconds, 16.0);
+        assert_eq!(parsed.regions[0].start_seconds, 0.0);
         assert_eq!(parsed.tempo_markers.len(), 2);
         assert_eq!(parsed.tempo_markers[0].start_seconds, 0.0);
         assert_eq!(parsed.tempo_markers[0].bpm, 128.0);
@@ -1649,18 +1676,30 @@ mod tests {
 
                 let parsed = parse_reaper_project(&project_path).expect("parse");
                 assert_eq!(parsed.bpm, Some(130.0));
-                assert_eq!(parsed.section_markers.len(), 2);
-                assert_eq!(parsed.section_markers[0].name, "Intro");
+                // Reaper regions become section markers: "Song Name" (the region at
+                // 0), plus the two MARKERs "Intro" and "Verso". The phantom numeric
+                // "1" at the region end must still be filtered out.
+                assert!(parsed
+                    .section_markers
+                    .iter()
+                    .any(|marker| marker.name == "Intro"));
+                assert!(parsed
+                    .section_markers
+                    .iter()
+                    .any(|marker| marker.name == "Verso"));
+                assert!(parsed
+                    .section_markers
+                    .iter()
+                    .any(|marker| marker.name == "Song Name"));
                 assert!(
                     !parsed
                         .section_markers
                         .iter()
                         .any(|marker| marker.name.trim() == "1")
                 );
+                // One full-span song region (regions are not separate songs).
                 assert_eq!(parsed.regions.len(), 1);
-                assert_eq!(parsed.regions[0].name, "Song Name");
                 assert!((parsed.regions[0].start_seconds - 0.0).abs() < 0.0001);
-                assert!((parsed.regions[0].end_seconds - 252.92307692307693).abs() < 0.001);
         }
 
         #[test]
@@ -1702,10 +1741,14 @@ mod tests {
 
                 let parsed = parse_reaper_project(&project_path).expect("parse");
 
-                // Exactly one user section marker survives: "Estrofa". No phantom
-                // marker at the song end (180.0 or the item length 181.5).
-                assert_eq!(parsed.section_markers.len(), 1);
-                assert_eq!(parsed.section_markers[0].name, "Estrofa");
+                // The user section "Estrofa" survives. "Cancion" (the region) is now
+                // a section marker at 0. Crucially there is NO phantom marker at/near
+                // the region end (180.0 / item length 181.5) — that was the bug.
+                assert!(parsed
+                    .section_markers
+                    .iter()
+                    .any(|marker| marker.name == "Estrofa"
+                        && (marker.start_seconds - 8.0).abs() < 0.0001));
                 assert!(
                     !parsed
                         .section_markers
@@ -1714,11 +1757,9 @@ mod tests {
                     "no section marker should land at/after the region end"
                 );
 
-                // The region spans the start boundary to the END boundary (180.0),
-                // not the raw audio item length (181.5).
+                // One full-span song region.
                 assert_eq!(parsed.regions.len(), 1);
-                assert_eq!(parsed.regions[0].name, "Cancion");
-                assert!((parsed.regions[0].end_seconds - 180.0).abs() < 0.001);
+                assert!((parsed.regions[0].start_seconds - 0.0).abs() < 0.0001);
         }
 
         #[test]
@@ -1814,6 +1855,7 @@ mod tests {
                     "clip length should be converted from beats to seconds, got {}",
                     parsed.tracks[0].items[0].length_seconds
                 );
+                // Locators are imported as SECTION MARKERS, not regions.
                 assert_eq!(parsed.section_markers.len(), 2);
                 assert_eq!(parsed.section_markers[0].name, "Intro");
                 // Locator at beat 4 → 4 * 60/123 ≈ 1.951 s.
@@ -1822,8 +1864,18 @@ mod tests {
                     "locator time should be converted from beats to seconds, got {}",
                     parsed.section_markers[0].start_seconds
                 );
+                // An imported project is ONE song = ONE region spanning the whole
+                // arrangement. Locators are sections inside it, not separate songs,
+                // so a long clip never straddles a region boundary.
                 assert_eq!(parsed.regions.len(), 1);
-                assert_eq!(parsed.regions[0].name, "Intro");
+                assert!(parsed.regions[0].start_seconds <= 0.0001);
+                let clip = &parsed.tracks[0].items[0];
+                assert!(
+                    clip.position_seconds >= parsed.regions[0].start_seconds - 0.0001
+                        && clip.position_seconds + clip.length_seconds
+                            <= parsed.regions[0].end_seconds + 0.0001,
+                    "the whole clip must lie inside the single region"
+                );
         }
 
         #[test]
@@ -1879,6 +1931,76 @@ mod tests {
                     (parsed.tracks[0].items[0].length_seconds - 4.0).abs() < 0.001,
                     "got {}",
                     parsed.tracks[0].items[0].length_seconds
+                );
+        }
+
+        #[test]
+        fn ableton_import_is_one_region_so_long_clips_never_cross_a_boundary() {
+                use flate2::write::GzEncoder;
+                use flate2::Compression;
+                use std::io::Write;
+                // Regression for two related engine rejections:
+                //   1. "clip ... falls outside every region" (a clip at 0s with the
+                //      first locator placed later), and
+                //   2. "clip ... spans the boundary between region X and the next"
+                //      (a long continuous clip crossing locator-derived regions).
+                // Both came from treating Ableton locators as regions. Locators are
+                // SECTION markers inside one song, so an import is a single region
+                // spanning the whole arrangement and a long clip stays whole.
+                let temp = tempfile::tempdir().expect("tempdir");
+                let project_path = temp.path().join("late-locator.als");
+                let source_path = temp.path().join("audio").join("bass.wav");
+                fs::create_dir_all(source_path.parent().expect("audio dir")).expect("mkdir");
+                fs::write(&source_path, b"wav").expect("write wav");
+
+                // Locators at beats 16 and 32 (i.e. NOT at 0). A clip sits at beat 0.
+                let als = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5" MinorVersion="11.0_11300" Creator="Ableton Live 11.3">
+    <LiveSet>
+        <MasterTrack><DeviceChain><Mixer><Tempo><Manual Value="120.0"/></Tempo></Mixer></DeviceChain></MasterTrack>
+        <Locators><Locators>
+            <Locator><Name Value="Verse"/><Time Value="16"/></Locator>
+            <Locator><Name Value="Chorus"/><Time Value="32"/></Locator>
+        </Locators></Locators>
+        <Tracks>
+            <AudioTrack>
+                <Name><EffectiveName Value="Bass"/></Name>
+                <DeviceChain><MainSequencer><Sample><ArrangerAutomation><Events>
+                    <AudioClip>
+                        <CurrentStart Value="0"/>
+                        <CurrentEnd Value="48"/>
+                        <SampleRef><FileRef><Path Value="audio/bass.wav"/></FileRef></SampleRef>
+                    </AudioClip>
+                </Events></ArrangerAutomation></Sample></MainSequencer></DeviceChain>
+            </AudioTrack>
+        </Tracks>
+    </LiveSet>
+</Ableton>
+"#;
+                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+                encoder.write_all(als.as_bytes()).expect("gzip write");
+                fs::write(&project_path, encoder.finish().expect("gzip finish"))
+                    .expect("write als");
+
+                let parsed = parse_ableton_project(&project_path).expect("parse ableton");
+
+                // The clip runs 0..24s (48 beats at 120 BPM).
+                let clip = &parsed.tracks[0].items[0];
+                assert!((clip.position_seconds - 0.0).abs() < 0.001);
+                assert!((clip.length_seconds - 24.0).abs() < 0.001);
+
+                // The two locators are section markers, not regions.
+                assert_eq!(parsed.section_markers.len(), 2);
+
+                // Exactly one region, spanning the whole arrangement, so the entire
+                // 0..24s clip lies inside it without crossing any boundary.
+                assert_eq!(parsed.regions.len(), 1);
+                assert!(parsed.regions[0].start_seconds <= 0.0001);
+                assert!(
+                    clip.position_seconds + clip.length_seconds
+                        <= parsed.regions[0].end_seconds + 0.0001,
+                    "the whole clip must lie inside the single region; region ends at {}",
+                    parsed.regions[0].end_seconds
                 );
         }
 }

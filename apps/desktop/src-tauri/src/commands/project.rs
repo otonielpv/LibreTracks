@@ -133,21 +133,9 @@ pub fn pick_and_import_external_project_from_dialog(
     state: State<'_, DesktopState>,
 ) -> Result<Option<SongPackageImportResponse>, String> {
     eprintln!("[libretracks-import] command wizard import start");
-    let target_pick = FileDialog::new()
-        .add_filter("LibreTracks Session", &["ltsession"])
-        .set_title("Elige donde guardar el proyecto importado")
-        .set_file_name("Proyecto importado.ltsession")
-        .save_file();
-
-    let Some(target_pick) = target_pick else {
-        eprintln!("[libretracks-import] command wizard import cancelled at save target picker");
-        return Ok(None);
-    };
-    eprintln!(
-        "[libretracks-import] wizard target selected={} ",
-        target_pick.to_string_lossy()
-    );
-
+    // Mirror the .ltset import flow: pick the source FIRST, then choose where to
+    // save. Choosing the file before the destination reads more naturally and
+    // lets us default the new session name to the imported project's name.
     let picked_file = FileDialog::new()
         .add_filter("Proyecto Reaper/Ableton", &["rpp", "als"])
         .add_filter("Proyecto Reaper", &["rpp"])
@@ -162,6 +150,31 @@ pub fn pick_and_import_external_project_from_dialog(
     eprintln!(
         "[libretracks-import] wizard source selected={} ",
         project_file.to_string_lossy()
+    );
+
+    // Default the new project to <app_data>/songs/<source-name>, matching the
+    // .ltset import and Create/Save-As. The user can still place it anywhere.
+    let default_directory = crate::state::create_song_default_directory(&app);
+    let default_name = project_file
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Proyecto importado")
+        .to_string();
+    let target_pick = FileDialog::new()
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_title("Elige donde guardar el proyecto importado")
+        .set_directory(&default_directory)
+        .set_file_name(&crate::state::default_project_file_name(&default_name))
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        eprintln!("[libretracks-import] command wizard import cancelled at save target picker");
+        return Ok(None);
+    };
+    eprintln!(
+        "[libretracks-import] wizard target selected={} ",
+        target_pick.to_string_lossy()
     );
 
     let mut session = state
@@ -232,7 +245,14 @@ pub fn pick_and_import_external_project_into_session_from_dialog(
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    let insert_at_seconds = session.transport_position_seconds();
+    // Append the imported project AFTER the current setlist. Its region (a whole
+    // song) must not overlap the existing ones, so we insert at the end of the
+    // last region rather than at the playhead (which is usually 0 and overlapped
+    // the first song → "regions out of order or overlap").
+    let insert_at_seconds = session.setlist_end_seconds();
+    eprintln!(
+        "[libretracks-import] session import appending at setlist end={insert_at_seconds:.3}s"
+    );
     let response = session
         .import_external_project(
             project_file.to_string_lossy().as_ref(),

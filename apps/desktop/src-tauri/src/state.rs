@@ -5831,6 +5831,20 @@ impl DesktopSession {
         let mut last_total = usize::MAX;
         let mut last_percent = u8::MAX;
 
+        // How many distinct audio sources the loaded song actually references.
+        // Right after a structural import the engine upserts the new sources for
+        // background decode, but they take a moment to appear in source_states.
+        // Without this, the `total == 0` "empty project" escape hatch below fires
+        // during that race window and returns "ready" before any MP3 is decoded —
+        // so prime_waveforms_from_engine_peaks finds nothing and the tracks sit on
+        // "analyzing waveform" forever. If the song HAS sources, we must wait for
+        // the engine to register them instead of short-circuiting.
+        let expected_sources = self
+            .engine
+            .song()
+            .map(|song| unique_waveform_keys(song).len())
+            .unwrap_or(0);
+
         loop {
             // engine_snapshot() uses try_lock and returns Err if the lock is
             // contended (e.g. meter polling holds it). Don't propagate — that
@@ -5914,7 +5928,23 @@ impl DesktopSession {
             // register sources from LoadSession, then short-circuit straight
             // to 100% so the loader doesn't hang on "Inicializando..." forever
             // for projects that legitimately contain no audio.
-            if total == 0 && started_at.elapsed() >= Duration::from_millis(300) {
+            //
+            // The grace window is short (300ms) for a truly empty song, but when
+            // the loaded song HAS sources we extend it: right after a structural
+            // import the engine upserts the new sources for background decode and
+            // they take a moment to appear in source_states. Short-circuiting in
+            // that race window returned "ready" before any MP3 was decoded, so the
+            // waveform prime found nothing and the tracks sat on "analyzing
+            // waveform" forever. Wait up to a few seconds for them to register; if
+            // they never do (a decode-pipeline bug elsewhere) we still give up so
+            // the importer isn't blocked for the full 120s — the background
+            // waveform jobs fall back to native file_peaks generation anyway.
+            let empty_grace = if expected_sources == 0 {
+                Duration::from_millis(300)
+            } else {
+                Duration::from_secs(10)
+            };
+            if total == 0 && started_at.elapsed() >= empty_grace {
                 emit_project_load_progress(
                     app,
                     100,
@@ -6632,6 +6662,31 @@ impl DesktopSession {
 
     pub fn transport_position_seconds(&self) -> f64 {
         self.current_position()
+    }
+
+    /// Where to drop the NEXT imported project so it sits after the current
+    /// setlist with a one-bar breathing gap between songs (regions are whole
+    /// songs and may not overlap — the engine rejects that). Returns 0 when
+    /// nothing is loaded so the first import starts at the top. The one-bar
+    /// spacing mirrors how `create_empty_song` separates appended songs, landing
+    /// on a real grid downbeat instead of butting the next song flush against the
+    /// previous one.
+    pub fn setlist_end_seconds(&self) -> f64 {
+        let Some(song) = self.engine.song() else {
+            return 0.0;
+        };
+        let last_end = song
+            .regions
+            .iter()
+            .map(|region| region.end_seconds)
+            .fold(0.0_f64, f64::max);
+        if last_end <= 0.0 {
+            return 0.0;
+        }
+        // One bar of silence at the tempo in effect at the end of the setlist,
+        // snapped to the next downbeat so the new song starts on the grid.
+        let gap_target = last_end + bar_seconds_at(song, last_end);
+        next_downbeat_after_in_song(song, gap_target)
     }
 
     pub(crate) fn current_position(&self) -> f64 {
