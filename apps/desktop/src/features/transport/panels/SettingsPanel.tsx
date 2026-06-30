@@ -32,6 +32,7 @@ import {
   useUpdateCheckStore,
 } from "../../updates/updateCheckStore";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
+import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 
 type AudioRoutingOption = { value: string; label: string };
 
@@ -1247,6 +1248,8 @@ export function SettingsPanel({
                   </div>
                 </section>
               ) : null}
+
+              {activeTab === "shortcuts" ? <ShortcutsSettingsTab /> : null}
 
               {activeTab === "diagnostics" ? (
                 <section

@@ -161,6 +161,7 @@ export type SettingsTab =
   | "voiceGuide"
   | "midi"
   | "general"
+  | "shortcuts"
   | "midiLearn"
   | "diagnostics";
 

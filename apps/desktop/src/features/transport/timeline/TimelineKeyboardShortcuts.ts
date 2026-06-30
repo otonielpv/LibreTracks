@@ -18,6 +18,13 @@ import {
   resolveMarkerShortcut,
   resolveRegionShortcut,
 } from "../helpers";
+import type { ShortcutActionId } from "../keyboard/actions";
+import { eventToBinding } from "../keyboard/keybinding";
+import {
+  buildBindingIndex,
+  resolveBindings,
+  useKeybindingStore,
+} from "../keyboard/keybindingStore";
 
 type TimelineKeyboardShortcutsProps = {
   runAction: (
@@ -53,6 +60,14 @@ type TimelineKeyboardShortcutsProps = {
   /** Split the song under the playhead in two (Shift+S). No-op if the cursor
    * isn't inside any song. */
   splitSongUnderCursor: () => Promise<void>;
+  /** Split the selected clip(s) at the playhead (S). No-op when nothing is
+   * selected or the cursor isn't inside the selection. */
+  splitSelectedClipsUnderCursor: () => Promise<boolean>;
+  /** Select every clip in the project (Ctrl+A). Returns false when empty. */
+  selectAllClips: () => boolean;
+  /** Nudge the selected clip(s) by one snap subdivision (Arrow keys). Returns
+   * false when nothing is selected. */
+  nudgeSelectedClips: (direction: -1 | 1) => Promise<boolean>;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   toggleViewMode: () => void;
@@ -79,51 +94,34 @@ export function useTimelineKeyboardShortcuts({
   scheduleMarkerJumpWithGlobalMode,
   scheduleRegionJumpWithOptions,
   splitSongUnderCursor,
+  splitSelectedClipsUnderCursor,
+  selectAllClips,
+  nudgeSelectedClips,
   setStatus,
   t,
   toggleViewMode,
 }: TimelineKeyboardShortcutsProps) {
+  // Subscribe to the user's binding overrides so a remap in the shortcuts
+  // panel takes effect immediately (the effect re-runs when this changes).
+  const overrides = useKeybindingStore((state) => state.overrides);
+
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      // Tab toggles between DAW and Compact view, Ableton-style. Skip when
-      // the user is typing or when modifier keys are held (Ctrl+Tab is the
-      // browser/OS tab-switch shortcut and Shift+Tab is reverse focus
-      // traversal — we don't want to steal either).
-      if (
-        event.key === "Tab" &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.shiftKey &&
-        !event.altKey
-      ) {
-        if (isTextEntryTarget(event.target)) {
-          return;
-        }
+    // Resolve the effective action → binding map and its reverse index once
+    // per override change, not on every keystroke.
+    const bindingToAction = buildBindingIndex(resolveBindings(overrides));
+
+    // ---- One handler per configurable action. These wrap exactly the
+    // behaviour the app shipped before the keybinding registry existed, so
+    // the refactor is behaviour-preserving for the default bindings. The
+    // dispatcher looks the pressed chord up in `bindingToAction` and calls
+    // the matching entry here. `event` is passed so handlers can read
+    // shift/repeat and call preventDefault.
+    const handlers: Record<
+      ShortcutActionId,
+      (event: KeyboardEvent) => void
+    > = {
+      "transport.playPause": (event) => {
         event.preventDefault();
-        toggleViewMode();
-        return;
-      }
-
-      if (event.code === "Space") {
-        if (isTextEntryTarget(event.target)) {
-          return;
-        }
-
-        event.preventDefault();
-
-        // Shift+Space is Stop (halt + rewind to the start), distinct from the
-        // plain Space toggle which pauses in place. Ableton uses Space itself
-        // for stop; we keep Space as play/pause and put the dedicated stop on
-        // Shift+Space so both behaviours are available.
-        if (event.shiftKey) {
-          void runAction(async () => {
-            const nextSnapshot = await stopTransport();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.playbackStopped"));
-          });
-          return;
-        }
-
         void runAction(async () => {
           if (snapshotRef.current?.playbackState === "playing") {
             const nextSnapshot = await pauseTransport();
@@ -131,69 +129,50 @@ export function useTimelineKeyboardShortcuts({
             setStatus(t("transport.status.playbackPaused"));
             return;
           }
-
           const nextSnapshot = await playTransport();
           applyPlaybackSnapshot(nextSnapshot);
           setStatus(t("transport.status.playbackStarted"));
         });
-        return;
-      }
-
-      // Home jumps the playhead to the very start of the timeline. Seek keeps
-      // the current play/stop state (it re-anchors playback if running), so
-      // this is the non-stopping "go to start", unlike Shift+Space.
-      if (event.key === "Home") {
-        if (isTextEntryTarget(event.target)) {
-          return;
-        }
-
+      },
+      "transport.stop": (event) => {
+        event.preventDefault();
+        void runAction(async () => {
+          const nextSnapshot = await stopTransport();
+          applyPlaybackSnapshot(nextSnapshot);
+          setStatus(t("transport.status.playbackStopped"));
+        });
+      },
+      "transport.gotoStart": (event) => {
         event.preventDefault();
         void runAction(async () => {
           const nextSnapshot = await seekTransport(0);
           applyPlaybackSnapshot(nextSnapshot);
           setStatus(t("transport.status.movedToStart"));
         });
-        return;
-      }
-
-      const target = event.target as HTMLElement | null;
-      const isTypingTarget =
-        isTextEntryTarget(event.target) || target?.tagName === "SELECT";
-
-      if (isTypingTarget) {
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      },
+      "project.save": (event) => {
         event.preventDefault();
-
-        if (event.shiftKey) {
-          handleSaveProjectAsClick();
-          return;
-        }
-
         handleSaveProjectClick();
-        return;
-      }
-
-      // Shift+S (no Ctrl/Cmd — that's Save/Save As above): split the song under
-      // the playhead in two. No-op if the cursor isn't inside any song.
-      if (
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "s"
-      ) {
+      },
+      "project.saveAs": (event) => {
+        event.preventDefault();
+        handleSaveProjectAsClick();
+      },
+      "edit.splitSong": (event) => {
         event.preventDefault();
         if (event.repeat) {
           return;
         }
         void splitSongUnderCursor();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+      },
+      "edit.splitClip": (event) => {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        void splitSelectedClipsUnderCursor();
+      },
+      "edit.copy": (event) => {
         event.preventDefault();
         if (event.repeat) {
           return;
@@ -201,10 +180,8 @@ export function useTimelineKeyboardShortcuts({
         if (copySelectedClips()) {
           setStatus(t("transport.status.clipsCopied"));
         }
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+      },
+      "edit.paste": (event) => {
         event.preventDefault();
         if (event.repeat) {
           return;
@@ -214,10 +191,8 @@ export function useTimelineKeyboardShortcuts({
             setStatus(t("transport.status.clipsPasted"));
           }
         });
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+      },
+      "edit.duplicate": (event) => {
         event.preventDefault();
         if (event.repeat) {
           return;
@@ -227,116 +202,58 @@ export function useTimelineKeyboardShortcuts({
             setStatus(t("transport.status.clipsDuplicated"));
           }
         });
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      },
+      "edit.undo": (event) => {
         event.preventDefault();
         void runAction(async () => {
-          const nextSnapshot = event.shiftKey
-            ? await redoAction()
-            : await undoAction();
+          const nextSnapshot = await undoAction();
           applyPlaybackSnapshot(nextSnapshot);
-          setStatus(
-            event.shiftKey
-              ? t("transport.status.actionRedone")
-              : t("transport.status.actionUndone"),
-          );
+          setStatus(t("transport.status.actionUndone"));
         });
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+      },
+      "edit.redo": (event) => {
         event.preventDefault();
         void runAction(async () => {
           const nextSnapshot = await redoAction();
           applyPlaybackSnapshot(nextSnapshot);
           setStatus(t("transport.status.actionRedone"));
         });
-        return;
-      }
-
-      const keyDigit = keyboardDigit(event);
-      if (keyDigit !== null) {
+      },
+      "edit.redoAlt": (event) => {
         event.preventDefault();
-
-        if (event.shiftKey) {
-          const region = song
-            ? resolveRegionShortcut(song.regions, keyDigit)
-            : null;
-          if (!region) {
-            setStatus(
-              t("transport.status.noSongForDigit", { digit: keyDigit }),
-            );
-            return;
-          }
-
-          void runAction(async () => {
-            await scheduleRegionJumpWithOptions(region.id, region.name);
-          });
-          return;
-        }
-
-        const marker = song
-          ? resolveMarkerShortcut(song.sectionMarkers, keyDigit)
-          : null;
-        if (!marker) {
-          setStatus(
-            t("transport.status.noMarkerForDigit", { digit: keyDigit }),
-          );
-          return;
-        }
-
         void runAction(async () => {
-          const pendingJump = snapshotRef.current?.pendingMarkerJump;
-          if (pendingJump && pendingJump.targetMarkerId === marker.id) {
-            const nextSnapshot = await cancelMarkerJump();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              t("transport.status.jumpCancelledDigit", { digit: keyDigit }),
-            );
-            return;
-          }
-
-          await scheduleMarkerJumpWithGlobalMode(marker.id, marker.name);
+          const nextSnapshot = await redoAction();
+          applyPlaybackSnapshot(nextSnapshot);
+          setStatus(t("transport.status.actionRedone"));
         });
-
-        return;
-      }
-
-      if (event.key === "Escape") {
+      },
+      "edit.selectAll": (event) => {
         event.preventDefault();
-
-        if (openTopMenu) {
-          setOpenTopMenu(null);
+        if (event.repeat) {
           return;
         }
-
-        if (snapshotRef.current?.pendingMarkerJump) {
-          void runAction(async () => {
-            const nextSnapshot = await cancelMarkerJump();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.jumpCancelled"));
-          });
-          return;
+        if (selectAllClips()) {
+          setStatus(
+            t("transport.status.allClipsSelected", {
+              defaultValue: "Seleccionados todos los clips.",
+            }),
+          );
         }
-
-        clearSelections(t("transport.status.selectionsCleared"));
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        if (isTextEntryTarget(event.target)) {
-          return;
-        }
-
+      },
+      "edit.nudgeLeft": (event) => {
         event.preventDefault();
-
+        void nudgeSelectedClips(-1);
+      },
+      "edit.nudgeRight": (event) => {
+        event.preventDefault();
+        void nudgeSelectedClips(1);
+      },
+      "edit.delete": (event) => {
+        event.preventDefault();
         if (selectedClipIds.length > 1) {
-          // Multi-clip deletion via the batched backend command — a
-          // single engine sync + one snapshot reload + one history
-          // entry, instead of N round-trips that made the UI feel
-          // sluggish on big selections.
+          // Multi-clip deletion via the batched backend command — a single
+          // engine sync + one snapshot reload + one history entry, instead of
+          // N round-trips that made the UI feel sluggish on big selections.
           const idsToDelete = [...selectedClipIds];
           void runAction(async () => {
             const nextSnapshot = await deleteClips(idsToDelete);
@@ -358,9 +275,7 @@ export function useTimelineKeyboardShortcuts({
           });
         } else if (selectedTrackIds.length > 0) {
           // Batched: one backend call deletes the whole selection in a single
-          // engine sync + snapshot + history entry. The old per-id loop made
-          // the tracks vanish one by one and felt sluggish on big selections
-          // (same fix as the multi-clip deleteClips path above).
+          // engine sync + snapshot + history entry.
           const idsToDelete = [...selectedTrackIds];
           void runAction(async () => {
             const nextSnapshot = await deleteTracks(idsToDelete);
@@ -373,6 +288,139 @@ export function useTimelineKeyboardShortcuts({
             );
           });
         }
+      },
+      "view.toggleViewMode": (event) => {
+        event.preventDefault();
+        toggleViewMode();
+      },
+      "nav.cancelOrClear": (event) => {
+        event.preventDefault();
+        if (openTopMenu) {
+          setOpenTopMenu(null);
+          return;
+        }
+        if (snapshotRef.current?.pendingMarkerJump) {
+          void runAction(async () => {
+            const nextSnapshot = await cancelMarkerJump();
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(t("transport.status.jumpCancelled"));
+          });
+          return;
+        }
+        clearSelections(t("transport.status.selectionsCleared"));
+      },
+      // UI-zoom actions are owned by the app-level handler in App.tsx (they
+      // also accept "+"/"_" variants), so they have no dispatcher entry here.
+      // They appear in the shortcuts panel as fixed/informational rows.
+      "view.zoomIn": () => {},
+      "view.zoomOut": () => {},
+      "view.zoomReset": () => {},
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const binding = eventToBinding(event);
+      if (binding === null) {
+        return;
+      }
+
+      const typingTarget = isTextEntryTarget(event.target);
+      const isSelectTarget =
+        (event.target as HTMLElement | null)?.tagName === "SELECT";
+
+      // Tab toggles DAW/Compact view, Ableton-style. We keep the original
+      // guard: only the unmodified Tab, and never while typing (so focus
+      // traversal still works in inputs). Ctrl/Shift/Alt+Tab fall through to
+      // the browser/OS.
+      if (binding === "Tab") {
+        if (typingTarget) {
+          return;
+        }
+        const action = bindingToAction.get("Tab");
+        if (action) {
+          handlers[action](event);
+        }
+        return;
+      }
+
+      // Space (play/pause or stop) must work even inside SELECT, but not while
+      // typing in a text field — matching the original behaviour.
+      if (binding === "Space" || binding === "Shift+Space") {
+        if (typingTarget) {
+          return;
+        }
+        const action = bindingToAction.get(binding);
+        if (action) {
+          handlers[action](event);
+        }
+        return;
+      }
+
+      // Marker (1-9) and region (Shift+1-9) jumps are dynamic — they resolve
+      // against the current song's markers/regions, so they live here rather
+      // than in the configurable registry. Resolve them before the generic
+      // binding lookup. Skip while typing or focused in a SELECT.
+      if (!typingTarget && !isSelectTarget) {
+        const keyDigit = keyboardDigit(event);
+        if (keyDigit !== null && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          if (event.shiftKey) {
+            const region = song
+              ? resolveRegionShortcut(song.regions, keyDigit)
+              : null;
+            if (!region) {
+              setStatus(
+                t("transport.status.noSongForDigit", { digit: keyDigit }),
+              );
+              return;
+            }
+            void runAction(async () => {
+              await scheduleRegionJumpWithOptions(region.id, region.name);
+            });
+            return;
+          }
+
+          const marker = song
+            ? resolveMarkerShortcut(song.sectionMarkers, keyDigit)
+            : null;
+          if (!marker) {
+            setStatus(
+              t("transport.status.noMarkerForDigit", { digit: keyDigit }),
+            );
+            return;
+          }
+          void runAction(async () => {
+            const pendingJump = snapshotRef.current?.pendingMarkerJump;
+            if (pendingJump && pendingJump.targetMarkerId === marker.id) {
+              const nextSnapshot = await cancelMarkerJump();
+              applyPlaybackSnapshot(nextSnapshot);
+              setStatus(
+                t("transport.status.jumpCancelledDigit", { digit: keyDigit }),
+              );
+              return;
+            }
+            await scheduleMarkerJumpWithGlobalMode(marker.id, marker.name);
+          });
+          return;
+        }
+      }
+
+      // Generic configurable shortcuts. Everything past this point is ignored
+      // while the user is typing or focused in a SELECT.
+      if (typingTarget || isSelectTarget) {
+        return;
+      }
+
+      // Backspace is a permanent alias for the Delete action (clip/track
+      // deletion). It isn't a separately bindable row — both keys always
+      // delete, matching the app's long-standing behaviour.
+      if (binding === "Backspace") {
+        handlers["edit.delete"](event);
+        return;
+      }
+
+      const action = bindingToAction.get(binding);
+      if (action) {
+        handlers[action](event);
       }
     };
 
@@ -381,6 +429,7 @@ export function useTimelineKeyboardShortcuts({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [
+    overrides,
     applyPlaybackSnapshot,
     clearSelections,
     handleSaveProjectAsClick,
@@ -390,6 +439,9 @@ export function useTimelineKeyboardShortcuts({
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
     splitSongUnderCursor,
+    splitSelectedClipsUnderCursor,
+    selectAllClips,
+    nudgeSelectedClips,
     selectedClipId,
     selectedClipIds,
     selectedTrackIds,

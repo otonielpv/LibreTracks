@@ -6639,3 +6639,129 @@ textarea {
   line-height: 1.4;
   opacity: 0.55;
 }
+
+/* Keyboard shortcuts settings tab */
+.lt-shortcuts-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lt-shortcuts-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.lt-shortcuts-search {
+  flex: 1;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(0 0 0 / 0.25);
+  color: inherit;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.lt-shortcuts-reset-all,
+.lt-shortcuts-edit,
+.lt-shortcuts-confirm,
+.lt-shortcuts-cancel,
+.lt-shortcuts-clear,
+.lt-shortcuts-reset {
+  border-radius: 4px;
+  border: 1px solid rgb(87 241 219 / 0.22);
+  background: rgb(87 241 219 / 0.06);
+  color: inherit;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.lt-shortcuts-confirm {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.16);
+}
+
+.lt-shortcuts-reset-all:hover,
+.lt-shortcuts-edit:hover,
+.lt-shortcuts-confirm:hover,
+.lt-shortcuts-cancel:hover,
+.lt-shortcuts-clear:hover,
+.lt-shortcuts-reset:hover {
+  background: rgb(87 241 219 / 0.18);
+}
+
+.lt-shortcuts-hint {
+  margin: 0;
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.lt-shortcuts-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.lt-shortcuts-group-title {
+  margin: 0.5rem 0 0.15rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.lt-shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.15rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.05);
+  min-height: 1.9rem;
+}
+
+.lt-shortcuts-row-label {
+  font-size: 0.8rem;
+}
+
+.lt-shortcuts-row-controls,
+.lt-shortcuts-capture {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-shortcuts-kbd {
+  font-family: inherit;
+  font-size: 0.72rem;
+  border-radius: 4px;
+  border: 1px solid rgb(87 241 219 / 0.3);
+  background: rgb(0 0 0 / 0.3);
+  padding: 0.12rem 0.4rem;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.lt-shortcuts-unbound,
+.lt-shortcuts-fixed,
+.lt-shortcuts-listening {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.lt-shortcuts-conflict {
+  font-size: 0.68rem;
+  color: rgb(255 196 120 / 0.95);
+}

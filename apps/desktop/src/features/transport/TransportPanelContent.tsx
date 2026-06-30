@@ -1254,6 +1254,13 @@ export function TransportPanelContent() {
   // matches the previous one the anchor never re-runs → playhead frozen.
   const forceReanchorOnNextSnapshotRef = useRef(false);
   const displayPositionSecondsRef = useRef(0);
+  // Latest timeline grid snap interval, kept in a ref so the Arrow-key nudge
+  // callback (declared before the grid is computed) can read it. Populated by
+  // an effect once timelineGrid exists.
+  const timelineGridSnapRef = useRef({
+    snapIntervalSeconds: 0,
+    beatDurationSeconds: 0,
+  });
   const followPlayheadEnabledRef = useRef(followPlayheadEnabled);
   const viewModeRef = useRef(viewMode);
   const laneViewportWidthRef = useRef(320);
@@ -4549,6 +4556,84 @@ export function TransportPanelContent() {
     );
   }, [song, splitSongRegionAtCursor]);
 
+  // Split the selected clip(s) at the playhead (S shortcut). Mirrors the clip
+  // context-menu "Split at cursor" action: only clips whose span contains the
+  // cursor are split, batched into one command. No-op when nothing qualifies.
+  const splitSelectedClipsUnderCursor = useCallback(async () => {
+    const cursorSeconds = displayPositionSecondsRef.current;
+    const splittable = selectedClipSummaries.filter(
+      (clip) =>
+        cursorSeconds > clip.timelineStartSeconds &&
+        cursorSeconds < clip.timelineStartSeconds + clip.durationSeconds,
+    );
+    if (!splittable.length) {
+      return false;
+    }
+    await runAction(async () => {
+      const ids = splittable.map((clip) => clip.id);
+      const nextSnapshot =
+        ids.length > 1
+          ? await splitClips(ids, cursorSeconds)
+          : await splitClip(ids[0], cursorSeconds);
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(
+        ids.length > 1
+          ? t("transport.status.clipsSplitAt", {
+              count: ids.length,
+              time: formatClock(cursorSeconds),
+              defaultValue: "Split {{count}} clips at {{time}}.",
+            })
+          : t("transport.status.clipSplitAt", {
+              time: formatClock(cursorSeconds),
+            }),
+      );
+    });
+    return true;
+  }, [selectedClipSummaries, runAction, applyPlaybackSnapshot, setStatus, t]);
+
+  // Select every clip in the project (Ctrl+A). Returns false when empty so the
+  // dispatcher can skip the status message.
+  const selectAllClips = useCallback(() => {
+    const clips = songRef.current?.clips ?? [];
+    if (!clips.length) {
+      return false;
+    }
+    setSelectedClipIds(clips.map((clip) => clip.id));
+    return true;
+  }, [setSelectedClipIds]);
+
+  // Nudge the selected clip(s) left (-1) or right (+1) by one snap subdivision
+  // (Arrow keys). Reads the live grid snap interval from a ref (the grid itself
+  // is computed further down), falling back to the beat duration when there's
+  // no sub-beat subdivision. Clamps to 0 so a clip can't be pushed before the
+  // timeline start. No-op when nothing is selected.
+  const nudgeSelectedClips = useCallback(
+    async (direction: -1 | 1) => {
+      if (!selectedClipSummaries.length) {
+        return false;
+      }
+      const grid = timelineGridSnapRef.current;
+      const step =
+        grid.snapIntervalSeconds > 0
+          ? grid.snapIntervalSeconds
+          : grid.beatDurationSeconds;
+      if (!(step > 0)) {
+        return false;
+      }
+      const delta = step * direction;
+      const moves = selectedClipSummaries.map((clip) => ({
+        clipId: clip.id,
+        timelineStartSeconds: Math.max(0, clip.timelineStartSeconds + delta),
+      }));
+      await runAction(async () => {
+        const nextSnapshot = await moveClipsBatch(moves);
+        applyPlaybackSnapshot(nextSnapshot);
+      });
+      return true;
+    },
+    [selectedClipSummaries, runAction, applyPlaybackSnapshot],
+  );
+
   useTimelineKeyboardShortcuts({
     runAction,
     applyPlaybackSnapshot,
@@ -4570,6 +4655,9 @@ export function TransportPanelContent() {
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
     splitSongUnderCursor,
+    splitSelectedClipsUnderCursor,
+    selectAllClips,
+    nudgeSelectedClips,
     setStatus,
     t,
     toggleViewMode,
@@ -5547,6 +5635,17 @@ export function TransportPanelContent() {
     viewportStartSeconds: 0,
     viewportEndSeconds: workspaceDurationSeconds,
   });
+
+  // Keep the latest grid snap interval in a ref so nudgeSelectedClips (defined
+  // earlier, before the keyboard hook) can read it without a declaration-order
+  // problem. The callback only fires in response to a keystroke (post-render),
+  // by which point the ref is populated.
+  useEffect(() => {
+    timelineGridSnapRef.current = {
+      snapIntervalSeconds: timelineGrid.snapIntervalSeconds,
+      beatDurationSeconds: timelineGrid.beatDurationSeconds,
+    };
+  }, [timelineGrid.snapIntervalSeconds, timelineGrid.beatDurationSeconds]);
 
   function handleSelectRegionFromMidi(direction: -1 | 1) {
     const effectSong = songRef.current;
@@ -9834,6 +9933,12 @@ export function TransportPanelContent() {
       id: "general",
       label: t("transport.settingsModal.tabGeneral", {
         defaultValue: "General",
+      }),
+    },
+    {
+      id: "shortcuts",
+      label: t("transport.settingsModal.tabShortcuts", {
+        defaultValue: "Atajos",
       }),
     },
     {
