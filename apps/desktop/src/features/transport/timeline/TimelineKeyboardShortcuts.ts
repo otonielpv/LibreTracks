@@ -50,6 +50,9 @@ type TimelineKeyboardShortcutsProps = {
     regionId: string,
     regionName: string,
   ) => Promise<TransportSnapshot>;
+  /** Split the song under the playhead in two (Shift+S). No-op if the cursor
+   * isn't inside any song. */
+  splitSongUnderCursor: () => Promise<void>;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   toggleViewMode: () => void;
@@ -75,6 +78,7 @@ export function useTimelineKeyboardShortcuts({
   handleSaveProjectAsClick,
   scheduleMarkerJumpWithGlobalMode,
   scheduleRegionJumpWithOptions,
+  splitSongUnderCursor,
   setStatus,
   t,
   toggleViewMode,
@@ -169,6 +173,23 @@ export function useTimelineKeyboardShortcuts({
         }
 
         handleSaveProjectClick();
+        return;
+      }
+
+      // Shift+S (no Ctrl/Cmd — that's Save/Save As above): split the song under
+      // the playhead in two. No-op if the cursor isn't inside any song.
+      if (
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "s"
+      ) {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        void splitSongUnderCursor();
         return;
       }
 
@@ -368,6 +389,7 @@ export function useTimelineKeyboardShortcuts({
     runAction,
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
+    splitSongUnderCursor,
     selectedClipId,
     selectedClipIds,
     selectedTrackIds,

@@ -240,6 +240,7 @@ fn main() {
             commands::timeline::update_live_region_master_gain,
             commands::timeline::update_song_region_master_gain,
             commands::timeline::delete_song_region,
+            commands::timeline::split_song_region,
             commands::timeline::upsert_automation_cue,
             commands::timeline::delete_automation_cue,
             commands::timeline::add_automation_track,

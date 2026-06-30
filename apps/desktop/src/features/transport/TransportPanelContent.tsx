@@ -112,6 +112,7 @@ import {
   setVoiceGuideConfigRealtime,
   splitClip,
   splitClips,
+  splitSongRegion,
   setSectionMarkerKind,
   setSectionMarkerColor,
   stopTransport,
@@ -4504,6 +4505,49 @@ export function TransportPanelContent() {
     };
   }, [openTopMenu]);
 
+  // Split a specific song region at the current playhead. Shared by the song
+  // context menu and the Shift+S keyboard shortcut. No-op (returns false) if the
+  // cursor isn't strictly inside the region.
+  const splitSongRegionAtCursor = useCallback(
+    async (regionId: string, regionStart: number, regionEnd: number) => {
+      const cursorSeconds = displayPositionSecondsRef.current;
+      if (cursorSeconds <= regionStart || cursorSeconds >= regionEnd) {
+        return false;
+      }
+      await runAction(async () => {
+        const nextSnapshot = await splitSongRegion(regionId, cursorSeconds);
+        applyPlaybackSnapshot(nextSnapshot);
+        await refreshSongView({ sync: true });
+        setStatus(
+          t("transport.status.songSplitAt", {
+            time: formatClock(cursorSeconds),
+            defaultValue: "Canción partida en {{time}}.",
+          }),
+        );
+      });
+      return true;
+    },
+    [runAction, applyPlaybackSnapshot, refreshSongView, setStatus, t],
+  );
+
+  // Find the song under the playhead and split it there (Shift+S).
+  const splitSongUnderCursor = useCallback(async () => {
+    const cursorSeconds = displayPositionSecondsRef.current;
+    const region = (song?.regions ?? []).find(
+      (candidate) =>
+        cursorSeconds > candidate.startSeconds &&
+        cursorSeconds < candidate.endSeconds,
+    );
+    if (!region) {
+      return;
+    }
+    await splitSongRegionAtCursor(
+      region.id,
+      region.startSeconds,
+      region.endSeconds,
+    );
+  }, [song, splitSongRegionAtCursor]);
+
   useTimelineKeyboardShortcuts({
     runAction,
     applyPlaybackSnapshot,
@@ -4524,6 +4568,7 @@ export function TransportPanelContent() {
     handleSaveProjectAsClick,
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
+    splitSongUnderCursor,
     setStatus,
     t,
     toggleViewMode,
@@ -6054,7 +6099,12 @@ export function TransportPanelContent() {
     ];
   }
 
+  // Split a specific song region at the current playhead. Shared by the song
   function songRegionContextMenu(region: SongRegionSummary) {
+    const cursorSeconds = displayPositionSecondsRef.current;
+    // Splitting needs the playhead strictly inside this song.
+    const canSplitSong =
+      cursorSeconds > region.startSeconds && cursorSeconds < region.endSeconds;
     return [
       {
         label: t("transport.menu.renameSong"),
@@ -6077,6 +6127,19 @@ export function TransportPanelContent() {
             await syncSongLibraryFolderAfterRename(region.name, nextName);
             setStatus(t("transport.status.songRenamed", { name: nextName }));
           });
+        },
+      },
+      {
+        label: t("transport.menu.splitSongAtCursor", {
+          defaultValue: "Partir canción en el cursor",
+        }),
+        disabled: !canSplitSong,
+        onSelect: async () => {
+          await splitSongRegionAtCursor(
+            region.id,
+            region.startSeconds,
+            region.endSeconds,
+          );
         },
       },
       {

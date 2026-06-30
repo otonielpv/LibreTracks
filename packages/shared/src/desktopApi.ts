@@ -885,6 +885,16 @@ export async function deleteSongRegion(regionId: string): Promise<TransportSnaps
   return invokeCommand<TransportSnapshot>("delete_song_region", { regionId });
 }
 
+export async function splitSongRegion(
+  regionId: string,
+  splitSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("split_song_region", {
+    regionId,
+    splitSeconds,
+  });
+}
+
 export async function upsertAutomationCue(
   cue: AutomationCueSummary,
 ): Promise<TransportSnapshot> {

@@ -4256,6 +4256,70 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Split a song (SongRegion) in two at `split_seconds_view`. The left half
+    /// keeps the original id/name/transpose/warp/master; the right half is a new
+    /// region named "<name> (2)" inheriting the same musical settings (it is the
+    /// same song, cut in two). Clips and markers are NOT moved — each already
+    /// belongs to whichever half contains its start (the "clip lives inside one
+    /// region" invariant), so the split point alone redistributes them. A clip
+    /// straddling the cut stays in the left half (its start is left of the cut);
+    /// the user can split that clip separately if they want.
+    pub fn split_song_region(
+        &mut self,
+        region_id: &str,
+        split_seconds_view: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let region_index = song
+            .regions
+            .iter()
+            .position(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+
+        // Region bounds live in source-time; the cursor is view-time. Convert,
+        // mirroring split_clips.
+        let split_seconds = source_seconds_at_view(&song, split_seconds_view);
+        let region = song.regions[region_index].clone();
+        // The cut must fall strictly inside the region, with enough room for two
+        // non-degenerate halves.
+        if split_seconds <= region.start_seconds + 0.001
+            || split_seconds >= region.end_seconds - 0.001
+        {
+            return Err(DesktopError::InvalidSplitPoint);
+        }
+
+        // A clip may not cross a region boundary (the engine rejects it). Any
+        // clip straddling the cut is split there too, so each half stays inside
+        // its song — exactly what split_clips does at the cursor.
+        split_clips_crossing_point(&mut song, split_seconds_view);
+
+        let right = SongRegion {
+            id: format!("region_{}_{}", timestamp_suffix(), song.regions.len()),
+            name: format!("{} (2)", region.name),
+            start_seconds: split_seconds,
+            end_seconds: region.end_seconds,
+            transpose_semitones: region.transpose_semitones,
+            warp_enabled: region.warp_enabled,
+            warp_source_bpm: region.warp_source_bpm,
+            master: region.master.clone(),
+        };
+        // Left half: shrink the original region's end to the cut.
+        song.regions[region_index].end_seconds = split_seconds;
+        song.regions.push(right);
+        sort_song_regions(&mut song.regions);
+
+        audio.update_live_song_regions(&song)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn assign_section_marker_digit(
         &mut self,
         section_id: &str,
@@ -9419,6 +9483,52 @@ fn sort_song_regions(regions: &mut Vec<SongRegion>) {
     });
 }
 
+/// Split every clip whose span strictly contains `split_seconds_view` into two
+/// clips at that point. Same cut math as `split_clips` (warp-aware via
+/// `source_seconds_at_view`), but applied to whichever clips cross the point
+/// rather than a caller-chosen set. Used when splitting a song region so no clip
+/// straddles the new song boundary (the engine rejects boundary-crossing clips).
+fn split_clips_crossing_point(song: &mut Song, split_seconds_view: f64) {
+    let suffix_base = timestamp_suffix();
+    let mut index = 0;
+    let mut counter = 0;
+    while index < song.clips.len() {
+        let clip = song.clips[index].clone();
+        let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
+        if split_seconds_view <= clip.timeline_start_seconds || split_seconds_view >= clip_end {
+            index += 1;
+            continue;
+        }
+
+        let left_duration = split_seconds_view - clip.timeline_start_seconds;
+        let right_duration = clip_end - split_seconds_view;
+        let split_seconds_source_clip =
+            source_seconds_at_view(song, clip.timeline_start_seconds + left_duration);
+        let source_left_duration = (split_seconds_source_clip
+            - source_seconds_at_view(song, clip.timeline_start_seconds))
+        .max(0.0);
+
+        let left_clip = Clip {
+            id: format!("clip_{}_{}_l", suffix_base, counter),
+            duration_seconds: left_duration,
+            ..clip.clone()
+        };
+        let right_clip = Clip {
+            id: format!("clip_{}_{}_r", suffix_base, counter),
+            timeline_start_seconds: split_seconds_view,
+            source_start_seconds: clip.source_start_seconds + source_left_duration,
+            duration_seconds: right_duration,
+            ..clip
+        };
+
+        song.clips
+            .splice(index..=index, [left_clip, right_clip]);
+        // Skip past both halves; neither crosses the point anymore.
+        index += 2;
+        counter += 1;
+    }
+}
+
 pub(crate) fn slugify(value: &str) -> String {
     let mut slug = String::new();
     let mut last_was_dash = false;
@@ -12498,6 +12608,81 @@ mod tests {
         assert_eq!(song_view.regions[1].id, "region_3");
         assert_eq!(song_view.regions[1].start_seconds, 14.0);
         assert_eq!(song_view.regions[1].end_seconds, 18.0);
+    }
+
+    #[test]
+    fn splitting_a_song_region_divides_it_in_two_at_the_cursor() {
+        let mut session = session_with_song_dir(
+            "region-split-demo",
+            demo_song_with_region_changes_and_sections(),
+        );
+        let audio = crate::audio_engine::AudioController::default();
+
+        // region_1 "Intro" spans [0, 8]. Split at 4s (no warp, so view==source).
+        session
+            .split_song_region("region_1", 4.0, &audio)
+            .expect("region should split");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        // Now four regions; the split halves are contiguous and tile [0, 8].
+        assert_eq!(song_view.regions.len(), 4);
+        let left = song_view
+            .regions
+            .iter()
+            .find(|r| r.id == "region_1")
+            .expect("left half keeps the original id");
+        assert_eq!(left.start_seconds, 0.0);
+        assert_eq!(left.end_seconds, 4.0);
+        assert_eq!(left.name, "Intro");
+
+        let right = song_view
+            .regions
+            .iter()
+            .find(|r| (r.start_seconds - 4.0).abs() < 0.0001 && r.id != "region_1")
+            .expect("right half exists at the cut");
+        assert_eq!(right.end_seconds, 8.0);
+        assert_eq!(right.name, "Intro (2)");
+
+        // The clip at [1,5] crossed the cut at 4, so it was split into [1,4] and
+        // [4,5] — each half now sits entirely inside one song (no clip straddles
+        // the new boundary, which the engine would reject).
+        assert_eq!(song_view.clips.len(), 2);
+        let mut starts: Vec<f64> = song_view
+            .clips
+            .iter()
+            .map(|clip| clip.timeline_start_seconds)
+            .collect();
+        starts.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert!((starts[0] - 1.0).abs() < 0.0001);
+        assert!((starts[1] - 4.0).abs() < 0.0001);
+        let total: f64 = song_view.clips.iter().map(|c| c.duration_seconds).sum();
+        assert!((total - 4.0).abs() < 0.0001, "no audio lost: 1..5 = 4s total");
+    }
+
+    #[test]
+    fn splitting_a_song_region_outside_its_range_is_rejected() {
+        let mut session = session_with_song_dir(
+            "region-split-invalid",
+            demo_song_with_region_changes_and_sections(),
+        );
+        let audio = crate::audio_engine::AudioController::default();
+
+        // 12s is inside region_2, not region_1 → splitting region_1 there is invalid.
+        let result = session.split_song_region("region_1", 12.0, &audio);
+        assert!(matches!(
+            result,
+            Err(crate::error::DesktopError::InvalidSplitPoint)
+        ));
+
+        // Region layout is untouched.
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+        assert_eq!(song_view.regions.len(), 3);
     }
 
     #[test]
