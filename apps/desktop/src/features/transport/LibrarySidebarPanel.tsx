@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LibraryImportProgressEvent } from "./desktopApi";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
+import { clientToZoomedCoords } from "../../shared/uiZoom";
 
 type ContextMenuAction = {
   label: string;
@@ -262,9 +263,10 @@ export function LibrarySidebarPanel({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    const { x, y } = clientToZoomedCoords(event.clientX, event.clientY);
     setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x,
+      y,
       title,
       actions,
     });

@@ -24,6 +24,7 @@ import {
   type CompactMixerHandlers,
 } from "./CompactMixer";
 import { LIBRARY_ASSET_DRAG_MIME } from "./dragDrop";
+import { clientToZoomedCoords } from "../../shared/uiZoom";
 import {
   createEmptySong,
   type SongRegionSummary,
@@ -501,7 +502,8 @@ function CompactSongColumnComponent({
     (event: ReactMouseEvent<HTMLDivElement>, clipId: string) => {
       event.preventDefault();
       event.stopPropagation();
-      setContextMenu({ clipId, x: event.clientX, y: event.clientY });
+      const { x, y } = clientToZoomedCoords(event.clientX, event.clientY);
+      setContextMenu({ clipId, x, y });
     },
     [],
   );
@@ -717,7 +719,8 @@ function CompactSongHeaderComponent({
   const openMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setContextMenu({ x: event.clientX, y: event.clientY });
+    const { x, y } = clientToZoomedCoords(event.clientX, event.clientY);
+    setContextMenu({ x, y });
   }, []);
   // Track Shift state via window listeners so the slider's onChange can
   // read it; same pattern as the CompactMixerStrip volume / pan.

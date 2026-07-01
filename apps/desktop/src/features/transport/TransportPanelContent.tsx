@@ -218,7 +218,7 @@ import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
 import { useLibraryActions } from "./hooks/useLibraryActions";
 import { useSettingsState } from "./hooks/useSettingsState";
-import { UI_ZOOM_STATUS_EVENT } from "../../shared/uiZoom";
+import { UI_ZOOM_STATUS_EVENT, clientToZoomedCoords } from "../../shared/uiZoom";
 import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
 import { useTransportPolling } from "./hooks/useTransportPolling";
 import {
@@ -6529,14 +6529,12 @@ export function TransportPanelContent() {
   ) {
     event.preventDefault();
     event.stopPropagation();
-    contextMenuPositionRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-    };
+    const { x, y } = clientToZoomedCoords(event.clientX, event.clientY);
+    contextMenuPositionRef.current = { x, y };
     setColorPickerPopover(null);
     setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x,
+      y,
       title,
       actions,
     });

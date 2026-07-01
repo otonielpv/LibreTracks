@@ -68,6 +68,21 @@ export function getUiZoom(): number {
   return current;
 }
 
+// Convert viewport coordinates (event.clientX/Y — always in real, unscaled CSS
+// pixels) into the coordinate space of an element that lives inside the
+// `zoom`-scaled app shell. A `position: fixed` popover placed with `left/top`
+// inside a zoomed ancestor has those offsets multiplied by the zoom when
+// painted, so a raw clientX lands off by the zoom factor (left of the cursor
+// when zoom < 1, right of it when zoom > 1). Dividing by the zoom cancels that
+// out so the popover pins to the actual pointer position.
+export function clientToZoomedCoords(
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const zoom = current || 1;
+  return { x: clientX / zoom, y: clientY / zoom };
+}
+
 export function shouldCompensateUiZoomViewport(
   userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
   platform = typeof navigator === "undefined" ? "" : navigator.platform,
