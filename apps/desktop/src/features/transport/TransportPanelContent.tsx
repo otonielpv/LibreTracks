@@ -6998,16 +6998,24 @@ export function TransportPanelContent() {
     const parentTrack = findTrack(currentSong, track.parentTrackId ?? null);
     const parentOfParent = parentTrack?.parentTrackId ?? null;
 
+    // Right-clicking a folder should create the new track *inside* it (as its
+    // first child); right-clicking a regular track inserts a sibling after it.
+    const isFolder = track.kind === "folder";
+    const createAnchor = isFolder ? null : track;
+    const createParentId = isFolder
+      ? track.id
+      : track.parentTrackId ?? null;
+
     const actions: ContextMenuAction[] = [
       {
         label: t("transport.menu.insertTrack"),
         onSelect: () =>
-          handleCreateTrack("audio", track, track.parentTrackId ?? null),
+          handleCreateTrack("audio", createAnchor, createParentId),
       },
       {
         label: t("transport.menu.insertFolderTrack"),
         onSelect: () =>
-          handleCreateTrack("folder", track, track.parentTrackId ?? null),
+          handleCreateTrack("folder", createAnchor, createParentId),
       },
       {
         label: t("common.rename"),
