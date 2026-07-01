@@ -1,15 +1,12 @@
 #include <lt_engine/sources/audio_decoder.h>
-#include <lt_engine/sources/io_throttle.h>
 
 #if LT_ENGINE_USE_FFMPEG
 
 #include <algorithm>
-#include <chrono>
 #include <cstring>
 #include <cmath>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 extern "C" {
@@ -54,12 +51,6 @@ std::string codec_name(const AVCodecParameters* params) {
     if (!params) return "unknown";
     const AVCodecDescriptor* descriptor = avcodec_descriptor_get(params->codec_id);
     return descriptor && descriptor->name ? descriptor->name : "unknown";
-}
-
-void yield_to_ui_scheduler() {
-    // Yields longer while playing so an FFmpeg decode of a new import doesn't
-    // starve the live audio stream. See io_throttle.h.
-    decode_background_yield();
 }
 
 class LibavDecoder : public AudioDecoder {
@@ -160,16 +151,16 @@ public:
         if (rc < 0)
             return Result<void>::err("libav: swr init failed: " + av_error(rc));
 
-        auto decoded = decode_all(estimated_duration_frames(stream), std::move(on_progress));
-        if (decoded.is_err())
-            return Result<void>::err(decoded.error());
-        samples_ = decoded.take();
-        cursor_frame_ = 0;
+        packet_.reset(av_packet_alloc());
+        frame_.reset(av_frame_alloc());
+        if (!packet_ || !frame_)
+            return Result<void>::err("libav: packet/frame allocation failed");
 
         info_.channel_count = channels_;
         info_.original_sample_rate = sample_rate_;
-        info_.duration_frames = static_cast<Frame>(samples_.size() / channels_);
+        info_.duration_frames = estimated_duration_frames(stream);
         info_.format = codec_name(params);
+        (void)on_progress;
         return Result<void>::ok();
     }
 
@@ -179,29 +170,60 @@ public:
         if (!out || frame_count <= 0 || channels_ <= 0)
             return 0;
 
-        const Frame available = info_.duration_frames - cursor_frame_;
-        if (available <= 0)
-            return 0;
+        int copied = copy_pending(out, frame_count);
+        while (copied < frame_count && !decoder_eof_ && !decode_failed_) {
+            if (receive_one_frame()) {
+                copied += copy_pending(
+                    out + static_cast<std::size_t>(copied) * channels_,
+                    frame_count - copied);
+                continue;
+            }
 
-        const int readable = static_cast<int>(
-            std::min<Frame>(available, static_cast<Frame>(frame_count)));
-        const std::size_t offset = static_cast<std::size_t>(cursor_frame_) * channels_;
-        const std::size_t count = static_cast<std::size_t>(readable) * channels_;
-        std::memcpy(out, samples_.data() + offset, count * sizeof(float));
-        cursor_frame_ += readable;
-        return readable;
+            if (decoder_eof_ || decode_failed_)
+                break;
+
+            const StepResult step = send_next_packet_or_flush();
+            if (step == StepResult::Failed || step == StepResult::Done)
+                break;
+        }
+
+        return copied;
     }
 
     Result<void> seek(Frame frame) override {
-        if (frame < 0 || frame > info_.duration_frames)
+        if (frame < 0 || (info_.duration_frames > 0 && frame > info_.duration_frames))
             return Result<void>::err("libav: seek out of range");
-        cursor_frame_ = frame;
+        if (!format_ || !codec_ctx_ || stream_index_ < 0)
+            return Result<void>::err("libav: not open");
+
+        AVStream* stream = format_->streams[stream_index_];
+        const int64_t timestamp = av_rescale_q(
+            frame,
+            AVRational{1, sample_rate_},
+            stream->time_base);
+        const int rc = av_seek_frame(format_, stream_index_, timestamp, AVSEEK_FLAG_BACKWARD);
+        if (rc < 0)
+            return Result<void>::err("libav: seek failed: " + av_error(rc));
+
+        avcodec_flush_buffers(codec_ctx_);
+        clear_pending();
+        discard_pending_packet();
+        input_eof_ = false;
+        flush_sent_ = false;
+        decoder_eof_ = false;
+        decode_failed_ = false;
         return Result<void>::ok();
     }
 
     void close() override {
-        samples_.clear();
-        cursor_frame_ = 0;
+        clear_pending();
+        discard_pending_packet();
+        packet_.reset();
+        frame_.reset();
+        input_eof_ = false;
+        flush_sent_ = false;
+        decoder_eof_ = false;
+        decode_failed_ = false;
         info_ = {};
         stream_index_ = -1;
         channels_ = 0;
@@ -223,6 +245,13 @@ public:
     }
 
 private:
+    enum class StepResult {
+        Sent,
+        NeedReceive,
+        Done,
+        Failed
+    };
+
     Frame estimated_duration_frames(const AVStream* stream) const {
         if (!stream || sample_rate_ <= 0)
             return 0;
@@ -237,84 +266,124 @@ private:
         return 0;
     }
 
-    Result<std::vector<float>> decode_all(Frame estimated_total_frames,
-                                          DecodeProgressCallback on_progress) {
-        std::unique_ptr<AVPacket, AvPacketDeleter> packet(av_packet_alloc());
-        std::unique_ptr<AVFrame, AvFrameDeleter> frame(av_frame_alloc());
-        if (!packet || !frame)
-            return Result<std::vector<float>>::err("libav: packet/frame allocation failed");
-
-        std::vector<float> out;
-        int last_reported = 1;
-        auto report_progress = [&](int progress_pct) {
-            if (!on_progress)
-                return;
-            progress_pct = std::clamp(progress_pct, 1, 70);
-            if (progress_pct <= last_reported)
-                return;
-            last_reported = progress_pct;
-            on_progress(progress_pct);
-            yield_to_ui_scheduler();
-        };
-        report_progress(1);
-        int rc = 0;
-        while ((rc = av_read_frame(format_, packet.get())) >= 0) {
-            if (packet->stream_index == stream_index_) {
-                auto sent = send_packet(packet.get(), frame.get(), out);
-                if (sent.is_err())
-                    return sent;
-                if (estimated_total_frames > 0 && channels_ > 0) {
-                    const Frame decoded_frames =
-                        static_cast<Frame>(out.size() / static_cast<std::size_t>(channels_));
-                    const int progress_pct = 1 + static_cast<int>(
-                        (std::min<Frame>(decoded_frames, estimated_total_frames) * 69)
-                            / estimated_total_frames);
-                    report_progress(progress_pct);
-                }
-            }
-            av_packet_unref(packet.get());
+    int copy_pending(float* out, int max_frames) {
+        if (!out || max_frames <= 0 || pending_.empty())
+            return 0;
+        const Frame total_frames =
+            static_cast<Frame>(pending_.size() / static_cast<std::size_t>(channels_));
+        const Frame available = total_frames - pending_offset_frames_;
+        if (available <= 0) {
+            clear_pending();
+            return 0;
         }
-        if (rc != AVERROR_EOF)
-            return Result<std::vector<float>>::err("libav: read failed: " + av_error(rc));
 
-        auto flushed = send_packet(nullptr, frame.get(), out);
-        if (flushed.is_err())
-            return flushed;
-        report_progress(70);
-
-        return Result<std::vector<float>>::ok(std::move(out));
+        const int frames = static_cast<int>(
+            std::min<Frame>(available, static_cast<Frame>(max_frames)));
+        const std::size_t sample_offset =
+            static_cast<std::size_t>(pending_offset_frames_) * channels_;
+        const std::size_t sample_count =
+            static_cast<std::size_t>(frames) * channels_;
+        std::memcpy(out, pending_.data() + sample_offset, sample_count * sizeof(float));
+        pending_offset_frames_ += frames;
+        if (pending_offset_frames_ >= total_frames)
+            clear_pending();
+        return frames;
     }
 
-    Result<std::vector<float>> send_packet(
-        AVPacket* packet,
-        AVFrame* frame,
-        std::vector<float>& out) {
-        int rc = avcodec_send_packet(codec_ctx_, packet);
-        if (rc < 0)
-            return Result<std::vector<float>>::err("libav: send packet failed: " + av_error(rc));
+    void clear_pending() {
+        pending_.clear();
+        pending_offset_frames_ = 0;
+    }
+
+    void discard_pending_packet() {
+        if (packet_ && packet_pending_)
+            av_packet_unref(packet_.get());
+        packet_pending_ = false;
+    }
+
+    StepResult send_next_packet_or_flush() {
+        if (!format_ || !codec_ctx_ || !packet_)
+            return StepResult::Failed;
+
+        if (packet_pending_) {
+            const int rc = avcodec_send_packet(codec_ctx_, packet_.get());
+            if (rc == AVERROR(EAGAIN))
+                return StepResult::NeedReceive;
+            av_packet_unref(packet_.get());
+            packet_pending_ = false;
+            if (rc < 0) {
+                decode_failed_ = true;
+                return StepResult::Failed;
+            }
+            return StepResult::Sent;
+        }
+
+        if (input_eof_) {
+            if (flush_sent_)
+                return StepResult::Done;
+            const int rc = avcodec_send_packet(codec_ctx_, nullptr);
+            if (rc == AVERROR(EAGAIN))
+                return StepResult::NeedReceive;
+            flush_sent_ = true;
+            if (rc == AVERROR_EOF) {
+                decoder_eof_ = true;
+                return StepResult::Done;
+            }
+            if (rc < 0) {
+                decode_failed_ = true;
+                return StepResult::Failed;
+            }
+            return StepResult::Sent;
+        }
 
         while (true) {
-            rc = avcodec_receive_frame(codec_ctx_, frame);
-            if (rc == AVERROR(EAGAIN) || rc == AVERROR_EOF)
-                break;
-            if (rc < 0)
-                return Result<std::vector<float>>::err("libav: receive frame failed: " + av_error(rc));
+            const int rc = av_read_frame(format_, packet_.get());
+            if (rc == AVERROR_EOF) {
+                input_eof_ = true;
+                return send_next_packet_or_flush();
+            }
+            if (rc < 0) {
+                decode_failed_ = true;
+                return StepResult::Failed;
+            }
 
-            auto converted = append_converted_frame(frame, out);
-            av_frame_unref(frame);
-            if (converted.is_err())
-                return converted;
+            if (packet_->stream_index != stream_index_) {
+                av_packet_unref(packet_.get());
+                continue;
+            }
+
+            packet_pending_ = true;
+            return send_next_packet_or_flush();
         }
-
-        return Result<std::vector<float>>::ok({});
     }
 
-    Result<std::vector<float>> append_converted_frame(
-        AVFrame* frame,
-        std::vector<float>& out) {
+    bool receive_one_frame() {
+        if (!codec_ctx_ || !frame_ || decoder_eof_ || decode_failed_)
+            return false;
+
+        const int rc = avcodec_receive_frame(codec_ctx_, frame_.get());
+        if (rc == AVERROR(EAGAIN))
+            return false;
+        if (rc == AVERROR_EOF) {
+            decoder_eof_ = true;
+            return false;
+        }
+        if (rc < 0) {
+            decode_failed_ = true;
+            return false;
+        }
+
+        const bool ok = append_converted_frame(frame_.get());
+        av_frame_unref(frame_.get());
+        if (!ok)
+            decode_failed_ = true;
+        return ok;
+    }
+
+    bool append_converted_frame(AVFrame* frame) {
         const int capacity = swr_get_out_samples(swr_, frame->nb_samples);
         if (capacity < 0)
-            return Result<std::vector<float>>::err("libav: swr capacity failed");
+            return false;
 
         std::vector<float> buffer(static_cast<std::size_t>(capacity) * channels_);
         uint8_t* out_planes[] = { reinterpret_cast<uint8_t*>(buffer.data()) };
@@ -325,27 +394,34 @@ private:
             const_cast<const uint8_t**>(frame->extended_data),
             frame->nb_samples);
         if (converted < 0)
-            return Result<std::vector<float>>::err("libav: swr convert failed: " + av_error(converted));
+            return false;
 
         buffer.resize(static_cast<std::size_t>(converted) * channels_);
-        out.insert(out.end(), buffer.begin(), buffer.end());
-        return Result<std::vector<float>>::ok({});
+        pending_.insert(pending_.end(), buffer.begin(), buffer.end());
+        return true;
     }
 
     AVFormatContext* format_ = nullptr;
     AVCodecContext* codec_ctx_ = nullptr;
     SwrContext* swr_ = nullptr;
+    std::unique_ptr<AVPacket, AvPacketDeleter> packet_;
+    std::unique_ptr<AVFrame, AvFrameDeleter> frame_;
 #if LT_LIBAV_HAS_CHANNEL_LAYOUT_API
     AVChannelLayout output_layout_{};
 #else
     uint64_t output_channel_layout_ = 0;
 #endif
     AudioFileInfo info_;
-    std::vector<float> samples_;
+    std::vector<float> pending_;
     int stream_index_ = -1;
     int channels_ = 0;
     int sample_rate_ = 0;
-    Frame cursor_frame_ = 0;
+    Frame pending_offset_frames_ = 0;
+    bool packet_pending_ = false;
+    bool input_eof_ = false;
+    bool flush_sent_ = false;
+    bool decoder_eof_ = false;
+    bool decode_failed_ = false;
 
     int codec_channel_count() const {
 #if LT_LIBAV_HAS_CHANNEL_LAYOUT_API

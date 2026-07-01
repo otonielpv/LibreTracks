@@ -70,3 +70,37 @@ TEST_CASE("MP3 decode via FFmpeg CLI fallback produces non-silent PCM when ffmpe
     CHECK(frames > 0);
     CHECK(peak(samples) > 0.001f);
 }
+
+TEST_CASE("MP3 decoder open defers PCM decoding until read_frames") {
+    if (!ffmpeg_available())
+        return;
+
+    auto path = std::filesystem::temp_directory_path() /
+        ("libretracks_decoder_streaming_" +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".mp3");
+    std::filesystem::remove(path);
+    std::string command =
+        "ffmpeg -y -v error -f lavfi -i \"sine=frequency=660:duration=1.0\" "
+        "-ac 2 -ar 48000 " + quote(path.string());
+    if (std::system(command.c_str()) != 0 || !std::filesystem::exists(path))
+        return;
+
+    auto decoder = make_decoder(path.string());
+    REQUIRE(static_cast<bool>(decoder));
+
+    int progress_calls = 0;
+    auto opened = decoder->open(path.string(), [&](int) { ++progress_calls; });
+    REQUIRE(opened.is_ok());
+    CHECK(progress_calls == 0);
+
+    const AudioFileInfo info = decoder->info();
+    REQUIRE(info.channel_count > 0);
+    std::vector<float> chunk(static_cast<std::size_t>(1024) * info.channel_count);
+    const int read = decoder->read_frames(chunk.data(), 1024);
+    decoder->close();
+    std::filesystem::remove(path);
+
+    REQUIRE(read > 0);
+    chunk.resize(static_cast<std::size_t>(read) * info.channel_count);
+    CHECK(peak(chunk) > 0.001f);
+}
