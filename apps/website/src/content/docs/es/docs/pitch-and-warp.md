@@ -29,7 +29,7 @@ Si cambias el BPM con warp activado en la region, el audio se estira en tiempo p
 - La duracion visible de la region pasa a ser `duracion_fuente / (BPM_destino / BPM_fuente)`.
 - El pitch se preserva. El warp por si solo no transpone nada.
 
-Warp se implementa con el time-stretcher Bungee y corre dentro del motor de audio. Es exigente con la CPU en sesiones muy cargadas; consulta [Control En Vivo](./live-control-flow) para saber cuando activarlo.
+Warp se implementa con el time-stretcher Bungee y corre dentro del motor de audio. Es exigente con la CPU en sesiones muy cargadas; consulta [Control En Vivo](/es/docs/live-control-flow/) para saber cuando activarlo.
 
 ### Transposicion De Region (Pitch)
 

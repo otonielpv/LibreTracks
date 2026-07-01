@@ -29,7 +29,7 @@ If you change the BPM while a region has warp on, the region's audio will time-s
 - The visible duration of the region becomes `source_duration / (target_BPM / source_BPM)`.
 - Pitch is preserved. Warp on its own does not transpose anything.
 
-Warp is implemented with the Bungee time-stretcher and runs inside the audio engine. It is CPU-intensive on heavily layered sessions; see [Live Control Flow](./live-control-flow) for guidance on when to enable it.
+Warp is implemented with the Bungee time-stretcher and runs inside the audio engine. It is CPU-intensive on heavily layered sessions; see [Live Control Flow](/docs/live-control-flow/) for guidance on when to enable it.
 
 ### Region Transpose (Pitch)
 

@@ -13,9 +13,9 @@ Esto es lo mas importante de interiorizar antes de leer el resto. Cuando piensas
 - Reordenar el setlist significa **mover canciones**, lo que arrastra sus clips, marcas, tempo y cambios de compas de forma atomica.
 - Tempo, tonalidad y ganancia master son **propiedades por cancion** (`Region Warp`, `Region Transpose`, fader master por cancion), no globales.
 - Hacer copia o compartir una pieza del show significa **exportar un `.ltpkg`** de una o varias canciones, que se puede importar en cualquier otro proyecto.
-- Llevarte el **show entero** entre ordenadores significa **exportar un `.ltset`** de la sesion completa, que se abre como sesion nueva en el equipo destino. Ver [Integracion Y Ecosistema](./integration-ecosystem#exportar-e-importar-sesiones-completas).
+- Llevarte el **show entero** entre ordenadores significa **exportar un `.ltset`** de la sesion completa, que se abre como sesion nueva en el equipo destino. Ver [Integracion Y Ecosistema](/es/docs/integration-ecosystem/#exportar-e-importar-sesiones-completas).
 
-La referencia sobre como se comportan las canciones como contenedores — limites, BPM efectivo, transpose, warp — esta en la seccion [Regiones De Cancion](#regiones-de-cancion--el-contenedor-principal) mas abajo. El flujo orientado a canciones en si (canciones como columnas, drag-and-drop de audio y paquetes, mixer por cancion) vive en [Vista Compacta](./compact-view).
+La referencia sobre como se comportan las canciones como contenedores — limites, BPM efectivo, transpose, warp — esta en la seccion [Regiones De Cancion](#regiones-de-cancion--el-contenedor-principal) mas abajo. El flujo orientado a canciones en si (canciones como columnas, drag-and-drop de audio y paquetes, mixer por cancion) vive en [Vista Compacta](/es/docs/compact-view/).
 
 ## Biblioteca Y Assets
 
@@ -44,7 +44,7 @@ Usa el menu contextual de pista para insertar audio tracks o folder tracks. Si a
 
 ### Pistas Auto-Creadas
 
-Las pistas que el sistema creo automaticamente — normalmente porque soltaste un archivo de audio sobre una zona vacia en la [Vista Compacta](./compact-view) — llevan un flag interno `auto_created`. Se comportan como cualquier otra pista al editar, pero **se borran automaticamente cuando pierden su ultimo clip**. Las pistas creadas a mano nunca se borran solas, aunque queden vacias. Este comportamiento mantiene el proyecto limpio mientras experimentas con drops rapidos, sin comprometerte a conservar cada carril que tuvo brevemente un clip.
+Las pistas que el sistema creo automaticamente — normalmente porque soltaste un archivo de audio sobre una zona vacia en la [Vista Compacta](/es/docs/compact-view/) — llevan un flag interno `auto_created`. Se comportan como cualquier otra pista al editar, pero **se borran automaticamente cuando pierden su ultimo clip**. Las pistas creadas a mano nunca se borran solas, aunque queden vacias. Este comportamiento mantiene el proyecto limpio mientras experimentas con drops rapidos, sin comprometerte a conservar cada carril que tuvo brevemente un clip.
 
 ## Clips Y Edicion De Timeline
 
@@ -72,7 +72,7 @@ Consecuencias practicas:
 
 - Las canciones se pueden **reordenar, renombrar, exportar y borrar** como una unidad. Borrar una cancion elimina los clips de dentro y los tempo markers en su mismo rango, y purga las pistas auto-creadas que se queden vacias.
 - El **BPM efectivo** de una cancion lo decide el tempo marker mas reciente al inicio de la region; si no hay marker, se usa el BPM global del proyecto. Al crear una cancion vacia se ancla automaticamente un tempo marker a su `start` para que no herede el tempo de la cancion anterior.
-- Cada region tambien guarda su propia transposicion y un toggle de warp independiente, asi el mismo arreglo puede subir o bajar por semitonos — cambiando o no la duracion — sin duplicar pistas ni clips. La interaccion exacta entre estos controles esta documentada en [Pitch, warp y el boton T](./pitch-and-warp).
+- Cada region tambien guarda su propia transposicion y un toggle de warp independiente, asi el mismo arreglo puede subir o bajar por semitonos — cambiando o no la duracion — sin duplicar pistas ni clips. La interaccion exacta entre estos controles esta documentada en [Pitch, warp y el boton T](/es/docs/pitch-and-warp/).
 
 Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Tambien puedes crear una cancion vacia desde el boton `+ Nueva cancion` de la Vista Compacta, importar un paquete `.ltpkg` previamente exportado o importar un proyecto Reaper/Ableton como una o varias canciones. Despues puedes ajustar `Region Transpose` y `Region Warp` desde la vista de transporte cuando la cancion necesite otra tonalidad o tempo.
 
@@ -95,7 +95,7 @@ Reglas:
 
 Usa `Shift + S`, o el menu contextual de la cancion, para partir la cancion bajo el playhead. LibreTracks crea una segunda region para la mitad derecha, mueve el limite de forma atomica y parte cualquier clip que cruce el corte para que cada lado siga perteneciendo a una sola cancion.
 
-Para el flujo completo orientado a canciones — canciones como columnas, fader Master por cancion, drag-and-drop de audio, paquetes y proyectos externos, y multi-seleccion de pistas en el mixer — ver [Vista Compacta](./compact-view).
+Para el flujo completo orientado a canciones — canciones como columnas, fader Master por cancion, drag-and-drop de audio, paquetes y proyectos externos, y multi-seleccion de pistas en el mixer — ver [Vista Compacta](/es/docs/compact-view/).
 
 ## Marcas Y Cambios De Compas
 

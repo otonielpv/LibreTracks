@@ -13,7 +13,7 @@ Usa LibreTracks cuando el show necesita audios preparados, un timeline claro, sa
 
 LibreTracks no pretende ser una DAW de produccion. Produce y mezcla stems en Reaper, Ableton Live, Logic, Cubase u otra herramienta de estudio, y trae los audios preparados a LibreTracks para el rig de directo. Tambien puedes importar proyectos Reaper `.rpp` y Ableton `.als` como punto de partida cuando quieras que LibreTracks recree la estructura del arreglo en directo.
 
-El modelo del proyecto es **song-first**: las canciones (regiones de cancion) son el contenedor principal, y los clips y pistas viven dentro de ellas. La app de escritorio ofrece dos proyecciones equivalentes de ese modelo — el [timeline lineal (vista DAW)](./core-concepts) para arreglar y la [Vista Compacta](./compact-view) para ensayar, tocar e importar/exportar canciones, paquetes `.ltpkg` y puntos de partida desde proyectos externos.
+El modelo del proyecto es **song-first**: las canciones (regiones de cancion) son el contenedor principal, y los clips y pistas viven dentro de ellas. La app de escritorio ofrece dos proyecciones equivalentes de ese modelo — el [timeline lineal (vista DAW)](/es/docs/core-concepts/) para arreglar y la [Vista Compacta](/es/docs/compact-view/) para ensayar, tocar e importar/exportar canciones, paquetes `.ltpkg` y puntos de partida desde proyectos externos.
 
 ## Flujo Principal
 
@@ -21,8 +21,8 @@ El modelo del proyecto es **song-first**: las canciones (regiones de cancion) so
 2. Organiza assets con carpetas virtuales.
 3. Arrastra archivos de audio, paquetes de cancion o proyectos externos a la sesion y organiza los assets entre Biblioteca y timeline.
 4. Configura dispositivo de audio, frecuencia de muestreo, tamaño de buffer, salidas hardware, rutas por pista, metronomo y entrada MIDI.
-5. Crea regiones de cancion, marcas, cambios de compas si hace falta y cambios de transposicion por region. Dale un tipo de seccion a las marcas para activar la [Voz Guia](./voice-guide).
-6. Ensaya saltos de marca, Vamp, saltos de cancion, transiciones, atajos, mapeos MIDI, estados de transposicion por pista y remote movil. Anade una [pista de automatizacion](./automation) para disparar saltos, mute/solo, movimientos de fader y escenas de mezcla automaticamente en puntos exactos.
+5. Crea regiones de cancion, marcas, cambios de compas si hace falta y cambios de transposicion por region. Dale un tipo de seccion a las marcas para activar la [Voz Guia](/es/docs/voice-guide/).
+6. Ensaya saltos de marca, Vamp, saltos de cancion, transiciones, atajos, mapeos MIDI, estados de transposicion por pista y remote movil. Anade una [pista de automatizacion](/es/docs/automation/) para disparar saltos, mute/solo, movimientos de fader y escenas de mezcla automaticamente en puntos exactos.
 7. Exporta canciones preparadas, una sesion completa `.ltset` o una plantilla `.lttemplate` cuando quieras reutilizar el trabajo en futuras sesiones.
 
 ![Importacion en Biblioteca](/screenshots/Library-Assets-Import.gif)
@@ -37,7 +37,7 @@ Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. L
 
 La reproduccion nunca se bloquea por la preparacion: al pulsar play el transporte arranca al instante, y cualquier pista cuyo audio aun se este decodificando permanece en silencio y entra sola en cuanto esta lista, asi las pistas ya preparadas nunca quedan retenidas por una fuente nueva lenta.
 
-Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Consulta [Pitch, warp y el boton T](./pitch-and-warp) para la tabla de decision completa.
+Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Consulta [Pitch, warp y el boton T](/es/docs/pitch-and-warp/) para la tabla de decision completa.
 
 La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+click para seleccion multiple, arrastre en grupo con IPC agrupado, y magnets con Ctrl al arrastrar que pegan los bordes del clip al playhead, marcas, regiones y bordes de otros clips. Tambien puedes arrastrar clips verticalmente para moverlos a otra pista, validando el destino mientras arrastras. Ademas, pistas y clips pueden colorearse desde el menu contextual para leer sesiones densas mas rapido.
 
@@ -51,7 +51,7 @@ LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, m
 
 - `Configuracion`: dispositivo de audio, frecuencia de muestreo, tamano de buffer, salidas hardware, metronomo, MIDI Learn, atajos de teclado personalizables y gestion de cache de decodificacion.
 - `Biblioteca`: assets importados, incluidos archivos FLAC y audio traido por importaciones Reaper/Ableton, y carpetas virtuales. El estado expandido/colapsado de las carpetas se conserva entre sesiones.
-- `Timeline (vista DAW)`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla, [senales de automatizacion](./automation) y organizacion por color. Toda la interfaz se puede ampliar y ajustar a pantallas pequenas, y el timeline puede seguir al cursor de reproduccion.
-- `Vista Compacta`: proyeccion estilo Session del mismo modelo — una columna por cancion con su propio fader Master, mixer horizontal compartido abajo, drag-and-drop de audio, paquetes `.ltpkg` y proyectos `.rpp`/`.als`, y reordenacion de pistas con multi-seleccion. Ver [Vista Compacta](./compact-view).
+- `Timeline (vista DAW)`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla, [senales de automatizacion](/es/docs/automation/) y organizacion por color. Toda la interfaz se puede ampliar y ajustar a pantallas pequenas, y el timeline puede seguir al cursor de reproduccion.
+- `Vista Compacta`: proyeccion estilo Session del mismo modelo — una columna por cancion con su propio fader Master, mixer horizontal compartido abajo, drag-and-drop de audio, paquetes `.ltpkg` y proyectos `.rpp`/`.als`, y reordenacion de pistas con multi-seleccion. Ver [Vista Compacta](/es/docs/compact-view/).
 - `Remote`: superficie web local para transporte, saltos, Vamp, transposicion y un mixer con medidores y pistas agrupadas visualmente.
-- `Archivo`: crear desde `.lttemplate`, importar canciones/paquetes, importar proyectos Reaper/Ableton, importar o exportar una sesion entera como `.ltset` portable, guardar plantillas y exportar canciones preparadas. Ver [Integracion Y Ecosistema](./integration-ecosystem).
+- `Archivo`: crear desde `.lttemplate`, importar canciones/paquetes, importar proyectos Reaper/Ableton, importar o exportar una sesion entera como `.ltset` portable, guardar plantillas y exportar canciones preparadas. Ver [Integracion Y Ecosistema](/es/docs/integration-ecosystem/).

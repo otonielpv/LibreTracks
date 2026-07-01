@@ -15,7 +15,7 @@ This is native transport behavior, so the same logic is available from desktop c
 
 ![Marker jump modes](/screenshots/Marker-Jump-Modes.png)
 
-When the [Voice Guide](./voice-guide) is enabled, an armed jump to a typed marker is announced and counted in before it fires, so the band hears the destination section and lands together on the downbeat.
+When the [Voice Guide](/docs/voice-guide/) is enabled, an armed jump to a typed marker is announced and counted in before it fires, so the band hears the destination section and lands together on the downbeat.
 
 ## Vamp
 
@@ -60,7 +60,7 @@ If you arm the wrong destination, press `Esc` immediately.
 
 ## Transpose And Warp In Live Use
 
-`Region Transpose`, `Region Warp`, and the per-track `T` toggle decide how each clip sounds and how the timeline grid shifts. The interaction between these three is the same Ableton-style model — see [Pitch, Warp & The T Button](./pitch-and-warp) for the full decision table and grid behavior.
+`Region Transpose`, `Region Warp`, and the per-track `T` toggle decide how each clip sounds and how the timeline grid shifts. The interaction between these three is the same Ableton-style model — see [Pitch, Warp & The T Button](/docs/pitch-and-warp/) for the full decision table and grid behavior.
 
 In live use, the rule of thumb is:
 

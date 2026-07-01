@@ -38,6 +38,6 @@ Scenes are ideal for big mix moves at a section boundary — for example, pullin
 
 ## Tips
 
-- Pair a jump cue with the [Voice Guide](./voice-guide) so the destination section is announced and counted in before the jump fires.
+- Pair a jump cue with the [Voice Guide](/docs/voice-guide/) so the destination section is announced and counted in before the jump fires.
 - Use a short **smoothing** time on volume/pan changes to avoid clicks when a fader moves during playback.
-- See [Live Control Flow](./live-control-flow) for arming jumps manually from the transport, shortcuts, and the remote.
+- See [Live Control Flow](/docs/live-control-flow/) for arming jumps manually from the transport, shortcuts, and the remote.

@@ -70,11 +70,11 @@ Any **cues attached to the jump's destination** are announced too — jump to a 
 
 If a jump leaves very little lead time (for example, a jump only one bar away), the **count always plays** so you still get the rhythmic entry; the spoken name is added only when it fits in the remaining space.
 
-See [Live Control Flow](./live-control-flow) for how to arm marker jumps and set their trigger mode.
+See [Live Control Flow](/docs/live-control-flow/) for how to arm marker jumps and set their trigger mode.
 
 ## Tips
 
-- Pair the voice guide with the [metronome](./audio-routing-metronome) on the same monitor bus, or split them to separate hardware outputs when your monitor mix needs independent control.
+- Pair the voice guide with the [metronome](/docs/audio-routing-metronome/) on the same monitor bus, or split them to separate hardware outputs when your monitor mix needs independent control.
 - Set lead-in to `2` bars at fast tempos if `1` bar feels rushed.
 - Leave markers you don't want announced as *Custom* — they still work for navigation and jumps, just without a spoken name.
 - Use **cues** for arrangement calls (build, drop the band out, key change) without cluttering your section markers — drop a cue right on a section's downbeat and it's spoken just before the count.

@@ -70,11 +70,11 @@ Los **avisos pegados al destino del salto** tambien se anuncian — salta a un "
 
 Si un salto deja muy poco tiempo de aviso (por ejemplo, un salto a solo un compas), el **conteo siempre suena** para que tengas la entrada ritmica; el nombre hablado se anade solo cuando cabe en el espacio restante.
 
-Consulta [Control en vivo](./live-control-flow) para armar saltos de marca y configurar su modo de disparo.
+Consulta [Control en vivo](/es/docs/live-control-flow/) para armar saltos de marca y configurar su modo de disparo.
 
 ## Consejos
 
-- Combina la voz guia con el [metronomo](./audio-routing-metronome) en el mismo bus de monitor, o separalos en salidas de hardware distintas cuando necesites control independiente en la mezcla de monitoreo.
+- Combina la voz guia con el [metronomo](/es/docs/audio-routing-metronome/) en el mismo bus de monitor, o separalos en salidas de hardware distintas cuando necesites control independiente en la mezcla de monitoreo.
 - Pon 2 compases de aviso en tempos rapidos si 1 compas se siente justo.
 - Deja en *Personalizada* las marcas que no quieras anunciar — siguen sirviendo para navegacion y saltos, solo que sin nombre hablado.
 - Usa **avisos** para las indicaciones de arreglo (subir intensidad, parar la banda, cambio de tono) sin saturar tus marcas de seccion — pon un aviso justo en el downbeat de una seccion y se dira justo antes del conteo.

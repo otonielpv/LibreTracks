@@ -15,7 +15,7 @@ Es comportamiento nativo del transporte, asi que la misma logica esta disponible
 
 ![Modos de salto de marca](/screenshots/Marker-Jump-Modes.png)
 
-Con la [Voz Guia](./voice-guide) activada, un salto armado a una marca con tipo se anuncia y se cuenta antes de ejecutarse, para que la banda oiga la seccion destino y entre junta en el downbeat.
+Con la [Voz Guia](/es/docs/voice-guide/) activada, un salto armado a una marca con tipo se anuncia y se cuenta antes de ejecutarse, para que la banda oiga la seccion destino y entre junta en el downbeat.
 
 ## Vamp
 
@@ -60,7 +60,7 @@ Si armas el destino equivocado, pulsa `Esc` inmediatamente.
 
 ## Transposicion Y Warp En Vivo
 
-`Region Transpose`, `Region Warp` y el toggle `T` por pista deciden como suena cada clip y como se desplaza la rejilla del timeline. La interaccion entre los tres sigue el modelo de Ableton Live — consulta [Pitch, Warp y el boton T](./pitch-and-warp) para la tabla de decision completa y el comportamiento de la rejilla.
+`Region Transpose`, `Region Warp` y el toggle `T` por pista deciden como suena cada clip y como se desplaza la rejilla del timeline. La interaccion entre los tres sigue el modelo de Ableton Live — consulta [Pitch, Warp y el boton T](/es/docs/pitch-and-warp/) para la tabla de decision completa y el comportamiento de la rejilla.
 
 En directo, la regla practica:
 

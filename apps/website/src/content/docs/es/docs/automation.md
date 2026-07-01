@@ -40,6 +40,6 @@ Las escenas son ideales para grandes movimientos de mezcla en un cambio de secci
 
 ## Consejos
 
-- Combina una señal de salto con la [Voz Guía](./voice-guide) para que la sección destino se anuncie y se cuente la entrada antes de que el salto se dispare.
+- Combina una señal de salto con la [Voz Guía](/es/docs/voice-guide/) para que la sección destino se anuncie y se cuente la entrada antes de que el salto se dispare.
 - Usa un **suavizado** corto en los cambios de volumen/pan para evitar clics cuando un fader se mueve durante la reproducción.
-- Consulta [Control en vivo](./live-control-flow) para armar saltos manualmente desde el transporte, los atajos y el remote.
+- Consulta [Control en vivo](/es/docs/live-control-flow/) para armar saltos manualmente desde el transporte, los atajos y el remote.

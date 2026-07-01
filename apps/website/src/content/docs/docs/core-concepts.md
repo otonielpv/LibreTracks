@@ -13,9 +13,9 @@ This is the single most important thing to internalise before reading the rest. 
 - Reordering the setlist means **moving songs**, which carries their clips, markers, tempo and meter changes along atomically.
 - Tempo, key and master gain are **per-song properties** (`Region Warp`, `Region Transpose`, per-song master fader), not global ones.
 - Backing up or sharing a piece of the show means **exporting a `.ltpkg`** of one or more songs, which round-trips into any other project.
-- Moving the **whole show** between computers means **exporting a `.ltset`** of the entire session, which opens as a fresh session on the target machine. See [Integration & Ecosystem](./integration-ecosystem#export-and-import-full-sessions).
+- Moving the **whole show** between computers means **exporting a `.ltset`** of the entire session, which opens as a fresh session on the target machine. See [Integration & Ecosystem](/docs/integration-ecosystem/#export-and-import-full-sessions).
 
-The reference for how songs behave as containers — boundaries, effective BPM, transpose, warp — is the [Song Regions](#song-regions--the-primary-container) section below. The song-first workflow itself (songs as columns, drag-and-drop of audio and packages, per-song mixer) lives in [Compact View](./compact-view).
+The reference for how songs behave as containers — boundaries, effective BPM, transpose, warp — is the [Song Regions](#song-regions--the-primary-container) section below. The song-first workflow itself (songs as columns, drag-and-drop of audio and packages, per-song mixer) lives in [Compact View](/docs/compact-view/).
 
 ## Library And Assets
 
@@ -44,7 +44,7 @@ Use the track context menu to insert audio or folder tracks. Opening that menu o
 
 ### Auto-Created Tracks
 
-Tracks that the system created on your behalf — typically because you dropped an audio file onto an empty area in the [Compact View](./compact-view) — carry an internal `auto_created` flag. They behave like any other track for editing, but **they are removed automatically the moment they lose their last clip**. Manually-created tracks are never deleted on their own, even when empty. This keeps the project clean while you experiment with rapid drops without committing to keeping every lane that briefly held a clip.
+Tracks that the system created on your behalf — typically because you dropped an audio file onto an empty area in the [Compact View](/docs/compact-view/) — carry an internal `auto_created` flag. They behave like any other track for editing, but **they are removed automatically the moment they lose their last clip**. Manually-created tracks are never deleted on their own, even when empty. This keeps the project clean while you experiment with rapid drops without committing to keeping every lane that briefly held a clip.
 
 ## Clips And Timeline Editing
 
@@ -72,7 +72,7 @@ What follows from this:
 
 - Songs can be **reordered, renamed, exported, and deleted** as a unit. Deleting a song removes the clips inside it and the tempo markers in the same range, and prunes any auto-created tracks that go empty as a result.
 - A song's **effective BPM** comes from the nearest preceding tempo marker at its start; if there is none, the project's global BPM applies. Creating an empty song automatically pins a tempo marker at its `start` so the new song does not inherit the previous song's tempo.
-- Each region also carries its own transpose value and an independent warp toggle, so the same arrangement can move up or down in semitones — with or without changing duration — without duplicating tracks or clips. The exact interaction between these controls is documented in [Pitch, Warp & The T Button](./pitch-and-warp).
+- Each region also carries its own transpose value and an independent warp toggle, so the same arrangement can move up or down in semitones — with or without changing duration — without duplicating tracks or clips. The exact interaction between these controls is documented in [Pitch, Warp & The T Button](/docs/pitch-and-warp/).
 
 Create a song region by selecting a range on the timeline, right-clicking it, and choosing `Create song from selection`. You can also create an empty song from the Compact View's `+ New song` button, import a previously-exported `.ltpkg` package, or import a Reaper/Ableton project as one or more songs. After that, adjust `Region Transpose` and `Region Warp` from the transport view when the song needs a different key or tempo.
 
@@ -95,7 +95,7 @@ Rules:
 
 Use `Shift + S`, or the song context menu, to split the song under the playhead. LibreTracks creates a second song region for the right half, moves the boundary atomically, and splits any clip that crosses the cut so each side still belongs to exactly one song.
 
-For the full song-first workflow — songs as columns, per-song master fader, drag-and-drop of audio, packages, external projects, and track multi-selection in the mixer — see [Compact View](./compact-view).
+For the full song-first workflow — songs as columns, per-song master fader, drag-and-drop of audio, packages, external projects, and track multi-selection in the mixer — see [Compact View](/docs/compact-view/).
 
 ## Markers And Meter Changes
 
