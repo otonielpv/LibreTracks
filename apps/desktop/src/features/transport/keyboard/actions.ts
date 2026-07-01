@@ -34,6 +34,7 @@ export type ShortcutActionId =
   | "edit.paste"
   | "edit.duplicate"
   | "edit.delete"
+  | "edit.rename"
   | "edit.undo"
   | "edit.redo"
   | "edit.redoAlt"
@@ -126,6 +127,13 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     group: "edit",
     labelKey: "shortcuts.action.delete",
     defaultBinding: "Delete",
+  },
+  {
+    // Rename the selected song / track / marker (whichever is selected).
+    id: "edit.rename",
+    group: "edit",
+    labelKey: "shortcuts.action.rename",
+    defaultBinding: "F2",
   },
   {
     id: "edit.undo",

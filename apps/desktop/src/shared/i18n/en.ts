@@ -45,6 +45,7 @@ const en = {
       paste: "Paste",
       duplicate: "Duplicate",
       delete: "Delete",
+      rename: "Rename (song / track / marker)",
       undo: "Undo",
       redo: "Redo",
       redoAlt: "Redo (alternate)",

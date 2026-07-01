@@ -74,6 +74,9 @@ type TimelineKeyboardShortcutsProps = {
   /** Delete the selected song region (with confirmation when it holds clips).
    * Invoked by Delete when no clip/track is selected. */
   deleteSelectedRegion: () => Promise<void>;
+  /** Rename whatever is selected (song / track / marker). Prompts the user.
+   * No-op when nothing renameable is selected. Invoked by F2. */
+  renameSelected: () => Promise<void>;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   toggleViewMode: () => void;
@@ -105,6 +108,7 @@ export function useTimelineKeyboardShortcuts({
   selectAllClips,
   nudgeSelectedClips,
   deleteSelectedRegion,
+  renameSelected,
   setStatus,
   t,
   toggleViewMode,
@@ -302,6 +306,13 @@ export function useTimelineKeyboardShortcuts({
           void deleteSelectedRegion();
         }
       },
+      "edit.rename": (event) => {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        void renameSelected();
+      },
       "view.toggleViewMode": (event) => {
         event.preventDefault();
         toggleViewMode();
@@ -456,6 +467,7 @@ export function useTimelineKeyboardShortcuts({
     selectAllClips,
     nudgeSelectedClips,
     deleteSelectedRegion,
+    renameSelected,
     selectedClipId,
     selectedClipIds,
     selectedTrackIds,

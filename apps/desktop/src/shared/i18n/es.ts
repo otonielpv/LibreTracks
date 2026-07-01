@@ -45,6 +45,7 @@ const es = {
       paste: "Pegar",
       duplicate: "Duplicar",
       delete: "Borrar",
+      rename: "Renombrar (canción / pista / marcador)",
       undo: "Deshacer",
       redo: "Rehacer",
       redoAlt: "Rehacer (alternativo)",

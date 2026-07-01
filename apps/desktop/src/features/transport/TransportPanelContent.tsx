@@ -4652,6 +4652,79 @@ export function TransportPanelContent() {
     await handleCompactDeleteSong(selectedRegionId);
   }, [selectedRegionId, handleCompactDeleteSong]);
 
+  // Rename whatever is selected (F2). Priority: song → track → marker — the
+  // three selectable things that have a rename command (clips inherit their
+  // asset name and have no rename backend). Each branch mirrors the same
+  // prompt + command its context-menu "Renombrar" entry uses.
+  const renameSelected = useCallback(async () => {
+    if (selectedRegionId) {
+      await handleCompactRenameSong(selectedRegionId);
+      return;
+    }
+
+    const currentSong = songRef.current;
+    if (!currentSong) {
+      return;
+    }
+
+    if (selectedTrackIds.length === 1) {
+      const track = currentSong.tracks.find(
+        (candidate) => candidate.id === selectedTrackIds[0],
+      );
+      if (!track) {
+        return;
+      }
+      const nextName = (
+        await promptDialog(t("transport.prompt.trackRename"), track.name)
+      )?.trim();
+      if (!nextName || nextName === track.name) {
+        return;
+      }
+      await runAction(async () => {
+        const nextSnapshot = await updateTrack({
+          trackId: track.id,
+          name: nextName,
+        });
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(t("transport.status.trackRenamed", { name: nextName }));
+      });
+      return;
+    }
+
+    if (selectedSectionId) {
+      const section = currentSong.sectionMarkers.find(
+        (candidate) => candidate.id === selectedSectionId,
+      );
+      if (!section) {
+        return;
+      }
+      const nextName = (
+        await promptDialog(t("transport.prompt.markerRename"), section.name)
+      )?.trim();
+      if (!nextName || nextName === section.name) {
+        return;
+      }
+      await runAction(async () => {
+        const nextSnapshot = await updateSectionMarker(
+          section.id,
+          nextName,
+          section.startSeconds,
+        );
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(t("transport.status.markerRenamed", { name: nextName }));
+      });
+    }
+  }, [
+    selectedRegionId,
+    selectedTrackIds,
+    selectedSectionId,
+    handleCompactRenameSong,
+    runAction,
+    applyPlaybackSnapshot,
+    setStatus,
+    t,
+  ]);
+
   useTimelineKeyboardShortcuts({
     runAction,
     applyPlaybackSnapshot,
@@ -4678,6 +4751,7 @@ export function TransportPanelContent() {
     selectAllClips,
     nudgeSelectedClips,
     deleteSelectedRegion,
+    renameSelected,
     setStatus,
     t,
     toggleViewMode,
@@ -6269,6 +6343,7 @@ export function TransportPanelContent() {
     return [
       {
         label: t("transport.menu.renameSong"),
+        shortcut: shortcutHint("edit.rename"),
         onSelect: async () => {
           const nextName = (
             await promptDialog(t("transport.prompt.songRename"), region.name)
@@ -6936,6 +7011,7 @@ export function TransportPanelContent() {
       },
       {
         label: t("common.rename"),
+        shortcut: shortcutHint("edit.rename"),
         onSelect: async () => {
           const nextName = (
             await promptDialog(t("transport.prompt.trackRename"), track.name)
@@ -7801,6 +7877,7 @@ export function TransportPanelContent() {
       },
       {
         label: t("common.rename"),
+        shortcut: shortcutHint("edit.rename"),
         disabled: !canEditMarker,
         onSelect: async () => {
           const nextName = (

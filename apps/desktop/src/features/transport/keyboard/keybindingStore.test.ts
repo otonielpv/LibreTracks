@@ -19,6 +19,7 @@ describe("resolveBindings", () => {
     expect(resolved["transport.playPause"]).toBe("Space");
     expect(resolved["edit.splitClip"]).toBe("S");
     expect(resolved["edit.splitSong"]).toBe("Shift+S");
+    expect(resolved["edit.rename"]).toBe("F2");
   });
 
   it("lets an override win over the default", () => {
