@@ -37,7 +37,10 @@ export function TimelineContextMenus({
               aria-hidden="true"
             />
           ) : null}
-          {action.label}
+          <span className="lt-context-menu-label">{action.label}</span>
+          {action.shortcut ? (
+            <kbd className="lt-context-menu-shortcut">{action.shortcut}</kbd>
+          ) : null}
         </button>
       ))}
     </div>

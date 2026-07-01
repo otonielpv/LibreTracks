@@ -233,6 +233,7 @@ import { useProjectActions } from "./hooks/useProjectActions";
 import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
 import { useTimelineActions } from "./timeline/useTimelineActions";
 import { useTimelineKeyboardShortcuts } from "./timeline/TimelineKeyboardShortcuts";
+import { useShortcutHint } from "./keyboard/shortcutHint";
 import {
   buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
@@ -924,6 +925,9 @@ export function TransportPanelContent() {
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
+  // Maps an action id to its current display shortcut, for showing keys next to
+  // context-menu items (Reaper-style).
+  const shortcutHint = useShortcutHint();
   const followPlayheadEnabled = useTimelineUIStore(
     (state) => state.followPlayheadEnabled,
   );
@@ -4634,6 +4638,16 @@ export function TransportPanelContent() {
     [selectedClipSummaries, runAction, applyPlaybackSnapshot],
   );
 
+  // Delete the currently selected song region via the Delete shortcut. Reuses
+  // the same confirm-when-not-empty flow as the region context menu and the
+  // compact view's delete-song button.
+  const deleteSelectedRegion = useCallback(async () => {
+    if (!selectedRegionId) {
+      return;
+    }
+    await handleCompactDeleteSong(selectedRegionId);
+  }, [selectedRegionId, handleCompactDeleteSong]);
+
   useTimelineKeyboardShortcuts({
     runAction,
     applyPlaybackSnapshot,
@@ -4642,6 +4656,7 @@ export function TransportPanelContent() {
     selectedClipId,
     selectedClipIds,
     selectedTrackIds,
+    selectedRegionId,
     openTopMenu,
     setOpenTopMenu,
     setSelectedClipId,
@@ -4658,6 +4673,7 @@ export function TransportPanelContent() {
     splitSelectedClipsUnderCursor,
     selectAllClips,
     nudgeSelectedClips,
+    deleteSelectedRegion,
     setStatus,
     t,
     toggleViewMode,
@@ -6233,6 +6249,7 @@ export function TransportPanelContent() {
         label: t("transport.menu.splitSongAtCursor", {
           defaultValue: "Partir canción en el cursor",
         }),
+        shortcut: shortcutHint("edit.splitSong"),
         disabled: !canSplitSong,
         onSelect: async () => {
           await splitSongRegionAtCursor(
@@ -6285,6 +6302,7 @@ export function TransportPanelContent() {
       },
       {
         label: t("transport.menu.deleteSong"),
+        shortcut: shortcutHint("edit.delete"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteSongRegion(region.id);
@@ -7339,6 +7357,7 @@ export function TransportPanelContent() {
     return [
       {
         label: t("transport.menu.splitClipAtCursor"),
+        shortcut: shortcutHint("edit.splitClip"),
         disabled: !canSplit,
         onSelect: async () => {
           await runAction(async () => {
@@ -7364,6 +7383,7 @@ export function TransportPanelContent() {
       },
       {
         label: t("transport.menu.duplicateClip"),
+        shortcut: shortcutHint("edit.duplicate"),
         onSelect: async () => {
           await runAction(async () => {
             const sourceClips =
@@ -7393,6 +7413,7 @@ export function TransportPanelContent() {
       },
       {
         label: t("common.delete"),
+        shortcut: shortcutHint("edit.delete"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteClip(clip.id);

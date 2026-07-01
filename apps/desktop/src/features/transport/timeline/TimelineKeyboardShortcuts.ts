@@ -39,6 +39,9 @@ type TimelineKeyboardShortcutsProps = {
    * shortcut deletes every selected clip, not just the primary one. */
   selectedClipIds: string[];
   selectedTrackIds: string[];
+  /** Currently selected song region (null when none). Used by Delete so a
+   * selected song can be removed with the keyboard. */
+  selectedRegionId: string | null;
   openTopMenu: "file" | null;
   setOpenTopMenu: (menu: "file" | null) => void;
   setSelectedClipId: (id: string | null) => void;
@@ -68,6 +71,9 @@ type TimelineKeyboardShortcutsProps = {
   /** Nudge the selected clip(s) by one snap subdivision (Arrow keys). Returns
    * false when nothing is selected. */
   nudgeSelectedClips: (direction: -1 | 1) => Promise<boolean>;
+  /** Delete the selected song region (with confirmation when it holds clips).
+   * Invoked by Delete when no clip/track is selected. */
+  deleteSelectedRegion: () => Promise<void>;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   toggleViewMode: () => void;
@@ -81,6 +87,7 @@ export function useTimelineKeyboardShortcuts({
   selectedClipId,
   selectedClipIds,
   selectedTrackIds,
+  selectedRegionId,
   openTopMenu,
   setOpenTopMenu,
   setSelectedClipId,
@@ -97,6 +104,7 @@ export function useTimelineKeyboardShortcuts({
   splitSelectedClipsUnderCursor,
   selectAllClips,
   nudgeSelectedClips,
+  deleteSelectedRegion,
   setStatus,
   t,
   toggleViewMode,
@@ -287,6 +295,11 @@ export function useTimelineKeyboardShortcuts({
               }),
             );
           });
+        } else if (selectedRegionId) {
+          // A song region is selected (clicked in the timeline) with no clip or
+          // track selection — Delete removes the whole song. The callback
+          // handles its own confirmation when the region still holds clips.
+          void deleteSelectedRegion();
         }
       },
       "view.toggleViewMode": (event) => {
@@ -442,9 +455,11 @@ export function useTimelineKeyboardShortcuts({
     splitSelectedClipsUnderCursor,
     selectAllClips,
     nudgeSelectedClips,
+    deleteSelectedRegion,
     selectedClipId,
     selectedClipIds,
     selectedTrackIds,
+    selectedRegionId,
     song,
     clearSelection,
     setOpenTopMenu,

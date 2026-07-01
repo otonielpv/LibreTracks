@@ -67,6 +67,8 @@ export type ContextMenuAction = {
   label: string;
   disabled?: boolean;
   swatch?: string;
+  /** Display-ready keyboard shortcut shown right-aligned, Reaper-style. */
+  shortcut?: string;
   onSelect: () => void | Promise<void>;
 };
 

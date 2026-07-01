@@ -4831,6 +4831,21 @@ textarea {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28);
 }
 
+.lt-context-menu-label {
+  flex: 1;
+  text-align: left;
+}
+
+.lt-context-menu-shortcut {
+  flex: 0 0 auto;
+  margin-left: 0.75rem;
+  font-family: inherit;
+  font-size: 0.68rem;
+  color: #9aa6a2;
+  opacity: 0.8;
+  letter-spacing: 0.02em;
+}
+
 .lt-color-popover {
   position: fixed;
   z-index: 65;
