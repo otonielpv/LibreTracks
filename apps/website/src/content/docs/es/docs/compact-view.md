@@ -1,6 +1,6 @@
 ---
 title: Vista Compacta
-description: Vista tipo Session Ableton de LibreTracks — canciones como columnas, mixer compartido, drag-and-drop, importacion y exportacion de paquetes ltpkg, seleccion multiple y reordenacion de tracks.
+description: Vista tipo Session Ableton de LibreTracks — canciones como columnas, mixer compartido, drag-and-drop, importacion/exportacion ltpkg, importacion Reaper/Ableton, seleccion multiple y reordenacion de tracks.
 ---
 
 La **Vista Compacta** es una segunda proyeccion del mismo proyecto. La vista DAW (timeline lineal) y la vista compacta comparten el mismo modelo: lo que haces en una se ve inmediatamente en la otra. 
@@ -14,7 +14,7 @@ Cambia entre las dos con la tecla `Tab` o con el boton del icono `view_module` /
 ## Cuando Usar Cada Vista
 
 - `Vista DAW`: editar el arreglo, alinear waveforms, colocar marcas, ajustar fades, mezclar con todo a la vista.
-- `Vista Compacta`: ensayar el set, saltar entre canciones, ajustar mezcla en directo, ver de un vistazo a que cancion pertenece cada clip y exportar / importar canciones rapidamente.
+- `Vista Compacta`: ensayar el set, saltar entre canciones, ajustar mezcla en directo, ver de un vistazo a que cancion pertenece cada clip e importar/exportar canciones y puntos de partida desde proyectos externos.
 
 ## La Cancion Como Objeto Base
 
@@ -68,6 +68,8 @@ Al final del strip hay dos botones:
 - `Importar .ltpkg` — abre el File Dialog filtrado a `.ltpkg` y appendea la cancion importada al final.
 
 Tambien puedes **arrastrar un `.ltpkg` desde el explorador del sistema** a cualquier parte del strip. Mientras arrastras veras una **columna fantasma** dashed teal a la derecha indicando donde caera, y el strip completo se ilumina ligeramente. Si el archivo no es valido (extension no soportada o mezcla de tipos), no se pinta feedback y el drop se rechaza con un mensaje en la barra de estado.
+
+Tambien puedes soltar un unico Reaper `.rpp` o Ableton `.als` sobre la tira compacta. LibreTracks lo convierte en material de cancion y lo anade al final del setlist. Usa `Archivo` -> `Importar Reaper/Ableton` si prefieres importar mediante dialogo.
 
 ### 2) Strip Inferior — Mixer Compacto
 
@@ -129,19 +131,21 @@ Esto evita la acumulacion de pistas residuales cuando experimentas con drops rap
 
 ## Drop De Assets Y Feedback Visual
 
-La vista compacta acepta tres tipos de origenes para soltar audio:
+La vista compacta acepta estos origenes de drop:
 
 | Origen | Donde se acepta | Que pasa |
 |---|---|---|
 | Biblioteca (drag interno) | Sobre una columna de cancion | Crea clips + auto-tracks dentro de esa cancion |
 | Explorador del SO (audio) | Sobre una columna de cancion | Crea clips + auto-tracks dentro de esa cancion |
 | Explorador del SO (`.ltpkg`) | Sobre cualquier parte del strip | Importa la cancion al final del proyecto |
+| Explorador del SO (`.rpp` / `.als`) | Sobre cualquier parte del strip | Importa el proyecto externo como material de cancion al final |
 | Cualquier archivo no soportado | — | Drop rechazado con mensaje en la barra de estado |
 
 Durante el dragover veras feedback distinto segun el caso:
 
 - **Audio sobre una columna**: tantos cuadros dashed teal como archivos vayas a soltar, dentro de la pila de clips de la columna. El fondo de la pila se tinta de teal suave.
 - **`.ltpkg` sobre el strip**: aparece una columna fantasma al final con icono `library_music` y el texto "Importar aqui".
+- **`.rpp` / `.als` sobre el strip**: no aparece una columna fantasma; la importacion del proyecto externo de archivo unico se acepta y aparece despues del setlist cuando termina la conversion.
 - **Archivo no soportado**: no se pinta nada (el sistema sabe que el drop sera rechazado).
 
 ## Snap, Iman Y Atajos
@@ -169,5 +173,5 @@ Mantenlas presentes al disenar tu workflow:
 - Un clip pertenece a una sola region de cancion y nunca puede cruzar el limite final de su region.
 - Borrar una cancion borra sus clips y sus tempo markers en el mismo rango.
 - Una pista auto-creada se borra cuando pierde su ultimo clip. Una pista manual no.
-- Un drop sobre una columna de cancion siempre crea clips dentro de esa cancion. Un `.ltpkg` siempre crea una cancion nueva al final.
+- Un drop sobre una columna de cancion siempre crea clips dentro de esa cancion. Un `.ltpkg` crea una cancion nueva al final, y un `.rpp` / `.als` soltado importa material externo al final.
 - Los faders, pan, M/S/T y routing del mixer compacto son la **misma** mezcla que ven la vista DAW y el remote: cualquier cambio se propaga al instante.

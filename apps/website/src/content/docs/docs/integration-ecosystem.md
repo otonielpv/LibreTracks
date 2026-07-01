@@ -21,6 +21,19 @@ Use `Import song` from the top `File` section when you want to bring another Lib
 
 For day-to-day prep, the session can also accept external drops more directly: audio files can be imported into the arrangement flow, while library folders help keep assets organized by song or show block.
 
+## Import Reaper And Ableton Projects
+
+Use `File` -> `Import Reaper/Ableton` to convert an external DAW project into LibreTracks instead of exporting every stem and rebuilding the set manually. LibreTracks currently accepts Reaper `.rpp` files and Ableton Live `.als` files.
+
+When importing into an open session, the project is appended after the current setlist. From the empty start screen, `Import Reaper/Ableton` first asks for the external project, then asks where to save the new LibreTracks `.ltsession`.
+
+You can also drag a single `.rpp` or `.als` from the operating system onto the timeline. The imported project tries to land at the drop position; if that would overlap an existing song, LibreTracks places it after the setlist. Dropping a Reaper/Ableton project onto the Compact View strip imports it as a new song at the end.
+
+The conversion keeps the live-playback structure rather than every DAW-only detail:
+
+- Reaper audio items become clips, tracks and folder tracks are recreated, basic track mix state is preserved, tempo and time-signature markers are imported, `REGION`s become LibreTracks songs, and Reaper `MARKER`s become section markers inside those songs.
+- Ableton audio arrangement clips become clips on recreated tracks, locators become section markers, tempo and time-signature data are imported, and the arrangement becomes one LibreTracks song because Ableton locators are section markers rather than song boundaries.
+
 ## Export And Import Full Sessions
 
 Where a `.ltpkg` package carries a single song that merges into the session you already have open, a `.ltset` file carries the **entire session** — every song, the library, automation, and waveforms — as one portable file. Use it to build a set on your home computer and open it unchanged on the machine you play live on, without configuring everything again.
@@ -34,6 +47,12 @@ A progress indicator shows how far the export has got — useful for a large ful
 
 To import a session, choose `Import session…` from the `File` menu, or use the **Import session** button on the start screen — you do not need a session open first. Pick the `.ltset`, choose where to save it, and LibreTracks creates a new project folder and opens it as a fresh session (it replaces what is loaded rather than merging into it).
 
+## Session Templates
+
+Use `File` -> `Save as template…` when the current session has a track layout you want to reuse. A `.lttemplate` keeps the organizational structure - tracks, folder hierarchy, names, colors, and routing - and deliberately removes clips, song regions, markers, tempo maps, and per-track mix values so the next project starts clean.
+
+Create from a template with `File` -> `New from template…`, from the **Templates** area on the start screen, or by choosing a template file manually. Templates are useful for recurring rigs such as Sunday service stems, theatre cues, click/guide layouts, or any show where the routing stays stable while the songs change.
+
 ## File Types And Opening From Your Computer
 
 LibreTracks registers its own file types so they are easy to recognize and open:
@@ -41,6 +60,7 @@ LibreTracks registers its own file types so they are easy to recognize and open:
 - `.ltsession` — a project/session you are working on.
 - `.ltpkg` — a single exported song package.
 - `.ltset` — a whole exported session.
+- `.lttemplate` — a reusable session template.
 
 After installing on Windows, these files show their own icons in Explorer instead of the blank generic file icon, so you can tell a song package from a full set at a glance. On macOS and Linux the types are registered as LibreTracks files, though they share the app icon there.
 
@@ -54,4 +74,4 @@ Remote commands are sent to the desktop backend and resolved through the same se
 
 ## Recommended Live Workflow
 
-Prepare audio in a production DAW, export stems, import them into LibreTracks, organize the Library, build the timeline, configure output routing, add song regions and markers, set transpose behavior where needed, rehearse jumps, connect MIDI, and use the mobile remote for transport or mixer control during rehearsal and show.
+Prepare audio in a production DAW, then either export stems or import a Reaper/Ableton project as a starting point. Organize the Library, build or refine the timeline, configure output routing, add song regions and markers, save a template if the rig should be reused, set transpose behavior where needed, rehearse jumps, connect MIDI, and use the mobile remote for transport or mixer control during rehearsal and show.

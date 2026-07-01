@@ -38,8 +38,21 @@ El disparador puede ser inmediato, tras un numero de compases o al final de la c
 
 ## Atajos
 
+La mayoria de atajos del timeline se pueden reasignar desde `Configuracion` -> `Atajos`. El panel agrupa acciones por transporte, edicion, proyecto, vista y navegacion, y permite editar, quitar o restaurar bindings sin tocar un archivo de configuracion.
+
+Atajos por defecto utiles:
+
 - `Space`: alterna `Play` / `Pause`
-- `Esc`: cancela un salto pendiente
+- `Shift + Space`: detener
+- `Home`: ir al inicio
+- `S`: partir el clip o los clips seleccionados en el playhead
+- `Shift + S`: partir la cancion bajo el playhead
+- `Delete`: borrar la seleccion actual, incluida una region de cancion seleccionada
+- `F2`: renombrar la cancion, pista o marca seleccionada
+- `Ctrl + C` / `Ctrl + V` / `Ctrl + D`: copiar, pegar y duplicar
+- `Ctrl + A`: seleccionar todos los clips
+- `Left` / `Right`: desplazar clips seleccionados una subdivision de snap
+- `Esc`: cancelar un salto pendiente o limpiar la seleccion
 - `0-9`: arma un salto a la marca correspondiente
 - `Shift + 0-9`: arma un salto a la region de cancion seleccionada
 

@@ -1,6 +1,6 @@
 ---
 title: Compact View
-description: LibreTracks' Ableton Session-style projection — songs as columns, shared mixer, drag-and-drop, .ltpkg import/export, multi-selection and track reorder.
+description: LibreTracks' Ableton Session-style projection — songs as columns, shared mixer, drag-and-drop, .ltpkg import/export, Reaper/Ableton project import, multi-selection and track reorder.
 ---
 
 The **Compact View** is a second projection of the same project. The DAW view (linear timeline) and the compact view share one underlying model: anything you change in one shows up immediately in the other.
@@ -14,7 +14,7 @@ Toggle between them with `Tab` or with the `view_module` / `view_timeline` butto
 ## When To Use Each View
 
 - `DAW view`: edit the arrangement, align waveforms, place markers, tweak fades, mix with everything visible at once.
-- `Compact view`: rehearse the set, jump between songs, adjust the mix during the show, see at a glance which song every clip belongs to, and quickly import or export songs.
+- `Compact view`: rehearse the set, jump between songs, adjust the mix during the show, see at a glance which song every clip belongs to, and quickly import or export songs and external project starting points.
 
 ## The Song As The Primary Object
 
@@ -68,6 +68,8 @@ At the end of the strip there are two buttons:
 - `Import .ltpkg` — opens the file dialog filtered to `.ltpkg` and appends the imported song at the end.
 
 You can also **drag a `.ltpkg` from the OS file explorer** anywhere over the strip. While dragging you'll see a **dashed teal ghost column** to the right showing where the import will land, plus a subtle highlight on the whole strip. If the file is unsupported (wrong extension or mixed types), no feedback is painted and the drop is rejected with a status message.
+
+A single Reaper `.rpp` or Ableton `.als` can also be dropped onto the compact strip. LibreTracks converts it into song material and appends it to the setlist. Use the top `File` menu's `Import Reaper/Ableton` action when you prefer a dialog-based import.
 
 ### 2) Bottom Strip — Compact Mixer
 
@@ -129,19 +131,21 @@ This prevents residual tracks from piling up while you experiment with rapid dro
 
 ## Drop Targets And Visual Feedback
 
-The compact view accepts three drop origins:
+The compact view accepts these drop origins:
 
 | Origin | Where accepted | What happens |
 |---|---|---|
 | Library (internal drag) | Onto a song column | Creates clips + auto-tracks inside that song |
 | OS file explorer (audio) | Onto a song column | Creates clips + auto-tracks inside that song |
 | OS file explorer (`.ltpkg`) | Anywhere over the strip | Imports the song at the end of the project |
+| OS file explorer (`.rpp` / `.als`) | Anywhere over the strip | Imports the external project as song material at the end |
 | Any unsupported file | — | Drop rejected with a status message |
 
 During dragover you'll see different feedback depending on the case:
 
 - **Audio over a song column**: as many dashed teal placeholders as files you're about to drop, inside the column's clip stack. The stack background tints light teal.
 - **`.ltpkg` over the strip**: a ghost column appears at the end with a `library_music` icon and the text "Import here".
+- **`.rpp` / `.als` over the strip**: there is no ghost column; the single-file external project import is accepted and appears after the setlist once converted.
 - **Unsupported file**: nothing is painted (the system knows the drop will be rejected).
 
 ## Snap, Magnet And Shortcuts
@@ -169,5 +173,5 @@ Keep these in mind when designing your workflow:
 - A clip belongs to exactly one song region and never crosses the end of its region.
 - Deleting a song deletes its clips and the tempo markers in the same range.
 - An auto-created track is removed when it loses its last clip. A manual track is not.
-- A drop on a song column always creates clips inside that song. A `.ltpkg` always creates a new song at the end.
+- A drop on a song column always creates clips inside that song. A `.ltpkg` creates a new song at the end, and a dropped `.rpp` / `.als` imports external song material at the end.
 - Faders, pan, M/S/T and routing on the compact mixer are the **same** mix the DAW view and the remote see: every change propagates instantly.

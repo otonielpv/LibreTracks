@@ -9,7 +9,7 @@ LibreTracks esta construido alrededor de la **cancion** como unidad de trabajo. 
 
 Esto es lo mas importante de interiorizar antes de leer el resto. Cuando piensas en canciones:
 
-- Añadir material al show significa **crear o importar una cancion**, no soltar audio sobre una pista.
+- Añadir material al show significa **crear o importar una cancion** - desde audio, un `.ltpkg` o un proyecto Reaper/Ableton - y no tratar el proyecto como pistas sueltas.
 - Reordenar el setlist significa **mover canciones**, lo que arrastra sus clips, marcas, tempo y cambios de compas de forma atomica.
 - Tempo, tonalidad y ganancia master son **propiedades por cancion** (`Region Warp`, `Region Transpose`, fader master por cancion), no globales.
 - Hacer copia o compartir una pieza del show significa **exportar un `.ltpkg`** de una o varias canciones, que se puede importar en cualquier otro proyecto.
@@ -27,6 +27,8 @@ Las carpetas virtuales agrupan assets por cancion, set, escena, seccion o instru
 
 ![Carpetas virtuales](/screenshots/Assets-Folder.gif)
 
+Las importaciones de proyectos Reaper `.rpp` y Ableton `.als` usan el mismo modelo song-first: el audio fuente se anade a Biblioteca, mientras que pistas, clips, marcas, tempo, compas y regiones de cancion importadas se colocan directamente en la sesion.
+
 ## Audio Tracks Y Folder Tracks
 
 - `Audio track` contiene clips y produce playback.
@@ -38,6 +40,8 @@ Las folder tracks tambien pueden ser las duenas del routing del grupo. Las pista
 
 ![Tracks y carpetas](/screenshots/Tracks-Folder.gif)
 
+Usa el menu contextual de pista para insertar audio tracks o folder tracks. Si abres ese menu sobre una carpeta, la pista nueva se crea dentro; si lo abres sobre una pista normal, se inserta como hermana despues de esa pista.
+
 ### Pistas Auto-Creadas
 
 Las pistas que el sistema creo automaticamente — normalmente porque soltaste un archivo de audio sobre una zona vacia en la [Vista Compacta](./compact-view) — llevan un flag interno `auto_created`. Se comportan como cualquier otra pista al editar, pero **se borran automaticamente cuando pierden su ultimo clip**. Las pistas creadas a mano nunca se borran solas, aunque queden vacias. Este comportamiento mantiene el proyecto limpio mientras experimentas con drops rapidos, sin comprometerte a conservar cada carril que tuvo brevemente un clip.
@@ -47,6 +51,8 @@ Las pistas que el sistema creo automaticamente — normalmente porque soltaste u
 Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar assets desde Biblioteca, soltar audio externo directamente en el timeline, mover clips, duplicar secciones repetidas y cortar en el cursor sin reescribir el WAV original.
 
 Selecciona clips y usa `Ctrl + C` / `Ctrl + V` para copiarlos y pegarlos. Usa `Ctrl + D` cuando quieras duplicar los clips seleccionados directamente en la siguiente posicion del timeline.
+
+Usa `S` para partir el clip o los clips seleccionados en el playhead. Es una edicion no destructiva: el archivo original no cambia, LibreTracks solo escribe nuevas referencias de clip.
 
 Arrastra el borde de un clip para redimensionar su region sin cambiar el archivo de audio original. Cuando `Snap to Grid` esta activado, manten `Alt` mientras mueves el playhead para colocarlo libremente sin ajustar a la rejilla.
 
@@ -68,7 +74,9 @@ Consecuencias practicas:
 - El **BPM efectivo** de una cancion lo decide el tempo marker mas reciente al inicio de la region; si no hay marker, se usa el BPM global del proyecto. Al crear una cancion vacia se ancla automaticamente un tempo marker a su `start` para que no herede el tempo de la cancion anterior.
 - Cada region tambien guarda su propia transposicion y un toggle de warp independiente, asi el mismo arreglo puede subir o bajar por semitonos — cambiando o no la duracion — sin duplicar pistas ni clips. La interaccion exacta entre estos controles esta documentada en [Pitch, warp y el boton T](./pitch-and-warp).
 
-Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Tambien puedes crear una cancion vacia desde el boton `+ Nueva cancion` de la Vista Compacta, o importar un paquete `.ltpkg` previamente exportado como una cancion appendeada al final. Despues puedes ajustar `Region Transpose` y `Region Warp` desde la vista de transporte cuando la cancion necesite otra tonalidad o tempo.
+Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Tambien puedes crear una cancion vacia desde el boton `+ Nueva cancion` de la Vista Compacta, importar un paquete `.ltpkg` previamente exportado o importar un proyecto Reaper/Ableton como una o varias canciones. Despues puedes ajustar `Region Transpose` y `Region Warp` desde la vista de transporte cuando la cancion necesite otra tonalidad o tempo.
+
+Las `REGION`s de Reaper se convierten en canciones separadas de LibreTracks dentro del setlist. Los `MARKER`s de Reaper y los locators de Ableton se convierten en marcas de seccion dentro de una cancion, y un arrangement de Ableton se importa como una unica cancion que abarca el arreglo.
 
 ### Mover una cancion completa
 
@@ -83,7 +91,11 @@ Reglas:
 
 ![Crear region de cancion](/screenshots/Create-Region.png)
 
-Para el flujo completo orientado a canciones — canciones como columnas, fader Master por cancion, drag-and-drop de audio y paquetes, y multi-seleccion de pistas en el mixer — ver [Vista Compacta](./compact-view).
+### Partir una cancion
+
+Usa `Shift + S`, o el menu contextual de la cancion, para partir la cancion bajo el playhead. LibreTracks crea una segunda region para la mitad derecha, mueve el limite de forma atomica y parte cualquier clip que cruce el corte para que cada lado siga perteneciendo a una sola cancion.
+
+Para el flujo completo orientado a canciones — canciones como columnas, fader Master por cancion, drag-and-drop de audio, paquetes y proyectos externos, y multi-seleccion de pistas en el mixer — ver [Vista Compacta](./compact-view).
 
 ## Marcas Y Cambios De Compas
 

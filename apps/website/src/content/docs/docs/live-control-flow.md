@@ -38,8 +38,21 @@ The trigger can be immediate, after a configured number of bars, or at the end o
 
 ## Shortcuts
 
+Most timeline shortcuts can be reassigned from `Settings` -> `Shortcuts`. The panel groups actions by transport, edit, project, view, and navigation, and lets you edit, remove, or reset bindings without editing a config file.
+
+Useful defaults:
+
 - `Space`: toggle `Play` / `Pause`
-- `Esc`: cancel a pending jump
+- `Shift + Space`: stop
+- `Home`: go to the start
+- `S`: split selected clip or clips at the playhead
+- `Shift + S`: split the song under the playhead
+- `Delete`: delete the current selection, including a selected song region
+- `F2`: rename the selected song, track, or marker
+- `Ctrl + C` / `Ctrl + V` / `Ctrl + D`: copy, paste, and duplicate
+- `Ctrl + A`: select all clips
+- `Left` / `Right`: nudge selected clips by one snap subdivision
+- `Esc`: cancel a pending jump or clear selection
 - `0-9`: arm a jump to the corresponding marker
 - `Shift + 0-9`: arm a jump to the selected song region
 
