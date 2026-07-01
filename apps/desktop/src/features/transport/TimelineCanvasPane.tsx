@@ -1407,7 +1407,8 @@ export function TimelineCanvasPane({
                   background:
                     externalDropPreview.kind === "audio"
                       ? "rgba(122,229,130,0.18)"
-                      : externalDropPreview.kind === "package"
+                      : externalDropPreview.kind === "package" ||
+                          externalDropPreview.kind === "external"
                         ? "rgba(255,184,107,0.18)"
                         : externalDropPreview.kind === "unknown"
                           ? "rgba(118,184,255,0.16)"
@@ -1415,7 +1416,8 @@ export function TimelineCanvasPane({
                   border:
                     externalDropPreview.kind === "audio"
                       ? "1px solid rgba(122,229,130,0.34)"
-                      : externalDropPreview.kind === "package"
+                      : externalDropPreview.kind === "package" ||
+                          externalDropPreview.kind === "external"
                         ? "1px solid rgba(255,184,107,0.34)"
                         : externalDropPreview.kind === "unknown"
                           ? "1px solid rgba(118,184,255,0.34)"
@@ -1435,11 +1437,13 @@ export function TimelineCanvasPane({
                   ? "Audio"
                   : externalDropPreview.kind === "package"
                     ? "Package"
-                    : externalDropPreview.kind === "unknown"
-                      ? "Drop"
-                      : externalDropPreview.kind === "mixed"
-                        ? "Mixed"
-                        : "Unsupported"}
+                    : externalDropPreview.kind === "external"
+                      ? "Reaper/Ableton"
+                      : externalDropPreview.kind === "unknown"
+                        ? "Drop"
+                        : externalDropPreview.kind === "mixed"
+                          ? "Mixed"
+                          : "Unsupported"}
               </div>
             </div>
           ) : null}

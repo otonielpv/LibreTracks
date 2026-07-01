@@ -5169,6 +5169,15 @@ impl DesktopSession {
         normalize_imported_section_markers(&mut next_song.section_markers);
         ensure_unique_imported_song_entity_ids(&mut next_song);
 
+        // A clip may not cross a region (song) boundary — the engine rejects it.
+        // Reaper region END boundaries don't always coincide with the audio item
+        // lengths (e.g. a click item is a few ms longer than the region), and
+        // when several songs sit on the timeline a clip that overruns its
+        // region's end invades the next song. Reconcile: split any clip that
+        // straddles a region boundary, then grow each region's end to cover the
+        // clips that start inside it (bounded by the next region's start).
+        reconcile_regions_and_clips(&mut next_song);
+
         eprintln!("[libretracks-import] persisting song update (structure rebuild)");
         self.persist_song_update(next_song, audio, AudioChangeImpact::StructureRebuild, true)?;
         eprintln!("[libretracks-import] persist_song_update completed");
@@ -9586,6 +9595,64 @@ fn split_clips_crossing_point(song: &mut Song, split_seconds_view: f64) {
     }
 }
 
+/// Make an imported song's clips legal against its region (song) boundaries. The
+/// engine rejects a clip that crosses from one region into the next. Reaper
+/// region-end boundaries can be a few ms shorter than the audio items inside
+/// them, so a clip may overrun its region and invade the following song. This:
+///   1. splits any clip straddling a region boundary (each region end), then
+///   2. grows every region's end to cover the clips that START inside it, capped
+///      at the next region's start so regions never overlap.
+/// A single-region import just gets its end grown to the last clip end (no split
+/// needed). Idempotent-ish and cheap; safe to run once at the end of an import.
+fn reconcile_regions_and_clips(song: &mut Song) {
+    if song.regions.is_empty() {
+        return;
+    }
+    sort_song_regions(&mut song.regions);
+
+    // 1) Split clips that cross any interior region boundary (each region start
+    //    after the first is a boundary between two songs).
+    let boundaries: Vec<f64> = song
+        .regions
+        .iter()
+        .skip(1)
+        .map(|region| region.start_seconds)
+        .collect();
+    for boundary in boundaries {
+        split_clips_crossing_point(song, boundary);
+    }
+
+    // 2) Grow each region end to cover clips starting inside it, capped by the
+    //    next region's start (half-open [start, end)).
+    let region_count = song.regions.len();
+    for index in 0..region_count {
+        let start = song.regions[index].start_seconds;
+        let cap = song
+            .regions
+            .get(index + 1)
+            .map(|next| next.start_seconds)
+            .unwrap_or(f64::INFINITY);
+        let max_clip_end = song
+            .clips
+            .iter()
+            .filter(|clip| {
+                clip.timeline_start_seconds >= start - 0.0001
+                    && clip.timeline_start_seconds < cap
+            })
+            .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
+            .fold(song.regions[index].end_seconds, f64::max);
+        // Never let the end reach/exceed the next region's start.
+        let capped_end = if cap.is_finite() {
+            max_clip_end.min(cap)
+        } else {
+            max_clip_end
+        };
+        song.regions[index].end_seconds = capped_end.max(start + 0.001);
+    }
+
+    refresh_song_duration(song);
+}
+
 pub(crate) fn slugify(value: &str) -> String {
     let mut slug = String::new();
     let mut last_was_dash = false;
@@ -9865,9 +9932,10 @@ mod tests {
     use super::{
         build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
         place_bundled_audio_and_repoint, realign_regions_after_warp_tempo_change,
-        write_library_manifest, write_library_manifest_assets, AudioFileImportPayload,
-        AudioFilePathImportPayload, ClipMoveRequest, CreateAudioTrackWithClipRequest,
-        CreateClipRequest, DesktopSession, TransportClock, WaveformMemoryCache,
+        reconcile_regions_and_clips, write_library_manifest, write_library_manifest_assets,
+        AudioFileImportPayload, AudioFilePathImportPayload, ClipMoveRequest,
+        CreateAudioTrackWithClipRequest, CreateClipRequest, DesktopSession, TransportClock,
+        WaveformMemoryCache,
     };
 
     fn demo_song() -> Song {
@@ -12760,6 +12828,63 @@ mod tests {
             bumped >= 18.0,
             "overlap should push the insert past the setlist end (18s), got {bumped}"
         );
+    }
+
+    #[test]
+    fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
+        // Two songs [0,100] and [100,200]. A clip in the first song is a hair
+        // longer than the region end (100.05), which without reconciliation would
+        // cross into the second song — the exact "clip spans the boundary" import
+        // error (Reaper region end vs. audio item length mismatch).
+        let mut song = demo_song();
+        song.regions = vec![
+            SongRegion {
+                id: "a".into(),
+                name: "A".into(),
+                start_seconds: 0.0,
+                end_seconds: 100.0,
+                transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
+            },
+            SongRegion {
+                id: "b".into(),
+                name: "B".into(),
+                start_seconds: 100.0,
+                end_seconds: 200.0,
+                transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
+            },
+        ];
+        song.clips = vec![Clip {
+            id: "c".into(),
+            track_id: song.tracks[0].id.clone(),
+            file_path: "audio/x.wav".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 100.05,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        }];
+
+        reconcile_regions_and_clips(&mut song);
+
+        // The overrunning clip was split at the 100s boundary, so no clip crosses.
+        for clip in &song.clips {
+            let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
+            let crosses = song.regions.iter().any(|region| {
+                clip.timeline_start_seconds < region.start_seconds - 0.0001
+                    && clip_end > region.start_seconds + 0.0001
+            });
+            assert!(!crosses, "no clip may cross a region boundary after reconcile");
+        }
+        // First region still ends at/under the next region's start.
+        assert!(song.regions[0].end_seconds <= 100.0 + 0.0001);
     }
 
     #[test]
