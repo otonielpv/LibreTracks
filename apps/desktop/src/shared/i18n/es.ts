@@ -98,6 +98,13 @@ const es = {
       importSession: "Importar sesión",
       importingSession: "Importando sesión...",
       exportingSession: "Exportando sesión...",
+      creatingFromTemplate: "Creando sesión desde plantilla...",
+      templatesHeading: "Plantillas",
+      useTemplateFile: "Usar plantilla de archivo…",
+      filterTemplates: "Buscar plantilla…",
+      noTemplateMatches: "Ninguna plantilla coincide con la búsqueda.",
+      noTemplates:
+        "Aún no tienes plantillas. Guarda una desde una sesión con “Guardar como plantilla…”.",
       choosingProjectLocation:
         "Elige donde guardar el proyecto importado...",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",
@@ -486,6 +493,7 @@ const es = {
       projectSaved: "Proyecto guardado.",
       projectSavedAt: "Proyecto guardado en {{path}}.",
       projectSavedNewLocation: "Proyecto guardado en nueva ubicacion.",
+      templateSaved: "Plantilla guardada.",
       audioDeviceUpdated: "Dispositivo de audio actualizado a {{name}}.",
       audioDeviceSystemDefault:
         "Dispositivo de audio ajustado al predeterminado del sistema.",
@@ -669,6 +677,7 @@ const es = {
     mainMenu: "Menu principal",
     fileMenu: "Archivo",
     newProject: "Nuevo proyecto",
+    newFromTemplate: "Nuevo desde plantilla…",
     open: "Abrir",
     importSong: "Importar cancion",
     importSession: "Importar sesión…",
@@ -676,6 +685,7 @@ const es = {
     importExternalProject: "Importar Reaper/Ableton",
     save: "Guardar",
     saveAs: "Guardar como",
+    saveAsTemplate: "Guardar como plantilla…",
     bpmLabel: "BPM",
     songBpmAria: "BPM de la sesion",
     tapTempo: "Tap tempo",

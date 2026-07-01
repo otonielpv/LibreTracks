@@ -34,7 +34,8 @@
       "../../../licenses/*": "licenses",
       "icons/file-types/ltsession.ico": "file-types/ltsession.ico",
       "icons/file-types/ltpkg.ico": "file-types/ltpkg.ico",
-      "icons/file-types/ltset.ico": "file-types/ltset.ico"
+      "icons/file-types/ltset.ico": "file-types/ltset.ico",
+      "icons/file-types/lttemplate.ico": "file-types/lttemplate.ico"
     },
     "fileAssociations": [
       {
@@ -71,6 +72,18 @@
         "exportedType": {
           "identifier": "com.libretracks.set",
           "conformsTo": ["public.data", "public.archive"]
+        }
+      },
+      {
+        "ext": ["lttemplate"],
+        "name": "LibreTracks.Template",
+        "description": "Plantilla de sesión de LibreTracks",
+        "mimeType": "application/x-libretracks-template",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "com.libretracks.template",
+          "conformsTo": ["public.data", "public.content"]
         }
       }
     ],

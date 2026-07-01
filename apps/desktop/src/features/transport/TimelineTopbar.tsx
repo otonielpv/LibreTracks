@@ -24,6 +24,7 @@ type TimelineTopbarProps = {
   onToggleTopMenu: (menuKey: "file") => void;
   onTopMenuAction: (action: () => void) => void;
   onCreateSong: () => void;
+  onCreateSongFromTemplate: () => void;
   onOpenProject: () => void;
   onImportSong: () => void;
   onImportSession: () => void;
@@ -31,6 +32,7 @@ type TimelineTopbarProps = {
   onImportExternalProject: () => void;
   onSaveProject: () => void;
   onSaveProjectAs: () => void;
+  onSaveAsTemplate: () => void;
   onStopTransport: () => void;
   onPlayTransport: () => void;
   onPauseTransport: () => void;
@@ -67,6 +69,7 @@ export function TimelineTopbar({
   onToggleTopMenu,
   onTopMenuAction,
   onCreateSong,
+  onCreateSongFromTemplate,
   onOpenProject,
   onImportSong,
   onImportSession,
@@ -74,6 +77,7 @@ export function TimelineTopbar({
   onImportExternalProject,
   onSaveProject,
   onSaveProjectAs,
+  onSaveAsTemplate,
   onStopTransport,
   onPlayTransport,
   onPauseTransport,
@@ -143,6 +147,17 @@ export function TimelineTopbar({
                   }}
                 >
                   <span>{t("timelineTopbar.newProject")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onTopMenuAction(onCreateSongFromTemplate)}
+                >
+                  <span>
+                    {t("timelineTopbar.newFromTemplate", {
+                      defaultValue: "Nuevo desde plantilla…",
+                    })}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -236,6 +251,18 @@ export function TimelineTopbar({
                 >
                   <span>{t("timelineTopbar.saveAs")}</span>
                   <span className="lt-top-menu-shortcut">Ctrl+Shift+S</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canPersistProject && !learnModeActive}
+                  onClick={() => onTopMenuAction(onSaveAsTemplate)}
+                >
+                  <span>
+                    {t("timelineTopbar.saveAsTemplate", {
+                      defaultValue: "Guardar como plantilla…",
+                    })}
+                  </span>
                 </button>
               </div>
             ) : null}

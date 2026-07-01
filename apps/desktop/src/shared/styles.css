@@ -2573,6 +2573,96 @@ textarea {
   box-shadow: 0 14px 40px rgb(87 241 219 / 0.22);
 }
 
+.lt-empty-state-templates {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgb(87 241 219 / 0.12);
+  text-align: left;
+}
+
+.lt-empty-state-templates-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.lt-empty-state-templates-header > span {
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9a9694;
+}
+
+.lt-empty-state-templates-header button {
+  border: 1px solid rgb(87 241 219 / 0.16);
+  border-radius: 2px;
+  background: rgb(32 31 31 / 0.95);
+  color: #e5e2e1;
+  padding: 0.45rem 0.75rem;
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-empty-state-templates-header button:hover {
+  border-color: rgb(87 241 219 / 0.36);
+  background: #2a2a2a;
+}
+
+.lt-empty-state-template-filter {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.6rem;
+  border: 1px solid rgb(87 241 219 / 0.16);
+  border-radius: 2px;
+  background: rgb(18 18 18 / 0.9);
+  color: #e5e2e1;
+  padding: 0.5rem 0.7rem;
+  font: 600 12px/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-empty-state-template-filter:focus {
+  outline: none;
+  border-color: rgb(87 241 219 / 0.4);
+}
+
+.lt-empty-state-template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* Cap the height so a large template collection scrolls inside its own box
+     instead of pushing the landing card open without bound. ~5 rows tall. */
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.lt-empty-state-template-list button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgb(87 241 219 / 0.12);
+  border-radius: 2px;
+  background: rgb(24 24 24 / 0.9);
+  color: #e5e2e1;
+  padding: 0.6rem 0.85rem;
+  font: 600 12px/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-empty-state-template-list button:hover {
+  border-color: rgb(87 241 219 / 0.36);
+  background: #262626;
+}
+
+.lt-empty-state-templates-empty {
+  margin: 0;
+  color: #7f7b79;
+  font: 400 12px/1.4 "Space Grotesk", sans-serif;
+}
+
 .lt-timeline-topline {
   min-height: 2.95rem;
   flex-shrink: 0;

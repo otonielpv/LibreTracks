@@ -396,6 +396,133 @@ pub fn start_create_song(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
+/// List the reusable `.lttemplate` files in the default templates folder so the
+/// landing screen can offer them when creating a new session.
+#[tauri::command]
+pub fn list_session_templates(app: AppHandle) -> Result<Vec<crate::state::TemplateSummary>, String> {
+    Ok(crate::state::list_default_templates(&app))
+}
+
+/// Save the currently loaded session as a portable `.lttemplate` file. Opens a
+/// save dialog seeded to the default templates folder; the user may pick any
+/// location so templates can be carried between machines.
+#[tauri::command]
+pub fn start_save_session_as_template(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<bool, String> {
+    let song_title = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .engine
+            .song()
+            .map(|song| song.title.clone())
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?
+    };
+
+    let default_directory = crate::state::templates_default_directory(&app);
+    // Ensure the suggested folder exists so the dialog can open there.
+    let _ = std::fs::create_dir_all(&default_directory);
+
+    let target_pick = FileDialog::new()
+        .add_filter("LibreTracks Template", &["lttemplate"])
+        .set_title("Guardar como plantilla")
+        .set_directory(&default_directory)
+        .set_file_name(&format!("{song_title}.lttemplate"))
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        return Ok(false);
+    };
+
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .save_current_as_template(target_pick)
+        .map(|_| true)
+        .map_err(|error| crate::error_log::log_command_err("start_save_session_as_template", error))
+}
+
+/// Create a new session from a template file already known by path (a template
+/// listed on the landing screen). Opens a save dialog for the new project
+/// location, then builds it off the template on a worker thread.
+#[tauri::command]
+pub fn start_create_song_from_template_path(
+    app: AppHandle,
+    template_path: String,
+) -> Result<bool, String> {
+    let template_path = std::path::PathBuf::from(template_path);
+    let default_directory = crate::state::create_song_default_directory(&app);
+    let target_pick = FileDialog::new()
+        .set_title("Crear proyecto desde plantilla")
+        .set_directory(&default_directory)
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_file_name(&crate::state::default_project_file_name("Nueva Cancion"))
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        return Ok(false);
+    };
+
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .create_song_from_template_path(template_path, target_pick, &state.audio)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
+}
+
+/// Create a new session from a template chosen via an open dialog (e.g. a
+/// `.lttemplate` brought from another machine). Prompts first for the template
+/// file, then for the new project location.
+#[tauri::command]
+pub fn start_create_song_from_template_file(app: AppHandle) -> Result<bool, String> {
+    let default_directory = crate::state::templates_default_directory(&app);
+    let template_pick = FileDialog::new()
+        .set_title("Elegir plantilla")
+        .set_directory(&default_directory)
+        .add_filter("LibreTracks Template", &["lttemplate"])
+        .pick_file();
+
+    let Some(template_path) = template_pick else {
+        return Ok(false);
+    };
+
+    let target_directory = crate::state::create_song_default_directory(&app);
+    let target_pick = FileDialog::new()
+        .set_title("Crear proyecto desde plantilla")
+        .set_directory(&target_directory)
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_file_name(&crate::state::default_project_file_name("Nueva Cancion"))
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        return Ok(false);
+    };
+
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .create_song_from_template_path(template_path, target_pick, &state.audio)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
+}
+
 #[tauri::command]
 pub fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state

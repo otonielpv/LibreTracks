@@ -274,10 +274,29 @@ describe("App / timeline-clips", () => {
       fireEvent.contextMenu(ruler, { clientX: 420, clientY: 32 });
     });
 
-    expect(await screen.findByRole("button", { name: /create marker/i })).toBeTruthy();
+    // "Create Marker" now opens a marker-kind submenu (Sections / Cues /
+    // Custom) rather than creating a marker directly; pick "Custom" to make an
+    // unlabelled marker at the clicked position.
+    expect(
+      await screen.findByRole("button", {
+        name: new RegExp(`^${en.transport.menu.createMarker}$`, "i"),
+      }),
+    ).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /create marker/i }));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: new RegExp(`^${en.transport.menu.createMarker}$`, "i"),
+        }),
+      );
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: new RegExp(`^${en.transport.markerKind.custom}$`, "i"),
+        }),
+      );
     });
 
     expect(

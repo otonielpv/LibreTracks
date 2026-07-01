@@ -5,6 +5,8 @@ import type {
 } from "@libretracks/shared/models";
 import {
   createSong,
+  createSongFromTemplateFile,
+  createSongFromTemplatePath,
   exportSessionPackage,
   getProjectLoadProgressSnapshot,
   importSessionPackage,
@@ -15,6 +17,7 @@ import {
   pickAndImportSong,
   saveProject,
   saveProjectAs,
+  saveSessionAsTemplate,
 } from "../desktopApi";
 import { nextPaint } from "../pendingAudioImports";
 import type { SidebarTab } from "../types";
@@ -451,6 +454,41 @@ export function useProjectActions({
     );
   }
 
+  // Save the current session's organizational structure (tracks, folders,
+  // routing) as a reusable `.lttemplate`. No session reload — just a save
+  // dialog + write — so this does NOT go through runProjectLoadFlow.
+  function handleSaveAsTemplateClick() {
+    void runAction(
+      async () => {
+        const saved = await saveSessionAsTemplate();
+        if (!saved) {
+          return;
+        }
+        setStatus(
+          t("transport.status.templateSaved", {
+            defaultValue: "Plantilla guardada.",
+          }),
+        );
+      },
+      { busy: true },
+    );
+  }
+
+  // Create a new session from a template (either one listed on the landing,
+  // known by `templatePath`, or one picked via an open dialog when omitted).
+  // Reuses the same hydrate-with-progress flow as opening a project.
+  function handleCreateSongFromTemplate(templatePath?: string) {
+    runProjectLoadFlow(
+      () =>
+        templatePath
+          ? createSongFromTemplatePath(templatePath)
+          : createSongFromTemplateFile(),
+      t("transport.shell.creatingFromTemplate", {
+        defaultValue: "Creando sesión desde plantilla...",
+      }),
+    );
+  }
+
   return {
     handleCreateSongClick,
     handleOpenProjectClick,
@@ -461,5 +499,7 @@ export function useProjectActions({
     handleImportExternalProjectWizardClick,
     handleSaveProjectClick,
     handleSaveProjectAsClick,
+    handleSaveAsTemplateClick,
+    handleCreateSongFromTemplate,
   };
 }

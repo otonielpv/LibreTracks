@@ -17,6 +17,7 @@
   WriteRegStr SHELL_CONTEXT "Software\Classes\LibreTracks.Session\DefaultIcon" "" "$INSTDIR\file-types\ltsession.ico,0"
   WriteRegStr SHELL_CONTEXT "Software\Classes\LibreTracks.SongPackage\DefaultIcon" "" "$INSTDIR\file-types\ltpkg.ico,0"
   WriteRegStr SHELL_CONTEXT "Software\Classes\LibreTracks.Set\DefaultIcon" "" "$INSTDIR\file-types\ltset.ico,0"
+  WriteRegStr SHELL_CONTEXT "Software\Classes\LibreTracks.Template\DefaultIcon" "" "$INSTDIR\file-types\lttemplate.ico,0"
 
   ; Tell the shell to drop its per-extension icon cache so the new icons show up
   ; without a logoff/reboot (SHCNE_ASSOCCHANGED).

@@ -142,7 +142,9 @@ import {
   removeAutomationTrack,
   setAutomationTrackPosition,
   formatTransposeSemitones,
+  listSessionTemplates,
 } from "./desktopApi";
+import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import {
   MARKER_KINDS as SECTION_KINDS,
@@ -3644,6 +3646,8 @@ export function TransportPanelContent() {
     handleExportSessionConfirm,
     handleImportExternalProjectClick,
     handleImportExternalProjectWizardClick,
+    handleSaveAsTemplateClick,
+    handleCreateSongFromTemplate,
   } = useProjectActions({
     runAction,
     applyPlaybackSnapshot,
@@ -5555,6 +5559,47 @@ export function TransportPanelContent() {
   const isProjectEmpty = !song;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
   const shouldShowEmptyState = !isShellBusy && !isProjectPending && !song;
+  // Reusable templates discovered in the default templates folder, offered on
+  // the empty-state landing. Refreshed whenever the landing becomes visible so
+  // a template just saved from a session shows up next time you land here.
+  const [sessionTemplates, setSessionTemplates] = useState<
+    SessionTemplateSummary[]
+  >([]);
+  const [templateFilter, setTemplateFilter] = useState("");
+  useEffect(() => {
+    if (!shouldShowEmptyState) {
+      return;
+    }
+    let cancelled = false;
+    void listSessionTemplates()
+      .then((templates) => {
+        if (!cancelled) {
+          setSessionTemplates(templates);
+          // Drop any stale filter each time the list is (re)loaded.
+          setTemplateFilter("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSessionTemplates([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldShowEmptyState]);
+  // Show the search box only once the list is long enough that scanning it by
+  // eye gets tedious; below that a filter would just be visual noise.
+  const TEMPLATE_FILTER_THRESHOLD = 8;
+  const filteredTemplates = useMemo(() => {
+    const query = templateFilter.trim().toLowerCase();
+    if (!query) {
+      return sessionTemplates;
+    }
+    return sessionTemplates.filter((template) =>
+      template.name.toLowerCase().includes(query),
+    );
+  }, [sessionTemplates, templateFilter]);
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = useMemo<TimelineTrackSummary[]>(() => {
     const realTracks: TimelineTrackSummary[] = song
@@ -10089,6 +10134,7 @@ export function TransportPanelContent() {
           onToggleTopMenu={handleToggleTopMenu}
           onTopMenuAction={handleTopMenuAction}
           onCreateSong={handleCreateSongClick}
+          onCreateSongFromTemplate={() => handleCreateSongFromTemplate()}
           onOpenProject={handleOpenProjectClick}
           onImportSong={handleImportSongClick}
           onImportSession={handleImportSessionClick}
@@ -10096,6 +10142,7 @@ export function TransportPanelContent() {
           onImportExternalProject={handleImportExternalProjectClick}
           onSaveProject={handleSaveProjectClick}
           onSaveProjectAs={handleSaveProjectAsClick}
+          onSaveAsTemplate={handleSaveAsTemplateClick}
           onStopTransport={() =>
             void runAction(async () => {
               const nextSnapshot = await stopTransport();
@@ -10277,6 +10324,76 @@ export function TransportPanelContent() {
                       >
                         {t("timelineTopbar.importExternalProject")}
                       </button>
+                    </div>
+                    <div className="lt-empty-state-templates">
+                      <div className="lt-empty-state-templates-header">
+                        <span>
+                          {t("transport.shell.templatesHeading", {
+                            defaultValue: "Plantillas",
+                          })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCreateSongFromTemplate()}
+                        >
+                          {t("transport.shell.useTemplateFile", {
+                            defaultValue: "Usar plantilla de archivo…",
+                          })}
+                        </button>
+                      </div>
+                      {sessionTemplates.length > 0 ? (
+                        <>
+                          {sessionTemplates.length >=
+                          TEMPLATE_FILTER_THRESHOLD ? (
+                            <input
+                              type="search"
+                              className="lt-empty-state-template-filter"
+                              value={templateFilter}
+                              onChange={(event) =>
+                                setTemplateFilter(event.target.value)
+                              }
+                              placeholder={t(
+                                "transport.shell.filterTemplates",
+                                { defaultValue: "Buscar plantilla…" },
+                              )}
+                              aria-label={t("transport.shell.filterTemplates", {
+                                defaultValue: "Buscar plantilla…",
+                              })}
+                            />
+                          ) : null}
+                          {filteredTemplates.length > 0 ? (
+                            <ul className="lt-empty-state-template-list">
+                              {filteredTemplates.map((template) => (
+                                <li key={template.path}>
+                                  <button
+                                    type="button"
+                                    title={template.path}
+                                    onClick={() =>
+                                      handleCreateSongFromTemplate(template.path)
+                                    }
+                                  >
+                                    {template.name}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="lt-empty-state-templates-empty">
+                              {t("transport.shell.noTemplateMatches", {
+                                defaultValue:
+                                  "Ninguna plantilla coincide con la búsqueda.",
+                              })}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="lt-empty-state-templates-empty">
+                          {t("transport.shell.noTemplates", {
+                            defaultValue:
+                              "Aún no tienes plantillas. Guarda una desde una sesión con “Guardar como plantilla…”.",
+                          })}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

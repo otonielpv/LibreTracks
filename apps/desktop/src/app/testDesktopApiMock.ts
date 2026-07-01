@@ -847,6 +847,11 @@ export const testDesktopApiMock = {
   },
   saveProject: async () => clone(buildSnapshot()),
   saveProjectAs: async () => clone(buildSnapshot()),
+  listSessionTemplates: async () => [],
+  saveSessionAsTemplate: async () => false,
+  createSongFromTemplateFile: async () => clone(buildSnapshot()),
+  createSongFromTemplatePath: async (_templatePath: string) =>
+    clone(buildSnapshot()),
   undoAction: async () => clone(buildSnapshot()),
   redoAction: async () => clone(buildSnapshot()),
   updateSongTempo: async (bpm: number) => {

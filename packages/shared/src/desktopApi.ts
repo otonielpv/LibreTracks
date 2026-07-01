@@ -344,6 +344,40 @@ export async function createSong(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_create_song");
 }
 
+/** One reusable `.lttemplate` file discovered in the default templates folder. */
+export interface SessionTemplateSummary {
+  name: string;
+  path: string;
+}
+
+/** List the reusable session templates in the default templates folder. */
+export async function listSessionTemplates(): Promise<SessionTemplateSummary[]> {
+  return invokeCommand<SessionTemplateSummary[]>("list_session_templates");
+}
+
+/**
+ * Save the currently loaded session as a portable `.lttemplate` file (structure,
+ * folder hierarchy and routing only). Opens a save dialog; resolves false if the
+ * user cancels.
+ */
+export async function saveSessionAsTemplate(): Promise<boolean> {
+  return invokeCommand<boolean>("start_save_session_as_template");
+}
+
+/** Create a new session from a template listed on the landing (known by path). */
+export async function createSongFromTemplatePath(
+  templatePath: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_create_song_from_template_path", {
+    templatePath,
+  });
+}
+
+/** Create a new session from a template chosen via an open dialog. */
+export async function createSongFromTemplateFile(): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_create_song_from_template_file");
+}
+
 export async function saveProject(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("save_project");
 }

@@ -986,7 +986,49 @@ impl DesktopSession {
         let title = "Nueva Cancion".to_string();
         let song_id = format!("song_{}", timestamp_suffix());
         let song = build_empty_song(song_id, title);
+        self.create_song_at_path_with(target_pick, song, audio)
+    }
 
+    /// Create a brand-new project at `target_pick` whose arrangement structure
+    /// comes from a `.lttemplate` file (tracks, folder hierarchy and routing).
+    /// The template is loaded, stripped of any residual clips/regions and given
+    /// fresh entity ids/title so the resulting session is a clean slate ready to
+    /// receive audio (see [`build_template_song`]).
+    pub fn create_song_from_template_path(
+        &mut self,
+        template_path: PathBuf,
+        target_pick: PathBuf,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let template_song = load_song_from_file(&template_path).map_err(|error| {
+            DesktopError::AudioCommand(format!(
+                "no se pudo leer la plantilla \"{}\": {error}",
+                template_path.display()
+            ))
+        })?;
+
+        let project_name = target_pick
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::to_owned)
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "Nueva Cancion".to_string());
+        let song_id = format!("song_{}", timestamp_suffix());
+        let song = build_template_song(template_song, song_id, project_name);
+
+        self.create_song_at_path_with(target_pick, song, audio)
+    }
+
+    /// Shared body for creating a new on-disk project (empty or from a
+    /// template): builds the Ableton-style folder layout, writes the session
+    /// document and loads it into the engine. `song` is whatever arrangement the
+    /// caller wants the fresh project to start with.
+    fn create_song_at_path_with(
+        &mut self,
+        target_pick: PathBuf,
+        song: Song,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
         let parent_dir = target_pick.parent().map(Path::to_path_buf).ok_or_else(|| {
             DesktopError::AudioCommand("no se pudo determinar la carpeta destino".into())
         })?;
@@ -1021,6 +1063,24 @@ impl DesktopSession {
         self.song_file_path = Some(target_song_file);
 
         Ok(self.snapshot())
+    }
+
+    /// Serialize the currently loaded session as a portable `.lttemplate` file
+    /// at `template_path`. Only the organizational structure is kept (tracks,
+    /// folder hierarchy, routing, names and colors); clips, regions, markers and
+    /// per-track mix are dropped so the template is a clean starting point.
+    pub fn save_current_as_template(
+        &self,
+        template_path: PathBuf,
+    ) -> Result<(), DesktopError> {
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let template = strip_song_to_template(song);
+        save_song_to_file(&template_path, &template)?;
+        Ok(())
     }
 
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {
@@ -7515,6 +7575,51 @@ fn build_empty_song(song_id: String, title: String) -> Song {
     }
 }
 
+/// Reduce a full session `Song` to a reusable template: keep the organizational
+/// structure (tracks, folder hierarchy via `parent_track_id`, routing via
+/// `audio_to`, names, colors, kinds) and drop everything song-specific (clips,
+/// regions, markers, tempo map and per-track mix). The result is what gets
+/// serialized into a portable `.lttemplate` file.
+fn strip_song_to_template(mut song: Song) -> Song {
+    song.title = "Plantilla".into();
+    song.artist = None;
+    song.key = None;
+    song.bpm = 120.0;
+    song.time_signature = "4/4".into();
+    song.duration_seconds = 60.0;
+    song.tempo_markers.clear();
+    song.time_signature_markers.clear();
+    song.regions.clear();
+    song.clips.clear();
+    song.section_markers.clear();
+
+    for track in song.tracks.iter_mut() {
+        // Structure/routing survive; the mix is reset to defaults so the
+        // template is a neutral starting point rather than a saved mix.
+        track.volume = 1.0;
+        track.pan = 0.0;
+        track.muted = false;
+        track.solo = false;
+        track.transpose_enabled = true;
+        // Auto-created tracks vanish once empty; a template has no clips, so
+        // pin every track as explicit to preserve the whole layout.
+        track.auto_created = false;
+    }
+
+    song
+}
+
+/// Turn a loaded `.lttemplate` document into the seed `Song` for a fresh
+/// project: re-apply the template stripping (defensively, in case the file was
+/// hand-edited or carried residue) and stamp it with a new id and the project
+/// title chosen at creation time.
+fn build_template_song(template: Song, song_id: String, title: String) -> Song {
+    let mut song = strip_song_to_template(template);
+    song.id = song_id;
+    song.title = title;
+    song
+}
+
 pub(crate) fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
     let payload = LibraryImportProgressEvent { percent, message };
 
@@ -9682,6 +9787,51 @@ pub(crate) fn create_song_default_directory(app: &AppHandle) -> PathBuf {
     project_root(app).join("songs")
 }
 
+/// Default folder where "Save as template" suggests writing `.lttemplate`
+/// files and where the landing screen looks for reusable templates. Users can
+/// still save/open templates anywhere; this is just the discoverable home.
+pub(crate) fn templates_default_directory(app: &AppHandle) -> PathBuf {
+    project_root(app).join("templates")
+}
+
+/// Summary of a `.lttemplate` file surfaced to the frontend template picker.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateSummary {
+    pub name: String,
+    pub path: String,
+}
+
+/// List the `.lttemplate` files living in the default templates folder, sorted
+/// by name. Missing folder → empty list (not an error): a fresh install simply
+/// has no templates yet.
+pub(crate) fn list_default_templates(app: &AppHandle) -> Vec<TemplateSummary> {
+    let dir = templates_default_directory(app);
+    let mut templates: Vec<TemplateSummary> = match fs::read_dir(&dir) {
+        Ok(entries) => entries
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                let is_template = path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("lttemplate"));
+                if !is_template {
+                    return None;
+                }
+                let name = path.file_stem()?.to_str()?.to_string();
+                Some(TemplateSummary {
+                    name,
+                    path: path.to_string_lossy().into_owned(),
+                })
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    templates.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    templates
+}
+
 fn normalize_external_source_key(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
 }
@@ -11752,6 +11902,123 @@ mod tests {
             .expect_err("delete should be rejected");
 
         assert!(error.to_string().contains("already used on the timeline"));
+    }
+
+    fn song_with_folder_hierarchy() -> Song {
+        let mut song = demo_song();
+        // A parent folder track + a child audio routed to a custom bus, plus the
+        // existing "track_1" — enough to exercise hierarchy + routing survival.
+        song.tracks.insert(
+            0,
+            Track {
+                id: "folder_1".into(),
+                name: "Drums".into(),
+                kind: TrackKind::Folder,
+                parent_track_id: None,
+                volume: 0.5,
+                pan: -0.3,
+                muted: true,
+                solo: true,
+                transpose_enabled: false,
+                audio_to: "bus_a".to_string(),
+                color: Some("#ff0000".into()),
+                auto_created: true,
+            },
+        );
+        song.tracks.push(Track {
+            id: "track_child".into(),
+            name: "Kick".into(),
+            kind: TrackKind::Audio,
+            parent_track_id: Some("folder_1".into()),
+            volume: 0.8,
+            pan: 0.2,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "bus_a".to_string(),
+            color: Some("#00ff00".into()),
+            auto_created: true,
+        });
+        song
+    }
+
+    #[test]
+    fn strip_song_to_template_keeps_structure_and_drops_content() {
+        let template = super::strip_song_to_template(song_with_folder_hierarchy());
+
+        // Content is gone.
+        assert!(template.clips.is_empty());
+        assert!(template.regions.is_empty());
+        assert!(template.section_markers.is_empty());
+        assert!(template.tempo_markers.is_empty());
+
+        // Structure survives: same three tracks with hierarchy + routing intact.
+        assert_eq!(template.tracks.len(), 3);
+        let folder = &template.tracks[0];
+        assert_eq!(folder.id, "folder_1");
+        assert_eq!(folder.kind, TrackKind::Folder);
+        assert_eq!(folder.audio_to, "bus_a");
+        assert_eq!(folder.color.as_deref(), Some("#ff0000"));
+        let child = template
+            .tracks
+            .iter()
+            .find(|track| track.id == "track_child")
+            .expect("child track survives");
+        assert_eq!(child.parent_track_id.as_deref(), Some("folder_1"));
+        assert_eq!(child.audio_to, "bus_a");
+
+        // Mix is reset and every track is pinned as explicit so the layout is
+        // not eroded by the empty-auto-track cleanup.
+        for track in &template.tracks {
+            assert_eq!(track.volume, 1.0);
+            assert_eq!(track.pan, 0.0);
+            assert!(!track.muted);
+            assert!(!track.solo);
+            assert!(track.transpose_enabled);
+            assert!(!track.auto_created);
+        }
+    }
+
+    #[test]
+    fn build_template_song_stamps_fresh_id_and_title() {
+        let song = super::build_template_song(
+            song_with_folder_hierarchy(),
+            "song_new".into(),
+            "My Show".into(),
+        );
+        assert_eq!(song.id, "song_new");
+        assert_eq!(song.title, "My Show");
+        assert!(song.clips.is_empty());
+        assert_eq!(song.tracks.len(), 3);
+    }
+
+    #[test]
+    fn create_song_from_template_path_builds_project_with_template_structure() {
+        // Arrange: write a template file to disk from a structured song.
+        let temp = tempfile::tempdir().expect("tempdir");
+        let template_path = temp.path().join("band.lttemplate");
+        let template = super::strip_song_to_template(song_with_folder_hierarchy());
+        super::save_song_to_file(&template_path, &template).expect("template saves");
+
+        // Act: create a brand-new project from that template.
+        let mut session = DesktopSession::default();
+        let audio = crate::audio_engine::AudioController::default();
+        let target_pick = temp.path().join("NewProject.ltsession");
+        session
+            .create_song_from_template_path(template_path, target_pick, &audio)
+            .expect("create from template succeeds");
+
+        // Assert: the loaded song carries the template's tracks and no clips.
+        let song = session
+            .engine
+            .song()
+            .cloned()
+            .expect("song is loaded");
+        assert_eq!(song.title, "NewProject");
+        assert_eq!(song.tracks.len(), 3);
+        assert!(song.clips.is_empty());
+        assert!(song.regions.is_empty());
+        assert!(temp.path().join("NewProject").join("audio").is_dir());
     }
 
     #[test]
