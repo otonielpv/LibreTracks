@@ -85,6 +85,12 @@ else()
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_JUCE=0)
 endif()
 
+if(LT_ENGINE_USE_OBOE)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_OBOE=1)
+else()
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_OBOE=0)
+endif()
+
 if(LT_ENGINE_USE_FFMPEG)
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_FFMPEG=1)
 else()
