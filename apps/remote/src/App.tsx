@@ -1,4 +1,13 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
@@ -127,10 +136,21 @@ const MASTER_SNAP_TARGET = 1.0;
 const MASTER_SNAP_THRESHOLD = MASTER_GAIN_MAX * 0.03;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
 const MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY = "libretracks.remote.mixerFilterActiveSong";
+const HIDDEN_MARKERS_STORAGE_KEY = "libretracks.remote.hiddenMarkerIds";
 const MAX_REMOTE_SIZE_LEVEL = 3;
 const TIMELINE_JITTER_RESET_THRESHOLD_SECONDS = 0.18;
-const TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS = 0.32;
-const TIMELINE_FORWARD_CORRECTION_PER_SECOND = 10;
+// Lower snap threshold so the playhead re-aligns with the real position sooner
+// (was 0.32) — the user wants the cinta to track playback tightly.
+const TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS = 0.14;
+// Much stronger forward correction so the visual playhead closes the latency
+// gap within a couple of frames instead of trailing for ~a second (was 10).
+const TIMELINE_FORWARD_CORRECTION_PER_SECOND = 60;
+// How long the manually-dragged timeline offset is held before it eases back to
+// the auto-following (playhead-centred) position.
+const TIMELINE_MANUAL_HOLD_MS = 6000;
+// Per-second exponential ease used to return the manual offset to zero once the
+// hold expires (higher = snappier return).
+const TIMELINE_MANUAL_RETURN_PER_SECOND = 4;
 const READOUT_MIN_UPDATE_INTERVAL_MS = 1000 / 30;
 const STRINGS = getRemoteStrings();
 
@@ -169,6 +189,39 @@ function readRemoteSizeLevel() {
   }
 
   return Math.min(MAX_REMOTE_SIZE_LEVEL, Math.max(0, Math.floor(parsedLevel)));
+}
+
+/** Marker ids the user has hidden from the jump grid, persisted per-device. */
+function readHiddenMarkerIds(): Set<string> {
+  if (typeof window === "undefined") {
+    return new Set();
+  }
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_MARKERS_STORAGE_KEY);
+    if (!raw) {
+      return new Set();
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? new Set(parsed.filter((entry): entry is string => typeof entry === "string"))
+      : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function writeHiddenMarkerIds(ids: Set<string>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      HIDDEN_MARKERS_STORAGE_KEY,
+      JSON.stringify(Array.from(ids)),
+    );
+  } catch {
+    // Storage blocked — keep the in-memory set only.
+  }
 }
 
 const useRemoteConnectionStore = create<RemoteConnectionState>()((set) => ({
@@ -358,6 +411,21 @@ type RemotePanelKey = "jump" | "vamp" | "song";
 
 function magnetizePanValue(value: number) {
   return Math.abs(value) <= PAN_CENTER_MAGNET ? 0 : value;
+}
+
+/** Pan readout for the mixer strip: "C" centred, else "L 50" / "R 32". */
+function formatRemotePan(value: number) {
+  if (Math.abs(value) < 0.005) {
+    return "C";
+  }
+  const side = value < 0 ? "L" : "R";
+  return `${side} ${Math.round(Math.abs(value) * 100)}`;
+}
+
+/** Volume readout: linear amplitude [0,1] shown as a percentage. */
+function formatRemoteVolume(value: number) {
+  const clamped = Math.max(0, Math.min(1, value));
+  return `${Math.round(clamped * 100)}%`;
 }
 
 function snapMasterGain(value: number) {
@@ -778,6 +846,7 @@ const SharedTimeline = memo(function SharedTimeline({
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
+  const playheadRef = useRef<HTMLDivElement | null>(null);
   const snapshotRef = useRef(snapshot);
   const snapshotReceivedAtMsRef = useRef(snapshotReceivedAtMs);
   const visibleGridMarkerCountRef = useRef(0);
@@ -796,6 +865,14 @@ const SharedTimeline = memo(function SharedTimeline({
     playing: false,
     positionSeconds: 0,
   });
+  // Manual scrub: users can drag the cinta to peek ahead. `manualOffsetRef`
+  // holds the extra px offset added on top of the auto-follow translate; after
+  // `TIMELINE_MANUAL_HOLD_MS` of no interaction it eases back to 0 so the
+  // playhead recentres itself. Kept in refs so dragging never re-renders.
+  const manualOffsetRef = useRef(0);
+  const lastManualInteractionAtRef = useRef(0);
+  const dragPointerIdRef = useRef<number | null>(null);
+  const dragLastClientXRef = useRef(0);
   const [viewportWidth, setViewportWidth] = useState(0);
   const durationSeconds = Math.max(songView?.durationSeconds ?? 0, 8);
   const regions = useMemo(() => buildSongTempoRegions(songView), [songView]);
@@ -1004,10 +1081,42 @@ const SharedTimeline = memo(function SharedTimeline({
       const desiredTranslate = width / 2 - currentX;
       const minTranslate = Math.min(0, width - contentWidth);
       const maxTranslate = width / 2;
-      const translateX = Math.max(minTranslate, Math.min(maxTranslate, desiredTranslate));
+      const autoTranslate = Math.max(minTranslate, Math.min(maxTranslate, desiredTranslate));
+
+      // Fold in the manual drag offset. While the user is dragging (or within
+      // the hold window) keep it; once the window lapses, ease it back to 0 so
+      // the auto-follow position takes over smoothly.
+      const isDragging = dragPointerIdRef.current !== null;
+      const sinceInteraction = frameAtMs - lastManualInteractionAtRef.current;
+      if (!isDragging && sinceInteraction > TIMELINE_MANUAL_HOLD_MS) {
+        const ease = Math.min(1, deltaSeconds * TIMELINE_MANUAL_RETURN_PER_SECOND);
+        manualOffsetRef.current += (0 - manualOffsetRef.current) * ease;
+        if (Math.abs(manualOffsetRef.current) < 0.5) {
+          manualOffsetRef.current = 0;
+        }
+      }
+
+      // Clamp the combined translate to the same content bounds so dragging
+      // can't scroll past the start/end of the cinta.
+      const translateX = Math.max(
+        minTranslate,
+        Math.min(maxTranslate, autoTranslate + manualOffsetRef.current),
+      );
 
       if (rulerRef.current) {
         rulerRef.current.style.transform = `translate3d(${translateX}px, 0, 0)`;
+      }
+
+      // Keep the playhead glued to the real playback position instead of the
+      // viewport centre: while the cinta is dragged to peek ahead, the playhead
+      // travels with the content (its true screen X = currentX + translateX)
+      // rather than staying pinned at the middle.
+      if (playheadRef.current) {
+        const playheadScreenX = currentX + translateX;
+        playheadRef.current.style.transform = `translate3d(${playheadScreenX}px, 0, 0)`;
+        // Hide it when it scrolls out of view so it doesn't stick to an edge.
+        playheadRef.current.style.opacity =
+          playheadScreenX < -2 || playheadScreenX > width + 2 ? "0" : "1";
       }
 
       frameId = window.requestAnimationFrame(render);
@@ -1020,9 +1129,51 @@ const SharedTimeline = memo(function SharedTimeline({
     };
   }, [contentWidth, timelineDebugEnabled, viewportWidth]);
 
+  const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    // Only primary button / touch drives the scrub.
+    if (event.button !== 0 && event.pointerType === "mouse") {
+      return;
+    }
+    dragPointerIdRef.current = event.pointerId;
+    dragLastClientXRef.current = event.clientX;
+    lastManualInteractionAtRef.current = performance.now();
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragPointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    const deltaX = event.clientX - dragLastClientXRef.current;
+    dragLastClientXRef.current = event.clientX;
+    // Dragging right reveals earlier content (offset grows), left reveals the
+    // future. The rAF loop clamps the final translate to the content bounds.
+    manualOffsetRef.current += deltaX;
+    lastManualInteractionAtRef.current = performance.now();
+  }, []);
+
+  const endDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragPointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    dragPointerIdRef.current = null;
+    // Start the hold countdown from release so the peeked view lingers.
+    lastManualInteractionAtRef.current = performance.now();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
   return (
-    <div ref={shellRef} className="timeline-shell timeline-shell-shared">
-      <div className="fixed-playhead" aria-hidden="true" />
+    <div
+      ref={shellRef}
+      className="timeline-shell timeline-shell-shared"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    >
+      <div ref={playheadRef} className="fixed-playhead" aria-hidden="true" />
       <div ref={rulerRef} className="timeline-ruler" style={{ width: contentWidth }}>
         <div className="timeline-header-row timeline-time-row">
           {visibleTimeLabels.map((seconds) => (
@@ -1130,17 +1281,17 @@ function TransportTopline() {
           <span>{STRINGS.time}</span>
           <strong>{readout.timecode}</strong>
         </div>
-        <div className="readout-card">
+        <div className="readout-card readout-card-compact">
           <span>{STRINGS.barBeat}</span>
           <strong>{readout.musicalDisplay}</strong>
         </div>
-        <div className="readout-card">
+        <div className="readout-card readout-card-compact">
           <span>{STRINGS.bpm}</span>
           <strong>{readout.bpm.toFixed(2)}</strong>
         </div>
-        <div className="readout-card">
+        <div className="readout-card readout-card-song">
           <span>{STRINGS.region}</span>
-          <strong>{readout.regionName}</strong>
+          <strong title={readout.regionName}>{readout.regionName}</strong>
         </div>
       </div>
 
@@ -1164,21 +1315,21 @@ function TransportChrome() {
             <span>{STRINGS.time}</span>
             <strong>{readout.timecode}</strong>
           </div>
-          <div className="readout-card">
+          <div className="readout-card readout-card-compact">
             <span>{STRINGS.barBeat}</span>
             <strong>{readout.musicalDisplay}</strong>
           </div>
-          <div className="readout-card">
+          <div className="readout-card readout-card-compact">
             <span>{STRINGS.bpm}</span>
             <strong>{readout.bpm.toFixed(2)}</strong>
           </div>
-          <div className="readout-card">
-            <span>Compas</span>
+          <div className="readout-card readout-card-compact">
+            <span>{STRINGS.meter}</span>
             <strong>{readout.timeSignature}</strong>
           </div>
-          <div className="readout-card">
+          <div className="readout-card readout-card-song">
             <span>{STRINGS.region}</span>
-            <strong>{readout.regionName}</strong>
+            <strong title={readout.regionName}>{readout.regionName}</strong>
           </div>
         </div>
 
@@ -1206,21 +1357,21 @@ function HeaderTransportTopline() {
             <span>{STRINGS.time}</span>
             <strong>{readout.timecode}</strong>
           </div>
-          <div className="readout-card">
+          <div className="readout-card readout-card-compact">
             <span>{STRINGS.barBeat}</span>
             <strong>{readout.musicalDisplay}</strong>
           </div>
-          <div className="readout-card">
+          <div className="readout-card readout-card-compact">
             <span>{STRINGS.bpm}</span>
             <strong>{readout.bpm.toFixed(2)}</strong>
           </div>
-          <div className="readout-card">
-            <span>Compas</span>
+          <div className="readout-card readout-card-compact">
+            <span>{STRINGS.meter}</span>
             <strong>{readout.timeSignature}</strong>
           </div>
-          <div className="readout-card">
+          <div className="readout-card readout-card-song">
             <span>{STRINGS.region}</span>
-            <strong>{readout.regionName}</strong>
+            <strong title={readout.regionName}>{readout.regionName}</strong>
           </div>
         </div>
 
@@ -1250,6 +1401,25 @@ function TransportView() {
   const setVampMode = useRemoteJumpStore((state) => state.setVampMode);
   const setVampBars = useRemoteJumpStore((state) => state.setVampBars);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
+  // Per-marker visibility: users hide individual jump buttons they never use.
+  // Persisted as a set of marker ids in localStorage.
+  const [hiddenMarkerIds, setHiddenMarkerIds] = useState<Set<string>>(
+    readHiddenMarkerIds,
+  );
+  const [revealHiddenMarkers, setRevealHiddenMarkers] = useState(false);
+
+  const toggleMarkerHidden = useCallback((markerId: string) => {
+    setHiddenMarkerIds((current) => {
+      const next = new Set(current);
+      if (next.has(markerId)) {
+        next.delete(markerId);
+      } else {
+        next.add(markerId);
+      }
+      writeHiddenMarkerIds(next);
+      return next;
+    });
+  }, []);
   // Only section markers are navigable from the remote — dynamic cues (Build,
   // All In, ...) are spoken by the voice guide, not jump destinations.
   const markers = (songView?.sectionMarkers ?? []).filter(
@@ -1316,6 +1486,15 @@ function TransportView() {
           marker.startSeconds <= selectedRegion.endSeconds,
       )
     : markers;
+  // The markers hidden by the user within the current region — drives the
+  // "show hidden (N)" affordance. When revealing, hidden cards render dimmed
+  // with a restore button; otherwise they're filtered out entirely.
+  const hiddenVisibleMarkers = visibleMarkers.filter((marker) =>
+    hiddenMarkerIds.has(marker.id),
+  );
+  const shownMarkers = revealHiddenMarkers
+    ? visibleMarkers
+    : visibleMarkers.filter((marker) => !hiddenMarkerIds.has(marker.id));
   const pendingJumpMode = parsePendingJumpMode(pendingJump?.trigger);
 
   const scheduleJump = (markerId: string) => {
@@ -1680,7 +1859,22 @@ function TransportView() {
         </div>
 
         {activePanel ? (
-          <div className="remote-inline-panel" role="region" aria-label={STRINGS.settings}>
+          <div
+            className="remote-inline-panel"
+            role="dialog"
+            aria-label={STRINGS.settings}
+          >
+            {/* Close button — only visible when the panel is presented as a
+                bottom sheet (phone / short-height); on wider screens it stays
+                an in-flow panel and the CSS hides this affordance. */}
+            <button
+              type="button"
+              className="remote-inline-panel-close"
+              aria-label={STRINGS.close}
+              onClick={() => setActivePanel(null)}
+            >
+              ×
+            </button>
             {activePanel === "jump" ? renderJumpControls() : null}
             {activePanel === "vamp" ? renderVampControls() : null}
             {activePanel === "song" ? renderSongControls() : null}
@@ -1688,26 +1882,60 @@ function TransportView() {
         ) : null}
       </div>
 
-      <div className="marker-grid">
-        {visibleMarkers.map((marker) => (
+      {hiddenVisibleMarkers.length > 0 ? (
+        <div className="marker-grid-header">
           <button
-            key={marker.id}
-            className={`marker-card ${pendingJumpTargetId === marker.id ? "is-pending" : ""}`}
-            style={{ "--marker-color": markerColor(marker) } as CSSProperties}
-            onClick={() => {
-              if (pendingJump?.targetMarkerId === marker.id) {
-                cancelJump();
-                return;
-              }
-
-              scheduleJump(marker.id);
-            }}
+            type="button"
+            className={`marker-grid-toggle ${revealHiddenMarkers ? "is-on" : ""}`}
+            aria-pressed={revealHiddenMarkers}
+            onClick={() => setRevealHiddenMarkers((current) => !current)}
           >
-            <strong>{marker.name}</strong>
-            <span>{formatTimecode(marker.startSeconds)}</span>
-            <em>{formatJumpModeLabel(jumpMode, jumpBars)}</em>
+            {revealHiddenMarkers
+              ? STRINGS.hideHiddenMarkers
+              : `${STRINGS.showHiddenMarkers} (${hiddenVisibleMarkers.length})`}
           </button>
-        ))}
+        </div>
+      ) : null}
+
+      <div className="marker-grid">
+        {shownMarkers.map((marker) => {
+          const isHidden = hiddenMarkerIds.has(marker.id);
+          return (
+            <div
+              key={marker.id}
+              className={`marker-card ${pendingJumpTargetId === marker.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""}`}
+              style={{ "--marker-color": markerColor(marker) } as CSSProperties}
+            >
+              <button
+                type="button"
+                className="marker-card-jump"
+                onClick={() => {
+                  if (pendingJump?.targetMarkerId === marker.id) {
+                    cancelJump();
+                    return;
+                  }
+
+                  scheduleJump(marker.id);
+                }}
+              >
+                <strong>{marker.name}</strong>
+                <span>{formatTimecode(marker.startSeconds)}</span>
+                <em>{formatJumpModeLabel(jumpMode, jumpBars)}</em>
+              </button>
+              <button
+                type="button"
+                className="marker-card-hide"
+                aria-label={
+                  isHidden ? STRINGS.showMarker : STRINGS.hideMarker
+                }
+                title={isHidden ? STRINGS.showMarker : STRINGS.hideMarker}
+                onClick={() => toggleMarkerHidden(marker.id)}
+              >
+                {isHidden ? "+" : "×"}
+              </button>
+            </div>
+          );
+        })}
       </div>
 
     </section>
@@ -1935,9 +2163,12 @@ function MixerStrip({
       </header>
 
       <div className="pan-section">
-        <button className="mini-action" onClick={() => commitTrackUpdate({ pan: 0 })}>
-          {STRINGS.center}
-        </button>
+        <div className="pan-section-head">
+          <button className="mini-action" onClick={() => commitTrackUpdate({ pan: 0 })}>
+            {STRINGS.center}
+          </button>
+          <span className="pan-value">{formatRemotePan(draftPan)}</span>
+        </div>
         <input
           type="range"
           min={-1}
@@ -1953,26 +2184,41 @@ function MixerStrip({
           onPointerCancel={(event) => commitDraftPan(Number(event.currentTarget.value))}
           onLostPointerCapture={(event) => commitDraftPan(Number(event.currentTarget.value))}
         />
+        <div className="pan-scale" aria-hidden="true">
+          <span>L</span>
+          <span>C</span>
+          <span>R</span>
+        </div>
       </div>
 
       <div className="volume-section">
-        <MeterBar trackId={track.id} />
-        <input
-          className="volume-fader"
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={draftVolume}
-          onChange={(event) => updateDraftVolume(Number(event.currentTarget.value))}
-          onInput={(event) => updateDraftVolume(Number(event.currentTarget.value))}
-          onPointerDown={() => {
-            volumeInteractionRef.current = true;
-          }}
-          onPointerUp={(event) => commitDraftVolume(Number(event.currentTarget.value))}
-          onPointerCancel={(event) => commitDraftVolume(Number(event.currentTarget.value))}
-          onLostPointerCapture={(event) => commitDraftVolume(Number(event.currentTarget.value))}
-        />
+        <div className="volume-value" aria-hidden="true">
+          {formatRemoteVolume(draftVolume)}
+        </div>
+        <div className="volume-fader-area">
+          <div className="volume-scale" aria-hidden="true">
+            <span>100</span>
+            <span>50</span>
+            <span>0</span>
+          </div>
+          <MeterBar trackId={track.id} />
+          <input
+            className="volume-fader"
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={draftVolume}
+            onChange={(event) => updateDraftVolume(Number(event.currentTarget.value))}
+            onInput={(event) => updateDraftVolume(Number(event.currentTarget.value))}
+            onPointerDown={() => {
+              volumeInteractionRef.current = true;
+            }}
+            onPointerUp={(event) => commitDraftVolume(Number(event.currentTarget.value))}
+            onPointerCancel={(event) => commitDraftVolume(Number(event.currentTarget.value))}
+            onLostPointerCapture={(event) => commitDraftVolume(Number(event.currentTarget.value))}
+          />
+        </div>
       </div>
 
       <div className="toggle-row">
@@ -2100,23 +2346,30 @@ function SongMasterFader({ region }: { region: SongRegionSummary | null }) {
         <small>{STRINGS.songMaster}</small>
         <strong>{region ? formatMasterGainSummary(draftGain) : STRINGS.songMasterNoSong}</strong>
       </div>
-      <input
-        className="song-master-fader"
-        type="range"
-        min={MASTER_GAIN_MIN}
-        max={MASTER_GAIN_MAX}
-        step={0.01}
-        value={draftGain}
-        disabled={disabled}
-        onChange={(event) => streamGain(Number(event.currentTarget.value))}
-        onInput={(event) => streamGain(Number(event.currentTarget.value))}
-        onPointerDown={() => {
-          interactionRef.current = true;
-        }}
-        onPointerUp={(event) => commitGain(Number(event.currentTarget.value))}
-        onPointerCancel={(event) => commitGain(Number(event.currentTarget.value))}
-        onLostPointerCapture={(event) => commitGain(Number(event.currentTarget.value))}
-      />
+      <div className="song-master-fader-area">
+        <input
+          className="song-master-fader"
+          type="range"
+          min={MASTER_GAIN_MIN}
+          max={MASTER_GAIN_MAX}
+          step={0.01}
+          value={draftGain}
+          disabled={disabled}
+          onChange={(event) => streamGain(Number(event.currentTarget.value))}
+          onInput={(event) => streamGain(Number(event.currentTarget.value))}
+          onPointerDown={() => {
+            interactionRef.current = true;
+          }}
+          onPointerUp={(event) => commitGain(Number(event.currentTarget.value))}
+          onPointerCancel={(event) => commitGain(Number(event.currentTarget.value))}
+          onLostPointerCapture={(event) => commitGain(Number(event.currentTarget.value))}
+        />
+        <div className="song-master-scale" aria-hidden="true">
+          <span>-∞</span>
+          <span>0dB</span>
+          <span>+6</span>
+        </div>
+      </div>
       <button
         type="button"
         className="song-master-reset"
@@ -2226,6 +2479,16 @@ export function App() {
     <main
       className={`remote-shell remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""}`}
     >
+      {/* Phones in landscape are too short to fit the transport view; the CSS
+          media query (orientation:landscape + short height) reveals this
+          overlay and hides the shell content, prompting a rotate to portrait.
+          Tablets (taller in landscape) are unaffected. */}
+      <div className="rotate-guard" role="alertdialog" aria-label={STRINGS.rotateTitle}>
+        <div className="rotate-guard-icon" aria-hidden="true">↻</div>
+        <strong>{STRINGS.rotateTitle}</strong>
+        <span>{STRINGS.rotateBody}</span>
+      </div>
+
       <header className="remote-header">
         <div className="remote-header-brand">
           <small>LibreTracks</small>

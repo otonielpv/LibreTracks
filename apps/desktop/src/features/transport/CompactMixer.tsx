@@ -451,6 +451,11 @@ function CompactMixerStripComponent({
           tracks the same `meters[trackId]` dictionary the DAW track
           headers already populate. */}
       <div className="lt-compact-mixer-fader-wrap">
+        <div className="lt-compact-mixer-fader-scale" aria-hidden="true">
+          <span>100</span>
+          <span>50</span>
+          <span>0</span>
+        </div>
         <CompactVerticalFader
           value={volume}
           onChange={(next) =>
@@ -574,6 +579,7 @@ function CompactVerticalFaderComponent({
 }: CompactVerticalFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
   const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
   // Map a clientY inside the track to a value in [0, 1] with the
@@ -598,6 +604,7 @@ function CompactVerticalFaderComponent({
       if (!target) return;
       target.setPointerCapture(event.pointerId);
       draggingRef.current = true;
+      setIsDragging(true);
       onChange(valueFromClientY(event.clientY));
     },
     [onChange, valueFromClientY],
@@ -615,6 +622,7 @@ function CompactVerticalFaderComponent({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
+      setIsDragging(false);
       const target = trackRef.current;
       if (target?.hasPointerCapture(event.pointerId)) {
         target.releasePointerCapture(event.pointerId);
@@ -681,6 +689,14 @@ function CompactVerticalFaderComponent({
         style={{ bottom: `${fillPct}%` }}
         aria-hidden="true"
       />
+      {isDragging ? (
+        <div
+          className="lt-compact-mixer-fader-tooltip"
+          style={{ bottom: `${fillPct}%` }}
+        >
+          {formatVolume(value)}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -710,6 +726,13 @@ function formatPan(value: number): string {
   const side = value < 0 ? "L" : "R";
   const magnitude = Math.round(Math.abs(value) * 100);
   return `${side} ${magnitude}`;
+}
+
+/** Volume formatter for the vertical-fader tooltip. The fader is a linear
+ * amplitude control in [0, 1], shown as a percentage (100% = unity). */
+function formatVolume(value: number): string {
+  const clamped = value < 0 ? 0 : value > 1 ? 1 : value;
+  return `${Math.round(clamped * 100)}%`;
 }
 
 function isStepperKey(key: string) {

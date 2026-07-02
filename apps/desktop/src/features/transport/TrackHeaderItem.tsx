@@ -9,6 +9,13 @@ import { useTransportStore } from "./store";
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
 
+/** The track fader is a linear amplitude control in [0, 1]; show it as a
+ * percentage so the inline value reads at a glance (100% = unity). */
+function formatVolumeValue(volume: number): string {
+  const clamped = Math.max(0, Math.min(1, volume));
+  return `${Math.round(clamped * 100)}%`;
+}
+
 function formatPanValue(pan: number): string {
   const clampedPan = Math.max(-1, Math.min(1, pan));
   if (Math.abs(clampedPan) <= PAN_DISPLAY_CENTER_EPSILON) {
@@ -213,7 +220,14 @@ function TrackHeaderItemComponent({
             </div>
             <div className="lt-track-mix-controls">
               <label className="lt-track-volume">
-                <span>{t("trackHeader.volume")}</span>
+                <span>
+                  <span className="lt-track-mix-label">
+                    {t("trackHeader.volume")}
+                  </span>
+                  <em className="lt-track-mix-value">
+                    {formatVolumeValue(effectiveVolumeValue)}
+                  </em>
+                </span>
                 <input
                   aria-label={t("trackHeader.volumeAria", { name: trackName })}
                   type="range"
@@ -244,7 +258,14 @@ function TrackHeaderItemComponent({
                 />
               </label>
               <label className="lt-track-pan">
-                <span>{formatPanValue(effectivePanValue)}</span>
+                <span>
+                  <span className="lt-track-mix-label">
+                    {t("trackHeader.pan", { defaultValue: "Pan" })}
+                  </span>
+                  <em className="lt-track-mix-value">
+                    {formatPanValue(effectivePanValue)}
+                  </em>
+                </span>
                 <input
                   aria-label={t("trackHeader.panAria", { name: trackName })}
                   type="range"

@@ -835,8 +835,8 @@ const es = {
     inherited: "Heredado (Folder)",
     master: "Master",
     monitor: "Monitor",
-    extOutMono: "Ext. Out {{channel}}",
-    extOutStereo: "Ext. Out {{left}}/{{right}}",
+    extOutMono: "Out {{channel}}",
+    extOutStereo: "Out {{left}}/{{right}}",
   },
   importAudio: {
     title: "Importar Audio",

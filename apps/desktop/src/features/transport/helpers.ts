@@ -123,14 +123,14 @@ export function formatAudioRouteLabel(route: string, t: TFunc) {
       return t("trackHeader.extOutStereo", {
         left,
         right,
-        defaultValue: `Ext. Out ${left}/${right}`,
+        defaultValue: `Out ${left}/${right}`,
       });
     }
 
     const channel = Number(channelPart) + 1;
     return t("trackHeader.extOutMono", {
       channel,
-      defaultValue: `Ext. Out ${channel}`,
+      defaultValue: `Out ${channel}`,
     });
   }
 

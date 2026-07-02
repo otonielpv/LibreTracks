@@ -185,8 +185,8 @@ describe("formatAudioRouteLabel", () => {
   it("labels inherit, master, mono and stereo external routes", () => {
     expect(formatAudioRouteLabel("inherit", t)).toBe("Inherited (Folder)");
     expect(formatAudioRouteLabel("master", t)).toBe("Master");
-    expect(formatAudioRouteLabel("ext:0", t)).toBe("Ext. Out 1");
-    expect(formatAudioRouteLabel("ext:2-3", t)).toBe("Ext. Out 3/4");
+    expect(formatAudioRouteLabel("ext:0", t)).toBe("Out 1");
+    expect(formatAudioRouteLabel("ext:2-3", t)).toBe("Out 3/4");
   });
 
   it("passes through unknown routes verbatim", () => {

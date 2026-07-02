@@ -3280,13 +3280,18 @@ textarea {
 .lt-track-header.is-condensed .lt-track-mix-controls,
 .lt-track-header.is-micro .lt-track-mix-controls {
   display: grid;
-  grid-template-columns: minmax(40px, 90px) minmax(88px, 1fr);
+  /* The fader is the important control, so col 1 (value + slider) takes all the
+     flexible space and stays long. The routing box (col 2) is a small fixed
+     width — enough to read "Master" — so it never dominates or reaches the
+     meter that sits just to the right of the header. */
+  grid-template-columns: minmax(0, 1fr) 66px;
   grid-template-rows: auto auto;
-  column-gap: 0.45rem;
+  column-gap: 0.35rem;
   row-gap: 0.18rem;
   align-items: center;
-  justify-content: start;
   min-width: 0;
+  /* Clear the meter (~8px) at the far right so nothing overlaps it. */
+  padding-right: 0.4rem;
 }
 
 .lt-track-header.is-compact .lt-track-volume,
@@ -3324,13 +3329,32 @@ textarea {
   min-width: 0;
 }
 
+/* In the compact height variants there is no room for the "VOL"/"PAN" label
+   text, but the numeric value stays visible so the fader always has a readout.
+   The span shrinks to just the value and sits before the slider. */
 .lt-track-header.is-compact .lt-track-volume > span,
 .lt-track-header.is-compact .lt-track-pan > span,
 .lt-track-header.is-condensed .lt-track-volume > span,
 .lt-track-header.is-condensed .lt-track-pan > span,
 .lt-track-header.is-micro .lt-track-volume > span,
 .lt-track-header.is-micro .lt-track-pan > span {
+  flex: 0 0 1.85rem;
+  margin-right: 0.2rem;
+  font-size: 9px;
+  letter-spacing: 0;
+  text-align: right;
+}
+
+.lt-track-header.is-compact .lt-track-mix-label,
+.lt-track-header.is-condensed .lt-track-mix-label,
+.lt-track-header.is-micro .lt-track-mix-label {
   display: none;
+}
+
+.lt-track-header.is-compact .lt-track-mix-value,
+.lt-track-header.is-condensed .lt-track-mix-value,
+.lt-track-header.is-micro .lt-track-mix-value {
+  margin-left: 0;
 }
 
 .lt-track-header.is-compact .lt-track-volume input[type="range"],
@@ -3364,10 +3388,12 @@ textarea {
 .lt-track-header.is-compact .lt-audio-route-trigger,
 .lt-track-header.is-condensed .lt-audio-route-trigger,
 .lt-track-header.is-micro .lt-audio-route-trigger {
-  height: 22px;
-  min-width: 88px;
+  height: 20px;
+  /* Must fit inside the fixed 78px routing column (see mix-controls grid) so it
+     can't push into the meter. Label ellipsises if the target name is long. */
+  min-width: 0;
   width: 100%;
-  padding: 0 0.5rem;
+  padding: 0 0.4rem;
   font-size: 9px;
 }
 
@@ -3744,6 +3770,16 @@ textarea {
   min-width: 0;
 }
 
+/* Inline value shown next to the VOL/PAN label (Ableton-style readout). */
+.lt-track-mix-value {
+  margin-left: 0.35rem;
+  color: #8bd7cc;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
 .lt-track-volume > span,
 .lt-track-pan > span,
 .lt-track-audio-to > span {
@@ -3753,14 +3789,23 @@ textarea {
   text-transform: uppercase;
 }
 
-.lt-track-volume > span {
-  flex: 0 0 1.9rem;
-}
-
+.lt-track-volume > span,
 .lt-track-pan > span {
-  flex: 0 0 1.9rem;
+  /* Auto width (label + value) instead of a fixed gutter, so the slider claims
+     the remaining space and reads longer. Capped so a long value can't crowd
+     the fader out. */
+  flex: 0 0 auto;
+  max-width: 5rem;
   white-space: nowrap;
   text-align: left;
+}
+
+/* Give the sliders visual presence: they're the most-used control, so let them
+   fill the row and grow. */
+.lt-track-volume input[type="range"],
+.lt-track-pan input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .lt-track-audio-to > span {
@@ -3863,16 +3908,16 @@ textarea {
   width: 100%;
   margin: 0;
   appearance: none;
-  height: 4px;
-  border-radius: 2px;
+  height: 6px;
+  border-radius: 3px;
   background: #0e0e0e;
 }
 
 .lt-track-volume input[type="range"]::-webkit-slider-thumb,
 .lt-track-pan input[type="range"]::-webkit-slider-thumb {
   appearance: none;
-  width: 8px;
-  height: 14px;
+  width: 9px;
+  height: 17px;
   border-radius: 2px;
   background: #3cddc7;
 }
@@ -4887,6 +4932,10 @@ textarea {
   background: rgb(19 19 19 / 0.8);
   border: 1px solid rgb(133 148 144 / 0.18);
   backdrop-filter: blur(12px);
+  /* A very long menu (e.g. the colour picker's presets) must never grow past
+     the viewport even after edge-clamping — scroll the overflow instead. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 
 .lt-context-menu strong {
@@ -4949,6 +4998,7 @@ textarea {
   border: 1px solid rgb(87 241 219 / 0.28);
   background: rgb(19 19 19 / 0.96);
   box-shadow: 0 14px 36px rgb(0 0 0 / 0.52);
+  overflow-y: auto;
 }
 
 .lt-color-popover strong {
@@ -4979,6 +5029,19 @@ textarea {
   border: 1px solid rgb(255 255 255 / 0.16);
   border-radius: 2px;
   cursor: pointer;
+}
+
+.lt-color-popover-recents-title {
+  color: #8ea39d;
+  font: 700 9px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lt-color-popover-recents {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.25rem;
 }
 
 .lt-color-popover-hex,
@@ -6357,6 +6420,40 @@ textarea {
   border-radius: 2px;
   background: #3cddc7;
   pointer-events: none;
+}
+
+/* Fixed volume scale beside the vertical fader (100 at top → 0 at bottom),
+   mirroring the pan's L/C/R guide row so the fader is readable at rest. */
+.lt-compact-mixer-fader-scale {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 2px 0;
+  color: rgba(186, 202, 197, 0.5);
+  font: 700 8px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+/* Value tooltip shown while dragging the vertical fader. Centred on the fader
+   at the thumb's height (thumb is centred on `bottom: <pct>%`). Kept over the
+   fader so the wrapper's `overflow: hidden` (which stops the thumb poking into
+   the toggles) doesn't clip it. */
+.lt-compact-mixer-fader-tooltip {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  padding: 0.12rem 0.35rem;
+  background: rgb(15 18 19);
+  border: 1px solid rgba(186, 202, 197, 0.35);
+  border-radius: 2px;
+  color: #e5e2e1;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .lt-compact-mixer-pan-wrap {

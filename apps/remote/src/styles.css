@@ -297,15 +297,27 @@ button {
 
 .transport-topline {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* Give the transport buttons a real share of the row so they fill the space
+     next to the readouts instead of shrinking to their label width. */
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.8fr);
   gap: 0.4rem;
   align-items: stretch;
 }
 
 .transport-readouts {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: flex;
   gap: 0.32rem;
+}
+
+/* Each readout grows to fill the row; compact ones (BPM, Bar.Beat, Meter) take
+   less width than the wider Time/Song cards. */
+.transport-readouts .readout-card {
+  flex: 1.5 1 0;
+  min-width: 0;
+}
+
+.transport-readouts .readout-card-compact {
+  flex: 0.7 1 0;
 }
 
 .transport-readouts-inline,
@@ -340,6 +352,15 @@ button {
   text-overflow: ellipsis;
 }
 
+/* Compact readouts (BPM, Bar.Beat, Meter): tighter box + smaller value. */
+.readout-card-compact {
+  padding: 0.26rem 0.34rem;
+}
+
+.readout-card-compact strong {
+  font-size: clamp(0.64rem, 1.5vw, 0.84rem);
+}
+
 .transport-controls {
   display: flex;
   gap: 0.24rem;
@@ -349,6 +370,7 @@ button {
 .transport-controls-inline {
   margin-top: 0;
   align-items: stretch;
+  height: 100%;
 }
 
 .pill-button,
@@ -362,17 +384,29 @@ button {
 
 .pill-button {
   flex: 1;
-  border-radius: 4px;
+  min-height: 2.75rem;
+  border-radius: 6px;
   background: linear-gradient(180deg, #57f1db, #2dd4bf);
   color: #003731;
   font-weight: 800;
-  padding: 0.36rem 0.52rem;
-  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.9rem;
+  box-shadow:
+    0 2px 8px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+.pill-button:active {
+  transform: translateY(1px);
 }
 
 .pill-button.is-active {
   background: linear-gradient(180deg, #ffd76a, #f59e0b);
   color: #3f2200;
+  box-shadow:
+    0 0 14px rgb(255 215 106 / 0.4),
+    inset 0 1px 0 rgb(255 255 255 / 0.3);
 }
 
 .timeline-shell {
@@ -389,6 +423,13 @@ button {
   margin-top: 0.45rem;
   height: 5.1rem;
   border-color: rgb(87 241 219 / 0.08);
+  /* Horizontal drag scrubs the timeline; keep vertical page scroll for touch. */
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.timeline-shell-shared:active {
+  cursor: grabbing;
 }
 
 .remote-header .timeline-shell-shared {
@@ -399,12 +440,15 @@ button {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 50%;
+  /* JS drives the horizontal position via translate3d so the playhead tracks
+     the true playback time even while the cinta is dragged. `left: -1px`
+     centres the 2px bar on the target X. */
+  left: -1px;
   width: 2px;
-  transform: translateX(-50%);
   background: var(--accent);
   box-shadow: 0 0 12px rgb(87 241 219 / 0.55);
   z-index: 2;
+  will-change: transform, opacity;
 }
 
 .pending-jump-playhead {
@@ -750,6 +794,13 @@ button {
   padding-top: 0;
 }
 
+/* Close affordance is only meaningful when the panel is a bottom sheet
+   (phone / short height). Hidden by default; the responsive blocks below
+   reveal it and switch the panel to a fixed sheet. */
+.remote-inline-panel-close {
+  display: none;
+}
+
 .jump-mode-group {
   display: inline-flex;
   gap: 0.22rem;
@@ -1037,6 +1088,30 @@ button {
   color: var(--accent);
 }
 
+.marker-grid-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.45rem;
+}
+
+.marker-grid-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim, #a9b4b1);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.3rem 0.85rem;
+  cursor: pointer;
+}
+
+.marker-grid-toggle.is-on {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.09);
+}
+
 .marker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(8.25rem, 1fr));
@@ -1045,14 +1120,8 @@ button {
 }
 
 .marker-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-  min-height: 3.45rem;
+  position: relative;
   border-radius: 6px;
-  color: var(--text);
-  padding: 0.52rem 0.58rem 0.52rem 0.78rem;
-  text-align: left;
   /* The marker colour shows through prominently: a translucent dark gradient is
      layered OVER the solid marker colour, so the card reads tinted toward the
      colour without needing color-mix (old-browser safe). A thick left bar makes
@@ -1063,23 +1132,67 @@ button {
   border-left: 6px solid var(--marker-color, #bacac5);
 }
 
-.marker-card strong {
+.marker-card.is-hidden-marker {
+  /* Only visible while "show hidden" is on — dimmed so it reads as disabled. */
+  opacity: 0.42;
+}
+
+.marker-card-jump {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  width: 100%;
+  min-height: 3.45rem;
+  color: var(--text);
+  /* Extra right padding leaves room for the hide button. */
+  padding: 0.52rem 1.7rem 0.52rem 0.72rem;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.marker-card-jump strong {
   font-size: 0.78rem;
   /* Title takes the marker colour so it pops; brightened by a text-shadow base. */
   color: var(--marker-color, var(--text));
 }
 
-.marker-card span,
-.marker-card small {
+.marker-card-jump span,
+.marker-card-jump small {
   color: var(--muted);
   font-size: 0.62rem;
 }
 
-.marker-card em {
+.marker-card-jump em {
   color: var(--accent);
   font-size: 0.62rem;
   font-style: normal;
- }
+}
+
+.marker-card-hide {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.marker-card-hide:hover {
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
+}
 
 .marker-card.is-pending,
 .pill-button.is-active,
@@ -1111,6 +1224,18 @@ button {
 
 .remote-shell.is-large-controls .readout-card strong {
   font-size: clamp(0.9rem, 2.3vw, 1.15rem);
+}
+
+.remote-shell.is-large-controls .readout-card-compact strong {
+  font-size: clamp(0.8rem, 2vw, 1rem);
+}
+
+.remote-shell.remote-size-2 .readout-card-compact strong {
+  font-size: clamp(0.88rem, 2.2vw, 1.1rem);
+}
+
+.remote-shell.remote-size-3 .readout-card-compact strong {
+  font-size: clamp(0.96rem, 2.4vw, 1.2rem);
 }
 
 .remote-shell.is-large-controls .pill-button {
@@ -1254,7 +1379,11 @@ button {
   flex: 1 1 auto;
   width: 100%;
   display: flex;
-  align-items: flex-end;
+  /* Stretch strips to the full height and lay their content top→bottom so the
+     track-name header is anchored at the top and never clipped by the
+     container's overflow. (Was `flex-end`, which anchored strips to the bottom
+     and pushed the name off the top when content was taller than the row.) */
+  align-items: stretch;
   gap: 0.8rem;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1309,6 +1438,9 @@ button {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.12rem;
+  /* Never shrink: the name must always be fully visible; the fader below
+     absorbs any height shortfall instead. */
+  flex: 0 0 auto;
   min-height: 2.6rem;
 }
 
@@ -1375,12 +1507,86 @@ button {
 
 .volume-section {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.35rem;
+  height: clamp(11rem, 100%, 22rem);
+}
+
+.volume-value {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.volume-fader-area {
+  display: flex;
   align-items: stretch;
   justify-content: center;
   flex: 1 1 auto;
   min-height: 0;
   gap: 0.8rem;
-  height: clamp(11rem, 100%, 22rem);
+}
+
+/* Fixed volume scale beside the vertical fader (100 top → 0 bottom). */
+.volume-scale {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0.2rem 0;
+  color: var(--muted);
+  font: 700 0.56rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+/* Pan strip: value readout next to the Center button + L/C/R scale below. */
+.pan-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pan-value {
+  color: var(--accent);
+  font: 700 0.66rem/1 "Space Grotesk", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.pan-scale {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0.1rem;
+  color: var(--muted);
+  font: 700 0.56rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+}
+
+/* Song master horizontal fader + min/unity/max scale below it. */
+.song-master-fader-area {
+  flex: 1 1 auto;
+  min-width: 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.song-master-fader-area .song-master-fader {
+  width: 100%;
+  min-width: 0;
+}
+
+.song-master-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font: 700 0.52rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
 }
 
 .mixer-meter {
@@ -1589,12 +1795,20 @@ button {
     padding: 0.26rem 0.34rem;
   }
 
+  .readout-card-compact {
+    flex: 0 0 3.4rem;
+  }
+
   .readout-card span {
     font-size: 0.44rem;
   }
 
   .readout-card strong {
     font-size: 0.72rem;
+  }
+
+  .readout-card-compact strong {
+    font-size: 0.66rem;
   }
 
   .transport-controls {
@@ -1607,8 +1821,9 @@ button {
   }
 
   .pill-button {
-    padding: 0.38rem 0.42rem;
-    font-size: 0.62rem;
+    min-height: 2.3rem;
+    padding: 0.5rem 0.42rem;
+    font-size: 0.74rem;
   }
 
   .timeline-shell-shared {
@@ -1971,5 +2186,193 @@ button {
 
   .volume-fader {
     width: 2.35rem;
+  }
+}
+
+/* ============================================================
+   Responsive Transport restructuring (tablet / phone / landscape).
+   These blocks are placed AFTER the width:720 block on purpose so their
+   readout/deck rules win by source order (equal specificity media queries).
+   ============================================================ */
+
+/* --- Tablet band (<=1024px): two-row topline, readouts in a grid so the
+   values stop truncating; the deck already goes 2-col at <=1100. --- */
+@media (max-width: 1024px) {
+  .transport-topline {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+
+  .transport-readouts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.32rem;
+    overflow: visible;
+  }
+
+  /* Undo the fixed-width scrolling chips inherited from the 720 block. */
+  .transport-readouts .readout-card,
+  .transport-readouts .readout-card-compact {
+    flex: initial;
+  }
+
+  /* Song gets its own full-width row so long names have space. */
+  .transport-readouts .readout-card-song {
+    grid-column: 1 / -1;
+  }
+
+  .transport-controls-inline {
+    height: auto;
+  }
+}
+
+/* --- Phone band (<=600px): full restructure. Readouts 2-col, config as a
+   bottom sheet, deck un-pinned so the marker grid is reachable. --- */
+@media (max-width: 600px) {
+  /* Slimmer header to reclaim vertical space on phones. */
+  .remote-header {
+    padding: 0.18rem 0.45rem 0.16rem;
+    gap: 0.28rem;
+  }
+
+  .remote-header h1 {
+    font-size: 0.78rem;
+  }
+
+  .remote-view-tabs button {
+    min-height: 1.4rem;
+  }
+
+  .remote-size-stepper button,
+  .remote-size-stepper span {
+    min-height: 1.5rem;
+  }
+
+  /* Shorter transport buttons — still comfortably tappable (~40px). */
+  .pill-button,
+  .remote-shell.is-large-controls .pill-button,
+  .remote-shell.remote-size-2 .pill-button,
+  .remote-shell.remote-size-3 .pill-button {
+    min-height: 2.35rem;
+    padding: 0.42rem 0.5rem;
+  }
+
+  .transport-readouts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Numeric readouts must show the full value (no ellipsis). */
+  .transport-readouts .readout-card strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  /* Song: full row, wrap up to two lines instead of hard truncation. */
+  .transport-readouts .readout-card-song {
+    grid-column: 1 / -1;
+  }
+
+  .transport-readouts .readout-card-song strong {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Deck stops pinning + eating the viewport; marker grid becomes reachable. */
+  .transport-control-deck,
+  .remote-shell.is-large-controls .transport-control-deck,
+  .remote-shell.remote-size-2 .transport-control-deck,
+  .remote-shell.remote-size-3 .transport-control-deck {
+    position: static;
+  }
+
+  /* Config panel becomes a fixed bottom sheet: it no longer consumes deck
+     height, so opening a config never pushes the marks off-screen. */
+  .remote-inline-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    order: initial;
+    flex: initial;
+    max-height: 70vh;
+    overflow: auto;
+    border-radius: 12px 12px 0 0;
+    padding: 0.9rem 0.9rem calc(0.9rem + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 32px rgb(0 0 0 / 0.5);
+  }
+
+  .remote-inline-panel-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.6rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.08);
+    color: var(--text);
+    font-size: 1.2rem;
+    line-height: 1;
+    z-index: 1;
+  }
+
+  /* Larger tap targets for the section-jump marks (~44px). */
+  .marker-card-jump {
+    min-height: 2.75rem;
+  }
+
+  .marker-card-hide {
+    width: 1.6rem;
+    height: 1.6rem;
+  }
+}
+
+/* --- Phone landscape lock. Phones in landscape are too short to fit the
+   transport view usably, so instead of restructuring we show a rotate prompt
+   and hide the shell content. Targeted by orientation + short height so tablets
+   (much taller in landscape, ~768px+) are unaffected. --- */
+.rotate-guard {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .remote-shell > *:not(.rotate-guard) {
+    display: none !important;
+  }
+
+  .rotate-guard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    text-align: center;
+    height: 100%;
+    padding: 1.2rem calc(1.2rem + env(safe-area-inset-right)) 1.2rem
+      calc(1.2rem + env(safe-area-inset-left));
+  }
+
+  .rotate-guard-icon {
+    font-size: 2.4rem;
+    color: var(--accent);
+  }
+
+  .rotate-guard strong {
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+
+  .rotate-guard span {
+    max-width: 22rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.35;
   }
 }

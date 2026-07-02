@@ -2,6 +2,7 @@ import {
   Profiler,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -220,7 +221,11 @@ import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
 import { useLibraryActions } from "./hooks/useLibraryActions";
 import { useSettingsState } from "./hooks/useSettingsState";
-import { UI_ZOOM_STATUS_EVENT, clientToZoomedCoords } from "../../shared/uiZoom";
+import {
+  UI_ZOOM_STATUS_EVENT,
+  clientToZoomedCoords,
+  getUiZoom,
+} from "../../shared/uiZoom";
 import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
 import { useTransportPolling } from "./hooks/useTransportPolling";
 import {
@@ -355,13 +360,76 @@ const MAX_SESSION_BPM = 300;
 const WAVEFORM_REQUEST_BATCH_SIZE = 4;
 const TIMELINE_COLOR_PRESETS = [
   { label: "Rojo", value: "#E35D5B" },
+  { label: "Coral", value: "#F08A6C" },
+  { label: "Naranja", value: "#EE8A3C" },
   { label: "Ambar", value: "#E0A83A" },
+  { label: "Lima", value: "#B7D34A" },
   { label: "Verde", value: "#57B66C" },
+  { label: "Esmeralda", value: "#2FA98A" },
   { label: "Cian", value: "#3CDDC7" },
+  { label: "Celeste", value: "#4FB8E6" },
   { label: "Azul", value: "#5C8CE6" },
+  { label: "Indigo", value: "#6F6FE0" },
   { label: "Violeta", value: "#9C73E6" },
+  { label: "Magenta", value: "#C96FD6" },
   { label: "Rosa", value: "#DF6FA8" },
 ] as const;
+
+const RECENT_COLORS_STORAGE_KEY = "libretracks.recentColors";
+const RECENT_COLORS_LIMIT = 8;
+
+/** Read the persisted recent-colors list, tolerating malformed storage. */
+function loadRecentColors(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(RECENT_COLORS_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    const seen = new Set<string>();
+    const colors: string[] = [];
+    for (const entry of parsed) {
+      const normalized =
+        typeof entry === "string" ? normalizeTimelineColorInput(entry) : null;
+      if (normalized && !seen.has(normalized)) {
+        seen.add(normalized);
+        colors.push(normalized);
+      }
+    }
+    return colors.slice(0, RECENT_COLORS_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+/** Push a color to the front (MRU), dedup case-insensitively, persist. */
+function pushRecentColor(previous: string[], color: string): string[] {
+  const normalized = normalizeTimelineColorInput(color);
+  if (!normalized) {
+    return previous;
+  }
+  const next = [
+    normalized,
+    ...previous.filter((entry) => entry !== normalized),
+  ].slice(0, RECENT_COLORS_LIMIT);
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        RECENT_COLORS_STORAGE_KEY,
+        JSON.stringify(next),
+      );
+    } catch {
+      // Storage full/blocked — keep the in-memory list, drop persistence.
+    }
+  }
+  return next;
+}
 
 function normalizeTimelineColorInput(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
@@ -387,11 +455,86 @@ function resolveSharedTimelineColor(tracks: TrackSummary[]) {
     : null;
 }
 
+/**
+ * Keep a floating overlay (context menu, colour popover) fully on-screen.
+ *
+ * The desired `{x, y}` is where the pointer opened it. Once mounted we measure
+ * the element and, if it would spill past the right/bottom viewport edge, shift
+ * it back inside (flipping above/left of the anchor when there is no room
+ * below/right). Runs in a layout effect so the corrected position paints before
+ * the user sees a clipped frame. Returns the clamped style to spread onto the
+ * element. The ref must be attached to the same element.
+ */
+function useClampedOverlayPosition(
+  ref: React.RefObject<HTMLDivElement | null>,
+  x: number,
+  y: number,
+) {
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+    maxHeight?: number;
+  }>({ left: x, top: y });
+
+  useLayoutEffect(() => {
+    setPosition({ left: x, top: y });
+    const element = ref.current;
+    if (!element || typeof window === "undefined") {
+      return;
+    }
+    // `x`/`y` are in the zoomed element's coordinate space (clientX / uiZoom),
+    // but getBoundingClientRect()/innerWidth report real viewport pixels.
+    // Reason in viewport space, then convert the result back by dividing by the
+    // same zoom factor. Flip left/up when there is more room there, and cap the
+    // height to the available space (the body scrolls) so it never spills off.
+    const zoom = getUiZoom() || 1;
+    const margin = 8;
+    const rect = element.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const anchorViewportX = x * zoom;
+    const anchorViewportY = y * zoom;
+
+    let leftViewport = anchorViewportX;
+    if (leftViewport + rect.width + margin > viewportW) {
+      leftViewport = Math.max(margin, anchorViewportX - rect.width);
+    }
+    leftViewport = Math.max(
+      margin,
+      Math.min(leftViewport, viewportW - rect.width - margin),
+    );
+
+    const roomBelow = viewportH - anchorViewportY - margin;
+    const roomAbove = anchorViewportY - margin;
+    let topViewport: number;
+    let maxHeight: number;
+    if (rect.height <= roomBelow || roomBelow >= roomAbove) {
+      topViewport = anchorViewportY;
+      maxHeight = roomBelow;
+    } else {
+      maxHeight = roomAbove;
+      topViewport = Math.max(
+        margin,
+        anchorViewportY - Math.min(rect.height, roomAbove),
+      );
+    }
+
+    setPosition({
+      left: leftViewport / zoom,
+      top: topViewport / zoom,
+      maxHeight: maxHeight / zoom,
+    });
+  }, [ref, x, y]);
+
+  return position;
+}
+
 type TimelineColorPopoverProps = {
   x: number;
   y: number;
   title: string;
   initialColor: string;
+  recentColors: string[];
   onApply: (color: string) => Promise<void>;
   onDismiss: () => void;
 };
@@ -401,10 +544,13 @@ function TimelineColorPopover({
   y,
   title,
   initialColor,
+  recentColors,
   onApply,
   onDismiss,
 }: TimelineColorPopoverProps) {
   const [draftColor, setDraftColor] = useState(initialColor);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const position = useClampedOverlayPosition(popoverRef, x, y);
 
   useEffect(() => {
     setDraftColor(initialColor);
@@ -414,8 +560,13 @@ function TimelineColorPopover({
 
   return (
     <div
+      ref={popoverRef}
       className="lt-color-popover"
-      style={{ left: x, top: y }}
+      style={{
+        left: position.left,
+        top: position.top,
+        maxHeight: position.maxHeight,
+      }}
       onClick={(event) => event.stopPropagation()}
     >
       <strong>{title}</strong>
@@ -437,6 +588,24 @@ function TimelineColorPopover({
           />
         ))}
       </div>
+      {recentColors.length > 0 ? (
+        <>
+          <span className="lt-color-popover-recents-title">Recientes</span>
+          <div className="lt-color-popover-recents">
+            {recentColors.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className="lt-color-popover-swatch"
+                style={{ background: color }}
+                aria-label={color}
+                title={color}
+                onClick={() => setDraftColor(color)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
       <label className="lt-color-popover-hex">
         <span>HEX</span>
         <input
@@ -711,6 +880,15 @@ export function TransportPanelContent() {
     initialColor: string;
     onApply: (color: string) => Promise<void>;
   } | null>(null);
+  const [recentColors, setRecentColors] = useState<string[]>(() =>
+    loadRecentColors(),
+  );
+  const recordRecentColor = useCallback((color: string | null) => {
+    if (!color) {
+      return;
+    }
+    setRecentColors((previous) => pushRecentColor(previous, color));
+  }, []);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
@@ -6680,18 +6858,25 @@ export function TransportPanelContent() {
     currentColor?: string | null;
     onColor: (color: string | null) => Promise<void>;
   }): ContextMenuAction[] {
+    // Single funnel: record every applied non-null colour as "recent" so the
+    // popover's Recientes row stays in sync regardless of entry point (preset,
+    // custom popover, or recent swatch).
+    const applyColor = async (color: string | null) => {
+      recordRecentColor(color);
+      await args.onColor(color);
+    };
     return [
       ...TIMELINE_COLOR_PRESETS.map((preset) => ({
         label: `${preset.label}${args.currentColor === preset.value ? " (actual)" : ""}`,
         swatch: preset.value,
-        onSelect: () => args.onColor(preset.value),
+        onSelect: () => applyColor(preset.value),
       })),
       {
         label: "Personalizado...",
         swatch: args.currentColor ?? "#3CDDC7",
         onSelect: () =>
           openCustomColorPopover(args.title, args.currentColor, (color) =>
-            args.onColor(color),
+            applyColor(color),
           ),
       },
       {
@@ -11409,6 +11594,7 @@ export function TransportPanelContent() {
                 y={colorPickerPopover.y}
                 title={colorPickerPopover.title}
                 initialColor={colorPickerPopover.initialColor}
+                recentColors={recentColors}
                 onApply={colorPickerPopover.onApply}
                 onDismiss={() => setColorPickerPopover(null)}
               />
