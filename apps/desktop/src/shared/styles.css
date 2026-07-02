@@ -6998,3 +6998,207 @@ textarea {
   font-size: 0.68rem;
   color: rgb(255 196 120 / 0.95);
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Android (mobile) layout — everything below is scoped under `.lt-android`,
+   a class main.tsx puts on <html> only inside the Android app, so none of
+   it can affect desktop rendering.
+
+   Design intent (phone/tablet in landscape, modelled on mobile DAWs like
+   Playback / Logic for iPad): the timeline owns the vertical space; the
+   topbar collapses to one dense band (icon-only toggles, BAR + TIME readout
+   always visible); the jump/vamp config cards become a single scrollable
+   row of chips whose settings open as bottom sheets instead of anchored
+   popovers.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Topbar: one dense band ──────────────────────────────────────────── */
+.lt-android .lt-topbar {
+  padding: 0.25rem 0.55rem 0.35rem;
+  gap: 0.25rem;
+}
+
+.lt-android .lt-topbar-menu-row {
+  min-height: 1.3rem;
+}
+
+.lt-android .lt-brand-title {
+  font-size: 0.8rem;
+}
+
+.lt-android .lt-topbar-main-row,
+.lt-android .lt-transport {
+  gap: 0.45rem;
+}
+
+/* The whole transport strip must fit a ~780px-wide phone: numeric inputs
+   narrow, secondary labels dropped, toggles icon-only. If a locale still
+   overflows, the strip scrolls instead of clipping controls off-screen. */
+.lt-android .lt-transport {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lt-android .lt-transport::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-android .lt-bpm-control input {
+  width: 3.4rem;
+}
+
+/* "BASE BPM" / current-signature echoes duplicate the readout — drop them. */
+.lt-android .lt-bpm-control small {
+  display: none;
+}
+
+/* TAP: icon-only. */
+.lt-android .lt-tap-tempo-button > span:last-child {
+  display: none;
+}
+
+.lt-android .lt-transport-buttons {
+  gap: 0.18rem;
+}
+
+/* Click / Guide: icon-only toggles (state still shown by the active tint). */
+.lt-android .lt-transport-buttons .lt-button-label {
+  display: none;
+}
+
+/* Readout: keep BAR + TIME + state pill; the TEMPO and COMPAS blocks
+   duplicate the editable inputs sitting immediately to their left. */
+.lt-android .lt-transport-readout {
+  gap: 0.5rem;
+}
+
+.lt-android .lt-readout-block:nth-child(1),
+.lt-android .lt-readout-block:nth-child(2) {
+  display: none;
+}
+
+.lt-android .lt-readout-block {
+  min-width: 0;
+}
+
+.lt-android .lt-readout-block strong {
+  font-size: 0.95rem;
+  width: auto;
+  min-width: 7ch;
+}
+
+/* ── Side nav: icon rail ─────────────────────────────────────────────── */
+.lt-android .lt-side-nav {
+  width: 3.1rem;
+}
+
+.lt-android .lt-side-nav button {
+  /* The label is a bare text node next to the icon span, so hide it by
+     zeroing the button font and restoring the icon's size explicitly. */
+  font-size: 0;
+  gap: 0;
+  padding: 0.7rem 0.2rem;
+}
+
+.lt-android .lt-side-nav button .material-symbols-outlined {
+  font-size: 22px;
+}
+
+/* ── Timeline toolbar: one row of chips, timeline gets the space ─────── */
+.lt-android .lt-timeline-topline {
+  padding: 0.22rem 0.5rem;
+  min-height: 0;
+}
+
+.lt-android .lt-timeline-meta {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lt-android .lt-timeline-meta::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-android .lt-bottom-controls {
+  flex-wrap: nowrap;
+}
+
+/* Track/clip/marker counters: diagnostics, not worth phone pixels. */
+.lt-android .lt-timeline-stats {
+  display: none;
+}
+
+/* Cards → chips: title only (the current value lives in the sheet). */
+.lt-android .lt-control-group {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+  min-height: 2.1rem;
+}
+
+.lt-android .lt-control-group-copy {
+  padding-left: 0.4rem;
+}
+
+.lt-android .lt-control-group-copy .lt-control-group-title {
+  white-space: nowrap;
+  letter-spacing: 0.08em;
+}
+
+.lt-android .lt-control-group-copy p {
+  display: none;
+}
+
+/* Cancel jump: icon-only (it lights up amber when a jump is pending). */
+.lt-android .lt-global-cancel-button > span:last-child {
+  display: none;
+}
+
+/* ── Popovers → bottom sheets ────────────────────────────────────────── */
+.lt-android .lt-control-popover-panel {
+  position: fixed;
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transform: none;
+  min-width: 0;
+  max-width: none;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 0.9rem 1rem 1.1rem;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 0;
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.lt-android .lt-control-group-jump .lt-control-popover-panel {
+  left: 0;
+}
+
+/* Finger-sized controls inside the sheets. */
+.lt-android .lt-control-popover-panel button {
+  min-height: 2.5rem;
+}
+
+.lt-android .lt-control-popover-panel input {
+  min-height: 2.2rem;
+}
+
+/* ── Landing / empty state: scroll instead of clipping in landscape ──── */
+.lt-android .lt-empty-state {
+  overflow-y: auto;
+  align-items: flex-start;
+  padding: 1rem;
+}
+
+.lt-android .lt-empty-state-card {
+  margin: auto;
+  padding: 1.4rem 1.5rem;
+  gap: 0.7rem;
+}
+
+.lt-android .lt-empty-state-card h1 {
+  font-size: 1.7rem;
+}

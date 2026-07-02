@@ -52,6 +52,14 @@ Rust:
 - **Orientación**: `sensorLandscape` en el `AndroidManifest.xml` (gen/android)
   — un DAW en vertical no se puede manejar; se permiten ambas rotaciones
   horizontales.
+- **Layout móvil (CSS)**: `main.tsx` pone la clase `lt-android` en `<html>`
+  y la sección final de `styles.css` (scoped, cero impacto desktop) compacta
+  todo al patrón de DAW móvil: topbar en una banda densa (TAP/Click/Guide
+  solo icono, readout BAR+TIMECODE siempre visible, sin duplicados de
+  tempo/compás), sidenav como rail de iconos, toolbar de saltos/vamp como
+  UNA fila de chips con scroll horizontal (sin summaries ni contadores), y
+  los popovers de configuración convertidos en bottom-sheets fijos con
+  controles táctiles. El timeline pasa de ~45% a ~80% del alto útil.
 
 ## Qué se excluye en Android (por diseño o por ahora)
 
