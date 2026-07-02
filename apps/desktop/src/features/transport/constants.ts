@@ -84,6 +84,7 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
     labelKey: "transport.settingsModal.midiLearnTransposeReset",
   },
   { key: "action:toggle_metronome", labelKey: "timelineTopbar.metronome" },
+  { key: "action:toggle_voice_guide", labelKey: "timelineTopbar.voiceGuide" },
   { key: "action:toggle_vamp", labelKey: "timelineToolbar.vampButton" },
   { key: "action:cancel_jump", labelKey: "timelineToolbar.cancelJump" },
   {

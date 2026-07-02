@@ -187,6 +187,31 @@ export function createMetronomeDeviceHandlers(
       });
     },
 
+    handleVoiceGuideEnabledChange(nextValue: boolean) {
+      // Quick on/off toggle for the voice guide. Reuses the realtime voice-guide
+      // config path (reloads/pushes the clip bank to the engine without
+      // reopening the audio device), mirroring handleVoiceGuideChange but with a
+      // dedicated enabled-state status message.
+      const nextSettings = applyLocal({ voiceGuideEnabled: nextValue });
+
+      void runAction(async () => {
+        try {
+          const savedSettings = normalizeAppSettings(
+            await setVoiceGuideConfigRealtime(nextSettings),
+          );
+          appSettingsRef.current = savedSettings;
+          setAppSettings(savedSettings);
+          setStatus(
+            nextValue
+              ? t("transport.status.voiceGuideEnabled")
+              : t("transport.status.voiceGuideDisabled"),
+          );
+        } catch (error) {
+          setStatus(formatErrorStatus(error));
+        }
+      });
+    },
+
     handleMetronomeVolumeDraftChange(nextValue: number) {
       const normalizedValue = clampVolume(nextValue);
       const requestId = metronomeLiveRequestIdRef.current + 1;

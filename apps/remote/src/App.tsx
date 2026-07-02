@@ -1249,6 +1249,7 @@ const SharedTimeline = memo(function SharedTimeline({
 function TransportControlButtons() {
   const settings = useRemoteSyncStore((state) => state.settings);
   const metronomeEnabled = settings?.metronomeEnabled ?? false;
+  const voiceGuideEnabled = settings?.voiceGuideEnabled ?? false;
 
   return (
     <div className="transport-controls transport-controls-inline">
@@ -1261,12 +1262,30 @@ function TransportControlButtons() {
       <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
         {STRINGS.stop}
       </button>
-      <button
-        className={`pill-button ${metronomeEnabled ? "is-active" : ""}`}
-        onClick={() => sendMetronomePatch({ enabled: !metronomeEnabled })}
-      >
-        {STRINGS.click}
-      </button>
+      {/* Click + Voice guide share the last transport slot as a split control. */}
+      <div className="pill-button-split">
+        <button
+          className={`pill-button ${metronomeEnabled ? "is-active" : ""}`}
+          onClick={() => sendMetronomePatch({ enabled: !metronomeEnabled })}
+        >
+          {STRINGS.click}
+        </button>
+        <button
+          className={`pill-button ${voiceGuideEnabled ? "is-active" : ""}`}
+          disabled={!settings}
+          onClick={() => {
+            if (!settings) {
+              return;
+            }
+            sendSettingsUpdate({
+              ...settings,
+              voiceGuideEnabled: !voiceGuideEnabled,
+            });
+          }}
+        >
+          {STRINGS.guide}
+        </button>
+      </div>
     </div>
   );
 }

@@ -373,6 +373,20 @@ button {
   height: 100%;
 }
 
+/* Click + Voice-guide split control: occupies one transport slot and lays out
+   its two pills side by side, each sharing the slot equally. */
+.pill-button-split {
+  flex: 1;
+  display: flex;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.pill-button-split .pill-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .pill-button,
 .region-chip,
 .marker-card,

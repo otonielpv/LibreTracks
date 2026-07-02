@@ -2025,6 +2025,7 @@ export function TransportPanelContent() {
     handleMetronomeSoundChange,
     handleVoiceGuideChange,
     handleMetronomeEnabledChange,
+    handleVoiceGuideEnabledChange,
     handleMetronomeVolumeDraftChange,
     commitMetronomeVolumeDraft,
     handleMidiInputDeviceChange,
@@ -10442,6 +10443,10 @@ export function TransportPanelContent() {
           metronomeEnabled={appSettings.metronomeEnabled}
           onToggleMetronome={() =>
             handleMetronomeEnabledChange(!appSettings.metronomeEnabled)
+          }
+          voiceGuideEnabled={appSettings.voiceGuideEnabled}
+          onToggleVoiceGuide={() =>
+            handleVoiceGuideEnabledChange(!appSettings.voiceGuideEnabled)
           }
           onTempoDraftChange={(next) => {
             tempoDraftDirtyRef.current = true;

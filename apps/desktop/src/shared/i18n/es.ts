@@ -506,6 +506,8 @@ const es = {
       midiDevicesRefreshed: "Lista de dispositivos MIDI actualizada.",
       metronomeEnabled: "Metronomo activado.",
       metronomeDisabled: "Metronomo desactivado.",
+      voiceGuideEnabled: "Voz guia activada.",
+      voiceGuideDisabled: "Voz guia desactivada.",
       metronomeVolumeUpdated: "Volumen del metronomo ajustado a {{volume}}%.",
       midiBindingLearned:
         "Asignacion MIDI aprendida para {{key}}: {{binding}}.",
@@ -697,6 +699,8 @@ const es = {
     pause: "Pausar",
     metronome: "Metronomo",
     click: "Click",
+    voiceGuide: "Voz guia",
+    guide: "Guia",
     next: "Siguiente",
     tempoReadout: "Tempo",
     barReadout: "Bar",

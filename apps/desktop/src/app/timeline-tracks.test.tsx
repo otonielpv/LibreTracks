@@ -45,10 +45,16 @@ import { useTimelineUIStore as useTimelineUIStoreForTest } from "../features/tra
 
 describe("App / timeline-tracks", () => {
   it("keeps folder tracks integrated in the same timeline box", async () => {
-    await renderApp();
+    const { container } = await renderApp();
 
-    expect(screen.getByText("Rhythm")).toBeTruthy();
-    expect(screen.getByText("Guide")).toBeTruthy();
+    // Scope name lookups to the track headers pane: the transport topbar now
+    // has a "Guide" (voice-guide) button that would otherwise collide with the
+    // track named "Guide".
+    const trackHeaders = within(
+      container.querySelector(".lt-track-headers-pane") as HTMLElement,
+    );
+    expect(trackHeaders.getByText("Rhythm")).toBeTruthy();
+    expect(trackHeaders.getByText("Guide")).toBeTruthy();
     expect(
       screen.getByRole("slider", {
         name: textMatcher(interpolate(en.trackHeader.volumeAria, { name: "Rhythm" })),

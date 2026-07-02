@@ -39,6 +39,8 @@ type TimelineTopbarProps = {
   onNextSong: () => void;
   metronomeEnabled: boolean;
   onToggleMetronome: () => void;
+  voiceGuideEnabled: boolean;
+  onToggleVoiceGuide: () => void;
   onTempoDraftChange: (nextTempoDraft: string) => void;
   onTempoDraftFocus?: () => void;
   onTapTempo: () => void;
@@ -84,6 +86,8 @@ export function TimelineTopbar({
   onNextSong,
   metronomeEnabled,
   onToggleMetronome,
+  voiceGuideEnabled,
+  onToggleVoiceGuide,
   onTempoDraftChange,
   onTempoDraftFocus,
   onTapTempo,
@@ -398,6 +402,23 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">music_note</span>
               <span className="lt-button-label">{t("timelineTopbar.click")}</span>
+            </button>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.voiceGuide")}
+              className={voiceGuideEnabled ? "is-active is-toggle" : "is-toggle"}
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:toggle_voice_guide");
+                  return;
+                }
+
+                onToggleVoiceGuide();
+              }}
+            >
+              <span className="material-symbols-outlined">campaign</span>
+              <span className="lt-button-label">{t("timelineTopbar.guide")}</span>
             </button>
             <button
               type="button"
