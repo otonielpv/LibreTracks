@@ -17,9 +17,41 @@ iOS cuando toque.
   `.gitignore` que genera el propio Tauri.
 - **APK debug compilado** para `aarch64` y `x86_64` (emulador).
 - **Config por plataforma**: `tauri.android.conf.json` quita el build del
-  remote del `beforeBuildCommand` y anula `bundle.resources` (DLLs de
-  Windows, dist del remote, etc. no van al APK). `vite.config.ts` respeta
-  `TAURI_DEV_HOST` para `tauri android dev` contra dispositivo real.
+  remote del `beforeDevCommand`/`beforeBuildCommand` y anula
+  `bundle.resources` (DLLs de Windows, dist del remote, etc. no van al APK).
+  `vite.config.ts` respeta `TAURI_DEV_HOST` para `tauri android dev` contra
+  dispositivo real.
+
+## UX/flujos Android (fase 2)
+
+Todo condicionado por `isAndroidApp` (`packages/shared/src/desktopApi.ts`,
+detección por user-agent) en frontend y por comandos nuevos sin diálogo en
+Rust:
+
+- **Sesiones sin diálogos nativos**: comandos `start_create_song_named`
+  (crea por nombre en `<app_data>/songs`, con saneado de nombre),
+  `start_open_project_from_path` y `list_default_sessions` (ordenadas por
+  mtime). El flujo con diálogos de desktop queda intacto.
+- **`MobileLanding`**: en Android la landing muestra "Crear" (formulario de
+  nombre inline, valida duplicados) + lista "Tus sesiones". El mismo
+  componente se reutiliza `embedded` en un modal "Sesiones…" accesible desde
+  el menú Archivo cuando ya hay una sesión abierta.
+- **Menú Archivo en Android**: solo "Sesiones…" y "Guardar" (el resto de
+  entradas dependen de diálogos rfd). Guardar no usa diálogo y funciona.
+- **Import de audio**: el botón Importar de la Librería usa el file chooser
+  del WebView (`mobileFilePicker.ts`, `<input type=file>` → bytes) y el
+  pipeline `import_audio_files_from_bytes` que ya usaba el drag-drop web.
+  En Android los ficheros viven tras `content://`, así que pasar bytes es
+  lo correcto (se copian a `audio/` de la sesión, como siempre).
+- **Ocultado en Android**: medidor CPU/RAM del topbar (y su polling 1 Hz),
+  tabs de Settings Atajos/MIDI/MIDI Learn, check de updates (la
+  distribución es APK), botón "Abrir carpeta de logs" (queda "Copiar log"),
+  hints de atajos en menús contextuales, botón Remote.
+- **Viewport**: `user-scalable=no` en `index.html` para que el pinch-zoom
+  del WebView no rompa el drag de clips/faders (sin efecto en desktop).
+- **Orientación**: `sensorLandscape` en el `AndroidManifest.xml` (gen/android)
+  — un DAW en vertical no se puede manejar; se permiten ambas rotaciones
+  horizontales.
 
 ## Qué se excluye en Android (por diseño o por ahora)
 
@@ -55,6 +87,24 @@ npx tauri android dev
    compilar el engine + Bungee + FFmpeg con el toolchain NDK (vcpkg tiene
    triplets `arm64-android`/`x64-android`) y cargar la `.so` como hasta ahora.
    El warm-loop de Bungee y el resto del contrato FFI no cambian.
+
+   **El modelo de streaming desde disco NO cambia en Android** — de hecho es
+   más correcto ahí que en desktop: el almacenamiento es flash (lecturas
+   aleatorias rápidas; la starvation del BlockCache que vimos en PCs con HDD
+   es mucho menos probable) y la RAM es el recurso escaso en móvil, así que
+   precargar sesiones enteras en memoria sería peor. Lo que sí cambia con el
+   port del engine:
+   - **Capa de dispositivo**: Oboe/AAudio en vez de WASAPI/DirectSound/ASIO,
+     con la SR nativa del dispositivo (típicamente 48 kHz) para evitar el
+     resampler del sistema, y buffers ajustados al burst size que reporta
+     AAudio.
+   - **Caché de decodificación** (`LT_DECODING_CACHE`): apuntarla al
+     cache dir de la app (Android puede purgarlo, y no cuenta como datos).
+   - **Ciclo de vida**: audio focus (pausar si llama alguien), foreground
+     service para reproducir con pantalla apagada, y Doze.
+   - **Bench de Bungee en ARM**: el presupuesto de 9+ voces está validado en
+     x86; hay que medir en un móvil real (NEON en ARM suele rendir bien,
+     pero el techo térmico es real).
 2. **Ficheros**: sustituir los picks cancelados del shim por
    `tauri-plugin-dialog` (soporta móvil) + Storage Access Framework, y decidir
    dónde viven las sesiones (`app_data_dir`).

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { TransportPanel } from "../features/transport/TransportPanel";
-import { isTauriApp } from "../features/transport/desktopApi";
+import { isAndroidApp, isTauriApp } from "../features/transport/desktopApi";
 import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
@@ -110,9 +110,11 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // No in-app update check on Android: releases there won't be the desktop
+  // installers the update modal points at (APK distribution is separate).
   const { release, isModalOpen, dismiss } = useUpdateCheck({
     currentVersion,
-    enabled: isTauriApp && !import.meta.env.DEV,
+    enabled: isTauriApp && !isAndroidApp && !import.meta.env.DEV,
   });
 
   return (

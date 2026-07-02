@@ -480,6 +480,39 @@ export async function openProject(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_open_project_from_dialog");
 }
 
+/**
+ * Create a session by name in the default songs folder, without a native save
+ * dialog. Android landing flow (rfd has no Android backend); works anywhere.
+ */
+export async function createSongNamed(
+  name: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_create_song_named", { name });
+}
+
+/** One session folder found in the default songs directory. */
+export interface DefaultSessionSummary {
+  name: string;
+  songFile: string;
+  modifiedMs: number | null;
+}
+
+/**
+ * List the sessions in the default songs folder, most recently modified
+ * first. The Android landing screen offers these instead of an "open file"
+ * dialog.
+ */
+export async function listDefaultSessions(): Promise<DefaultSessionSummary[]> {
+  return invokeCommand<DefaultSessionSummary[]>("list_default_sessions");
+}
+
+/** Open a session whose `.ltsession` path is already known (Android landing). */
+export async function openProjectFromPath(
+  songFile: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_open_project_from_path", { songFile });
+}
+
 export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_pick_and_import_song_from_dialog");
 }

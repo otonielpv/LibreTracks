@@ -2663,6 +2663,37 @@ textarea {
   font: 400 12px/1.4 "Space Grotesk", sans-serif;
 }
 
+/* Android landing: name-the-session form (same visual language as the
+   template filter input). */
+.lt-mobile-landing-create {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.lt-mobile-landing-create input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgb(87 241 219 / 0.16);
+  border-radius: 2px;
+  background: rgb(18 18 18 / 0.9);
+  color: #e5e2e1;
+  padding: 0.65rem 0.7rem;
+  font: 600 14px/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-mobile-landing-create input:focus {
+  outline: none;
+  border-color: rgb(87 241 219 / 0.4);
+}
+
+.lt-mobile-landing-name-taken {
+  margin: 0;
+  color: #f2b8b5;
+  font: 400 12px/1.4 "Space Grotesk", sans-serif;
+}
+
 .lt-timeline-topline {
   min-height: 2.95rem;
   flex-shrink: 0;

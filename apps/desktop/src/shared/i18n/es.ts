@@ -96,6 +96,13 @@ const es = {
       emptyTitle: "Crea o abre una sesion",
       emptyDescription:
         "Inicia una sesion nueva o abre una existente. Importa assets WAV despues desde el panel Libreria y arrastralos al timeline solo cuando quieras organizarlos.",
+      mobileEmptyDescription:
+        "Crea una sesion nueva o abre una de tus sesiones. Importa audio despues desde el panel Libreria.",
+      mobileSessionNamePlaceholder: "Nombre de la sesion",
+      mobileSessionNameTaken: "Ya existe una sesion con ese nombre.",
+      mobileSessionsHeading: "Tus sesiones",
+      mobileNoSessions:
+        "Aun no tienes sesiones. Crea la primera con el boton de arriba.",
       importSession: "Importar sesión",
       importingSession: "Importando sesión...",
       exportingSession: "Exportando sesión...",
@@ -680,6 +687,7 @@ const es = {
     mainMenu: "Menu principal",
     fileMenu: "Archivo",
     newProject: "Nuevo proyecto",
+    mobileSessions: "Sesiones…",
     newFromTemplate: "Nuevo desde plantilla…",
     open: "Abrir",
     importSong: "Importar cancion",

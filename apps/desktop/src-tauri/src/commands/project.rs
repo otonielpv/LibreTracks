@@ -396,6 +396,65 @@ pub fn start_create_song(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Sanitize a user-typed session name into a safe folder/file stem: path
+/// separators and characters Windows rejects become spaces, and leading or
+/// trailing dots/spaces are trimmed so the result is a valid directory name
+/// on every platform.
+fn sanitize_session_name(raw: &str) -> Result<String, String> {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => ' ',
+            c if c.is_control() => ' ',
+            c => c,
+        })
+        .collect();
+    let cleaned = cleaned
+        .trim()
+        .trim_matches('.')
+        .trim()
+        .to_string();
+    if cleaned.is_empty() {
+        return Err("El nombre del proyecto está vacío".to_string());
+    }
+    Ok(cleaned)
+}
+
+/// Create a session by name directly in the default songs folder, without a
+/// native save dialog. This is the Android landing flow (`rfd` has no Android
+/// backend), but it works on any platform. Same worker + progress events as
+/// `start_create_song`.
+#[tauri::command]
+pub fn start_create_song_named(app: AppHandle, name: String) -> Result<bool, String> {
+    let name = sanitize_session_name(&name)?;
+    let default_directory = crate::state::create_song_default_directory(&app);
+    if default_directory.join(&name).exists() {
+        return Err(format!("Ya existe un proyecto llamado \"{name}\""));
+    }
+    let _ = std::fs::create_dir_all(&default_directory);
+    let target_pick = default_directory.join(crate::state::default_project_file_name(&name));
+
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .create_song_at_path(target_pick, &state.audio)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
+}
+
+/// List the sessions living in the default songs folder (most recently
+/// modified first) so the Android landing screen can offer them without a
+/// native "open file" dialog.
+#[tauri::command]
+pub fn list_default_sessions(app: AppHandle) -> Result<Vec<crate::state::SessionSummary>, String> {
+    Ok(crate::state::list_default_sessions(&app))
+}
+
 /// List the reusable `.lttemplate` files in the default templates folder so the
 /// landing screen can offer them when creating a new session.
 #[tauri::command]
@@ -631,6 +690,28 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
         return Ok(false);
     };
 
+    spawn_open_project_worker(&app, song_file);
+    Ok(true)
+}
+
+/// Open a session whose `.ltsession` path is already known — the Android
+/// landing screen picks from `list_default_sessions` instead of a native
+/// file dialog. Same worker + progress events as the dialog flow.
+#[tauri::command]
+pub fn start_open_project_from_path(app: AppHandle, song_file: String) -> Result<bool, String> {
+    let song_file = std::path::PathBuf::from(song_file);
+    if !song_file.is_file() {
+        return Err(format!(
+            "No se encontró el archivo de sesión: {}",
+            song_file.display()
+        ));
+    }
+
+    spawn_open_project_worker(&app, song_file);
+    Ok(true)
+}
+
+fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
     let worker_app = app.clone();
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
@@ -676,8 +757,6 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
             }
         }
     });
-
-    Ok(true)
 }
 
 #[tauri::command]

@@ -9788,6 +9788,58 @@ pub(crate) fn create_song_default_directory(app: &AppHandle) -> PathBuf {
     project_root(app).join("songs")
 }
 
+/// Summary of a session folder inside the default songs directory, surfaced
+/// to the landing screen on platforms without native file dialogs (Android):
+/// the user picks from this list instead of an "open file" dialog.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub name: String,
+    pub song_file: String,
+    pub modified_ms: Option<u64>,
+}
+
+/// List the sessions living in the default songs folder, most recently
+/// modified first. Missing folder → empty list (fresh install).
+pub(crate) fn list_default_sessions(app: &AppHandle) -> Vec<SessionSummary> {
+    let dir = create_song_default_directory(app);
+    let mut sessions: Vec<SessionSummary> = match fs::read_dir(&dir) {
+        Ok(entries) => entries
+            .flatten()
+            .filter_map(|entry| {
+                let folder = entry.path();
+                if !folder.is_dir() {
+                    return None;
+                }
+                let song_file = fs::read_dir(&folder)
+                    .ok()?
+                    .flatten()
+                    .map(|entry| entry.path())
+                    .find(|path| {
+                        path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("ltsession"))
+                    })?;
+                let name = folder.file_name()?.to_str()?.to_string();
+                let modified_ms = song_file
+                    .metadata()
+                    .ok()
+                    .and_then(|meta| meta.modified().ok())
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_millis() as u64);
+                Some(SessionSummary {
+                    name,
+                    song_file: song_file.to_string_lossy().into_owned(),
+                    modified_ms,
+                })
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    sessions.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms));
+    sessions
+}
+
 /// Default folder where "Save as template" suggests writing `.lttemplate`
 /// files and where the landing screen looks for reusable templates. Users can
 /// still save/open templates anywhere; this is just the discoverable home.

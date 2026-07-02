@@ -10,6 +10,7 @@ import {
 import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
 import {
   getDecodingCacheInfo,
+  isAndroidApp,
   purgeDecodingCache,
   readErrorLog,
   revealErrorLog,
@@ -1744,6 +1745,12 @@ function DecodingCacheField() {
 function UpdateCheckField() {
   const { t } = useTranslation();
   const { release, error, isChecking, hasCheckedOnce } = useUpdateCheckStore();
+
+  // Android distributes updates as APKs, not the desktop installers the
+  // update flow downloads — hide the whole check.
+  if (isAndroidApp) {
+    return null;
+  }
   const current = normalizeVersion(
     typeof window !== "undefined"
       ? (window as { __LT_APP_VERSION__?: string }).__LT_APP_VERSION__ ?? ""
@@ -1859,15 +1866,17 @@ function DiagnosticsTabPanel() {
           })}
         </small>
         <div className="lt-inline-actions">
-          <button
-            type="button"
-            className="lt-secondary-button"
-            onClick={handleReveal}
-          >
-            {t("transport.settingsModal.diagnosticsOpenFolder", {
-              defaultValue: "Open logs folder",
-            })}
-          </button>
+          {!isAndroidApp ? (
+            <button
+              type="button"
+              className="lt-secondary-button"
+              onClick={handleReveal}
+            >
+              {t("transport.settingsModal.diagnosticsOpenFolder", {
+                defaultValue: "Open logs folder",
+              })}
+            </button>
+          ) : null}
           <button
             type="button"
             className="lt-secondary-button"

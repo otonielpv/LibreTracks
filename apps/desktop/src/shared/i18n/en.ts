@@ -96,6 +96,13 @@ const en = {
       emptyTitle: "Create or open a session",
       emptyDescription:
         "Start a new session or open an existing one. Import WAV assets later from the Library panel and drag them onto the timeline only when you want to arrange them.",
+      mobileEmptyDescription:
+        "Create a new session or open one of your sessions. Import audio later from the Library panel.",
+      mobileSessionNamePlaceholder: "Session name",
+      mobileSessionNameTaken: "A session with that name already exists.",
+      mobileSessionsHeading: "Your sessions",
+      mobileNoSessions:
+        "You don't have any sessions yet. Create your first one with the button above.",
       importSession: "Import session",
       importingSession: "Importing session...",
       exportingSession: "Exporting session...",
@@ -654,6 +661,7 @@ const en = {
     mainMenu: "Main menu",
     fileMenu: "File",
     newProject: "New project",
+    mobileSessions: "Sessions…",
     newFromTemplate: "New from template…",
     open: "Open",
     importSong: "Import song",

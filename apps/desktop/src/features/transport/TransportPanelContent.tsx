@@ -217,6 +217,8 @@ import {
 } from "./panels/AutomationCueModal";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
+import { MobileLanding } from "./MobileLanding";
+import { pickFilesViaWebView } from "./mobileFilePicker";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
@@ -935,6 +937,10 @@ export function TransportPanelContent() {
     useState<ExportSongTarget | null>(null);
   // True while the whole-session export-mode chooser (Light / Full) is shown.
   const [isExportSessionModalOpen, setIsExportSessionModalOpen] =
+    useState(false);
+  // Android: in-app sessions modal (create by name / open from list) that
+  // replaces the dialog-based New/Open entries of the FILE menu.
+  const [isMobileSessionsModalOpen, setIsMobileSessionsModalOpen] =
     useState(false);
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
@@ -2035,6 +2041,25 @@ export function TransportPanelContent() {
     handleRefreshMidiInputDevices,
   } = metronomeDeviceHandlers;
 
+  // Android: the library "Import" button can't open an rfd dialog, so route
+  // it through the WebView file chooser + the bytes import pipeline. Same
+  // contract as importLibraryAssetsFromDialog: full asset list, null = cancel.
+  const importLibraryAssetsViaWebViewPicker =
+    async (): Promise<LibraryAssetSummary[] | null> => {
+      const files = await pickFilesViaWebView("audio/*");
+      if (files.length === 0) {
+        return null;
+      }
+      const payloads = await Promise.all(
+        files.map(async (file) => ({
+          fileName: file.name,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+        })),
+      );
+      await importAudioFilesFromBytes(payloads);
+      return getLibraryAssets();
+    };
+
   // Library asset/folder mutation handlers. See ./library/libraryHandlers.
   const libraryHandlers = useMemo(
     () =>
@@ -2052,7 +2077,9 @@ export function TransportPanelContent() {
         setDeletingLibraryFilePath,
         loadLibraryState,
         t,
-        importLibraryAssetsFromDialog,
+        importLibraryAssetsFromDialog: isAndroidApp
+          ? importLibraryAssetsViaWebViewPicker
+          : importLibraryAssetsFromDialog,
         getLibraryFolders,
         deleteLibraryAsset,
         createLibraryFolder,
@@ -3822,7 +3849,9 @@ export function TransportPanelContent() {
     handleSaveProjectClick,
     handleSaveProjectAsClick,
     handleCreateSongClick,
+    handleCreateSongNamed,
     handleOpenProjectClick,
+    handleOpenProjectFromPath,
     handleImportSongClick,
     handleImportSessionClick,
     handleExportSessionConfirm,
@@ -10250,7 +10279,15 @@ export function TransportPanelContent() {
     appSettings.selectedMidiDevice &&
     !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
-  const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
+  // Keyboard shortcuts and MIDI make no sense on a phone/tablet: no physical
+  // keyboard by default, and midir has no Android backend (the MIDI tabs
+  // would only ever show an empty device list).
+  const androidHiddenSettingsTabs: SettingsTab[] = [
+    "shortcuts",
+    "midi",
+    "midiLearn",
+  ];
+  const allSettingsTabs: Array<{ id: SettingsTab; label: string }> = [
     {
       id: "audio",
       label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }),
@@ -10296,6 +10333,11 @@ export function TransportPanelContent() {
       }),
     },
   ];
+  const settingsTabs = isAndroidApp
+    ? allSettingsTabs.filter(
+        (tab) => !androidHiddenSettingsTabs.includes(tab.id),
+      )
+    : allSettingsTabs;
 
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
@@ -10410,6 +10452,7 @@ export function TransportPanelContent() {
           onCreateSong={handleCreateSongClick}
           onCreateSongFromTemplate={() => handleCreateSongFromTemplate()}
           onOpenProject={handleOpenProjectClick}
+          onOpenMobileSessions={() => setIsMobileSessionsModalOpen(true)}
           onImportSong={handleImportSongClick}
           onImportSession={handleImportSessionClick}
           onExportSession={() => setIsExportSessionModalOpen(true)}
@@ -10573,6 +10616,12 @@ export function TransportPanelContent() {
                 }}
               />
               {shouldShowEmptyState ? (
+                isAndroidApp ? (
+                  <MobileLanding
+                    onCreateSession={handleCreateSongNamed}
+                    onOpenSession={handleOpenProjectFromPath}
+                  />
+                ) : (
                 <div className="lt-empty-state">
                   <div className="lt-empty-state-card">
                     <span className="lt-empty-state-eyebrow">
@@ -10675,6 +10724,7 @@ export function TransportPanelContent() {
                     </div>
                   </div>
                 </div>
+                )
               ) : (
                 <section className="lt-main-stage">
                   <TimelineToolbar
@@ -11557,6 +11607,52 @@ export function TransportPanelContent() {
               onClose={() => setIsRemoteModalOpen(false)}
               remoteServerInfo={remoteServerInfo}
             />
+
+            {isMobileSessionsModalOpen ? (
+              <div
+                className="lt-modal-backdrop"
+                onClick={() => setIsMobileSessionsModalOpen(false)}
+              >
+                <section
+                  className="lt-settings-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="lt-mobile-sessions-title"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <header className="lt-settings-modal-header">
+                    <div>
+                      <h2 id="lt-mobile-sessions-title">
+                        {t("timelineTopbar.mobileSessions", {
+                          defaultValue: "Sesiones…",
+                        })}
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      className="lt-settings-modal-close"
+                      onClick={() => setIsMobileSessionsModalOpen(false)}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                      {t("common.close")}
+                    </button>
+                  </header>
+                  <div className="lt-settings-modal-body">
+                    <MobileLanding
+                      embedded
+                      onCreateSession={(name) => {
+                        setIsMobileSessionsModalOpen(false);
+                        handleCreateSongNamed(name);
+                      }}
+                      onOpenSession={(songFile) => {
+                        setIsMobileSessionsModalOpen(false);
+                        handleOpenProjectFromPath(songFile);
+                      }}
+                    />
+                  </div>
+                </section>
+              </div>
+            ) : null}
 
             <ExportSongModal
               target={exportSongTarget}

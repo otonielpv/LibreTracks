@@ -7,11 +7,13 @@ import {
   createSong,
   createSongFromTemplateFile,
   createSongFromTemplatePath,
+  createSongNamed,
   exportSessionPackage,
   getProjectLoadProgressSnapshot,
   importSessionPackage,
   listenToSessionExportProgress,
   openProject,
+  openProjectFromPath,
   pickAndImportExternalProject,
   pickAndImportExternalProjectIntoSession,
   pickAndImportSong,
@@ -189,6 +191,39 @@ export function useProjectActions({
   function handleOpenProjectClick() {
     runProjectLoadFlow(
       openProject,
+      t("transport.shell.loadingProject", {
+        defaultValue: "Opening project...",
+      }),
+    );
+  }
+
+  // Android landing flow: no native dialogs there, so sessions are created by
+  // name in the default songs folder and opened from a list of known paths.
+  function handleCreateSongNamed(name: string) {
+    void runAction(
+      async () => {
+        const nextSnapshot = await createSongNamed(name);
+        if (!nextSnapshot) {
+          return;
+        }
+
+        applyPlaybackSnapshot(nextSnapshot);
+        setActiveSidebarTab(null);
+        setStatus(
+          nextSnapshot.songFilePath
+            ? t("transport.status.projectCreatedAt", {
+                path: nextSnapshot.songFilePath,
+              })
+            : t("transport.status.projectCreated"),
+        );
+      },
+      { busy: true },
+    );
+  }
+
+  function handleOpenProjectFromPath(songFile: string) {
+    runProjectLoadFlow(
+      () => openProjectFromPath(songFile),
       t("transport.shell.loadingProject", {
         defaultValue: "Opening project...",
       }),
@@ -491,7 +526,9 @@ export function useProjectActions({
 
   return {
     handleCreateSongClick,
+    handleCreateSongNamed,
     handleOpenProjectClick,
+    handleOpenProjectFromPath,
     handleImportSongClick,
     handleImportSessionClick,
     handleExportSessionConfirm,
