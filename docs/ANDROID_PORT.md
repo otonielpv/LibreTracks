@@ -60,6 +60,14 @@ Rust:
   UNA fila de chips con scroll horizontal (sin summaries ni contadores), y
   los popovers de configuración convertidos en bottom-sheets fijos con
   controles táctiles. El timeline pasa de ~45% a ~80% del alto útil.
+- **Ruler compacto (94px vs 122px desktop)**: los carriles `LANE_*` de
+  `Renderer/drawBackground.ts` son dependientes de plataforma (regiones/cues
+  18px, secciones 22px, tempo 26px); dibujo y hit-testing derivan de los
+  mismos exports. `RULER_HEIGHT` (TimelineCanvasPane) y el CSS `.lt-android`
+  (incluido el `grid-template-rows` del pane, ojo: si no se toca queda una
+  banda negra muerta) deben moverse SIEMPRE juntos. La fila del logo se
+  fusiona con la banda de transporte (logo oculto, FILE inline). Chrome
+  total sobre el primer track: ~38% del alto en un móvil apaisado.
 
 ## Qué se excluye en Android (por diseño o por ahora)
 
