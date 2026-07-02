@@ -87,6 +87,7 @@ import {
   importAudioFilesFromPaths,
   importSongPackageFromPathWithProgress,
   importExternalProjectFromPathWithProgress,
+  isAndroidApp,
   isTauriApp,
   listenToMidiRawMessage,
   listenToProjectLoadProgress,
@@ -1258,7 +1259,9 @@ export function TransportPanelContent() {
   }, [isSettingsModalOpen]);
 
   useEffect(() => {
-    if (!isTauriApp) {
+    // No remote server on Android — the command exists but always errors, so
+    // skip the call instead of logging a guaranteed failure on every boot.
+    if (!isTauriApp || isAndroidApp) {
       return;
     }
 

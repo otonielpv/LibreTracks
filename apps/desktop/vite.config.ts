@@ -12,8 +12,20 @@ import { browserslistToTargets } from "lightningcss";
 // styles.css (solid-colour ::after overlays + an explicit modifier class).
 const legacyWebkitTargets = browserslistToTargets(["safari >= 13"]);
 
+// Set by the Tauri CLI during `tauri android dev`: the WebView on the phone
+// must reach the Vite dev server over the LAN, not on localhost.
+const tauriDevHost = process.env.TAURI_DEV_HOST;
+
 export default defineConfig({
   plugins: [react()],
+  server: tauriDevHost
+    ? {
+        host: tauriDevHost,
+        port: 1420,
+        strictPort: true,
+        hmr: { protocol: "ws", host: tauriDevHost, port: 1421 },
+      }
+    : undefined,
   build: {
     // The Tauri WebView uses the system Safari; our floor is macOS 10.15
     // Catalina (Safari 13.1). Vite's default target ('modules') assumes

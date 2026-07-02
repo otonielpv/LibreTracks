@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { isAndroidApp } from "../desktopApi";
 import type { SidebarTab } from "../types";
 
 type SideNavProps = {
@@ -34,15 +35,17 @@ export function SideNav({
         <span className="material-symbols-outlined">library_music</span>
         {t("transport.shell.library")}
       </button>
-      <button
-        type="button"
-        className={isRemoteModalOpen ? "is-active" : ""}
-        aria-label={t("transport.shell.remote")}
-        onClick={onRemoteClick}
-      >
-        <span className="material-symbols-outlined">phonelink</span>
-        {t("transport.shell.remote")}
-      </button>
+      {!isAndroidApp && (
+        <button
+          type="button"
+          className={isRemoteModalOpen ? "is-active" : ""}
+          aria-label={t("transport.shell.remote")}
+          onClick={onRemoteClick}
+        >
+          <span className="material-symbols-outlined">phonelink</span>
+          {t("transport.shell.remote")}
+        </button>
+      )}
       <button
         type="button"
         className={isSettingsModalOpen ? "is-active" : ""}

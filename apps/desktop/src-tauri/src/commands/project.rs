@@ -14,7 +14,7 @@ use crate::state::{
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession, DesktopState,
     ProjectLoadProgressEvent,
 };
-use rfd::FileDialog;
+use crate::file_dialog::FileDialog;
 
 #[tauri::command]
 pub fn get_song_view(

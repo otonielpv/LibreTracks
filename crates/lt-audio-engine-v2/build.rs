@@ -13,8 +13,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=LT_ENGINE_V2_LIB_DIR");
     println!("cargo:rerun-if-changed=build.rs");
 
-    // Skip linking when the no-link feature is active.
-    let no_link = std::env::var("CARGO_FEATURE_NO_LINK").is_ok();
+    // Skip linking when the no-link feature is active, or when targeting
+    // Android: the C++ engine is not built for the NDK yet, so ffi.rs swaps
+    // in the same stubs the no-link feature uses.
+    let no_link = std::env::var("CARGO_FEATURE_NO_LINK").is_ok()
+        || std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android");
     if no_link {
         return;
     }

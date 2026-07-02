@@ -12,8 +12,10 @@ use crate::audio_engine::AudioDebugSnapshot;
 use crate::error::DesktopError;
 use crate::midi::get_midi_input_names;
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
+#[cfg(not(target_os = "android"))]
 use crate::remote;
 use crate::state::DesktopState;
+#[cfg(not(target_os = "android"))]
 use libretracks_remote::RemoteServerInfo;
 
 #[tauri::command]
@@ -213,9 +215,19 @@ pub fn report_ui_render_metric(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String> {
     Ok(remote::remote_server_info(&app))
+}
+
+/// Android build: there is no embedded remote-control server (the app itself
+/// is the handheld device), so the command exists for API parity but always
+/// errors. The frontend hides the remote UI on Android and never calls this.
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub fn get_remote_server_info() -> Result<serde_json::Value, String> {
+    Err("remote control server is not available on Android".to_string())
 }
 
 #[tauri::command]

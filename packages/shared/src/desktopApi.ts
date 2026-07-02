@@ -36,6 +36,12 @@ const tauriWindow = window as Window & {
 
 export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 
+// Android build of the app (Tauri mobile WebView). Features that only make
+// sense on desktop — e.g. the remote-control server, whose point is to
+// control the desktop app FROM a phone — are hidden when this is true.
+export const isAndroidApp =
+  isTauriApp && /android/i.test(navigator.userAgent);
+
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
   try {

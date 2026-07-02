@@ -29,7 +29,8 @@ use libretracks_project::{
 };
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use rayon::prelude::*;
-use rfd::FileDialog;
+
+use crate::file_dialog::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
 use tauri::{AppHandle, Emitter, Manager};
