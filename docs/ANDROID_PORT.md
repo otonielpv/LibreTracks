@@ -128,10 +128,21 @@ cmake --build build-android-x86_64
 
 - `build.rs` del crate FFI enlaza la `.so` cuando existe (emite el cfg
   `lt_engine_android_link`); sin ella, stubs silenciosos como antes.
-- JUCE OFF: `audio_device_manager.cpp` tiene stub completo — sin dispositivo
-  de audio aún (milestone 2 = backend Oboe). Bungee OFF: upstream no publica
-  binario Android; pitch/warp = passthrough hasta compilarlo de fuente con
-  clang. Decoders: libsndfile + dr_mp3/dr_flac (sin FFmpeg ni vcpkg).
+- **Milestone 2 HECHO — backend Oboe (audio real)**: añade
+  `-DLT_ENGINE_USE_OBOE=ON` al configure de arriba (JUCE y Oboe son
+  excluyentes). `audio_device_manager_oboe.cpp` abre un stream AAudio
+  float estéreo (Usage::Media, LowLatency+Shared, buffer=2 bursts) y
+  puentea el render planar del engine al buffer intercalado de Oboe con
+  scratch pre-asignado. Verificado en emulador: stream `started` en
+  dumpsys, el reloj del transporte avanza desde callbacks reales, y un
+  tempo marker en mitad de la canción se aplica en vivo.
+  Bungee sigue OFF: upstream no publica binario Android; pitch/warp =
+  passthrough hasta compilarlo de fuente con clang. Decoders: libsndfile +
+  dr_mp3/dr_flac (sin FFmpeg ni vcpkg).
+- **Pantalla completa (MainActivity)**: con edge-to-edge la barra de estado
+  robaba TODOS los toques de la franja superior (menú FILE y transporte
+  intocables). Modo inmersivo (swipe revela las barras) +
+  FLAG_KEEP_SCREEN_ON para no dormir el dispositivo en directo.
 - Verificado en emulador: engine inicializa (thread pools según hardware),
   carga sesiones, decodifica WAVs y genera `.ltpeaks`.
 - **Bug conocido (milestone 3)**: hay DOS raíces de caché en el dispositivo
