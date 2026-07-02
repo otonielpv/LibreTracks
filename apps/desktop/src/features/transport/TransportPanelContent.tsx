@@ -10806,6 +10806,12 @@ export function TransportPanelContent() {
               ) : (
                 <section className="lt-main-stage">
                   <TimelineToolbar
+                    onTrackHeightDecrease={() =>
+                      applyTrackHeight(trackHeight - TRACK_HEIGHT_STEP)
+                    }
+                    onTrackHeightIncrease={() =>
+                      applyTrackHeight(trackHeight + TRACK_HEIGHT_STEP)
+                    }
                     snapEnabled={snapEnabled}
                     subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
                     selectedRegion={selectedRegion}

@@ -7222,6 +7222,19 @@ textarea {
   grid-template-rows: 94px minmax(0, 1fr);
 }
 
+/* ── Library panel: narrower on a phone ──────────────────────────────── */
+/* Desktop's 20rem leaves the timeline ~40% of a landscape phone; 15.5rem
+   still fits asset names + durations comfortably. Header buttons compact
+   to match. */
+.lt-android .lt-library-panel {
+  width: 15.5rem;
+}
+
+.lt-android .lt-library-panel-actions button {
+  padding: 0.45rem 0.5rem;
+  font-size: 9px;
+}
+
 /* ── Library selection action bar (Android) ──────────────────────────── */
 /* Appears at the bottom of the library panel while assets are selected;
    replaces the desktop pointer-drag-to-timeline, which touch can't do. */
