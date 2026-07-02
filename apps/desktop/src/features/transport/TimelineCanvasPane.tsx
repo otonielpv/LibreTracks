@@ -28,7 +28,7 @@ import type {
   TimelineClipSummary,
   TimelineTrackSummary,
 } from "./pendingAudioImports";
-import { formatTransposeSemitones } from "./desktopApi";
+import { formatTransposeSemitones, isAndroidApp } from "./desktopApi";
 import { buildSongTempoRegions } from "@libretracks/shared/models";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
@@ -57,7 +57,10 @@ import {
   type ExternalDropPreview,
 } from "./dragDrop";
 
-const RULER_HEIGHT = 122;
+// Must stay in sync with the lane layout in Renderer/drawBackground.ts and
+// the .lt-android ruler heights in styles.css: 94px is the mobile lanes'
+// bottom edge (87) plus breathing room.
+const RULER_HEIGHT = isAndroidApp ? 94 : 122;
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */

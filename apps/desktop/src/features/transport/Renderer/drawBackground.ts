@@ -1,8 +1,9 @@
-import type {
-  ActiveVampSummary,
-  SectionMarkerSummary,
-  SongRegionSummary,
-  TempoMarkerSummary,
+import {
+  isAndroidApp,
+  type ActiveVampSummary,
+  type SectionMarkerSummary,
+  type SongRegionSummary,
+  type TempoMarkerSummary,
 } from "../desktopApi";
 import type { TimelineGrid } from "../timelineMath";
 import { markerColor, markerKindCategory } from "../markerKinds";
@@ -20,34 +21,42 @@ function hexToRgba(hex: string, alpha: number): string {
 
 const MIN_LABEL_WIDTH_PX = 112;
 
-export const LANE_REGIONS = {
-  top: 0,
-  height: 22,
-} as const;
+// Ruler lane layout. The Android build compacts every lane (~2/3 height,
+// same stacking order) because a phone in landscape has roughly half the
+// vertical pixels of a desktop window and the 122px desktop ruler was
+// eating a third of the timeline. Everything that draws or hit-tests the
+// ruler derives from these four exports, so the two layouts stay
+// consistent by construction. Keep RULER_HEIGHT (TimelineCanvasPane) and
+// the .lt-android ruler CSS heights in sync with the mobile bottom edge.
+type RulerLane = { readonly top: number; readonly height: number };
+
+const MOBILE_RULER = isAndroidApp;
+
+export const LANE_REGIONS: RulerLane = MOBILE_RULER
+  ? { top: 0, height: 18 }
+  : { top: 0, height: 22 };
 
 // Dynamic-cue markers (Build, All In, ...) get their own lane just above the
-// section lane, in the previously-empty 22-48px gap. This keeps a cue and a
-// section that share a timeline position vertically separated so both stay
-// visible and clickable instead of stacking on the same pixel.
-export const LANE_CUES = {
-  top: 24,
-  height: 22,
-} as const;
+// section lane, in the previously-empty gap between regions and sections.
+// This keeps a cue and a section that share a timeline position vertically
+// separated so both stay visible and clickable instead of stacking on the
+// same pixel.
+export const LANE_CUES: RulerLane = MOBILE_RULER
+  ? { top: 19, height: 18 }
+  : { top: 24, height: 22 };
 
-export const LANE_SECTIONS = {
-  top: 48,
-  height: 26,
-} as const;
+export const LANE_SECTIONS: RulerLane = MOBILE_RULER
+  ? { top: 38, height: 22 }
+  : { top: 48, height: 26 };
 
-export const LANE_TEMPO_METRIC = {
-  top: 72,
-  height: 34,
-} as const;
+export const LANE_TEMPO_METRIC: RulerLane = MOBILE_RULER
+  ? { top: 61, height: 26 }
+  : { top: 72, height: 34 };
 
-const GRID_LABEL_TOP = 24;
-const GRID_LABEL_SECOND_LINE_TOP = 36;
+const GRID_LABEL_TOP = MOBILE_RULER ? 20 : 24;
+const GRID_LABEL_SECOND_LINE_TOP = MOBILE_RULER ? 30 : 36;
 const TEMPO_LABEL_TOP = 2;
-const METRIC_LABEL_TOP = 20;
+const METRIC_LABEL_TOP = MOBILE_RULER ? 13 : 20;
 const TIME_SIGNATURE_VERTICAL_OFFSET = 8;
 
 function formatRulerMusicalPosition(barNumber: number, beatInBar: number) {
