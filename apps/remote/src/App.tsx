@@ -873,6 +873,13 @@ const SharedTimeline = memo(function SharedTimeline({
   const lastManualInteractionAtRef = useRef(0);
   const dragPointerIdRef = useRef<number | null>(null);
   const dragLastClientXRef = useRef(0);
+  // While the cinta is manually scrolled, the render window must follow what the
+  // user is LOOKING at (the dragged centre), not the playhead — otherwise the
+  // grid/markers of a far-away region aren't rendered. Published from the rAF
+  // loop (throttled to whole-second changes) so distant scrolls stay populated;
+  // null means "follow the playhead" (no manual scroll active).
+  const [manualCenterSeconds, setManualCenterSeconds] = useState<number | null>(null);
+  const publishedManualCenterRef = useRef<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const durationSeconds = Math.max(songView?.durationSeconds ?? 0, 8);
   const regions = useMemo(() => buildSongTempoRegions(songView), [songView]);
@@ -896,7 +903,10 @@ const SharedTimeline = memo(function SharedTimeline({
     (Math.max(durationSeconds, gridEndSeconds) + 4) * CHROME_TIMELINE_PIXELS_PER_SECOND,
   );
   const viewportDurationSeconds = Math.max(1, viewportWidth / CHROME_TIMELINE_PIXELS_PER_SECOND);
-  const renderCenterSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
+  // Centre the render window on the dragged view when the user is scrubbing,
+  // else on the live playhead, so distant scroll positions render their grid.
+  const renderCenterSeconds =
+    manualCenterSeconds ?? resolveLivePosition(snapshot, snapshotReceivedAtMs);
   const renderWindowStartSeconds = Math.max(0, renderCenterSeconds - viewportDurationSeconds * 1.5);
   const renderWindowEndSeconds = Math.max(
     renderWindowStartSeconds + viewportDurationSeconds * 3,
@@ -1117,6 +1127,21 @@ const SharedTimeline = memo(function SharedTimeline({
         // Hide it when it scrolls out of view so it doesn't stick to an edge.
         playheadRef.current.style.opacity =
           playheadScreenX < -2 || playheadScreenX > width + 2 ? "0" : "1";
+      }
+
+      // Publish the dragged view centre so the render window (grid/markers)
+      // follows the scroll. Throttled to whole-second changes to avoid a
+      // re-render every frame; cleared once the manual offset eases back to 0.
+      if (Math.abs(manualOffsetRef.current) > 0.5) {
+        const visibleCenterSeconds = (width / 2 - translateX) / CHROME_TIMELINE_PIXELS_PER_SECOND;
+        const rounded = Math.max(0, Math.round(visibleCenterSeconds));
+        if (publishedManualCenterRef.current !== rounded) {
+          publishedManualCenterRef.current = rounded;
+          setManualCenterSeconds(rounded);
+        }
+      } else if (publishedManualCenterRef.current !== null) {
+        publishedManualCenterRef.current = null;
+        setManualCenterSeconds(null);
       }
 
       frameId = window.requestAnimationFrame(render);
