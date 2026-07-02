@@ -105,13 +105,48 @@ npx tauri android build --apk --debug --target x86_64    # emulador
 npx tauri android dev
 ```
 
+## Engine NDK (milestone 1 HECHO — spike de compilación)
+
+El engine C++ **compila y corre en Android** sin cambios de código fuente:
+
+```powershell
+# Por ABI (x86_64 emulador / arm64-v8a dispositivo). CMake >=3.25 del
+# sistema + ninja del SDK. FetchContent descarga libsndfile/r8brain/nlohmann.
+$ndk = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.1.12297006"
+$ninja = "$env:LOCALAPPDATA\Android\Sdk\cmake\3.22.1\bin\ninja.exe"
+cd native/audio-engine-v2
+cmake -S . -B build-android-x86_64 -G Ninja "-DCMAKE_MAKE_PROGRAM=$ninja" `
+  "-DCMAKE_TOOLCHAIN_FILE=$ndk\build\cmake\android.toolchain.cmake" `
+  -DANDROID_ABI=x86_64 -DANDROID_PLATFORM=android-24 -DCMAKE_BUILD_TYPE=Release `
+  -DLT_ENGINE_USE_JUCE=OFF -DLT_ENGINE_USE_BUNGEE=OFF `
+  -DLT_ENGINE_USE_FFMPEG=OFF -DLT_ENGINE_USE_LIBSNDFILE=ON
+cmake --build build-android-x86_64
+# Copiar a jniLibs (gitignored):
+#   gen/android/app/src/main/jniLibs/x86_64/liblt_audio_engine_v2.so
+#   gen/android/app/src/main/jniLibs/arm64-v8a/  (desde build-android-arm64)
+```
+
+- `build.rs` del crate FFI enlaza la `.so` cuando existe (emite el cfg
+  `lt_engine_android_link`); sin ella, stubs silenciosos como antes.
+- JUCE OFF: `audio_device_manager.cpp` tiene stub completo — sin dispositivo
+  de audio aún (milestone 2 = backend Oboe). Bungee OFF: upstream no publica
+  binario Android; pitch/warp = passthrough hasta compilarlo de fuente con
+  clang. Decoders: libsndfile + dr_mp3/dr_flac (sin FFmpeg ni vcpkg).
+- Verificado en emulador: engine inicializa (thread pools según hardware),
+  carga sesiones, decodifica WAVs y genera `.ltpeaks`.
+- **Bug conocido (milestone 3)**: hay DOS raíces de caché en el dispositivo
+  (`cache/LibreTracks/waveform-cache` y `cache/waveform-cache`): Rust y C++
+  resuelven la ruta en momentos distintos y el lector no encuentra los picos
+  recién generados → los clips se quedan con placeholder. La generación en
+  sí funciona.
+
 ## Roadmap (siguiente trabajo)
 
-1. **Audio real**: portar `native/audio-engine-v2` al NDK. JUCE (que ya usamos
-   para dispositivos) soporta Android vía Oboe/OpenSL, así que la vía es
-   compilar el engine + Bungee + FFmpeg con el toolchain NDK (vcpkg tiene
-   triplets `arm64-android`/`x64-android`) y cargar la `.so` como hasta ahora.
-   El warm-loop de Bungee y el resto del contrato FFI no cambian.
+1. **Milestone 2 — backend Oboe**: dispositivo de audio real detrás de la
+   abstracción `src/devices` (SR nativa del dispositivo, burst size AAudio)
+   → metrónomo y playback sonando. Después: unificar la raíz de la caché de
+   decodificación (bug de arriba), empaquetado automático de la .so, audio
+   focus + foreground service, y Bungee de fuente para pitch/warp.
 
    **El modelo de streaming desde disco NO cambia en Android** — de hecho es
    más correcto ahí que en desktop: el almacenamiento es flash (lecturas
