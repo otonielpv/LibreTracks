@@ -39,10 +39,19 @@ Rust:
 - **Menú Archivo en Android**: solo "Sesiones…" y "Guardar" (el resto de
   entradas dependen de diálogos rfd). Guardar no usa diálogo y funciona.
 - **Import de audio**: el botón Importar de la Librería usa el file chooser
-  del WebView (`mobileFilePicker.ts`, `<input type=file>` → bytes) y el
-  pipeline `import_audio_files_from_bytes` que ya usaba el drag-drop web.
-  En Android los ficheros viven tras `content://`, así que pasar bytes es
-  lo correcto (se copian a `audio/` de la sesión, como siempre).
+  del WebView (`mobileFilePicker.ts`, `<input type=file>` → bytes; multi-
+  select soportado por el `onShowFileChooser` de wry) y el pipeline
+  compartido de placeholders, importando BYTES porque en Android los
+  ficheros viven tras `content://`. **Gotcha**: el chooser solo abre dentro
+  de la ventana de gesto del tap — el pick debe ser lo primero de
+  `handleImportLibraryFromDialog`, sin `await`s antes.
+- **Multi-audio → timeline sin drag-and-drop** (verificado end-to-end):
+  1. Tras importar N ficheros, prompt "¿Añadir los N audios al timeline?"
+     → cada uno crea su pista en el playhead (`create_clips_with_auto_tracks`).
+  2. En la Librería, en Android el tap alterna selección (sin Ctrl/Shift) y
+     aparece una barra inferior "Añadir al timeline (N)" + limpiar. El
+     pointer-drag de librería a timeline está desactivado en Android
+     (pelea con el scroll táctil).
 - **Ocultado en Android**: medidor CPU/RAM del topbar (y su polling 1 Hz),
   tabs de Settings Atajos/MIDI/MIDI Learn, check de updates (la
   distribución es APK), botón "Abrir carpeta de logs" (queda "Copiar log"),
