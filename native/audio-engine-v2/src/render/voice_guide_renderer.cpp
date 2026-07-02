@@ -388,8 +388,9 @@ void VoiceGuideRenderer::choke_active_voices(double sample_rate) noexcept {
     }
 }
 
-void VoiceGuideRenderer::trigger_clip(const VoiceGuideClip* clip, float gain,
-                                      double sample_rate) noexcept {
+void VoiceGuideRenderer::trigger_clip(
+    const VoiceGuideClip* clip, float gain, double sample_rate,
+    const std::shared_ptr<const VoiceGuideClipBank>& bank) noexcept {
     if (!clip || clip->samples.empty()) return;
     // Choke whatever is still playing so voices never overlap (Playback-style).
     choke_active_voices(sample_rate);
@@ -412,6 +413,9 @@ void VoiceGuideRenderer::trigger_clip(const VoiceGuideClip* clip, float gain,
     v->gain = gain;
     v->fade_remaining = -1;
     v->fade_total = 0;
+    // Pin the bank the sample pointer lives in, so a bank swap can't free it
+    // mid-clip (see Voice::bank).
+    v->bank = bank;
 }
 
 void VoiceGuideRenderer::reset_voices() noexcept {
@@ -421,6 +425,7 @@ void VoiceGuideRenderer::reset_voices() noexcept {
         v.total = 0;
         v.fade_remaining = -1;
         v.fade_total = 0;
+        v.bank.reset();
     }
     last_section_frame_ = -1;
     last_count_frame_ = -1;
@@ -621,7 +626,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                             const Frame cue_start =
                                 block_start - static_cast<Frame>(chained[i]->samples.size());
                             if (cue_start == abs_frame && cue_start >= timeline_frame) {
-                                trigger_clip(chained[i], 0.9f, sample_rate);
+                                trigger_clip(chained[i], 0.9f, sample_rate, bank);
                                 last_chained_cue_frame_ = chained_marker_frame[i];
                                 // For a jump, remember the destination cue's REAL
                                 // frame so the later linear pass over it doesn't
@@ -646,7 +651,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                             if (section_start == abs_frame
                                 && section_start >= timeline_frame
                                 && section_start != last_section_frame_) {
-                                trigger_clip(section, 0.9f, sample_rate);
+                                trigger_clip(section, 0.9f, sample_rate, bank);
                                 last_section_frame_ = section_start;
                                 announcements_fired_.fetch_add(1, std::memory_order_relaxed);
                             }
@@ -664,7 +669,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                                 const int beat_number = (b % beats_per_bar) + 1;
                                 if (beat_frame != last_count_frame_) {
                                     trigger_clip(bank->count_for(beat_number), 0.9f,
-                                                 sample_rate);
+                                                 sample_rate, bank);
                                     last_count_frame_ = beat_frame;
                                     counts_fired_.fetch_add(1, std::memory_order_relaxed);
                                 }
@@ -744,7 +749,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                         // for this cue in the loaded language (an absent recording
                         // is a silent slot, not a fired announcement).
                         if (const VoiceGuideClip* clip = bank->cue_for(cue->kind)) {
-                            trigger_clip(clip, 0.9f, sample_rate);
+                            trigger_clip(clip, 0.9f, sample_rate, bank);
                             announcements_fired_.fetch_add(1, std::memory_order_relaxed);
                         }
                         last_cue_frame_ = cue->frame;
@@ -762,10 +767,11 @@ void VoiceGuideRenderer::render(float** output_channels,
                     ? static_cast<float>(v.fade_remaining) / static_cast<float>(v.fade_total)
                     : 0.0f;
                 if (--v.fade_remaining < 0) {
-                    // Fade complete: stop this voice.
+                    // Fade complete: stop this voice and release its bank pin.
                     v.samples = nullptr;
                     v.index = 0;
                     v.total = 0;
+                    v.bank.reset();
                     continue;
                 }
             }
@@ -775,6 +781,13 @@ void VoiceGuideRenderer::render(float** output_channels,
             if (right != left)
                 output_channels[right][f] += sample;
             ++v.index;
+            // Natural completion: release the bank pin promptly so a swapped-out
+            // bank is freed once its last voice finishes (not held until the
+            // slot is reused).
+            if (v.index >= v.total) {
+                v.samples = nullptr;
+                v.bank.reset();
+            }
         }
     }
 }

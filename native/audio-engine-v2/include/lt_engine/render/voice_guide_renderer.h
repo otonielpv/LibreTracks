@@ -146,7 +146,7 @@ private:
     // talk over each other (the Playback behaviour). The pool size lets the
     // fading tail of the previous voice ring out under the new one.
     struct Voice {
-        const float* samples = nullptr; // points into a clip bank vector (bank outlives the voice)
+        const float* samples = nullptr; // points into a clip bank vector
         int total = 0;
         int index = 0;                  // next sample to read; index >= total == done
         float gain = 0.0f;
@@ -154,11 +154,20 @@ private:
         // left of a `fade_total`-frame linear ramp to silence, then it stops.
         int fade_remaining = -1;
         int fade_total = 0;
+        // Pin the clip bank this voice reads from alive for the voice's whole
+        // lifetime. Without this, replacing the bank (set_clip_bank, e.g. when
+        // the voice guide is toggled or the language/sample-rate changes) could
+        // free the sample buffer while `samples` still points into it — a
+        // use-after-free on the audio thread. Holding the shared_ptr keeps the
+        // old bank alive until this voice finishes, even after `bank_` is
+        // swapped. Cleared when the voice stops so the old bank is released.
+        std::shared_ptr<const VoiceGuideClipBank> bank;
         bool active() const noexcept { return samples != nullptr && index < total; }
     };
     static constexpr int kVoiceCount = 6;
 
-    void trigger_clip(const VoiceGuideClip* clip, float gain, double sample_rate) noexcept;
+    void trigger_clip(const VoiceGuideClip* clip, float gain, double sample_rate,
+                      const std::shared_ptr<const VoiceGuideClipBank>& bank) noexcept;
     void choke_active_voices(double sample_rate) noexcept;
     void reset_voices() noexcept;
 

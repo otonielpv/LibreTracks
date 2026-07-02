@@ -662,3 +662,47 @@ TEST_CASE("a jump-chained cue is NOT re-announced when the playhead reaches it")
     CHECK(r.diagnostics().announcements_fired == after_leadin); // no repeat
     CHECK(peak(ch2[2]) == doctest::Approx(0.0f));               // silence
 }
+
+TEST_CASE("swapping the clip bank mid-clip does not use freed samples") {
+    // Regression: toggling the voice guide / changing language / sample rate
+    // calls set_clip_bank() from the control thread while a voice may be mid
+    // clip on the audio thread. If the voice held a raw pointer into the old
+    // bank without pinning it alive, dropping the caller's shared_ptr would free
+    // the sample buffer → use-after-free (STATUS_ACCESS_VIOLATION). The Voice
+    // now holds a shared_ptr to keep the buffer alive until it finishes.
+    auto bank = make_marked_bank();
+    VoiceGuideRenderer r;
+    r.set_clip_bank(bank);
+    r.set_config({true, 1.0f, "monitor", 1, true});
+
+    // A marker at 2s so the count-in (and section) start firing well before it.
+    Session session = make_session(MarkerKind::Chorus, 2.0);
+
+    const int block = 256;
+    const double sr = static_cast<double>(kSampleRate);
+    std::array<std::vector<float>, 4> ch;
+    const Frame total = static_cast<Frame>(kSampleRate * 3);
+    for (auto& c : ch) c.assign(static_cast<std::size_t>(total), 0.0f);
+
+    bool swapped = false;
+    for (Frame start = 0; start < total; start += block) {
+        const int frames = static_cast<int>(std::min<Frame>(block, total - start));
+        float* out[4] = {ch[0].data() + start, ch[1].data() + start,
+                         ch[2].data() + start, ch[3].data() + start};
+        r.render(out, 4, frames, sr, start, &session, {});
+
+        // Once the guide has started speaking, swap in a fresh bank and DROP
+        // every other reference to the old one. With the fix, the mid-clip voice
+        // keeps the old bank alive; without it this frees the buffer the audio
+        // thread is still reading.
+        if (!swapped && r.diagnostics().announcements_fired + r.diagnostics().counts_fired > 0) {
+            auto fresh = make_marked_bank();
+            r.set_clip_bank(fresh);
+            bank.reset();   // release the test's own reference to the old bank
+            swapped = true;
+        }
+    }
+
+    CHECK(swapped);                 // the scenario actually exercised the swap
+    CHECK(peak(ch[2]) > 0.0f);      // audio kept flowing (no crash, valid reads)
+}
