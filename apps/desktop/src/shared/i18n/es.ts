@@ -805,6 +805,11 @@ const es = {
     assetsCount: "{{count}} assets",
     foldersCount: "{{count}} folders",
     selectedCount: "{{count}} selected",
+    addToTimeline: "Añadir al timeline ({{count}})",
+    addedToTimeline: "{{count}} audios añadidos al timeline",
+    addImportedToTimelinePrompt:
+      "¿Añadir los {{count}} audios importados al timeline? Cada uno creará su propia pista en la posición actual.",
+    clearSelection: "Quitar selección",
     deleteHint: "Delete removes selection",
     openSessionHint: "Abre o crea una sesion",
     loading: "Cargando assets de la biblioteca...",

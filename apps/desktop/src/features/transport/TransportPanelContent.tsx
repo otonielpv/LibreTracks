@@ -2041,25 +2041,6 @@ export function TransportPanelContent() {
     handleRefreshMidiInputDevices,
   } = metronomeDeviceHandlers;
 
-  // Android: the library "Import" button can't open an rfd dialog, so route
-  // it through the WebView file chooser + the bytes import pipeline. Same
-  // contract as importLibraryAssetsFromDialog: full asset list, null = cancel.
-  const importLibraryAssetsViaWebViewPicker =
-    async (): Promise<LibraryAssetSummary[] | null> => {
-      const files = await pickFilesViaWebView("audio/*");
-      if (files.length === 0) {
-        return null;
-      }
-      const payloads = await Promise.all(
-        files.map(async (file) => ({
-          fileName: file.name,
-          bytes: new Uint8Array(await file.arrayBuffer()),
-        })),
-      );
-      await importAudioFilesFromBytes(payloads);
-      return getLibraryAssets();
-    };
-
   // Library asset/folder mutation handlers. See ./library/libraryHandlers.
   const libraryHandlers = useMemo(
     () =>
@@ -2077,9 +2058,7 @@ export function TransportPanelContent() {
         setDeletingLibraryFilePath,
         loadLibraryState,
         t,
-        importLibraryAssetsFromDialog: isAndroidApp
-          ? importLibraryAssetsViaWebViewPicker
-          : importLibraryAssetsFromDialog,
+        importLibraryAssetsFromDialog,
         getLibraryFolders,
         deleteLibraryAsset,
         createLibraryFolder,
@@ -3719,6 +3698,34 @@ export function TransportPanelContent() {
       song,
       t,
     ],
+  );
+
+  // Android: bulk "take these to the timeline". Touch can't pointer-drag
+  // from the library across panels, so the library's selection action bar
+  // (and the post-import prompt) call this instead: every asset lands on
+  // its own auto-created track at the current playhead — the same pipeline
+  // as dropping N files onto the timeline on desktop.
+  const handleAddLibraryAssetsAtPlayhead = useCallback(
+    (payload: Array<{ filePath: string }>) => {
+      if (payload.length === 0) return;
+      const startSeconds = displayPositionSecondsRef.current;
+      void runAction(async () => {
+        const snapshot = await createClipsWithAutoTracks(
+          payload.map((item) => ({
+            filePath: item.filePath,
+            timelineStartSeconds: startSeconds,
+          })),
+        );
+        applyPlaybackSnapshot(snapshot);
+        setStatus(
+          t("library.addedToTimeline", {
+            count: payload.length,
+            defaultValue: "{{count}} audios añadidos al timeline",
+          }),
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setStatus, t],
   );
 
   const handleCompactDropLibraryAssetsIntoSong = useCallback(
@@ -9726,6 +9733,72 @@ export function TransportPanelContent() {
       return;
     }
 
+    // Android: no rfd paths — the WebView chooser hands us the file CONTENTS
+    // (Android files live behind content:// URIs the Rust side can't read).
+    // Same placeholder pipeline as below, importing bytes instead of paths,
+    // plus a one-tap "put the imported files on the timeline" prompt (the
+    // usual mobile intent behind importing a song's multitracks). NOTE: the
+    // chooser only opens inside the tap's user-gesture window, so the pick
+    // must be the first thing this function does — no awaits before it.
+    if (isAndroidApp) {
+      const files = await pickFilesViaWebView("audio/*");
+      if (!files.length) {
+        return; // user cancelled
+      }
+
+      const pendingImports = createPendingAudioImports(files, 0).map(
+        (item) => ({ ...item, showInTimeline: false }),
+      );
+      useTransportStore.getState().addPendingAudioImports(pendingImports);
+      setStatus(t("transport.status.libraryImportStarting"));
+      await nextPaint();
+
+      let payloads: Array<{ fileName: string; bytes: Uint8Array }> = [];
+      await runAudioImportPipeline({
+        pendingIds: pendingImports.map((item) => item.id),
+        beforeImport: async () => {
+          payloads = await Promise.all(
+            files.map(async (file) => ({
+              fileName: file.name,
+              bytes: new Uint8Array(await file.arrayBuffer()),
+            })),
+          );
+        },
+        importFn: () => importAudioFilesFromBytes(payloads),
+        onImported: async (importedAssets) => {
+          if (importedAssets.length === 0) {
+            return;
+          }
+          const shouldPlace = await confirmDialog(
+            t("library.addImportedToTimelinePrompt", {
+              count: importedAssets.length,
+              defaultValue:
+                "¿Añadir los {{count}} audios importados al timeline?",
+            }),
+          );
+          if (!shouldPlace) {
+            return;
+          }
+          const startSeconds = displayPositionSecondsRef.current;
+          const snapshot = await createClipsWithAutoTracks(
+            importedAssets.map((asset) => ({
+              filePath: asset.filePath,
+              timelineStartSeconds: startSeconds,
+            })),
+          );
+          applyPlaybackSnapshot(snapshot);
+        },
+        mergeLibraryAssets,
+        refreshLibraryState,
+        setStatus,
+        successMessage: (importedAssets) =>
+          t("transport.status.libraryUpdated", {
+            count: importedAssets.length,
+          }),
+      });
+      return;
+    }
+
     const paths = await pickLibraryFiles();
     if (!paths.length) {
       return; // user cancelled
@@ -10613,6 +10686,11 @@ export function TransportPanelContent() {
                 }}
                 onDeleteRequested={(assets) => {
                   void handleDeleteLibraryAssets(assets);
+                }}
+                onAddSelectionToTimeline={(assets) => {
+                  handleAddLibraryAssetsAtPlayhead(
+                    assets.map((asset) => ({ filePath: asset.filePath })),
+                  );
                 }}
               />
               {shouldShowEmptyState ? (

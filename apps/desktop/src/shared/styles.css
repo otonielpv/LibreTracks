@@ -7222,6 +7222,55 @@ textarea {
   grid-template-rows: 94px minmax(0, 1fr);
 }
 
+/* ── Library selection action bar (Android) ──────────────────────────── */
+/* Appears at the bottom of the library panel while assets are selected;
+   replaces the desktop pointer-drag-to-timeline, which touch can't do. */
+.lt-android .lt-library-mobile-actionbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid rgb(87 241 219 / 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent), #161616;
+}
+
+.lt-android .lt-library-mobile-actionbar-count {
+  color: #bacac5;
+  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.lt-android .lt-library-mobile-actionbar-add {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 3px;
+  background: #57f1db;
+  color: #0f1917;
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lt-android .lt-library-mobile-actionbar-clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  border: 1px solid rgb(186 202 197 / 0.25);
+  border-radius: 3px;
+  background: transparent;
+  color: #bacac5;
+}
+
 /* ── Landing / empty state: scroll instead of clipping in landscape ──── */
 .lt-android .lt-empty-state {
   overflow-y: auto;

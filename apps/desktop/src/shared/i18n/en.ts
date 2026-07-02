@@ -778,6 +778,11 @@ const en = {
     assetsCount: "{{count}} assets",
     foldersCount: "{{count}} folders",
     selectedCount: "{{count}} selected",
+    addToTimeline: "Add to timeline ({{count}})",
+    addedToTimeline: "{{count}} audio files added to the timeline",
+    addImportedToTimelinePrompt:
+      "Add the {{count}} imported audio files to the timeline? Each one will create its own track at the current position.",
+    clearSelection: "Clear selection",
     deleteHint: "Delete removes selection",
     openSessionHint: "Open or create a session",
     loading: "Loading library assets...",
