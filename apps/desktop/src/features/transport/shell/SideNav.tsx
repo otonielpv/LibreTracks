@@ -9,6 +9,11 @@ type SideNavProps = {
   onLibraryToggle: () => void;
   onRemoteClick: () => void;
   onSettingsClick: () => void;
+  /** Android: the FILE menu's two mobile entries live here instead of the
+   * topbar, freeing the transport strip on narrow phone screens. */
+  onSessionsClick?: () => void;
+  onSaveClick?: () => void;
+  canSave?: boolean;
 };
 
 export function SideNav({
@@ -18,6 +23,9 @@ export function SideNav({
   onLibraryToggle,
   onRemoteClick,
   onSettingsClick,
+  onSessionsClick,
+  onSaveClick,
+  canSave = false,
 }: SideNavProps) {
   const { t } = useTranslation();
 
@@ -26,6 +34,31 @@ export function SideNav({
       className="lt-side-nav"
       aria-label={t("transport.shell.navigation")}
     >
+      {isAndroidApp && onSessionsClick ? (
+        <button
+          type="button"
+          aria-label={t("timelineTopbar.mobileSessions", {
+            defaultValue: "Sesiones…",
+          })}
+          onClick={onSessionsClick}
+        >
+          <span className="material-symbols-outlined">folder_open</span>
+          {t("timelineTopbar.mobileSessionsShort", {
+            defaultValue: "Sesiones",
+          })}
+        </button>
+      ) : null}
+      {isAndroidApp && onSaveClick ? (
+        <button
+          type="button"
+          aria-label={t("timelineTopbar.save")}
+          disabled={!canSave}
+          onClick={onSaveClick}
+        >
+          <span className="material-symbols-outlined">save</span>
+          {t("timelineTopbar.saveShort", { defaultValue: "Guardar" })}
+        </button>
+      ) : null}
       <button
         type="button"
         className={activeSidebarTab === "library" ? "is-active" : ""}

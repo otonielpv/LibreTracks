@@ -12,18 +12,34 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
 
-    // Immersive fullscreen: with edge-to-edge the WebView draws under the
-    // status bar, whose overlay also STEALS the touches in that strip — the
-    // app's top bar (FILE menu, transport buttons) sat exactly there and was
-    // untappable. A live-performance DAW wants the whole screen anyway, so
-    // hide the system bars; swipe from the edge reveals them transiently.
-    val controller = WindowCompat.getInsetsController(window, window.decorView)
-    controller.systemBarsBehavior =
-      WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-    controller.hide(WindowInsetsCompat.Type.systemBars())
+    hideSystemBars()
 
     // The show must go on: never let the device sleep mid-performance while
     // LibreTracks is in the foreground.
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+  }
+
+  // Some OEM skins (ColorOS on the Oppo A5 test device) drop the immersive
+  // state whenever the window regains focus — after the transient bars, a
+  // notification shade pull, or app switching — leaving the status bar
+  // permanently drawn OVER the app's top controls and stealing their taps.
+  // Re-asserting on every focus gain is the documented pattern.
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+    super.onWindowFocusChanged(hasFocus)
+    if (hasFocus) {
+      hideSystemBars()
+    }
+  }
+
+  // Immersive fullscreen: with edge-to-edge the WebView draws under the
+  // status bar, whose overlay also STEALS the touches in that strip — the
+  // app's top bar (transport buttons) sat exactly there and was untappable.
+  // A live-performance DAW wants the whole screen anyway, so hide the system
+  // bars; swipe from the edge reveals them transiently.
+  private fun hideSystemBars() {
+    val controller = WindowCompat.getInsetsController(window, window.decorView)
+    controller.systemBarsBehavior =
+      WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    controller.hide(WindowInsetsCompat.Type.systemBars())
   }
 }

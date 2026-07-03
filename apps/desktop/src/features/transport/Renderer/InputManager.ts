@@ -45,6 +45,13 @@ type DragPanState = {
   latestCameraX: number;
 };
 
+type TouchGestureState = {
+  originZoom: number;
+  startDistance: number;
+  lastMidClientX: number;
+  lastMidClientY: number;
+};
+
 export class InputManager {
   private readonly container: HTMLElement;
 
@@ -54,15 +61,28 @@ export class InputManager {
 
   private dragPanState: DragPanState | null = null;
 
+  private touchGesture: TouchGestureState | null = null;
+
   constructor(private readonly options: InputManagerOptions) {
     this.container = options.container;
     this.container.addEventListener("wheel", this.handleWheel, { passive: false });
     this.container.addEventListener("mousedown", this.handleMouseDown, { passive: false });
+    // Touch (Android): two-finger pan + pinch zoom, DAW-tablet convention.
+    // One finger stays with the existing pointer interactions (select, drag
+    // clips, seek), so the gestures only engage at two touches.
+    this.container.addEventListener("touchstart", this.handleTouchStart, { passive: false });
+    this.container.addEventListener("touchmove", this.handleTouchMove, { passive: false });
+    this.container.addEventListener("touchend", this.handleTouchEnd, { passive: false });
+    this.container.addEventListener("touchcancel", this.handleTouchEnd, { passive: false });
   }
 
   destroy() {
     this.container.removeEventListener("wheel", this.handleWheel);
     this.container.removeEventListener("mousedown", this.handleMouseDown);
+    this.container.removeEventListener("touchstart", this.handleTouchStart);
+    this.container.removeEventListener("touchmove", this.handleTouchMove);
+    this.container.removeEventListener("touchend", this.handleTouchEnd);
+    this.container.removeEventListener("touchcancel", this.handleTouchEnd);
     window.removeEventListener("mousemove", this.handleMouseMove);
     window.removeEventListener("mouseup", this.handleMouseUp);
 
@@ -238,6 +258,89 @@ export class InputManager {
     const factor = Math.exp((-cappedDelta * baseStep) / stepReference);
     return Math.max(0.01, currentZoomLevel * factor);
   }
+
+  private handleTouchStart = (event: TouchEvent) => {
+    if (event.touches.length !== 2) {
+      return;
+    }
+
+    // Two fingers own the gesture: stop the browser's scroll/zoom AND any
+    // in-flight one-finger clip interaction from fighting the camera.
+    event.preventDefault();
+    const state = this.options.getState();
+    const [a, b] = [event.touches[0], event.touches[1]];
+    this.touchGesture = {
+      originZoom: state.zoomLevel,
+      startDistance: Math.max(
+        1,
+        Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
+      ),
+      lastMidClientX: (a.clientX + b.clientX) / 2,
+      lastMidClientY: (a.clientY + b.clientY) / 2,
+    };
+  };
+
+  private handleTouchMove = (event: TouchEvent) => {
+    if (!this.touchGesture || event.touches.length !== 2) {
+      return;
+    }
+
+    event.preventDefault();
+    const state = this.options.getState();
+    const bounds = this.container.getBoundingClientRect();
+    const [a, b] = [event.touches[0], event.touches[1]];
+    const distance = Math.max(
+      1,
+      Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
+    );
+    const midClientX = (a.clientX + b.clientX) / 2;
+    const midClientY = (a.clientY + b.clientY) / 2;
+
+    // Pinch → horizontal zoom anchored at the finger midpoint. The target
+    // zoom derives from the gesture's ORIGIN zoom and the total distance
+    // ratio (not incremental steps), so wobbly fingers don't accumulate
+    // drift. A small dead zone keeps two-finger pans from micro-zooming.
+    let cameraAfterZoom = state.cameraX;
+    const scale = distance / this.touchGesture.startDistance;
+    if (state.canZoom && Math.abs(scale - 1) > 0.02) {
+      const anchorViewportX = clamp(
+        clientXToLocalX(midClientX, bounds, this.container.offsetWidth),
+        0,
+        this.container.offsetWidth || bounds.width,
+      );
+      const nextZoomLevel = Math.max(0.01, this.touchGesture.originZoom * scale);
+      const view = this.options.onPreviewZoom(nextZoomLevel, anchorViewportX);
+      if (view) {
+        cameraAfterZoom = view.cameraX;
+        this.scheduleZoomCommit(view);
+      }
+    }
+
+    // Two-finger drag → pan. Horizontal moves the camera; vertical scrolls
+    // the track list (when the host wired a vertical scroller).
+    const dragDeltaX = clientDeltaXToLocalDelta(
+      this.touchGesture.lastMidClientX - midClientX,
+      bounds,
+      this.container.offsetWidth,
+    );
+    const nextCameraX = this.options.onPreviewCameraX(cameraAfterZoom + dragDeltaX);
+    this.schedulePanCommit(nextCameraX);
+
+    const dragDeltaY = this.touchGesture.lastMidClientY - midClientY;
+    if (this.options.onScrollVertical && Math.abs(dragDeltaY) > 0.5) {
+      this.options.onScrollVertical(dragDeltaY);
+    }
+
+    this.touchGesture.lastMidClientX = midClientX;
+    this.touchGesture.lastMidClientY = midClientY;
+  };
+
+  private handleTouchEnd = (event: TouchEvent) => {
+    if (this.touchGesture && event.touches.length < 2) {
+      // Commits are already debounced by the pan/zoom schedulers.
+      this.touchGesture = null;
+    }
+  };
 
   private handleMouseDown = (event: MouseEvent) => {
     if (event.button !== 1) {

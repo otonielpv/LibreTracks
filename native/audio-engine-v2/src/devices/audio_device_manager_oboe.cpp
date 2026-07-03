@@ -184,7 +184,12 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
 
     oboe::AudioStreamBuilder builder;
     builder.setDirection(oboe::Direction::Output)
-        ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
+        // PerformanceMode::None (not LowLatency): LibreTracks is a playback
+        // app, and LowLatency streams get small internal buffer capacities
+        // that stuttered on a low-end phone (Oppo A5) the moment anything
+        // else breathed. The default mode allows a deeper buffer; jumps
+        // still feel instant next to Bungee's ~100 ms pitch latency.
+        ->setPerformanceMode(oboe::PerformanceMode::None)
         ->setSharingMode(oboe::SharingMode::Shared)
         ->setFormat(oboe::AudioFormat::Float)
         ->setFormatConversionAllowed(true)
@@ -211,12 +216,13 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         return Result<void>::err(impl_->last_error);
     }
 
-    // Double-buffer over the burst size: LibreTracks is a playback app, not a
-    // live instrument — a little extra headroom over the minimum kills the
-    // underruns that LowLatency + single burst invites on busy devices.
+    // Generous buffering over the burst size: LibreTracks is a playback app,
+    // not a live instrument — headroom over the minimum kills the underruns
+    // that tight buffers invite on busy low-end devices ("petardeo" reported
+    // on an Oppo A5 at burst*2). Oboe clamps to the stream's capacity.
     const int burst = impl_->stream->getFramesPerBurst();
     if (burst > 0)
-        impl_->stream->setBufferSizeInFrames(burst * 2);
+        impl_->stream->setBufferSizeInFrames(burst * 4);
 
     impl_->sample_rate = impl_->stream->getSampleRate();
     impl_->buffer_size = burst > 0

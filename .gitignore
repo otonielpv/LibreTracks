@@ -32,6 +32,16 @@ build*
 # ...but the FFmpeg build *scripts* are source, not build artifacts (the broad build* above would catch them).
 !scripts/build-ffmpeg-universal.sh
 !scripts/build-ffmpeg-linux.sh
+# ...and the Android gradle project files are source too. Without these
+# negations a fresh clone can't build the Android app at all (the gradle
+# build scripts were silently swallowed by `build*`). gen/android/.gitignore
+# still excludes the actual build outputs (app/build, .gradle, buildSrc/build).
+!apps/desktop/src-tauri/gen/android/build.gradle.kts
+!apps/desktop/src-tauri/gen/android/app/build.gradle.kts
+!apps/desktop/src-tauri/gen/android/app/tauri.build.gradle.kts
+!apps/desktop/src-tauri/gen/android/buildSrc/
+!apps/desktop/src-tauri/gen/android/buildSrc/build.gradle.kts
+apps/desktop/src-tauri/gen/android/buildSrc/build/
 bench-out*
 .graphify_detect_fast.json
 .graphify_detect.json

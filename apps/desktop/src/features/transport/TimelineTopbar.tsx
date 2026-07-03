@@ -127,6 +127,10 @@ export function TimelineTopbar({
           <span className="lt-brand-title">LIBRETRACKS</span>
         </div>
 
+        {/* Android: no FILE menu here — its two mobile entries (Sessions…,
+            Save) live in the side nav rail instead, so the transport strip
+            gets the full width on narrow phone screens. */}
+        {!isAndroidApp ? (
         <nav className="lt-menu-bar" aria-label={t("timelineTopbar.mainMenu")} ref={menuBarRef}>
           <div className={`lt-top-menu ${openTopMenu === "file" ? "is-open" : ""}`}>
             <button
@@ -305,6 +309,7 @@ export function TimelineTopbar({
             ) : null}
           </div>
         </nav>
+        ) : null}
 
         <ResourceMeter />
       </div>

@@ -7055,8 +7055,15 @@ textarea {
   display: none;
 }
 
+.lt-android .lt-bpm-control {
+  height: 1.7rem;
+  gap: 0.25rem;
+  padding: 0 0.25rem;
+}
+
 .lt-android .lt-bpm-control input {
-  width: 3.4rem;
+  width: 2.9rem;
+  height: 1.2rem;
 }
 
 /* "BASE BPM" / current-signature echoes duplicate the readout — drop them. */
@@ -7103,6 +7110,48 @@ textarea {
    right, and the highlighted play/stop buttons already show the state. */
 .lt-android .lt-transport-readout .transport-pill {
   display: none;
+}
+
+/* The BAR + TIMECODE readout must survive narrow phones (a 720p panel is
+   ~900 CSS px wide in landscape): it never shrinks, and everything to its
+   left compresses instead. */
+.lt-android .lt-transport-readout {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1040px) {
+  /* Field labels go — the values identify themselves ("120" next to TAP,
+     "4/4"), and the readout keeps its BAR/TIMECODE captions. */
+  .lt-android .lt-bpm-control > span {
+    display: none;
+  }
+
+  .lt-android .lt-topbar {
+    padding: 0.2rem 0.4rem 0.25rem;
+    gap: 0.35rem;
+  }
+
+  .lt-android .lt-topbar-main-row,
+  .lt-android .lt-transport {
+    gap: 0.3rem;
+  }
+
+  .lt-android .lt-transport-buttons button {
+    padding: 0.3rem 0.4rem;
+  }
+
+  .lt-android .lt-tap-tempo-button {
+    padding: 0.3rem 0.4rem;
+  }
+
+  .lt-android .lt-readout-block strong {
+    font-size: 0.85rem;
+    min-width: 6ch;
+  }
+
+  .lt-android .lt-readout-block span {
+    font-size: 8px;
+  }
 }
 
 /* ── Side nav: icon rail ─────────────────────────────────────────────── */
@@ -7220,6 +7269,10 @@ textarea {
    opens a dead black band between the ruler and the first track. */
 .lt-android .lt-timeline-canvas-pane {
   grid-template-rows: 94px minmax(0, 1fr);
+  /* One finger may scroll the track list vertically (browser-native);
+     horizontal pan and zoom belong to the two-finger gestures in
+     Renderer/InputManager.ts, so the browser must not claim them. */
+  touch-action: pan-y;
 }
 
 /* ── Library panel: narrower on a phone ──────────────────────────────── */
