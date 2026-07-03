@@ -161,11 +161,19 @@ cmake --build build-android-x86_64
   FLAG_KEEP_SCREEN_ON para no dormir el dispositivo en directo.
 - Verificado en emulador: engine inicializa (thread pools según hardware),
   carga sesiones, decodifica WAVs y genera `.ltpeaks`.
-- **Bug conocido (milestone 3)**: hay DOS raíces de caché en el dispositivo
-  (`cache/LibreTracks/waveform-cache` y `cache/waveform-cache`): Rust y C++
-  resuelven la ruta en momentos distintos y el lector no encuentra los picos
-  recién generados → los clips se quedan con placeholder. La generación en
-  sí funciona.
+- **Waveforms: RESUELTO (2026-07-03)** — el "bug de la doble raíz de caché"
+  era un artefacto de la era stub: sin engine enlazado,
+  `lt_audio_engine_source_cache_dir()` (stub) devuelve "" y
+  `decoding_cache_root()` de Rust caía al fallback `temp_dir()/LibreTracks`
+  (= `cache/LibreTracks/` en Android, TMPDIR es el cache dir de la app),
+  mientras builds posteriores con engine usaban `cache/`. Con el engine
+  enlazado ambos lados resuelven `cache/` siempre; verificado por CDP que
+  `get_song_view` embebe los summaries y el canvas los pinta.
+  `cache/LibreTracks/` que quede en un dispositivo es residuo inofensivo.
+  (Moraleja de la sesión de diagnóstico: los archivos de prueba sintéticos
+  —tonos con decay— pintan waveforms EN FORMA DE TRIÁNGULOS que se
+  confunden con un placeholder; el placeholder real es un rect plano con
+  texto "ANALYZING WAVEFORM…".)
 
 ## Audio validado en hardware real (Oppo A5, gama baja 2020)
 
