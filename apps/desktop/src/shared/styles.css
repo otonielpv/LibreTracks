@@ -7468,3 +7468,14 @@ textarea {
 .lt-android .lt-empty-state-card h1 {
   font-size: 1.7rem;
 }
+
+/* ── Sticky :hover on touch (M/S/T toggles) ──────────────────────────── */
+/* On a touchscreen the tapped element keeps :hover forever (no pointer to
+   move away), and the M/S/T hover recipe is IDENTICAL to .is-active — so
+   after deactivating, the button stayed painted green as if still on
+   (worst on T, whose only feedback is that color). Hover feedback is
+   meaningless on touch: neutralize it and let only .is-active paint. */
+.lt-android .lt-track-toggle-group button:hover:not(.is-active) {
+  color: #bacac5;
+  background: #0e0e0e;
+}
