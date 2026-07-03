@@ -11191,6 +11191,7 @@ export function TransportPanelContent() {
                             });
 
                             const startClientX = event.clientX;
+                            const pressStartedAt = Date.now();
                             const pointerScaleX = getElementScaleX(
                               event.currentTarget.getBoundingClientRect(),
                               event.currentTarget.offsetWidth,
@@ -11319,6 +11320,19 @@ export function TransportPanelContent() {
                               );
                               window.removeEventListener("mouseup", onMouseUp);
                               stopRangeAutoScroll();
+
+                              // Android long-press: the context menu opened
+                              // DURING this very press (mousedown fires when
+                              // the finger lands, the menu ~600 ms later).
+                              // Releasing the finger must neither seek away
+                              // ("cursor moved") nor disturb the fresh menu.
+                              if (
+                                isAndroidApp &&
+                                contextMenuOpenedAtRef.current >= pressStartedAt
+                              ) {
+                                setSelectedTimelineRange(null);
+                                return;
+                              }
 
                               if (!hasMoved) {
                                 setSelectedTimelineRange(null);
