@@ -1,8 +1,10 @@
 package com.libretracks.desktop
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -17,6 +19,19 @@ class MainActivity : TauriActivity() {
     // The show must go on: never let the device sleep mid-performance while
     // LibreTracks is in the foreground.
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+    // Foreground media service + audio focus so playback survives the screen
+    // turning off or the user switching apps. Lives for the whole app run;
+    // see AudioPlaybackService for the rationale.
+    ContextCompat.startForegroundService(
+      this,
+      Intent(this, AudioPlaybackService::class.java),
+    )
+  }
+
+  override fun onDestroy() {
+    stopService(Intent(this, AudioPlaybackService::class.java))
+    super.onDestroy()
   }
 
   // Some OEM skins (ColorOS on the Oppo A5 test device) drop the immersive

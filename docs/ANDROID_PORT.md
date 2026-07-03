@@ -178,6 +178,18 @@ cmake --build build-android-x86_64
   Verificado en emulador x86_64: import m4a (AAC) + ogg (Vorbis) desde el
   picker → decode por códec del sistema → caché PCM → playback con hits y
   cero starvation.
+- **Foreground service + audio focus (2026-07-03)**: `AudioPlaybackService`
+  (tipo `mediaPlayback`) arranca con MainActivity y vive toda la sesión de
+  app — sin él, Android congela el proceso cacheado al apagar pantalla o
+  cambiar de app y el AAudio muere a mitad de canción. Audio focus GAIN
+  pedido una vez (pausa Spotify y cía al arrancar); en PÉRDIDA de focus NO
+  se pausa nada a propósito (en directo, auto-pausarse por una llamada es
+  peor que dejar que el SO nos atenúe). Verificado en emulador: el diag log
+  sigue creciendo con `mWakefulness=Asleep` (pantalla apagada) y con la app
+  en background (procState=FGS). Pendientes: pedir POST_NOTIFICATIONS en
+  runtime (API 33+, sin ella la notificación fija puede quedar oculta,
+  el servicio corre igual) y, a futuro, atar la notificación al estado real
+  del transporte vía plugin Tauri.
 - **Pantalla completa (MainActivity)**: con edge-to-edge la barra de estado
   robaba TODOS los toques de la franja superior (menú FILE y transporte
   intocables). Modo inmersivo (swipe revela las barras) +
