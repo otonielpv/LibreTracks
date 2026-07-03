@@ -151,6 +151,33 @@ cmake --build build-android-x86_64
   recién generados → los clips se quedan con placeholder. La generación en
   sí funciona.
 
+## Audio validado en hardware real (Oppo A5, gama baja 2020)
+
+Playback limpio confirmado con multitracks reales de estudio. La cadena de
+diagnóstico que llevó ahí (documentada por si reaparece):
+
+1. Underruns → buffer AAudio: pedir `setBufferCapacityInFrames` ANTES de
+   abrir (la capacidad por defecto era 2 bursts y recortaba en silencio el
+   `setBufferSizeInFrames` posterior).
+2. Distorsión en picos con mezcla caliente → AAudio no tiene limitador
+   (Windows shared-mode sí): soft-clip (rodilla -3 dBFS, tanh) en la
+   frontera Oboe.
+3. **Crackles horneados en la caché (el "petardeo")**: masters calientes
+   resampleados 44.1→48 hacen overshoot de ±1.0 (ringing normal), y
+   libsndfile SIN `SFC_SET_CLIPPING` los ENVUELVE al escribir la caché
+   int16 (-1.002 → +32694) → chasquidos a fondo de escala en los
+   transitorios, grabados en disco. Fix: clipping activado en ambos
+   escritores de caché. **Latente también en desktop.**
+   Verificación: extraer `cache/source-cache/*.wav` del dispositivo
+   (release lleva `isDebuggable=true` de momento) y analizar deltas
+   muestra a muestra.
+4. Telemetría: Android arranca con `LIBRETRACKS_AUDIO_DIAG=1` (no hay
+   shell para setearlo); volcado cada 500 ms en `lt_audio_debug.log`.
+
+Bugs abiertos anotados: source mudo tras cambiar SR hasta reiniciar
+(carrera de re-preparación, pariente del bug de desktop de cambio de
+dispositivo).
+
 ## Roadmap (siguiente trabajo)
 
 1. **Milestone 2 — backend Oboe**: dispositivo de audio real detrás de la
