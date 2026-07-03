@@ -213,6 +213,8 @@ pub fn run() {
             commands::project::pick_library_files,
             commands::project::import_audio_files_from_bytes,
             commands::project::import_audio_files_from_paths,
+            commands::project::stage_imported_audio_chunk,
+            commands::project::import_staged_audio_files,
             commands::project::export_region_as_package,
             commands::project::export_region_rendered_audio,
             commands::project::import_song_package,

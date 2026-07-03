@@ -7896,6 +7896,108 @@ pub fn import_audio_files_from_bytes_to_library(
     import_result
 }
 
+/// Android staged-import variant: like the bytes import above — the asset is
+/// moved INTO the session's audio/ folder and registered by RELATIVE path —
+/// but the source is a staged temp file (see `stage_imported_audio_chunk`)
+/// that gets consumed (rename, or copy+delete across filesystems).
+///
+/// This must NOT go through `import_audio_files_from_paths_to_library`: that
+/// one registers the ABSOLUTE source path (desktop assets reference the
+/// user's original files), and staged temp files are ephemeral — the next
+/// import batch cleans the staging area, which surfaced phantom
+/// "missing file" warnings for assets that played back fine (the clip's
+/// session copy existed; the library provenance path didn't).
+pub fn import_staged_audio_files_to_library(
+    song_dir: &Path,
+    song: Option<&Song>,
+    files: &[AudioFilePathImportPayload],
+) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    if files.is_empty() {
+        return Err(DesktopError::AudioCommand(
+            "at least one audio file is required".into(),
+        ));
+    }
+
+    let audio_dir = song_dir.join("audio");
+    fs::create_dir_all(&audio_dir)?;
+
+    let mut written_paths = Vec::with_capacity(files.len());
+    let import_result = (|| {
+        let mut imported_assets = Vec::with_capacity(files.len());
+        let mut reserved_paths = collect_library_file_paths(song_dir, song)?
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        for file in files {
+            let source_path = PathBuf::from(file.source_path.trim());
+            if !source_path.is_file() {
+                return Err(DesktopError::AudioCommand(format!(
+                    "staged import source not found: {}",
+                    source_path.display()
+                )));
+            }
+
+            let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
+            let relative_path =
+                allocate_library_audio_path(&reserved_paths, &sanitized_file_name);
+            reserved_paths.insert(relative_path.clone());
+
+            let absolute_path = resolve_audio_file_path(song_dir, &relative_path);
+            if fs::rename(&source_path, &absolute_path).is_err() {
+                fs::copy(&source_path, &absolute_path)?;
+                let _ = fs::remove_file(&source_path);
+            }
+            written_paths.push(absolute_path.clone());
+            // Best-effort cleanup of the per-file staging folder.
+            if let Some(parent) = source_path.parent() {
+                let _ = fs::remove_dir(parent);
+            }
+
+            let metadata = read_audio_metadata(&absolute_path)?;
+            let file_name = Path::new(&relative_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&relative_path)
+                .to_string();
+
+            imported_assets.push(LibraryAssetSummary {
+                file_name,
+                file_path: relative_path,
+                duration_seconds: metadata.duration_seconds,
+                is_missing: false,
+                folder_path: None,
+            });
+        }
+
+        let mut library_assets = list_library_assets(song_dir, song)?;
+        for asset in &imported_assets {
+            if let Some(existing_asset) = library_assets
+                .iter_mut()
+                .find(|existing_asset| existing_asset.file_path == asset.file_path)
+            {
+                *existing_asset = asset.clone();
+            } else {
+                library_assets.push(asset.clone());
+            }
+        }
+
+        library_assets.sort_by(|left, right| {
+            left.folder_path
+                .cmp(&right.folder_path)
+                .then_with(|| left.file_name.cmp(&right.file_name))
+        });
+        write_library_manifest_assets(song_dir, &library_assets)?;
+        Ok(imported_assets)
+    })();
+
+    if import_result.is_err() {
+        for path in written_paths {
+            let _ = fs::remove_file(path);
+        }
+    }
+    import_result
+}
+
 pub fn import_audio_files_from_paths_to_library(
     song_dir: &Path,
     song: Option<&Song>,

@@ -85,6 +85,7 @@ import {
   pickLibraryFiles,
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
+  importStagedAudioFiles,
   importSongPackageFromPathWithProgress,
   importExternalProjectFromPathWithProgress,
   isAndroidApp,
@@ -218,7 +219,7 @@ import {
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { MobileLanding } from "./MobileLanding";
-import { pickFilesViaWebView } from "./mobileFilePicker";
+import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
@@ -9753,18 +9754,23 @@ export function TransportPanelContent() {
       setStatus(t("transport.status.libraryImportStarting"));
       await nextPaint();
 
-      let payloads: Array<{ fileName: string; bytes: Uint8Array }> = [];
+      // Stage sequentially: one in-flight slice at a time keeps the WebView
+      // renderer's heap flat — reading whole files into Uint8Arrays here
+      // OOM-crashed the renderer on low-RAM phones.
+      const stagedPayloads: Array<{ fileName: string; sourcePath: string }> =
+        [];
       await runAudioImportPipeline({
         pendingIds: pendingImports.map((item) => item.id),
         beforeImport: async () => {
-          payloads = await Promise.all(
-            files.map(async (file) => ({
+          for (let index = 0; index < files.length; index += 1) {
+            const file = files[index];
+            stagedPayloads.push({
               fileName: file.name,
-              bytes: new Uint8Array(await file.arrayBuffer()),
-            })),
-          );
+              sourcePath: await stageFileForImport(file, index === 0),
+            });
+          }
         },
-        importFn: () => importAudioFilesFromBytes(payloads),
+        importFn: () => importStagedAudioFiles(stagedPayloads),
         onImported: async (importedAssets) => {
           if (importedAssets.length === 0) {
             return;
@@ -10653,6 +10659,9 @@ export function TransportPanelContent() {
             onLibraryToggle={() => handleSidebarTabToggle("library")}
             onRemoteClick={handleRemoteButtonClick}
             onSettingsClick={handleSettingsButtonClick}
+            onSessionsClick={() => setIsMobileSessionsModalOpen(true)}
+            onSaveClick={handleSaveProjectClick}
+            canSave={canPersistProject}
           />
 
           <div className="lt-workspace">

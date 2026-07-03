@@ -1079,6 +1079,120 @@ pub async fn import_audio_files_from_paths(
     Ok(assets)
 }
 
+/// Android: consume files staged by `stage_imported_audio_chunk` — they are
+/// MOVED into the session's audio/ folder and registered by relative path
+/// (bytes-import semantics), because the staged temp files are ephemeral and
+/// registering their absolute path (the desktop paths-import behaviour)
+/// produced phantom "missing file" warnings once the staging area was
+/// cleaned by the next import batch.
+#[tauri::command]
+pub async fn import_staged_audio_files(
+    files: Vec<AudioFilePathImportPayload>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let (song_dir, current_song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?;
+        let current_song = session.engine.song().cloned();
+        (song_dir, current_song)
+    };
+
+    let song_dir_for_prepare = song_dir.clone();
+    let assets = tauri::async_runtime::spawn_blocking(move || {
+        crate::state::import_staged_audio_files_to_library(
+            &song_dir,
+            current_song.as_ref(),
+            &files,
+        )
+    })
+    .await
+    .map_err(|error| crate::error_log::log_command_err("import_staged_audio_files", error))?
+    .map_err(|error| crate::error_log::log_command_err("import_staged_audio_files", error))?;
+
+    prepare_library_assets(&state, &song_dir_for_prepare, &assets);
+
+    Ok(assets)
+}
+
+/// Android import staging. The WebView file chooser hands us `File` objects
+/// (no filesystem path — Android files live behind content:// URIs), and the
+/// old path read the WHOLE file into a `Uint8Array` before invoking: on
+/// low-RAM phones the WebView renderer process OOM-crashed importing normal-
+/// sized WAVs (seen on an Oppo A5: "Render process crash" in
+/// libwebviewchromium). Instead the frontend streams the file in small
+/// base64 slices; each call appends to a temp file under the app cache, and
+/// the last call returns the staged path, which then goes through the normal
+/// paths-based import pipeline.
+///
+/// Base64-in-JSON rather than a raw invoke body because Android's WebView
+/// cannot expose POST bodies to the intercepted custom scheme — Tauri routes
+/// IPC through the string bridge there, so `tauri::ipc::Request` never sees
+/// `InvokeBody::Raw` on Android (verified: the raw variant failed with
+/// "expected a raw byte body" while desktop worked).
+#[tauri::command]
+pub fn stage_imported_audio_chunk(
+    app: AppHandle,
+    file_id: String,
+    file_name: String,
+    chunk_base64: String,
+    is_last: bool,
+    batch_reset: bool,
+) -> Result<Option<String>, String> {
+    let file_id: String = file_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(64)
+        .collect();
+    if file_id.is_empty() {
+        return Err("stage_imported_audio_chunk: empty file id".to_string());
+    }
+    // Each file stages under its own uuid folder KEEPING the original file
+    // name: the library asset and the copy in the session's audio/ take
+    // their names from the source path's basename, so staging as
+    // "<uuid>.wav" surfaced uuid-named assets in the UI.
+    let file_name: String = file_name
+        .chars()
+        .filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .take(128)
+        .collect();
+    let file_name = file_name.trim().trim_matches('.').to_string();
+    if file_name.is_empty() {
+        return Err("stage_imported_audio_chunk: empty file name".to_string());
+    }
+
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(chunk_base64.as_bytes())
+        .map_err(|error| format!("stage_imported_audio_chunk: bad base64: {error}"))?;
+
+    let staging_root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| error.to_string())?
+        .join("import-staging");
+    if batch_reset {
+        let _ = std::fs::remove_dir_all(&staging_root);
+    }
+    let staging_dir = staging_root.join(&file_id);
+    std::fs::create_dir_all(&staging_dir).map_err(|error| error.to_string())?;
+
+    let staged_path = staging_dir.join(file_name);
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&staged_path)
+        .map_err(|error| error.to_string())?;
+    std::io::Write::write_all(&mut file, &bytes).map_err(|error| error.to_string())?;
+
+    Ok(is_last.then(|| staged_path.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 pub async fn export_region_as_package(
     region_id: String,

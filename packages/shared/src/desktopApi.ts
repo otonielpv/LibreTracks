@@ -620,6 +620,17 @@ export async function importAudioFilesFromPaths(
   return invokeCommand<LibraryAssetSummary[]>("import_audio_files_from_paths", { files });
 }
 
+/**
+ * Android: consume files staged via stage_imported_audio_chunk. They are
+ * MOVED into the session's audio/ folder (relative-path registration, like
+ * the bytes import) instead of referencing the ephemeral staged path.
+ */
+export async function importStagedAudioFiles(
+  files: AudioFilePathImportPayload[],
+): Promise<LibraryAssetSummary[]> {
+  return invokeCommand<LibraryAssetSummary[]>("import_staged_audio_files", { files });
+}
+
 export async function exportRegionAsPackage(
   regionId: string,
   includeAudio = false,
