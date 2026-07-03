@@ -138,7 +138,23 @@ cmake --build build-android-x86_64
   tempo marker en mitad de la canción se aplica en vivo.
   Bungee sigue OFF: upstream no publica binario Android; pitch/warp =
   passthrough hasta compilarlo de fuente con clang. Decoders: libsndfile +
-  dr_mp3/dr_flac (sin FFmpeg ni vcpkg).
+  dr_mp3/dr_flac (sin FFmpeg ni vcpkg) + **MediaCodec del sistema** para
+  todo lo demás (ver abajo).
+- **Formatos no-WAV (MediaCodec NDK)**: `mediacodec_decoder.cpp` implementa
+  `AudioDecoder` sobre `AMediaExtractor` + `AMediaCodec` (link `mediandk`,
+  solo `if(ANDROID)` en `src/sources/CMakeLists.txt`) — el equivalente móvil
+  de la ruta FFmpeg de escritorio: AAC/M4A, OGG/Vorbis, Opus, 3GP… se
+  decodifican con los códecs del SO y se cachean como PCM (estilo Ableton),
+  cero bytes extra de binario. El dispatch de `make_decoder` en Android
+  manda a MediaCodec todo lo que no sea WAV/AIFF (libsndfile) ni MP3/FLAC
+  (dr_libs). GOTCHA que costó una tarde: `AMediaExtractor_setDataSource(path)`
+  FALLA en silencio con rutas privadas de la app (pasa por el resolver de
+  media HTTP/content) — hay que abrir el fd uno mismo y usar
+  `AMediaExtractor_setDataSourceFd` (el extractor lo dupea). Los fallos de
+  open se registran como `[LT_MEDIACODEC]` en `lt_audio_debug.log`.
+  Verificado en emulador x86_64: import m4a (AAC) + ogg (Vorbis) desde el
+  picker → decode por códec del sistema → caché PCM → playback con hits y
+  cero starvation.
 - **Pantalla completa (MainActivity)**: con edge-to-edge la barra de estado
   robaba TODOS los toques de la franja superior (menú FILE y transporte
   intocables). Modo inmersivo (swipe revela las barras) +
