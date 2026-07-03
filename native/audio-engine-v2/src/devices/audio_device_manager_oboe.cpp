@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -35,6 +36,22 @@ namespace lt {
 namespace {
 
 constexpr int kOutputChannels = 2;
+
+// Soft clip at the device boundary. Windows' shared-mode audio engine runs a
+// limiter after the app, so hot master sums (two full-scale tracks at 100%)
+// never reach the DAC above full scale on desktop — but AAudio has no such
+// stage and hard-clips anything past ±1.0, which is exactly the harsh
+// crackle reported on peaks. Transparent below the knee (-3 dBFS); above it,
+// a tanh bend that never exceeds ±1. Audio-thread safe (pure math).
+inline float soft_clip(float sample) noexcept {
+    constexpr float kKnee = 0.7f;
+    const float magnitude = std::fabs(sample);
+    if (magnitude <= kKnee)
+        return sample;
+    const float bent =
+        kKnee + (1.0f - kKnee) * std::tanh((magnitude - kKnee) / (1.0f - kKnee));
+    return sample < 0.0f ? -bent : bent;
+}
 // Planar scratch capacity per channel. AAudio bursts are typically 96-1920
 // frames; anything larger is handled by chunking the render loop.
 constexpr int kMaxRenderChunkFrames = 8192;
@@ -94,9 +111,9 @@ public:
             for (int frame = 0; frame < chunk; ++frame) {
                 const size_t base =
                     static_cast<size_t>(offset + frame) * channels;
-                out[base] = planar_[0][frame];
+                out[base] = soft_clip(planar_[0][frame]);
                 if (channels > 1)
-                    out[base + 1] = planar_[1][frame];
+                    out[base + 1] = soft_clip(planar_[1][frame]);
             }
             offset += chunk;
         }
@@ -190,6 +207,11 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         // else breathed. The default mode allows a deeper buffer; jumps
         // still feel instant next to Bungee's ~100 ms pitch latency.
         ->setPerformanceMode(oboe::PerformanceMode::None)
+        // Capacity must be requested BEFORE opening: the default came out as
+        // just 2 bursts (~40 ms) on the Oppo A5 test device, so the buffer
+        // enlargement below was silently clamped and playback underran
+        // whenever the CPU breathed. ~170 ms of capacity costs 64 KB.
+        ->setBufferCapacityInFrames(8192)
         ->setSharingMode(oboe::SharingMode::Shared)
         ->setFormat(oboe::AudioFormat::Float)
         ->setFormatConversionAllowed(true)
@@ -250,9 +272,10 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     }
 
     lt_debug_log("[LT_AUDIO_DIAG] oboe stream open sr=%d burst=%d buffer=%d "
-                 "latency_samples=%d api=%s\n",
+                 "capacity=%d latency_samples=%d api=%s\n",
                  impl_->sample_rate, burst,
                  impl_->stream->getBufferSizeInFrames(),
+                 impl_->stream->getBufferCapacityInFrames(),
                  impl_->output_latency_samples,
                  impl_->stream->getAudioApi() == oboe::AudioApi::AAudio
                      ? "AAudio" : "OpenSLES");

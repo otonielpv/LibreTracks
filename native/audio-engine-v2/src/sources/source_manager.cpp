@@ -776,6 +776,12 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         SNDFILE* sf = lt_sf_open(cache_file, SFM_WRITE, &info);
         if (!sf)
             return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
+        // CRITICAL for the int16 cache: without clipping enabled, libsndfile
+        // WRAPS float samples beyond ±1.0 (e.g. -1.002 → +32694), so the
+        // resampler's Gibbs overshoot on hot masters turns transients into
+        // full-scale sign-flip crackles baked into the cache. Found on a
+        // full-scale acoustic-guitar stem resampled 44.1→48 k.
+        sf_command(sf, SFC_SET_CLIPPING, nullptr, SF_TRUE);
         sf_count_t written = 0;
         constexpr sf_count_t kWriteChunkFrames = 65536;
         while (written < static_cast<sf_count_t>(duration_frames)) {
@@ -925,6 +931,10 @@ Result<void> SourceManager::decode_and_store_streaming(
     SNDFILE* sf = lt_sf_open(cache_file, SFM_WRITE, &info);
     if (!sf)
         return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
+    // See the sibling writer above: clipping must be ON or out-of-range floats
+    // (resampler overshoot on hot masters) WRAP in the int16 cache as
+    // full-scale crackles.
+    sf_command(sf, SFC_SET_CLIPPING, nullptr, SF_TRUE);
 
     const int block_frames = block_cache_.block_frames();
     const int eager_blocks = eager_source_blocks_from_env();

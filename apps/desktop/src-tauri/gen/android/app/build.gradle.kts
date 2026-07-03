@@ -49,6 +49,11 @@ android {
             // which simply doesn't fit on storage-constrained phones.
             // TODO: replace with a real upload keystore before distributing.
             signingConfig = signingConfigs.getByName("debug")
+            // Diagnostics on test devices: keeps `adb run-as` working so the
+            // engine's lt_audio_debug.log ([LT_STARVATION], callback gaps) is
+            // readable from optimized builds while we tune low-end phones.
+            // TODO: drop together with the debug signing before distributing.
+            isDebuggable = true
         }
     }
     kotlinOptions {

@@ -101,6 +101,16 @@ pub fn run() {
                 }
             }
 
+            // Android field diagnostics: there's no shell environment to set
+            // LIBRETRACKS_AUDIO_DIAG on a phone, and we're actively tuning
+            // playback on low-end devices. ~2 log lines/second while playing.
+            // TODO: gate behind a Settings toggle once Android playback is
+            // considered stable.
+            #[cfg(target_os = "android")]
+            if std::env::var_os("LIBRETRACKS_AUDIO_DIAG").is_none() {
+                std::env::set_var("LIBRETRACKS_AUDIO_DIAG", "1");
+            }
+
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
                 eprintln!("[libretracks-settings] failed to load settings: {error}");
                 settings::AppSettings::default()
