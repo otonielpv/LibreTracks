@@ -248,10 +248,6 @@ type TimelineToolbarProps = {
   compactMixerFilterAvailable: boolean;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
-  /** Android: touch can't Ctrl+wheel over the track headers, so the toolbar
-   * exposes explicit track-density buttons instead. */
-  onTrackHeightDecrease: () => void;
-  onTrackHeightIncrease: () => void;
 };
 
 type ControlGroupProps = {
@@ -357,8 +353,6 @@ export function TimelineToolbar({
   compactMixerFilterAvailable,
   midiLearnMode,
   onMidiLearnTarget,
-  onTrackHeightDecrease,
-  onTrackHeightIncrease,
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
   const learnModeActive = midiLearnMode !== null;
@@ -573,32 +567,6 @@ export function TimelineToolbar({
             </button>
           ) : null}
 
-          {isAndroidApp && viewMode === "daw" ? (
-            <>
-              <button
-                type="button"
-                className="lt-icon-button"
-                aria-label={t("timelineToolbar.trackHeightDecrease", {
-                  defaultValue: "Pistas más bajas",
-                })}
-                disabled={controlsDisabled}
-                onClick={onTrackHeightDecrease}
-              >
-                <span className="material-symbols-outlined">unfold_less</span>
-              </button>
-              <button
-                type="button"
-                className="lt-icon-button"
-                aria-label={t("timelineToolbar.trackHeightIncrease", {
-                  defaultValue: "Pistas más altas",
-                })}
-                disabled={controlsDisabled}
-                onClick={onTrackHeightIncrease}
-              >
-                <span className="material-symbols-outlined">unfold_more</span>
-              </button>
-            </>
-          ) : null}
 
           <ControlGroup
             title={t("timelineToolbar.vampModeLabel")}

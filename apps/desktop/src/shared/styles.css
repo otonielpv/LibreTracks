@@ -7288,6 +7288,99 @@ textarea {
   font-size: 9px;
 }
 
+/* ── Ruler-header touch controls (Android) ───────────────────────────── */
+/* The 94px header cell above the track headers is mostly empty on Android;
+   it hosts the track-density buttons and the seek lock. */
+.lt-android .lt-ruler-header {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0.35rem 0.5rem 0.4rem;
+}
+
+.lt-android .lt-ruler-header-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.lt-android .lt-ruler-header-actions .lt-icon-button {
+  min-width: 2.2rem;
+  min-height: 1.9rem;
+}
+
+/* ── Marker flags: tight touch hit zones (Android) ───────────────────── */
+/* The desktop hotspot is 68px wide with overlap headroom; on touch, two
+   markers a beat apart end up under ONE hotspot and only the top one is
+   tappable. Narrow zones separate them (long pill tails lose tappability —
+   acceptable trade). */
+.lt-android .lt-marker-hotspot {
+  width: 2.6rem;
+  margin-left: -0.35rem;
+}
+
+/* ── Compact-view mixer toggle (Android) ─────────────────────────────── */
+.lt-android .lt-compact-mixer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 2rem;
+  border: 0;
+  border-top: 1px solid rgb(87 241 219 / 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent), #151515;
+  color: #bacac5;
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── Library: compact header + room for the file name (Android) ──────── */
+.lt-android .lt-library-panel-header {
+  padding: 0.4rem 0.6rem 0.35rem;
+  gap: 0.3rem;
+}
+
+.lt-android .lt-library-panel-header h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* "SESSION ASSETS" eyebrow: redundant next to the Library title. */
+.lt-android .lt-library-panel-eyebrow {
+  display: none;
+}
+
+.lt-android .lt-library-panel-actions button {
+  padding: 0.35rem 0.5rem;
+  font-size: 9px;
+}
+
+/* Counters + "delete removes selection" hint: two rows of chrome for
+   diagnostics-grade info; keep one thin line. */
+.lt-android .lt-library-panel-meta {
+  padding: 0.15rem 0.6rem;
+  font-size: 8px;
+}
+
+.lt-android .lt-library-panel-meta span:last-child {
+  display: none;
+}
+
+/* File names truncated at ~8 chars were unidentifiable: smaller duration,
+   tighter paddings, and the name gets every remaining pixel. */
+.lt-android .lt-library-asset-copy {
+  font-size: 0.72rem;
+}
+
+.lt-android .lt-library-asset-duration {
+  font-size: 8px;
+}
+
+.lt-android .lt-library-folder-summary {
+  padding: 0.3rem 0.45rem;
+}
+
 /* ── Library selection action bar (Android) ──────────────────────────── */
 /* Appears at the bottom of the library panel while assets are selected;
    replaces the desktop pointer-drag-to-timeline, which touch can't do. */

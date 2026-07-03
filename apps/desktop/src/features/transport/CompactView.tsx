@@ -23,6 +23,7 @@ import {
   CompactMixer,
   type CompactMixerHandlers,
 } from "./CompactMixer";
+import { isAndroidApp } from "./desktopApi";
 import { LIBRARY_ASSET_DRAG_MIME } from "./dragDrop";
 import { clientToZoomedCoords } from "../../shared/uiZoom";
 import {
@@ -265,6 +266,36 @@ function CompactViewComponent({
     return ids;
   }, [regions, playheadSeconds, clipsByRegion]);
 
+  // Android: mixer collapsed by default on narrow (phone) screens, visible on
+  // tablets; the user's explicit choice persists. Desktop: always visible.
+  const [isMixerVisible, setIsMixerVisible] = useState(() => {
+    if (!isAndroidApp) return true;
+    try {
+      const saved = window.localStorage.getItem(
+        "libretracks.compact.mixerVisible",
+      );
+      if (saved === "1") return true;
+      if (saved === "0") return false;
+    } catch {
+      // Private mode → fall through to the width heuristic.
+    }
+    return window.innerWidth >= 1000;
+  });
+  const toggleMixerVisible = () => {
+    setIsMixerVisible((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(
+          "libretracks.compact.mixerVisible",
+          next ? "1" : "0",
+        );
+      } catch {
+        // Best effort.
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="lt-compact-view">
       {/* Top zone: songs + master + clip stacks. Horizontal scroll when
@@ -351,19 +382,38 @@ function CompactViewComponent({
         </div>
       </div>
 
+      {/* Android: the mixer band eats most of a phone's landscape height, so
+          it collapses behind a slim toggle. Wide screens (tablets) default to
+          visible; the choice persists. Desktop keeps the mixer always on. */}
+      {isAndroidApp ? (
+        <button
+          type="button"
+          className="lt-compact-mixer-toggle"
+          aria-expanded={isMixerVisible}
+          onClick={toggleMixerVisible}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {isMixerVisible ? "expand_more" : "expand_less"}
+          </span>
+          {isMixerVisible ? "Ocultar mixer" : "Mixer"}
+        </button>
+      ) : null}
+
       {/* Bottom zone: global mixer over all tracks. Reusable so the DAW
           view can mount it later without forking the component. */}
-      <CompactMixer
-        tracks={tracks}
-        audioRoutingOptions={audioRoutingOptions}
-        handlers={mixerHandlers}
-        onTrackContextMenu={onTrackContextMenu}
-        selectedTrackIds={selectedTrackIds}
-        onTrackSelect={onTrackSelect}
-        onTrackDragStart={onTrackDragStart}
-        activeSongTrackIds={activeSongTrackIds}
-        filterActiveSong={compactMixerFilterActiveSong}
-      />
+      {isMixerVisible ? (
+        <CompactMixer
+          tracks={tracks}
+          audioRoutingOptions={audioRoutingOptions}
+          handlers={mixerHandlers}
+          onTrackContextMenu={onTrackContextMenu}
+          selectedTrackIds={selectedTrackIds}
+          onTrackSelect={onTrackSelect}
+          onTrackDragStart={onTrackDragStart}
+          activeSongTrackIds={activeSongTrackIds}
+          filterActiveSong={compactMixerFilterActiveSong}
+        />
+      ) : null}
     </div>
   );
 }

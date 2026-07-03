@@ -943,6 +943,30 @@ export function TransportPanelContent() {
   // replaces the dialog-based New/Open entries of the FILE menu.
   const [isMobileSessionsModalOpen, setIsMobileSessionsModalOpen] =
     useState(false);
+  // Android: with touch, a tap meant for a marker flag that lands a few px
+  // off seeks the transport instead — fatal mid-performance. This lock
+  // disables plain tap-to-seek on the ruler; marker/region flags keep
+  // working (they're separate overlays with their own handlers).
+  const [rulerSeekLocked, setRulerSeekLocked] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("libretracks.android.rulerSeekLocked") ===
+        "1",
+  );
+  const toggleRulerSeekLock = () => {
+    setRulerSeekLocked((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(
+          "libretracks.android.rulerSeekLocked",
+          next ? "1" : "0",
+        );
+      } catch {
+        // Private mode → just lose persistence.
+      }
+      return next;
+    });
+  };
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
   const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
@@ -4686,9 +4710,27 @@ export function TransportPanelContent() {
     sourcesPreparing,
   });
 
+  // Android long-press opens context menus while the finger is still down;
+  // the WebView then fires a synthesized pointer/mouse event on RELEASE,
+  // which the outside-click closer below read as "clicked outside" and the
+  // menu vanished before it could be used. Ignore dismissals in the first
+  // instants after opening (touch only — desktop right-click is instant).
+  const contextMenuOpenedAtRef = useRef(0);
+  useEffect(() => {
+    if (contextMenu) {
+      contextMenuOpenedAtRef.current = Date.now();
+    }
+  }, [contextMenu]);
+
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
       if (event.button !== 0) {
+        return;
+      }
+      if (
+        isAndroidApp &&
+        Date.now() - contextMenuOpenedAtRef.current < 500
+      ) {
         return;
       }
       if (
@@ -10815,12 +10857,6 @@ export function TransportPanelContent() {
               ) : (
                 <section className="lt-main-stage">
                   <TimelineToolbar
-                    onTrackHeightDecrease={() =>
-                      applyTrackHeight(trackHeight - TRACK_HEIGHT_STEP)
-                    }
-                    onTrackHeightIncrease={() =>
-                      applyTrackHeight(trackHeight + TRACK_HEIGHT_STEP)
-                    }
                     snapEnabled={snapEnabled}
                     subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
                     selectedRegion={selectedRegion}
@@ -10974,6 +11010,63 @@ export function TransportPanelContent() {
                     >
                       <div className="lt-timeline-main-grid">
                         <TrackHeadersPane
+                          headerActions={
+                            isAndroidApp ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="lt-icon-button"
+                                  aria-label={t(
+                                    "timelineToolbar.trackHeightDecrease",
+                                    { defaultValue: "Pistas más bajas" },
+                                  )}
+                                  onClick={() =>
+                                    applyTrackHeight(
+                                      trackHeight - TRACK_HEIGHT_STEP,
+                                    )
+                                  }
+                                >
+                                  <span className="material-symbols-outlined">
+                                    unfold_less
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="lt-icon-button"
+                                  aria-label={t(
+                                    "timelineToolbar.trackHeightIncrease",
+                                    { defaultValue: "Pistas más altas" },
+                                  )}
+                                  onClick={() =>
+                                    applyTrackHeight(
+                                      trackHeight + TRACK_HEIGHT_STEP,
+                                    )
+                                  }
+                                >
+                                  <span className="material-symbols-outlined">
+                                    unfold_more
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`lt-icon-button ${rulerSeekLocked ? "is-active" : ""}`}
+                                  aria-label={t(
+                                    "timelineToolbar.rulerSeekLock",
+                                    {
+                                      defaultValue:
+                                        "Bloquear salto al tocar el ruler",
+                                    },
+                                  )}
+                                  aria-pressed={rulerSeekLocked}
+                                  onClick={toggleRulerSeekLock}
+                                >
+                                  <span className="material-symbols-outlined">
+                                    {rulerSeekLocked ? "lock" : "lock_open"}
+                                  </span>
+                                </button>
+                              </>
+                            ) : undefined
+                          }
                           song={song}
                           visibleTracks={visibleTracks}
                           selectedTrackIds={selectedTrackIds}
@@ -11062,7 +11155,11 @@ export function TransportPanelContent() {
                             if (
                               !song ||
                               event.button !== 0 ||
-                              !rulerTrackRef.current
+                              !rulerTrackRef.current ||
+                              // Android seek lock: plain ruler taps neither
+                              // seek nor range-select; marker/region flags
+                              // are separate overlays and keep working.
+                              rulerSeekLocked
                             ) {
                               return;
                             }
