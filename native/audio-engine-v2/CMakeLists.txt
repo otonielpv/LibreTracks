@@ -161,6 +161,14 @@ if(LT_ENGINE_USE_BUNGEE)
         set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/windows-x86_64")
         set(_lt_bungee_lib    "${_lt_bungee_libdir}/bungee.lib")
         set(_lt_bungee_dll    "${_lt_bungee_libdir}/bungee.dll")
+    elseif(ANDROID)
+        # Android has no upstream binary release: the libs are built from
+        # source with the NDK (static + PIC, plus its pffft dep) and laid out
+        # as android-<ABI>/libbungee.a — see docs/ANDROID_PORT.md for the
+        # build recipe. Static so the APK gains no extra .so.
+        set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/android-${ANDROID_ABI}")
+        set(_lt_bungee_lib    "${_lt_bungee_libdir}/libbungee.a")
+        set(_lt_bungee_dll    "")
     elseif(APPLE)
         set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/apple-mac")
         set(_lt_bungee_lib    "${_lt_bungee_libdir}/bungee.framework")
@@ -179,6 +187,11 @@ if(LT_ENGINE_USE_BUNGEE)
     endif()
     target_include_directories(lt_audio_engine_v2 PRIVATE "${LT_BUNGEE_DIR}/include")
     target_link_libraries(lt_audio_engine_v2 PRIVATE "${_lt_bungee_lib}")
+    if(ANDROID)
+        # bungee_library links pffft PRIVATE, so a static libbungee.a does not
+        # carry it — link the companion archive built alongside it.
+        target_link_libraries(lt_audio_engine_v2 PRIVATE "${_lt_bungee_libdir}/libpffft.a")
+    endif()
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_BUNGEE=1)
     if(APPLE)
         set_target_properties(lt_audio_engine_v2 PROPERTIES

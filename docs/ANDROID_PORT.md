@@ -136,10 +136,33 @@ cmake --build build-android-x86_64
   scratch pre-asignado. Verificado en emulador: stream `started` en
   dumpsys, el reloj del transporte avanza desde callbacks reales, y un
   tempo marker en mitad de la canción se aplica en vivo.
-  Bungee sigue OFF: upstream no publica binario Android; pitch/warp =
-  passthrough hasta compilarlo de fuente con clang. Decoders: libsndfile +
-  dr_mp3/dr_flac (sin FFmpeg ni vcpkg) + **MediaCodec del sistema** para
-  todo lo demás (ver abajo).
+  Decoders: libsndfile + dr_mp3/dr_flac (sin FFmpeg ni vcpkg) +
+  **MediaCodec del sistema** para todo lo demás (ver abajo).
+- **Bungee en Android (pitch/warp real, 2026-07-03)**: upstream no publica
+  binario Android, así que se compila DE FUENTE con el NDK (estático + PIC,
+  sin .so extra en el APK). Receta (repo en `D:\Repos\bungee`, tag v2.4.24 —
+  la MISMA versión que el SDK de escritorio):
+
+  ```
+  cmake -S D:\Repos\bungee -B D:\Repos\bungee\build-android-<abi> -G Ninja ^
+    -DCMAKE_MAKE_PROGRAM=<sdk>\cmake\3.22.1\bin\ninja.exe ^
+    -DCMAKE_TOOLCHAIN_FILE=<ndk>\build\cmake\android.toolchain.cmake ^
+    -DANDROID_ABI=arm64-v8a|x86_64 -DANDROID_PLATFORM=android-24 ^
+    -DCMAKE_BUILD_TYPE=Release -DBUNGEE_BUILD_SHARED_LIBRARY=OFF ^
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUNGEE_VERSION=2.4.24
+  cmake --build ... --target bungee_library pffft
+  ```
+
+  Layout del SDK android (en `D:\Repos\bungee-android-sdk`, machine-local):
+  `include/bungee/*.h` + `android-arm64-v8a/{libbungee.a,libpffft.a}` +
+  `android-x86_64/{...}`. El CMake del engine tiene rama `elseif(ANDROID)`
+  que espera exactamente eso (y enlaza libpffft.a aparte porque el estático
+  de bungee no lo arrastra). Configurar el engine con
+  `-DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR=D:/Repos/bungee-android-sdk`.
+  Verificado en emulador: región con warp activo (100→120 BPM) reproduce
+  por el camino Bungee (`str+=` en el diag, ~2,6 ms/callback con 3 voces,
+  cero over_budget, sin crash — el warm_voice de siempre aplica). Bench de
+  voces máximas en el Oppo PENDIENTE.
 - **Formatos no-WAV (MediaCodec NDK)**: `mediacodec_decoder.cpp` implementa
   `AudioDecoder` sobre `AMediaExtractor` + `AMediaCodec` (link `mediandk`,
   solo `if(ANDROID)` en `src/sources/CMakeLists.txt`) — el equivalente móvil
