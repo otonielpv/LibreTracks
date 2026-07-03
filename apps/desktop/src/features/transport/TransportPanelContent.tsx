@@ -11159,7 +11159,15 @@ export function TransportPanelContent() {
                               // Android seek lock: plain ruler taps neither
                               // seek nor range-select; marker/region flags
                               // are separate overlays and keep working.
-                              rulerSeekLocked
+                              rulerSeekLocked ||
+                              // Android long-press: releasing the finger after
+                              // the context menu opened fires a synthesized
+                              // mousedown HERE, which seeked ("cursor moved")
+                              // and closed the fresh menu. Same grace window
+                              // as the global outside-click closer.
+                              (isAndroidApp &&
+                                Date.now() - contextMenuOpenedAtRef.current <
+                                  600)
                             ) {
                               return;
                             }

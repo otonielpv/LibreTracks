@@ -1155,6 +1155,16 @@ export function TimelineCanvasPane({
                 markerKindCategory(section.kind) === "cue"
                   ? LANE_CUES
                   : LANE_SECTIONS;
+              // Android: the fixed 68px desktop hotspot swallows neighbouring
+              // taps (tapping the next bar still selected this marker). Size
+              // the touch zone to the drawn flag instead: digit prefix + name
+              // at the canvas' ~7px/char, clamped to a finger-sized minimum.
+              const flagLabelLength =
+                section.name.length + (section.digit != null ? 3 : 0);
+              const androidHotspotWidth = Math.max(
+                30,
+                Math.min(96, 14 + flagLabelLength * 7),
+              );
               return (
               <button
                 key={section.id}
@@ -1166,6 +1176,9 @@ export function TimelineCanvasPane({
                   left: section.startSeconds * pixelsPerSecond,
                   top: lane.top,
                   height: lane.height,
+                  ...(isAndroidApp
+                    ? { width: androidHotspotWidth, marginLeft: -4 }
+                    : {}),
                 }}
                 onMouseDown={(event) => {
                   event.preventDefault();

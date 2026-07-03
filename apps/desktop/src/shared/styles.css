@@ -7290,12 +7290,13 @@ textarea {
 
 /* ── Ruler-header touch controls (Android) ───────────────────────────── */
 /* The 94px header cell above the track headers is mostly empty on Android;
-   it hosts the track-density buttons and the seek lock. */
+   it hosts the track-density buttons and the seek lock (top row), with the
+   "Tracks" label staying at the bottom where it always lived. */
 .lt-android .lt-ruler-header {
   flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 0.35rem 0.5rem 0.4rem;
+  padding: 0.35rem 0.5rem 0.5rem;
 }
 
 .lt-android .lt-ruler-header-actions {
@@ -7303,22 +7304,43 @@ textarea {
   gap: 0.3rem;
 }
 
+/* Same visual recipe as the timeline-toolbar buttons — these sit outside
+   .lt-bottom-controls, which is where that styling normally comes from. */
 .lt-android .lt-ruler-header-actions .lt-icon-button {
   min-width: 2.2rem;
   min-height: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.12)),
+    #201f1f;
+  color: #e5e2e1;
 }
 
-/* ── Marker flags: tight touch hit zones (Android) ───────────────────── */
-/* The desktop hotspot is 68px wide with overlap headroom; on touch, two
-   markers a beat apart end up under ONE hotspot and only the top one is
-   tappable. Narrow zones separate them (long pill tails lose tappability —
-   acceptable trade). */
-.lt-android .lt-marker-hotspot {
-  width: 2.6rem;
-  margin-left: -0.35rem;
+.lt-android .lt-ruler-header-actions .lt-icon-button.is-active {
+  background: rgb(87 241 219 / 0.18);
+  color: #57f1db;
+}
+
+.lt-android .lt-ruler-header-actions .lt-icon-button .material-symbols-outlined {
+  font-size: 18px;
 }
 
 /* ── Compact-view mixer toggle (Android) ─────────────────────────────── */
+/* Open mixer takes the WHOLE view (songs hide): sharing the phone's height
+   left pan faders and routing selectors invisible below the fold. */
+.lt-android .lt-compact-view.is-mixer-full .lt-compact-songs {
+  display: none;
+}
+
+.lt-android .lt-compact-view.is-mixer-full .lt-compact-mixer {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .lt-android .lt-compact-mixer-toggle {
   display: inline-flex;
   align-items: center;

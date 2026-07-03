@@ -105,10 +105,10 @@ export function TrackHeadersPane({
       }}
     >
       <div className="lt-ruler-header">
-        <span>Tracks</span>
         {headerActions ? (
           <div className="lt-ruler-header-actions">{headerActions}</div>
         ) : null}
+        <span>Tracks</span>
       </div>
       <div
         className="lt-track-headers-list"

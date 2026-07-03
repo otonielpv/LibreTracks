@@ -296,8 +296,15 @@ function CompactViewComponent({
     });
   };
 
+  // Android: with the mixer open it takes the WHOLE compact view (pan +
+  // routing were unreadable sharing the height with the song columns on a
+  // phone); the toggle flips between songs and mixer rather than stacking.
+  const mixerTakesFullHeight = isAndroidApp && isMixerVisible;
+
   return (
-    <div className="lt-compact-view">
+    <div
+      className={`lt-compact-view${mixerTakesFullHeight ? " is-mixer-full" : ""}`}
+    >
       {/* Top zone: songs + master + clip stacks. Horizontal scroll when
           the project has more songs than fit on screen. Accepts OS drag
           of a .ltpkg file anywhere over the strip — the drop appends a
