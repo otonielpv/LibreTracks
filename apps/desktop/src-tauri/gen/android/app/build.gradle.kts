@@ -62,6 +62,13 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    // Bundle the voice-guide WAV bank into the APK as Android assets, sourced
+    // from the shared resources/ tree (no git duplication). Tauri's resource
+    // bundler doesn't ship `resources` on Android, and the native decoder needs
+    // fopen-able paths, so MainActivity copies these to filesDir on first run.
+    sourceSets.getByName("main") {
+        assets.srcDir("../../../resources")
+    }
 }
 
 rust {

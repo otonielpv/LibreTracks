@@ -148,6 +148,16 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"toggle_count", snap.metronome.toggle_count},
     };
 
+    j["voice_guide"] = {
+        {"enabled", snap.voice_guide.enabled},
+        {"bank_loaded", snap.voice_guide.bank_loaded},
+        {"route_resolved", snap.voice_guide.route_resolved},
+        {"muted_reason", snap.voice_guide.muted_reason},
+        {"announcements_fired", snap.voice_guide.announcements_fired},
+        {"counts_fired", snap.voice_guide.counts_fired},
+        {"current_gain", snap.voice_guide.current_gain},
+    };
+
     j["pitch"] = {
         {"mixer_scheduled_jump_executed_count",
          snap.mixer_scheduled_jump_executed_count},

@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
@@ -15,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import java.io.File
 
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,6 +38,52 @@ class MainActivity : TauriActivity() {
     )
 
     requestStorageAccessOnce()
+    installVoiceGuideAssets()
+  }
+
+  // The voice-guide WAV bank ships as Android assets (assets/voices/), but the
+  // native decoder needs fopen-able paths and Tauri's resource bundler doesn't
+  // ship `resources` on Android. Copy the bank to filesDir/voices on first run
+  // (and after an app update, keyed by versionCode) so the Rust side can point
+  // the engine at a real directory. Runs off the UI thread — ~33 MB of WAVs.
+  private fun installVoiceGuideAssets() {
+    Thread {
+      try {
+        val dest = File(filesDir, "voices")
+        val stamp = File(filesDir, "voices/.version")
+        val version = packageManager
+          .getPackageInfo(packageName, 0)
+          .let { info ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toString()
+            else @Suppress("DEPRECATION") info.versionCode.toString()
+          }
+        if (dest.isDirectory && stamp.isFile && stamp.readText() == version) {
+          return@Thread
+        }
+        dest.deleteRecursively()
+        copyAssetDir("voices", dest)
+        stamp.writeText(version)
+        Log.i("LTVoiceGuide", "voice-guide assets installed to ${dest.absolutePath}")
+      } catch (e: Exception) {
+        Log.e("LTVoiceGuide", "failed to install voice-guide assets", e)
+      }
+    }.start()
+  }
+
+  private fun copyAssetDir(assetPath: String, destDir: File) {
+    val entries = assets.list(assetPath) ?: emptyArray()
+    if (entries.isEmpty()) {
+      // A leaf (file): copy its bytes.
+      destDir.parentFile?.mkdirs()
+      assets.open(assetPath).use { input ->
+        destDir.outputStream().use { output -> input.copyTo(output) }
+      }
+      return
+    }
+    destDir.mkdirs()
+    for (entry in entries) {
+      copyAssetDir("$assetPath/$entry", File(destDir, entry))
+    }
   }
 
   // Open-session-in-place needs to read session FOLDERS anywhere on storage

@@ -904,6 +904,14 @@ std::string EngineImpl::get_snapshot() const {
         snap.metronome.current_gain = metro.current_gain;
         snap.metronome.target_gain = metro.target_gain;
         snap.metronome.toggle_count = metro.toggle_count;
+        auto vg = mixer_->voice_guide_diagnostics();
+        snap.voice_guide.enabled = vg.enabled;
+        snap.voice_guide.bank_loaded = vg.bank_loaded;
+        snap.voice_guide.route_resolved = vg.route_resolved;
+        snap.voice_guide.muted_reason = vg.muted_reason;
+        snap.voice_guide.announcements_fired = vg.announcements_fired;
+        snap.voice_guide.counts_fired = vg.counts_fired;
+        snap.voice_guide.current_gain = vg.current_gain;
         snap.mixer_scheduled_jump_executed_count =
             mixer_->scheduled_jump_executed_count();
     }
@@ -1123,6 +1131,28 @@ std::string EngineImpl::get_snapshot() const {
                 static_cast<unsigned long long>(bd.rebuilds_for_seek),
                 static_cast<unsigned long long>(bd.voice_lookups_hit),
                 static_cast<unsigned long long>(bd.voice_lookups_miss));
+        }
+    }
+
+    // Voice-guide diagnostics — surfaces why the guide is (or isn't) audible:
+    // bank loaded, resolved route, mute reason, and the running announce/count
+    // fire counts. Gated on AUDIO_DIAG (on by default on Android).
+    if (env_flag_enabled("LIBRETRACKS_AUDIO_DIAG") && mixer_) {
+        static std::chrono::steady_clock::time_point s_last_vg_log;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - s_last_vg_log >= std::chrono::seconds(1)) {
+            s_last_vg_log = now;
+            const auto vg = mixer_->voice_guide_diagnostics();
+            // lt_debug_log (not the gated debug_log) so it honours AUDIO_DIAG.
+            lt_debug_log("[LT_VOICE_GUIDE] enabled=%s bank_loaded=%s route=%s "
+                "muted_reason=\"%s\" announce=%llu counts=%llu gain=%.3f\n",
+                vg.enabled ? "true" : "false",
+                vg.bank_loaded ? "true" : "false",
+                vg.route_resolved.c_str(),
+                vg.muted_reason.c_str(),
+                static_cast<unsigned long long>(vg.announcements_fired),
+                static_cast<unsigned long long>(vg.counts_fired),
+                vg.current_gain);
         }
     }
 

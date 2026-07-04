@@ -131,15 +131,35 @@ pub fn set_metronome_sound_realtime(
 /// `resources/voices` source tree.
 fn voice_guide_voices_dir(app: &AppHandle) -> Option<String> {
     use tauri::Manager;
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        let bundled = resource_dir.join("voices");
-        if bundled.exists() {
-            return bundled.to_str().map(|s| s.to_string());
+    // Android: the WAV bank ships as Android assets and MainActivity copies it
+    // to filesDir/voices on first run (Tauri's resource bundler doesn't ship
+    // `resources` on Android, and the native decoder needs fopen-able paths).
+    // filesDir maps to Tauri's app_local_data_dir.
+    #[cfg(target_os = "android")]
+    {
+        // app_local_data_dir() is the app's data BASE (/data/data/<pkg>);
+        // MainActivity copies to filesDir = <base>/files/voices.
+        if let Ok(data_dir) = app.path().app_local_data_dir() {
+            let copied = data_dir.join("files").join("voices");
+            if copied.exists() {
+                return copied.to_str().map(|s| s.to_string());
+            }
         }
+        return None;
     }
-    // Dev fallback: source tree relative to the crate manifest.
-    let dev = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/voices");
-    dev.to_str().map(|s| s.to_string())
+
+    #[cfg(not(target_os = "android"))]
+    {
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            let bundled = resource_dir.join("voices");
+            if bundled.exists() {
+                return bundled.to_str().map(|s| s.to_string());
+            }
+        }
+        // Dev fallback: source tree relative to the crate manifest.
+        let dev = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/voices");
+        dev.to_str().map(|s| s.to_string())
+    }
 }
 
 /// Apply voice-guide settings live (enabled/volume/lead bars/count-in/language)
