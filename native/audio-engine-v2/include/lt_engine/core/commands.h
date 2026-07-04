@@ -311,6 +311,8 @@ struct CmdSetOutputDevice {
 };
 struct CmdSetSampleRate   { int sample_rate; };
 struct CmdSetBufferSize   { int buffer_size; };
+// Android only: toggle AAudio low-latency PerformanceMode. Reopens the device.
+struct CmdSetLowLatency   { bool enabled; };
 
 // ---------------------------------------------------------------------------
 // Union type
@@ -332,7 +334,7 @@ using EngineCommand = std::variant<
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdUpsertSongTracks, CmdPrepareSources,
-    CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
+    CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize, CmdSetLowLatency
 >;
 
 // ---------------------------------------------------------------------------

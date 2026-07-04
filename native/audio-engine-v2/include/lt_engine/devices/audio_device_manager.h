@@ -39,6 +39,9 @@ struct DeviceOpenRequest {
     // Output channels to activate on the hardware (0-based indices into the
     // device's channel list). Empty = back-compat stereo (channels 0 and 1).
     std::vector<int> active_output_channels;
+    // Android/Oboe only: request AAudio low-latency PerformanceMode. Ignored by
+    // desktop backends. Off by default (deep-buffer mode, safe on low-end).
+    bool        low_latency  = false;
 };
 
 // ---------------------------------------------------------------------------

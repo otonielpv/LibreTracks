@@ -231,6 +231,12 @@ pub enum EngineCommand {
     SetBufferSize {
         buffer_size: i32,
     },
+    /// Android only: toggle AAudio low-latency mode on the output stream. The
+    /// backend reopens the device with the new PerformanceMode. A no-op on
+    /// desktop backends, which don't expose this knob.
+    SetLowLatency {
+        enabled: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

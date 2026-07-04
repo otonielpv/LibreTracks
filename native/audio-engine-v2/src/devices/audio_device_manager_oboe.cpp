@@ -27,6 +27,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <string>
 #include <vector>
@@ -56,7 +57,6 @@ inline float soft_clip(float sample) noexcept {
 // frames; anything larger is handled by chunking the render loop.
 constexpr int kMaxRenderChunkFrames = 8192;
 
-constexpr const char* kDeviceId   = "oboe-default";
 constexpr const char* kDeviceName = "Salida de audio del sistema (AAudio)";
 constexpr const char* kBackend    = "oboe";
 
@@ -171,6 +171,10 @@ struct AudioDeviceManager::Impl {
     int         buffer_size = 0;
     int         output_latency_samples = 0;
     std::string last_error;
+    // The device_id the currently-open stream was requested with (empty =
+    // system default). Reported back through device_info() so the control
+    // layer can tell which endpoint is actually live.
+    std::string open_device_id;
 };
 
 AudioDeviceManager::AudioDeviceManager() : impl_(std::make_unique<Impl>()) {}
@@ -180,10 +184,18 @@ AudioDeviceManager::~AudioDeviceManager() {
 }
 
 std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
-    // Android routes the default output itself (speaker/headset/BT); apps
-    // don't pick hardware endpoints the way desktop backends do.
+    // The native backend only knows the AAudio *default* route. The concrete
+    // hardware endpoints (speaker / wired / USB interface / Bluetooth) are
+    // enumerated on the Rust side via AudioManager.getDevices() and appended to
+    // this list (see engine_v2_list_devices + android_audio_devices.rs).
+    //
+    // This one entry is the "system default": an EMPTY id, matching the
+    // desktop contract where an empty device_id means "let the OS pick the
+    // current default endpoint". The Settings UI renders the empty-id option as
+    // "System default", so this must not carry a concrete id or there would be
+    // no default entry to fall back to.
     DeviceDescriptor descriptor;
-    descriptor.id = kDeviceId;
+    descriptor.id = "";
     descriptor.name = kDeviceName;
     descriptor.backend = kBackend;
     descriptor.output_channel_count = kOutputChannels;
@@ -200,13 +212,37 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     impl_->adaptor = std::make_unique<OboeCallbackAdaptor>(callback);
 
     oboe::AudioStreamBuilder builder;
+
+    // Route to an explicit endpoint when the caller named one. The device_id
+    // is the Android AudioDeviceInfo.getId() integer (see the Rust JNI
+    // enumeration in android_audio_devices.rs) rendered as a string. Empty (or
+    // unparseable) means "system default": leave the id kUnspecified so AAudio
+    // picks the current default route (speaker / headset / BT), exactly as
+    // before this feature existed. AAudio honours setDeviceId; if the device
+    // is gone by open time, openStream() fails and the caller falls back to
+    // default — the same path a disappeared desktop device takes.
+    int32_t requested_device_id = oboe::kUnspecified;
+    if (!request.device_id.empty()) {
+        try {
+            requested_device_id = std::stoi(request.device_id);
+        } catch (const std::exception&) {
+            requested_device_id = oboe::kUnspecified;
+        }
+    }
+
+    // PerformanceMode::None (deep buffer) is the safe default: LowLatency
+    // streams get small internal buffer capacities that stuttered on a low-end
+    // phone (Oppo A5) the moment anything else breathed, and the app is a
+    // playback tool where jumps still feel instant next to Bungee's ~100 ms
+    // pitch latency. The user opts into LowLatency (Settings → "Baja latencia")
+    // when they have hardware that can take it — e.g. a USB interface.
+    const oboe::PerformanceMode performance_mode = request.low_latency
+        ? oboe::PerformanceMode::LowLatency
+        : oboe::PerformanceMode::None;
+
     builder.setDirection(oboe::Direction::Output)
-        // PerformanceMode::None (not LowLatency): LibreTracks is a playback
-        // app, and LowLatency streams get small internal buffer capacities
-        // that stuttered on a low-end phone (Oppo A5) the moment anything
-        // else breathed. The default mode allows a deeper buffer; jumps
-        // still feel instant next to Bungee's ~100 ms pitch latency.
-        ->setPerformanceMode(oboe::PerformanceMode::None)
+        ->setDeviceId(requested_device_id)
+        ->setPerformanceMode(performance_mode)
         // Capacity must be requested BEFORE opening: the default came out as
         // just 2 bursts (~40 ms) on the Oppo A5 test device, so the buffer
         // enlargement below was silently clamped and playback underran
@@ -238,13 +274,15 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         return Result<void>::err(impl_->last_error);
     }
 
-    // Generous buffering over the burst size: LibreTracks is a playback app,
-    // not a live instrument — headroom over the minimum kills the underruns
-    // that tight buffers invite on busy low-end devices ("petardeo" reported
-    // on an Oppo A5 at burst*2). Oboe clamps to the stream's capacity.
+    // Buffer target over the burst size. In the safe default (deep buffer)
+    // mode, generous headroom kills the underruns that tight buffers invite on
+    // busy low-end devices ("petardeo" reported on an Oppo A5 at burst*2). When
+    // the user opts into low latency, tighten to burst*2 so the mode actually
+    // lowers latency instead of being clamped back up — they've accepted the
+    // underrun risk. Oboe clamps to the stream's capacity either way.
     const int burst = impl_->stream->getFramesPerBurst();
     if (burst > 0)
-        impl_->stream->setBufferSizeInFrames(burst * 4);
+        impl_->stream->setBufferSizeInFrames(burst * (request.low_latency ? 2 : 4));
 
     impl_->sample_rate = impl_->stream->getSampleRate();
     impl_->buffer_size = burst > 0
@@ -271,14 +309,28 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         return Result<void>::err(impl_->last_error);
     }
 
+    // Remember which endpoint we opened so device_info() reports it (empty =
+    // system default). Cleared in close_device().
+    impl_->open_device_id = request.device_id;
+
+    // Log both the requested id and the id AAudio actually bound: on an
+    // explicit selection they should match, and a mismatch (e.g. the endpoint
+    // vanished and AAudio fell back to default) is exactly what we want visible
+    // when validating device switching without the hardware in hand.
     lt_debug_log("[LT_AUDIO_DIAG] oboe stream open sr=%d burst=%d buffer=%d "
-                 "capacity=%d latency_samples=%d api=%s\n",
+                 "capacity=%d latency_samples=%d api=%s requested_device_id=%d "
+                 "actual_device_id=%d low_latency=%d mode=%s\n",
                  impl_->sample_rate, burst,
                  impl_->stream->getBufferSizeInFrames(),
                  impl_->stream->getBufferCapacityInFrames(),
                  impl_->output_latency_samples,
                  impl_->stream->getAudioApi() == oboe::AudioApi::AAudio
-                     ? "AAudio" : "OpenSLES");
+                     ? "AAudio" : "OpenSLES",
+                 requested_device_id,
+                 impl_->stream->getDeviceId(),
+                 request.low_latency ? 1 : 0,
+                 impl_->stream->getPerformanceMode() == oboe::PerformanceMode::LowLatency
+                     ? "LowLatency" : "None");
     return Result<void>::ok();
 }
 
@@ -290,6 +342,7 @@ Result<void> AudioDeviceManager::close_device() {
     }
     // The stream is fully torn down before the adaptor it points at dies.
     impl_->adaptor.reset();
+    impl_->open_device_id.clear();
     return Result<void>::ok();
 }
 
@@ -317,7 +370,9 @@ std::string AudioDeviceManager::actual_backend() const { return kBackend; }
 
 DeviceInfo AudioDeviceManager::device_info() const {
     DeviceInfo info;
-    info.device_id   = impl_->stream ? kDeviceId : std::string{};
+    // Report the endpoint that's actually open (empty = system default), not a
+    // constant — the control layer compares this against the saved selection.
+    info.device_id   = impl_->stream ? impl_->open_device_id : std::string{};
     info.device_name = actual_device_name();
     info.backend     = kBackend;
     info.sample_rate = impl_->sample_rate;
