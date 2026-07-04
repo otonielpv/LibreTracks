@@ -43,9 +43,11 @@ class MainActivity : TauriActivity() {
 
   // The voice-guide WAV bank ships as Android assets (assets/voices/), but the
   // native decoder needs fopen-able paths and Tauri's resource bundler doesn't
-  // ship `resources` on Android. Copy the bank to filesDir/voices on first run
-  // (and after an app update, keyed by versionCode) so the Rust side can point
-  // the engine at a real directory. Runs off the UI thread — ~33 MB of WAVs.
+  // ship `resources` on Android. Copy the bank to filesDir/voices when the
+  // install changes so the Rust side can point the engine at a real directory.
+  // Keyed by lastUpdateTime (not versionCode) so re-installing a build that
+  // changed the bank without bumping the version still refreshes it. Runs off
+  // the UI thread — ~33 MB of WAVs.
   private fun installVoiceGuideAssets() {
     Thread {
       try {
@@ -53,10 +55,8 @@ class MainActivity : TauriActivity() {
         val stamp = File(filesDir, "voices/.version")
         val version = packageManager
           .getPackageInfo(packageName, 0)
-          .let { info ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toString()
-            else @Suppress("DEPRECATION") info.versionCode.toString()
-          }
+          .lastUpdateTime
+          .toString()
         if (dest.isDirectory && stamp.isFile && stamp.readText() == version) {
           return@Thread
         }

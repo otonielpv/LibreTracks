@@ -151,12 +151,12 @@ import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import {
   MARKER_KINDS as SECTION_KINDS,
-  CUE_KINDS,
   markerColor,
   markerKindCategory,
   markerKindColor,
   markerKindLabel,
   markerKindVariants,
+  availableCueKinds,
 } from "./markerKinds";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { HorizontalScrollbar } from "./HorizontalScrollbar";
@@ -7126,7 +7126,7 @@ export function TransportPanelContent() {
           onSelect: () =>
             openCreateMarkerKindList(
               positionSeconds,
-              CUE_KINDS,
+              availableCueKinds(appSettings.voiceGuideLanguage),
               t("transport.menu.markerKindCuesGroup"),
             ),
         },
@@ -7222,7 +7222,7 @@ export function TransportPanelContent() {
           onSelect: () =>
             openMarkerKindList(
               section,
-              CUE_KINDS,
+              availableCueKinds(appSettings.voiceGuideLanguage),
               t("transport.menu.markerKindCuesGroup"),
             ),
         },
