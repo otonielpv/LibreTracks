@@ -294,7 +294,7 @@ const en = {
       description: "{{name}}",
       fullTitle: "Full (for sharing)",
       fullDescription:
-        "Includes the used audio files and waveforms. Self-contained: opens on another PC without the original files.",
+        "Includes the used audio files and waveforms. Self-contained: opens on another device without the original files.",
       lightTitle: "Light",
       lightDescription:
         "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
@@ -307,7 +307,7 @@ const en = {
       description: "{{name}}",
       fullTitle: "Full (to take with you)",
       fullDescription:
-        "Includes the used audio files and waveforms. Self-contained: opens on another PC without the original files.",
+        "Includes the used audio files and waveforms. Self-contained: opens on another device without the original files.",
       lightTitle: "Light",
       lightDescription:
         "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
@@ -830,7 +830,7 @@ const en = {
   },
   importAudio: {
     title: "Import Audio",
-    pickTitle: "Select WAV files from your computer",
+    pickTitle: "Select WAV files from your device",
     pickHint:
       "The system file browser will open. You can select one or more WAV files.",
     selectingFiles: "Select files...",

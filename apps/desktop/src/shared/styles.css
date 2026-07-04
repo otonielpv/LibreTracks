@@ -7479,3 +7479,29 @@ textarea {
   color: #bacac5;
   background: #0e0e0e;
 }
+
+/* ── Sessions modal: song/session import-export actions (Android) ────── */
+.lt-mobile-sessions-file-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0.9rem 1rem 0.4rem;
+  border-top: 1px solid rgb(87 241 219 / 0.12);
+  margin-top: 0.9rem;
+}
+
+.lt-mobile-sessions-file-actions button {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid rgb(186 202 197 / 0.3);
+  border-radius: 3px;
+  background: transparent;
+  color: #d2d4d1;
+  font: 600 11px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lt-mobile-sessions-file-actions button:disabled {
+  opacity: 0.4;
+}

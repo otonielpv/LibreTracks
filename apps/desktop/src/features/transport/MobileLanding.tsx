@@ -9,6 +9,9 @@ import {
 type MobileLandingProps = {
   onCreateSession: (name: string) => void;
   onOpenSession: (songFile: string) => void;
+  /** Import a whole `.ltset` as a new session via the system file picker.
+   * Optional so the embedded "Sesiones…" modal can omit it. */
+  onImportSession?: () => void;
   /** Render just the card (no full-stage backdrop) — used inside the
    * "Sesiones…" modal reachable from the FILE menu once a session is open. */
   embedded?: boolean;
@@ -23,6 +26,7 @@ type MobileLandingProps = {
 export function MobileLanding({
   onCreateSession,
   onOpenSession,
+  onImportSession,
   embedded = false,
 }: MobileLandingProps) {
   const { t } = useTranslation();
@@ -120,6 +124,13 @@ export function MobileLanding({
             >
               {t("common.create")}
             </button>
+            {onImportSession ? (
+              <button type="button" onClick={onImportSession}>
+                {t("transport.shell.importSession", {
+                  defaultValue: "Importar sesión",
+                })}
+              </button>
+            ) : null}
           </div>
         )}
 

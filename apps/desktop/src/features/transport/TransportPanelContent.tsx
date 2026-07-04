@@ -4102,10 +4102,12 @@ export function TransportPanelContent() {
       setExportSongTarget(null);
       void runAction(
         async () => {
-          await exportRegionAsPackage(regionId, includeAudio);
-          setStatus(
-            `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
-          );
+          const exported = await exportRegionAsPackage(regionId, includeAudio);
+          if (exported) {
+            setStatus(
+              `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
+            );
+          }
         },
         { busy: true },
       );
@@ -10749,6 +10751,7 @@ export function TransportPanelContent() {
                   <MobileLanding
                     onCreateSession={handleCreateSongNamed}
                     onOpenSession={handleOpenProjectFromPath}
+                    onImportSession={handleImportSessionClick}
                   />
                 ) : (
                 <div className="lt-empty-state">
@@ -11861,6 +11864,44 @@ export function TransportPanelContent() {
                         handleOpenProjectFromPath(songFile);
                       }}
                     />
+                    {/* Song/session interchange via the system SAF pickers —
+                        the mobile stand-in for the desktop FILE menu entries.
+                        The external DAW import (Reaper/Ableton) stays
+                        desktop-only by design. */}
+                    <div className="lt-mobile-sessions-file-actions">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMobileSessionsModalOpen(false);
+                          handleImportSongClick();
+                        }}
+                      >
+                        {t("timelineTopbar.importSong")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMobileSessionsModalOpen(false);
+                          handleImportSessionClick();
+                        }}
+                      >
+                        {t("timelineTopbar.importSession", {
+                          defaultValue: "Importar sesión…",
+                        })}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!song}
+                        onClick={() => {
+                          setIsMobileSessionsModalOpen(false);
+                          setIsExportSessionModalOpen(true);
+                        }}
+                      >
+                        {t("timelineTopbar.exportSession", {
+                          defaultValue: "Exportar sesión…",
+                        })}
+                      </button>
+                    </div>
                   </div>
                 </section>
               </div>

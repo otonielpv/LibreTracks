@@ -13,6 +13,8 @@ mod error;
 mod error_log;
 mod external_project;
 mod file_dialog;
+#[cfg(target_os = "android")]
+mod mobile_files;
 mod models;
 mod resource_monitor;
 mod settings;
@@ -71,6 +73,7 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(DesktopState::default());
 

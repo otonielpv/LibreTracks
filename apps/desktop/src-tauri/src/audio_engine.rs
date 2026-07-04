@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     sync::{
@@ -302,6 +302,13 @@ struct ControllerState {
     last_start_reason: Option<String>,
     song_dir: Option<PathBuf>,
     loaded_session_signature: Option<String>,
+    /// Resolved audio paths (engine source ids) of the CURRENTLY loaded song.
+    /// The engine's SourceManager deliberately persists sources across
+    /// LoadSession (so re-opening a session skips the re-decode), which means
+    /// `snapshot.source_states` accumulates every source ever registered this
+    /// run — the "Preparing audio…" indicator must count only the current
+    /// song's sources or the total grows with each session opened (2→4→13).
+    current_song_source_ids: HashSet<String>,
 }
 
 impl ControllerState {
@@ -321,6 +328,7 @@ impl ControllerState {
             last_start_reason: None,
             song_dir: None,
             loaded_session_signature: None,
+            current_song_source_ids: HashSet::new(),
         }
     }
 }
@@ -1863,12 +1871,25 @@ impl AudioController {
             return SourceReadinessSummary::default();
         };
 
-        let total = snapshot.source_states.len();
+        // Only the current song's sources: the engine keeps every source ever
+        // registered this run alive across LoadSession (by design, to skip
+        // re-decodes), so the raw snapshot total accumulates across sessions.
+        let current_sources: Vec<_> = snapshot
+            .source_states
+            .iter()
+            .filter(|source| {
+                state
+                    .current_song_source_ids
+                    .contains(&normalize_source_id(&source.source_id))
+            })
+            .collect();
+
+        let total = current_sources.len();
         let mut ready_count = 0usize;
         let mut loading_count = 0usize;
         let mut failed_count = 0usize;
         let mut progress_sum: f64 = 0.0;
-        for source in &snapshot.source_states {
+        for source in &current_sources {
             match source.status.as_str() {
                 "ready" | "cache_ready" => {
                     ready_count += 1;
@@ -2227,8 +2248,20 @@ fn force_load_song(
     song: &Song,
 ) -> Result<(), DesktopError> {
     let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+    state.current_song_source_ids = resolved
+        .clips
+        .iter()
+        .map(|clip| normalize_source_id(&clip.file_path))
+        .filter(|path| !path.is_empty())
+        .collect();
     let signature = session_signature(&resolved);
     load_resolved_song(engine, state, &resolved, signature)
+}
+
+/// Normalize a resolved audio path for comparison against the engine's
+/// source ids (the engine stores forward-slash paths).
+fn normalize_source_id(path: &str) -> String {
+    path.trim().replace('\\', "/")
 }
 
 fn load_resolved_song(

@@ -631,15 +631,17 @@ export async function importStagedAudioFiles(
   return invokeCommand<LibraryAssetSummary[]>("import_staged_audio_files", { files });
 }
 
+// Returns false if the user cancelled the save dialog (nothing was written).
 export async function exportRegionAsPackage(
   regionId: string,
   includeAudio = false,
-): Promise<void> {
-  await invokeCommand("export_region_as_package", { regionId, includeAudio });
+): Promise<boolean> {
+  return invokeCommand<boolean>("export_region_as_package", { regionId, includeAudio });
 }
 
-export async function exportRegionRenderedAudio(regionId: string): Promise<void> {
-  await invokeCommand("export_region_rendered_audio", { regionId });
+// Returns false if the user cancelled the save dialog (nothing was written).
+export async function exportRegionRenderedAudio(regionId: string): Promise<boolean> {
+  return invokeCommand<boolean>("export_region_rendered_audio", { regionId });
 }
 
 // Export the WHOLE session as a single portable .ltset (every region + library

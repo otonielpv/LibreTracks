@@ -311,7 +311,7 @@ const es = {
       description: "{{name}}",
       fullTitle: "Completo (para compartir)",
       fullDescription:
-        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro PC sin los archivos originales.",
+        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro dispositivo sin los archivos originales.",
       lightTitle: "Ligero",
       lightDescription:
         "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
@@ -324,7 +324,7 @@ const es = {
       description: "{{name}}",
       fullTitle: "Completo (para llevártelo)",
       fullDescription:
-        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro PC sin los archivos originales.",
+        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro dispositivo sin los archivos originales.",
       lightTitle: "Ligero",
       lightDescription:
         "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
@@ -857,7 +857,7 @@ const es = {
   },
   importAudio: {
     title: "Importar Audio",
-    pickTitle: "Selecciona archivos WAV desde tu ordenador",
+    pickTitle: "Selecciona archivos WAV desde tu dispositivo",
     pickHint:
       "Se abrira el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.",
     selectingFiles: "Seleccionar archivos...",
