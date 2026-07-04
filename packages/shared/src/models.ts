@@ -652,6 +652,8 @@ export type AppSettings = {
   outputChannelMapping: OutputChannelRequest;
   outputSampleFormat: AudioSampleFormat | null;
   audioSafeMode: boolean;
+  /** Android only: open the output stream in AAudio low-latency mode. */
+  lowLatencyOutput: boolean;
   selectedMidiDevice: string | null;
   suppressMissingMidiDeviceWarning: boolean;
   enabledOutputChannels: number[];
@@ -696,6 +698,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   outputChannelMapping: { channels: [0, 1] },
   outputSampleFormat: null,
   audioSafeMode: false,
+  lowLatencyOutput: false,
   selectedMidiDevice: null,
   suppressMissingMidiDeviceWarning: false,
   enabledOutputChannels: [0, 1],
@@ -878,6 +881,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     },
     outputSampleFormat,
     audioSafeMode: Boolean(settings.audioSafeMode),
+    lowLatencyOutput: Boolean(settings.lowLatencyOutput),
     selectedMidiDevice,
     suppressMissingMidiDeviceWarning: Boolean(
       settings.suppressMissingMidiDeviceWarning,

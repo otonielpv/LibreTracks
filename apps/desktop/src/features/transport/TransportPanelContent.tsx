@@ -2000,6 +2000,7 @@ export function TransportPanelContent() {
     handleOutputSampleRateChange,
     handleOutputBufferSizeChange,
     handleAudioSafeModeChange,
+    handleLowLatencyOutputChange,
     handleEnabledOutputChannelChange,
     handleDiscardEnabledOutputChannels,
     handleSelectAllOutputChannels,
@@ -11833,6 +11834,7 @@ export function TransportPanelContent() {
               onSelectAllOutputChannels={handleSelectAllOutputChannels}
               onClearOutputChannels={handleClearOutputChannels}
               onAudioSafeModeChange={handleAudioSafeModeChange}
+              onLowLatencyOutputChange={handleLowLatencyOutputChange}
               metronomeVolumeDraft={metronomeVolumeDraft}
               onMetronomeEnabledChange={handleMetronomeEnabledChange}
               onMetronomeOutputChange={handleMetronomeOutputChange}
