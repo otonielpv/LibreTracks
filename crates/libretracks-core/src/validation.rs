@@ -262,8 +262,16 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
         }
     }
 
-    let mut previous_marker_id: Option<&str> = None;
-    let mut previous_marker_start_seconds: Option<f64> = None;
+    // Order is validated PER CATEGORY. Sections and cues share the
+    // `section_markers` list but are independent overlays: a cue (a one-shot
+    // spoken instruction like "Build") legitimately sits at the same time as a
+    // section downbeat it belongs to. Requiring a single strictly-increasing
+    // order across both would reject that — the "add a cue where a section
+    // already is" case. Within one category the strict order still holds.
+    let mut previous_section_id: Option<&str> = None;
+    let mut previous_section_start_seconds: Option<f64> = None;
+    let mut previous_cue_id: Option<&str> = None;
+    let mut previous_cue_start_seconds: Option<f64> = None;
     let mut used_digits = HashSet::new();
 
     for marker in &song.section_markers {
@@ -273,10 +281,19 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             });
         }
 
-        if let Some(previous_start_seconds) = previous_marker_start_seconds {
-            if marker.start_seconds <= previous_start_seconds {
+        let (previous_id, previous_start_seconds) = match marker.kind.category() {
+            crate::model::MarkerCategory::Cue => {
+                (&mut previous_cue_id, &mut previous_cue_start_seconds)
+            }
+            crate::model::MarkerCategory::Section => {
+                (&mut previous_section_id, &mut previous_section_start_seconds)
+            }
+        };
+
+        if let Some(prev) = *previous_start_seconds {
+            if marker.start_seconds <= prev {
                 return Err(DomainError::MarkersOutOfOrder {
-                    previous_marker_id: previous_marker_id.unwrap_or_default().to_string(),
+                    previous_marker_id: previous_id.unwrap_or_default().to_string(),
                     marker_id: marker.id.clone(),
                 });
             }
@@ -295,8 +312,8 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             }
         }
 
-        previous_marker_id = Some(marker.id.as_str());
-        previous_marker_start_seconds = Some(marker.start_seconds);
+        *previous_id = Some(marker.id.as_str());
+        *previous_start_seconds = Some(marker.start_seconds);
     }
 
     let mut previous_time_signature_marker_id: Option<&str> = None;
@@ -608,6 +625,64 @@ mod tests {
         assert!(matches!(
             validate_song(&song),
             Err(DomainError::MarkersOutOfOrder { marker_id, .. }) if marker_id == "m2"
+        ));
+    }
+
+    #[test]
+    fn accepts_cue_at_the_same_time_as_a_section() {
+        // A cue (Build) and a section (Chorus) legitimately coincide: order is
+        // validated per category, so sharing a start time is allowed.
+        let mut song = valid_song();
+        song.section_markers = vec![
+            Marker {
+                id: "sec".into(),
+                name: "Chorus".into(),
+                start_seconds: 8.0,
+                digit: None,
+                kind: MarkerKind::Chorus,
+                variant: None,
+                color: None,
+            },
+            Marker {
+                id: "cue".into(),
+                name: "Build".into(),
+                start_seconds: 8.0,
+                digit: None,
+                kind: MarkerKind::Build,
+                variant: None,
+                color: None,
+            },
+        ];
+        assert!(validate_song(&song).is_ok());
+    }
+
+    #[test]
+    fn rejects_two_sections_at_the_same_time() {
+        // Same category (two sections) still requires strictly increasing time.
+        let mut song = valid_song();
+        song.section_markers = vec![
+            Marker {
+                id: "s1".into(),
+                name: "Verse".into(),
+                start_seconds: 8.0,
+                digit: None,
+                kind: MarkerKind::Verse,
+                variant: None,
+                color: None,
+            },
+            Marker {
+                id: "s2".into(),
+                name: "Chorus".into(),
+                start_seconds: 8.0,
+                digit: None,
+                kind: MarkerKind::Chorus,
+                variant: None,
+                color: None,
+            },
+        ];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::MarkersOutOfOrder { marker_id, .. }) if marker_id == "s2"
         ));
     }
 
