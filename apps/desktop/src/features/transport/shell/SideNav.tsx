@@ -14,6 +14,9 @@ type SideNavProps = {
   onSessionsClick?: () => void;
   onSaveClick?: () => void;
   canSave?: boolean;
+  /** Android: toggles the file-actions submenu (import song / export session). */
+  onFileActionsClick?: () => void;
+  isFileActionsOpen?: boolean;
 };
 
 export function SideNav({
@@ -26,6 +29,8 @@ export function SideNav({
   onSessionsClick,
   onSaveClick,
   canSave = false,
+  onFileActionsClick,
+  isFileActionsOpen = false,
 }: SideNavProps) {
   const { t } = useTranslation();
 
@@ -57,6 +62,20 @@ export function SideNav({
         >
           <span className="material-symbols-outlined">save</span>
           {t("timelineTopbar.saveShort", { defaultValue: "Guardar" })}
+        </button>
+      ) : null}
+      {isAndroidApp && onFileActionsClick ? (
+        <button
+          type="button"
+          className={isFileActionsOpen ? "is-active" : ""}
+          aria-label={t("transport.shell.fileActions", {
+            defaultValue: "Importar / Exportar",
+          })}
+          aria-expanded={isFileActionsOpen}
+          onClick={onFileActionsClick}
+        >
+          <span className="material-symbols-outlined">import_export</span>
+          {t("transport.shell.fileActionsShort", { defaultValue: "Archivo" })}
         </button>
       ) : null}
       <button

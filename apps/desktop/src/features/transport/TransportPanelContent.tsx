@@ -894,6 +894,9 @@ export function TransportPanelContent() {
     setRecentColors((previous) => pushRecentColor(previous, color));
   }, []);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
+  // Android: file-actions submenu (import song / export session) toggled from
+  // its side-rail button.
+  const [isMobileFileActionsOpen, setIsMobileFileActionsOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
   );
@@ -10706,7 +10709,53 @@ export function TransportPanelContent() {
             onSessionsClick={() => setIsMobileSessionsModalOpen(true)}
             onSaveClick={handleSaveProjectClick}
             canSave={canPersistProject}
+            onFileActionsClick={() =>
+              setIsMobileFileActionsOpen((current) => !current)
+            }
+            isFileActionsOpen={isMobileFileActionsOpen}
           />
+
+          {/* Android: file-actions submenu anchored to the side rail. Import
+              session lives on the landing screen (like desktop); these are the
+              in-session actions. */}
+          {isMobileFileActionsOpen ? (
+            <div
+              className="lt-mobile-file-menu-backdrop"
+              onClick={() => setIsMobileFileActionsOpen(false)}
+            >
+              <div
+                className="lt-mobile-file-menu"
+                role="menu"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMobileFileActionsOpen(false);
+                    handleImportSongClick();
+                  }}
+                >
+                  <span className="material-symbols-outlined">library_add</span>
+                  {t("timelineTopbar.importSong")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!song}
+                  onClick={() => {
+                    setIsMobileFileActionsOpen(false);
+                    setIsExportSessionModalOpen(true);
+                  }}
+                >
+                  <span className="material-symbols-outlined">ios_share</span>
+                  {t("timelineTopbar.exportSession", {
+                    defaultValue: "Exportar sesión…",
+                  })}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="lt-workspace">
             <div className="lt-workspace-body">
@@ -11864,44 +11913,6 @@ export function TransportPanelContent() {
                         handleOpenProjectFromPath(songFile);
                       }}
                     />
-                    {/* Song/session interchange via the system SAF pickers —
-                        the mobile stand-in for the desktop FILE menu entries.
-                        The external DAW import (Reaper/Ableton) stays
-                        desktop-only by design. */}
-                    <div className="lt-mobile-sessions-file-actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsMobileSessionsModalOpen(false);
-                          handleImportSongClick();
-                        }}
-                      >
-                        {t("timelineTopbar.importSong")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsMobileSessionsModalOpen(false);
-                          handleImportSessionClick();
-                        }}
-                      >
-                        {t("timelineTopbar.importSession", {
-                          defaultValue: "Importar sesión…",
-                        })}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!song}
-                        onClick={() => {
-                          setIsMobileSessionsModalOpen(false);
-                          setIsExportSessionModalOpen(true);
-                        }}
-                      >
-                        {t("timelineTopbar.exportSession", {
-                          defaultValue: "Exportar sesión…",
-                        })}
-                      </button>
-                    </div>
                   </div>
                 </section>
               </div>
