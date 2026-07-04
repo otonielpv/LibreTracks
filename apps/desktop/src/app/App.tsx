@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { TransportPanel } from "../features/transport/TransportPanel";
-import { isAndroidApp, isTauriApp } from "../features/transport/desktopApi";
+import { isTauriApp } from "../features/transport/desktopApi";
 import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
@@ -110,11 +110,13 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // No in-app update check on Android: releases there won't be the desktop
-  // installers the update modal points at (APK distribution is separate).
+  // In-app update check runs on both desktop and Android. Each GitHub release
+  // now bundles the signed APK alongside the desktop installers under the same
+  // version tag, and the download page lists the .apk asset, so the modal's
+  // "Download" button lands the phone on a page where the APK is available.
   const { release, isModalOpen, dismiss } = useUpdateCheck({
     currentVersion,
-    enabled: isTauriApp && !isAndroidApp && !import.meta.env.DEV,
+    enabled: isTauriApp && !import.meta.env.DEV,
   });
 
   return (
