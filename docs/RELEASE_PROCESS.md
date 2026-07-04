@@ -299,3 +299,57 @@ Notes:
   the in-app modal shows these to end users.
 - Pushing the tag before the user confirms — the release pipeline is
   not idempotent for the version slot.
+
+---
+
+## Android APK (distribution)
+
+The download page (`GithubReleases.astro`) lists each GitHub Release's
+assets, so distributing Android is: **attach the signed `.apk` to the
+release** and the page shows it automatically (🤖 icon). No Google Play,
+no store fee.
+
+### Signing — the keystore is irreplaceable
+
+A distributable APK must be signed with a stable key you own and must NOT
+be debuggable. Signing config lives in
+`apps/desktop/src-tauri/gen/android/keystore.properties` (gitignored),
+which points at a `.jks` kept OUTSIDE the repo
+(`~/.libretracks/libretracks-release.jks`).
+
+**Back up that .jks somewhere safe (not just this machine).** If you lose
+it you can never ship an update to an already-installed app — users would
+have to uninstall + reinstall. All future versions must be signed with the
+same key.
+
+`keystore.properties` format:
+```
+storeFile=C:/Users/<you>/.libretracks/libretracks-release.jks
+storePassword=…
+keyAlias=libretracks
+keyPassword=…
+```
+
+When the file is absent (fresh clone, no keystore) the release build falls
+back to debug signing + `isDebuggable=true` — those builds are for local
+testing only, never for distribution.
+
+### Build + verify + attach
+
+```bash
+# arm64 covers all modern phones/tablets. Add --target x86_64 only for the
+# emulator; don't ship x86_64.
+cd apps/desktop && npx tauri android build --apk --target aarch64
+
+# Verify BEFORE attaching:
+apksigner verify --print-certs <apk>   # Signer #1 DN must be CN=LibreTracks
+aapt dump badging <apk> | grep debuggable   # must print nothing
+
+# Attach app-universal-release.apk to the GitHub Release (rename to include
+# the version, e.g. LibreTracks-1.5.0-android.apk, so the download card reads
+# clearly). versionCode must increase every release or devices refuse the
+# update — it derives from tauri.android.versionCode.
+```
+
+Changing from a debug-signed test build to the release-signed APK requires
+`adb uninstall` first (Android rejects an update with a different signature).
