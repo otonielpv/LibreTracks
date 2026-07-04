@@ -50,3 +50,8 @@ bench-out*
 .graphify_detect_fast.json
 .graphify_detect.json
 .claude/scheduled_tasks.lock
+# Android release signing credentials — NEVER commit (contains passwords and
+# points at the private keystore). Each developer keeps their own copy.
+apps/desktop/src-tauri/gen/android/keystore.properties
+*.jks
+*.keystore

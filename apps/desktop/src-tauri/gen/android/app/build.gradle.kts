@@ -13,6 +13,18 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release signing: credentials live in gen/android/keystore.properties (NOT
+// versioned). When present, release builds are signed with the real upload
+// keystore; when absent (a fresh clone with no keystore), the release block
+// falls back to debug signing so a dev build still works.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystoreProps.getProperty("storeFile")?.let { file(it).exists() } == true
+
 android {
     compileSdk = 36
     namespace = "com.libretracks.desktop"
@@ -23,6 +35,16 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -43,17 +65,19 @@ android {
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
                     .toList().toTypedArray()
             )
-            // Development convenience: sign release builds with the debug
-            // keystore so optimized APKs are installable on test devices.
-            // The debug-profile Rust lib is ~210 MB (vs ~25 MB optimized),
-            // which simply doesn't fit on storage-constrained phones.
-            // TODO: replace with a real upload keystore before distributing.
-            signingConfig = signingConfigs.getByName("debug")
-            // Diagnostics on test devices: keeps `adb run-as` working so the
-            // engine's lt_audio_debug.log ([LT_STARVATION], callback gaps) is
-            // readable from optimized builds while we tune low-end phones.
-            // TODO: drop together with the debug signing before distributing.
-            isDebuggable = true
+            // Sign with the real upload keystore when its credentials are
+            // present (keystore.properties). A distributable APK must be
+            // signed with a stable key you own and NOT be debuggable. Without
+            // the keystore (a fresh clone) fall back to debug signing +
+            // debuggable so a dev build still installs on test devices — those
+            // builds are for local testing only, never for distribution.
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+                isDebuggable = false
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+                isDebuggable = true
+            }
         }
     }
     kotlinOptions {
