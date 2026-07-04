@@ -104,6 +104,35 @@ pub fn export_temp_path(app: &AppHandle, file_name: &str) -> Result<PathBuf, Str
     Ok(dir.join(format!("{}-{}", unique_stamp(), file_name)))
 }
 
+/// Try to turn a SAF pick into a REAL filesystem path.
+///
+/// Needed for open-in-place flows (a session is a folder of files the engine
+/// streams by path — a single content:// fd is useless there). Only the
+/// external-storage provider encodes a usable location in its document id
+/// ("primary:Music/Set/x.ltsession" → /storage/emulated/0/Music/Set/…);
+/// provider-virtualized picks (the "Downloads"/"Recents" shortcuts, cloud
+/// docs) do not map to paths. Reading the result still needs the storage
+/// permission (legacy on Android 10, "all files" on 11+).
+pub fn resolve_picked_file_to_path(picked: &FilePath) -> Option<PathBuf> {
+    let url = match picked {
+        FilePath::Path(path) => return Some(path.clone()),
+        FilePath::Url(url) => url,
+    };
+    if url.host_str() != Some("com.android.externalstorage.documents") {
+        return None;
+    }
+    let last_segment = url.path_segments()?.next_back()?.to_string();
+    let doc_id = percent_decode(&last_segment);
+    let (volume, relative) = doc_id.split_once(':')?;
+    let root = if volume == "primary" {
+        "/storage/emulated/0".to_string()
+    } else {
+        format!("/storage/{volume}")
+    };
+    let candidate = PathBuf::from(root).join(relative);
+    candidate.is_file().then_some(candidate)
+}
+
 fn unique_stamp() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

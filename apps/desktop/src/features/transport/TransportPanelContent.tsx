@@ -10800,6 +10800,7 @@ export function TransportPanelContent() {
                   <MobileLanding
                     onCreateSession={handleCreateSongNamed}
                     onOpenSession={handleOpenProjectFromPath}
+                    onOpenSessionFromPicker={handleOpenProjectClick}
                     onImportSession={handleImportSessionClick}
                   />
                 ) : (

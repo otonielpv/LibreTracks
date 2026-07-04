@@ -786,13 +786,50 @@ pub fn get_project_load_progress_snapshot(
 
 #[tauri::command]
 pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
-    let song_file = FileDialog::new()
-        .add_filter("LibreTracks Session", &["ltsession"])
-        .set_title("Selecciona session.ltsession")
-        .pick_file();
+    // Android: the system picker (which remembers the app's last folder on
+    // its own) returns a content:// URI; opening IN PLACE needs the real
+    // path — a session is a folder the engine streams by path — so resolve
+    // it and fall out with a clear message when the location can't map to
+    // one (cloud providers, the virtual Downloads shortcut).
+    #[cfg(target_os = "android")]
+    let song_file = {
+        let Some(picked) =
+            crate::mobile_files::pick_file(&app, "Selecciona session.ltsession")
+        else {
+            return Ok(false);
+        };
+        let Some(path) = crate::mobile_files::resolve_picked_file_to_path(&picked) else {
+            return Err(
+                "No se puede abrir una sesión desde esa ubicación. Navega al \
+                 almacenamiento del dispositivo (no a accesos directos como \
+                 'Descargas' o unidades en la nube), o usa Importar sesión \
+                 (.ltset). Si es la primera vez, concede a LibreTracks el \
+                 permiso de acceso a archivos."
+                    .into(),
+            );
+        };
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| !ext.eq_ignore_ascii_case("ltsession"))
+            .unwrap_or(true)
+        {
+            return Err("Selecciona un archivo .ltsession".into());
+        }
+        path
+    };
 
-    let Some(song_file) = song_file else {
-        return Ok(false);
+    #[cfg(not(target_os = "android"))]
+    let song_file = {
+        let song_file = FileDialog::new()
+            .add_filter("LibreTracks Session", &["ltsession"])
+            .set_title("Selecciona session.ltsession")
+            .pick_file();
+
+        let Some(song_file) = song_file else {
+            return Ok(false);
+        };
+        song_file
     };
 
     spawn_open_project_worker(&app, song_file);

@@ -9,6 +9,9 @@ import {
 type MobileLandingProps = {
   onCreateSession: (name: string) => void;
   onOpenSession: (songFile: string) => void;
+  /** Browse for a .ltsession anywhere on the device via the system picker
+   * (which remembers the app's last folder) — the desktop "Open" flow. */
+  onOpenSessionFromPicker?: () => void;
   /** Import a whole `.ltset` as a new session via the system file picker.
    * Optional so the embedded "Sesiones…" modal can omit it. */
   onImportSession?: () => void;
@@ -26,6 +29,7 @@ type MobileLandingProps = {
 export function MobileLanding({
   onCreateSession,
   onOpenSession,
+  onOpenSessionFromPicker,
   onImportSession,
   embedded = false,
 }: MobileLandingProps) {
@@ -124,6 +128,11 @@ export function MobileLanding({
             >
               {t("common.create")}
             </button>
+            {onOpenSessionFromPicker ? (
+              <button type="button" onClick={onOpenSessionFromPicker}>
+                {t("common.open")}
+              </button>
+            ) : null}
             {onImportSession ? (
               <button type="button" onClick={onImportSession}>
                 {t("transport.shell.importSession", {
