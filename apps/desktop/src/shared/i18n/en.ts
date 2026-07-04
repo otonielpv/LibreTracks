@@ -322,6 +322,7 @@ const en = {
       renameSong: "Rename Song",
       changeBpm: "Change BPM",
       changeRegionWarpSourceBpm: "Change Original BPM",
+      exportSong: "Export Song",
       deleteSong: "Delete Song",
       deleteMarker: "Delete Marker",
       insertTrack: "Insert Track",

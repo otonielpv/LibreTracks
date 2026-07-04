@@ -4096,6 +4096,7 @@ export function TransportPanelContent() {
     [setExportSongTarget],
   );
 
+
   // Runs the export once the user picked a mode in the ExportSongModal.
   const handleConfirmExportSong = useCallback(
     (regionId: string, includeAudio: boolean) => {
@@ -6681,7 +6682,9 @@ export function TransportPanelContent() {
         },
       },
       {
-        label: "Exportar Cancion",
+        label: t("transport.menu.exportSong", {
+          defaultValue: "Exportar Cancion",
+        }),
         onSelect: () => {
           setExportSongTarget({ regionId: region.id, regionName: region.name });
         },
