@@ -1945,7 +1945,8 @@ impl DesktopSession {
             || previous_settings.output_buffer_size != next_settings.output_buffer_size
             || previous_settings.output_sample_format != next_settings.output_sample_format
             || previous_settings.output_channel_mapping != next_settings.output_channel_mapping
-            || previous_settings.audio_safe_mode != next_settings.audio_safe_mode;
+            || previous_settings.audio_safe_mode != next_settings.audio_safe_mode
+            || previous_settings.low_latency_output != next_settings.low_latency_output;
         let midi_changed =
             previous_settings.selected_midi_device != next_settings.selected_midi_device;
         let output_channels_changed =

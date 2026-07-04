@@ -51,6 +51,15 @@ libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
 rfd = "0.15"
 
+# Android-only. Enumerating real output devices (speaker / headphones / USB
+# interface / Bluetooth) is a Java-only API (AudioManager.getDevices): the NDK
+# doesn't expose it. We call it from Rust via JNI, using the JavaVM + Context
+# that Tauri/tao already cache in ndk-context — no JNI plumbing needed in the
+# C++ engine. See src/android_audio_devices.rs.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
+
 [features]
 audio-engine-v2 = []
 # Build/test without linking the native C++ audio engine. Propagates to the

@@ -1614,6 +1614,21 @@ impl AudioController {
                     settings.output_buffer_size = AudioBufferSizeRequest::Default;
                 }
             }
+            // Low-latency mode (Android/Oboe only; a no-op on desktop backends).
+            // Sent last so it reopens the stream with the final device + SR in
+            // place. Best-effort like the others — a rejected mode must not kill
+            // apply_settings.
+            if let Err(error) = engine.send_command(&EngineCommand::SetLowLatency {
+                enabled: settings.low_latency_output,
+            }) {
+                if audio_debug_logging_enabled() {
+                    eprintln!(
+                        "[libretracks-audio] low-latency mode \
+                         {} rejected ({error}); keeping previous mode.",
+                        settings.low_latency_output,
+                    );
+                }
+            }
             } // end if rebuild_stream
             // Metronome config is a pure state setter; if THIS fails it's a
             // genuine engine bug, so we DO propagate.

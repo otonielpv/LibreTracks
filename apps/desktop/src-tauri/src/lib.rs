@@ -3,9 +3,10 @@
 //! Desktop builds run this through src/main.rs; Android/iOS load it as a
 //! shared library through `mobile_entry_point`. On Android the remote-control
 //! server and MIDI input are excluded (see the `remote` / `midi` module
-//! splits) and the C++ audio engine runs as a no-op stub until it is ported
-//! to the NDK.
+//! splits); the C++ audio engine runs for real through the Oboe/AAudio backend.
 
+#[cfg(target_os = "android")]
+mod android_audio_devices;
 mod audio_engine;
 mod automation;
 mod commands;
