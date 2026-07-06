@@ -481,13 +481,31 @@ export async function openProject(): Promise<TransportSnapshot | null> {
 }
 
 /**
- * Create a session by name in the default songs folder, without a native save
- * dialog. Android landing flow (rfd has no Android backend); works anywhere.
+ * Create a session by name, without a native save dialog. When `parentDir` is
+ * given the session folder is placed there (the "choose where to save" flow);
+ * otherwise it lands in the default songs folder. Android landing flow (rfd
+ * has no Android backend); works anywhere.
  */
 export async function createSongNamed(
   name: string,
+  parentDir?: string,
 ): Promise<TransportSnapshot | null> {
-  return runProjectLoadCommand("start_create_song_named", { name });
+  return runProjectLoadCommand("start_create_song_named_at", {
+    name,
+    parentDir: parentDir ?? null,
+  });
+}
+
+/**
+ * Ask the user where to save a new session named `name` and return the picked
+ * parent directory as a real filesystem path (or `null` if cancelled). On
+ * Android this is the system "save as" dialog (the dialog plugin has no folder
+ * chooser there); the suggested file name is derived from `name`. Rejects when
+ * the pick is a location that doesn't map to a real path (a cloud root or the
+ * Downloads shortcut).
+ */
+export async function pickSessionFolder(name: string): Promise<string | null> {
+  return invokeCommand<string | null>("pick_session_folder", { name });
 }
 
 /** One session folder found in the default songs directory. */

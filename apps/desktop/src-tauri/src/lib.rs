@@ -217,6 +217,8 @@ pub fn run() {
             commands::system::report_ui_render_metric,
             commands::project::start_create_song,
             commands::project::start_create_song_named,
+            commands::project::start_create_song_named_at,
+            commands::project::pick_session_folder,
             commands::project::start_open_project_from_path,
             commands::project::list_default_sessions,
             commands::project::list_session_templates,

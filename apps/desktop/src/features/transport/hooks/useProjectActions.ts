@@ -199,10 +199,10 @@ export function useProjectActions({
 
   // Android landing flow: no native dialogs there, so sessions are created by
   // name in the default songs folder and opened from a list of known paths.
-  function handleCreateSongNamed(name: string) {
+  function handleCreateSongNamed(name: string, parentDir?: string) {
     void runAction(
       async () => {
-        const nextSnapshot = await createSongNamed(name);
+        const nextSnapshot = await createSongNamed(name, parentDir);
         if (!nextSnapshot) {
           return;
         }

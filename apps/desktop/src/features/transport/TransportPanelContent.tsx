@@ -11910,9 +11910,9 @@ export function TransportPanelContent() {
                   <div className="lt-settings-modal-body">
                     <MobileLanding
                       embedded
-                      onCreateSession={(name) => {
+                      onCreateSession={(name, parentDir) => {
                         setIsMobileSessionsModalOpen(false);
-                        handleCreateSongNamed(name);
+                        handleCreateSongNamed(name, parentDir);
                       }}
                       onOpenSession={(songFile) => {
                         setIsMobileSessionsModalOpen(false);

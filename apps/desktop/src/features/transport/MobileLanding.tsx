@@ -3,11 +3,14 @@ import { useTranslation } from "react-i18next";
 
 import {
   listDefaultSessions,
+  pickSessionFolder,
   type DefaultSessionSummary,
 } from "./desktopApi";
 
 type MobileLandingProps = {
-  onCreateSession: (name: string) => void;
+  /** Create the session under `parentDir` (a folder the user picked) — the
+   * caller places it in the default folder when `parentDir` is omitted. */
+  onCreateSession: (name: string, parentDir?: string) => void;
   onOpenSession: (songFile: string) => void;
   /** Browse for a .ltsession anywhere on the device via the system picker
    * (which remembers the app's last folder) — the desktop "Open" flow. */
@@ -37,6 +40,8 @@ export function MobileLanding({
   const [sessions, setSessions] = useState<DefaultSessionSummary[]>([]);
   const [sessionName, setSessionName] = useState("");
   const [isNamingSession, setIsNamingSession] = useState(false);
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [isPickingFolder, setIsPickingFolder] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,12 +67,33 @@ export function MobileLanding({
   );
 
   const submitCreate = () => {
-    if (!trimmedName || nameTaken) {
+    if (!trimmedName || nameTaken || isPickingFolder) {
       return;
     }
-    setIsNamingSession(false);
-    setSessionName("");
-    onCreateSession(trimmedName);
+    const name = trimmedName;
+    // Ask where to save first; cancelling the folder cancels the whole create
+    // (no silent fallback to the app's private folder). Only after we have a
+    // destination do we close the form and hand off to the backend.
+    setFolderError(null);
+    setIsPickingFolder(true);
+    void pickSessionFolder(name)
+      .then((parentDir) => {
+        if (!parentDir) {
+          // User cancelled the folder picker — leave the form as-is.
+          return;
+        }
+        setIsNamingSession(false);
+        setSessionName("");
+        onCreateSession(name, parentDir);
+      })
+      .catch((error: unknown) => {
+        setFolderError(
+          typeof error === "string" ? error : (error as Error)?.message ?? null,
+        );
+      })
+      .finally(() => {
+        setIsPickingFolder(false);
+      });
   };
 
   return (
@@ -100,19 +126,26 @@ export function MobileLanding({
                 {t("transport.shell.mobileSessionNameTaken")}
               </p>
             ) : null}
+            {folderError ? (
+              <p className="lt-mobile-landing-name-taken" role="alert">
+                {folderError}
+              </p>
+            ) : null}
             <div className="lt-empty-state-actions">
               <button
                 type="submit"
                 className="is-primary"
-                disabled={!trimmedName || nameTaken}
+                disabled={!trimmedName || nameTaken || isPickingFolder}
               >
                 {t("common.create")}
               </button>
               <button
                 type="button"
+                disabled={isPickingFolder}
                 onClick={() => {
                   setIsNamingSession(false);
                   setSessionName("");
+                  setFolderError(null);
                 }}
               >
                 {t("common.cancel")}

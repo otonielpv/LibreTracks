@@ -531,13 +531,51 @@ fn sanitize_session_name(raw: &str) -> Result<String, String> {
 /// `start_create_song`.
 #[tauri::command]
 pub fn start_create_song_named(app: AppHandle, name: String) -> Result<bool, String> {
+    start_create_song_named_at(app, name, None)
+}
+
+/// Create a session by name inside a caller-chosen parent folder — the Android
+/// "choose where to save" flow, mirroring the desktop save dialog. When
+/// `parent_dir` is `None` this behaves exactly like the default-folder create;
+/// when `Some`, the session folder is placed under that directory (collisions
+/// get a `-2`, `-3`… suffix so we never clobber an existing session). Same
+/// worker + progress events as `start_create_song`.
+#[tauri::command]
+pub fn start_create_song_named_at(
+    app: AppHandle,
+    name: String,
+    parent_dir: Option<String>,
+) -> Result<bool, String> {
     let name = sanitize_session_name(&name)?;
-    let default_directory = crate::state::create_song_default_directory(&app);
-    if default_directory.join(&name).exists() {
-        return Err(format!("Ya existe un proyecto llamado \"{name}\""));
-    }
-    let _ = std::fs::create_dir_all(&default_directory);
-    let target_pick = default_directory.join(crate::state::default_project_file_name(&name));
+
+    let target_pick = match parent_dir {
+        Some(parent) => {
+            let parent = std::path::PathBuf::from(parent);
+            if !parent.is_dir() {
+                return Err(format!(
+                    "La carpeta destino no existe: {}",
+                    parent.display()
+                ));
+            }
+            // A chosen folder may already hold a same-named session; pick a
+            // fresh `<name>`, `<name>-2`… folder instead of failing so the
+            // user isn't forced to rename.
+            let song_dir = unique_session_dir(&parent, &name);
+            let dir_name = song_dir
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&name);
+            song_dir.join(crate::state::default_project_file_name(dir_name))
+        }
+        None => {
+            let default_directory = crate::state::create_song_default_directory(&app);
+            if default_directory.join(&name).exists() {
+                return Err(format!("Ya existe un proyecto llamado \"{name}\""));
+            }
+            let _ = std::fs::create_dir_all(&default_directory);
+            default_directory.join(crate::state::default_project_file_name(&name))
+        }
+    };
 
     spawn_project_work(&app, move |_worker_app, state| {
         let mut session = state
@@ -550,6 +588,50 @@ pub fn start_create_song_named(app: AppHandle, name: String) -> Result<bool, Str
     });
 
     Ok(true)
+}
+
+/// Let the user choose where a new session should be saved and return the
+/// picked PARENT directory as a real filesystem path — the frontend then calls
+/// `start_create_song_named_at` with it, so the session lands in
+/// `<chosen>/<name>/`. Returns `None` when the user cancels.
+///
+/// Android has no folder chooser in the dialog plugin, so this reuses the SAF
+/// create-document dialog (the system "save as" UI): we suggest
+/// `<name>.ltsession` and derive the chosen folder from where the user places
+/// it. Errors when the pick is a provider-virtualized location that doesn't map
+/// to a real path (Drive, the Downloads shortcut…), since the engine streams
+/// audio by path and can't use those.
+#[tauri::command]
+pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String>, String> {
+    let name = sanitize_session_name(&name)?;
+
+    #[cfg(target_os = "android")]
+    {
+        let suggested = crate::state::default_project_file_name(&name);
+        let Some(picked) =
+            crate::mobile_files::save_file(&app, "Elige donde guardar la sesion", &suggested)
+        else {
+            return Ok(None);
+        };
+        match crate::mobile_files::resolve_picked_document_parent(&picked) {
+            Some(path) => Ok(Some(path.to_string_lossy().into_owned())),
+            None => Err(
+                "Esa ubicacion no se puede usar como carpeta de sesion. Elige una carpeta \
+                 del almacenamiento del dispositivo (no un acceso directo como Descargas o \
+                 una nube)."
+                    .to_string(),
+            ),
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = &name;
+        let picked = FileDialog::new()
+            .set_title("Elige donde guardar la sesion")
+            .pick_folder();
+        Ok(picked.map(|path| path.to_string_lossy().into_owned()))
+    }
 }
 
 /// List the sessions living in the default songs folder (most recently
@@ -1577,9 +1659,7 @@ pub fn export_session_package(
 pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     let (package_source, target_song_dir) = {
-        // SAF picker for the .ltset; no second "save as" dialog — sessions
-        // live in the app's private songs dir on Android (same as the landing
-        // screen's create-by-name), under a unique folder named after the set.
+        // SAF picker for the .ltset.
         let Some(picked) = crate::mobile_files::pick_file(&app, "Importar sesion (.ltset)")
         else {
             return Ok(false);
@@ -1597,8 +1677,30 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
             .filter(|name| !name.is_empty())
             .unwrap_or("sesion-importada")
             .to_string();
-        let songs_dir = crate::state::create_song_default_directory(&app);
-        let target_song_dir = unique_session_dir(&songs_dir, &default_name);
+        // Let the user choose where the new session folder lands (mirroring the
+        // desktop "save as" step). The dialog plugin has no folder chooser on
+        // Android, so we reuse the SAF create-document dialog and derive the
+        // parent folder from the placement. Cancelling cancels the import — no
+        // silent fallback to the private songs dir.
+        let suggested = crate::state::default_project_file_name(&default_name);
+        let Some(folder_pick) = crate::mobile_files::save_file(
+            &app,
+            "Elige donde guardar la sesion importada",
+            &suggested,
+        ) else {
+            return Ok(false);
+        };
+        let Some(parent_dir) =
+            crate::mobile_files::resolve_picked_document_parent(&folder_pick)
+        else {
+            return Err(
+                "Esa ubicacion no se puede usar como carpeta de sesion. Elige una carpeta \
+                 del almacenamiento del dispositivo (no un acceso directo como Descargas o \
+                 una nube)."
+                    .to_string(),
+            );
+        };
+        let target_song_dir = unique_session_dir(&parent_dir, &default_name);
         ((picked, picked_name), target_song_dir)
     };
 
@@ -1736,9 +1838,9 @@ fn sanitize_saf_name_hint(raw: &str, fallback: &str) -> String {
 }
 
 /// First non-existing `<songs>/<name>`, `<songs>/<name>-2`, … folder. Android
-/// has no "save as" dialog to resolve collisions, so imports pick a fresh
-/// folder automatically instead of clobbering an existing session.
-#[cfg(target_os = "android")]
+/// has no "save as" dialog to resolve collisions, so imports and the
+/// choose-folder create pick a fresh folder automatically instead of
+/// clobbering an existing session.
 fn unique_session_dir(songs_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
     let base = songs_dir.join(name);
     if !base.exists() {

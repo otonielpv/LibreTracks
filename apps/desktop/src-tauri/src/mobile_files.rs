@@ -133,6 +133,47 @@ pub fn resolve_picked_file_to_path(picked: &FilePath) -> Option<PathBuf> {
     candidate.is_file().then_some(candidate)
 }
 
+/// Turn a SAF "create document" pick into the REAL parent DIRECTORY the user
+/// chose, so we can build a proper session folder there.
+///
+/// The plugin has no folder chooser on Android (`pick_folder` is desktop-only),
+/// so "choose where to save a session" reuses the create-document dialog
+/// (`ACTION_CREATE_DOCUMENT`), which returns a `document/` URI whose id is the
+/// full destination path — `primary:Music/Sets/Mi Cancion.ltsession`. We map
+/// that the same way as `resolve_picked_file_to_path` (`volume:relative` →
+/// `/storage/<volume>/relative`) but return the file's PARENT and require it to
+/// be an existing directory. Provider-virtualized picks (the Downloads/Recents
+/// shortcuts, cloud roots) don't encode a real path → `None`, so the caller can
+/// report a clear "pick a real device folder" message.
+///
+/// SAF also touches an empty placeholder file at the picked location; the
+/// caller should delete it (we only ever wanted the folder).
+pub fn resolve_picked_document_parent(picked: &FilePath) -> Option<PathBuf> {
+    let url = match picked {
+        // Desktop returns a real file path; its parent is the chosen folder.
+        FilePath::Path(path) => return path.parent().map(std::path::Path::to_path_buf),
+        FilePath::Url(url) => url,
+    };
+    if url.host_str() != Some("com.android.externalstorage.documents") {
+        return None;
+    }
+    let last_segment = url.path_segments()?.next_back()?.to_string();
+    let doc_id = percent_decode(&last_segment);
+    let (volume, relative) = doc_id.split_once(':')?;
+    let root = if volume == "primary" {
+        "/storage/emulated/0".to_string()
+    } else {
+        format!("/storage/{volume}")
+    };
+    let file_path = PathBuf::from(root).join(relative);
+    let parent = file_path.parent()?.to_path_buf();
+    // Clean up the empty placeholder SAF created; ignore failure (it may live
+    // under a provider that doesn't expose the real file, or perms may block
+    // it — the folder is what we need and that we've validated).
+    let _ = std::fs::remove_file(&file_path);
+    parent.is_dir().then_some(parent)
+}
+
 fn unique_stamp() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
