@@ -263,6 +263,7 @@ pub struct SongRegionSummary {
     pub start_seconds: f64,
     pub end_seconds: f64,
     pub transpose_semitones: i32,
+    pub key: Option<String>,
     pub warp_enabled: bool,
     pub warp_source_bpm: Option<f64>,
     pub master: SongMasterSummary,
@@ -871,6 +872,7 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
         start_seconds: warp_timeline_seconds_at(song, region.start_seconds),
         end_seconds: warp_timeline_seconds_at(song, region.end_seconds),
         transpose_semitones: region.transpose_semitones,
+        key: region.key.clone(),
         warp_enabled: region.warp_enabled,
         warp_source_bpm: region.warp_source_bpm,
         master: SongMasterSummary {
@@ -1175,6 +1177,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: SongMaster::default(),
         }
     }

@@ -104,6 +104,22 @@ if(LT_ENGINE_USE_JUCE)
     endif()
 endif()
 
+# ── OBOE (Android device backend) ─────────────────────────────────────────
+# Google Oboe wraps AAudio (falling back to OpenSL ES on old Android) with a
+# stable C++ API and device-quirk workarounds. Static lib via FetchContent;
+# it links the NDK's log/OpenSLES itself. Content goes on the same interface
+# target the engine already links for the device backend (lt_deps_juce), so
+# the root CMakeLists needs no per-backend link juggling.
+if(LT_ENGINE_USE_OBOE)
+    FetchContent_Declare(oboe
+        GIT_REPOSITORY https://github.com/google/oboe.git
+        GIT_TAG        1.9.3
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(oboe)
+    target_link_libraries(lt_deps_juce INTERFACE oboe log)
+endif()
+
 # ── DECODER ───────────────────────────────────────────────────────────────
 if(LT_ENGINE_USE_LIBSNDFILE)
     find_package(SndFile QUIET)

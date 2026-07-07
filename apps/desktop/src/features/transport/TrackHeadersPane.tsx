@@ -1,4 +1,9 @@
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { densityFromHeight } from "./constants";
@@ -36,6 +41,9 @@ type TrackHeadersPaneProps = {
   onCommitPan: (trackId: string) => void;
   audioRoutingOptions: Array<{ value: string; label: string }>;
   onAudioToChange: (trackId: string, nextAudioTo: string) => void;
+  /** Android: the ruler-header cell is mostly empty there, so it hosts the
+   * touch controls (track density, seek lock) instead of wasting the space. */
+  headerActions?: ReactNode;
 };
 
 export function TrackHeadersPane({
@@ -62,6 +70,7 @@ export function TrackHeadersPane({
   onCommitPan,
   audioRoutingOptions,
   onAudioToChange,
+  headerActions,
 }: TrackHeadersPaneProps) {
   const { t } = useTranslation();
   const headersListRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +105,9 @@ export function TrackHeadersPane({
       }}
     >
       <div className="lt-ruler-header">
+        {headerActions ? (
+          <div className="lt-ruler-header-actions">{headerActions}</div>
+        ) : null}
         <span>Tracks</span>
       </div>
       <div

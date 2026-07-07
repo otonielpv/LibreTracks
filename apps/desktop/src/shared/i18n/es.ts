@@ -96,6 +96,13 @@ const es = {
       emptyTitle: "Crea o abre una sesion",
       emptyDescription:
         "Inicia una sesion nueva o abre una existente. Importa assets WAV despues desde el panel Libreria y arrastralos al timeline solo cuando quieras organizarlos.",
+      mobileEmptyDescription:
+        "Crea una sesion nueva o abre una de tus sesiones. Importa audio despues desde el panel Libreria.",
+      mobileSessionNamePlaceholder: "Nombre de la sesion",
+      mobileSessionNameTaken: "Ya existe una sesion con ese nombre.",
+      mobileSessionsHeading: "Tus sesiones",
+      mobileNoSessions:
+        "Aun no tienes sesiones. Crea la primera con el boton de arriba.",
       importSession: "Importar sesión",
       importingSession: "Importando sesión...",
       exportingSession: "Exportando sesión...",
@@ -304,7 +311,7 @@ const es = {
       description: "{{name}}",
       fullTitle: "Completo (para compartir)",
       fullDescription:
-        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro PC sin los archivos originales.",
+        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro dispositivo sin los archivos originales.",
       lightTitle: "Ligero",
       lightDescription:
         "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
@@ -317,7 +324,7 @@ const es = {
       description: "{{name}}",
       fullTitle: "Completo (para llevártelo)",
       fullDescription:
-        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro PC sin los archivos originales.",
+        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro dispositivo sin los archivos originales.",
       lightTitle: "Ligero",
       lightDescription:
         "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
@@ -330,8 +337,11 @@ const es = {
       changeTimelineBpm: "Cambiar BPM del timeline",
       clearTimelineSelection: "Limpiar seleccion del timeline",
       renameSong: "Renombrar Cancion",
+      songKey: "Nota de la cancion",
+      songKeyNone: "Sin nota",
       changeBpm: "Cambiar BPM",
       changeRegionWarpSourceBpm: "Cambiar BPM original",
+      exportSong: "Exportar Cancion",
       deleteSong: "Borrar Cancion",
       deleteMarker: "Borrar marca",
       insertTrack: "Insertar track",
@@ -459,6 +469,8 @@ const es = {
       tempoMarkerCreated: "Marca de BPM creada en {{time}} a {{bpm}} BPM.",
       timelineSelectionCleared: "Seleccion del timeline limpiada.",
       songRenamed: "Cancion renombrada: {{name}}.",
+      songKeyUpdated: "Nota de «{{name}}» → {{key}}.",
+      songKeyCleared: "Nota de «{{name}}» eliminada.",
       regionTransposeUpdated:
         "Transposicion de la region actualizada para {{name}} a {{transpose}} st.",
       songDeleted: "Cancion eliminada: {{name}}.",
@@ -680,6 +692,7 @@ const es = {
     mainMenu: "Menu principal",
     fileMenu: "Archivo",
     newProject: "Nuevo proyecto",
+    mobileSessions: "Sesiones…",
     newFromTemplate: "Nuevo desde plantilla…",
     open: "Abrir",
     importSong: "Importar cancion",
@@ -797,6 +810,11 @@ const es = {
     assetsCount: "{{count}} assets",
     foldersCount: "{{count}} folders",
     selectedCount: "{{count}} selected",
+    addToTimeline: "Añadir al timeline ({{count}})",
+    addedToTimeline: "{{count}} audios añadidos al timeline",
+    addImportedToTimelinePrompt:
+      "¿Añadir los {{count}} audios importados al timeline? Cada uno creará su propia pista en la posición actual.",
+    clearSelection: "Quitar selección",
     deleteHint: "Delete removes selection",
     openSessionHint: "Abre o crea una sesion",
     loading: "Cargando assets de la biblioteca...",
@@ -844,7 +862,7 @@ const es = {
   },
   importAudio: {
     title: "Importar Audio",
-    pickTitle: "Selecciona archivos WAV desde tu ordenador",
+    pickTitle: "Selecciona archivos WAV desde tu dispositivo",
     pickHint:
       "Se abrira el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.",
     selectingFiles: "Seleccionar archivos...",

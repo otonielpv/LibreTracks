@@ -7,8 +7,12 @@ option(LT_ENGINE_BUILD_TESTS
     OFF)
 
 option(LT_ENGINE_USE_JUCE
-    "Use JUCE for audio device management (recommended)"
+    "Use JUCE for audio device management (recommended on desktop)"
     ON)
+
+option(LT_ENGINE_USE_OBOE
+    "Use Google Oboe (AAudio/OpenSL) for audio output — Android builds"
+    OFF)
 
 option(LT_ENGINE_ENABLE_ASAN
     "Enable AddressSanitizer for supported debug/development builds"
@@ -36,6 +40,12 @@ option(LT_ENGINE_USE_LIBSAMPLERATE
 # ---------------------------------------------------------------------------
 # Validate backend constraints
 # ---------------------------------------------------------------------------
+if(LT_ENGINE_USE_JUCE AND LT_ENGINE_USE_OBOE)
+    message(FATAL_ERROR
+        "LT_ENGINE_USE_JUCE and LT_ENGINE_USE_OBOE are mutually exclusive device "
+        "backends. Desktop uses JUCE; Android uses Oboe.")
+endif()
+
 if(NOT LT_ENGINE_USE_FFMPEG AND NOT LT_ENGINE_USE_LIBSNDFILE)
     message(FATAL_ERROR
         "No decoder backend selected. Enable LT_ENGINE_USE_FFMPEG or LT_ENGINE_USE_LIBSNDFILE.")

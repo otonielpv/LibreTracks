@@ -110,6 +110,10 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // In-app update check runs on both desktop and Android. Each GitHub release
+  // now bundles the signed APK alongside the desktop installers under the same
+  // version tag, and the download page lists the .apk asset, so the modal's
+  // "Download" button lands the phone on a page where the APK is available.
   const { release, isModalOpen, dismiss } = useUpdateCheck({
     currentVersion,
     enabled: isTauriApp && !import.meta.env.DEV,

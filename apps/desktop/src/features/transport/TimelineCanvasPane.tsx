@@ -28,7 +28,7 @@ import type {
   TimelineClipSummary,
   TimelineTrackSummary,
 } from "./pendingAudioImports";
-import { formatTransposeSemitones } from "./desktopApi";
+import { formatTransposeSemitones, isAndroidApp } from "./desktopApi";
 import { buildSongTempoRegions } from "@libretracks/shared/models";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
@@ -57,7 +57,10 @@ import {
   type ExternalDropPreview,
 } from "./dragDrop";
 
-const RULER_HEIGHT = 122;
+// Must stay in sync with the lane layout in Renderer/drawBackground.ts and
+// the .lt-android ruler heights in styles.css: 94px is the mobile lanes'
+// bottom edge (87) plus breathing room.
+const RULER_HEIGHT = isAndroidApp ? 94 : 122;
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
@@ -478,6 +481,23 @@ export function TimelineCanvasPane({
     previewEndSeconds: number;
   };
   const regionMoveDragRef = useRef<RegionMoveDrag | null>(null);
+  // Touch long-press → region context menu (Android). The WebView doesn't fire
+  // oncontextmenu on a finger long-press (only right-click does), so we time
+  // the press and synthesize the same call. Cancelled if the finger moves
+  // (that's a region move) or lifts early (a tap = select).
+  const regionLongPressRef = useRef<{
+    timerId: number;
+    regionId: string;
+    startClientX: number;
+    startClientY: number;
+    fired: boolean;
+  } | null>(null);
+  const cancelRegionLongPress = () => {
+    if (regionLongPressRef.current) {
+      window.clearTimeout(regionLongPressRef.current.timerId);
+      regionLongPressRef.current = null;
+    }
+  };
   const [regionMovePreview, setRegionMovePreview] = useState<{
     regionId: string;
     startSeconds: number;
@@ -1062,14 +1082,73 @@ export function TimelineCanvasPane({
                     if (event.altKey || event.ctrlKey || event.metaKey) {
                       return;
                     }
+                    // Android: arm a long-press that opens this region's
+                    // context menu (desktop's right-click equivalent). The
+                    // move drag still arms below; the long-press aborts it
+                    // when it fires.
+                    if (isAndroidApp) {
+                      cancelRegionLongPress();
+                      const regionId = region.id;
+                      const startClientX = event.clientX;
+                      const startClientY = event.clientY;
+                      regionLongPressRef.current = {
+                        regionId,
+                        startClientX,
+                        startClientY,
+                        fired: false,
+                        timerId: window.setTimeout(() => {
+                          if (
+                            regionLongPressRef.current?.regionId !== regionId
+                          ) {
+                            return;
+                          }
+                          regionLongPressRef.current.fired = true;
+                          if (regionMoveDragRef.current?.regionId === regionId) {
+                            regionMoveDragRef.current = null;
+                            setRegionMovePreview(null);
+                          }
+                          onRegionContextMenu(
+                            {
+                              preventDefault: () => {},
+                              stopPropagation: () => {},
+                              clientX: startClientX,
+                              clientY: startClientY,
+                            } as ReactMouseEvent<HTMLButtonElement>,
+                            regionId,
+                          );
+                        }, 500),
+                      };
+                    }
                     beginRegionMove(event, region);
                   }}
-                  onPointerMove={updateRegionMove}
-                  onPointerUp={endRegionMove}
-                  onPointerCancel={endRegionMove}
+                  onPointerMove={(event) => {
+                    if (regionLongPressRef.current) {
+                      const dx =
+                        event.clientX - regionLongPressRef.current.startClientX;
+                      const dy =
+                        event.clientY - regionLongPressRef.current.startClientY;
+                      if (Math.hypot(dx, dy) > 8) {
+                        cancelRegionLongPress();
+                      }
+                    }
+                    updateRegionMove(event);
+                  }}
+                  onPointerUp={(event) => {
+                    cancelRegionLongPress();
+                    endRegionMove(event);
+                  }}
+                  onPointerCancel={(event) => {
+                    cancelRegionLongPress();
+                    endRegionMove(event);
+                  }}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    // Swallow the click that follows a long-press menu open.
+                    if (regionLongPressRef.current?.fired) {
+                      regionLongPressRef.current = null;
+                      return;
+                    }
                     // Swallow the click that follows a move drag —
                     // dragging is not selecting. We detect it by
                     // checking if the move preview state was set.
@@ -1152,6 +1231,16 @@ export function TimelineCanvasPane({
                 markerKindCategory(section.kind) === "cue"
                   ? LANE_CUES
                   : LANE_SECTIONS;
+              // Android: the fixed 68px desktop hotspot swallows neighbouring
+              // taps (tapping the next bar still selected this marker). Size
+              // the touch zone to the drawn flag instead: digit prefix + name
+              // at the canvas' ~7px/char, clamped to a finger-sized minimum.
+              const flagLabelLength =
+                section.name.length + (section.digit != null ? 3 : 0);
+              const androidHotspotWidth = Math.max(
+                30,
+                Math.min(96, 14 + flagLabelLength * 7),
+              );
               return (
               <button
                 key={section.id}
@@ -1163,6 +1252,9 @@ export function TimelineCanvasPane({
                   left: section.startSeconds * pixelsPerSecond,
                   top: lane.top,
                   height: lane.height,
+                  ...(isAndroidApp
+                    ? { width: androidHotspotWidth, marginLeft: -4 }
+                    : {}),
                 }}
                 onMouseDown={(event) => {
                   event.preventDefault();

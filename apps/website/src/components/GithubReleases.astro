@@ -127,6 +127,7 @@ function iconForAsset(name: string): string {
   if (/\.msi$|\.exe$/i.test(name)) return "🪟";
   if (/\.dmg$/i.test(name)) return "🍎";
   if (/\.deb$|\.AppImage$|\.rpm$/i.test(name)) return "🐧";
+  if (/\.apk$/i.test(name)) return "🤖";
   return "📦";
 }
 

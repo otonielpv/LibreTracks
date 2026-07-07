@@ -1,7 +1,12 @@
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
-import { getSongBaseBpm, type PlaybackState, type SongView } from "./desktopApi";
+import {
+  getSongBaseBpm,
+  isAndroidApp,
+  type PlaybackState,
+  type SongView,
+} from "./desktopApi";
 import { ResourceMeter } from "./ResourceMeter";
 
 type TimelineTopbarProps = {
@@ -26,6 +31,9 @@ type TimelineTopbarProps = {
   onCreateSong: () => void;
   onCreateSongFromTemplate: () => void;
   onOpenProject: () => void;
+  /** Android: opens the in-app sessions modal (create by name / open from
+   * list) that replaces the dialog-based New/Open/Import menu entries. */
+  onOpenMobileSessions: () => void;
   onImportSong: () => void;
   onImportSession: () => void;
   onExportSession: () => void;
@@ -73,6 +81,7 @@ export function TimelineTopbar({
   onCreateSong,
   onCreateSongFromTemplate,
   onOpenProject,
+  onOpenMobileSessions,
   onImportSong,
   onImportSession,
   onExportSession,
@@ -118,6 +127,10 @@ export function TimelineTopbar({
           <span className="lt-brand-title">LIBRETRACKS</span>
         </div>
 
+        {/* Android: no FILE menu here — its two mobile entries (Sessions…,
+            Save) live in the side nav rail instead, so the transport strip
+            gets the full width on narrow phone screens. */}
+        {!isAndroidApp ? (
         <nav className="lt-menu-bar" aria-label={t("timelineTopbar.mainMenu")} ref={menuBarRef}>
           <div className={`lt-top-menu ${openTopMenu === "file" ? "is-open" : ""}`}>
             <button
@@ -137,7 +150,31 @@ export function TimelineTopbar({
               <span className="material-symbols-outlined" aria-hidden="true">arrow_drop_down</span>
             </button>
 
-            {canOpenFileMenu && openTopMenu === "file" ? (
+            {canOpenFileMenu && openTopMenu === "file" && isAndroidApp ? (
+              <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onTopMenuAction(onOpenMobileSessions)}
+                >
+                  <span>
+                    {t("timelineTopbar.mobileSessions", {
+                      defaultValue: "Sesiones…",
+                    })}
+                  </span>
+                </button>
+                <div className="lt-top-menu-separator" aria-hidden="true" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canPersistProject}
+                  onClick={() => onTopMenuAction(onSaveProject)}
+                >
+                  <span>{t("timelineTopbar.save")}</span>
+                </button>
+              </div>
+            ) : null}
+            {canOpenFileMenu && openTopMenu === "file" && !isAndroidApp ? (
               <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
                 <button
                   type="button"
@@ -272,6 +309,7 @@ export function TimelineTopbar({
             ) : null}
           </div>
         </nav>
+        ) : null}
 
         <ResourceMeter />
       </div>

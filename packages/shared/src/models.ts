@@ -190,6 +190,10 @@ export type SongRegionSummary = {
   startSeconds: number;
   endSeconds: number;
   transposeSemitones: number;
+  /** The song's original musical key in canonical sharp notation (e.g. `"Dm"`,
+   * `"F#"`), or `null` when unset. The key shown on the region is this value
+   * transposed by `transposeSemitones` — see `regionEffectiveKey`. */
+  key: string | null;
   /** When true, the region's audio is time-stretched so its `warpSourceBpm`
    * aligns with the effective timeline tempo. Applies to ALL tracks in the
    * region, independent of `transposeSemitones`. */
@@ -652,6 +656,8 @@ export type AppSettings = {
   outputChannelMapping: OutputChannelRequest;
   outputSampleFormat: AudioSampleFormat | null;
   audioSafeMode: boolean;
+  /** Android only: open the output stream in AAudio low-latency mode. */
+  lowLatencyOutput: boolean;
   selectedMidiDevice: string | null;
   suppressMissingMidiDeviceWarning: boolean;
   enabledOutputChannels: number[];
@@ -696,6 +702,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   outputChannelMapping: { channels: [0, 1] },
   outputSampleFormat: null,
   audioSafeMode: false,
+  lowLatencyOutput: false,
   selectedMidiDevice: null,
   suppressMissingMidiDeviceWarning: false,
   enabledOutputChannels: [0, 1],
@@ -878,6 +885,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     },
     outputSampleFormat,
     audioSafeMode: Boolean(settings.audioSafeMode),
+    lowLatencyOutput: Boolean(settings.lowLatencyOutput),
     selectedMidiDevice,
     suppressMissingMidiDeviceWarning: Boolean(
       settings.suppressMissingMidiDeviceWarning,
@@ -1166,6 +1174,7 @@ export function buildSongTempoRegions(
       bpm: displayBpm,
       timeSignature,
       transposeSemitones: 0,
+      key: null,
       warpEnabled: false,
       warpSourceBpm: null,
       master: { gain: 1.0 },
@@ -1184,6 +1193,7 @@ export function buildSongTempoRegions(
     bpm: displayBpm,
     timeSignature,
     transposeSemitones: 0,
+    key: null,
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
@@ -1204,6 +1214,135 @@ export function getPrimarySongRegion(
 
 export function getSongBaseBpm(song: SongView | null | undefined): number {
   return song?.bpm ?? 120;
+}
+
+/**
+ * The twelve pitch classes in sharp notation, indexed by semitone offset from C.
+ * Canonical output notation always uses sharps (no flats) so that
+ * {@link transposeKey} round-trips deterministically.
+ */
+const PITCH_CLASSES = [
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#",
+  "A",
+  "A#",
+  "B",
+] as const;
+
+/**
+ * Maps every accepted note-name spelling (sharps and flats) to its semitone
+ * offset from C. Used to parse a stored `song.key` regardless of how it was
+ * written. Case is normalised by {@link parseSongKey} before lookup.
+ */
+const NOTE_TO_SEMITONE: Record<string, number> = {
+  C: 0,
+  "C#": 1,
+  DB: 1,
+  D: 2,
+  "D#": 3,
+  EB: 3,
+  E: 4,
+  FB: 4,
+  F: 5,
+  "E#": 5,
+  "F#": 6,
+  GB: 6,
+  G: 7,
+  "G#": 8,
+  AB: 8,
+  A: 9,
+  "A#": 10,
+  BB: 10,
+  B: 11,
+  CB: 11,
+};
+
+/**
+ * The 24 selectable song keys (12 pitch classes × major/minor) in canonical
+ * sharp notation — the closed vocabulary offered by the key picker. Order is
+ * all majors C→B, then all minors Cm→Bm.
+ */
+export const SONG_KEY_OPTIONS: readonly string[] = [
+  ...PITCH_CLASSES,
+  ...PITCH_CLASSES.map((note) => `${note}m`),
+];
+
+export type ParsedSongKey = {
+  /** Semitone offset of the tonic from C, in the range 0..11. */
+  semitone: number;
+  /** True when the key is minor (a trailing `m`), false for major. */
+  minor: boolean;
+};
+
+/**
+ * Parses a stored key string (e.g. `"Dm"`, `"F#"`, `"eb"`) into a tonic
+ * semitone + mode. Returns `null` when the string is empty or not a recognised
+ * note, so callers can fall back to showing raw text or nothing.
+ */
+export function parseSongKey(
+  key: string | null | undefined,
+): ParsedSongKey | null {
+  if (!key) return null;
+  const trimmed = key.trim();
+  if (trimmed.length === 0) return null;
+
+  // A trailing "m" (but not "maj") marks a minor key. Everything before it is
+  // the note name.
+  const minor = /m$/i.test(trimmed) && !/maj$/i.test(trimmed);
+  const noteName = (minor ? trimmed.slice(0, -1) : trimmed).trim();
+  const normalised =
+    noteName.charAt(0).toUpperCase() + noteName.slice(1).toUpperCase();
+  const semitone = NOTE_TO_SEMITONE[normalised];
+  if (semitone === undefined) return null;
+
+  return { semitone, minor };
+}
+
+/**
+ * Canonical label for a parsed key, always in sharp notation (`"Dm"`, `"F#"`).
+ */
+export function formatSongKey(parsed: ParsedSongKey): string {
+  return `${PITCH_CLASSES[parsed.semitone]}${parsed.minor ? "m" : ""}`;
+}
+
+/**
+ * Transposes a stored key by a number of semitones and returns the canonical
+ * label of the result. When `key` cannot be parsed the original string is
+ * returned unchanged (with the semitone count appended only by the caller if
+ * desired). A `0` shift returns the canonicalised original key.
+ */
+export function transposeKey(
+  key: string | null | undefined,
+  semitones: number,
+): string | null {
+  const parsed = parseSongKey(key);
+  if (!parsed) return null;
+  const shifted = (((parsed.semitone + semitones) % 12) + 12) % 12;
+  return formatSongKey({ semitone: shifted, minor: parsed.minor });
+}
+
+/**
+ * The effective musical key of a region (song): the region's own original
+ * `key` transposed by its `transposeSemitones`. Returns `null` when the region
+ * has no key set or it is unparseable, so display sites can hide the label.
+ *
+ * The transpose always applies, warp or not: warp and pitch are independent
+ * parameters of the same Bungee voice (warp sets the time-ratio, transpose sets
+ * the pitch-scale), so a warped region with a transpose still sounds — and is
+ * labelled — at the shifted key.
+ */
+export function regionEffectiveKey(
+  region: Pick<SongRegionSummary, "key" | "transposeSemitones"> | null | undefined,
+): string | null {
+  if (!region) return null;
+  return transposeKey(region.key, region.transposeSemitones);
 }
 
 function semitonesToPitchScale(semitones: number): number {

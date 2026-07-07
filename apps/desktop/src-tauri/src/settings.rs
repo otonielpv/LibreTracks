@@ -126,6 +126,14 @@ pub struct AppSettings {
     pub output_sample_format: Option<AudioSampleFormat>,
     #[serde(default)]
     pub audio_safe_mode: bool,
+    /// Android only: open the output stream in AAudio low-latency mode
+    /// (Oboe `PerformanceMode::LowLatency`) instead of the default deep-buffer
+    /// mode. Off by default because low-latency streams get small internal
+    /// buffers that underran ("petardeo") on low-end phones; the user opts in
+    /// when they have hardware that can take it (e.g. a USB interface). Ignored
+    /// on desktop, which negotiates latency through buffer size.
+    #[serde(default)]
+    pub low_latency_output: bool,
     #[serde(default)]
     pub selected_midi_device: Option<String>,
     #[serde(default)]
@@ -213,6 +221,7 @@ impl Default for AppSettings {
             output_channel_mapping: OutputChannelRequest::default(),
             output_sample_format: None,
             audio_safe_mode: false,
+            low_latency_output: false,
             selected_midi_device: None,
             suppress_missing_midi_device_warning: false,
             enabled_output_channels: default_enabled_output_channels(),

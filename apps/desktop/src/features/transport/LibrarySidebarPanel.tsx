@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { LibraryImportProgressEvent } from "./desktopApi";
+import { isAndroidApp, type LibraryImportProgressEvent } from "./desktopApi";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
 import { clientToZoomedCoords } from "../../shared/uiZoom";
 
@@ -48,6 +48,9 @@ type LibrarySidebarPanelProps = {
   onRenameFolder: (folderPath: string) => void;
   onDeleteFolder: (folderPath: string) => void;
   onDeleteRequested: (assets: PendingLibraryAssetSummary[]) => void;
+  /** Android: the selection action bar's "Add to timeline" — pointer-drag to
+   * the timeline isn't viable on touch, so multi-select + one tap replaces it. */
+  onAddSelectionToTimeline?: (assets: PendingLibraryAssetSummary[]) => void;
 };
 
 function formatAssetDuration(durationSeconds: number) {
@@ -74,6 +77,7 @@ export function LibrarySidebarPanel({
   onRenameFolder,
   onDeleteFolder,
   onDeleteRequested,
+  onAddSelectionToTimeline,
 }: LibrarySidebarPanelProps) {
   const { t } = useTranslation();
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
@@ -249,6 +253,13 @@ export function LibrarySidebarPanel({
     asset: PendingLibraryAssetSummary,
     groupAssets: PendingLibraryAssetSummary[],
   ) => {
+    // Android has no Ctrl/Shift: every tap toggles, so multi-select builds
+    // up naturally (Google Files / Photos pattern) and the action bar below
+    // offers the bulk actions.
+    if (isAndroidApp) {
+      updateAssetSelection(asset, true);
+      return;
+    }
     if (event.shiftKey) {
       applyRangeSelection(asset, groupAssets);
       return;
@@ -351,6 +362,12 @@ export function LibrarySidebarPanel({
   };
 
   const handleAssetPointerDown = (event: ReactPointerEvent<HTMLDivElement>, asset: PendingLibraryAssetSummary) => {
+    // No pointer-drag to the timeline on Android: it fights touch scrolling,
+    // and the selection action bar covers the "take these to the timeline"
+    // flow instead.
+    if (isAndroidApp) {
+      return;
+    }
     if (event.button !== 0 || asset.isPending) {
       return;
     }
@@ -588,6 +605,38 @@ export function LibrarySidebarPanel({
           </div>
         ) : null}
       </div>
+
+      {isAndroidApp && selectedAssets.length > 0 && onAddSelectionToTimeline ? (
+        <div className="lt-library-mobile-actionbar">
+          <span className="lt-library-mobile-actionbar-count">
+            {t("library.selectedCount", { count: selectedAssets.length })}
+          </span>
+          <button
+            type="button"
+            className="lt-library-mobile-actionbar-add"
+            onClick={() => {
+              const assetsToAdd = selectedAssets.filter(
+                (asset) => !asset.isPending && !asset.isMissing,
+              );
+              setSelectedAssetPaths([]);
+              if (assetsToAdd.length > 0) {
+                onAddSelectionToTimeline(assetsToAdd);
+              }
+            }}
+          >
+            <span className="material-symbols-outlined">playlist_add</span>
+            {t("library.addToTimeline", { count: selectedAssets.length })}
+          </button>
+          <button
+            type="button"
+            className="lt-library-mobile-actionbar-clear"
+            aria-label={t("library.clearSelection")}
+            onClick={() => setSelectedAssetPaths([])}
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }

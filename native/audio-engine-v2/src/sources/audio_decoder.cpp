@@ -261,6 +261,16 @@ std::unique_ptr<AudioDecoder> make_decoder(const std::string& file_path) {
         // so it cannot decode FLAC. Use the bundled dr_flac decoder instead.
         return std::make_unique<DrFlacDecoder>();
     }
+#if defined(__ANDROID__)
+    // Anything that isn't WAV/AIFF (libsndfile) or MP3/FLAC (dr_libs) goes
+    // to the Android system codecs — AAC/M4A, OGG/Vorbis, Opus, 3GP... the
+    // mobile counterpart of the desktop FFmpeg route (Ableton-style: decode
+    // once with the OS, cache as PCM).
+    if (ext != "wav" && ext != "wave" && ext != "aif" && ext != "aiff" &&
+        ext != "aifc") {
+        return make_mediacodec_decoder();
+    }
+#endif
     // libsndfile handles WAV/AIFF. (FLAC/OGG would need ENABLE_EXTERNAL_LIBS.)
     return std::make_unique<SndfileDecoder>();
 #else

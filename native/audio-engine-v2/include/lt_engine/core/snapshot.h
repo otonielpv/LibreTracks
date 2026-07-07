@@ -109,6 +109,16 @@ struct MetronomeSnapshot {
     uint64_t    toggle_count = 0;
 };
 
+struct VoiceGuideSnapshot {
+    bool        enabled = false;
+    bool        bank_loaded = false;
+    std::string route_resolved;
+    std::string muted_reason;
+    uint64_t    announcements_fired = 0;
+    uint64_t    counts_fired = 0;
+    float       current_gain = 0.f;
+};
+
 struct EngineSnapshot {
     // Transport position
     Frame              current_frame   = 0;
@@ -141,6 +151,7 @@ struct EngineSnapshot {
 
     // Internal metronome
     MetronomeSnapshot metronome;
+    VoiceGuideSnapshot voice_guide;
 
     std::uint64_t mixer_scheduled_jump_executed_count = 0;
 

@@ -61,6 +61,12 @@ pub struct SongRegion {
     pub end_seconds: f64,
     #[serde(default)]
     pub transpose_semitones: i32,
+    /// The song's original musical key (e.g. `"Dm"`, `"F#"`). Pure display
+    /// metadata: the effective key shown to the user is this value transposed
+    /// by `transpose_semitones`. `None` when unset. Sessions saved before this
+    /// field deserialize to `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
     /// When true, every track in this region is time-stretched so the audio's
     /// original tempo (`warp_source_bpm`) aligns with the timeline's effective
     /// tempo. Pitch is preserved. Warp applies to the whole region — it is

@@ -17,3 +17,12 @@ if(LT_ENGINE_USE_FFMPEG)
         libav_decoder.cpp
     )
 endif()
+
+if(ANDROID)
+    # System-codec decoder (AAC/M4A/OGG/Opus...) via NDK MediaCodec — the
+    # mobile counterpart of the FFmpeg route above.
+    target_sources(lt_audio_engine_v2 PRIVATE
+        mediacodec_decoder.cpp
+    )
+    target_link_libraries(lt_audio_engine_v2 PRIVATE mediandk)
+endif()

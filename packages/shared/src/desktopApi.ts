@@ -36,6 +36,12 @@ const tauriWindow = window as Window & {
 
 export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 
+// Android build of the app (Tauri mobile WebView). Features that only make
+// sense on desktop — e.g. the remote-control server, whose point is to
+// control the desktop app FROM a phone — are hidden when this is true.
+export const isAndroidApp =
+  isTauriApp && /android/i.test(navigator.userAgent);
+
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
   try {
@@ -398,6 +404,16 @@ export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("update_song_tempo", { bpm });
 }
 
+export async function updateSongRegionKey(
+  regionId: string,
+  key: string | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_song_region_key", {
+    regionId,
+    key,
+  });
+}
+
 export async function upsertSongTempoMarker(
   startSeconds: number,
   bpm: number,
@@ -472,6 +488,57 @@ async function runProjectLoadCommand(
 
 export async function openProject(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_open_project_from_dialog");
+}
+
+/**
+ * Create a session by name, without a native save dialog. When `parentDir` is
+ * given the session folder is placed there (the "choose where to save" flow);
+ * otherwise it lands in the default songs folder. Android landing flow (rfd
+ * has no Android backend); works anywhere.
+ */
+export async function createSongNamed(
+  name: string,
+  parentDir?: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_create_song_named_at", {
+    name,
+    parentDir: parentDir ?? null,
+  });
+}
+
+/**
+ * Ask the user where to save a new session named `name` and return the picked
+ * parent directory as a real filesystem path (or `null` if cancelled). On
+ * Android this is the system "save as" dialog (the dialog plugin has no folder
+ * chooser there); the suggested file name is derived from `name`. Rejects when
+ * the pick is a location that doesn't map to a real path (a cloud root or the
+ * Downloads shortcut).
+ */
+export async function pickSessionFolder(name: string): Promise<string | null> {
+  return invokeCommand<string | null>("pick_session_folder", { name });
+}
+
+/** One session folder found in the default songs directory. */
+export interface DefaultSessionSummary {
+  name: string;
+  songFile: string;
+  modifiedMs: number | null;
+}
+
+/**
+ * List the sessions in the default songs folder, most recently modified
+ * first. The Android landing screen offers these instead of an "open file"
+ * dialog.
+ */
+export async function listDefaultSessions(): Promise<DefaultSessionSummary[]> {
+  return invokeCommand<DefaultSessionSummary[]>("list_default_sessions");
+}
+
+/** Open a session whose `.ltsession` path is already known (Android landing). */
+export async function openProjectFromPath(
+  songFile: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_open_project_from_path", { songFile });
 }
 
 export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
@@ -581,15 +648,28 @@ export async function importAudioFilesFromPaths(
   return invokeCommand<LibraryAssetSummary[]>("import_audio_files_from_paths", { files });
 }
 
+/**
+ * Android: consume files staged via stage_imported_audio_chunk. They are
+ * MOVED into the session's audio/ folder (relative-path registration, like
+ * the bytes import) instead of referencing the ephemeral staged path.
+ */
+export async function importStagedAudioFiles(
+  files: AudioFilePathImportPayload[],
+): Promise<LibraryAssetSummary[]> {
+  return invokeCommand<LibraryAssetSummary[]>("import_staged_audio_files", { files });
+}
+
+// Returns false if the user cancelled the save dialog (nothing was written).
 export async function exportRegionAsPackage(
   regionId: string,
   includeAudio = false,
-): Promise<void> {
-  await invokeCommand("export_region_as_package", { regionId, includeAudio });
+): Promise<boolean> {
+  return invokeCommand<boolean>("export_region_as_package", { regionId, includeAudio });
 }
 
-export async function exportRegionRenderedAudio(regionId: string): Promise<void> {
-  await invokeCommand("export_region_rendered_audio", { regionId });
+// Returns false if the user cancelled the save dialog (nothing was written).
+export async function exportRegionRenderedAudio(regionId: string): Promise<boolean> {
+  return invokeCommand<boolean>("export_region_rendered_audio", { regionId });
 }
 
 // Export the WHOLE session as a single portable .ltset (every region + library

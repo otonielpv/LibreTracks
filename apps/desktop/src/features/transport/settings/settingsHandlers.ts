@@ -116,6 +116,10 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       persistAudioPatch({ audioSafeMode: enabled }, audioRoutingUpdated());
     },
 
+    handleLowLatencyOutputChange(enabled: boolean) {
+      persistAudioPatch({ lowLatencyOutput: enabled }, audioRoutingUpdated());
+    },
+
     handleEnabledOutputChannelChange(channelIndex: number, enabled: boolean) {
       setEnabledOutputChannelsDraft((previous) => {
         const next = new Set(

@@ -12,10 +12,39 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-env-changed=LT_ENGINE_V2_LIB_DIR");
     println!("cargo:rerun-if-changed=build.rs");
+    // Declared unconditionally so rustc's unexpected_cfgs lint knows the cfg
+    // exists on every platform, not just Android builds that set it.
+    println!("cargo::rustc-check-cfg=cfg(lt_engine_android_link)");
 
     // Skip linking when the no-link feature is active.
-    let no_link = std::env::var("CARGO_FEATURE_NO_LINK").is_ok();
-    if no_link {
+    if std::env::var("CARGO_FEATURE_NO_LINK").is_ok() {
+        return;
+    }
+
+    // Android: link the NDK-built engine when it exists (see
+    // docs/ANDROID_PORT.md for the cmake invocation), and fall back to the
+    // no-link stubs when it doesn't — so a checkout without the engine build
+    // still compiles the app (silent engine). The emitted cfg is what flips
+    // ffi.rs between the real extern block and the stubs.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
+        let abi_dir = match std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
+            Ok("aarch64") => "build-android-arm64",
+            Ok("x86_64") => "build-android-x86_64",
+            _ => return, // other ABIs: stubs
+        };
+        let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let lib_dir = manifest
+            .ancestors()
+            .nth(2) // crates/lt-audio-engine-v2 → repo root
+            .unwrap()
+            .join("native/audio-engine-v2")
+            .join(abi_dir);
+        println!("cargo:rerun-if-changed={}", lib_dir.display());
+        if lib_dir.join("liblt_audio_engine_v2.so").exists() {
+            println!("cargo:rustc-cfg=lt_engine_android_link");
+            println!("cargo:rustc-link-search=native={}", lib_dir.display());
+            println!("cargo:rustc-link-lib=dylib=lt_audio_engine_v2");
+        }
         return;
     }
 

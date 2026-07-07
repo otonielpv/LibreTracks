@@ -87,7 +87,14 @@ export function shouldCompensateUiZoomViewport(
   userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
   platform = typeof navigator === "undefined" ? "" : navigator.platform,
 ): boolean {
-  return /Windows|Win32|Win64|WOW64/i.test(`${userAgent} ${platform}`);
+  // Blink/Chromium WebViews (Windows WebView2 and the Android System WebView)
+  // do NOT reflow the layout viewport when the CSS `zoom` property changes: the
+  // shell paints smaller/larger but `100vw`/`100vh` stay at the device size, so
+  // the shell no longer fills the window (gap when zoom < 1, clipped timecode
+  // when zoom > 1). WebKit (the macOS Tauri WebView) reflows on `zoom`, so it
+  // needs no compensation. Match the Blink hosts and divide the shell size by
+  // the zoom to cancel the mismatch (see the compensation class in styles.css).
+  return /Windows|Win32|Win64|WOW64|Android/i.test(`${userAgent} ${platform}`);
 }
 
 export function dispatchUiZoomStatus(zoom = current): void {

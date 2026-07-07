@@ -306,7 +306,7 @@ export function TimelineRulerCanvas({
       regions
         .map(
           (region) =>
-            `${region.id}:${region.name}:${region.startSeconds}:${region.endSeconds}:${region.warpEnabled ? 1 : 0}:${region.warpSourceBpm ?? 0}`,
+            `${region.id}:${region.name}:${region.startSeconds}:${region.endSeconds}:${region.warpEnabled ? 1 : 0}:${region.warpSourceBpm ?? 0}:${region.transposeSemitones}:${region.key ?? ""}`,
         )
         .join("|"),
     [regions],

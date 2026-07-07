@@ -10,7 +10,11 @@ import {
   METER_MIN_DB,
 } from "@libretracks/shared/meterBallistics";
 
-import { formatTransposeSemitones, type SongRegionSummary } from "./desktopApi";
+import {
+  formatTransposeSemitones,
+  isAndroidApp,
+  type SongRegionSummary,
+} from "./desktopApi";
 import { useTransportStore } from "./store";
 import type {
   GlobalJumpMode,
@@ -562,6 +566,7 @@ export function TimelineToolbar({
               <span className="material-symbols-outlined">my_location</span>
             </button>
           ) : null}
+
 
           <ControlGroup
             title={t("timelineToolbar.vampModeLabel")}

@@ -904,6 +904,14 @@ std::string EngineImpl::get_snapshot() const {
         snap.metronome.current_gain = metro.current_gain;
         snap.metronome.target_gain = metro.target_gain;
         snap.metronome.toggle_count = metro.toggle_count;
+        auto vg = mixer_->voice_guide_diagnostics();
+        snap.voice_guide.enabled = vg.enabled;
+        snap.voice_guide.bank_loaded = vg.bank_loaded;
+        snap.voice_guide.route_resolved = vg.route_resolved;
+        snap.voice_guide.muted_reason = vg.muted_reason;
+        snap.voice_guide.announcements_fired = vg.announcements_fired;
+        snap.voice_guide.counts_fired = vg.counts_fired;
+        snap.voice_guide.current_gain = vg.current_gain;
         snap.mixer_scheduled_jump_executed_count =
             mixer_->scheduled_jump_executed_count();
     }
@@ -1123,6 +1131,28 @@ std::string EngineImpl::get_snapshot() const {
                 static_cast<unsigned long long>(bd.rebuilds_for_seek),
                 static_cast<unsigned long long>(bd.voice_lookups_hit),
                 static_cast<unsigned long long>(bd.voice_lookups_miss));
+        }
+    }
+
+    // Voice-guide diagnostics — surfaces why the guide is (or isn't) audible:
+    // bank loaded, resolved route, mute reason, and the running announce/count
+    // fire counts. Gated on AUDIO_DIAG (on by default on Android).
+    if (env_flag_enabled("LIBRETRACKS_AUDIO_DIAG") && mixer_) {
+        static std::chrono::steady_clock::time_point s_last_vg_log;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - s_last_vg_log >= std::chrono::seconds(1)) {
+            s_last_vg_log = now;
+            const auto vg = mixer_->voice_guide_diagnostics();
+            // lt_debug_log (not the gated debug_log) so it honours AUDIO_DIAG.
+            lt_debug_log("[LT_VOICE_GUIDE] enabled=%s bank_loaded=%s route=%s "
+                "muted_reason=\"%s\" announce=%llu counts=%llu gain=%.3f\n",
+                vg.enabled ? "true" : "false",
+                vg.bank_loaded ? "true" : "false",
+                vg.route_resolved.c_str(),
+                vg.muted_reason.c_str(),
+                static_cast<unsigned long long>(vg.announcements_fired),
+                static_cast<unsigned long long>(vg.counts_fired),
+                vg.current_gain);
         }
     }
 
@@ -2886,6 +2916,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = current_device_request_.buffer_size;
             req.active_output_channels = c.active_channels;
+            req.low_latency = current_device_request_.low_latency;
             // Idempotency guard: if the requested device + channels already match
             // what's currently open, do NOT reopen. open_device can take several
             // seconds on slow DirectSound stacks and runs under the Rust state
@@ -2981,6 +3012,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.sample_rate = c.sample_rate;
             req.buffer_size = current_device_request_.buffer_size;
             req.active_output_channels = current_device_request_.active_output_channels;
+            req.low_latency = current_device_request_.low_latency;
             const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
@@ -3017,6 +3049,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = c.buffer_size;
             req.active_output_channels = current_device_request_.active_output_channels;
+            req.low_latency = current_device_request_.low_latency;
             const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
@@ -3028,6 +3061,42 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 // Buffer-size change rarely affects SR but devices can
                 // renegotiate it; handle SR-change identically to SetSampleRate.
+                const int new_sr = clock_ ? clock_->sample_rate() : 0;
+                if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
+                    rescale_session_for_new_sample_rate(prev_sr);
+                    resample_sources_for_new_sample_rate();
+                } else if (prearmed_jumps_) {
+                    prearmed_jumps_->clear();
+                    const int sr = device_manager_->actual_sample_rate() > 0
+                        ? device_manager_->actual_sample_rate() : 48000;
+                    const int bs = device_manager_->actual_buffer_size() > 0
+                        ? device_manager_->actual_buffer_size() : 1024;
+                    prearmed_jumps_->prepare(sr, /*channels=*/2, bs * 4);
+                    prearm_revision_.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+            return r;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLowLatency>) {
+            // Reopen the current endpoint with the new PerformanceMode. No-op on
+            // desktop backends (their open_device ignores low_latency), so this
+            // is safe to send unconditionally from the control layer; only the
+            // Oboe backend acts on it.
+            DeviceOpenRequest req = current_device_request_;
+            req.low_latency = c.enabled;
+            const int prev_sr = clock_ ? clock_->sample_rate() : 0;
+            auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
+                                    : static_cast<AudioRenderCallback*>(silent_callback_.get());
+            auto r = device_manager_->open_device(req, callback);
+            if (r.is_ok()) {
+                current_device_request_ = req;
+                if (clock_ && device_manager_->actual_sample_rate() > 0)
+                    clock_->set_sample_rate(device_manager_->actual_sample_rate());
+                (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                // The mode switch can renegotiate SR (low-latency picks the
+                // device's native rate); handle it exactly like the other
+                // device-reopening commands so voice-guide / metronome stay
+                // aligned to the running rate.
                 const int new_sr = clock_ ? clock_->sample_rate() : 0;
                 if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
                     rescale_session_for_new_sample_rate(prev_sr);

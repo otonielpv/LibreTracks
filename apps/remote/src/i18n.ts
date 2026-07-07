@@ -27,8 +27,8 @@ const STRINGS = {
   en: {
     appTitle: "Remote",
     time: "Time",
-    barBeat: "Bar.Beat",
-    meter: "Meter",
+    barBeat: "Bar",
+    meter: "Signature",
     bpm: "BPM",
     region: "Song",
     play: "Play",
@@ -91,8 +91,8 @@ const STRINGS = {
   es: {
     appTitle: "Remote",
     time: "Tiempo",
-    barBeat: "Compás",
-    meter: "Métrica",
+    barBeat: "Bar",
+    meter: "Compás",
     bpm: "BPM",
     region: "Canción",
     play: "Reproducir",

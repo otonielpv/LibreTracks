@@ -28,6 +28,7 @@ type LibraryPanelProps = {
   onRenameFolder: (folderPath: string) => void;
   onDeleteFolder: (folderPath: string) => void;
   onDeleteRequested: (assets: PendingLibraryAssetSummary[]) => void;
+  onAddSelectionToTimeline?: (assets: PendingLibraryAssetSummary[]) => void;
 };
 
 export function LibraryPanel({
@@ -48,6 +49,7 @@ export function LibraryPanel({
   onRenameFolder,
   onDeleteFolder,
   onDeleteRequested,
+  onAddSelectionToTimeline,
 }: LibraryPanelProps) {
   const { t } = useTranslation();
   const dragTargetFolderPath =
@@ -101,6 +103,7 @@ export function LibraryPanel({
           onRenameFolder={onRenameFolder}
           onDeleteFolder={onDeleteFolder}
           onDeleteRequested={onDeleteRequested}
+          onAddSelectionToTimeline={onAddSelectionToTimeline}
         />
       ) : null}
       {internalLibraryPointerDrag?.isDragging ? (

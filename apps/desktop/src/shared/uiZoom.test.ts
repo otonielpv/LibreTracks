@@ -30,11 +30,17 @@ describe("uiZoom", () => {
     );
   });
 
-  it("uses viewport compensation on Windows only", () => {
+  it("uses viewport compensation on Blink WebViews (Windows + Android), not WebKit", () => {
     expect(
       shouldCompensateUiZoomViewport(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Win32",
+      ),
+    ).toBe(true);
+    expect(
+      shouldCompensateUiZoomViewport(
+        "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36",
+        "Linux armv8l",
       ),
     ).toBe(true);
     expect(

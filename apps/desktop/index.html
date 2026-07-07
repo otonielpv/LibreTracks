@@ -2,7 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- maximum-scale/user-scalable: the DAW surface handles its own zoom
+         (timeline pinch, UI zoom setting); letting the Android WebView
+         pinch-zoom the whole page breaks dragging clips and faders. No
+         effect on desktop WebViews. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>LibreTracks Desktop</title>
   </head>
   <body>

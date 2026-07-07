@@ -14,7 +14,76 @@ use crate::state::{
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession, DesktopState,
     ProjectLoadProgressEvent,
 };
-use rfd::FileDialog;
+use crate::file_dialog::FileDialog;
+
+/// Where an export should be written, chosen by the platform's "save as".
+///
+/// Desktop picks a real filesystem path and the export writes straight to it.
+/// Android's SAF returns a `content://` URI which `std::fs` can't open, so the
+/// export writes to a private temp file and `finish()` copies it into the URI
+/// through the content resolver (then deletes the temp).
+enum ExportTarget {
+    Path(std::path::PathBuf),
+    #[cfg(target_os = "android")]
+    Saf {
+        temp: std::path::PathBuf,
+        target: tauri_plugin_fs::FilePath,
+    },
+}
+
+impl ExportTarget {
+    /// The path the export routine should write to.
+    fn write_path(&self) -> &std::path::Path {
+        match self {
+            ExportTarget::Path(path) => path,
+            #[cfg(target_os = "android")]
+            ExportTarget::Saf { temp, .. } => temp,
+        }
+    }
+
+    /// Deliver the finished file to its real destination (no-op on desktop).
+    fn finish(&self, app: &AppHandle) -> Result<(), String> {
+        let _ = app;
+        match self {
+            ExportTarget::Path(_) => Ok(()),
+            #[cfg(target_os = "android")]
+            ExportTarget::Saf { temp, target } => {
+                let result = crate::mobile_files::copy_path_to_picked_target(app, temp, target);
+                let _ = std::fs::remove_file(temp);
+                result
+            }
+        }
+    }
+}
+
+/// Platform "save as" dialog for exports. Returns None if the user cancels.
+fn pick_export_target(
+    app: &AppHandle,
+    title: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    suggested_name: &str,
+) -> Result<Option<ExportTarget>, String> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Ok(FileDialog::new()
+            .add_filter(filter_name, extensions)
+            .set_title(title)
+            .set_file_name(suggested_name)
+            .save_file()
+            .map(ExportTarget::Path))
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = (filter_name, extensions);
+        let Some(target) = crate::mobile_files::save_file(app, title, suggested_name) else {
+            return Ok(None);
+        };
+        let temp = crate::mobile_files::export_temp_path(app, suggested_name)?;
+        Ok(Some(ExportTarget::Saf { temp, target }))
+    }
+}
 
 #[tauri::command]
 pub fn get_song_view(
@@ -33,29 +102,65 @@ pub fn get_song_view(
 
 #[tauri::command]
 pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, String> {
-    let package_file = FileDialog::new()
-        .add_filter("LibreTracks Package", &["ltpkg"])
-        .set_title("Selecciona un paquete .ltpkg")
-        .pick_file();
-
-    let Some(package_file) = package_file else {
-        return Ok(false);
-    };
-
-    spawn_project_work(&app, move |worker_app, state| {
-        // The file-menu import inserts at the current playhead. Read it under a
-        // brief lock, then do the heavy decompression unlocked.
-        let insert_at = {
-            let session = state
-                .session
-                .lock()
-                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-            session.current_position()
+    #[cfg(target_os = "android")]
+    {
+        // SAF picker → content:// URI; stage it to a private temp file on the
+        // worker (a big .ltpkg copy shouldn't block the command) and feed the
+        // same import path as desktop.
+        let Some(picked) = crate::mobile_files::pick_file(&app, "Selecciona un paquete .ltpkg")
+        else {
+            return Ok(false);
         };
-        import_package_off_lock(worker_app, state, package_file, insert_at)
-    });
+        // No extension check: SAF document URIs from providers like Downloads
+        // end in an opaque id ("msf:28"), not the display name. The package
+        // reader validates the zip structure and reports a clear error.
+        let picked_name = sanitize_saf_name_hint(
+            &crate::mobile_files::picked_file_name(&picked),
+            "paquete.ltpkg",
+        );
+        spawn_project_work(&app, move |worker_app, state| {
+            let staged =
+                crate::mobile_files::stage_picked_file_to_temp(worker_app, &picked, &picked_name)?;
+            let insert_at = {
+                let session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+                session.current_position()
+            };
+            let result = import_package_off_lock(worker_app, state, staged.clone(), insert_at);
+            let _ = std::fs::remove_file(&staged);
+            result
+        });
+        return Ok(true);
+    }
 
-    Ok(true)
+    #[cfg(not(target_os = "android"))]
+    {
+        let package_file = FileDialog::new()
+            .add_filter("LibreTracks Package", &["ltpkg"])
+            .set_title("Selecciona un paquete .ltpkg")
+            .pick_file();
+
+        let Some(package_file) = package_file else {
+            return Ok(false);
+        };
+
+        spawn_project_work(&app, move |worker_app, state| {
+            // The file-menu import inserts at the current playhead. Read it under a
+            // brief lock, then do the heavy decompression unlocked.
+            let insert_at = {
+                let session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+                session.current_position()
+            };
+            import_package_off_lock(worker_app, state, package_file, insert_at)
+        });
+
+        Ok(true)
+    }
 }
 
 /// Path-based sibling of [`start_pick_and_import_song_from_dialog`] for the
@@ -396,6 +501,147 @@ pub fn start_create_song(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Sanitize a user-typed session name into a safe folder/file stem: path
+/// separators and characters Windows rejects become spaces, and leading or
+/// trailing dots/spaces are trimmed so the result is a valid directory name
+/// on every platform.
+fn sanitize_session_name(raw: &str) -> Result<String, String> {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => ' ',
+            c if c.is_control() => ' ',
+            c => c,
+        })
+        .collect();
+    let cleaned = cleaned
+        .trim()
+        .trim_matches('.')
+        .trim()
+        .to_string();
+    if cleaned.is_empty() {
+        return Err("El nombre del proyecto está vacío".to_string());
+    }
+    Ok(cleaned)
+}
+
+/// Create a session by name directly in the default songs folder, without a
+/// native save dialog. This is the Android landing flow (`rfd` has no Android
+/// backend), but it works on any platform. Same worker + progress events as
+/// `start_create_song`.
+#[tauri::command]
+pub fn start_create_song_named(app: AppHandle, name: String) -> Result<bool, String> {
+    start_create_song_named_at(app, name, None)
+}
+
+/// Create a session by name inside a caller-chosen parent folder — the Android
+/// "choose where to save" flow, mirroring the desktop save dialog. When
+/// `parent_dir` is `None` this behaves exactly like the default-folder create;
+/// when `Some`, the session folder is placed under that directory (collisions
+/// get a `-2`, `-3`… suffix so we never clobber an existing session). Same
+/// worker + progress events as `start_create_song`.
+#[tauri::command]
+pub fn start_create_song_named_at(
+    app: AppHandle,
+    name: String,
+    parent_dir: Option<String>,
+) -> Result<bool, String> {
+    let name = sanitize_session_name(&name)?;
+
+    let target_pick = match parent_dir {
+        Some(parent) => {
+            let parent = std::path::PathBuf::from(parent);
+            if !parent.is_dir() {
+                return Err(format!(
+                    "La carpeta destino no existe: {}",
+                    parent.display()
+                ));
+            }
+            // A chosen folder may already hold a same-named session; pick a
+            // fresh `<name>`, `<name>-2`… folder instead of failing so the
+            // user isn't forced to rename.
+            let song_dir = unique_session_dir(&parent, &name);
+            let dir_name = song_dir
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&name);
+            song_dir.join(crate::state::default_project_file_name(dir_name))
+        }
+        None => {
+            let default_directory = crate::state::create_song_default_directory(&app);
+            if default_directory.join(&name).exists() {
+                return Err(format!("Ya existe un proyecto llamado \"{name}\""));
+            }
+            let _ = std::fs::create_dir_all(&default_directory);
+            default_directory.join(crate::state::default_project_file_name(&name))
+        }
+    };
+
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .create_song_at_path(target_pick, &state.audio)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
+}
+
+/// Let the user choose where a new session should be saved and return the
+/// picked PARENT directory as a real filesystem path — the frontend then calls
+/// `start_create_song_named_at` with it, so the session lands in
+/// `<chosen>/<name>/`. Returns `None` when the user cancels.
+///
+/// Android has no folder chooser in the dialog plugin, so this reuses the SAF
+/// create-document dialog (the system "save as" UI): we suggest
+/// `<name>.ltsession` and derive the chosen folder from where the user places
+/// it. Errors when the pick is a provider-virtualized location that doesn't map
+/// to a real path (Drive, the Downloads shortcut…), since the engine streams
+/// audio by path and can't use those.
+#[tauri::command]
+pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String>, String> {
+    let name = sanitize_session_name(&name)?;
+
+    #[cfg(target_os = "android")]
+    {
+        let suggested = crate::state::default_project_file_name(&name);
+        let Some(picked) =
+            crate::mobile_files::save_file(&app, "Elige donde guardar la sesion", &suggested)
+        else {
+            return Ok(None);
+        };
+        match crate::mobile_files::resolve_picked_document_parent(&picked) {
+            Some(path) => Ok(Some(path.to_string_lossy().into_owned())),
+            None => Err(
+                "Esa ubicacion no se puede usar como carpeta de sesion. Elige una carpeta \
+                 del almacenamiento del dispositivo (no un acceso directo como Descargas o \
+                 una nube)."
+                    .to_string(),
+            ),
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = &name;
+        let picked = FileDialog::new()
+            .set_title("Elige donde guardar la sesion")
+            .pick_folder();
+        Ok(picked.map(|path| path.to_string_lossy().into_owned()))
+    }
+}
+
+/// List the sessions living in the default songs folder (most recently
+/// modified first) so the Android landing screen can offer them without a
+/// native "open file" dialog.
+#[tauri::command]
+pub fn list_default_sessions(app: AppHandle) -> Result<Vec<crate::state::SessionSummary>, String> {
+    Ok(crate::state::list_default_sessions(&app))
+}
+
 /// List the reusable `.lttemplate` files in the default templates folder so the
 /// landing screen can offer them when creating a new session.
 #[tauri::command]
@@ -622,15 +868,74 @@ pub fn get_project_load_progress_snapshot(
 
 #[tauri::command]
 pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
-    let song_file = FileDialog::new()
-        .add_filter("LibreTracks Session", &["ltsession"])
-        .set_title("Selecciona session.ltsession")
-        .pick_file();
-
-    let Some(song_file) = song_file else {
-        return Ok(false);
+    // Android: the system picker (which remembers the app's last folder on
+    // its own) returns a content:// URI; opening IN PLACE needs the real
+    // path — a session is a folder the engine streams by path — so resolve
+    // it and fall out with a clear message when the location can't map to
+    // one (cloud providers, the virtual Downloads shortcut).
+    #[cfg(target_os = "android")]
+    let song_file = {
+        let Some(picked) =
+            crate::mobile_files::pick_file(&app, "Selecciona session.ltsession")
+        else {
+            return Ok(false);
+        };
+        let Some(path) = crate::mobile_files::resolve_picked_file_to_path(&picked) else {
+            return Err(
+                "No se puede abrir una sesión desde esa ubicación. Navega al \
+                 almacenamiento del dispositivo (no a accesos directos como \
+                 'Descargas' o unidades en la nube), o usa Importar sesión \
+                 (.ltset). Si es la primera vez, concede a LibreTracks el \
+                 permiso de acceso a archivos."
+                    .into(),
+            );
+        };
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| !ext.eq_ignore_ascii_case("ltsession"))
+            .unwrap_or(true)
+        {
+            return Err("Selecciona un archivo .ltsession".into());
+        }
+        path
     };
 
+    #[cfg(not(target_os = "android"))]
+    let song_file = {
+        let song_file = FileDialog::new()
+            .add_filter("LibreTracks Session", &["ltsession"])
+            .set_title("Selecciona session.ltsession")
+            .pick_file();
+
+        let Some(song_file) = song_file else {
+            return Ok(false);
+        };
+        song_file
+    };
+
+    spawn_open_project_worker(&app, song_file);
+    Ok(true)
+}
+
+/// Open a session whose `.ltsession` path is already known — the Android
+/// landing screen picks from `list_default_sessions` instead of a native
+/// file dialog. Same worker + progress events as the dialog flow.
+#[tauri::command]
+pub fn start_open_project_from_path(app: AppHandle, song_file: String) -> Result<bool, String> {
+    let song_file = std::path::PathBuf::from(song_file);
+    if !song_file.is_file() {
+        return Err(format!(
+            "No se encontró el archivo de sesión: {}",
+            song_file.display()
+        ));
+    }
+
+    spawn_open_project_worker(&app, song_file);
+    Ok(true)
+}
+
+fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
     let worker_app = app.clone();
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
@@ -676,8 +981,6 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
             }
         }
     });
-
-    Ok(true)
 }
 
 #[tauri::command]
@@ -1000,12 +1303,127 @@ pub async fn import_audio_files_from_paths(
     Ok(assets)
 }
 
+/// Android: consume files staged by `stage_imported_audio_chunk` — they are
+/// MOVED into the session's audio/ folder and registered by relative path
+/// (bytes-import semantics), because the staged temp files are ephemeral and
+/// registering their absolute path (the desktop paths-import behaviour)
+/// produced phantom "missing file" warnings once the staging area was
+/// cleaned by the next import batch.
+#[tauri::command]
+pub async fn import_staged_audio_files(
+    files: Vec<AudioFilePathImportPayload>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let (song_dir, current_song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?;
+        let current_song = session.engine.song().cloned();
+        (song_dir, current_song)
+    };
+
+    let song_dir_for_prepare = song_dir.clone();
+    let assets = tauri::async_runtime::spawn_blocking(move || {
+        crate::state::import_staged_audio_files_to_library(
+            &song_dir,
+            current_song.as_ref(),
+            &files,
+        )
+    })
+    .await
+    .map_err(|error| crate::error_log::log_command_err("import_staged_audio_files", error))?
+    .map_err(|error| crate::error_log::log_command_err("import_staged_audio_files", error))?;
+
+    prepare_library_assets(&state, &song_dir_for_prepare, &assets);
+
+    Ok(assets)
+}
+
+/// Android import staging. The WebView file chooser hands us `File` objects
+/// (no filesystem path — Android files live behind content:// URIs), and the
+/// old path read the WHOLE file into a `Uint8Array` before invoking: on
+/// low-RAM phones the WebView renderer process OOM-crashed importing normal-
+/// sized WAVs (seen on an Oppo A5: "Render process crash" in
+/// libwebviewchromium). Instead the frontend streams the file in small
+/// base64 slices; each call appends to a temp file under the app cache, and
+/// the last call returns the staged path, which then goes through the normal
+/// paths-based import pipeline.
+///
+/// Base64-in-JSON rather than a raw invoke body because Android's WebView
+/// cannot expose POST bodies to the intercepted custom scheme — Tauri routes
+/// IPC through the string bridge there, so `tauri::ipc::Request` never sees
+/// `InvokeBody::Raw` on Android (verified: the raw variant failed with
+/// "expected a raw byte body" while desktop worked).
+#[tauri::command]
+pub fn stage_imported_audio_chunk(
+    app: AppHandle,
+    file_id: String,
+    file_name: String,
+    chunk_base64: String,
+    is_last: bool,
+    batch_reset: bool,
+) -> Result<Option<String>, String> {
+    let file_id: String = file_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(64)
+        .collect();
+    if file_id.is_empty() {
+        return Err("stage_imported_audio_chunk: empty file id".to_string());
+    }
+    // Each file stages under its own uuid folder KEEPING the original file
+    // name: the library asset and the copy in the session's audio/ take
+    // their names from the source path's basename, so staging as
+    // "<uuid>.wav" surfaced uuid-named assets in the UI.
+    let file_name: String = file_name
+        .chars()
+        .filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .take(128)
+        .collect();
+    let file_name = file_name.trim().trim_matches('.').to_string();
+    if file_name.is_empty() {
+        return Err("stage_imported_audio_chunk: empty file name".to_string());
+    }
+
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(chunk_base64.as_bytes())
+        .map_err(|error| format!("stage_imported_audio_chunk: bad base64: {error}"))?;
+
+    let staging_root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| error.to_string())?
+        .join("import-staging");
+    if batch_reset {
+        let _ = std::fs::remove_dir_all(&staging_root);
+    }
+    let staging_dir = staging_root.join(&file_id);
+    std::fs::create_dir_all(&staging_dir).map_err(|error| error.to_string())?;
+
+    let staged_path = staging_dir.join(file_name);
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&staged_path)
+        .map_err(|error| error.to_string())?;
+    std::io::Write::write_all(&mut file, &bytes).map_err(|error| error.to_string())?;
+
+    Ok(is_last.then(|| staged_path.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 pub async fn export_region_as_package(
+    app: AppHandle,
     region_id: String,
     include_audio: bool,
     state: State<'_, DesktopState>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let (song_dir, song, region_name) = {
         let session = state
             .session
@@ -1029,37 +1447,43 @@ pub async fn export_region_as_package(
         (song_dir, song, region_name)
     };
 
-    let output_path = FileDialog::new()
-        .add_filter("LibreTracks Package", &["ltpkg"])
-        .set_title("Exportar Cancion")
-        .set_file_name(&format!("{}.ltpkg", crate::state::slugify(&region_name)))
-        .save_file();
+    let Some(target) = pick_export_target(
+        &app,
+        "Exportar Cancion",
+        "LibreTracks Package",
+        &["ltpkg"],
+        &format!("{}.ltpkg", crate::state::slugify(&region_name)),
+    )?
+    else {
+        return Ok(false);
+    };
 
-    if let Some(path) = output_path {
-        let cache_root = crate::state::decoding_cache_root();
-        tauri::async_runtime::spawn_blocking(move || {
-            libretracks_project::export_region_as_package(
-                &cache_root,
-                &song_dir,
-                &song,
-                &region_id,
-                &path,
-                include_audio,
-            )
-            .map_err(|error| error.to_string())
-        })
-        .await
-        .map_err(|error| error.to_string())??;
-    }
+    let cache_root = crate::state::decoding_cache_root();
+    let write_path = target.write_path().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        libretracks_project::export_region_as_package(
+            &cache_root,
+            &song_dir,
+            &song,
+            &region_id,
+            &write_path,
+            include_audio,
+        )
+        .map_err(|error| error.to_string())?;
+        target.finish(&app)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
-    Ok(())
+    Ok(true)
 }
 
 #[tauri::command]
 pub fn export_region_rendered_audio(
+    app: AppHandle,
     region_id: String,
     state: State<'_, DesktopState>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let (song_dir, song, region_name) = {
         let session = state
             .session
@@ -1083,20 +1507,24 @@ pub fn export_region_rendered_audio(
         (song_dir, song, region_name)
     };
 
-    let output_path = FileDialog::new()
-        .add_filter("Wave Audio", &["wav"])
-        .set_title("Exportar Audio Renderizado")
-        .set_file_name(&format!("{}.wav", crate::state::slugify(&region_name)))
-        .save_file();
+    let Some(target) = pick_export_target(
+        &app,
+        "Exportar Audio Renderizado",
+        "Wave Audio",
+        &["wav"],
+        &format!("{}.wav", crate::state::slugify(&region_name)),
+    )?
+    else {
+        return Ok(false);
+    };
 
-    if let Some(path) = output_path {
-        state
-            .audio
-            .export_region_rendered_audio(song_dir, song, &region_id, &path)
-            .map_err(|error| error.to_string())?;
-    }
+    state
+        .audio
+        .export_region_rendered_audio(song_dir, song, &region_id, target.write_path())
+        .map_err(|error| error.to_string())?;
+    target.finish(&app)?;
 
-    Ok(())
+    Ok(true)
 }
 
 #[tauri::command]
@@ -1139,15 +1567,17 @@ pub fn export_session_package(
             .map_err(|error| error.to_string())?
     };
 
-    let output_path = FileDialog::new()
-        .add_filter("LibreTracks Set", &["ltset"])
-        .set_title("Exportar sesion")
-        .set_file_name(&format!("{}.ltset", crate::state::slugify(&song.title)))
-        .save_file();
-
-    let Some(path) = output_path else {
+    let Some(target) = pick_export_target(
+        &app,
+        "Exportar sesion",
+        "LibreTracks Set",
+        &["ltset"],
+        &format!("{}.ltset", crate::state::slugify(&song.title)),
+    )?
+    else {
         return Ok(false);
     };
+    let path = target.write_path().to_path_buf();
 
     let cache_root = crate::state::decoding_cache_root();
     let worker_app = app.clone();
@@ -1190,6 +1620,12 @@ pub fn export_session_package(
             },
         );
 
+        // Android: the export landed in a private temp; hand it to the SAF
+        // destination the user picked (desktop finish() is a no-op).
+        let result = result
+            .map_err(|error| error.to_string())
+            .and_then(|_| target.finish(&worker_app));
+
         match result {
             Ok(_) => crate::state::emit_session_export_progress(
                 &worker_app,
@@ -1221,46 +1657,113 @@ pub fn export_session_package(
 /// whatever is currently loaded (it does NOT merge).
 #[tauri::command]
 pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, String> {
-    let package_file = FileDialog::new()
-        .add_filter("LibreTracks Set", &["ltset"])
-        .set_title("Importar sesion (.ltset)")
-        .pick_file();
-
-    let Some(package_file) = package_file else {
-        return Ok(false);
+    #[cfg(target_os = "android")]
+    let (package_source, target_song_dir) = {
+        // SAF picker for the .ltset.
+        let Some(picked) = crate::mobile_files::pick_file(&app, "Importar sesion (.ltset)")
+        else {
+            return Ok(false);
+        };
+        // No extension check: SAF document URIs from providers like Downloads
+        // end in an opaque id ("msf:28"), not the display name. The package
+        // reader validates the zip structure and reports a clear error.
+        let picked_name = sanitize_saf_name_hint(
+            &crate::mobile_files::picked_file_name(&picked),
+            "sesion-importada.ltset",
+        );
+        let default_name = picked_name
+            .rsplit_once('.')
+            .map(|(stem, _)| stem)
+            .filter(|name| !name.is_empty())
+            .unwrap_or("sesion-importada")
+            .to_string();
+        // Let the user choose where the new session folder lands (mirroring the
+        // desktop "save as" step). The dialog plugin has no folder chooser on
+        // Android, so we reuse the SAF create-document dialog and derive the
+        // parent folder from the placement. Cancelling cancels the import — no
+        // silent fallback to the private songs dir.
+        let suggested = crate::state::default_project_file_name(&default_name);
+        let Some(folder_pick) = crate::mobile_files::save_file(
+            &app,
+            "Elige donde guardar la sesion importada",
+            &suggested,
+        ) else {
+            return Ok(false);
+        };
+        let Some(parent_dir) =
+            crate::mobile_files::resolve_picked_document_parent(&folder_pick)
+        else {
+            return Err(
+                "Esa ubicacion no se puede usar como carpeta de sesion. Elige una carpeta \
+                 del almacenamiento del dispositivo (no un acceso directo como Descargas o \
+                 una nube)."
+                    .to_string(),
+            );
+        };
+        let target_song_dir = unique_session_dir(&parent_dir, &default_name);
+        ((picked, picked_name), target_song_dir)
     };
 
-    // Default the new project folder to <app_data>/songs/<set-name>, but let the
-    // user place it anywhere. The picked file name (sans extension) becomes the
-    // project folder name, matching Create/Save-As.
-    let default_directory = crate::state::create_song_default_directory(&app);
-    let default_name = package_file
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .filter(|name| !name.is_empty())
-        .unwrap_or("sesion-importada")
-        .to_string();
-    let target_pick = FileDialog::new()
-        .set_title("Guardar sesion importada como")
-        .set_directory(&default_directory)
-        .add_filter("LibreTracks Session", &["ltsession"])
-        .set_file_name(&crate::state::default_project_file_name(&default_name))
-        .save_file();
+    #[cfg(not(target_os = "android"))]
+    let (package_source, target_song_dir) = {
+        let package_file = FileDialog::new()
+            .add_filter("LibreTracks Set", &["ltset"])
+            .set_title("Importar sesion (.ltset)")
+            .pick_file();
 
-    let Some(target_pick) = target_pick else {
-        return Ok(false);
-    };
+        let Some(package_file) = package_file else {
+            return Ok(false);
+        };
 
-    let target_song_dir = match session_dir_from_pick(&target_pick) {
-        Ok(dir) => dir,
-        Err(error) => return Err(error),
+        // Default the new project folder to <app_data>/songs/<set-name>, but let the
+        // user place it anywhere. The picked file name (sans extension) becomes the
+        // project folder name, matching Create/Save-As.
+        let default_directory = crate::state::create_song_default_directory(&app);
+        let default_name = package_file
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .filter(|name| !name.is_empty())
+            .unwrap_or("sesion-importada")
+            .to_string();
+        let target_pick = FileDialog::new()
+            .set_title("Guardar sesion importada como")
+            .set_directory(&default_directory)
+            .add_filter("LibreTracks Session", &["ltsession"])
+            .set_file_name(&crate::state::default_project_file_name(&default_name))
+            .save_file();
+
+        let Some(target_pick) = target_pick else {
+            return Ok(false);
+        };
+
+        let target_song_dir = match session_dir_from_pick(&target_pick) {
+            Ok(dir) => dir,
+            Err(error) => return Err(error),
+        };
+        (package_file, target_song_dir)
     };
 
     let worker_app = app.clone();
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
         let result = (|| -> Result<TransportSnapshot, String> {
-            {
+            // Android: materialize the content:// pick into a private temp
+            // file the zip reader can open; desktop already has a real path.
+            #[cfg(target_os = "android")]
+            let (package_file, staged_cleanup) = {
+                let (picked, picked_name) = &package_source;
+                let staged = crate::mobile_files::stage_picked_file_to_temp(
+                    &worker_app,
+                    picked,
+                    picked_name,
+                )?;
+                (staged.clone(), Some(staged))
+            };
+            #[cfg(not(target_os = "android"))]
+            let (package_file, staged_cleanup): (std::path::PathBuf, Option<std::path::PathBuf>) =
+                (package_source, None);
+
+            let import_result = {
                 let mut session = state
                     .session
                     .lock()
@@ -1272,8 +1775,12 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
                         &package_file,
                         &target_song_dir,
                     )
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| error.to_string())
+            };
+            if let Some(staged) = staged_cleanup {
+                let _ = std::fs::remove_file(staged);
             }
+            import_result?;
             let snapshot = DesktopSession::wait_for_project_audio_preparation_unlocked(
                 &worker_app,
                 &state,
@@ -1308,6 +1815,50 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
     });
 
     Ok(true)
+}
+
+/// SAF display names may be opaque provider ids ("msf:28") or carry path
+/// separators; keep them safe for temp-file names and readable as folder
+/// names, falling back when there's nothing usable.
+#[cfg(target_os = "android")]
+fn sanitize_saf_name_hint(raw: &str, fallback: &str) -> String {
+    let cleaned: String = raw
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+            other => other,
+        })
+        .collect();
+    let cleaned = cleaned.trim_matches(['-', ' ', '.']).to_string();
+    // Opaque ids like "msf-28" (no extension, short) make terrible names.
+    if cleaned.is_empty() || !cleaned.contains('.') {
+        return fallback.to_string();
+    }
+    cleaned
+}
+
+/// First non-existing `<songs>/<name>`, `<songs>/<name>-2`, … folder. Android
+/// has no "save as" dialog to resolve collisions, so imports and the
+/// choose-folder create pick a fresh folder automatically instead of
+/// clobbering an existing session.
+fn unique_session_dir(songs_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let base = songs_dir.join(name);
+    if !base.exists() {
+        return base;
+    }
+    for suffix in 2..1000 {
+        let candidate = songs_dir.join(format!("{name}-{suffix}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    songs_dir.join(format!(
+        "{name}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis())
+            .unwrap_or(0)
+    ))
 }
 
 /// Turn the save dialog's `<name>.ltsession` pick into the project FOLDER we

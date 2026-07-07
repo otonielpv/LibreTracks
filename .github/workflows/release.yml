@@ -658,9 +658,157 @@ jobs:
           path: target-desktop-native/**/bundle/**/*
           if-no-files-found: error
 
+  build-android:
+    name: Build Android APK
+    needs: test
+    runs-on: ubuntu-22.04
+    env:
+      ANDROID_ABI: arm64-v8a
+      ANDROID_TARGET: aarch64
+      NDK_VERSION: 27.1.12297006
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Android Rust target
+        run: rustup target add aarch64-linux-android
+
+      - name: Setup Java (for Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK + NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK + build tools
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}" "cmake;3.22.1" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # Bungee ships no Android binary, so build it from source (same tag as
+      # desktop) as a static PIC lib for the NDK. Cached by version — the tag
+      # is pinned, so this only rebuilds when BUNGEE_VERSION changes.
+      - name: Cache Bungee Android build
+        id: bungee-cache
+        uses: actions/cache@v4
+        with:
+          path: bungee-android-sdk
+          key: bungee-android-${{ env.BUNGEE_VERSION }}-${{ env.ANDROID_ABI }}-ndk${{ env.NDK_VERSION }}
+
+      - name: Build Bungee for Android
+        if: steps.bungee-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$BUNGEE_VERSION" --recurse-submodules \
+            https://github.com/bungee-audio-stretch/bungee.git bungee-src
+          NINJA="$ANDROID_SDK_ROOT/cmake/3.22.1/bin/ninja"
+          TOOLCHAIN="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
+          cmake -S bungee-src -B bungee-src/build-android -G Ninja \
+            -DCMAKE_MAKE_PROGRAM="$NINJA" \
+            -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
+            -DANDROID_ABI="$ANDROID_ABI" -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release -DBUNGEE_BUILD_SHARED_LIBRARY=OFF \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DBUNGEE_VERSION="${BUNGEE_VERSION#v}"
+          cmake --build bungee-src/build-android --target bungee_library pffft
+          mkdir -p "bungee-android-sdk/include/bungee" "bungee-android-sdk/android-${ANDROID_ABI}"
+          cp bungee-src/bungee/*.h "bungee-android-sdk/include/bungee/"
+          cp bungee-src/build-android/libbungee.a bungee-src/build-android/libpffft.a \
+            "bungee-android-sdk/android-${ANDROID_ABI}/"
+
+      - name: Build the native engine for Android (NDK)
+        run: |
+          set -euo pipefail
+          NINJA="$ANDROID_SDK_ROOT/cmake/3.22.1/bin/ninja"
+          TOOLCHAIN="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
+          BUNGEE_DIR="$PWD/bungee-android-sdk"
+          cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build-android \
+            -G Ninja -DCMAKE_MAKE_PROGRAM="$NINJA" \
+            -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
+            -DANDROID_ABI="$ANDROID_ABI" -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLT_ENGINE_USE_JUCE=OFF -DLT_ENGINE_USE_OBOE=ON \
+            -DLT_ENGINE_USE_FFMPEG=OFF -DLT_ENGINE_USE_LIBSNDFILE=ON \
+            -DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR="$BUNGEE_DIR"
+          cmake --build native/audio-engine-v2/build-android --target lt_audio_engine_v2
+          JNI_DIR="apps/desktop/src-tauri/gen/android/app/src/main/jniLibs/${ANDROID_ABI}"
+          mkdir -p "$JNI_DIR"
+          cp native/audio-engine-v2/build-android/liblt_audio_engine_v2.so "$JNI_DIR/"
+
+      # Materialize the release keystore from secrets so the APK is signed with
+      # the real key (build.gradle reads keystore.properties → falls back to
+      # debug signing when absent).
+      - name: Prepare release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set — cannot sign a distributable APK."
+            exit 1
+          fi
+          KS_DIR="apps/desktop/src-tauri/gen/android"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KS_DIR/release.jks"
+          cat > "$KS_DIR/keystore.properties" <<EOF
+          storeFile=$PWD/$KS_DIR/release.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Build signed release APK
+        run: npx tauri android build --apk --target "$ANDROID_TARGET"
+        working-directory: apps/desktop
+
+      - name: Verify APK is signed and not debuggable
+        run: |
+          set -euo pipefail
+          APK=$(find apps/desktop/src-tauri/gen/android -path '*release*' -name '*.apk' | head -n1)
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs "$APK" | grep -q "CN=LibreTracks" \
+            || { echo "::error::APK not signed with the LibreTracks key"; exit 1; }
+          if "$BT/aapt" dump badging "$APK" | grep -q "application-debuggable"; then
+            echo "::error::release APK is debuggable"; exit 1
+          fi
+          # Rename to a clear, versioned asset name for the download page.
+          VER=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          cp "$APK" "LibreTracks-${VER}-android-arm64.apk"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: libretracks-android-assets
+          path: LibreTracks-*-android-arm64.apk
+          if-no-files-found: error
+
+      - name: Scrub keystore
+        if: always()
+        run: rm -f apps/desktop/src-tauri/gen/android/release.jks apps/desktop/src-tauri/gen/android/keystore.properties
+
   publish-release:
     name: Publish release
-    needs: build-release-assets
+    needs: [build-release-assets, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -698,6 +846,7 @@ jobs:
               -name '*.msi' -o \
               -name '*.tar.gz' -o \
               -name '*.zip' -o \
+              -name '*.apk' -o \
               -name '*.sig' \
             \) -print0
           )

@@ -1,0 +1,22 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+key.properties
+
+/.tauri
+/tauri.settings.gradle
+# NDK-built C++ engine copied in from native/audio-engine-v2/build-android-*
+# (see docs/ANDROID_PORT.md). Binary artifacts; rebuilt locally.
+/app/src/main/jniLibs/**/liblt_audio_engine_v2.so

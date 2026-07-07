@@ -440,6 +440,9 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetBufferSize")
         return CmdSetBufferSize{ j.at("buffer_size").get<int>() };
 
+    if (type == "SetLowLatency")
+        return CmdSetLowLatency{ j.at("enabled").get<bool>() };
+
     throw std::invalid_argument("Unknown command type: " + type);
 }
 

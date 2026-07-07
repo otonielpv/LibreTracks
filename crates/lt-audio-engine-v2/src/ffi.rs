@@ -2,6 +2,12 @@
 //!
 //! Under the `no-link` feature the extern block is replaced by stubs so
 //! `cargo test --features no-link` compiles without the C++ shared library.
+//!
+//! On Android, build.rs emits `lt_engine_android_link` when the NDK-built
+//! engine (`native/audio-engine-v2/build-android-<abi>/liblt_audio_engine_v2.so`)
+//! exists, linking it like any other platform. Without that build the stubs
+//! take over and the app runs with a silent no-op engine — so a checkout
+//! that never ran the NDK cmake build still compiles.
 
 use std::ffi::c_char;
 
@@ -22,7 +28,10 @@ pub struct LtEngine {
 }
 
 // ── Real FFI (C++ library present) ─────────────────────────────────────────
-#[cfg(not(feature = "no-link"))]
+#[cfg(not(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+)))]
 #[link(name = "lt_audio_engine_v2")]
 extern "C" {
     pub fn lt_audio_engine_create() -> *mut LtEngine;
@@ -69,42 +78,75 @@ extern "C" {
 // is opaque (`LtEngine` is a zero-sized `[u8; 0]`) and every stub ignores it,
 // so this pointer is never read or written — it only has to be non-null so
 // `Engine::new()` treats creation as successful.
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 static STUB_ENGINE_HANDLE: u8 = 0;
 
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_create() -> *mut LtEngine {
     (&STUB_ENGINE_HANDLE as *const u8 as *mut u8).cast::<LtEngine>()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_destroy(_: *mut LtEngine) {}
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_initialize(_: *mut LtEngine) -> LtResult {
     LT_OK
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_shutdown(_: *mut LtEngine) -> LtResult {
     LT_OK
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_get_version(_: *mut LtEngine) -> *const c_char {
     b"0.0.0\0".as_ptr().cast()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_get_diagnostics(_: *mut LtEngine) -> *const c_char {
     b"{}\0".as_ptr().cast()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_send_command(_: *mut LtEngine, _: *const c_char) -> LtResult {
     LT_OK
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_service_control_thread(_: *mut LtEngine) {}
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_poll_event(_: *mut LtEngine) -> *const c_char {
     std::ptr::null()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
     // The safe wrapper deserializes this into EngineSnapshot, which has a few
     // non-defaulted fields (current_frame, device, cpu, meters…). Returning a
@@ -128,11 +170,17 @@ pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
             .unwrap_or(std::ptr::null())
     })
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_list_devices(_: *mut LtEngine) -> *const c_char {
     b"[]\0".as_ptr().cast()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_get_source_peaks(
     _: *mut LtEngine,
     _: *const c_char,
@@ -140,19 +188,31 @@ pub unsafe fn lt_audio_engine_get_source_peaks(
 ) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_analyze_file_peaks(_: *const c_char, _: i32) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_source_cache_dir() -> *const c_char {
     b"\0".as_ptr().cast()
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_source_cache_size_bytes() -> u64 {
     0
 }
-#[cfg(feature = "no-link")]
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
 pub unsafe fn lt_audio_engine_purge_source_cache() -> u64 {
     0
 }

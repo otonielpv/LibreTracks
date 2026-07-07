@@ -118,3 +118,23 @@ export function markerKindVariants(kind: MarkerKind | undefined): number[] {
   if (!max) return [];
   return Array.from({ length: max }, (_, i) => i + 1);
 }
+
+/** Cue kinds that have NO voice recording in a given language, so creating one
+ * would produce a silent marker. The bundled pack doesn't cover the same cues
+ * in every language; hide those from the create/change menus for that language.
+ * Keyed by the voice-guide language code (see resources/voices/<lang>/cues). */
+const CUE_KINDS_WITHOUT_RECORDING: Record<string, readonly MarkerKind[]> = {
+  // Spanish pack has Guitar (Guitara) but not these three.
+  es: ["ad_lib", "slowly_build", "worship_freely"],
+  // English pack ships everything except Guitar.
+  en: ["guitar"],
+};
+
+/** Cue kinds that actually have a recording in the active voice-guide language,
+ * in menu order. Falls back to the full list for unknown languages (better to
+ * offer a maybe-silent cue than to hide everything). */
+export function availableCueKinds(language: string): readonly MarkerKind[] {
+  const missing = CUE_KINDS_WITHOUT_RECORDING[language];
+  if (!missing || missing.length === 0) return CUE_KINDS;
+  return CUE_KINDS.filter((kind) => !missing.includes(kind));
+}

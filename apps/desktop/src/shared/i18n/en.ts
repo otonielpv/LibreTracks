@@ -96,6 +96,13 @@ const en = {
       emptyTitle: "Create or open a session",
       emptyDescription:
         "Start a new session or open an existing one. Import WAV assets later from the Library panel and drag them onto the timeline only when you want to arrange them.",
+      mobileEmptyDescription:
+        "Create a new session or open one of your sessions. Import audio later from the Library panel.",
+      mobileSessionNamePlaceholder: "Session name",
+      mobileSessionNameTaken: "A session with that name already exists.",
+      mobileSessionsHeading: "Your sessions",
+      mobileNoSessions:
+        "You don't have any sessions yet. Create your first one with the button above.",
       importSession: "Import session",
       importingSession: "Importing session...",
       exportingSession: "Exporting session...",
@@ -287,7 +294,7 @@ const en = {
       description: "{{name}}",
       fullTitle: "Full (for sharing)",
       fullDescription:
-        "Includes the used audio files and waveforms. Self-contained: opens on another PC without the original files.",
+        "Includes the used audio files and waveforms. Self-contained: opens on another device without the original files.",
       lightTitle: "Light",
       lightDescription:
         "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
@@ -300,7 +307,7 @@ const en = {
       description: "{{name}}",
       fullTitle: "Full (to take with you)",
       fullDescription:
-        "Includes the used audio files and waveforms. Self-contained: opens on another PC without the original files.",
+        "Includes the used audio files and waveforms. Self-contained: opens on another device without the original files.",
       lightTitle: "Light",
       lightDescription:
         "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
@@ -313,8 +320,11 @@ const en = {
       changeTimelineBpm: "Change Timeline BPM",
       clearTimelineSelection: "Clear Timeline Selection",
       renameSong: "Rename Song",
+      songKey: "Song key",
+      songKeyNone: "No key",
       changeBpm: "Change BPM",
       changeRegionWarpSourceBpm: "Change Original BPM",
+      exportSong: "Export Song",
       deleteSong: "Delete Song",
       deleteMarker: "Delete Marker",
       insertTrack: "Insert Track",
@@ -441,6 +451,8 @@ const en = {
       tempoMarkerCreated: "BPM marker created at {{time}} with {{bpm}} BPM.",
       timelineSelectionCleared: "Timeline selection cleared.",
       songRenamed: "Song renamed: {{name}}.",
+      songKeyUpdated: "Key of “{{name}}” → {{key}}.",
+      songKeyCleared: "Key of “{{name}}” cleared.",
       regionTransposeUpdated:
         "Region transpose updated for {{name}} to {{transpose}} st.",
       songDeleted: "Song deleted: {{name}}.",
@@ -654,6 +666,7 @@ const en = {
     mainMenu: "Main menu",
     fileMenu: "File",
     newProject: "New project",
+    mobileSessions: "Sessions…",
     newFromTemplate: "New from template…",
     open: "Open",
     importSong: "Import song",
@@ -770,6 +783,11 @@ const en = {
     assetsCount: "{{count}} assets",
     foldersCount: "{{count}} folders",
     selectedCount: "{{count}} selected",
+    addToTimeline: "Add to timeline ({{count}})",
+    addedToTimeline: "{{count}} audio files added to the timeline",
+    addImportedToTimelinePrompt:
+      "Add the {{count}} imported audio files to the timeline? Each one will create its own track at the current position.",
+    clearSelection: "Clear selection",
     deleteHint: "Delete removes selection",
     openSessionHint: "Open or create a session",
     loading: "Loading library assets...",
@@ -817,7 +835,7 @@ const en = {
   },
   importAudio: {
     title: "Import Audio",
-    pickTitle: "Select WAV files from your computer",
+    pickTitle: "Select WAV files from your device",
     pickHint:
       "The system file browser will open. You can select one or more WAV files.",
     selectingFiles: "Select files...",

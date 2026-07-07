@@ -10,6 +10,7 @@ import {
 import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
 import {
   getDecodingCacheInfo,
+  isAndroidApp,
   purgeDecodingCache,
   readErrorLog,
   revealErrorLog,
@@ -75,6 +76,7 @@ type SettingsPanelProps = {
   onSelectAllOutputChannels: () => void;
   onClearOutputChannels: () => void;
   onAudioSafeModeChange: (checked: boolean) => void;
+  onLowLatencyOutputChange: (checked: boolean) => void;
 
   metronomeVolumeDraft: number;
   onMetronomeEnabledChange: (checked: boolean) => void;
@@ -147,6 +149,7 @@ export function SettingsPanel({
   onSelectAllOutputChannels,
   onClearOutputChannels,
   onAudioSafeModeChange,
+  onLowLatencyOutputChange,
   metronomeVolumeDraft,
   onMetronomeEnabledChange,
   onMetronomeOutputChange,
@@ -259,32 +262,37 @@ export function SettingsPanel({
                   aria-labelledby="lt-settings-tab-audio"
                 >
                   <div className="lt-settings-section-grid">
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t("transport.settingsModal.audioBackend", {
-                          defaultValue: "Audio System",
-                        })}
-                      </span>
-                      <select
-                        value={appSettings.selectedAudioBackend ?? ""}
-                        disabled={isSaving}
-                        onChange={(event) =>
-                          onAudioBackendChange(event.target.value)
-                        }
-                      >
-                        <option value="">
-                          {t(
-                            "transport.settingsModal.audioBackendSystemDefault",
-                            { defaultValue: "System default" },
-                          )}
-                        </option>
-                        {audioBackendOptions.map((backend) => (
-                          <option key={backend} value={backend}>
-                            {backend.replaceAll("_", " ").toUpperCase()}
+                    {/* Android has exactly one audio backend (Oboe/AAudio), so
+                        the "Audio System" selector is noise there — hide it and
+                        show only the device / rate / buffer controls. */}
+                    {!isAndroidApp ? (
+                      <label className="lt-settings-field">
+                        <span className="lt-settings-field-label">
+                          {t("transport.settingsModal.audioBackend", {
+                            defaultValue: "Audio System",
+                          })}
+                        </span>
+                        <select
+                          value={appSettings.selectedAudioBackend ?? ""}
+                          disabled={isSaving}
+                          onChange={(event) =>
+                            onAudioBackendChange(event.target.value)
+                          }
+                        >
+                          <option value="">
+                            {t(
+                              "transport.settingsModal.audioBackendSystemDefault",
+                              { defaultValue: "System default" },
+                            )}
                           </option>
-                        ))}
-                      </select>
-                    </label>
+                          {audioBackendOptions.map((backend) => (
+                            <option key={backend} value={backend}>
+                              {backend.replaceAll("_", " ").toUpperCase()}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
 
                     <label className="lt-settings-field">
                       <span className="lt-settings-field-label">
@@ -546,6 +554,34 @@ export function SettingsPanel({
                         })}
                       </span>
                     </label>
+
+                    {/* Low-latency mode is an Android/AAudio-only knob; desktop
+                        backends negotiate latency through buffer size. */}
+                    {isAndroidApp ? (
+                      <label className="lt-settings-toggle">
+                        <input
+                          type="checkbox"
+                          checked={appSettings.lowLatencyOutput}
+                          disabled={isSaving}
+                          onChange={(event) =>
+                            onLowLatencyOutputChange(event.target.checked)
+                          }
+                        />
+                        <span className="lt-settings-toggle-copy">
+                          <span>
+                            {t("transport.settingsModal.lowLatencyOutput", {
+                              defaultValue: "Baja latencia",
+                            })}
+                          </span>
+                          <small>
+                            {t("transport.settingsModal.lowLatencyOutputHint", {
+                              defaultValue:
+                                "Menor retardo con interfaces de audio; puede dar cortes en dispositivos modestos.",
+                            })}
+                          </small>
+                        </span>
+                      </label>
+                    ) : null}
                   </div>
                 </section>
               ) : null}
@@ -1744,6 +1780,12 @@ function DecodingCacheField() {
 function UpdateCheckField() {
   const { t } = useTranslation();
   const { release, error, isChecking, hasCheckedOnce } = useUpdateCheckStore();
+
+  // Android distributes updates as APKs, not the desktop installers the
+  // update flow downloads — hide the whole check.
+  if (isAndroidApp) {
+    return null;
+  }
   const current = normalizeVersion(
     typeof window !== "undefined"
       ? (window as { __LT_APP_VERSION__?: string }).__LT_APP_VERSION__ ?? ""
@@ -1859,15 +1901,17 @@ function DiagnosticsTabPanel() {
           })}
         </small>
         <div className="lt-inline-actions">
-          <button
-            type="button"
-            className="lt-secondary-button"
-            onClick={handleReveal}
-          >
-            {t("transport.settingsModal.diagnosticsOpenFolder", {
-              defaultValue: "Open logs folder",
-            })}
-          </button>
+          {!isAndroidApp ? (
+            <button
+              type="button"
+              className="lt-secondary-button"
+              onClick={handleReveal}
+            >
+              {t("transport.settingsModal.diagnosticsOpenFolder", {
+                defaultValue: "Open logs folder",
+              })}
+            </button>
+          ) : null}
           <button
             type="button"
             className="lt-secondary-button"

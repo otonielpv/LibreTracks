@@ -51,6 +51,12 @@ std::unique_ptr<AudioDecoder> make_decoder(const std::string& file_path);
 std::unique_ptr<AudioDecoder> make_libav_decoder();
 #endif
 
+#if defined(__ANDROID__)
+// Android system codecs (NDK AMediaExtractor + AMediaCodec) — the mobile
+// counterpart of the desktop FFmpeg route: AAC/M4A, OGG/Vorbis, Opus, ...
+std::unique_ptr<AudioDecoder> make_mediacodec_decoder();
+#endif
+
 // Convenience: decode entire file to interleaved float32 in one call.
 // Resamples to `target_sample_rate` using r8brain/libsamplerate.
 Result<std::vector<float>> decode_file_to_float32(

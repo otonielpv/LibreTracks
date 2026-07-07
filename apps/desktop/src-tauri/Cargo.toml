@@ -9,6 +9,13 @@ autobins = false
 name = "libretracks-desktop"
 path = "src/main.rs"
 
+# Library target required by Tauri mobile: Android/iOS load the app as a
+# shared library (`mobile_entry_point` in src/lib.rs) instead of running the
+# binary. Desktop keeps using src/main.rs, which just calls the lib's run().
+[lib]
+name = "libretracks_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -18,11 +25,8 @@ flate2 = "1"
 libretracks-audio = { path = "../../../crates/libretracks-audio" }
 lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2" }
 libretracks-project = { path = "../../../crates/libretracks-project" }
-libretracks-remote = { path = "../../../crates/libretracks-remote" }
-midir = "0.9"
 quick-xml = "0.37"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-rfd = "0.15"
 rayon = "1.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -32,9 +36,29 @@ thiserror = "2"
 tokio = { version = "1", features = ["sync", "time"] }
 tauri-plugin-dialog = "2.7.0"
 tauri-plugin-opener = "2"
+tauri-plugin-fs = "2.5.1"
 
 [dependencies.libretracks-core]
 path = "../../../crates/libretracks-core"
+
+# Desktop-only dependencies. The Android build excludes:
+# - libretracks-remote: the app IS the device on mobile; no remote-control server.
+# - midir: no Android backend.
+# - rfd: desktop-style native file dialogs don't exist on Android (see
+#   src/file_dialog.rs for the stub; mobile flows will use tauri-plugin-dialog).
+[target.'cfg(not(target_os = "android"))'.dependencies]
+libretracks-remote = { path = "../../../crates/libretracks-remote" }
+midir = "0.9"
+rfd = "0.15"
+
+# Android-only. Enumerating real output devices (speaker / headphones / USB
+# interface / Bluetooth) is a Java-only API (AudioManager.getDevices): the NDK
+# doesn't expose it. We call it from Rust via JNI, using the JavaVM + Context
+# that Tauri/tao already cache in ndk-context — no JNI plumbing needed in the
+# C++ engine. See src/android_audio_devices.rs.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
 
 [features]
 audio-engine-v2 = []

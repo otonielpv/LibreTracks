@@ -85,8 +85,10 @@ import {
   pickLibraryFiles,
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
+  importStagedAudioFiles,
   importSongPackageFromPathWithProgress,
   importExternalProjectFromPathWithProgress,
+  isAndroidApp,
   isTauriApp,
   listenToMidiRawMessage,
   listenToProjectLoadProgress,
@@ -127,6 +129,7 @@ import {
   updateSongRegionMasterGain,
   updateSongRegionTranspose,
   updateSongRegionWarp,
+  updateSongRegionKey,
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
@@ -144,17 +147,18 @@ import {
   setAutomationTrackPosition,
   formatTransposeSemitones,
   listSessionTemplates,
+  SONG_KEY_OPTIONS,
 } from "./desktopApi";
 import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import {
   MARKER_KINDS as SECTION_KINDS,
-  CUE_KINDS,
   markerColor,
   markerKindCategory,
   markerKindColor,
   markerKindLabel,
   markerKindVariants,
+  availableCueKinds,
 } from "./markerKinds";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { HorizontalScrollbar } from "./HorizontalScrollbar";
@@ -216,6 +220,8 @@ import {
 } from "./panels/AutomationCueModal";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
+import { MobileLanding } from "./MobileLanding";
+import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
@@ -890,6 +896,9 @@ export function TransportPanelContent() {
     setRecentColors((previous) => pushRecentColor(previous, color));
   }, []);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
+  // Android: file-actions submenu (import song / export session) toggled from
+  // its side-rail button.
+  const [isMobileFileActionsOpen, setIsMobileFileActionsOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
   );
@@ -935,6 +944,34 @@ export function TransportPanelContent() {
   // True while the whole-session export-mode chooser (Light / Full) is shown.
   const [isExportSessionModalOpen, setIsExportSessionModalOpen] =
     useState(false);
+  // Android: in-app sessions modal (create by name / open from list) that
+  // replaces the dialog-based New/Open entries of the FILE menu.
+  const [isMobileSessionsModalOpen, setIsMobileSessionsModalOpen] =
+    useState(false);
+  // Android: with touch, a tap meant for a marker flag that lands a few px
+  // off seeks the transport instead — fatal mid-performance. This lock
+  // disables plain tap-to-seek on the ruler; marker/region flags keep
+  // working (they're separate overlays with their own handlers).
+  const [rulerSeekLocked, setRulerSeekLocked] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("libretracks.android.rulerSeekLocked") ===
+        "1",
+  );
+  const toggleRulerSeekLock = () => {
+    setRulerSeekLocked((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(
+          "libretracks.android.rulerSeekLocked",
+          next ? "1" : "0",
+        );
+      } catch {
+        // Private mode → just lose persistence.
+      }
+      return next;
+    });
+  };
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
   const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
@@ -1258,7 +1295,9 @@ export function TransportPanelContent() {
   }, [isSettingsModalOpen]);
 
   useEffect(() => {
-    if (!isTauriApp) {
+    // No remote server on Android — the command exists but always errors, so
+    // skip the call instead of logging a guaranteed failure on every boot.
+    if (!isTauriApp || isAndroidApp) {
       return;
     }
 
@@ -1963,6 +2002,7 @@ export function TransportPanelContent() {
     handleOutputSampleRateChange,
     handleOutputBufferSizeChange,
     handleAudioSafeModeChange,
+    handleLowLatencyOutputChange,
     handleEnabledOutputChannelChange,
     handleDiscardEnabledOutputChannels,
     handleSelectAllOutputChannels,
@@ -3691,6 +3731,34 @@ export function TransportPanelContent() {
     ],
   );
 
+  // Android: bulk "take these to the timeline". Touch can't pointer-drag
+  // from the library across panels, so the library's selection action bar
+  // (and the post-import prompt) call this instead: every asset lands on
+  // its own auto-created track at the current playhead — the same pipeline
+  // as dropping N files onto the timeline on desktop.
+  const handleAddLibraryAssetsAtPlayhead = useCallback(
+    (payload: Array<{ filePath: string }>) => {
+      if (payload.length === 0) return;
+      const startSeconds = displayPositionSecondsRef.current;
+      void runAction(async () => {
+        const snapshot = await createClipsWithAutoTracks(
+          payload.map((item) => ({
+            filePath: item.filePath,
+            timelineStartSeconds: startSeconds,
+          })),
+        );
+        applyPlaybackSnapshot(snapshot);
+        setStatus(
+          t("library.addedToTimeline", {
+            count: payload.length,
+            defaultValue: "{{count}} audios añadidos al timeline",
+          }),
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setStatus, t],
+  );
+
   const handleCompactDropLibraryAssetsIntoSong = useCallback(
     (
       regionId: string,
@@ -3819,7 +3887,9 @@ export function TransportPanelContent() {
     handleSaveProjectClick,
     handleSaveProjectAsClick,
     handleCreateSongClick,
+    handleCreateSongNamed,
     handleOpenProjectClick,
+    handleOpenProjectFromPath,
     handleImportSongClick,
     handleImportSessionClick,
     handleExportSessionConfirm,
@@ -4029,6 +4099,38 @@ export function TransportPanelContent() {
     [setExportSongTarget],
   );
 
+  // Compact view "Nota de la canción" submenu → sets the region's original key.
+  // Reuses the same backend command as the DAW context menu so the effective-key
+  // badge (which recomputes with the transpose) stays consistent across views.
+  const handleCompactSetSongKey = useCallback(
+    (regionId: string, key: string | null) => {
+      const currentRegion = songRef.current?.regions.find(
+        (region) => region.id === regionId,
+      );
+      if (!currentRegion || (currentRegion.key ?? null) === key) {
+        return;
+      }
+      void runAction(async () => {
+        const nextSnapshot = await updateSongRegionKey(regionId, key);
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(
+          key
+            ? t("transport.status.songKeyUpdated", {
+                defaultValue: `Nota de «{{name}}» → {{key}}`,
+                name: currentRegion.name,
+                key,
+              })
+            : t("transport.status.songKeyCleared", {
+                defaultValue: `Nota de «{{name}}» eliminada`,
+                name: currentRegion.name,
+              }),
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setStatus, t],
+  );
+
+
   // Runs the export once the user picked a mode in the ExportSongModal.
   const handleConfirmExportSong = useCallback(
     (regionId: string, includeAudio: boolean) => {
@@ -4038,10 +4140,12 @@ export function TransportPanelContent() {
       setExportSongTarget(null);
       void runAction(
         async () => {
-          await exportRegionAsPackage(regionId, includeAudio);
-          setStatus(
-            `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
-          );
+          const exported = await exportRegionAsPackage(regionId, includeAudio);
+          if (exported) {
+            setStatus(
+              `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
+            );
+          }
         },
         { busy: true },
       );
@@ -4646,9 +4750,27 @@ export function TransportPanelContent() {
     sourcesPreparing,
   });
 
+  // Android long-press opens context menus while the finger is still down;
+  // the WebView then fires a synthesized pointer/mouse event on RELEASE,
+  // which the outside-click closer below read as "clicked outside" and the
+  // menu vanished before it could be used. Ignore dismissals in the first
+  // instants after opening (touch only — desktop right-click is instant).
+  const contextMenuOpenedAtRef = useRef(0);
+  useEffect(() => {
+    if (contextMenu) {
+      contextMenuOpenedAtRef.current = Date.now();
+    }
+  }, [contextMenu]);
+
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
       if (event.button !== 0) {
+        return;
+      }
+      if (
+        isAndroidApp &&
+        Date.now() - contextMenuOpenedAtRef.current < 500
+      ) {
         return;
       }
       if (
@@ -6545,6 +6667,10 @@ export function TransportPanelContent() {
         },
       },
       {
+        label: `${t("transport.menu.songKey", { defaultValue: "Nota de la canción" })} ▸`,
+        onSelect: () => openSongRegionKeyMenu(region),
+      },
+      {
         label: t("transport.menu.splitSongAtCursor", {
           defaultValue: "Partir canción en el cursor",
         }),
@@ -6594,7 +6720,9 @@ export function TransportPanelContent() {
         },
       },
       {
-        label: "Exportar Cancion",
+        label: t("transport.menu.exportSong", {
+          defaultValue: "Exportar Cancion",
+        }),
         onSelect: () => {
           setExportSongTarget({ regionId: region.id, regionName: region.name });
         },
@@ -6612,6 +6740,52 @@ export function TransportPanelContent() {
         },
       },
     ];
+  }
+
+  // Applies a new original key to a region (song) and refreshes the snapshot so
+  // the timeline/remote badges recompute from region.key + transpose.
+  async function setSongRegionKey(region: SongRegionSummary, key: string | null) {
+    await runAction(async () => {
+      const nextSnapshot = await updateSongRegionKey(region.id, key);
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(
+        key
+          ? t("transport.status.songKeyUpdated", {
+              defaultValue: `Nota de «{{name}}» → {{key}}`,
+              name: region.name,
+              key,
+            })
+          : t("transport.status.songKeyCleared", {
+              defaultValue: `Nota de «{{name}}» eliminada`,
+              name: region.name,
+            }),
+      );
+    });
+  }
+
+  // Submenu listing the 24 keys (plus "no key") for the region's original key.
+  // The region's current key is marked with a swatch dot so it reads as
+  // selected, mirroring the marker-kind picker's reopen-the-menu pattern.
+  function openSongRegionKeyMenu(region: SongRegionSummary) {
+    const next = bumpContextMenuPosition();
+    const currentKey = region.key ?? null;
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: t("transport.menu.songKey", { defaultValue: "Nota de la canción" }),
+      actions: [
+        {
+          label: t("transport.menu.songKeyNone", { defaultValue: "Sin nota" }),
+          swatch: currentKey === null ? "#3CDDC7" : undefined,
+          onSelect: () => setSongRegionKey(region, null),
+        },
+        ...SONG_KEY_OPTIONS.map((key) => ({
+          label: key,
+          swatch: currentKey === key ? "#3CDDC7" : undefined,
+          onSelect: () => setSongRegionKey(region, key),
+        })),
+      ],
+    });
   }
 
   function tempoMarkerContextMenu(marker: TempoMarkerSummary) {
@@ -7036,7 +7210,7 @@ export function TransportPanelContent() {
           onSelect: () =>
             openCreateMarkerKindList(
               positionSeconds,
-              CUE_KINDS,
+              availableCueKinds(appSettings.voiceGuideLanguage),
               t("transport.menu.markerKindCuesGroup"),
             ),
         },
@@ -7132,7 +7306,7 @@ export function TransportPanelContent() {
           onSelect: () =>
             openMarkerKindList(
               section,
-              CUE_KINDS,
+              availableCueKinds(appSettings.voiceGuideLanguage),
               t("transport.menu.markerKindCuesGroup"),
             ),
         },
@@ -9694,6 +9868,77 @@ export function TransportPanelContent() {
       return;
     }
 
+    // Android: no rfd paths — the WebView chooser hands us the file CONTENTS
+    // (Android files live behind content:// URIs the Rust side can't read).
+    // Same placeholder pipeline as below, importing bytes instead of paths,
+    // plus a one-tap "put the imported files on the timeline" prompt (the
+    // usual mobile intent behind importing a song's multitracks). NOTE: the
+    // chooser only opens inside the tap's user-gesture window, so the pick
+    // must be the first thing this function does — no awaits before it.
+    if (isAndroidApp) {
+      const files = await pickFilesViaWebView("audio/*");
+      if (!files.length) {
+        return; // user cancelled
+      }
+
+      const pendingImports = createPendingAudioImports(files, 0).map(
+        (item) => ({ ...item, showInTimeline: false }),
+      );
+      useTransportStore.getState().addPendingAudioImports(pendingImports);
+      setStatus(t("transport.status.libraryImportStarting"));
+      await nextPaint();
+
+      // Stage sequentially: one in-flight slice at a time keeps the WebView
+      // renderer's heap flat — reading whole files into Uint8Arrays here
+      // OOM-crashed the renderer on low-RAM phones.
+      const stagedPayloads: Array<{ fileName: string; sourcePath: string }> =
+        [];
+      await runAudioImportPipeline({
+        pendingIds: pendingImports.map((item) => item.id),
+        beforeImport: async () => {
+          for (let index = 0; index < files.length; index += 1) {
+            const file = files[index];
+            stagedPayloads.push({
+              fileName: file.name,
+              sourcePath: await stageFileForImport(file, index === 0),
+            });
+          }
+        },
+        importFn: () => importStagedAudioFiles(stagedPayloads),
+        onImported: async (importedAssets) => {
+          if (importedAssets.length === 0) {
+            return;
+          }
+          const shouldPlace = await confirmDialog(
+            t("library.addImportedToTimelinePrompt", {
+              count: importedAssets.length,
+              defaultValue:
+                "¿Añadir los {{count}} audios importados al timeline?",
+            }),
+          );
+          if (!shouldPlace) {
+            return;
+          }
+          const startSeconds = displayPositionSecondsRef.current;
+          const snapshot = await createClipsWithAutoTracks(
+            importedAssets.map((asset) => ({
+              filePath: asset.filePath,
+              timelineStartSeconds: startSeconds,
+            })),
+          );
+          applyPlaybackSnapshot(snapshot);
+        },
+        mergeLibraryAssets,
+        refreshLibraryState,
+        setStatus,
+        successMessage: (importedAssets) =>
+          t("transport.status.libraryUpdated", {
+            count: importedAssets.length,
+          }),
+      });
+      return;
+    }
+
     const paths = await pickLibraryFiles();
     if (!paths.length) {
       return; // user cancelled
@@ -10247,7 +10492,15 @@ export function TransportPanelContent() {
     appSettings.selectedMidiDevice &&
     !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
-  const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
+  // Keyboard shortcuts and MIDI make no sense on a phone/tablet: no physical
+  // keyboard by default, and midir has no Android backend (the MIDI tabs
+  // would only ever show an empty device list).
+  const androidHiddenSettingsTabs: SettingsTab[] = [
+    "shortcuts",
+    "midi",
+    "midiLearn",
+  ];
+  const allSettingsTabs: Array<{ id: SettingsTab; label: string }> = [
     {
       id: "audio",
       label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }),
@@ -10293,6 +10546,11 @@ export function TransportPanelContent() {
       }),
     },
   ];
+  const settingsTabs = isAndroidApp
+    ? allSettingsTabs.filter(
+        (tab) => !androidHiddenSettingsTabs.includes(tab.id),
+      )
+    : allSettingsTabs;
 
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
@@ -10407,6 +10665,7 @@ export function TransportPanelContent() {
           onCreateSong={handleCreateSongClick}
           onCreateSongFromTemplate={() => handleCreateSongFromTemplate()}
           onOpenProject={handleOpenProjectClick}
+          onOpenMobileSessions={() => setIsMobileSessionsModalOpen(true)}
           onImportSong={handleImportSongClick}
           onImportSession={handleImportSessionClick}
           onExportSession={() => setIsExportSessionModalOpen(true)}
@@ -10534,7 +10793,56 @@ export function TransportPanelContent() {
             onLibraryToggle={() => handleSidebarTabToggle("library")}
             onRemoteClick={handleRemoteButtonClick}
             onSettingsClick={handleSettingsButtonClick}
+            onSessionsClick={() => setIsMobileSessionsModalOpen(true)}
+            onSaveClick={handleSaveProjectClick}
+            canSave={canPersistProject}
+            onFileActionsClick={() =>
+              setIsMobileFileActionsOpen((current) => !current)
+            }
+            isFileActionsOpen={isMobileFileActionsOpen}
           />
+
+          {/* Android: file-actions submenu anchored to the side rail. Import
+              session lives on the landing screen (like desktop); these are the
+              in-session actions. */}
+          {isMobileFileActionsOpen ? (
+            <div
+              className="lt-mobile-file-menu-backdrop"
+              onClick={() => setIsMobileFileActionsOpen(false)}
+            >
+              <div
+                className="lt-mobile-file-menu"
+                role="menu"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMobileFileActionsOpen(false);
+                    handleImportSongClick();
+                  }}
+                >
+                  <span className="material-symbols-outlined">library_add</span>
+                  {t("timelineTopbar.importSong")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!song}
+                  onClick={() => {
+                    setIsMobileFileActionsOpen(false);
+                    setIsExportSessionModalOpen(true);
+                  }}
+                >
+                  <span className="material-symbols-outlined">ios_share</span>
+                  {t("timelineTopbar.exportSession", {
+                    defaultValue: "Exportar sesión…",
+                  })}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="lt-workspace">
             <div className="lt-workspace-body">
@@ -10568,8 +10876,21 @@ export function TransportPanelContent() {
                 onDeleteRequested={(assets) => {
                   void handleDeleteLibraryAssets(assets);
                 }}
+                onAddSelectionToTimeline={(assets) => {
+                  handleAddLibraryAssetsAtPlayhead(
+                    assets.map((asset) => ({ filePath: asset.filePath })),
+                  );
+                }}
               />
               {shouldShowEmptyState ? (
+                isAndroidApp ? (
+                  <MobileLanding
+                    onCreateSession={handleCreateSongNamed}
+                    onOpenSession={handleOpenProjectFromPath}
+                    onOpenSessionFromPicker={handleOpenProjectClick}
+                    onImportSession={handleImportSessionClick}
+                  />
+                ) : (
                 <div className="lt-empty-state">
                   <div className="lt-empty-state-card">
                     <span className="lt-empty-state-eyebrow">
@@ -10672,6 +10993,7 @@ export function TransportPanelContent() {
                     </div>
                   </div>
                 </div>
+                )
               ) : (
                 <section className="lt-main-stage">
                   <TimelineToolbar
@@ -10828,6 +11150,63 @@ export function TransportPanelContent() {
                     >
                       <div className="lt-timeline-main-grid">
                         <TrackHeadersPane
+                          headerActions={
+                            isAndroidApp ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="lt-icon-button"
+                                  aria-label={t(
+                                    "timelineToolbar.trackHeightDecrease",
+                                    { defaultValue: "Pistas más bajas" },
+                                  )}
+                                  onClick={() =>
+                                    applyTrackHeight(
+                                      trackHeight - TRACK_HEIGHT_STEP,
+                                    )
+                                  }
+                                >
+                                  <span className="material-symbols-outlined">
+                                    unfold_less
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="lt-icon-button"
+                                  aria-label={t(
+                                    "timelineToolbar.trackHeightIncrease",
+                                    { defaultValue: "Pistas más altas" },
+                                  )}
+                                  onClick={() =>
+                                    applyTrackHeight(
+                                      trackHeight + TRACK_HEIGHT_STEP,
+                                    )
+                                  }
+                                >
+                                  <span className="material-symbols-outlined">
+                                    unfold_more
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`lt-icon-button ${rulerSeekLocked ? "is-active" : ""}`}
+                                  aria-label={t(
+                                    "timelineToolbar.rulerSeekLock",
+                                    {
+                                      defaultValue:
+                                        "Bloquear salto al tocar el ruler",
+                                    },
+                                  )}
+                                  aria-pressed={rulerSeekLocked}
+                                  onClick={toggleRulerSeekLock}
+                                >
+                                  <span className="material-symbols-outlined">
+                                    {rulerSeekLocked ? "lock" : "lock_open"}
+                                  </span>
+                                </button>
+                              </>
+                            ) : undefined
+                          }
                           song={song}
                           visibleTracks={visibleTracks}
                           selectedTrackIds={selectedTrackIds}
@@ -10916,7 +11295,19 @@ export function TransportPanelContent() {
                             if (
                               !song ||
                               event.button !== 0 ||
-                              !rulerTrackRef.current
+                              !rulerTrackRef.current ||
+                              // Android seek lock: plain ruler taps neither
+                              // seek nor range-select; marker/region flags
+                              // are separate overlays and keep working.
+                              rulerSeekLocked ||
+                              // Android long-press: releasing the finger after
+                              // the context menu opened fires a synthesized
+                              // mousedown HERE, which seeked ("cursor moved")
+                              // and closed the fresh menu. Same grace window
+                              // as the global outside-click closer.
+                              (isAndroidApp &&
+                                Date.now() - contextMenuOpenedAtRef.current <
+                                  600)
                             ) {
                               return;
                             }
@@ -10940,6 +11331,7 @@ export function TransportPanelContent() {
                             });
 
                             const startClientX = event.clientX;
+                            const pressStartedAt = Date.now();
                             const pointerScaleX = getElementScaleX(
                               event.currentTarget.getBoundingClientRect(),
                               event.currentTarget.offsetWidth,
@@ -11068,6 +11460,19 @@ export function TransportPanelContent() {
                               );
                               window.removeEventListener("mouseup", onMouseUp);
                               stopRangeAutoScroll();
+
+                              // Android long-press: the context menu opened
+                              // DURING this very press (mousedown fires when
+                              // the finger lands, the menu ~600 ms later).
+                              // Releasing the finger must neither seek away
+                              // ("cursor moved") nor disturb the fresh menu.
+                              if (
+                                isAndroidApp &&
+                                contextMenuOpenedAtRef.current >= pressStartedAt
+                              ) {
+                                setSelectedTimelineRange(null);
+                                return;
+                              }
 
                               if (!hasMoved) {
                                 setSelectedTimelineRange(null);
@@ -11453,6 +11858,7 @@ export function TransportPanelContent() {
                       onSetSongBpm={handleCompactSetSongBpm}
                       onDeleteSong={handleCompactDeleteSong}
                       onExportSong={handleCompactExportSong}
+                      onSetSongKey={handleCompactSetSongKey}
                       bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
                       onImportSongPackageFromDialog={
@@ -11512,6 +11918,7 @@ export function TransportPanelContent() {
               onSelectAllOutputChannels={handleSelectAllOutputChannels}
               onClearOutputChannels={handleClearOutputChannels}
               onAudioSafeModeChange={handleAudioSafeModeChange}
+              onLowLatencyOutputChange={handleLowLatencyOutputChange}
               metronomeVolumeDraft={metronomeVolumeDraft}
               onMetronomeEnabledChange={handleMetronomeEnabledChange}
               onMetronomeOutputChange={handleMetronomeOutputChange}
@@ -11554,6 +11961,52 @@ export function TransportPanelContent() {
               onClose={() => setIsRemoteModalOpen(false)}
               remoteServerInfo={remoteServerInfo}
             />
+
+            {isMobileSessionsModalOpen ? (
+              <div
+                className="lt-modal-backdrop"
+                onClick={() => setIsMobileSessionsModalOpen(false)}
+              >
+                <section
+                  className="lt-settings-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="lt-mobile-sessions-title"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <header className="lt-settings-modal-header">
+                    <div>
+                      <h2 id="lt-mobile-sessions-title">
+                        {t("timelineTopbar.mobileSessions", {
+                          defaultValue: "Sesiones…",
+                        })}
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      className="lt-settings-modal-close"
+                      onClick={() => setIsMobileSessionsModalOpen(false)}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                      {t("common.close")}
+                    </button>
+                  </header>
+                  <div className="lt-settings-modal-body">
+                    <MobileLanding
+                      embedded
+                      onCreateSession={(name, parentDir) => {
+                        setIsMobileSessionsModalOpen(false);
+                        handleCreateSongNamed(name, parentDir);
+                      }}
+                      onOpenSession={(songFile) => {
+                        setIsMobileSessionsModalOpen(false);
+                        handleOpenProjectFromPath(songFile);
+                      }}
+                    />
+                  </div>
+                </section>
+              </div>
+            ) : null}
 
             <ExportSongModal
               target={exportSongTarget}

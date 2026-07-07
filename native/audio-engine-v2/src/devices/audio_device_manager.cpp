@@ -698,7 +698,8 @@ double AudioDeviceManager::take_callback_work_max_ms() {
 
 } // namespace lt
 
-#else // LT_ENGINE_USE_JUCE=0 - stub implementation
+#elif !LT_ENGINE_USE_OBOE // no JUCE, no Oboe — stub implementation
+// (the Oboe backend lives in audio_device_manager_oboe.cpp)
 
 namespace lt {
 
@@ -756,4 +757,4 @@ double AudioDeviceManager::take_callback_work_max_ms() { return 0.0; }
 
 } // namespace lt
 
-#endif // LT_ENGINE_USE_JUCE
+#endif // LT_ENGINE_USE_JUCE / !LT_ENGINE_USE_OBOE

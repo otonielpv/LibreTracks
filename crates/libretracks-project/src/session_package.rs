@@ -173,6 +173,70 @@ fn plan_audio_sources(song_dir: &Path, song: &Song) -> Vec<PlannedAudioSource> {
     planned
 }
 
+/// A comparable key for a source path: forward slashes, `\\?\`/`//?/` long-path
+/// prefixes stripped, lowercased (audio libraries live on case-insensitive
+/// filesystems in practice). Lets library assets match the planned clip sources
+/// they came from even when the two were recorded with cosmetically different
+/// spellings of the same path.
+fn normalize_source_key(path: &Path) -> String {
+    let mut s = path.to_string_lossy().replace('\\', "/");
+    for prefix in ["//?/", "//./"] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            s = rest.to_string();
+        }
+    }
+    s.to_lowercase()
+}
+
+/// Rewrite a `library.json` so each asset that was bundled under `audio/` points
+/// at that bundled path instead of the exporter's original (often absolute)
+/// source path. Assets NOT bundled (library files no clip uses) keep their
+/// original path. Returns None on parse failure so the caller falls back to the
+/// verbatim bytes.
+fn rewrite_library_for_package(
+    bytes: &[u8],
+    song_dir: &Path,
+    bundled_by_source_abs: &HashMap<String, String>,
+) -> Option<Vec<u8>> {
+    let mut value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let obj = value.as_object_mut()?;
+
+    let remap = |file_path: &str| -> Option<String> {
+        let source_abs = if Path::new(file_path).is_absolute() {
+            PathBuf::from(file_path)
+        } else {
+            song_dir.join(file_path)
+        };
+        bundled_by_source_abs
+            .get(&normalize_source_key(&source_abs))
+            .cloned()
+    };
+
+    // New-style: `assets: [{ filePath, folderPath }]`.
+    if let Some(assets) = obj.get_mut("assets").and_then(|a| a.as_array_mut()) {
+        for asset in assets {
+            if let Some(file_path) = asset.get("filePath").and_then(|v| v.as_str()) {
+                if let Some(bundled) = remap(file_path) {
+                    asset["filePath"] = serde_json::Value::String(bundled);
+                }
+            }
+        }
+    }
+
+    // Legacy: `filePaths: ["...", ...]`.
+    if let Some(file_paths) = obj.get_mut("filePaths").and_then(|a| a.as_array_mut()) {
+        for entry in file_paths {
+            if let Some(file_path) = entry.as_str() {
+                if let Some(bundled) = remap(file_path) {
+                    *entry = serde_json::Value::String(bundled);
+                }
+            }
+        }
+    }
+
+    serde_json::to_vec_pretty(&value).ok()
+}
+
 /// Export the whole session as a `.ltset` at `output_path`.
 ///
 /// Always bundles the session document, the named sidecar files (those that
@@ -243,12 +307,34 @@ pub fn export_session_as_package(
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
     zip.write_all(session_json.as_bytes())?;
 
+    // In a full package the library.json's asset paths must be rewritten to the
+    // bundled `audio/<name>` paths too — otherwise the library keeps the
+    // exporter's (often absolute, Windows) source paths and every asset reads as
+    // "missing" on another machine even though the audio is right there in the
+    // set. Keyed by the resolved source path, so an asset used by a clip maps to
+    // the same bundled file the clip now points at.
+    let bundled_by_source_abs: HashMap<String, String> = planned
+        .iter()
+        .map(|source| {
+            (
+                normalize_source_key(&source.source_abs),
+                source.relative_path.clone(),
+            )
+        })
+        .collect();
+
     // Opaque project sidecars (library.json, automation…). Missing ones are
     // simply skipped — a session may not have automation, for instance.
     for sidecar in sidecars {
         let source = song_dir.join(&sidecar.file_name);
         let Ok(bytes) = fs::read(&source) else {
             continue;
+        };
+        let bytes = if include_audio && sidecar.file_name == "library.json" {
+            rewrite_library_for_package(&bytes, song_dir, &bundled_by_source_abs)
+                .unwrap_or(bytes)
+        } else {
+            bytes
         };
         zip.start_file(format!("sidecars/{}", sidecar.file_name), deflated)
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
@@ -467,6 +553,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: libretracks_core::SongMaster::default(),
         }
     }
@@ -568,6 +655,76 @@ mod tests {
             b"AUTO"
         );
         assert!(dest_dir.join("library.json").exists());
+    }
+
+    #[test]
+    fn full_export_rewrites_library_paths_to_bundled_audio() {
+        // The library.json ships the exporter's original (often absolute) source
+        // paths. A full package must rewrite the assets that were bundled to the
+        // `audio/<name>` paths, or every asset reads as "missing" on another
+        // machine even though the audio is right there in the set.
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+        let mut song = session();
+        // Clips reference the audio by absolute source path (as after an import
+        // from an external folder), matching how the library records them.
+        let abs_one = song_dir
+            .join("audio")
+            .join("one.wav")
+            .to_string_lossy()
+            .replace('\\', "/");
+        let abs_two = song_dir
+            .join("audio")
+            .join("two.wav")
+            .to_string_lossy()
+            .replace('\\', "/");
+        song.clips = vec![
+            clip("c1", "t1", &abs_one, 0.0, 10.0),
+            clip("c2", "t1", &abs_two, 30.0, 10.0),
+        ];
+        // Library lists the same two assets by their absolute source path, in a
+        // per-song folder — exactly the shape that read as "missing" on import.
+        let library = format!(
+            r#"{{"assets":[{{"filePath":"{abs_one}","folderPath":"Song A"}},{{"filePath":"{abs_two}","folderPath":"Song A"}}]}}"#
+        );
+        fs::write(song_dir.join("library.json"), library).expect("library");
+
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &song,
+            &sidecars(),
+            &package_path,
+            true,
+            |_, _| {},
+        )
+        .expect("export full");
+
+        let target = tempfile::tempdir().expect("target");
+        let dest_dir = target.path().join("Mi Set");
+        extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
+
+        // The imported library must point at bundled audio that exists, and keep
+        // the per-song folder assignment.
+        let library_bytes = fs::read(dest_dir.join("library.json")).expect("library");
+        let library: serde_json::Value =
+            serde_json::from_slice(&library_bytes).expect("library json");
+        let assets = library["assets"].as_array().expect("assets");
+        assert_eq!(assets.len(), 2);
+        for asset in assets {
+            let file_path = asset["filePath"].as_str().expect("filePath");
+            assert!(
+                file_path.starts_with("audio/"),
+                "library asset should point at bundled audio, got {file_path}"
+            );
+            assert!(
+                dest_dir.join(file_path).exists(),
+                "bundled audio missing for library asset {file_path}"
+            );
+            assert_eq!(asset["folderPath"].as_str(), Some("Song A"));
+        }
     }
 
     #[test]
