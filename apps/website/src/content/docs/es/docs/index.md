@@ -3,7 +3,9 @@ title: Documentacion de LibreTracks
 description: Documentacion tecnica y de usuario para LibreTracks.
 ---
 
-LibreTracks es una workstation desktop de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta pensada para preparar el show con antelacion, guardar o convertir la sesion en plantilla, y tocar con routing, marcas, saltos, controles de transposicion, timeline con colores, MIDI, atajos personalizables y remote movil de forma predecible.
+LibreTracks es una workstation de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta pensada para preparar el show con antelacion, guardar o convertir la sesion en plantilla, y tocar con routing, marcas, saltos, controles de transposicion, timeline con colores, MIDI, atajos personalizables y remote movil de forma predecible.
+
+LibreTracks funciona en escritorio (Windows, macOS, Linux) y ahora esta disponible en Android como una beta inicial: puedes instalarlo en un movil o tablet y abrir tus sesiones con reproduccion real, importacion de audio y control tactil del timeline. La version de Android todavia esta en pruebas, asi que usala con cautela y no dependas de ella para un directo importante todavia.
 
 ![Timeline de proyecto en LibreTracks](/screenshots/Proyecto.png)
 
@@ -37,7 +39,7 @@ Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. L
 
 La reproduccion nunca se bloquea por la preparacion: al pulsar play el transporte arranca al instante, y cualquier pista cuyo audio aun se este decodificando permanece en silencio y entra sola en cuanto esta lista, asi las pistas ya preparadas nunca quedan retenidas por una fuente nueva lenta.
 
-Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Consulta [Pitch, warp y el boton T](/es/docs/pitch-and-warp/) para la tabla de decision completa.
+Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Ademas, cada cancion puede llevar su propia nota o tonalidad, que se ajusta desde el menu contextual de la region ("Nota"), se muestra en el timeline y se transpone junto con el cambio de tono de la region. Consulta [Pitch, warp y el boton T](/es/docs/pitch-and-warp/) para la tabla de decision completa.
 
 La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+click para seleccion multiple, arrastre en grupo con IPC agrupado, y magnets con Ctrl al arrastrar que pegan los bordes del clip al playhead, marcas, regiones y bordes de otros clips. Tambien puedes arrastrar clips verticalmente para moverlos a otra pista, validando el destino mientras arrastras. Ademas, pistas y clips pueden colorearse desde el menu contextual para leer sesiones densas mas rapido.
 

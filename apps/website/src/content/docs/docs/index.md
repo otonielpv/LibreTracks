@@ -3,7 +3,9 @@ title: LibreTracks Documentation
 description: User and technical documentation for LibreTracks.
 ---
 
-LibreTracks is a desktop multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving or templating the session, and performing with predictable audio routing, markers, jumps, transposition controls, color-coded timelines, MIDI, customizable shortcuts, and a mobile remote.
+LibreTracks is a multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving or templating the session, and performing with predictable audio routing, markers, jumps, transposition controls, color-coded timelines, MIDI, customizable shortcuts, and a mobile remote.
+
+LibreTracks runs on desktop (Windows, macOS, Linux) and is now available on Android as an early beta — you can install it on a phone or tablet and open your sessions with real playback, audio import, and touch control of the timeline. The Android build is still in testing, so use it with care and don't rely on it for an important show yet.
 
 ![LibreTracks project timeline](/screenshots/Proyecto.png)
 
@@ -37,7 +39,7 @@ Large imported sources are prepared for disk-backed playback. LibreTracks keeps 
 
 Playback never blocks on preparation: pressing play starts the transport immediately, and any track whose audio is still decoding stays silent and joins in on its own the moment it is ready, so already-prepared tracks are never held back by a slow new source.
 
-Each song region can independently change tempo and key. Region Warp time-stretches the audio to the timeline BPM while keeping pitch intact, and Region Transpose shifts pitch with or without changing duration depending on whether warp is on. See [Pitch, Warp & The T Button](/docs/pitch-and-warp/) for the full decision table.
+Each song region can independently change tempo and key. Region Warp time-stretches the audio to the timeline BPM while keeping pitch intact, and Region Transpose shifts pitch with or without changing duration depending on whether warp is on. Every song can also carry its own musical key, set from the region's context menu ("Note"), which is shown on the timeline and transposes together with the region's pitch change. See [Pitch, Warp & The T Button](/docs/pitch-and-warp/) for the full decision table.
 
 Clip editing supports Ableton-style flows: Ctrl/Cmd+click and Shift+click for multi-selection, group drag with batched IPC, and Ctrl-during-drag magnets that snap clip edges to the playhead, markers, regions, and other clip edges. Clips can also be dragged vertically to move them onto another track, with the target validated as you drag. Tracks and clips can also be color-coded from the context menu, which makes dense sessions easier to scan.
 
