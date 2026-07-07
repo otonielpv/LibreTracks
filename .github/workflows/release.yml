@@ -666,6 +666,12 @@ jobs:
       ANDROID_ABI: arm64-v8a
       ANDROID_TARGET: aarch64
       NDK_VERSION: 27.1.12297006
+      # This job never installs sccache (unlike `test` / `build-release-assets`),
+      # but the workflow-level env sets RUSTC_WRAPPER=sccache. When
+      # `tauri android build` shells out to `cargo build` for the aarch64 target,
+      # cargo tries to exec the missing `sccache` binary and dies with os error 2
+      # (exit 101). Clear the wrapper here so cargo calls rustc directly.
+      RUSTC_WRAPPER: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
