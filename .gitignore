@@ -41,6 +41,10 @@ build*
 !apps/desktop/src-tauri/gen/android/app/tauri.build.gradle.kts
 !apps/desktop/src-tauri/gen/android/buildSrc/
 !apps/desktop/src-tauri/gen/android/buildSrc/build.gradle.kts
+# BuildTask.kt is Kotlin source (defines the BuildTask class RustPlugin.kt
+# references) — `build*` was swallowing it by basename, so a fresh clone /
+# CI couldn't compile buildSrc at all ("Unresolved reference: BuildTask").
+!apps/desktop/src-tauri/gen/android/buildSrc/src/main/java/**/BuildTask.kt
 apps/desktop/src-tauri/gen/android/buildSrc/build/
 # ...and the "Build" voice-guide cue WAVs are source, not build artifacts —
 # the broad build* above was swallowing build.wav (the cue is a real recording,
