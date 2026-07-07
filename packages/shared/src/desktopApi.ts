@@ -404,6 +404,16 @@ export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("update_song_tempo", { bpm });
 }
 
+export async function updateSongRegionKey(
+  regionId: string,
+  key: string | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_song_region_key", {
+    regionId,
+    key,
+  });
+}
+
 export async function upsertSongTempoMarker(
   startSeconds: number,
   bpm: number,

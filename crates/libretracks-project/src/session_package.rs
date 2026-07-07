@@ -553,6 +553,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: libretracks_core::SongMaster::default(),
         }
     }

@@ -236,6 +236,7 @@ pub fn import_wav_song(
             start_seconds: 0.0,
             end_seconds: duration_seconds,
             transpose_semitones: 0,
+            key: request.key.clone(),
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),

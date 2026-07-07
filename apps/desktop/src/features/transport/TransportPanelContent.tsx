@@ -129,6 +129,7 @@ import {
   updateSongRegionMasterGain,
   updateSongRegionTranspose,
   updateSongRegionWarp,
+  updateSongRegionKey,
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
@@ -146,6 +147,7 @@ import {
   setAutomationTrackPosition,
   formatTransposeSemitones,
   listSessionTemplates,
+  SONG_KEY_OPTIONS,
 } from "./desktopApi";
 import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
@@ -4097,6 +4099,37 @@ export function TransportPanelContent() {
     [setExportSongTarget],
   );
 
+  // Compact view "Nota de la canción" submenu → sets the region's original key.
+  // Reuses the same backend command as the DAW context menu so the effective-key
+  // badge (which recomputes with the transpose) stays consistent across views.
+  const handleCompactSetSongKey = useCallback(
+    (regionId: string, key: string | null) => {
+      const currentRegion = songRef.current?.regions.find(
+        (region) => region.id === regionId,
+      );
+      if (!currentRegion || (currentRegion.key ?? null) === key) {
+        return;
+      }
+      void runAction(async () => {
+        const nextSnapshot = await updateSongRegionKey(regionId, key);
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(
+          key
+            ? t("transport.status.songKeyUpdated", {
+                defaultValue: `Nota de «{{name}}» → {{key}}`,
+                name: currentRegion.name,
+                key,
+              })
+            : t("transport.status.songKeyCleared", {
+                defaultValue: `Nota de «{{name}}» eliminada`,
+                name: currentRegion.name,
+              }),
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setStatus, t],
+  );
+
 
   // Runs the export once the user picked a mode in the ExportSongModal.
   const handleConfirmExportSong = useCallback(
@@ -6634,6 +6667,10 @@ export function TransportPanelContent() {
         },
       },
       {
+        label: `${t("transport.menu.songKey", { defaultValue: "Nota de la canción" })} ▸`,
+        onSelect: () => openSongRegionKeyMenu(region),
+      },
+      {
         label: t("transport.menu.splitSongAtCursor", {
           defaultValue: "Partir canción en el cursor",
         }),
@@ -6703,6 +6740,52 @@ export function TransportPanelContent() {
         },
       },
     ];
+  }
+
+  // Applies a new original key to a region (song) and refreshes the snapshot so
+  // the timeline/remote badges recompute from region.key + transpose.
+  async function setSongRegionKey(region: SongRegionSummary, key: string | null) {
+    await runAction(async () => {
+      const nextSnapshot = await updateSongRegionKey(region.id, key);
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(
+        key
+          ? t("transport.status.songKeyUpdated", {
+              defaultValue: `Nota de «{{name}}» → {{key}}`,
+              name: region.name,
+              key,
+            })
+          : t("transport.status.songKeyCleared", {
+              defaultValue: `Nota de «{{name}}» eliminada`,
+              name: region.name,
+            }),
+      );
+    });
+  }
+
+  // Submenu listing the 24 keys (plus "no key") for the region's original key.
+  // The region's current key is marked with a swatch dot so it reads as
+  // selected, mirroring the marker-kind picker's reopen-the-menu pattern.
+  function openSongRegionKeyMenu(region: SongRegionSummary) {
+    const next = bumpContextMenuPosition();
+    const currentKey = region.key ?? null;
+    setContextMenu({
+      x: next.x,
+      y: next.y,
+      title: t("transport.menu.songKey", { defaultValue: "Nota de la canción" }),
+      actions: [
+        {
+          label: t("transport.menu.songKeyNone", { defaultValue: "Sin nota" }),
+          swatch: currentKey === null ? "#3CDDC7" : undefined,
+          onSelect: () => setSongRegionKey(region, null),
+        },
+        ...SONG_KEY_OPTIONS.map((key) => ({
+          label: key,
+          swatch: currentKey === key ? "#3CDDC7" : undefined,
+          onSelect: () => setSongRegionKey(region, key),
+        })),
+      ],
+    });
   }
 
   function tempoMarkerContextMenu(marker: TempoMarkerSummary) {
@@ -11775,6 +11858,7 @@ export function TransportPanelContent() {
                       onSetSongBpm={handleCompactSetSongBpm}
                       onDeleteSong={handleCompactDeleteSong}
                       onExportSong={handleCompactExportSong}
+                      onSetSongKey={handleCompactSetSongKey}
                       bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
                       onImportSongPackageFromDialog={

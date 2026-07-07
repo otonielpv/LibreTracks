@@ -18,6 +18,7 @@ import {
   formatTransposeSemitones,
   markerColor,
   markerKindCategory,
+  regionEffectiveKey,
   type AppSettings,
   type AudioMeterLevel,
   type SongRegionSummary,
@@ -1875,6 +1876,11 @@ function TransportView() {
                   }}
                 >
                   <span>{region.name}</span>
+                  {regionEffectiveKey(region) ? (
+                    <em className="region-chip-key">
+                      {regionEffectiveKey(region)}
+                    </em>
+                  ) : null}
                   {region.transposeSemitones !== 0 ? (
                     <em>{formatTransposeSemitones(region.transposeSemitones)} st</em>
                   ) : null}
@@ -1890,6 +1896,11 @@ function TransportView() {
                     <strong>{formatTransposeSemitones(selectedRegion.transposeSemitones)} st</strong>
                     <button type="button" onClick={() => updateSelectedRegionTranspose(1)}>+</button>
                   </div>
+                  {regionEffectiveKey(selectedRegion) ? (
+                    <span className="selected-region-key">
+                      {regionEffectiveKey(selectedRegion)}
+                    </span>
+                  ) : null}
                 </div>
                 <button
                   className="jump-cancel-button region-jump-button"

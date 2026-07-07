@@ -299,6 +299,7 @@ pub fn run() {
             commands::timeline::set_section_marker_kind,
             commands::timeline::set_section_marker_color,
             commands::timeline::update_song_tempo,
+            commands::timeline::update_song_region_key,
             commands::timeline::upsert_song_tempo_marker,
             commands::timeline::delete_song_tempo_marker,
             commands::timeline::update_song_time_signature,

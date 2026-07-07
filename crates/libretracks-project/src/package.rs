@@ -107,6 +107,10 @@ struct SongPackageManifest {
     duration_seconds: f64,
     #[serde(default)]
     region_transpose_semitones: i32,
+    /// The exported song's original key (e.g. `"Dm"`). Absent in packages made
+    /// before the per-song key feature → `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    region_key: Option<String>,
     #[serde(default)]
     tracks: Vec<Track>,
     #[serde(default)]
@@ -258,6 +262,7 @@ pub fn export_region_as_package(
         base_time_signature: song.time_signature.clone(),
         duration_seconds: region_duration,
         region_transpose_semitones: region.transpose_semitones,
+        region_key: region.key.clone(),
         tracks,
         clips: clips.clone(),
         section_markers,
@@ -583,6 +588,7 @@ pub fn merge_extracted_song_package(
         start_seconds: insert_at_seconds,
         end_seconds: insert_at_seconds + region_span,
         transpose_semitones: manifest.region_transpose_semitones,
+        key: manifest.region_key.clone(),
         warp_enabled: false,
         warp_source_bpm: None,
         master: libretracks_core::SongMaster::default(),
@@ -720,6 +726,7 @@ mod tests {
             start_seconds: start,
             end_seconds: end,
             transpose_semitones: 0,
+            key: None,
             warp_enabled: false,
             warp_source_bpm: None,
             master: SongMaster::default(),

@@ -43,6 +43,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: SongMaster::default(),
             }],
             tracks: vec![
@@ -116,6 +117,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: SongMaster::default(),
         });
 
@@ -168,6 +170,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: SongMaster::default(),
         });
         // Clip starts inside region_intro [0, 240) but extends past 240.
@@ -193,6 +196,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: SongMaster::default(),
         });
         song.clips[0].timeline_start_seconds = 0.0;

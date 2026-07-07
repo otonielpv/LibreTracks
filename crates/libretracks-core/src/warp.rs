@@ -250,6 +250,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: enabled,
             warp_source_bpm: source_bpm,
+            key: None,
             master: crate::model::SongMaster::default(),
         }
     }
@@ -382,6 +383,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(120.0),
+            key: None,
             master: crate::model::SongMaster::default(),
         };
         s.regions.push(r.clone());
@@ -403,6 +405,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(100.0),
+            key: None,
             master: crate::model::SongMaster::default(),
         });
 
@@ -425,6 +428,7 @@ mod tests {
             transpose_semitones: region_pitch,
             warp_enabled,
             warp_source_bpm,
+            key: None,
             master: crate::model::SongMaster::default(),
         });
         s
@@ -489,6 +493,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(100.0), // ratio = 120/100 = 1.2 → view len 50s
+            key: None,
             master: crate::model::SongMaster::default(),
         });
 
@@ -515,6 +520,7 @@ mod tests {
             transpose_semitones: 12, // pitch_scale = 2 → view len 5s
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: crate::model::SongMaster::default(),
         });
 
@@ -539,6 +545,7 @@ mod tests {
             transpose_semitones: 12,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: crate::model::SongMaster::default(),
         });
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
@@ -557,6 +564,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(120.0),
+            key: None,
             master: crate::model::SongMaster::default(),
         });
 

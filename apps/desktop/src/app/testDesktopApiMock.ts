@@ -154,6 +154,7 @@ function buildInitialSong(): SongView {
         startSeconds: 0,
         endSeconds: 180,
         transposeSemitones: 0,
+        key: null,
         warpEnabled: false,
         warpSourceBpm: null,
         master: { gain: 1.0 },
@@ -508,6 +509,7 @@ function buildSongTempoRegions(
       startSeconds,
       endSeconds: marker.startSeconds,
       transposeSemitones: 0,
+      key: null,
       warpEnabled: false,
       warpSourceBpm: null,
       master: { gain: 1.0 },
@@ -525,6 +527,7 @@ function buildSongTempoRegions(
     startSeconds,
     endSeconds: Math.max(startSeconds, SONG_TEMPO_REGION_VISUAL_END_SECONDS),
     transposeSemitones: 0,
+    key: null,
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
@@ -734,6 +737,7 @@ function createRegionFromSelection(
     startSeconds: Math.max(0, startSeconds),
     endSeconds: Math.max(startSeconds, endSeconds),
     transposeSemitones: 0,
+    key: null,
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
@@ -859,6 +863,18 @@ export const testDesktopApiMock = {
     replaceSong({
       ...state.song,
       bpm,
+    });
+    return clone(buildSnapshot());
+  },
+  updateSongRegionKey: async (regionId: string, key: string | null) => {
+    const trimmed = key?.trim();
+    replaceSong({
+      ...state.song,
+      regions: state.song.regions.map((region) =>
+        region.id === regionId
+          ? { ...region, key: trimmed && trimmed.length > 0 ? trimmed : null }
+          : region,
+      ),
     });
     return clone(buildSnapshot());
   },
@@ -1396,6 +1412,7 @@ export const testDesktopApiMock = {
       startSeconds,
       endSeconds,
       transposeSemitones: 0,
+      key: null,
       warpEnabled: false,
       warpSourceBpm: null,
       master: { gain: 1.0 },
@@ -1440,6 +1457,20 @@ export const testDesktopApiMock = {
         region.id === regionId
           ? { ...region, master: { gain: masterGain } }
           : region,
+      ),
+    });
+    return clone(buildSnapshot());
+  },
+  updateSongRegionTranspose: async (
+    regionId: string,
+    transposeSemitones: number,
+  ) => {
+    // Mirrors the backend: mutate the region's transpose in place, preserving
+    // every other field (crucially `key`, which drives the effective-key badge).
+    replaceSong({
+      ...state.song,
+      regions: state.song.regions.map((region) =>
+        region.id === regionId ? { ...region, transposeSemitones } : region,
       ),
     });
     return clone(buildSnapshot());

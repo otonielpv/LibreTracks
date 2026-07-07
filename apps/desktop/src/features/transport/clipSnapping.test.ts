@@ -42,6 +42,7 @@ describe("buildClipSnapAnchors", () => {
           startSeconds: 10,
           endSeconds: 50,
           transposeSemitones: 0,
+          key: null,
           warpEnabled: false,
           warpSourceBpm: null,
           master: { gain: 1.0 },

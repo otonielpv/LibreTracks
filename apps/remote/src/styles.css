@@ -1097,6 +1097,26 @@ button {
   letter-spacing: 0.1em;
 }
 
+/* The effective-key badge is the primary musical cue, so it reads as a solid
+   pill rather than the translucent transpose badge next to it. */
+.region-chip em.region-chip-key {
+  background: rgb(255 226 171 / 0.18);
+  color: #ffe2ab;
+  letter-spacing: 0.04em;
+}
+
+.selected-region-key {
+  align-self: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgb(255 226 171 / 0.18);
+  color: #ffe2ab;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .region-chip.is-active {
   background: var(--accent-soft);
   color: var(--accent);

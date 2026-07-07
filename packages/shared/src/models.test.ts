@@ -12,6 +12,9 @@ import {
   getSongRegionAtPosition,
   getSongTempoRegionAtPosition,
   normalizeAppSettings,
+  parseSongKey,
+  regionEffectiveKey,
+  transposeKey,
   type AppSettings,
   type SongRegionSummary,
   type SongView,
@@ -26,6 +29,7 @@ function makeRegion(
     startSeconds: 0,
     endSeconds: 10,
     transposeSemitones: 0,
+    key: null,
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
@@ -62,6 +66,78 @@ describe("formatTransposeSemitones", () => {
 
   it("keeps the - for negative values", () => {
     expect(formatTransposeSemitones(-3)).toBe("-3");
+  });
+});
+
+describe("parseSongKey", () => {
+  it("parses a plain major note", () => {
+    expect(parseSongKey("C")).toEqual({ semitone: 0, minor: false });
+    expect(parseSongKey("F#")).toEqual({ semitone: 6, minor: false });
+  });
+
+  it("parses a minor note via the trailing m", () => {
+    expect(parseSongKey("Dm")).toEqual({ semitone: 2, minor: true });
+    expect(parseSongKey("A#m")).toEqual({ semitone: 10, minor: true });
+  });
+
+  it("accepts flats and normalises them to sharps", () => {
+    expect(parseSongKey("Db")).toEqual({ semitone: 1, minor: false });
+    expect(parseSongKey("Ebm")).toEqual({ semitone: 3, minor: true });
+  });
+
+  it("is case-insensitive and trims whitespace", () => {
+    expect(parseSongKey("  gm ")).toEqual({ semitone: 7, minor: true });
+  });
+
+  it("returns null for empty or unrecognised input", () => {
+    expect(parseSongKey(null)).toBeNull();
+    expect(parseSongKey("")).toBeNull();
+    expect(parseSongKey("Sol")).toBeNull();
+  });
+});
+
+describe("transposeKey", () => {
+  it("shifts a major key up preserving the mode", () => {
+    expect(transposeKey("D", 2)).toBe("E");
+  });
+
+  it("shifts a minor key and keeps the m suffix", () => {
+    expect(transposeKey("Dm", 2)).toBe("Em");
+  });
+
+  it("wraps around the octave in both directions", () => {
+    expect(transposeKey("B", 1)).toBe("C");
+    expect(transposeKey("C", -1)).toBe("B");
+    expect(transposeKey("Cm", -14)).toBe("A#m");
+  });
+
+  it("canonicalises to sharps and returns null for unparseable keys", () => {
+    expect(transposeKey("Db", 0)).toBe("C#");
+    expect(transposeKey("Sol", 3)).toBeNull();
+  });
+});
+
+describe("regionEffectiveKey", () => {
+  it("transposes the region's own key by its semitones", () => {
+    expect(
+      regionEffectiveKey(makeRegion({ key: "Dm", transposeSemitones: 2 })),
+    ).toBe("Em");
+  });
+
+  it("applies the transpose even when the region is warped", () => {
+    // Warp (time-ratio) and transpose (pitch-scale) are independent on the same
+    // Bungee voice, so a warped region still shifts key by its transpose.
+    expect(
+      regionEffectiveKey(
+        makeRegion({ key: "Dm", transposeSemitones: 5, warpEnabled: true }),
+      ),
+    ).toBe("Gm");
+  });
+
+  it("returns null when the region has no key", () => {
+    expect(
+      regionEffectiveKey(makeRegion({ key: null, transposeSemitones: 2 })),
+    ).toBeNull();
   });
 });
 

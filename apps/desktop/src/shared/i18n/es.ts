@@ -337,6 +337,8 @@ const es = {
       changeTimelineBpm: "Cambiar BPM del timeline",
       clearTimelineSelection: "Limpiar seleccion del timeline",
       renameSong: "Renombrar Cancion",
+      songKey: "Nota de la cancion",
+      songKeyNone: "Sin nota",
       changeBpm: "Cambiar BPM",
       changeRegionWarpSourceBpm: "Cambiar BPM original",
       exportSong: "Exportar Cancion",
@@ -467,6 +469,8 @@ const es = {
       tempoMarkerCreated: "Marca de BPM creada en {{time}} a {{bpm}} BPM.",
       timelineSelectionCleared: "Seleccion del timeline limpiada.",
       songRenamed: "Cancion renombrada: {{name}}.",
+      songKeyUpdated: "Nota de «{{name}}» → {{key}}.",
+      songKeyCleared: "Nota de «{{name}}» eliminada.",
       regionTransposeUpdated:
         "Transposicion de la region actualizada para {{name}} a {{transpose}} st.",
       songDeleted: "Cancion eliminada: {{name}}.",

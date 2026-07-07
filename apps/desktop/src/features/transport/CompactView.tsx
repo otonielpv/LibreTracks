@@ -28,6 +28,8 @@ import { LIBRARY_ASSET_DRAG_MIME } from "./dragDrop";
 import { clientToZoomedCoords } from "../../shared/uiZoom";
 import {
   createEmptySong,
+  regionEffectiveKey,
+  SONG_KEY_OPTIONS,
   type SongRegionSummary,
   type TrackSummary,
   type TransportSnapshot,
@@ -139,6 +141,11 @@ type CompactViewProps = {
    * the DAW's right-click "Exportar Cancion" uses, so the file dialog
    * and output format are identical between views. */
   onExportSong: (regionId: string) => void;
+  /** Fired from the song-column right-click menu's "Nota" submenu. Sets the
+   * song's original key (`null` clears it). Reuses the same backend command
+   * (`update_song_region_key`) the DAW context menu uses, so the effective-key
+   * badge stays consistent between views and updates with the transpose. */
+  onSetSongKey: (regionId: string, key: string | null) => void;
   /** Effective BPM at each song's start_seconds, computed by the parent so
    * the column reads "what tempo plays here" without re-doing the marker
    * resolution at render time. Empty / missing values fall back to the
@@ -211,6 +218,7 @@ function CompactViewComponent({
   onSetSongBpm,
   onDeleteSong,
   onExportSong,
+  onSetSongKey,
   bpmByRegion,
   onSnapshotApplied,
   onImportSongPackageFromDialog,
@@ -339,6 +347,7 @@ function CompactViewComponent({
             onSetBpm={() => onSetSongBpm(region.id)}
             onDelete={() => onDeleteSong(region.id)}
             onExport={() => onExportSong(region.id)}
+            onSetKey={(key) => onSetSongKey(region.id, key)}
             bpm={bpmByRegion[region.id]}
             placeholderCount={
               dragPreview &&
@@ -445,6 +454,7 @@ type CompactSongColumnProps = {
   onSetBpm: () => void;
   onDelete: () => void;
   onExport: () => void;
+  onSetKey: (key: string | null) => void;
   bpm: number | undefined;
   /** Number of dashed placeholders to render at the end of the clip
    * stack while a drag is hovering this column. Driven by the parent's
@@ -476,6 +486,7 @@ function CompactSongColumnComponent({
   onSetBpm,
   onDelete,
   onExport,
+  onSetKey,
   bpm,
   placeholderCount,
   isSelected,
@@ -591,6 +602,7 @@ function CompactSongColumnComponent({
         onSetBpm={onSetBpm}
         onDelete={onDelete}
         onExport={onExport}
+        onSetKey={onSetKey}
         isSelected={isSelected}
         onSelect={onSelect}
       />
@@ -718,6 +730,7 @@ type CompactSongHeaderProps = {
   onSetBpm: () => void;
   onDelete: () => void;
   onExport: () => void;
+  onSetKey: (key: string | null) => void;
   /** True when this region matches the project selection. Drives the
    * `is-selected` styling so the user sees which song the toolbar's
    * Transpose / Warp / Master controls are bound to. */
@@ -753,6 +766,7 @@ function CompactSongHeaderComponent({
   onSetBpm,
   onDelete,
   onExport,
+  onSetKey,
   isSelected,
   onSelect,
 }: CompactSongHeaderProps) {
@@ -760,9 +774,14 @@ function CompactSongHeaderComponent({
     x: number;
     y: number;
   } | null>(null);
+  // When true the menu shows the 24-key picker instead of the root actions.
+  const [keyMenuOpen, setKeyMenuOpen] = useState(false);
   useEffect(() => {
     if (!contextMenu) return;
-    const close = () => setContextMenu(null);
+    const close = () => {
+      setContextMenu(null);
+      setKeyMenuOpen(false);
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
@@ -900,54 +919,107 @@ function CompactSongHeaderComponent({
             {bpm.toFixed(bpm % 1 === 0 ? 0 : 2)} BPM
           </div>
         ) : null}
+        {regionEffectiveKey(region) ? (
+          <div
+            className="lt-compact-song-key"
+            title="Nota de la canción (con el cambio de tono aplicado)"
+          >
+            {regionEffectiveKey(region)}
+          </div>
+        ) : null}
       </div>
       {contextMenu ? (
         <div
-          className="lt-compact-clip-menu"
+          className={`lt-compact-clip-menu ${keyMenuOpen ? "is-key-picker" : ""}`}
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            className="lt-compact-clip-menu-item"
-            onClick={() => {
-              setContextMenu(null);
-              onRename();
-            }}
-          >
-            Renombrar canción
-          </button>
-          <button
-            type="button"
-            className="lt-compact-clip-menu-item"
-            onClick={() => {
-              setContextMenu(null);
-              onSetBpm();
-            }}
-          >
-            Cambiar BPM…
-          </button>
-          <button
-            type="button"
-            className="lt-compact-clip-menu-item"
-            onClick={() => {
-              setContextMenu(null);
-              onExport();
-            }}
-          >
-            Exportar canción
-          </button>
-          <div className="lt-compact-clip-menu-divider" aria-hidden="true" />
-          <button
-            type="button"
-            className="lt-compact-clip-menu-item is-destructive"
-            onClick={() => {
-              setContextMenu(null);
-              onDelete();
-            }}
-          >
-            Eliminar canción
-          </button>
+          {keyMenuOpen ? (
+            <>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item"
+                onClick={() => {
+                  setContextMenu(null);
+                  setKeyMenuOpen(false);
+                  onSetKey(null);
+                }}
+              >
+                {(region.key ?? null) === null ? "✓ " : ""}Sin nota
+              </button>
+              {SONG_KEY_OPTIONS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="lt-compact-clip-menu-item"
+                  onClick={() => {
+                    setContextMenu(null);
+                    setKeyMenuOpen(false);
+                    onSetKey(key);
+                  }}
+                >
+                  {region.key === key ? "✓ " : ""}
+                  {key}
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item"
+                onClick={() => {
+                  setContextMenu(null);
+                  onRename();
+                }}
+              >
+                Renombrar canción
+              </button>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item"
+                onClick={() => {
+                  setContextMenu(null);
+                  onSetBpm();
+                }}
+              >
+                Cambiar BPM…
+              </button>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item"
+                onClick={(event) => {
+                  // Keep the menu open and swap to the key picker instead of
+                  // closing — mirrors the DAW's reopen-with-keys submenu.
+                  event.stopPropagation();
+                  setKeyMenuOpen(true);
+                }}
+              >
+                Nota de la canción ▸
+              </button>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item"
+                onClick={() => {
+                  setContextMenu(null);
+                  onExport();
+                }}
+              >
+                Exportar canción
+              </button>
+              <div className="lt-compact-clip-menu-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item is-destructive"
+                onClick={() => {
+                  setContextMenu(null);
+                  onDelete();
+                }}
+              >
+                Eliminar canción
+              </button>
+            </>
+          )}
         </div>
       ) : null}
       <div

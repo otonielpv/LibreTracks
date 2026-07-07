@@ -1,5 +1,6 @@
 import {
   isAndroidApp,
+  transposeKey,
   type ActiveVampSummary,
   type SectionMarkerSummary,
   type SongRegionSummary,
@@ -343,6 +344,13 @@ export function drawRulerRegion(
 
   let badgeLeft = blockLeft + 7 + context.measureText(region.name).width + 8;
   const badges: string[] = [];
+  // The transpose always shifts the key, warp or not (warp = time-ratio,
+  // transpose = pitch-scale, both independent on the same Bungee voice). Shown
+  // first as the key is the primary musical cue for a live performer.
+  const effectiveKey = transposeKey(region.key, region.transposeSemitones);
+  if (effectiveKey) {
+    badges.push(effectiveKey);
+  }
   if (region.warpEnabled && region.warpSourceBpm && region.warpSourceBpm > 0) {
     badges.push(`${region.warpSourceBpm.toFixed(0)} BPM`);
   }

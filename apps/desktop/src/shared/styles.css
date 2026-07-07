@@ -5889,6 +5889,28 @@ textarea {
   white-space: nowrap;
 }
 
+/* Effective-key badge next to the BPM. Warm amber to match the region key
+   badge on the DAW timeline, and to read as the primary musical cue distinct
+   from the teal BPM chip. Shows region.key transposed by the region's pitch. */
+.lt-compact-song-key {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.4rem;
+  color: #ffe2ab;
+  background: rgba(255, 226, 171, 0.14);
+  border: 1px solid rgba(255, 226, 171, 0.38);
+  border-radius: 2px;
+  font: 700 9px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* The key picker lists 25 items — cap the height and scroll so it never runs
+   off-screen (especially inside the mobile bottom-sheet layout). */
+.lt-compact-clip-menu.is-key-picker {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
 .lt-compact-song-play {
   flex: 0 0 auto;
   width: 1.4rem;

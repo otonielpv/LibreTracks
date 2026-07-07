@@ -320,6 +320,8 @@ const en = {
       changeTimelineBpm: "Change Timeline BPM",
       clearTimelineSelection: "Clear Timeline Selection",
       renameSong: "Rename Song",
+      songKey: "Song key",
+      songKeyNone: "No key",
       changeBpm: "Change BPM",
       changeRegionWarpSourceBpm: "Change Original BPM",
       exportSong: "Export Song",
@@ -449,6 +451,8 @@ const en = {
       tempoMarkerCreated: "BPM marker created at {{time}} with {{bpm}} BPM.",
       timelineSelectionCleared: "Timeline selection cleared.",
       songRenamed: "Song renamed: {{name}}.",
+      songKeyUpdated: "Key of “{{name}}” → {{key}}.",
+      songKeyCleared: "Key of “{{name}}” cleared.",
       regionTransposeUpdated:
         "Region transpose updated for {{name}} to {{transpose}} st.",
       songDeleted: "Song deleted: {{name}}.",

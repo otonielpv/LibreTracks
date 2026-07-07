@@ -3567,6 +3567,7 @@ impl DesktopSession {
             start_seconds,
             end_seconds,
             transpose_semitones: 0,
+            key: None,
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
@@ -3647,6 +3648,7 @@ impl DesktopSession {
             start_seconds,
             end_seconds,
             transpose_semitones: 0,
+            key: None,
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
@@ -3723,6 +3725,7 @@ impl DesktopSession {
             start_seconds,
             end_seconds,
             transpose_semitones: existing_region.transpose_semitones,
+            key: existing_region.key.clone(),
             warp_enabled: existing_region.warp_enabled,
             warp_source_bpm: existing_region.warp_source_bpm,
             master: existing_region.master.clone(),
@@ -3936,6 +3939,7 @@ impl DesktopSession {
             start_seconds: new_start,
             end_seconds: new_end,
             transpose_semitones: existing_region.transpose_semitones,
+            key: existing_region.key.clone(),
             warp_enabled: existing_region.warp_enabled,
             warp_source_bpm: existing_region.warp_source_bpm,
             master: existing_region.master.clone(),
@@ -4367,6 +4371,7 @@ impl DesktopSession {
             start_seconds: split_seconds,
             end_seconds: region.end_seconds,
             transpose_semitones: region.transpose_semitones,
+            key: region.key.clone(),
             warp_enabled: region.warp_enabled,
             warp_source_bpm: region.warp_source_bpm,
             master: region.master.clone(),
@@ -4501,6 +4506,35 @@ impl DesktopSession {
             AudioChangeImpact::TransportOnly
         };
         self.persist_song_update(song, audio, impact, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    /// Sets a region's (song's) original musical key (e.g. `"Dm"`, `"F#"`).
+    /// Pure display metadata — the audible pitch is driven by the region's
+    /// `transpose_semitones`, so this only persists and re-emits the snapshot.
+    /// `None` (or an empty/whitespace string) clears the key.
+    pub fn update_song_region_key(
+        &mut self,
+        region_id: &str,
+        key: Option<String>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        region.key = key
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -5174,6 +5208,7 @@ impl DesktopSession {
                 start_seconds: insert_at_seconds,
                 end_seconds: insert_at_seconds + project.duration_seconds.max(1.0),
                 transpose_semitones: 0,
+                key: None,
                 warp_enabled: false,
                 warp_source_bpm: None,
                 master: libretracks_core::SongMaster::default(),
@@ -5189,6 +5224,7 @@ impl DesktopSession {
                             .end_seconds
                             .max(imported_region.start_seconds + 0.001),
                     transpose_semitones: 0,
+                    key: None,
                     warp_enabled: false,
                     warp_source_bpm: None,
                     master: libretracks_core::SongMaster::default(),
@@ -9027,6 +9063,7 @@ fn ensure_region_covers_clip(
         start_seconds: clip_start,
         end_seconds: clip_end,
         transpose_semitones: 0,
+        key: None,
         warp_enabled: false,
         warp_source_bpm: None,
         master: libretracks_core::SongMaster::default(),
@@ -9714,6 +9751,7 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 start_seconds: region.start_seconds,
                 end_seconds: replacement.start_seconds,
                 transpose_semitones: region.transpose_semitones,
+                key: region.key.clone(),
                 warp_enabled: region.warp_enabled,
                 warp_source_bpm: region.warp_source_bpm,
                 master: region.master.clone(),
@@ -9733,6 +9771,7 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 start_seconds: replacement.end_seconds,
                 end_seconds: region.end_seconds,
                 transpose_semitones: region.transpose_semitones,
+                key: region.key.clone(),
                 warp_enabled: region.warp_enabled,
                 warp_source_bpm: region.warp_source_bpm,
                 master: region.master.clone(),
@@ -10263,6 +10302,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![Track {
@@ -10320,6 +10360,7 @@ mod tests {
             transpose_semitones: 3,
             warp_enabled: false,
             warp_source_bpm: None,
+            key: None,
             master: libretracks_core::SongMaster::default(),
         }];
         // Keep the clip inside the varispeed region ([5, 20]) so the song
@@ -10413,6 +10454,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
             SongRegion {
@@ -10423,6 +10465,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
             SongRegion {
@@ -10433,6 +10476,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
         ];
@@ -10546,6 +10590,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![
@@ -11069,6 +11114,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![
@@ -13269,6 +13315,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
             SongRegion {
@@ -13279,6 +13326,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
         ];
@@ -13470,6 +13518,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
             SongRegion {
@@ -13480,6 +13529,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: true,
                 warp_source_bpm: Some(130.0),
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
             SongRegion {
@@ -13490,6 +13540,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                key: None,
                 master: libretracks_core::SongMaster::default(),
             },
         ];
