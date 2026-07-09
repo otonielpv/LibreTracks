@@ -193,7 +193,7 @@ private:
     std::array<TrackMeterSlot, kMaxTracks> track_meters_;
     std::atomic<int> track_meter_count_{0};
 
-    // Per-region meters. Updated inside apply_region_master_gain so the value
+    // Per-region meters. Updated inside update_region_meters so the value
     // reflects the post-master signal of whichever region holds the playhead.
     // Inactive regions decay toward zero with a fixed release time so the bar
     // doesn't snap off when crossing region boundaries.
@@ -265,13 +265,28 @@ private:
                               int output_offset,
                               const std::shared_ptr<const Session>& session) noexcept;
     void apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept;
-    // Multiplies the post-mix bus by the master_gain of whichever region
-    // contains `timeline_frame`. No-op if no region covers the playhead.
-    void apply_region_master_gain(float** output_channels,
-                                   int num_channels,
-                                   int num_frames,
-                                   const Session* session,
-                                   Frame timeline_frame) noexcept;
+    // Multiplies the track bus by the master_gain of whichever region
+    // contains `timeline_frame`. Called right after the track render loop and
+    // BEFORE the metronome/voice-guide are mixed in, so the song master volume
+    // only attenuates the song's tracks — the click and the guide voice stay at
+    // their own level (a user can lower the song under them). No-op if no region
+    // covers the playhead. `output_offset` shifts the write window for the
+    // split-block jump path.
+    void apply_region_master_gain_to_tracks(float** output_channels,
+                                            int num_channels,
+                                            int num_frames,
+                                            int output_offset,
+                                            const Session* session,
+                                            Frame timeline_frame) noexcept;
+    // master_gain of whichever region contains `timeline_frame` (1.0 if none).
+    float region_master_gain_at(const Session* session, Frame timeline_frame) const noexcept;
+    // Updates the per-region meters from the final output bus (post master
+    // fade), so the bar reflects what the song actually sends to the device.
+    void update_region_meters(float** output_channels,
+                              int num_channels,
+                              int num_frames,
+                              const Session* session,
+                              Frame timeline_frame) noexcept;
     TrackControlState* control_for_track(const Id& track_id) noexcept;
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;

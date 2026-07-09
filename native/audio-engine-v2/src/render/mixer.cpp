@@ -547,6 +547,11 @@ void Mixer::render_timeline_span(float** output_channels,
     rendered_track_count_.fetch_add(rendered_this_block, std::memory_order_relaxed);
     skipped_track_count_.fetch_add(skipped_this_block, std::memory_order_relaxed);
 
+    // Song master volume attenuates ONLY the tracks — apply it to this span's
+    // window before the metronome/voice-guide mix so they keep their own level.
+    apply_region_master_gain_to_tracks(output_channels, num_channels, num_frames,
+                                       output_offset, session.get(), timeline_frame);
+
     std::array<float*, 64> shifted_channels{};
     float** metronome_channels = output_channels;
     if (num_channels <= static_cast<int>(shifted_channels.size())) {
@@ -841,6 +846,12 @@ void Mixer::render(float** output_channels,
         rendered_track_count_.fetch_add(rendered_this_block, std::memory_order_relaxed);
         skipped_track_count_.fetch_add(skipped_this_block, std::memory_order_relaxed);
 
+        // Song master volume attenuates ONLY the tracks — apply it before the
+        // metronome/voice-guide mix so the click and guide voice keep their own
+        // level regardless of how low the song is turned down.
+        apply_region_master_gain_to_tracks(output_channels, num_channels, num_frames,
+                                           /*output_offset=*/0, session.get(), timeline_frame);
+
         metronome_.render(output_channels, num_channels, num_frames,
                           clock_->sample_rate(), timeline_frame, session.get());
         voice_guide_.render(output_channels, num_channels, num_frames,
@@ -859,10 +870,10 @@ void Mixer::render(float** output_channels,
     if (!fade_processed_in_split)
         fade_.process(output_channels, num_channels, num_frames);
 
-    apply_region_master_gain(output_channels, num_channels, num_frames,
-                              session.get(), timeline_frame);
-
     apply_master_gain(output_channels, num_channels, num_frames);
+
+    update_region_meters(output_channels, num_channels, num_frames,
+                         session.get(), timeline_frame);
 
     // Peak meters.
     float peak_l = 0.f, peak_r = 0.f;
@@ -982,11 +993,44 @@ void Mixer::trigger_crossfade() noexcept {
     fade_.trigger_crossfade();
 }
 
-void Mixer::apply_region_master_gain(float** output_channels,
-                                       int num_channels,
-                                       int num_frames,
-                                       const Session* session,
-                                       Frame timeline_frame) noexcept {
+float Mixer::region_master_gain_at(const Session* session, Frame timeline_frame) const noexcept {
+    if (!session) return 1.0f;
+    for (const auto& song : session->songs) {
+        for (const auto& region : song.regions) {
+            if (timeline_frame >= region.start_frame
+                && timeline_frame < region.end_frame)
+                return region.master_gain;
+        }
+    }
+    return 1.0f;
+}
+
+void Mixer::apply_region_master_gain_to_tracks(float** output_channels,
+                                               int num_channels,
+                                               int num_frames,
+                                               int output_offset,
+                                               const Session* session,
+                                               Frame timeline_frame) noexcept {
+    if (!session || num_channels <= 0 || num_frames <= 0)
+        return;
+
+    const float gain = region_master_gain_at(session, timeline_frame);
+    if (std::abs(gain - 1.0f) <= 0.000001f)
+        return;
+
+    for (int ch = 0; ch < num_channels; ++ch) {
+        if (!output_channels[ch]) continue;
+        float* buf = output_channels[ch] + output_offset;
+        for (int f = 0; f < num_frames; ++f)
+            buf[f] *= gain;
+    }
+}
+
+void Mixer::update_region_meters(float** output_channels,
+                                 int num_channels,
+                                 int num_frames,
+                                 const Session* session,
+                                 Frame timeline_frame) noexcept {
     if (!session || num_channels <= 0 || num_frames <= 0)
         return;
 
@@ -995,7 +1039,6 @@ void Mixer::apply_region_master_gain(float** output_channels,
     // slot table cheaply per block instead of relying on rebuild_control_slots.
     int region_count = 0;
     int active_index = -1;
-    float gain = 1.0f;
     for (const auto& song : session->songs) {
         for (const auto& region : song.regions) {
             if (region_count >= kMaxRegions) break;
@@ -1004,7 +1047,6 @@ void Mixer::apply_region_master_gain(float** output_channels,
             if (timeline_frame >= region.start_frame
                 && timeline_frame < region.end_frame) {
                 active_index = region_count;
-                gain = region.master_gain;
             }
             ++region_count;
         }
@@ -1012,19 +1054,10 @@ void Mixer::apply_region_master_gain(float** output_channels,
     }
     region_meter_count_.store(region_count, std::memory_order_release);
 
-    const bool gain_is_unity = std::abs(gain - 1.0f) <= 0.000001f;
-    if (active_index >= 0 && !gain_is_unity) {
-        for (int ch = 0; ch < num_channels; ++ch) {
-            if (!output_channels[ch]) continue;
-            for (int f = 0; f < num_frames; ++f)
-                output_channels[ch][f] *= gain;
-        }
-    }
-
-    // Compute the post-gain peak of the active region (mono max(|L|, |R|))
-    // and apply a 200ms release to every other slot so inactive bars decay
-    // smoothly toward zero instead of snapping off when the playhead crosses
-    // a region boundary.
+    // Compute the peak of the active region from the final output bus (mono
+    // max(|L|, |R|)) and apply a 200ms release to every other slot so inactive
+    // bars decay smoothly toward zero instead of snapping off when the playhead
+    // crosses a region boundary.
     float block_peak = 0.f;
     if (active_index >= 0) {
         for (int ch = 0; ch < std::min(num_channels, 2); ++ch) {
