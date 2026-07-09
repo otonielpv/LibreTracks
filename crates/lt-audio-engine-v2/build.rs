@@ -40,10 +40,26 @@ fn main() {
             .join("native/audio-engine-v2")
             .join(abi_dir);
         println!("cargo:rerun-if-changed={}", lib_dir.display());
-        if lib_dir.join("liblt_audio_engine_v2.so").exists() {
+        println!("cargo:rerun-if-env-changed=LT_ENGINE_ANDROID_REQUIRE_LINK");
+        let so_path = lib_dir.join("liblt_audio_engine_v2.so");
+        if so_path.exists() {
             println!("cargo:rustc-cfg=lt_engine_android_link");
             println!("cargo:rustc-link-search=native={}", lib_dir.display());
             println!("cargo:rustc-link-lib=dylib=lt_audio_engine_v2");
+        } else if std::env::var_os("LT_ENGINE_ANDROID_REQUIRE_LINK").is_some() {
+            // Guardrail for distributable builds: falling back to the silent
+            // stub engine here would ship an APK with no audio, no waveforms,
+            // and an empty device list — and it would do so WITHOUT any error.
+            // A release build sets this env var so a missing engine .so (e.g.
+            // a CI build-dir-name mismatch) fails loudly instead. The name is
+            // `build-android-<arch>` keyed off CARGO_CFG_TARGET_ARCH; make sure
+            // whatever built the engine put the .so exactly there.
+            panic!(
+                "LT_ENGINE_ANDROID_REQUIRE_LINK is set but the NDK-built engine \
+                 was not found at {}. The APK would silently ship the no-op stub \
+                 engine. Build the engine into that exact directory before linking.",
+                so_path.display()
+            );
         }
         return;
     }

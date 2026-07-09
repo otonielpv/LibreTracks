@@ -746,7 +746,15 @@ jobs:
           NINJA="$ANDROID_SDK_ROOT/cmake/3.22.1/bin/ninja"
           TOOLCHAIN="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
           BUNGEE_DIR="$PWD/bungee-android-sdk"
-          cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build-android \
+          # CRITICAL: the build dir name must match what build.rs looks for at
+          # LINK time — it keys off CARGO_CFG_TARGET_ARCH (aarch64 →
+          # `build-android-arm64`), NOT the ABI. Building into a different dir
+          # (e.g. `build-android`) means build.rs never finds the .so, never
+          # emits the `lt_engine_android_link` cfg, and the APK silently ships
+          # the no-op STUB engine (no audio, no waveforms, empty device list).
+          # See crates/lt-audio-engine-v2/build.rs.
+          ENGINE_BUILD_DIR="native/audio-engine-v2/build-android-arm64"
+          cmake -S native/audio-engine-v2 -B "$ENGINE_BUILD_DIR" \
             -G Ninja -DCMAKE_MAKE_PROGRAM="$NINJA" \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ANDROID_ABI" -DANDROID_PLATFORM=android-24 \
@@ -754,10 +762,10 @@ jobs:
             -DLT_ENGINE_USE_JUCE=OFF -DLT_ENGINE_USE_OBOE=ON \
             -DLT_ENGINE_USE_FFMPEG=OFF -DLT_ENGINE_USE_LIBSNDFILE=ON \
             -DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR="$BUNGEE_DIR"
-          cmake --build native/audio-engine-v2/build-android --target lt_audio_engine_v2
+          cmake --build "$ENGINE_BUILD_DIR" --target lt_audio_engine_v2
           JNI_DIR="apps/desktop/src-tauri/gen/android/app/src/main/jniLibs/${ANDROID_ABI}"
           mkdir -p "$JNI_DIR"
-          cp native/audio-engine-v2/build-android/liblt_audio_engine_v2.so "$JNI_DIR/"
+          cp "$ENGINE_BUILD_DIR/liblt_audio_engine_v2.so" "$JNI_DIR/"
 
       # Materialize the release keystore from secrets so the APK is signed with
       # the real key (build.gradle reads keystore.properties → falls back to
@@ -784,6 +792,11 @@ jobs:
           EOF
 
       - name: Build signed release APK
+        # Fail loudly if the NDK engine .so isn't where build.rs links it from
+        # (see crates/lt-audio-engine-v2/build.rs) instead of silently shipping
+        # the no-op stub engine — an APK with no audio, waveforms, or devices.
+        env:
+          LT_ENGINE_ANDROID_REQUIRE_LINK: "1"
         run: npx tauri android build --apk --target "$ANDROID_TARGET"
         working-directory: apps/desktop
 

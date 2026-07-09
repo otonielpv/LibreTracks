@@ -557,10 +557,26 @@ pub fn start_create_song_named_at(
                     parent.display()
                 ));
             }
-            // A chosen folder may already hold a same-named session; pick a
-            // fresh `<name>`, `<name>-2`… folder instead of failing so the
-            // user isn't forced to rename.
-            let song_dir = unique_session_dir(&parent, &name);
+            // On Android the "choose folder" flow reuses the SAF save dialog,
+            // so the picked parent is the folder the user placed `<name>.ltsession`
+            // INTO. When the user navigated into (or created) a folder that already
+            // matches the session name, nesting another `<name>/` under it would
+            // produce `…/Test/Test/`. If the chosen folder is already named `<name>`
+            // and holds no session of its own, inflate the session directly there
+            // instead of nesting.
+            let parent_is_named_like_session = parent
+                .file_name()
+                .and_then(|value| value.to_str())
+                .map(|dir_name| dir_name.eq_ignore_ascii_case(&name))
+                .unwrap_or(false);
+            let song_dir = if parent_is_named_like_session && !dir_holds_session(&parent) {
+                parent.clone()
+            } else {
+                // A chosen folder may already hold a same-named session; pick a
+                // fresh `<name>`, `<name>-2`… folder instead of failing so the
+                // user isn't forced to rename.
+                unique_session_dir(&parent, &name)
+            };
             let dir_name = song_dir
                 .file_name()
                 .and_then(|value| value.to_str())
@@ -616,9 +632,11 @@ pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String
         match crate::mobile_files::resolve_picked_document_parent(&picked) {
             Some(path) => Ok(Some(path.to_string_lossy().into_owned())),
             None => Err(
-                "Esa ubicacion no se puede usar como carpeta de sesion. Elige una carpeta \
-                 del almacenamiento del dispositivo (no un acceso directo como Descargas o \
-                 una nube)."
+                "No se puede crear la sesión en esa ubicación. Navega al almacenamiento \
+                 del dispositivo (por ejemplo Música o Documentos) en vez de a un acceso \
+                 directo como 'Descargas' o una unidad en la nube, que no tienen una ruta \
+                 real. Si es la primera vez, concede a LibreTracks el permiso de acceso a \
+                 archivos."
                     .to_string(),
             ),
         }
@@ -1841,6 +1859,23 @@ fn sanitize_saf_name_hint(raw: &str, fallback: &str) -> String {
 /// has no "save as" dialog to resolve collisions, so imports and the
 /// choose-folder create pick a fresh folder automatically instead of
 /// clobbering an existing session.
+/// Whether a directory already contains a session (a `*.ltsession` file at its
+/// top level). Used to decide if we can safely inflate a new session directly
+/// into a user-picked folder rather than nesting a subfolder inside it.
+fn dir_holds_session(dir: &std::path::Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        entry
+            .path()
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("ltsession"))
+            .unwrap_or(false)
+    })
+}
+
 fn unique_session_dir(songs_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
     let base = songs_dir.join(name);
     if !base.exists() {
