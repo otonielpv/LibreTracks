@@ -790,12 +790,18 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
             const int latency_frames = static_cast<int>(voice->latency_frames());
             const int compensation_frames =
                 voice->alignment_compensation_frames(pitch_scale);
-            if (!ensure_seek_read_window_ready(
-                    sources, spec, max_in_frames,
-                    latency_frames, compensation_frames)) {
-                return;
-            }
-            if (spec.source) {
+            // The prefeed window may not be decoded yet the FIRST time a region's
+            // warp is toggled on (its source hasn't been streamed into the block
+            // cache). Do NOT abandon the voice in that case — publishing without
+            // a voice for the clip makes render_path_stretched return silence, so
+            // the region's tracks go mute until the user toggles warp again (by
+            // then the cache is warm). Mirror rebuild_for_session's tolerant
+            // policy instead: always install the voice; only the prefeed and the
+            // fade length are conditional on the window being ready.
+            const bool window_ready = ensure_seek_read_window_ready(
+                sources, spec, max_in_frames,
+                latency_frames, compensation_frames);
+            if (window_ready && spec.source) {
                 prefeed_voice_with_source_audio(
                     *voice, *spec.source, spec.source_frame,
                     sample_rate, channel_count, max_in_frames,
@@ -808,7 +814,9 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
                 static_cast<long long>(spec.source_frame));
             voice->set_clip_mapping(spec.timeline_start_frame,
                                     spec.source_start_frame, spec.time_ratio);
-            voice->arm_fade_in(0);
+            // Prefed voice starts clean (fade 0); un-prefed voice masks its
+            // warm-up silence with a short fade so the first blocks don't click.
+            voice->arm_fade_in(window_ready ? 0 : 3);
             result.voice = std::move(voice);
             result.succeeded = true;
         });
@@ -876,12 +884,15 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
         const int latency_frames = static_cast<int>(voice->latency_frames());
         const int compensation_frames =
             voice->alignment_compensation_frames(pitch_scale);
-        if (!ensure_seek_read_window_ready(
-                sources, spec, impl_->max_in_frames,
-                latency_frames, compensation_frames)) {
-            continue;
-        }
-        if (spec.source) {
+        // Never abandon the voice when the prefeed window isn't decoded yet —
+        // that leaves the clip without a Bungee voice and its region plays
+        // silent until the source warms. Install the voice regardless; make
+        // only the prefeed + fade length conditional. Same policy as
+        // rebuild_for_session / build_seek_voice_map.
+        const bool window_ready = ensure_seek_read_window_ready(
+            sources, spec, impl_->max_in_frames,
+            latency_frames, compensation_frames);
+        if (window_ready && spec.source) {
             prefeed_voice_with_source_audio(
                 *voice, *spec.source, spec.source_frame,
                 impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
@@ -891,10 +902,10 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
             static_cast<long long>(spec.source_frame));
         voice->set_clip_mapping(spec.timeline_start_frame,
                                 spec.source_start_frame, spec.time_ratio);
-        // This voice has already been prefed to the seek target; the mixer's
-        // seek de-click ramp handles the boundary. Avoid an extra per-voice
-        // gain ramp here because it can roughen transposed post-seek audio.
-        voice->arm_fade_in(0);
+        // A prefed voice starts clean (mixer's seek de-click ramp covers the
+        // boundary); an un-prefed voice masks its warm-up silence with a short
+        // fade so the first blocks don't click.
+        voice->arm_fade_in(window_ready ? 0 : 3);
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
