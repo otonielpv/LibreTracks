@@ -3896,7 +3896,6 @@ export function TransportPanelContent() {
     handleCreateSongClick,
     handleCreateSongNamed,
     handleOpenProjectClick,
-    handleOpenProjectFromPath,
     handleImportSongClick,
     handleImportSessionClick,
     handleExportSessionConfirm,
@@ -5948,11 +5947,16 @@ export function TransportPanelContent() {
     SessionTemplateSummary[]
   >([]);
   const [templateFilter, setTemplateFilter] = useState("");
+  // Whether the first template scan has resolved yet. Starts true so we render
+  // a loading placeholder instead of flashing the "no templates" empty message
+  // during the brief window before listSessionTemplates() resolves on load.
+  const [templatesLoading, setTemplatesLoading] = useState(true);
   useEffect(() => {
     if (!shouldShowEmptyState) {
       return;
     }
     let cancelled = false;
+    setTemplatesLoading(true);
     void listSessionTemplates()
       .then((templates) => {
         if (!cancelled) {
@@ -5964,6 +5968,11 @@ export function TransportPanelContent() {
       .catch(() => {
         if (!cancelled) {
           setSessionTemplates([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTemplatesLoading(false);
         }
       });
     return () => {
@@ -10893,7 +10902,6 @@ export function TransportPanelContent() {
                 isAndroidApp ? (
                   <MobileLanding
                     onCreateSession={handleCreateSongNamed}
-                    onOpenSession={handleOpenProjectFromPath}
                     onOpenSessionFromPicker={handleOpenProjectClick}
                     onImportSession={handleImportSessionClick}
                   />
@@ -10989,6 +10997,12 @@ export function TransportPanelContent() {
                             </p>
                           )}
                         </>
+                      ) : templatesLoading ? (
+                        <p className="lt-empty-state-templates-empty">
+                          {t("transport.shell.templatesLoading", {
+                            defaultValue: "Cargando plantillas…",
+                          })}
+                        </p>
                       ) : (
                         <p className="lt-empty-state-templates-empty">
                           {t("transport.shell.noTemplates", {
@@ -12005,9 +12019,13 @@ export function TransportPanelContent() {
                         setIsMobileSessionsModalOpen(false);
                         handleCreateSongNamed(name, parentDir);
                       }}
-                      onOpenSession={(songFile) => {
+                      onOpenSessionFromPicker={() => {
                         setIsMobileSessionsModalOpen(false);
-                        handleOpenProjectFromPath(songFile);
+                        handleOpenProjectClick();
+                      }}
+                      onImportSession={() => {
+                        setIsMobileSessionsModalOpen(false);
+                        handleImportSessionClick();
                       }}
                     />
                   </div>

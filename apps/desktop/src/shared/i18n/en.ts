@@ -113,6 +113,7 @@ const en = {
       noTemplateMatches: "No template matches your search.",
       noTemplates:
         "You don't have any templates yet. Save one from a session with “Save as template…”.",
+      templatesLoading: "Loading templates…",
       choosingProjectLocation: "Choose where to save the imported project...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",

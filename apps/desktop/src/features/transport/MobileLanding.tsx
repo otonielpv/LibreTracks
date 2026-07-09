@@ -1,17 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  listDefaultSessions,
-  pickSessionFolder,
-  type DefaultSessionSummary,
-} from "./desktopApi";
+import { pickSessionFolder } from "./desktopApi";
 
 type MobileLandingProps = {
   /** Create the session under `parentDir` (a folder the user picked) — the
    * caller places it in the default folder when `parentDir` is omitted. */
   onCreateSession: (name: string, parentDir?: string) => void;
-  onOpenSession: (songFile: string) => void;
   /** Browse for a .ltsession anywhere on the device via the system picker
    * (which remembers the app's last folder) — the desktop "Open" flow. */
   onOpenSessionFromPicker?: () => void;
@@ -24,50 +19,30 @@ type MobileLandingProps = {
 };
 
 /**
- * Landing screen for Android, where native file dialogs don't exist: sessions
- * are created by name in the app's default songs folder and opened from a
- * list of the sessions found there. Replaces the desktop empty-state card
- * (Create/Open/Import buttons), whose flows all go through `rfd` dialogs.
+ * Landing screen for Android, where native file dialogs are limited: sessions
+ * are created by name (the user still picks where to save via the folder
+ * picker) and opened through the system file picker, which can reach a
+ * `.ltsession` anywhere on the device. We deliberately do NOT list the app's
+ * default songs folder here — sessions live scattered across the device, so a
+ * partial list keyed to one folder is misleading. Replaces the desktop
+ * empty-state card, whose flows all go through `rfd` dialogs.
  */
 export function MobileLanding({
   onCreateSession,
-  onOpenSession,
   onOpenSessionFromPicker,
   onImportSession,
   embedded = false,
 }: MobileLandingProps) {
   const { t } = useTranslation();
-  const [sessions, setSessions] = useState<DefaultSessionSummary[]>([]);
   const [sessionName, setSessionName] = useState("");
   const [isNamingSession, setIsNamingSession] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    void listDefaultSessions()
-      .then((list) => {
-        if (!cancelled) {
-          setSessions(list);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSessions([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const trimmedName = sessionName.trim();
-  const nameTaken = sessions.some(
-    (session) => session.name.toLowerCase() === trimmedName.toLowerCase(),
-  );
 
   const submitCreate = () => {
-    if (!trimmedName || nameTaken || isPickingFolder) {
+    if (!trimmedName || isPickingFolder) {
       return;
     }
     const name = trimmedName;
@@ -121,11 +96,6 @@ export function MobileLanding({
               placeholder={t("transport.shell.mobileSessionNamePlaceholder")}
               aria-label={t("transport.shell.mobileSessionNamePlaceholder")}
             />
-            {nameTaken ? (
-              <p className="lt-mobile-landing-name-taken" role="alert">
-                {t("transport.shell.mobileSessionNameTaken")}
-              </p>
-            ) : null}
             {folderError ? (
               <p className="lt-mobile-landing-name-taken" role="alert">
                 {folderError}
@@ -135,7 +105,7 @@ export function MobileLanding({
               <button
                 type="submit"
                 className="is-primary"
-                disabled={!trimmedName || nameTaken || isPickingFolder}
+                disabled={!trimmedName || isPickingFolder}
               >
                 {t("common.create")}
               </button>
@@ -175,30 +145,6 @@ export function MobileLanding({
             ) : null}
           </div>
         )}
-
-        <div className="lt-empty-state-templates">
-          <div className="lt-empty-state-templates-header">
-            <span>{t("transport.shell.mobileSessionsHeading")}</span>
-          </div>
-          {sessions.length > 0 ? (
-            <ul className="lt-empty-state-template-list">
-              {sessions.map((session) => (
-                <li key={session.songFile}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenSession(session.songFile)}
-                  >
-                    {session.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="lt-empty-state-templates-empty">
-              {t("transport.shell.mobileNoSessions")}
-            </p>
-          )}
-        </div>
       </div>
     </div>
   );

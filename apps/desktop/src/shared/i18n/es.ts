@@ -113,6 +113,7 @@ const es = {
       noTemplateMatches: "Ninguna plantilla coincide con la búsqueda.",
       noTemplates:
         "Aún no tienes plantillas. Guarda una desde una sesión con “Guardar como plantilla…”.",
+      templatesLoading: "Cargando plantillas…",
       choosingProjectLocation:
         "Elige donde guardar el proyecto importado...",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",
