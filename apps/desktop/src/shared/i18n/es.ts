@@ -196,7 +196,7 @@ const es = {
       metronomeDescription:
         "Añade una claqueta sintetizada y la mantiene bloqueada muestra a muestra con el timeline del transporte.",
       metronomeVolume: "Volumen del metronomo",
-      metronomeVolumeValue: "{{value}}%",
+      metronomeVolumeValue: "{{value}} dB",
       metronomeOutput: "Salida del metronomo",
       voiceGuideOutput: "Salida de la voz guia",
       tabVoiceGuide: "Voz guía",
@@ -520,7 +520,7 @@ const es = {
       metronomeDisabled: "Metronomo desactivado.",
       voiceGuideEnabled: "Voz guia activada.",
       voiceGuideDisabled: "Voz guia desactivada.",
-      metronomeVolumeUpdated: "Volumen del metronomo ajustado a {{volume}}%.",
+      metronomeVolumeUpdated: "Volumen del metronomo ajustado a {{volume}} dB.",
       midiBindingLearned:
         "Asignacion MIDI aprendida para {{key}}: {{binding}}.",
       midiMappingsReset: "Mapeos MIDI reseteados.",

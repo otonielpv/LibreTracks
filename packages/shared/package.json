@@ -8,7 +8,8 @@
     "./models": "./src/models.ts",
     "./desktopApi": "./src/desktopApi.ts",
     "./timelineMath": "./src/timelineMath.ts",
-    "./meterBallistics": "./src/meterBallistics.ts"
+    "./meterBallistics": "./src/meterBallistics.ts",
+    "./faderScale": "./src/faderScale.ts"
   },
   "scripts": {
     "lint": "tsc -p tsconfig.json --noEmit",

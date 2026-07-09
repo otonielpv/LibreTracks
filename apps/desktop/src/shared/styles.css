@@ -3409,6 +3409,33 @@ textarea {
   width: 8px;
 }
 
+/* Mixer controls (faders, pan sliders, toggle buttons) show a focus ring only
+   for keyboard navigation (:focus-visible), never for a mouse click or drag —
+   the browser default outline flashing while dragging a fader is distracting.
+   Keyboard users still get a clear ring. */
+.lt-track-volume input[type="range"]:focus,
+.lt-track-pan input[type="range"]:focus,
+.lt-compact-mixer-fader:focus,
+.lt-compact-mixer-pan:focus,
+.lt-track-toggle-group button:focus,
+.lt-compact-mixer-toggle:focus,
+.lt-compact-mixer-audio-to:focus,
+.lt-folder-toggle:focus {
+  outline: none;
+}
+
+.lt-track-volume input[type="range"]:focus-visible,
+.lt-track-pan input[type="range"]:focus-visible,
+.lt-compact-mixer-fader:focus-visible,
+.lt-compact-mixer-pan:focus-visible,
+.lt-track-toggle-group button:focus-visible,
+.lt-compact-mixer-toggle:focus-visible,
+.lt-compact-mixer-audio-to:focus-visible,
+.lt-folder-toggle:focus-visible {
+  outline: 1px solid rgb(87 241 219 / 0.7);
+  outline-offset: 1px;
+}
+
 /* AUDIO TO: compact button at the right of the sliders, label hidden. */
 .lt-track-header.is-compact .lt-track-audio-to > span,
 .lt-track-header.is-condensed .lt-track-audio-to > span,
@@ -6479,14 +6506,29 @@ textarea {
    mirroring the pan's L/C/R guide row so the fader is readable at rest. */
 .lt-compact-mixer-fader-scale {
   flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
+  position: relative;
+  align-self: stretch;
+  min-width: 1.6em;
   padding: 2px 0;
   color: rgba(186, 202, 197, 0.5);
   font: 700 8px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.04em;
+}
+
+/* Each tick is absolutely positioned at its true dB offset from the top and
+   vertically centred on that line, so "0" lands where 0 dB actually is. */
+.lt-compact-mixer-fader-scale span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+/* Keep the top/bottom ticks inside the track edges. */
+.lt-compact-mixer-fader-scale span:first-child {
+  transform: translateY(0);
+}
+.lt-compact-mixer-fader-scale span:last-child {
+  transform: translateY(-100%);
 }
 
 /* Value tooltip shown while dragging the vertical fader. Centred on the fader

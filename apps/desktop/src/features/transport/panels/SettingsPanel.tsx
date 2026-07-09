@@ -9,6 +9,12 @@ import {
 } from "@libretracks/shared/models";
 import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
 import {
+  AUX_FADER_SCALE,
+  formatGainDb,
+  gainToPosition,
+  positionToGain,
+} from "@libretracks/shared/faderScale";
+import {
   getDecodingCacheInfo,
   isAndroidApp,
   purgeDecodingCache,
@@ -656,8 +662,11 @@ export function SettingsPanel({
                         type="range"
                         min={0}
                         max={1}
-                        step={0.01}
-                        value={metronomeVolumeDraft}
+                        step={0.001}
+                        value={gainToPosition(
+                          metronomeVolumeDraft,
+                          AUX_FADER_SCALE,
+                        )}
                         disabled={isLoading || isSaving}
                         onPointerDown={(event) => {
                           if (midiLearnMode === null) {
@@ -670,17 +679,26 @@ export function SettingsPanel({
                         }}
                         onChange={(event) =>
                           onMetronomeVolumeDraftChange(
-                            Number(event.target.value),
+                            positionToGain(
+                              Number(event.target.value),
+                              AUX_FADER_SCALE,
+                            ),
                           )
                         }
                         onPointerUp={(event) =>
                           onCommitMetronomeVolume(
-                            Number(event.currentTarget.value),
+                            positionToGain(
+                              Number(event.currentTarget.value),
+                              AUX_FADER_SCALE,
+                            ),
                           )
                         }
                         onBlur={(event) =>
                           onCommitMetronomeVolume(
-                            Number(event.currentTarget.value),
+                            positionToGain(
+                              Number(event.currentTarget.value),
+                              AUX_FADER_SCALE,
+                            ),
                           )
                         }
                       />
@@ -688,7 +706,7 @@ export function SettingsPanel({
                         {t(
                           "transport.settingsModal.metronomeVolumeValue",
                           {
-                            value: Math.round(metronomeVolumeDraft * 100),
+                            value: formatGainDb(metronomeVolumeDraft),
                           },
                         )}
                       </small>
@@ -896,21 +914,25 @@ export function SettingsPanel({
                             type="range"
                             min={0}
                             max={1}
-                            step={0.01}
-                            value={appSettings.metronomeSubdivisionGain}
+                            step={0.001}
+                            value={gainToPosition(
+                              appSettings.metronomeSubdivisionGain,
+                              AUX_FADER_SCALE,
+                            )}
                             disabled={isLoading || isSaving}
                             onChange={(event) =>
                               onMetronomeSoundChange({
-                                metronomeSubdivisionGain: Number(
-                                  event.target.value,
+                                metronomeSubdivisionGain: positionToGain(
+                                  Number(event.target.value),
+                                  AUX_FADER_SCALE,
                                 ),
                               })
                             }
                           />
                           <small>
                             {t("transport.settingsModal.metronomeVolumeValue", {
-                              value: Math.round(
-                                appSettings.metronomeSubdivisionGain * 100,
+                              value: formatGainDb(
+                                appSettings.metronomeSubdivisionGain,
                               ),
                             })}
                           </small>
@@ -1058,18 +1080,24 @@ export function SettingsPanel({
                           <input
                             type="range"
                             min={0}
-                            max={2}
-                            step={0.05}
-                            value={appSettings.voiceGuideVolume}
+                            max={1}
+                            step={0.001}
+                            value={gainToPosition(
+                              appSettings.voiceGuideVolume,
+                              AUX_FADER_SCALE,
+                            )}
                             disabled={isLoading || isSaving}
                             onChange={(event) =>
                               onVoiceGuideChange({
-                                voiceGuideVolume: Number(event.target.value),
+                                voiceGuideVolume: positionToGain(
+                                  Number(event.target.value),
+                                  AUX_FADER_SCALE,
+                                ),
                               })
                             }
                           />
                           <small>
-                            {Math.round(appSettings.voiceGuideVolume * 100)}%
+                            {formatGainDb(appSettings.voiceGuideVolume)} dB
                           </small>
                         </label>
                       </>

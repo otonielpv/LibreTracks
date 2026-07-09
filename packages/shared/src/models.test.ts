@@ -148,11 +148,17 @@ describe("normalizeAppSettings", () => {
     );
   });
 
-  it("clamps metronome volume into [0, 1]", () => {
+  it("clamps metronome volume into [0, +20 dB headroom]", () => {
+    // The click fader is an aux dB fader reaching +20 dB (linear gain ≈ 10),
+    // so anything above that headroom clamps to it, not to unity.
+    expect(
+      normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, metronomeVolume: 50 })
+        .metronomeVolume,
+    ).toBeCloseTo(10, 6);
     expect(
       normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, metronomeVolume: 5 })
         .metronomeVolume,
-    ).toBe(1);
+    ).toBe(5);
     expect(
       normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, metronomeVolume: -2 })
         .metronomeVolume,

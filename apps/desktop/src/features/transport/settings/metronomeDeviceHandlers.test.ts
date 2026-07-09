@@ -79,10 +79,14 @@ describe("createMetronomeDeviceHandlers", () => {
     expect(deps.saveSettings).not.toHaveBeenCalled();
   });
 
-  it("volume draft clamps to [0, 1]", () => {
+  it("volume draft clamps to [0, +20 dB headroom]", () => {
     const { handlers, deps } = setup();
+    // The click fader reaches +20 dB (linear gain ≈ 10); values within that
+    // headroom pass through, values above it clamp to it.
     handlers.handleMetronomeVolumeDraftChange(5);
-    expect(deps.setMetronomeVolumeRealtime).toHaveBeenLastCalledWith(1);
+    expect(deps.setMetronomeVolumeRealtime).toHaveBeenLastCalledWith(5);
+    handlers.handleMetronomeVolumeDraftChange(50);
+    expect(deps.setMetronomeVolumeRealtime).toHaveBeenLastCalledWith(10);
     handlers.handleMetronomeVolumeDraftChange(-2);
     expect(deps.setMetronomeVolumeRealtime).toHaveBeenLastCalledWith(0);
   });

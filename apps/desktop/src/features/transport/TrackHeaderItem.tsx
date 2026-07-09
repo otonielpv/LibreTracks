@@ -1,7 +1,15 @@
 import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  TRACK_FADER_SCALE,
+  formatGainDb,
+  gainToPosition,
+  positionToGain,
+} from "@libretracks/shared/faderScale";
+
 import { AudioRouteCombobox } from "./AudioRouteCombobox";
+import { useFineDragRange } from "./useFineDragRange";
 import type { TrackKind } from "./desktopApi";
 import { TrackMeter } from "./TrackMeter";
 import { useTransportStore } from "./store";
@@ -9,11 +17,10 @@ import { useTransportStore } from "./store";
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
 
-/** The track fader is a linear amplitude control in [0, 1]; show it as a
- * percentage so the inline value reads at a glance (100% = unity). */
+/** The stored volume is a linear gain (1.0 = unity); the fader is an
+ * Ableton-style dB scale. Show the dB readout (0 dB = unity, +10 dB = top). */
 function formatVolumeValue(volume: number): string {
-  const clamped = Math.max(0, Math.min(1, volume));
-  return `${Math.round(clamped * 100)}%`;
+  return `${formatGainDb(volume)} dB`;
 }
 
 function formatPanValue(pan: number): string {
@@ -109,7 +116,15 @@ function TrackHeaderItemComponent({
   const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
   const effectiveTrackSolo = optimisticMix?.solo ?? trackSolo;
   const effectiveVolumeValue = optimisticMix?.volume ?? volumeValue;
-  const volumeFill = `${(effectiveVolumeValue * 100).toFixed(2)}%`;
+  const volumePosition = gainToPosition(effectiveVolumeValue, TRACK_FADER_SCALE);
+  const volumeFill = `${(volumePosition * 100).toFixed(2)}%`;
+  // Hold Shift to fine-drag the volume fader for precise dB tweaks.
+  const volumeFineDrag = useFineDragRange({
+    value: volumePosition,
+    onChange: (position) =>
+      onVolumeChange(trackId, positionToGain(position, TRACK_FADER_SCALE)),
+    onCommit: () => onCommitVolume(trackId),
+  });
   const panFill = `${(((effectivePanValue + 1) * 0.5) * 100).toFixed(2)}%`;
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target;
@@ -233,19 +248,24 @@ function TrackHeaderItemComponent({
                   type="range"
                   min={0}
                   max={1}
-                  step={0.01}
-                  value={effectiveVolumeValue}
+                  step={0.001}
+                  value={volumePosition}
                   style={{
                     background: `linear-gradient(to right, #3cddc7 ${volumeFill}, #0e0e0e ${volumeFill})`,
                   }}
-                  onChange={(event) => {
-                    onVolumeChange(trackId, Number(event.target.value));
+                  onChange={volumeFineDrag.handleChange}
+                  onPointerDown={volumeFineDrag.handlePointerDown}
+                  onDoubleClick={(event) => {
+                    // Reset to unity (0 dB), the way Reaper resets a fader.
+                    event.stopPropagation();
+                    onVolumeChange(trackId, 1.0);
+                    onCommitVolume(trackId);
                   }}
                   onMouseUp={() => {
-                    onCommitVolume(trackId);
+                    volumeFineDrag.handleCommit();
                   }}
                   onTouchEnd={() => {
-                    onCommitVolume(trackId);
+                    volumeFineDrag.handleCommit();
                   }}
                   onKeyUp={(event) => {
                     if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {

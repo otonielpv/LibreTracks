@@ -70,6 +70,11 @@ const SESSION_EXPORT_PROGRESS_EVENT: &str = "session:export-progress";
 pub const WAVEFORM_READY_EVENT: &str = "waveform:ready";
 const TRANSPORT_RUNTIME_SYNC_INTERVAL: Duration = Duration::from_millis(250);
 const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
+/// Track volume faders are an Ableton-style dB scale reaching +10 dB, i.e. a
+/// linear gain of 10^(10/20) ≈ 3.1623. Track gain must clamp to this headroom,
+/// not to unity — clamping to 1.0 here snaps every above-0-dB fader back down.
+/// Keep in sync with `TRACK_FADER_SCALE` in packages/shared/src/faderScale.ts.
+const MAX_TRACK_GAIN: f64 = 3.162_277_66;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -6771,7 +6776,7 @@ impl DesktopSession {
         }
 
         if let Some(volume) = volume {
-            track.volume = volume.clamp(0.0, 1.0);
+            track.volume = volume.clamp(0.0, MAX_TRACK_GAIN);
         }
 
         if let Some(pan) = pan {

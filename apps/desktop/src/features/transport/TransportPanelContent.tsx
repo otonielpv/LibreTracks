@@ -52,6 +52,10 @@ import {
   type WaveformSummaryDto,
 } from "@libretracks/shared/models";
 import {
+  TRACK_FADER_SCALE,
+  positionToGain,
+} from "@libretracks/shared/faderScale";
+import {
   assignSectionMarkerDigit,
   cancelMarkerJump,
   createAudioTracksWithClips,
@@ -363,6 +367,9 @@ import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
+/** Max linear gain a track fader reaches (+10 dB ≈ 3.162). The fader is a dB
+ * scale now, so track volume must clamp to this headroom, not to unity (1.0). */
+const MAX_TRACK_GAIN = positionToGain(1, TRACK_FADER_SCALE);
 const WAVEFORM_REQUEST_BATCH_SIZE = 4;
 const TIMELINE_COLOR_PRESETS = [
   { label: "Rojo", value: "#E35D5B" },
@@ -2473,7 +2480,7 @@ export function TransportPanelContent() {
       return {
         muted: optimisticMix.muted ?? track.muted,
         solo: optimisticMix.solo ?? track.solo,
-        volume: clamp(optimisticMix.volume ?? track.volume, 0, 1),
+        volume: clamp(optimisticMix.volume ?? track.volume, 0, MAX_TRACK_GAIN),
         pan: clamp(optimisticMix.pan ?? track.pan, -1, 1),
       };
     },
@@ -7745,7 +7752,7 @@ export function TransportPanelContent() {
   const handleTrackHeaderVolumeChange = useCallback(
     (trackId: string, nextVolume: number) => {
       patchTrackOptimisticMix(trackId, {
-        volume: clamp(nextVolume, 0, 1),
+        volume: clamp(nextVolume, 0, MAX_TRACK_GAIN),
       });
       queueTrackMixLiveUpdate(trackId, ["volume"]);
     },

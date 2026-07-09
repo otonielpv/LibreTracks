@@ -1533,6 +1533,26 @@ button {
   touch-action: none;
 }
 
+/* Faders and mixer buttons show a focus ring only for keyboard navigation
+   (:focus-visible), never on a click/drag — the default outline flashing while
+   dragging a fader is distracting. Keyboard users keep a clear ring. */
+.volume-fader:focus,
+.pan-section input:focus,
+.toggle-row button:focus,
+.mini-action:focus,
+.pill-button:focus {
+  outline: none;
+}
+
+.volume-fader:focus-visible,
+.pan-section input:focus-visible,
+.toggle-row button:focus-visible,
+.mini-action:focus-visible,
+.pill-button:focus-visible {
+  outline: 2px solid rgba(87, 241, 219, 0.7);
+  outline-offset: 2px;
+}
+
 .pan-section input {
   width: 100%;
 }
@@ -1576,17 +1596,30 @@ button {
   gap: 0.8rem;
 }
 
-/* Fixed volume scale beside the vertical fader (100 top → 0 bottom). */
+/* dB scale beside the vertical fader. Ticks are absolutely positioned at their
+   true travel offset so "0" sits where 0 dB actually is (~30% down), not at the
+   vertical midpoint. */
 .volume-scale {
   flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
+  position: relative;
+  align-self: stretch;
+  min-width: 2.2em;
   padding: 0.2rem 0;
   color: var(--muted);
   font: 700 0.56rem/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.04em;
+}
+.volume-scale span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+.volume-scale span:first-child {
+  transform: translateY(0);
+}
+.volume-scale span:last-child {
+  transform: translateY(-100%);
 }
 
 /* Pan strip: value readout next to the Center button + L/C/R scale below. */

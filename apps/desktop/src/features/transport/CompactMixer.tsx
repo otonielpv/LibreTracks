@@ -12,6 +12,19 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  TRACK_FADER_SCALE,
+  faderTicks,
+  formatDb,
+  gainToPosition,
+  positionToDb,
+  positionToGain,
+} from "@libretracks/shared/faderScale";
+
+// Tick marks positioned at their true travel offset (0 dB is ~30% down, not
+// centred). Computed once — the scale never changes.
+const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
+
 import type { TrackSummary } from "./desktopApi";
 import { TrackMeter } from "./TrackMeter";
 import { useTransportStore, type OptimisticMixState } from "./store";
@@ -198,12 +211,18 @@ type CompactMixerStripProps = {
 // Snap thresholds: when the slider lands within this fraction of the
 // snap target, the value pulls to the target. 3% of the slider range
 // matches the "feels-magnetic" zone in Ableton and most other DAWs.
-const VOLUME_SNAP_TARGET = 1.0;
-const VOLUME_SNAP_RANGE = 1.0; // slider runs 0..1
+// The fader now runs in *position* space [0,1] with an Ableton-style dB curve;
+// unity (0 dB) lives at `unityPosition`, so that's where the fader snaps.
+const VOLUME_SNAP_TARGET = TRACK_FADER_SCALE.unityPosition;
+const VOLUME_SNAP_RANGE = 1.0; // fader position runs 0..1
 const VOLUME_SNAP_THRESHOLD = VOLUME_SNAP_RANGE * 0.03;
 const PAN_SNAP_TARGET = 0.0;
 const PAN_SNAP_RANGE = 2.0; // slider runs -1..1
 const PAN_SNAP_THRESHOLD = PAN_SNAP_RANGE * 0.03;
+// Holding Shift while dragging a fader scales pointer travel by this factor for
+// fine dB adjustments (Reaper-style). Also bypasses the snap, since a crawl
+// doesn't want the magnet fighting it.
+const FINE_DRAG_FACTOR = 0.25;
 
 function applySnap(
   value: number,
@@ -263,6 +282,7 @@ function CompactMixerStripComponent({
   const muted = effectiveBool(optimisticMix?.muted, track.muted);
   const solo = effectiveBool(optimisticMix?.solo, track.solo);
   const volume = effectiveNumber(optimisticMix?.volume, track.volume);
+  const volumePosition = gainToPosition(volume, TRACK_FADER_SCALE);
   const pan = effectiveNumber(optimisticMix?.pan, track.pan);
 
   // Track Shift state via global key listeners so the slider's onChange
@@ -305,7 +325,8 @@ function CompactMixerStripComponent({
   // also commit so the snapshot reflects the new value immediately rather
   // than waiting for the next pointer-up.
   const handleVolumeDoubleClick = useCallback(() => {
-    handlers.onVolumeChange(track.id, VOLUME_SNAP_TARGET);
+    // Reset to unity (0 dB, gain 1.0).
+    handlers.onVolumeChange(track.id, 1.0);
     handlers.onCommitVolume(track.id);
   }, [handlers, track.id]);
 
@@ -452,20 +473,28 @@ function CompactMixerStripComponent({
           headers already populate. */}
       <div className="lt-compact-mixer-fader-wrap">
         <div className="lt-compact-mixer-fader-scale" aria-hidden="true">
-          <span>100</span>
-          <span>50</span>
-          <span>0</span>
+          {TRACK_FADER_TICKS.map((tick) => (
+            <span
+              key={tick.label}
+              style={{ top: `${(tick.offsetFromTop * 100).toFixed(2)}%` }}
+            >
+              {tick.label}
+            </span>
+          ))}
         </div>
         <CompactVerticalFader
-          value={volume}
-          onChange={(next) =>
+          value={volumePosition}
+          onChange={(nextPosition) =>
             handlers.onVolumeChange(
               track.id,
-              applySnap(
-                next,
-                VOLUME_SNAP_TARGET,
-                VOLUME_SNAP_THRESHOLD,
-                shiftPressedRef.current,
+              positionToGain(
+                applySnap(
+                  nextPosition,
+                  VOLUME_SNAP_TARGET,
+                  VOLUME_SNAP_THRESHOLD,
+                  shiftPressedRef.current,
+                ),
+                TRACK_FADER_SCALE,
               ),
             )
           }
@@ -582,6 +611,14 @@ function CompactVerticalFaderComponent({
   const [isDragging, setIsDragging] = useState(false);
   const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
+  // Fine-drag anchor: while Shift is held mid-drag we move incrementally from
+  // where the pointer was when Shift went down, scaled by FINE_DRAG_FACTOR, so
+  // the fader crawls for precise dB tweaks (Reaper-style). Re-anchored whenever
+  // Shift toggles so the thumb never jumps.
+  const fineAnchorRef = useRef<{ clientY: number; value: number } | null>(null);
+  const latestValueRef = useRef(value);
+  latestValueRef.current = value;
+
   // Map a clientY inside the track to a value in [0, 1] with the
   // bottom of the track being 0 and the top being 1 — i.e. the way
   // every mixer fader on the planet works.
@@ -605,14 +642,42 @@ function CompactVerticalFaderComponent({
       target.setPointerCapture(event.pointerId);
       draggingRef.current = true;
       setIsDragging(true);
-      onChange(valueFromClientY(event.clientY));
+      if (event.shiftKey) {
+        // Start a fine drag: anchor here, keep the current value (no jump).
+        fineAnchorRef.current = { clientY: event.clientY, value };
+      } else {
+        fineAnchorRef.current = null;
+        onChange(valueFromClientY(event.clientY));
+      }
     },
-    [onChange, valueFromClientY],
+    [onChange, value, valueFromClientY],
   );
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!draggingRef.current) return;
+
+      if (event.shiftKey) {
+        const track = trackRef.current;
+        const height = track?.getBoundingClientRect().height ?? 0;
+        if (height <= 0) return;
+        // (Re-)anchor when Shift is first pressed mid-drag so the thumb stays
+        // put and only subsequent movement is scaled.
+        if (!fineAnchorRef.current) {
+          fineAnchorRef.current = {
+            clientY: event.clientY,
+            value: latestValueRef.current,
+          };
+        }
+        const anchor = fineAnchorRef.current;
+        const deltaPixels = anchor.clientY - event.clientY; // up = positive
+        const next = anchor.value + (deltaPixels / height) * FINE_DRAG_FACTOR;
+        onChange(clamp(next));
+        return;
+      }
+
+      // Shift released mid-drag → resume absolute tracking from the pointer.
+      fineAnchorRef.current = null;
       onChange(valueFromClientY(event.clientY));
     },
     [onChange, valueFromClientY],
@@ -622,6 +687,7 @@ function CompactVerticalFaderComponent({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
+      fineAnchorRef.current = null;
       setIsDragging(false);
       const target = trackRef.current;
       if (target?.hasPointerCapture(event.pointerId)) {
@@ -728,11 +794,10 @@ function formatPan(value: number): string {
   return `${side} ${magnitude}`;
 }
 
-/** Volume formatter for the vertical-fader tooltip. The fader is a linear
- * amplitude control in [0, 1], shown as a percentage (100% = unity). */
-function formatVolume(value: number): string {
-  const clamped = value < 0 ? 0 : value > 1 ? 1 : value;
-  return `${Math.round(clamped * 100)}%`;
+/** Volume formatter for the vertical-fader tooltip. The fader runs in
+ * *position* space [0,1]; show the dB value at that position (0 dB = unity). */
+function formatVolume(position: number): string {
+  return `${formatDb(positionToDb(position, TRACK_FADER_SCALE))} dB`;
 }
 
 function isStepperKey(key: string) {

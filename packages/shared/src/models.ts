@@ -1,7 +1,11 @@
+import { AUX_FADER_SCALE, positionToGain } from "./faderScale";
 import {
   getCumulativeMusicalPosition,
   type TimelineRegion,
 } from "./timelineMath";
+
+/** Max linear gain the click / voice-guide aux faders reach (+20 dB ≈ 10×). */
+const AUX_MAX_GAIN = positionToGain(1, AUX_FADER_SCALE);
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder";
@@ -708,7 +712,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   enabledOutputChannels: [0, 1],
   locale: null,
   metronomeEnabled: false,
-  metronomeVolume: 0.8,
+  metronomeVolume: 1.0,
   metronomeOutput: "master",
   metronomeAccentEnabled: true,
   metronomeAccentPreset: 0,
@@ -771,8 +775,10 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   );
   const selectedMidiDevice = settings.selectedMidiDevice?.trim() || null;
   const locale = settings.locale?.trim().toLowerCase();
+  // Aux faders (click / voice guide) run an Ableton-style dB scale up to
+  // +20 dB, i.e. a linear gain of ~10. Clamp to that headroom, not to unity.
   const metronomeVolume = Number.isFinite(settings.metronomeVolume)
-    ? Math.min(1, Math.max(0, settings.metronomeVolume))
+    ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.metronomeVolume))
     : DEFAULT_APP_SETTINGS.metronomeVolume;
   const normalizePreset = (value: number, fallback: number) => {
     const index = Math.floor(value);
@@ -818,7 +824,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const metronomeSubdivisionGain = Number.isFinite(
     settings.metronomeSubdivisionGain,
   )
-    ? Math.min(1, Math.max(0, settings.metronomeSubdivisionGain))
+    ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.metronomeSubdivisionGain))
     : DEFAULT_APP_SETTINGS.metronomeSubdivisionGain;
   const enabledOutputChannels = Array.from(
     new Set(
@@ -909,7 +915,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     voiceGuideEnabled: Boolean(settings.voiceGuideEnabled),
     voiceGuideOutput,
     voiceGuideVolume: Number.isFinite(settings.voiceGuideVolume)
-      ? Math.min(4, Math.max(0, settings.voiceGuideVolume))
+      ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.voiceGuideVolume))
       : DEFAULT_APP_SETTINGS.voiceGuideVolume,
     voiceGuideLeadBars: Number.isFinite(settings.voiceGuideLeadBars)
       ? Math.min(4, Math.max(1, Math.round(settings.voiceGuideLeadBars)))

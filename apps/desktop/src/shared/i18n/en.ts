@@ -194,7 +194,7 @@ const en = {
       metronomeDescription:
         "Adds a synthesized click and keeps it sample-locked to the transport timeline.",
       metronomeVolume: "Metronome volume",
-      metronomeVolumeValue: "{{value}}%",
+      metronomeVolumeValue: "{{value}} dB",
       metronomeOutput: "Metronome output",
       voiceGuideOutput: "Voice guide output",
       metronomeAccentSound: "Accent sound",
@@ -499,7 +499,7 @@ const en = {
       metronomeDisabled: "Metronome disabled.",
       voiceGuideEnabled: "Voice guide enabled.",
       voiceGuideDisabled: "Voice guide disabled.",
-      metronomeVolumeUpdated: "Metronome volume set to {{volume}}%.",
+      metronomeVolumeUpdated: "Metronome volume set to {{volume}} dB.",
       midiBindingLearned: "MIDI binding learned for {{key}}: {{binding}}.",
       midiMappingsReset: "MIDI mappings reset.",
       audioRoutingUpdated: "Audio routing updated.",

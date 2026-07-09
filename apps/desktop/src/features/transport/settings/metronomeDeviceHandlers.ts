@@ -3,6 +3,11 @@ import {
   type AppSettings,
   type AudioDeviceDescriptor,
 } from "@libretracks/shared/models";
+import {
+  AUX_FADER_SCALE,
+  formatGainDb,
+  positionToGain,
+} from "@libretracks/shared/faderScale";
 
 /**
  * Dependencies for the metronome / audio-device / MIDI-input settings handlers.
@@ -58,7 +63,11 @@ type AudioDeviceListLike = {
   defaultDevice?: string | null;
 };
 
-const clampVolume = (value: number) => Math.max(0, Math.min(1, value));
+// The click fader tops out at +20 dB (linear gain ≈ 10), so the clamp mirrors
+// the aux-fader headroom rather than unity.
+const AUX_MAX_GAIN = positionToGain(1, AUX_FADER_SCALE);
+const clampVolume = (value: number) =>
+  Math.max(0, Math.min(AUX_MAX_GAIN, value));
 
 export function createMetronomeDeviceHandlers(
   deps: MetronomeDeviceHandlerDeps,
@@ -249,7 +258,7 @@ export function createMetronomeDeviceHandlers(
           setAppSettings(savedSettings);
           setStatus(
             t("transport.status.metronomeVolumeUpdated", {
-              volume: Math.round(savedSettings.metronomeVolume * 100),
+              volume: formatGainDb(savedSettings.metronomeVolume),
             }),
           );
         } catch (error) {

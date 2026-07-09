@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent as ReactChangeEvent,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -45,6 +46,13 @@ import {
   peakToMeterDb,
   stepMeterDb,
 } from "@libretracks/shared/meterBallistics";
+import {
+  TRACK_FADER_SCALE,
+  faderTicks,
+  formatGainDb,
+  gainToPosition,
+  positionToGain,
+} from "@libretracks/shared/faderScale";
 import { getRemoteStrings } from "./i18n";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
@@ -128,6 +136,12 @@ type RgbColor = {
 
 const CHROME_TIMELINE_PIXELS_PER_SECOND = BASE_PIXELS_PER_SECOND * 2.35;
 const PAN_CENTER_MAGNET = 0.08;
+// Track-fader dB tick marks, positioned at their true travel offset so "0"
+// lands where 0 dB actually sits (~30% down), not at the vertical midpoint.
+const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
+// Holding Shift while dragging scales pointer travel by this factor for fine
+// dB adjustments (Reaper-style). Mirrors the desktop useFineDragRange factor.
+const FINE_DRAG_FACTOR = 0.25;
 // Song master fader: linear gain 0..2, snapping to unity (1.0) within ±3% of
 // the range. Mirrors the desktop master fader (TimelineToolbar) so the remote
 // and desktop feel identical.
@@ -423,10 +437,9 @@ function formatRemotePan(value: number) {
   return `${side} ${Math.round(Math.abs(value) * 100)}`;
 }
 
-/** Volume readout: linear amplitude [0,1] shown as a percentage. */
+/** Volume readout: linear gain shown as a dB value (0 dB = unity). */
 function formatRemoteVolume(value: number) {
-  const clamped = Math.max(0, Math.min(1, value));
-  return `${Math.round(clamped * 100)}%`;
+  return `${formatGainDb(value)} dB`;
 }
 
 function snapMasterGain(value: number) {
@@ -2127,6 +2140,28 @@ function MixerStrip({
   const [draftVolume, setDraftVolume] = useState(effectiveTrack.volume);
   const panInteractionRef = useRef(false);
   const volumeInteractionRef = useRef(false);
+  // Shift state, tracked globally: a range input's change event doesn't carry
+  // shiftKey, so we can't read the modifier off the event itself.
+  const shiftPressedRef = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftPressedRef.current = true;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftPressedRef.current = false;
+    };
+    const onBlur = () => {
+      shiftPressedRef.current = false;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
   const stripStyle = palette
     ? ({
         "--folder-strip-bg": palette.background,
@@ -2193,18 +2228,58 @@ function MixerStrip({
     commitTrackUpdate({ pan: nextPan });
   };
 
-  const updateDraftVolume = (value: number) => {
-    const nextVolume = Math.max(0, Math.min(1, value));
+  // The fader input runs in *position* space [0,1] with the Ableton-style dB
+  // curve; convert to linear gain (what we store/send) before dispatching.
+  const updateDraftVolume = (position: number) => {
+    const nextVolume = positionToGain(position, TRACK_FADER_SCALE);
     volumeInteractionRef.current = true;
     setDraftVolume(nextVolume);
     pushMixUpdate({ volume: nextVolume });
   };
 
-  const commitDraftVolume = (value: number) => {
-    const nextVolume = Math.max(0, Math.min(1, value));
+  const commitDraftVolume = (position: number) => {
+    const nextVolume = positionToGain(position, TRACK_FADER_SCALE);
     volumeInteractionRef.current = false;
     setDraftVolume(nextVolume);
     commitTrackUpdate({ volume: nextVolume });
+  };
+
+  // Double-click resets the fader to unity (0 dB), the way Reaper does.
+  const resetVolumeToUnity = () => {
+    volumeInteractionRef.current = false;
+    setDraftVolume(1.0);
+    commitTrackUpdate({ volume: 1.0 });
+  };
+
+  // Hold Shift to fine-drag the volume fader. A native range input snaps to the
+  // absolute pointer position, and its change event carries no shiftKey, so we
+  // read Shift from the global ref above and work *with* onChange: while Shift
+  // is held we apply only a fraction of the increment the input reports since
+  // the last event (Reaper-style crawl). `lastNativeVolumeRef` tracks the raw
+  // native value between events; null = no fine-drag baseline yet.
+  const lastNativeVolumeRef = useRef<number | null>(null);
+  const handleVolumeChange = (event: ReactChangeEvent<HTMLInputElement>) => {
+    const nativeValue = Number(event.currentTarget.value); // position [0,1]
+    if (!shiftPressedRef.current) {
+      lastNativeVolumeRef.current = null;
+      updateDraftVolume(nativeValue);
+      return;
+    }
+    // First Shift change: anchor here, no jump.
+    if (lastNativeVolumeRef.current == null) {
+      lastNativeVolumeRef.current = nativeValue;
+      volumeInteractionRef.current = true;
+      return;
+    }
+    const nativeDelta = nativeValue - lastNativeVolumeRef.current;
+    lastNativeVolumeRef.current = nativeValue;
+    const currentPosition = gainToPosition(draftVolume, TRACK_FADER_SCALE);
+    const next = currentPosition + nativeDelta * FINE_DRAG_FACTOR;
+    updateDraftVolume(Math.max(0, Math.min(1, next)));
+  };
+  const commitVolumeDrag = (position: number) => {
+    lastNativeVolumeRef.current = null;
+    commitDraftVolume(position);
   };
 
   return (
@@ -2252,9 +2327,14 @@ function MixerStrip({
         </div>
         <div className="volume-fader-area">
           <div className="volume-scale" aria-hidden="true">
-            <span>100</span>
-            <span>50</span>
-            <span>0</span>
+            {TRACK_FADER_TICKS.map((tick) => (
+              <span
+                key={tick.label}
+                style={{ top: `${(tick.offsetFromTop * 100).toFixed(2)}%` }}
+              >
+                {tick.label}
+              </span>
+            ))}
           </div>
           <MeterBar trackId={track.id} />
           <input
@@ -2262,16 +2342,23 @@ function MixerStrip({
             type="range"
             min={0}
             max={1}
-            step={0.01}
-            value={draftVolume}
-            onChange={(event) => updateDraftVolume(Number(event.currentTarget.value))}
-            onInput={(event) => updateDraftVolume(Number(event.currentTarget.value))}
+            step={0.001}
+            value={gainToPosition(draftVolume, TRACK_FADER_SCALE)}
+            onChange={handleVolumeChange}
+            onDoubleClick={resetVolumeToUnity}
             onPointerDown={() => {
               volumeInteractionRef.current = true;
+              lastNativeVolumeRef.current = null;
             }}
-            onPointerUp={(event) => commitDraftVolume(Number(event.currentTarget.value))}
-            onPointerCancel={(event) => commitDraftVolume(Number(event.currentTarget.value))}
-            onLostPointerCapture={(event) => commitDraftVolume(Number(event.currentTarget.value))}
+            onPointerUp={(event) =>
+              commitVolumeDrag(Number(event.currentTarget.value))
+            }
+            onPointerCancel={(event) =>
+              commitVolumeDrag(Number(event.currentTarget.value))
+            }
+            onLostPointerCapture={(event) =>
+              commitVolumeDrag(Number(event.currentTarget.value))
+            }
           />
         </div>
       </div>
