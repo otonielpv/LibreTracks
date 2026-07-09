@@ -11788,6 +11788,22 @@ export function TransportPanelContent() {
                               applyPlaybackSnapshot(nextSnapshot);
                             });
                           }}
+                          onMarkerMoveCommit={(markerId, startSeconds) => {
+                            const section = song?.sectionMarkers.find(
+                              (candidate) => candidate.id === markerId,
+                            );
+                            if (!section) {
+                              return;
+                            }
+                            void runAction(async () => {
+                              const nextSnapshot = await updateSectionMarker(
+                                section.id,
+                                section.name,
+                                startSeconds,
+                              );
+                              applyPlaybackSnapshot(nextSnapshot);
+                            });
+                          }}
                           snapEnabled={snapEnabled}
                           canNativeZoom={Boolean(song)}
                           navigationScheme={appSettings.timelineNavigationScheme}

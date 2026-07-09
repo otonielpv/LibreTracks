@@ -4126,8 +4126,34 @@ textarea {
   border: 0;
   background: transparent;
   color: transparent;
-  cursor: pointer;
+  cursor: grab;
   z-index: 3;
+}
+
+.lt-marker-hotspot.is-dragging {
+  cursor: grabbing;
+  z-index: 6;
+}
+
+/* Vertical guide shown while dragging a section/cue marker, marking the
+   snapped position where the flag will land. Rendered twice: once over the
+   ruler (absolute in .lt-ruler-content) and once over the track lanes
+   (.is-over-tracks, absolute in .lt-track-layers). */
+.lt-marker-drop-guide {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: rgb(255 210 130 / 0.95);
+  box-shadow: 0 0 6px 1px rgb(255 210 130 / 0.6);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.lt-marker-drop-guide.is-over-tracks {
+  top: 0;
+  bottom: 0;
+  height: auto;
+  z-index: 34;
 }
 
 .lt-tempo-hotspot {

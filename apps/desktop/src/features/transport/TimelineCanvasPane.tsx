@@ -265,6 +265,13 @@ type TimelineCanvasPaneProps = {
    */
   onRegionMoveCommit?: (regionId: string, deltaSeconds: number) => void;
   /**
+   * Fires once when the user finishes dragging a section/cue marker flag
+   * along the ruler. Delivers the marker id and its new absolute start in
+   * seconds (already snapped + clamped). The component drives the optimistic
+   * preview during the drag and only fires this on release.
+   */
+  onMarkerMoveCommit?: (markerId: string, startSeconds: number) => void;
+  /**
    * Snap state used during resize drag (matches the snap behaviour of
    * clip drag). Holding Alt during the drag temporarily disables snap.
    */
@@ -373,6 +380,7 @@ export function TimelineCanvasPane({
   onAutomationLaneContextMenu,
   onRegionResizeCommit,
   onRegionMoveCommit,
+  onMarkerMoveCommit,
   snapEnabled,
   midiLearnMode,
   onMidiLearnTarget,
@@ -838,6 +846,129 @@ export function TimelineCanvasPane({
     }
   }
 
+  // ── Section-marker move drag ────────────────────────────────────────────
+  // Drag a section/cue flag along the ruler to reposition it. Optimistic:
+  // the flag's hotspot `left` follows the pointer during the drag and the
+  // backend is touched once on release via onMarkerMoveCommit. Pointer
+  // events cover both mouse (desktop) and touch (Android). A press that
+  // doesn't move past DRAG_THRESHOLD_PX is treated as a plain click
+  // (primary action / select), so tapping a marker still works.
+  type MarkerMoveDrag = {
+    markerId: string;
+    pointerId: number;
+    pointerStartClientX: number;
+    pointerScaleX: number;
+    initialStartSeconds: number;
+    previewStartSeconds: number;
+    moved: boolean;
+  };
+  const markerMoveDragRef = useRef<MarkerMoveDrag | null>(null);
+  // Set true the instant a marker drag actually moves; consumed by the
+  // marker's onClick to swallow the synthetic click that follows pointer-up
+  // (the drag ref is already nulled by then). Reset on the next pointerdown.
+  const markerDidDragRef = useRef(false);
+  const [markerMovePreview, setMarkerMovePreview] = useState<{
+    markerId: string;
+    startSeconds: number;
+  } | null>(null);
+  const MARKER_DRAG_THRESHOLD_PX = 4;
+
+  function beginMarkerMove(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    markerId: string,
+    startSeconds: number,
+  ) {
+    if (event.button !== 0) return;
+    markerDidDragRef.current = false;
+    markerMoveDragRef.current = {
+      markerId,
+      pointerId: event.pointerId,
+      pointerStartClientX: event.clientX,
+      pointerScaleX: getElementScaleX(
+        event.currentTarget.getBoundingClientRect(),
+        event.currentTarget.offsetWidth,
+      ),
+      initialStartSeconds: startSeconds,
+      previewStartSeconds: startSeconds,
+      moved: false,
+    };
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Some engines refuse capture on a not-yet-hovered element; ignore.
+    }
+  }
+
+  function updateMarkerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = markerMoveDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId || !song) return;
+
+    const effectivePixelsPerSecond =
+      livePixelsPerSecondRef.current ?? pixelsPerSecond;
+    if (effectivePixelsPerSecond <= 0) return;
+
+    const rawDelta =
+      (event.clientX - drag.pointerStartClientX) /
+      drag.pointerScaleX /
+      effectivePixelsPerSecond;
+
+    // Only start treating this as a drag once the pointer clears the
+    // threshold, so a stationary tap/click still fires the primary action.
+    if (
+      !drag.moved &&
+      Math.abs(event.clientX - drag.pointerStartClientX) <
+        MARKER_DRAG_THRESHOLD_PX
+    ) {
+      return;
+    }
+    drag.moved = true;
+    markerDidDragRef.current = true;
+
+    let nextStart = drag.initialStartSeconds + rawDelta;
+
+    // Snap to the song grid (same grid the user sees). Holding Shift bypasses.
+    const shouldSnap = Boolean(snapEnabled) && !event.shiftKey;
+    if (shouldSnap) {
+      nextStart = snapToTimelineGrid(
+        nextStart,
+        song.bpm,
+        song.timeSignature,
+        1,
+        effectivePixelsPerSecond,
+        buildSongTempoRegions(song),
+      );
+    }
+
+    // A marker can't sit before the timeline start.
+    nextStart = Math.max(0, nextStart);
+
+    drag.previewStartSeconds = nextStart;
+    setMarkerMovePreview({ markerId: drag.markerId, startSeconds: nextStart });
+  }
+
+  function endMarkerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = markerMoveDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Already released — ignore.
+    }
+
+    const finalStart = drag.previewStartSeconds;
+    const moved =
+      drag.moved &&
+      Math.abs(finalStart - drag.initialStartSeconds) > 1e-6;
+
+    markerMoveDragRef.current = null;
+    setMarkerMovePreview(null);
+
+    if (moved && onMarkerMoveCommit) {
+      onMarkerMoveCommit(drag.markerId, finalStart);
+    }
+  }
+
   const handleTimelineDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
@@ -1241,15 +1372,21 @@ export function TimelineCanvasPane({
                 30,
                 Math.min(96, 14 + flagLabelLength * 7),
               );
+              // Optimistic drag preview: the flag follows the pointer.
+              const isDraggingMarker =
+                markerMovePreview?.markerId === section.id;
+              const renderStartSeconds = isDraggingMarker
+                ? markerMovePreview.startSeconds
+                : section.startSeconds;
               return (
               <button
                 key={section.id}
                 type="button"
-                className={`lt-marker-hotspot ${selectedSectionId === section.id ? "is-selected" : ""}`}
+                className={`lt-marker-hotspot ${selectedSectionId === section.id ? "is-selected" : ""}${isDraggingMarker ? " is-dragging" : ""}`}
                 aria-label={`${section.name} - carril central`}
                 title={`Carril central: ${section.name}`}
                 style={{
-                  left: section.startSeconds * pixelsPerSecond,
+                  left: renderStartSeconds * pixelsPerSecond,
                   top: lane.top,
                   height: lane.height,
                   ...(isAndroidApp
@@ -1260,9 +1397,24 @@ export function TimelineCanvasPane({
                   event.preventDefault();
                   event.stopPropagation();
                 }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  if (event.altKey || event.ctrlKey || event.metaKey) return;
+                  beginMarkerMove(event, section.id, section.startSeconds);
+                }}
+                onPointerMove={updateMarkerMove}
+                onPointerUp={endMarkerMove}
+                onPointerCancel={endMarkerMove}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
+                  // A drag just finished — swallow the synthetic click so the
+                  // marker isn't also triggered/seeked. (The drag ref is
+                  // already nulled by pointer-up, hence the separate flag.)
+                  if (markerDidDragRef.current) {
+                    markerDidDragRef.current = false;
+                    return;
+                  }
                   if (midiLearnMode !== null) {
                     // jump_marker_N indexes only section markers (cues are not
                     // jump targets), so the index must match the section-only,
@@ -1355,6 +1507,22 @@ export function TimelineCanvasPane({
                 <span className="lt-sr-only">{marker.signature}</span>
               </button>
             ))}
+
+            {/* Snap guide showing where the dragged marker will land. Lives
+                INSIDE the ruler canvas so it inherits the same
+                `left: -cameraX` wrapper the marker hotspots use — placing it
+                outside would ignore the camera offset and desync from the
+                flags (the "double bar" bug). */}
+            {markerMovePreview !== null ? (
+              <div
+                aria-hidden="true"
+                className="lt-marker-drop-guide"
+                style={{
+                  left: markerMovePreview.startSeconds * pixelsPerSecond,
+                  height: RULER_HEIGHT,
+                }}
+              />
+            ) : null}
           </TimelineRulerCanvas>
 
           <PlayheadOverlay
@@ -1428,6 +1596,16 @@ export function TimelineCanvasPane({
               positionSecondsRef={displayPositionSecondsRef}
             />
           </div>
+
+          {markerMovePreview !== null ? (
+            <div
+              aria-hidden="true"
+              className="lt-marker-drop-guide is-over-tracks"
+              style={{
+                left: resolveLibraryGhostLeft(markerMovePreview.startSeconds),
+              }}
+            />
+          ) : null}
 
           {clipDragSnapIndicatorSeconds !== null ? (
             <div
