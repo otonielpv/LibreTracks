@@ -123,6 +123,28 @@ pub enum EngineCommand {
         lang: String,
     },
 
+    /// Set the ambient-pad config (enable/volume/route/key). Applied
+    /// realtime-safely on the next audio block.
+    SetPadConfig {
+        enabled: bool,
+        volume: f32,
+        route: String,
+        /// 0..11 (C..B) — the currently selected key.
+        key: i32,
+        /// Installed pad folder name (diagnostics only).
+        #[serde(default)]
+        pad_id: String,
+    },
+
+    /// Decode a single ambient-pad key from disk and swap it into the renderer.
+    /// The engine reads `<pads_dir>/<pad_id>/<key>.<ext>`. Decoding happens off
+    /// the audio thread; the clip is swapped in atomically.
+    LoadPadClip {
+        pads_dir: String,
+        pad_id: String,
+        key: i32,
+    },
+
     SetSongTranspose {
         song_id: String,
         semitones: i32,

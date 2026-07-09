@@ -118,6 +118,11 @@ import {
   setMetronomeVolumeRealtime,
   setMetronomeSoundRealtime,
   setVoiceGuideConfigRealtime,
+  setPadConfigRealtime,
+  getPadsCatalog,
+  downloadPad,
+  deletePad,
+  listenToPadDownloadProgress,
   splitClip,
   splitClips,
   splitSongRegion,
@@ -170,6 +175,7 @@ import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./CompactView";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineTopbar } from "./TimelineTopbar";
+import { PadsPopover } from "./PadsPopover";
 import { TrackHeadersPane } from "./TrackHeadersPane";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./clipSnapping";
 import {
@@ -982,6 +988,8 @@ export function TransportPanelContent() {
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
   const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
+  const [isPadsPopoverOpen, setIsPadsPopoverOpen] = useState(false);
+  const padButtonRef = useRef<HTMLButtonElement | null>(null);
   const selectedRegion = useMemo(
     () =>
       song?.regions.find((region) => region.id === selectedRegionId) ?? null,
@@ -2063,6 +2071,7 @@ export function TransportPanelContent() {
         setMetronomeEnabledRealtime,
         setMetronomeVolumeRealtime,
         setVoiceGuideConfigRealtime,
+        setPadConfigRealtime,
         saveSettings,
       }),
     [persistAudioSettings, runAction, setStatus, formatErrorStatus, t],
@@ -2073,6 +2082,8 @@ export function TransportPanelContent() {
     handleVoiceGuideChange,
     handleMetronomeEnabledChange,
     handleVoiceGuideEnabledChange,
+    handlePadChange,
+    handlePadEnabledChange,
     handleMetronomeVolumeDraftChange,
     commitMetronomeVolumeDraft,
     handleMidiInputDeviceChange,
@@ -10723,6 +10734,9 @@ export function TransportPanelContent() {
           onToggleVoiceGuide={() =>
             handleVoiceGuideEnabledChange(!appSettings.voiceGuideEnabled)
           }
+          padEnabled={appSettings.padEnabled}
+          padButtonRef={padButtonRef}
+          onOpenPads={() => setIsPadsPopoverOpen((open) => !open)}
           onTempoDraftChange={(next) => {
             tempoDraftDirtyRef.current = true;
             setTempoDraft(next);
@@ -10799,6 +10813,16 @@ export function TransportPanelContent() {
           }}
           midiLearnMode={midiLearnMode}
           onMidiLearnTarget={handleMidiLearnTarget}
+        />
+
+        <PadsPopover
+          open={isPadsPopoverOpen}
+          anchorRef={padButtonRef}
+          settings={appSettings}
+          routeOptions={audioRoutingOptions}
+          onClose={() => setIsPadsPopoverOpen(false)}
+          onToggleEnabled={handlePadEnabledChange}
+          onPadChange={handlePadChange}
         />
 
         <div className={`lt-shell-body ${isShellBusy ? "is-hidden" : ""}`}>

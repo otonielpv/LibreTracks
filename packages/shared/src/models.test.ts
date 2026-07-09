@@ -319,6 +319,38 @@ describe("normalizeAppSettings", () => {
       }).timelinePlayheadFollowMode,
     ).toBe(DEFAULT_APP_SETTINGS.timelinePlayheadFollowMode);
   });
+
+  it("clamps pad key into [0, 11] and rounds it", () => {
+    expect(
+      normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, padKey: 20 }).padKey,
+    ).toBe(11);
+    expect(
+      normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, padKey: -3 }).padKey,
+    ).toBe(0);
+    expect(
+      normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, padKey: 5.7 }).padKey,
+    ).toBe(6);
+  });
+
+  it("clamps pad volume into the aux fader headroom and lowercases the route", () => {
+    expect(
+      normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, padVolume: 50 }).padVolume,
+    ).toBeCloseTo(10, 6);
+    expect(
+      normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, padOutput: "MONITOR" })
+        .padOutput,
+    ).toBe("monitor");
+  });
+
+  it("coerces pad id and enabled to safe types", () => {
+    const result = normalizeAppSettings({
+      ...DEFAULT_APP_SETTINGS,
+      padId: undefined as unknown as string,
+      padEnabled: 1 as unknown as boolean,
+    });
+    expect(result.padId).toBe("");
+    expect(result.padEnabled).toBe(true);
+  });
 });
 
 describe("buildWaveformLodsFromPeaks", () => {

@@ -1369,6 +1369,35 @@ impl AudioController {
         })
     }
 
+    /// Push the ambient-pad config (enabled/volume/route/key/pad_id) to the
+    /// engine live, without reopening the device. Mirrors the metronome path.
+    pub fn set_pad_config_realtime(&self, settings: &AppSettings) -> Result<(), DesktopError> {
+        self.with_engine_state("set_pad_config_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetPadConfig {
+                enabled: settings.pad_enabled,
+                volume: settings.pad_volume as f32,
+                route: settings.pad_output.clone(),
+                key: settings.pad_key,
+                pad_id: settings.pad_id.clone(),
+            })?;
+            Ok(())
+        })
+    }
+
+    /// Decode a single ambient-pad key from disk and swap it into the renderer.
+    /// `pads_dir` is the installed-pads base dir (resolved by the command
+    /// layer). Decoding happens on the engine command thread.
+    pub fn load_pad_clip(&self, pads_dir: &str, pad_id: &str, key: i32) -> Result<(), DesktopError> {
+        self.with_engine_state("load_pad_clip", None, |engine, _state| {
+            engine.send_command(&EngineCommand::LoadPadClip {
+                pads_dir: pads_dir.to_string(),
+                pad_id: pad_id.to_string(),
+                key,
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {
         RealtimeControlDiagnostics {
             live_mix_realtime_command_count: self
@@ -1654,6 +1683,15 @@ impl AudioController {
                 route: settings.voice_guide_output.clone(),
                 lead_bars: settings.voice_guide_lead_bars,
                 count_in_enabled: settings.voice_guide_count_in_enabled,
+            })?;
+            // Ambient-pad config (the key clip is decoded separately via the
+            // command layer, which knows the installed-pads path).
+            engine.send_command(&EngineCommand::SetPadConfig {
+                enabled: settings.pad_enabled,
+                volume: settings.pad_volume as f32,
+                route: settings.pad_output.clone(),
+                key: settings.pad_key,
+                pad_id: settings.pad_id.clone(),
             })?;
             state.settings = settings;
             Ok(())

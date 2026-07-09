@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "pads": [
+    {
+      "id": "warm",
+      "name": "Warm Pad",
+      "description": "Cálido, cuerdas suaves — ideal para baladas y momentos íntimos.",
+      "sizeBytes": 512000000,
+      "sha256": "",
+      "downloadUrl": "https://raw.githubusercontent.com/otonielpv/libretracks-pads/main/warm.zip"
+    },
+    {
+      "id": "cinematic",
+      "name": "Cinematic Pad",
+      "description": "Amplio y atmosférico, con cola larga.",
+      "sizeBytes": 498000000,
+      "sha256": "",
+      "downloadUrl": "https://raw.githubusercontent.com/otonielpv/libretracks-pads/main/cinematic.zip"
+    }
+  ]
+}

@@ -684,6 +684,13 @@ export type AppSettings = {
   voiceGuideLeadBars: number;
   voiceGuideCountInEnabled: boolean;
   voiceGuideLanguage: string;
+  padEnabled: boolean;
+  /** Installed pad folder id currently selected ("" = none). */
+  padId: string;
+  /** Selected key, 0..11 (C..B). */
+  padKey: number;
+  padVolume: number;
+  padOutput: string;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars";
@@ -729,6 +736,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   voiceGuideLeadBars: 1,
   voiceGuideCountInEnabled: true,
   voiceGuideLanguage: "es",
+  padEnabled: false,
+  padId: "",
+  padKey: 0,
+  padVolume: 1.0,
+  padOutput: "master",
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -844,6 +856,8 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const voiceGuideOutput =
     settings.voiceGuideOutput?.trim().toLowerCase() ||
     DEFAULT_APP_SETTINGS.voiceGuideOutput;
+  const padOutput =
+    settings.padOutput?.trim().toLowerCase() || DEFAULT_APP_SETTINGS.padOutput;
   const globalJumpMode =
     settings.globalJumpMode === "after_bars" ||
     settings.globalJumpMode === "next_marker"
@@ -923,6 +937,15 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     voiceGuideCountInEnabled: settings.voiceGuideCountInEnabled ?? true,
     voiceGuideLanguage:
       settings.voiceGuideLanguage ?? DEFAULT_APP_SETTINGS.voiceGuideLanguage,
+    padEnabled: Boolean(settings.padEnabled),
+    padId: typeof settings.padId === "string" ? settings.padId : "",
+    padKey: Number.isFinite(settings.padKey)
+      ? Math.min(11, Math.max(0, Math.round(settings.padKey)))
+      : DEFAULT_APP_SETTINGS.padKey,
+    padVolume: Number.isFinite(settings.padVolume)
+      ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.padVolume))
+      : DEFAULT_APP_SETTINGS.padVolume,
+    padOutput,
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,
@@ -1097,6 +1120,41 @@ export type ProjectLoadProgressEvent = {
   sourcesTotal: number;
   ramCacheMb: number;
   diskCacheMb: number;
+  emittedAtUnixMs?: number;
+};
+
+// ── Ambient pads ─────────────────────────────────────────────────────────────
+
+/** A pad offered by the catalog, plus its local install state. */
+export type PadCatalogEntry = {
+  id: string;
+  name: string;
+  description: string;
+  sizeBytes: number;
+  downloadUrl: string;
+  /** True when all 12 keys are present on disk. */
+  installed: boolean;
+  /** Number of the 12 keys present (partial-install hint). */
+  keysPresent: number;
+};
+
+export type PadsCatalog = {
+  pads: PadCatalogEntry[];
+  /** Installed ids no longer in the manifest (still usable/removable). */
+  orphanInstalled: string[];
+  /** True when the manifest couldn't be fetched (offline). */
+  offline: boolean;
+};
+
+/** Progress of a single pad download/unzip/install, shaped like the
+ * project-load progress so the same "preparing audio"-style indicator can
+ * render it. */
+export type PadDownloadProgressEvent = {
+  padId: string;
+  percent: number;
+  message: string;
+  done: boolean;
+  error?: string;
   emittedAtUnixMs?: number;
 };
 

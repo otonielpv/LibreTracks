@@ -46,6 +46,9 @@ pub struct EngineSnapshot {
     pub metronome: MetronomeSnapshot,
 
     #[serde(default)]
+    pub pad: PadSnapshot,
+
+    #[serde(default)]
     pub pitch: PitchSnapshot,
 
     #[serde(default)]
@@ -210,6 +213,26 @@ pub struct MetronomeSnapshot {
     pub target_gain: f32,
     #[serde(default)]
     pub toggle_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PadSnapshot {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub clip_loaded: bool,
+    #[serde(default)]
+    pub key: i32,
+    #[serde(default)]
+    pub clip_key: i32,
+    #[serde(default)]
+    pub pad_id: String,
+    #[serde(default)]
+    pub route_resolved: String,
+    #[serde(default)]
+    pub muted_reason: String,
+    #[serde(default)]
+    pub current_gain: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

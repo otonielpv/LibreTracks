@@ -8,6 +8,7 @@
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/metronome_renderer.h>
 #include <lt_engine/render/voice_guide_renderer.h>
+#include <lt_engine/render/pad_renderer.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -75,6 +76,12 @@ public:
     void set_voice_guide_enabled(bool enabled);
     void set_voice_guide_clip_bank(std::shared_ptr<const VoiceGuideClipBank> bank) noexcept;
     VoiceGuideDiagnostics voice_guide_diagnostics() const;
+
+    void set_pad_config(const PadConfig& config);
+    void set_pad_enabled(bool enabled);
+    void set_pad_volume(float volume);
+    void set_pad_clip(std::shared_ptr<const PadClip> clip) noexcept;
+    PadDiagnostics pad_diagnostics() const;
     // Build the voice-guide announce target from the next pending scheduled jump
     // (so the destination section is spoken before the jump fires). Empty target
     // when no announceable jump is pending.
@@ -255,6 +262,7 @@ private:
     FadeProcessor fade_;
     MetronomeRenderer metronome_;
     VoiceGuideRenderer voice_guide_;
+    PadRenderer pad_;
 
     // Check whether any track is soloed (scans control slots).
     bool any_solo_active_in_slots() const noexcept;

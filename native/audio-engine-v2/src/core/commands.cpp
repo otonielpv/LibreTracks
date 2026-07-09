@@ -160,6 +160,24 @@ EngineCommand command_from_json(const std::string& raw) {
         return c;
     }
 
+    if (type == "SetPadConfig") {
+        CmdSetPadConfig c;
+        c.enabled = j.value("enabled", false);
+        c.volume = j.value("volume", 1.0f);
+        c.route = j.value("route", std::string{"master"});
+        c.key = j.value("key", 0);
+        c.pad_id = j.value("pad_id", std::string{});
+        return c;
+    }
+
+    if (type == "LoadPadClip") {
+        CmdLoadPadClip c;
+        c.pads_dir = j.value("pads_dir", std::string{});
+        c.pad_id = j.value("pad_id", std::string{});
+        c.key = j.value("key", 0);
+        return c;
+    }
+
     if (type == "SetSongTranspose")
         return CmdSetSongTranspose{ j.at("song_id").get<Id>(), j.at("semitones").get<Semitones>() };
 
@@ -498,6 +516,20 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["type"] = "LoadVoiceGuideBank";
             j["voices_dir"] = c.voices_dir;
             j["lang"] = c.lang;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetPadConfig>) {
+            j["type"] = "SetPadConfig";
+            j["enabled"] = c.enabled;
+            j["volume"] = c.volume;
+            j["route"] = c.route;
+            j["key"] = c.key;
+            j["pad_id"] = c.pad_id;
+        }
+        else if constexpr (std::is_same_v<T, CmdLoadPadClip>) {
+            j["type"] = "LoadPadClip";
+            j["pads_dir"] = c.pads_dir;
+            j["pad_id"] = c.pad_id;
+            j["key"] = c.key;
         }
         // ... additional types follow the same pattern.
         // Omitted for brevity — expand as needed.

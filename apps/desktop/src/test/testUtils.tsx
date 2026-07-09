@@ -167,6 +167,11 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     commitTrackMixChange: vi.fn(testDesktopApiMock.commitTrackMixChange),
     setMetronomeEnabledRealtime: vi.fn(testDesktopApiMock.setMetronomeEnabledRealtime),
     setMetronomeVolumeRealtime: vi.fn(testDesktopApiMock.setMetronomeVolumeRealtime),
+    getPadsCatalog: vi.fn(testDesktopApiMock.getPadsCatalog),
+    downloadPad: vi.fn(testDesktopApiMock.downloadPad),
+    deletePad: vi.fn(testDesktopApiMock.deletePad),
+    setPadConfigRealtime: vi.fn(testDesktopApiMock.setPadConfigRealtime),
+    listenToPadDownloadProgress: vi.fn(testDesktopApiMock.listenToPadDownloadProgress),
     deleteTrack: vi.fn(testDesktopApiMock.deleteTrack),
   };
 });

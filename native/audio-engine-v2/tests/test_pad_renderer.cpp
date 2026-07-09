@@ -1,0 +1,143 @@
+#include <doctest/doctest.h>
+#include <lt_engine/render/pad_renderer.h>
+
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <vector>
+
+using namespace lt;
+
+namespace {
+
+// Build a stereo clip with a constant value per channel, `frames` long.
+std::shared_ptr<PadClip> make_clip(int frames, float left, float right,
+                                   int key = 0, double sr = 48000.0) {
+    auto clip = std::make_shared<PadClip>();
+    clip->channels = 2;
+    clip->sample_rate = sr;
+    clip->key = key;
+    clip->samples.assign(static_cast<std::size_t>(frames) * 2, 0.0f);
+    for (int f = 0; f < frames; ++f) {
+        clip->samples[static_cast<std::size_t>(f) * 2] = left;
+        clip->samples[static_cast<std::size_t>(f) * 2 + 1] = right;
+    }
+    return clip;
+}
+
+// Render `num_frames` into a fresh stereo (or n-channel) buffer and return it as
+// a channel-major vector of vectors.
+std::vector<std::vector<float>> render_block(PadRenderer& pad, int num_channels,
+                                             int num_frames, double sr = 48000.0) {
+    std::vector<std::vector<float>> chans(
+        static_cast<std::size_t>(num_channels),
+        std::vector<float>(static_cast<std::size_t>(num_frames), 0.0f));
+    std::vector<float*> ptrs;
+    for (auto& c : chans) ptrs.push_back(c.data());
+    pad.render(ptrs.data(), num_channels, num_frames, sr);
+    return chans;
+}
+
+float max_abs(const std::vector<float>& v) {
+    float p = 0.0f;
+    for (float s : v) p = std::max(p, std::abs(s));
+    return p;
+}
+
+} // namespace
+
+TEST_CASE("pad is silent when disabled") {
+    PadRenderer pad;
+    pad.set_clip(make_clip(4800, 0.5f, 0.5f));
+    // Not enabled → nothing written.
+    auto out = render_block(pad, 2, 512);
+    CHECK(max_abs(out[0]) == doctest::Approx(0.0f));
+    CHECK(max_abs(out[1]) == doctest::Approx(0.0f));
+    CHECK(pad.diagnostics().enabled == false);
+}
+
+TEST_CASE("pad plays and loops the clip when enabled") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    pad.set_config(cfg);
+    // Short clip so a single block wraps it several times.
+    pad.set_clip(make_clip(64, 0.5f, 0.5f));
+
+    // Warm up the gain ramp, then measure a steady block.
+    render_block(pad, 2, 256);
+    auto out = render_block(pad, 2, 256);
+    // After ramp-in the constant clip should be clearly audible on both channels.
+    CHECK(max_abs(out[0]) > 0.3f);
+    CHECK(max_abs(out[1]) > 0.3f);
+    CHECK(pad.diagnostics().clip_loaded == true);
+}
+
+TEST_CASE("pad volume scales the output") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.output_route = "master";
+    cfg.volume = 0.25f;
+    pad.set_config(cfg);
+    pad.set_clip(make_clip(64, 1.0f, 1.0f));
+
+    // Settle the gain ramp.
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+    auto out = render_block(pad, 2, 256);
+    // Constant 1.0 clip at 0.25 volume → ~0.25 peak (allow ramp slack).
+    CHECK(max_abs(out[0]) == doctest::Approx(0.25f).epsilon(0.05));
+}
+
+TEST_CASE("pad routes to the monitor bus when available") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "monitor";
+    pad.set_config(cfg);
+    pad.set_clip(make_clip(64, 0.5f, 0.5f));
+
+    // 4 channels → monitor is 2-3.
+    for (int i = 0; i < 8; ++i) render_block(pad, 4, 256);
+    auto out = render_block(pad, 4, 256);
+    CHECK(max_abs(out[0]) == doctest::Approx(0.0f));  // main pair untouched
+    CHECK(max_abs(out[1]) == doctest::Approx(0.0f));
+    CHECK(max_abs(out[2]) > 0.3f);                    // monitor pair carries it
+    CHECK(max_abs(out[3]) > 0.3f);
+    CHECK(pad.diagnostics().route_resolved == "monitor");
+}
+
+TEST_CASE("pad clip swap resets the read cursor and updates diagnostics") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    pad.set_config(cfg);
+
+    pad.set_clip(make_clip(64, 0.5f, 0.5f, /*key=*/0));
+    render_block(pad, 2, 256);
+    CHECK(pad.diagnostics().clip_key == 0);
+
+    // Swap to a different key/clip; diagnostics should reflect it.
+    pad.set_clip(make_clip(64, 0.5f, 0.5f, /*key=*/7));
+    render_block(pad, 2, 256);
+    CHECK(pad.diagnostics().clip_key == 7);
+    CHECK(pad.diagnostics().clip_loaded == true);
+}
+
+TEST_CASE("empty clip yields silence and a muted reason") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    pad.set_config(cfg);
+    pad.set_clip(std::make_shared<PadClip>());  // empty
+
+    auto out = render_block(pad, 2, 256);
+    CHECK(max_abs(out[0]) == doctest::Approx(0.0f));
+    CHECK(pad.diagnostics().clip_loaded == false);
+}

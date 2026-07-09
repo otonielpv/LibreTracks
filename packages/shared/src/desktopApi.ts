@@ -12,6 +12,8 @@ import type {
   LibraryImportProgressEvent,
   MarkerKind,
   MixSceneSummary,
+  PadsCatalog,
+  PadDownloadProgressEvent,
   ProjectLoadCompleteEvent,
   MidiRawMessage,
   ProjectLoadProgressEvent,
@@ -1266,6 +1268,35 @@ export async function setVoiceGuideConfigRealtime(
 ): Promise<AppSettings> {
   return invokeCommand<AppSettings>("set_voice_guide_config_realtime", {
     settings,
+  });
+}
+
+// ── Ambient pads ─────────────────────────────────────────────────────────────
+
+export async function getPadsCatalog(): Promise<PadsCatalog> {
+  return invokeCommand<PadsCatalog>("get_pads_catalog");
+}
+
+export async function downloadPad(padId: string): Promise<void> {
+  return invokeCommand<void>("download_pad", { padId });
+}
+
+export async function deletePad(padId: string): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("delete_pad", { padId });
+}
+
+export async function setPadConfigRealtime(
+  settings: AppSettings,
+): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("set_pad_config_realtime", { settings });
+}
+
+export async function listenToPadDownloadProgress(
+  handler: (event: PadDownloadProgressEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<PadDownloadProgressEvent>("pad:download-progress", (event) => {
+    handler(event.payload);
   });
 }
 

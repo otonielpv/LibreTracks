@@ -54,6 +54,7 @@ export type MetronomeDeviceHandlerDeps = {
   setMetronomeEnabledRealtime: (enabled: boolean) => Promise<void>;
   setMetronomeVolumeRealtime: (volume: number) => Promise<void>;
   setVoiceGuideConfigRealtime: (settings: AppSettings) => Promise<AppSettings>;
+  setPadConfigRealtime: (settings: AppSettings) => Promise<AppSettings>;
   saveSettings: (settings: AppSettings) => Promise<AppSettings>;
 };
 
@@ -96,6 +97,7 @@ export function createMetronomeDeviceHandlers(
     setMetronomeEnabledRealtime,
     setMetronomeVolumeRealtime,
     setVoiceGuideConfigRealtime,
+    setPadConfigRealtime,
     saveSettings,
   } = deps;
 
@@ -214,6 +216,44 @@ export function createMetronomeDeviceHandlers(
             nextValue
               ? t("transport.status.voiceGuideEnabled")
               : t("transport.status.voiceGuideDisabled"),
+          );
+        } catch (error) {
+          setStatus(formatErrorStatus(error));
+        }
+      });
+    },
+
+    // Apply any ambient-pad settings patch (enable/key/volume/route/pad_id):
+    // decode the selected key + push config to the engine + persist, without
+    // reopening the audio device. Mirrors handleVoiceGuideChange.
+    handlePadChange(patch: Partial<AppSettings>) {
+      const nextSettings = applyLocal(patch);
+      void runAction(async () => {
+        try {
+          const savedSettings = normalizeAppSettings(
+            await setPadConfigRealtime(nextSettings),
+          );
+          appSettingsRef.current = savedSettings;
+          setAppSettings(savedSettings);
+        } catch (error) {
+          setStatus(formatErrorStatus(error));
+        }
+      });
+    },
+
+    handlePadEnabledChange(nextValue: boolean) {
+      const nextSettings = applyLocal({ padEnabled: nextValue });
+      void runAction(async () => {
+        try {
+          const savedSettings = normalizeAppSettings(
+            await setPadConfigRealtime(nextSettings),
+          );
+          appSettingsRef.current = savedSettings;
+          setAppSettings(savedSettings);
+          setStatus(
+            nextValue
+              ? t("transport.status.padEnabled", { defaultValue: "Pad on." })
+              : t("transport.status.padDisabled", { defaultValue: "Pad off." }),
           );
         } catch (error) {
           setStatus(formatErrorStatus(error));

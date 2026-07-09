@@ -118,6 +118,26 @@ struct CmdLoadVoiceGuideBank {
 };
 
 // ---------------------------------------------------------------------------
+// Ambient pad
+// ---------------------------------------------------------------------------
+struct CmdSetPadConfig {
+    bool enabled = false;
+    float volume = 1.0f;
+    std::string route = "master";
+    int key = 0;               // 0..11 (C..B)
+    std::string pad_id;
+};
+
+// Decode a single pad key from disk and hand it to the renderer. Runs the
+// (slow) decode on the command thread; the resulting clip is swapped in
+// realtime-safely. `pads_dir/<pad_id>/<key>.<ext>`.
+struct CmdLoadPadClip {
+    std::string pads_dir;
+    std::string pad_id;
+    int key = 0;
+};
+
+// ---------------------------------------------------------------------------
 // Pitch
 // ---------------------------------------------------------------------------
 struct CmdSetSongTranspose    { Id song_id;    Semitones semitones; };
@@ -331,6 +351,7 @@ using EngineCommand = std::variant<
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
     CmdSetVoiceGuideConfig, CmdLoadVoiceGuideBank,
+    CmdSetPadConfig, CmdLoadPadClip,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdUpsertSongTracks, CmdPrepareSources,

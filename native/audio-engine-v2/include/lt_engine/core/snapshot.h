@@ -119,6 +119,17 @@ struct VoiceGuideSnapshot {
     float       current_gain = 0.f;
 };
 
+struct PadSnapshot {
+    bool        enabled = false;
+    bool        clip_loaded = false;
+    int         key = 0;
+    int         clip_key = -1;
+    std::string pad_id;
+    std::string route_resolved;
+    std::string muted_reason;
+    float       current_gain = 0.f;
+};
+
 struct EngineSnapshot {
     // Transport position
     Frame              current_frame   = 0;
@@ -152,6 +163,7 @@ struct EngineSnapshot {
     // Internal metronome
     MetronomeSnapshot metronome;
     VoiceGuideSnapshot voice_guide;
+    PadSnapshot pad;
 
     std::uint64_t mixer_scheduled_jump_executed_count = 0;
 

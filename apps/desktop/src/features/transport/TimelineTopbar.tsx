@@ -49,6 +49,9 @@ type TimelineTopbarProps = {
   onToggleMetronome: () => void;
   voiceGuideEnabled: boolean;
   onToggleVoiceGuide: () => void;
+  padEnabled: boolean;
+  padButtonRef?: React.Ref<HTMLButtonElement>;
+  onOpenPads: () => void;
   onTempoDraftChange: (nextTempoDraft: string) => void;
   onTempoDraftFocus?: () => void;
   onTapTempo: () => void;
@@ -97,6 +100,9 @@ export function TimelineTopbar({
   onToggleMetronome,
   voiceGuideEnabled,
   onToggleVoiceGuide,
+  padEnabled,
+  padButtonRef,
+  onOpenPads,
   onTempoDraftChange,
   onTempoDraftFocus,
   onTapTempo,
@@ -457,6 +463,24 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">campaign</span>
               <span className="lt-button-label">{t("timelineTopbar.guide")}</span>
+            </button>
+            <button
+              type="button"
+              ref={padButtonRef}
+              aria-label={t("timelineTopbar.pads")}
+              className={padEnabled ? "is-active is-toggle" : "is-toggle"}
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:toggle_pads");
+                  return;
+                }
+
+                onOpenPads();
+              }}
+            >
+              <span className="material-symbols-outlined">graphic_eq</span>
+              <span className="lt-button-label">{t("timelineTopbar.pads")}</span>
             </button>
             <button
               type="button"

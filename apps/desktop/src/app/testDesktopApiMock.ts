@@ -12,6 +12,7 @@ import type {
   JumpTriggerLabel,
   LibraryAssetSummary,
   LibraryImportProgressEvent,
+  PadDownloadProgressEvent,
   PendingJumpSummary,
   ProjectLoadProgressEvent,
   RegionMeterLevel,
@@ -420,6 +421,11 @@ function buildInitialState(): DesktopApiMockState {
       voiceGuideLeadBars: 1,
       voiceGuideCountInEnabled: true,
       voiceGuideLanguage: "es",
+      padEnabled: false,
+      padId: "",
+      padKey: 0,
+      padVolume: 1.0,
+      padOutput: "master",
       globalJumpMode: "immediate",
       globalJumpBars: 4,
       songJumpTrigger: "immediate",
@@ -1950,6 +1956,15 @@ export const testDesktopApiMock = {
   setMetronomeVolumeRealtime: async (volume: number) => {
     state.appSettings = { ...state.appSettings, metronomeVolume: volume };
   },
+  getPadsCatalog: async () => ({ pads: [], orphanInstalled: [], offline: false }),
+  downloadPad: async (_padId: string) => {},
+  deletePad: async (_padId: string) => clone(state.appSettings),
+  setPadConfigRealtime: async (settings: AppSettings) => {
+    state.appSettings = { ...settings };
+    return clone(state.appSettings);
+  },
+  listenToPadDownloadProgress:
+    async (_handler: (event: PadDownloadProgressEvent) => void) => () => {},
   deleteTrack: async (trackId: string) => {
     const track = getTrack(trackId);
     if (!track) {

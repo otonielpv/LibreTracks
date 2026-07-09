@@ -89,6 +89,14 @@ private:
     // 44.1k while render is at 48k, or vice-versa). Empty until a bank is loaded.
     std::string                         voice_guide_voices_dir_;
     std::string                         voice_guide_lang_;
+    // Ambient-pad config + the source params of the currently loaded key, kept
+    // so the active key can be re-decoded at the new rate on a device SR change
+    // (same reasoning as the voice-guide bank above). pad_loaded_key_ == -1
+    // until a key is loaded.
+    PadConfig                           pad_config_;
+    std::string                         pad_pads_dir_;
+    std::string                         pad_loaded_pad_id_;
+    int                                 pad_loaded_key_ = -1;
     // The raw project JSON of the currently loaded session, kept so the whole
     // timeline can be re-parsed at a new sample rate when the device changes.
     // Markers/clips/regions/tempo are baked from seconds → frames using the SR
@@ -123,6 +131,11 @@ private:
     // No-op if no bank was ever loaded. Called on SR changes so the spoken
     // count-in/section stays aligned with the beat grid after a device switch.
     void reload_voice_guide_bank_for_new_sample_rate();
+
+    // Re-decode the currently loaded ambient-pad key at the device sample rate.
+    // No-op if no key was ever loaded. Called on SR changes alongside the voice
+    // guide reload.
+    void reload_pad_clip_for_new_sample_rate();
 
     // Re-parse the loaded session's timeline (markers/clips/regions/tempo) at the
     // engine's current sample rate from the saved project JSON, preserving the

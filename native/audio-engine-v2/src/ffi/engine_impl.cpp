@@ -912,6 +912,15 @@ std::string EngineImpl::get_snapshot() const {
         snap.voice_guide.announcements_fired = vg.announcements_fired;
         snap.voice_guide.counts_fired = vg.counts_fired;
         snap.voice_guide.current_gain = vg.current_gain;
+        auto pad = mixer_->pad_diagnostics();
+        snap.pad.enabled = pad.enabled;
+        snap.pad.clip_loaded = pad.clip_loaded;
+        snap.pad.key = pad.key;
+        snap.pad.clip_key = pad.clip_key;
+        snap.pad.pad_id = pad.pad_id;
+        snap.pad.route_resolved = pad.route_resolved;
+        snap.pad.muted_reason = pad.muted_reason;
+        snap.pad.current_gain = pad.current_gain;
         snap.mixer_scheduled_jump_executed_count =
             mixer_->scheduled_jump_executed_count();
     }
@@ -1226,6 +1235,7 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
     // would otherwise drift against the beat grid (clips at 44.1k, render at
     // 48k). Done before the early-returns below so it always runs on an SR change.
     reload_voice_guide_bank_for_new_sample_rate();
+    reload_pad_clip_for_new_sample_rate();
 
     if (!source_manager_) return;
 
@@ -1279,6 +1289,17 @@ void EngineImpl::reload_voice_guide_bank_for_new_sample_rate() {
     // audio thread); the mixer swaps the bank in via an atomic shared_ptr.
     auto bank = load_voice_guide_bank(voice_guide_voices_dir_, voice_guide_lang_, rate);
     mixer_->set_voice_guide_clip_bank(std::move(bank));
+}
+
+void EngineImpl::reload_pad_clip_for_new_sample_rate() {
+    // No pad key was ever loaded → nothing to re-decode.
+    if (pad_pads_dir_.empty() || pad_loaded_pad_id_.empty() || pad_loaded_key_ < 0 || !mixer_)
+        return;
+    const int rate = clock_ && clock_->sample_rate() > 0 ? clock_->sample_rate() : 48000;
+    // Decode on the command/dispatch thread; the mixer swaps the clip in via an
+    // atomic shared_ptr.
+    auto clip = load_pad_clip(pad_pads_dir_, pad_loaded_pad_id_, pad_loaded_key_, rate);
+    mixer_->set_pad_clip(std::move(clip));
 }
 
 void EngineImpl::rescale_session_for_new_sample_rate(int old_sr) {
@@ -1675,6 +1696,30 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             voice_guide_lang_ = c.lang;
             auto bank = load_voice_guide_bank(c.voices_dir, c.lang, rate);
             if (mixer_) mixer_->set_voice_guide_clip_bank(std::move(bank));
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetPadConfig>) {
+            pad_config_.enabled = c.enabled;
+            pad_config_.volume = std::clamp(c.volume, 0.0f, 4.0f);
+            pad_config_.output_route = c.route.empty() ? std::string("master") : c.route;
+            pad_config_.key = std::clamp(c.key, 0, 11);
+            pad_config_.pad_id = c.pad_id;
+            if (mixer_) mixer_->set_pad_config(pad_config_);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdLoadPadClip>) {
+            // Decode happens here on the command thread (never the audio thread).
+            const int rate = clock_ && clock_->sample_rate() > 0
+                ? clock_->sample_rate()
+                : 48000;
+            // Remember the source params so the active key can be re-decoded at
+            // the new device rate on an SR change (same reasoning as the voice
+            // guide bank above).
+            pad_pads_dir_ = c.pads_dir;
+            pad_loaded_pad_id_ = c.pad_id;
+            pad_loaded_key_ = std::clamp(c.key, 0, 11);
+            auto clip = load_pad_clip(c.pads_dir, c.pad_id, pad_loaded_key_, rate);
+            if (mixer_) mixer_->set_pad_clip(std::move(clip));
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdJumpToMarker>) {

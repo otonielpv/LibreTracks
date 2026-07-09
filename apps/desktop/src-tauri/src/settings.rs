@@ -49,6 +49,14 @@ fn default_voice_guide_language() -> String {
     "es".to_string()
 }
 
+fn default_pad_volume() -> f64 {
+    1.0
+}
+
+fn default_pad_route() -> String {
+    "master".into()
+}
+
 fn default_enabled_output_channels() -> Vec<usize> {
     vec![0, 1]
 }
@@ -178,6 +186,18 @@ pub struct AppSettings {
     pub voice_guide_count_in_enabled: bool,
     #[serde(default = "default_voice_guide_language")]
     pub voice_guide_language: String,
+    #[serde(default)]
+    pub pad_enabled: bool,
+    /// Installed pad folder name currently selected (empty = none).
+    #[serde(default)]
+    pub pad_id: String,
+    /// Selected key, 0..11 (C..B).
+    #[serde(default)]
+    pub pad_key: i32,
+    #[serde(default = "default_pad_volume")]
+    pub pad_volume: f64,
+    #[serde(default = "default_pad_route")]
+    pub pad_output: String,
     #[serde(default = "default_global_jump_mode")]
     pub global_jump_mode: String,
     #[serde(default = "default_global_jump_bars")]
@@ -244,6 +264,11 @@ impl Default for AppSettings {
             voice_guide_lead_bars: default_voice_guide_lead_bars(),
             voice_guide_count_in_enabled: default_voice_guide_count_in_enabled(),
             voice_guide_language: default_voice_guide_language(),
+            pad_enabled: false,
+            pad_id: String::new(),
+            pad_key: 0,
+            pad_volume: default_pad_volume(),
+            pad_output: default_pad_route(),
             global_jump_mode: default_global_jump_mode(),
             global_jump_bars: default_global_jump_bars(),
             song_jump_trigger: default_song_jump_trigger(),

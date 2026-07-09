@@ -564,6 +564,7 @@ void Mixer::render_timeline_span(float** output_channels,
     voice_guide_.render(metronome_channels, num_channels, num_frames,
                         clock_->sample_rate(), timeline_frame, session.get(),
                         announceable_jump_target(session.get()));
+    pad_.render(metronome_channels, num_channels, num_frames, clock_->sample_rate());
 
     const bool was_pending_start = clock_->pending_start();
     if (was_pending_start)
@@ -857,6 +858,7 @@ void Mixer::render(float** output_channels,
         voice_guide_.render(output_channels, num_channels, num_frames,
                             clock_->sample_rate(), timeline_frame, session.get(),
                             announceable_jump_target(session.get()));
+        pad_.render(output_channels, num_channels, num_frames, clock_->sample_rate());
 
         const bool was_pending_start = clock_->pending_start();
         if (was_pending_start)
@@ -1195,6 +1197,26 @@ void Mixer::set_voice_guide_clip_bank(std::shared_ptr<const VoiceGuideClipBank> 
 
 VoiceGuideDiagnostics Mixer::voice_guide_diagnostics() const {
     return voice_guide_.diagnostics();
+}
+
+void Mixer::set_pad_config(const PadConfig& config) {
+    pad_.set_config(config);
+}
+
+void Mixer::set_pad_enabled(bool enabled) {
+    pad_.set_enabled(enabled);
+}
+
+void Mixer::set_pad_volume(float volume) {
+    pad_.set_volume(volume);
+}
+
+void Mixer::set_pad_clip(std::shared_ptr<const PadClip> clip) noexcept {
+    pad_.set_clip(std::move(clip));
+}
+
+PadDiagnostics Mixer::pad_diagnostics() const {
+    return pad_.diagnostics();
 }
 
 VoiceGuideTarget Mixer::announceable_jump_target(const Session* session) const noexcept {

@@ -26,14 +26,16 @@ libretracks-audio = { path = "../../../crates/libretracks-audio" }
 lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2" }
 libretracks-project = { path = "../../../crates/libretracks-project" }
 quick-xml = "0.37"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 rayon = "1.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 tauri = { version = "2", features = [] }
 thiserror = "2"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "fs"] }
+futures-util = "0.3"
+zip = "2"
 tauri-plugin-dialog = "2.7.0"
 tauri-plugin-opener = "2"
 tauri-plugin-fs = "2.5.1"
