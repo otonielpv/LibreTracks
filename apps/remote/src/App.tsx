@@ -3373,43 +3373,17 @@ export function App() {
           <small>LibreTracks</small>
           <h1>{STRINGS.appTitle}</h1>
         </div>
-        <div className="remote-header-actions">
-          {editing ? (
-            <>
-              <button type="button" className="layout-reset-button" onClick={exportLayout}>
-                {STRINGS.exportLayout}
-              </button>
-              <button
-                type="button"
-                className="layout-reset-button"
-                onClick={() => importInputRef.current?.click()}
-              >
-                {STRINGS.importLayout}
-              </button>
-              <button type="button" className="layout-reset-button" onClick={resetLayout}>
-                {STRINGS.resetLayout}
-              </button>
-              <input
-                ref={importInputRef}
-                type="file"
-                accept="application/json,.json"
-                className="layout-import-input"
-                onChange={onImportFileChosen}
-              />
-            </>
-          ) : null}
-          <button
-            type="button"
-            className={`layout-edit-button ${editing ? "is-active" : ""}`}
-            aria-pressed={editing}
-            onClick={() => setEditing((current) => !current)}
-          >
-            {editing ? STRINGS.doneEditing : STRINGS.editLayout}
-          </button>
-        </div>
         <div className="status-pill">
           {snapshot?.playbackState ? STRINGS[snapshot.playbackState] : STRINGS.idle}
         </div>
+        <button
+          type="button"
+          className={`layout-edit-button ${editing ? "is-active" : ""}`}
+          aria-pressed={editing}
+          onClick={() => setEditing((current) => !current)}
+        >
+          {editing ? STRINGS.doneEditing : STRINGS.editLayout}
+        </button>
         <div className="remote-size-stepper" role="group" aria-label={STRINGS.size}>
           <button
             type="button"
@@ -3431,6 +3405,39 @@ export function App() {
           </button>
         </div>
       </header>
+
+      {/* Dedicated edit toolbar so the layout actions never crowd the header
+          (the tight phone header was pushing "Done" under the size stepper).
+          Only shown while editing; "Done" is the prominent primary action. */}
+      {editing ? (
+        <div className="layout-edit-toolbar">
+          <button type="button" className="layout-edit-done" onClick={() => setEditing(false)}>
+            ✓ {STRINGS.doneEditing}
+          </button>
+          <div className="layout-edit-toolbar-actions">
+            <button type="button" className="layout-reset-button" onClick={exportLayout}>
+              {STRINGS.exportLayout}
+            </button>
+            <button
+              type="button"
+              className="layout-reset-button"
+              onClick={() => importInputRef.current?.click()}
+            >
+              {STRINGS.importLayout}
+            </button>
+            <button type="button" className="layout-reset-button" onClick={resetLayout}>
+              {STRINGS.resetLayout}
+            </button>
+          </div>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="layout-import-input"
+            onChange={onImportFileChosen}
+          />
+        </div>
+      ) : null}
 
       <div className="remote-content">
         <LayoutCanvas layout={layout} editing={editing} onChange={updateLayout} />

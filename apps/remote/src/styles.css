@@ -60,6 +60,41 @@ button {
   border-bottom: 1px solid rgb(255 255 255 / 0.055);
 }
 
+/* status pill takes the flexible middle; edit button + size stepper sit at the
+   end. The edit toolbar (below the header) holds export/import/reset so the
+   header never gets crowded on a phone. */
+.remote-header .status-pill {
+  justify-self: end;
+}
+
+.layout-edit-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--outline);
+  background: var(--accent-soft);
+}
+
+.layout-edit-done {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.6rem;
+  background: var(--accent);
+  color: #06201c;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.layout-edit-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .remote-header small,
 .readout-card span,
 .mixer-strip-header small,
@@ -2572,6 +2607,22 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /* The canvas is the scroll container for a tab's widgets. Its parent
+     (.remote-content) is overflow:hidden and flex:1, so the scroll must live
+     here or tall layouts get clipped (no scroll). */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+/* The tab bar stays pinned while the widgets below scroll. */
+.layout-canvas-wrap .layout-tabbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: linear-gradient(180deg, rgb(19 19 19 / 0.98), rgb(19 19 19 / 0.9));
 }
 
 .layout-canvas {

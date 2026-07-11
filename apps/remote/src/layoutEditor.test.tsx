@@ -154,41 +154,43 @@ describe("layout editor", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
 
-    // Start with one tab ("Principal").
-    expect(screen.getAllByRole("tab").length).toBe(1);
+    // The default has two tabs (Controles + Mixer).
+    const initial = screen.getAllByRole("tab").length;
+    expect(initial).toBe(2);
 
     fireEvent.click(screen.getByRole("button", { name: /\+ (tab|pestaña)/i }));
 
-    // Two tabs now, and the new one is persisted + active.
-    expect(screen.getAllByRole("tab").length).toBe(2);
+    // One more tab now, and the new one is persisted + active.
+    expect(screen.getAllByRole("tab").length).toBe(initial + 1);
     const stored = JSON.parse(
       window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
     );
-    expect(stored.tabs.length).toBe(2);
-    expect(stored.activeTabId).toBe(stored.tabs[1].id);
+    expect(stored.tabs.length).toBe(initial + 1);
+    expect(stored.activeTabId).toBe(stored.tabs[stored.tabs.length - 1].id);
   });
 
   it("reorders tabs with the move buttons", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
-    // Add a second tab so there are two to reorder.
-    fireEvent.click(screen.getByRole("button", { name: /\+ (tab|pestaña)/i }));
 
-    const before = JSON.parse(
-      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
-    );
-    const [firstId, secondId] = before.tabs.map((t: { id: string }) => t.id);
+    // Default order (before any persistence): Controles, Mixer.
+    const names = () => screen.getAllByRole("tab").map((el) => el.textContent);
+    expect(names()).toEqual(["Controles", "Mixer"]);
 
-    // Move the second tab left (its "move left" button is enabled).
+    // Move the second tab (Mixer) left; index 0's move-left is disabled.
     const moveLeft = screen.getAllByRole("button", {
       name: /move tab left|mover pestaña a la izquierda/i,
     });
-    // The first tab's "move left" is disabled; click the last enabled one.
-    fireEvent.click(moveLeft[moveLeft.length - 1]);
+    fireEvent.click(moveLeft[1]);
 
-    const after = JSON.parse(
+    // Order swapped in the UI and persisted.
+    expect(names()).toEqual(["Mixer", "Controles"]);
+    const stored = JSON.parse(
       window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
     );
-    expect(after.tabs.map((t: { id: string }) => t.id)).toEqual([secondId, firstId]);
+    expect(stored.tabs.map((t: { name: string }) => t.name)).toEqual([
+      "Mixer",
+      "Controles",
+    ]);
   });
 });

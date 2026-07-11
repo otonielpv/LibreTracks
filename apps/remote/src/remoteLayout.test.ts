@@ -24,13 +24,24 @@ describe("remoteLayout", () => {
     window.localStorage.clear();
   });
 
-  it("default layout has one tab of known widget types + a valid active id", () => {
+  it("default layout is the classic two tabs (Controles + Mixer) of known widgets", () => {
     const layout = defaultLayout();
-    expect(layout.tabs).toHaveLength(1);
+    expect(layout.tabs.map((t) => t.name)).toEqual(["Controles", "Mixer"]);
     expect(layout.activeTabId).toBe(layout.tabs[0].id);
     for (const widget of allWidgets(layout)) {
       expect(ALL_WIDGET_TYPES).toContain(widget.type);
     }
+    // No live/counter widgets in the default (opt-in from the palette only).
+    const liveTypes = new Set([
+      "countdownMarkerBars",
+      "countdownSongTime",
+      "progressMarker",
+      "progressSong",
+      "nextMarker",
+      "nextSong",
+      "currentKey",
+    ]);
+    expect(allWidgets(layout).some((w) => liveTypes.has(w.type))).toBe(false);
   });
 
   it("normalizeLayout falls back to default for garbage input", () => {

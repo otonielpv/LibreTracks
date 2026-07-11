@@ -100,28 +100,28 @@ function placement(type: WidgetType, w: number, h = 1): WidgetPlacement {
 }
 
 /**
- * The default layout: a single "Principal" tab reproducing the pre-editor
- * fixed stack (live widgets row + timeline + control deck + marker grid +
- * mixer), so a user who never opens the editor sees what they saw before.
+ * The default layout reproduces the classic two-view remote: a "Controles" tab
+ * (readouts + transport + timeline + control deck + marker grid) and a "Mixer"
+ * tab. No live/counter widgets by default — those are opt-in from the palette.
  */
 export function defaultLayout(): RemoteLayout {
-  const tab: LayoutTab = {
+  const controls: LayoutTab = {
     id: newTabId(),
-    name: "Principal",
+    name: "Controles",
     widgets: [
-      placement("countdownMarkerBars", 1),
-      placement("nextMarker", 1),
-      placement("progressMarker", 1),
-      placement("currentKey", 1),
-      placement("nextSong", 1),
-      placement("progressSong", 1),
+      placement("readouts", LAYOUT_COLUMNS, 1),
+      placement("transportButtons", LAYOUT_COLUMNS, 1),
       placement("timeline", LAYOUT_COLUMNS, 1),
       placement("controlDeck", LAYOUT_COLUMNS, 1),
       placement("markerGrid", LAYOUT_COLUMNS, 1),
-      placement("mixer", LAYOUT_COLUMNS, 2),
     ],
   };
-  return { version: LAYOUT_VERSION, tabs: [tab], activeTabId: tab.id };
+  const mixer: LayoutTab = {
+    id: newTabId(),
+    name: "Mixer",
+    widgets: [placement("mixer", LAYOUT_COLUMNS, 2)],
+  };
+  return { version: LAYOUT_VERSION, tabs: [controls, mixer], activeTabId: controls.id };
 }
 
 /** A fresh empty tab with the given (or a default) name. */
