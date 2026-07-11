@@ -119,26 +119,48 @@ describe("layout editor", () => {
     const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
     const keyItem = within(palette).getAllByRole("button", { name: /key|tonalidad/i })[0];
 
-    // Pointer add-drag: down on the palette item starts it; up ends it and
-    // inserts the widget (at the end when nothing was hovered).
+    // Pointer add-drag: down on the palette item starts it; up on the grid ends
+    // it and inserts the widget at the resolved cell.
     fireEvent.pointerDown(keyItem, { pointerId: 1 });
     fireEvent.pointerUp(document.querySelector(".layout-canvas")!, { pointerId: 1 });
 
     expect(storedWidgetCount()).toBe(before + 1);
   });
 
+  it("Cancel reverts changes made during the edit session", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    const before = defaultWidgetCount();
+    // Make a change (add a widget from the palette via keyboard fallback).
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+    fireEvent.click(within(palette).getAllByRole("button", { name: /key|tonalidad/i })[0]);
+    expect(storedWidgetCount()).toBe(before + 1);
+
+    // Cancel restores the pre-edit layout and persists it.
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$|^cancelar$/i }));
+    expect(storedWidgetCount()).toBe(before);
+    // And leaves edit mode (no palette shown).
+    expect(screen.queryByRole("group", { name: /add widget|añadir widget/i })).toBeNull();
+  });
+
   it("imports a layout file and persists it", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
 
-    // A tabbed layout file carried from "another device": two tabs.
-    const fileText = serializeLayoutFile({
+    // A v2 tabbed layout file (no x/y) carried from "another device"; the
+    // importer migrates it to the current x/y model.
+    const fileText = JSON.stringify({
+      kind: "libretracks.remote.layout",
       version: 2,
-      activeTabId: "t1",
-      tabs: [
-        { id: "t1", name: "Live", widgets: [{ id: "x", type: "timeline", w: 6, h: 1 }] },
-        { id: "t2", name: "Mixer", widgets: [{ id: "y", type: "mixer", w: 6, h: 2 }] },
-      ],
+      layout: {
+        version: 2,
+        activeTabId: "t1",
+        tabs: [
+          { id: "t1", name: "Live", widgets: [{ id: "x", type: "timeline", w: 6, h: 1 }] },
+          { id: "t2", name: "Mixer", widgets: [{ id: "y", type: "mixer", w: 6, h: 2 }] },
+        ],
+      },
     });
     const file = new File([fileText], "layout.json", { type: "application/json" });
     // jsdom's File may not implement text(); the browser does. Provide it so the

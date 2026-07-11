@@ -66,6 +66,7 @@ import {
 } from "./liveWidgets";
 import {
   LAYOUT_COLUMNS,
+  LAYOUT_MAX_ROWS,
   clearStoredLayout,
   defaultLayout,
   layoutExportFilename,
@@ -2930,94 +2931,47 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   countdownSongTime: { labelKey: "widgetCountdownSong", Component: CountdownSongTimeHost, defaultW: 1, defaultH: 1 },
 };
 
+/** Fixed pixel height of one grid row in the absolute (X/Y) layout. The grid
+ * uses fixed-height rows so a widget's row-span maps to a predictable size and
+ * drag math stays simple. */
+const ROW_HEIGHT_PX = 72;
+
 /**
- * Renders one placed widget. In edit mode the whole top chrome is the drag
- * handle (move the widget by dragging it, Mixing-Station style), a corner
- * grip resizes it continuously by pointer, and a remove button deletes it.
- * Width/height steppers remain as an accessible fallback.
+ * Renders one placed widget at its absolute grid cell (x/y, w/h). In edit mode
+ * the whole top chrome is the move handle and a corner grip resizes it; both
+ * only emit pointer-down — the canvas owns the move/resize math (it knows the
+ * grid geometry). Width/height steppers + a remove button round out the chrome.
  */
 function LayoutWidgetHost({
   placement,
   editing,
-  cellWidth,
-  rowHeight,
   onRemove,
   onResize,
-  dragHandlers,
+  onMovePointerDown,
+  onResizePointerDown,
   isDragging,
-  isDropTarget,
 }: {
   placement: WidgetPlacement;
   editing: boolean;
-  /** Pixel width of one grid column, for translating a resize drag to spans. */
-  cellWidth: number;
-  /** Pixel height of one grid row, for the vertical resize drag. */
-  rowHeight: number;
   onRemove: () => void;
   onResize: (patch: { w?: number; h?: number }) => void;
-  dragHandlers: {
-    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-    onPointerEnter: () => void;
-  };
+  onMovePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onResizePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   isDragging: boolean;
-  isDropTarget: boolean;
 }) {
   const definition = WIDGET_REGISTRY[placement.type];
-  // Continuous corner resize: anchor the pointer + starting span, then convert
-  // pointer travel into column/row deltas using the measured cell size.
-  const resizeRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    startW: number;
-    startH: number;
-  } | null>(null);
-
   if (!definition) {
     return null;
   }
   const { Component } = definition;
 
-  const onResizePointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    event.stopPropagation();
-    resizeRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      startW: placement.w,
-      startH: placement.h,
-    };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const onResizePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    const state = resizeRef.current;
-    if (!state || state.pointerId !== event.pointerId) {
-      return;
-    }
-    const dw = cellWidth > 0 ? Math.round((event.clientX - state.startX) / cellWidth) : 0;
-    const dh = rowHeight > 0 ? Math.round((event.clientY - state.startY) / rowHeight) : 0;
-    const nextW = Math.max(1, Math.min(LAYOUT_COLUMNS, state.startW + dw));
-    const nextH = Math.max(1, Math.min(4, state.startH + dh));
-    if (nextW !== placement.w || nextH !== placement.h) {
-      onResize({ w: nextW, h: nextH });
-    }
-  };
-
-  const endResize = (event: ReactPointerEvent<HTMLElement>) => {
-    if (resizeRef.current?.pointerId === event.pointerId) {
-      resizeRef.current = null;
-    }
-  };
-
   return (
     <div
-      className={`layout-widget ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""} ${isDropTarget ? "is-drop-target" : ""}`}
+      className={`layout-widget ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""}`}
       style={{
-        gridColumn: `span ${Math.min(LAYOUT_COLUMNS, placement.w)}`,
-        gridRow: `span ${placement.h}`,
+        gridColumn: `${placement.x + 1} / span ${Math.min(LAYOUT_COLUMNS, placement.w)}`,
+        gridRow: `${placement.y + 1} / span ${placement.h}`,
       }}
-      onPointerEnter={editing ? dragHandlers.onPointerEnter : undefined}
     >
       {editing ? (
         <div className="layout-widget-chrome">
@@ -3026,7 +2980,7 @@ function LayoutWidgetHost({
             className="layout-widget-drag"
             role="button"
             aria-label={`${STRINGS.moveWidget}: ${STRINGS[definition.labelKey]}`}
-            onPointerDown={dragHandlers.onPointerDown}
+            onPointerDown={onMovePointerDown}
           >
             <span className="layout-widget-title">⠿ {STRINGS[definition.labelKey]}</span>
           </div>
@@ -3058,19 +3012,11 @@ function LayoutWidgetHost({
           role="button"
           aria-label={`${STRINGS.resizeWidget}: ${STRINGS[definition.labelKey]}`}
           onPointerDown={onResizePointerDown}
-          onPointerMove={onResizePointerMove}
-          onPointerUp={endResize}
-          onPointerCancel={endResize}
         />
       ) : null}
     </div>
   );
 }
-
-// Approx pixel height of one grid row, for translating a vertical resize drag
-// into row-span deltas. The grid uses auto rows, so this is a felt constant
-// rather than a measured one — good enough to make the corner grip feel right.
-const ROW_HEIGHT_PX = 72;
 
 /**
  * The palette shown in edit mode. A pointer-down on an item starts an add-drag
@@ -3229,27 +3175,32 @@ function LayoutCanvas({
   editing: boolean;
   onChange: (next: RemoteLayout) => void;
 }) {
-  const dragIndexRef = useRef<number | null>(null);
+  // Active pointer gesture: moving an existing widget, resizing it, or dragging
+  // a new one in from the palette. All share the same pointer-move/up handlers
+  // on the grid, which convert client coordinates to a grid cell (x/y).
+  type Gesture =
+    | { kind: "move"; id: string; grabDX: number; grabDY: number }
+    | { kind: "resize"; id: string; startX: number; startY: number; startW: number; startH: number }
+    | { kind: "add"; type: WidgetType };
+  const gestureRef = useRef<Gesture | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-  // A widget type being dragged in from the palette (null when not adding).
-  const pendingAddRef = useRef<WidgetType | null>(null);
   const [pendingAddType, setPendingAddType] = useState<WidgetType | null>(null);
-  // Measured grid cell size, so corner-resize drags map pixels → spans.
+
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const [cellWidth, setCellWidth] = useState(0);
+  const cellWidthRef = useRef(0);
+  const rowHeightRef = useRef(ROW_HEIGHT_PX);
 
   const activeTab =
     layout.tabs.find((tab) => tab.id === layout.activeTabId) ?? layout.tabs[0];
   const widgets = activeTab?.widgets ?? [];
 
+  // Measure the column width from the grid so pointer coordinates map to cells.
   useEffect(() => {
     const measure = () => {
-      const width = gridRef.current?.clientWidth ?? 0;
-      // Columns are equal fractions; subtract the inter-column gaps (0.45rem
-      // ≈ 7.2px each) so a full-width widget maps to LAYOUT_COLUMNS cleanly.
-      const gapTotal = 7.2 * (LAYOUT_COLUMNS - 1);
-      setCellWidth(width > 0 ? (width - gapTotal) / LAYOUT_COLUMNS : 0);
+      const el = gridRef.current;
+      if (!el) return;
+      const gapTotal = 7.2 * (LAYOUT_COLUMNS - 1); // ~0.45rem gaps
+      cellWidthRef.current = Math.max(1, (el.clientWidth - gapTotal) / LAYOUT_COLUMNS);
     };
     measure();
     if (typeof ResizeObserver === "undefined" || !gridRef.current) {
@@ -3259,13 +3210,11 @@ function LayoutCanvas({
     const observer = new ResizeObserver(measure);
     observer.observe(gridRef.current);
     return () => observer.disconnect();
-  }, [widgets.length, activeTab?.id]);
+  }, [activeTab?.id]);
 
   // Replace the active tab's widgets, keeping every other tab untouched.
   const commit = (nextWidgets: WidgetPlacement[]) => {
-    if (!activeTab) {
-      return;
-    }
+    if (!activeTab) return;
     onChange({
       ...layout,
       tabs: layout.tabs.map((tab) =>
@@ -3274,9 +3223,7 @@ function LayoutCanvas({
     });
   };
 
-  const selectTab = (tabId: string) => {
-    onChange({ ...layout, activeTabId: tabId });
-  };
+  const selectTab = (tabId: string) => onChange({ ...layout, activeTabId: tabId });
 
   const addTab = () => {
     const tab = makeEmptyTab(STRINGS.newTabName);
@@ -3291,86 +3238,29 @@ function LayoutCanvas({
   };
 
   const deleteTab = (tabId: string) => {
-    if (layout.tabs.length <= 1) {
-      return;
-    }
+    if (layout.tabs.length <= 1) return;
     const remaining = layout.tabs.filter((tab) => tab.id !== tabId);
-    const nextActive =
-      layout.activeTabId === tabId ? remaining[0].id : layout.activeTabId;
+    const nextActive = layout.activeTabId === tabId ? remaining[0].id : layout.activeTabId;
     onChange({ ...layout, tabs: remaining, activeTabId: nextActive });
   };
 
   const moveTab = (tabId: string, direction: -1 | 1) => {
     const index = layout.tabs.findIndex((tab) => tab.id === tabId);
     const target = index + direction;
-    if (index < 0 || target < 0 || target >= layout.tabs.length) {
-      return;
-    }
+    if (index < 0 || target < 0 || target >= layout.tabs.length) return;
     const tabs = [...layout.tabs];
     [tabs[index], tabs[target]] = [tabs[target], tabs[index]];
     onChange({ ...layout, tabs });
   };
 
-  const beginDrag = (index: number, event: ReactPointerEvent<HTMLElement>) => {
-    dragIndexRef.current = index;
-    setDragId(widgets[index]?.id ?? null);
-    setDropIndex(index);
-    // Capture so pointermove/up keep flowing even off the handle.
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+  const removeWidget = (id: string) => {
+    commit(widgets.filter((widget) => widget.id !== id));
   };
 
-  const hoverIndex = (index: number) => {
-    // Only track a drop target while something is actually being dragged
-    // (a widget move or a palette add), so idle hovers don't flicker.
-    if (dragIndexRef.current !== null || pendingAddRef.current !== null) {
-      setDropIndex(index);
-    }
-  };
-
-  const endDrag = () => {
-    const from = dragIndexRef.current;
-    const to = dropIndex;
-    const pendingAdd = pendingAddRef.current;
-    dragIndexRef.current = null;
-    pendingAddRef.current = null;
-    setDragId(null);
-    setDropIndex(null);
-    setPendingAddType(null);
-
-    // Palette add-drag: insert the new widget at the drop position (or append).
-    if (pendingAdd) {
-      const definition = WIDGET_REGISTRY[pendingAdd];
-      const entry = {
-        id: newWidgetId(pendingAdd),
-        type: pendingAdd,
-        w: definition.defaultW,
-        h: definition.defaultH,
-      };
-      const at = to ?? widgets.length;
-      const next = [...widgets];
-      next.splice(at, 0, entry);
-      commit(next);
-      return;
-    }
-
-    // Widget move: reorder from → to.
-    if (from === null || to === null || from === to) {
-      return;
-    }
-    const next = [...widgets];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    commit(next);
-  };
-
-  const removeAt = (index: number) => {
-    commit(widgets.filter((_, i) => i !== index));
-  };
-
-  const resizeAt = (index: number, patch: { w?: number; h?: number }) => {
+  const resizeWidget = (id: string, patch: { w?: number; h?: number }) => {
     commit(
-      widgets.map((widget, i) =>
-        i === index
+      widgets.map((widget) =>
+        widget.id === id
           ? {
               ...widget,
               w: patch.w !== undefined ? Math.max(1, Math.min(LAYOUT_COLUMNS, patch.w)) : widget.w,
@@ -3381,23 +3271,121 @@ function LayoutCanvas({
     );
   };
 
-  // Tapping a palette item appends the widget (fast path, always works).
-  const addWidget = (type: WidgetType) => {
+  const updatePos = (id: string, x: number, y: number) => {
+    commit(
+      widgets.map((widget) => (widget.id === id ? { ...widget, x, y } : widget)),
+    );
+  };
+
+  // Client coords → grid cell (col, row), clamped to the grid.
+  const cellFromClient = (clientX: number, clientY: number) => {
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (!rect) return { col: 0, row: 0 };
+    const col = Math.max(
+      0,
+      Math.min(LAYOUT_COLUMNS - 1, Math.floor((clientX - rect.left) / cellWidthRef.current)),
+    );
+    const row = Math.max(
+      0,
+      Math.min(LAYOUT_MAX_ROWS - 1, Math.floor((clientY - rect.top) / rowHeightRef.current)),
+    );
+    return { col, row };
+  };
+
+  // --- Gesture starts (from the widget host / palette) -------------------
+  const beginMove = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+    const widget = widgets.find((w) => w.id === id);
+    if (!widget) return;
+    const rect = gridRef.current?.getBoundingClientRect();
+    // Remember where inside the widget the finger grabbed, so the widget
+    // doesn't jump its top-left corner to the pointer.
+    const originX = rect ? rect.left + widget.x * cellWidthRef.current : event.clientX;
+    const originY = rect ? rect.top + widget.y * rowHeightRef.current : event.clientY;
+    gestureRef.current = {
+      kind: "move",
+      id,
+      grabDX: event.clientX - originX,
+      grabDY: event.clientY - originY,
+    };
+    setDragId(id);
+    gridRef.current?.setPointerCapture?.(event.pointerId);
+  };
+
+  const beginResize = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+    const widget = widgets.find((w) => w.id === id);
+    if (!widget) return;
+    event.stopPropagation();
+    gestureRef.current = {
+      kind: "resize",
+      id,
+      startX: event.clientX,
+      startY: event.clientY,
+      startW: widget.w,
+      startH: widget.h,
+    };
+    setDragId(id);
+    gridRef.current?.setPointerCapture?.(event.pointerId);
+  };
+
+  const beginAdd = (type: WidgetType, event: ReactPointerEvent<HTMLElement>) => {
+    gestureRef.current = { kind: "add", type };
+    setPendingAddType(type);
+    gridRef.current?.setPointerCapture?.(event.pointerId);
+  };
+
+  // --- Shared move/up on the grid ----------------------------------------
+  const onGridPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture) return;
+    if (gesture.kind === "move") {
+      const { col, row } = cellFromClient(event.clientX - gesture.grabDX, event.clientY - gesture.grabDY);
+      const widget = widgets.find((w) => w.id === gesture.id);
+      if (widget && (widget.x !== col || widget.y !== row)) {
+        const maxX = LAYOUT_COLUMNS - widget.w;
+        updatePos(gesture.id, Math.min(col, Math.max(0, maxX)), row);
+      }
+    } else if (gesture.kind === "resize") {
+      const dw = Math.round((event.clientX - gesture.startX) / cellWidthRef.current);
+      const dh = Math.round((event.clientY - gesture.startY) / rowHeightRef.current);
+      const nextW = Math.max(1, Math.min(LAYOUT_COLUMNS, gesture.startW + dw));
+      const nextH = Math.max(1, Math.min(4, gesture.startH + dh));
+      resizeWidget(gesture.id, { w: nextW, h: nextH });
+    }
+    // "add" only resolves its cell on pointer-up (below).
+  };
+
+  const onGridPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    setDragId(null);
+    setPendingAddType(null);
+    if (!gesture) return;
+    if (gesture.kind === "add") {
+      const definition = WIDGET_REGISTRY[gesture.type];
+      const { col, row } = cellFromClient(event.clientX, event.clientY);
+      const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - definition.defaultW));
+      commit([
+        ...widgets,
+        { id: newWidgetId(gesture.type), type: gesture.type, x, y: row, w: definition.defaultW, h: definition.defaultH },
+      ]);
+    }
+  };
+
+  // Keyboard/no-pointer fallback: append the widget in the first free-ish row.
+  const appendWidget = (type: WidgetType) => {
     const definition = WIDGET_REGISTRY[type];
+    const y = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
     commit([
       ...widgets,
-      { id: newWidgetId(type), type, w: definition.defaultW, h: definition.defaultH },
+      { id: newWidgetId(type), type, x: 0, y, w: definition.defaultW, h: definition.defaultH },
     ]);
   };
 
-  // Dragging a palette item starts an add-drag; the drop position is picked by
-  // hovering a widget (onPointerEnter → hoverIndex) and applied in endDrag.
-  const beginPaletteAdd = (type: WidgetType, event: ReactPointerEvent<HTMLElement>) => {
-    pendingAddRef.current = type;
-    setPendingAddType(type);
-    setDropIndex(widgets.length);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
+  // The grid needs enough rows to show every widget + a little slack to drop into.
+  const gridRows = Math.max(
+    6,
+    widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0) + 2,
+  );
 
   return (
     <div className={`layout-canvas-wrap ${editing ? "is-editing" : ""}`}>
@@ -3411,42 +3399,38 @@ function LayoutCanvas({
         onDelete={deleteTab}
         onMove={moveTab}
       />
-      {editing ? <WidgetPalette onAdd={addWidget} onDragAdd={beginPaletteAdd} /> : null}
-      {widgets.length === 0 ? (
-        <div
-          className="layout-canvas-empty"
-          onPointerUp={editing ? endDrag : undefined}
-          onPointerCancel={editing ? endDrag : undefined}
-        >
-          {pendingAddType ? STRINGS.dropHere : STRINGS.emptyTab}
-        </div>
+      {editing ? <WidgetPalette onAdd={appendWidget} onDragAdd={beginAdd} /> : null}
+      {widgets.length === 0 && !editing ? (
+        <div className="layout-canvas-empty">{STRINGS.emptyTab}</div>
       ) : (
         <div
           ref={gridRef}
-          className={`layout-canvas ${pendingAddType ? "is-adding" : ""}`}
-          style={{ gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))` }}
-          onPointerUp={editing ? endDrag : undefined}
-          onPointerCancel={editing ? endDrag : undefined}
+          className={`layout-canvas ${editing ? "is-editing" : ""} ${pendingAddType ? "is-adding" : ""}`}
+          style={{
+            gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))`,
+            gridTemplateRows: editing
+              ? `repeat(${gridRows}, ${ROW_HEIGHT_PX}px)`
+              : `repeat(${gridRows}, minmax(min-content, auto))`,
+          }}
+          onPointerMove={editing ? onGridPointerMove : undefined}
+          onPointerUp={editing ? onGridPointerUp : undefined}
+          onPointerCancel={editing ? onGridPointerUp : undefined}
         >
-          {widgets.map((placement, index) => (
+          {widgets.length === 0 && editing ? (
+            <div className="layout-canvas-empty layout-canvas-empty-inline">
+              {pendingAddType ? STRINGS.dropHere : STRINGS.emptyTab}
+            </div>
+          ) : null}
+          {widgets.map((placement) => (
             <LayoutWidgetHost
               key={placement.id}
               placement={placement}
               editing={editing}
-              cellWidth={cellWidth}
-              rowHeight={ROW_HEIGHT_PX}
               isDragging={dragId === placement.id}
-              isDropTarget={
-                editing &&
-                dropIndex === index &&
-                ((dragId !== null && dragId !== placement.id) || pendingAddType !== null)
-              }
-              onRemove={() => removeAt(index)}
-              onResize={(patch) => resizeAt(index, patch)}
-              dragHandlers={{
-                onPointerDown: (event) => beginDrag(index, event),
-                onPointerEnter: () => hoverIndex(index),
-              }}
+              onRemove={() => removeWidget(placement.id)}
+              onResize={(patch) => resizeWidget(placement.id, patch)}
+              onMovePointerDown={(event) => beginMove(placement.id, event)}
+              onResizePointerDown={(event) => beginResize(placement.id, event)}
             />
           ))}
         </div>
@@ -3460,6 +3444,9 @@ export function App() {
   const [sizeLevel, setSizeLevel] = useState(readRemoteSizeLevel);
   const [layout, setLayout] = useState<RemoteLayout>(readStoredLayout);
   const [editing, setEditing] = useState(false);
+  // Snapshot of the layout taken when edit mode opens, so "Cancel" can revert
+  // every change made during the session. null when not editing.
+  const editBaselineRef = useRef<RemoteLayout | null>(null);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
 
   useEffect(() => {
@@ -3471,6 +3458,28 @@ export function App() {
   const updateLayout = useCallback((next: RemoteLayout) => {
     setLayout(next);
     writeStoredLayout(next);
+  }, []);
+
+  const startEditing = useCallback(() => {
+    editBaselineRef.current = layout;
+    setEditing(true);
+  }, [layout]);
+
+  const finishEditing = useCallback(() => {
+    editBaselineRef.current = null;
+    setEditing(false);
+  }, []);
+
+  // Cancel: restore the layout as it was when editing started, persist that,
+  // and leave edit mode. Discards every move/resize/add/tab change since.
+  const cancelEditing = useCallback(() => {
+    const baseline = editBaselineRef.current;
+    if (baseline) {
+      setLayout(baseline);
+      writeStoredLayout(baseline);
+    }
+    editBaselineRef.current = null;
+    setEditing(false);
   }, []);
 
   const resetLayout = useCallback(() => {
@@ -3544,7 +3553,7 @@ export function App() {
           type="button"
           className={`layout-edit-button ${editing ? "is-active" : ""}`}
           aria-pressed={editing}
-          onClick={() => setEditing((current) => !current)}
+          onClick={() => (editing ? finishEditing() : startEditing())}
         >
           {editing ? STRINGS.doneEditing : STRINGS.editLayout}
         </button>
@@ -3575,8 +3584,11 @@ export function App() {
           Only shown while editing; "Done" is the prominent primary action. */}
       {editing ? (
         <div className="layout-edit-toolbar">
-          <button type="button" className="layout-edit-done" onClick={() => setEditing(false)}>
+          <button type="button" className="layout-edit-done" onClick={finishEditing}>
             ✓ {STRINGS.doneEditing}
+          </button>
+          <button type="button" className="layout-edit-cancel" onClick={cancelEditing}>
+            {STRINGS.cancelEditing}
           </button>
           <div className="layout-edit-toolbar-actions">
             <button type="button" className="layout-reset-button" onClick={exportLayout}>

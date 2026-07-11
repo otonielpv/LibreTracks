@@ -51,6 +51,85 @@ describe("remoteLayout", () => {
     expect(normalizeLayout({ tabs: [] }).tabs.length).toBeGreaterThan(0);
   });
 
+  it("default widgets all have x/y coordinates", () => {
+    for (const widget of allWidgets(defaultLayout())) {
+      expect(Number.isFinite(widget.x)).toBe(true);
+      expect(Number.isFinite(widget.y)).toBe(true);
+      expect(widget.x).toBeGreaterThanOrEqual(0);
+      expect(widget.y).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("auto-places widgets that lack x/y (migration from the flow model)", () => {
+    // Three full-width widgets with no x/y should stack in rows 0,1,2 at col 0.
+    const migrated = normalizeLayout({
+      version: 2,
+      activeTabId: "t1",
+      tabs: [
+        {
+          id: "t1",
+          name: "T",
+          widgets: [
+            { id: "a", type: "timeline", w: 6, h: 1 },
+            { id: "b", type: "controlDeck", w: 6, h: 1 },
+            { id: "c", type: "markerGrid", w: 6, h: 1 },
+          ],
+        },
+      ],
+    });
+    expect(migrated.tabs[0].widgets.map((w) => [w.x, w.y])).toEqual([
+      [0, 0],
+      [0, 1],
+      [0, 2],
+    ]);
+  });
+
+  it("auto-place wraps narrow widgets across columns before the next row", () => {
+    const migrated = normalizeLayout({
+      version: 2,
+      activeTabId: "t1",
+      tabs: [
+        {
+          id: "t1",
+          name: "T",
+          // Two width-2 widgets then a width-6: 2+2 fit row 0 (cols 0,2), the
+          // width-6 wraps to row 1.
+          widgets: [
+            { id: "a", type: "currentKey", w: 2, h: 1 },
+            { id: "b", type: "nextSong", w: 2, h: 1 },
+            { id: "c", type: "timeline", w: 6, h: 1 },
+          ],
+        },
+      ],
+    });
+    expect(migrated.tabs[0].widgets.map((w) => [w.x, w.y])).toEqual([
+      [0, 0],
+      [2, 0],
+      [0, 1],
+    ]);
+  });
+
+  it("keeps and clamps explicit x/y", () => {
+    const result = normalizeLayout({
+      version: 3,
+      activeTabId: "t1",
+      tabs: [
+        {
+          id: "t1",
+          name: "T",
+          widgets: [
+            { id: "a", type: "currentKey", x: 3, y: 2, w: 1, h: 1 },
+            { id: "b", type: "nextSong", x: 99, y: -5, w: 1, h: 1 },
+          ],
+        },
+      ],
+    });
+    const [a, b] = result.tabs[0].widgets;
+    expect([a.x, a.y]).toEqual([3, 2]);
+    expect(b.x).toBe(LAYOUT_COLUMNS - 1);
+    expect(b.y).toBe(0);
+  });
+
   it("migrates a v1 flat layout into a single 'Principal' tab", () => {
     const migrated = normalizeLayout({
       version: 1,

@@ -130,6 +130,7 @@ const STRINGS = {
     moveWidget: "Move widget",
     resizeWidget: "Resize widget",
     dropHere: "Drop here",
+    cancelEditing: "Cancel",
   },
   es: {
     appTitle: "Remote",
@@ -237,6 +238,7 @@ const STRINGS = {
     moveWidget: "Mover widget",
     resizeWidget: "Redimensionar widget",
     dropHere: "Suelta aquí",
+    cancelEditing: "Cancelar",
   },
 } as const;
 

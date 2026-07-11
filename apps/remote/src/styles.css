@@ -89,10 +89,22 @@ button {
   cursor: pointer;
 }
 
+.layout-edit-cancel {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.6rem;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .layout-edit-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  margin-left: auto;
 }
 
 .remote-header small,
@@ -2627,10 +2639,25 @@ button {
 
 .layout-canvas {
   display: grid;
-  grid-auto-rows: minmax(min-content, auto);
-  grid-auto-flow: row dense;
   gap: 0.45rem;
-  align-items: start;
+  align-items: stretch;
+  position: relative;
+}
+
+/* In view mode, rows size to content so widgets aren't forced to a fixed
+   height; in edit mode the inline style pins fixed row heights so absolute
+   x/y placement + drag math line up. */
+.layout-canvas:not(.is-editing) {
+  grid-auto-rows: minmax(min-content, auto);
+}
+
+.layout-canvas.is-editing .layout-widget {
+  overflow: hidden;
+}
+
+.layout-canvas-empty-inline {
+  grid-column: 1 / -1;
+  grid-row: 1 / 3;
 }
 
 .layout-widget {

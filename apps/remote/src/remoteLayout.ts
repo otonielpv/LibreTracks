@@ -50,11 +50,19 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
 
 /** The layout grid is this many columns wide; widget widths are 1..COLUMNS. */
 export const LAYOUT_COLUMNS = 6;
+/** Max rows a widget may span, and the tallest y a widget may start at. The
+ * grid grows to fit, but we clamp starts/spans to keep numbers sane. */
+export const LAYOUT_MAX_ROWS = 60;
 
 export type WidgetPlacement = {
   /** Stable instance id (a type may appear more than once). */
   id: string;
   type: WidgetType;
+  /** Zero-based start column in [0, LAYOUT_COLUMNS-1]. Absolute (Mixing-Station
+   * style): the widget lives exactly here, overlaps allowed. */
+  x: number;
+  /** Zero-based start row in [0, LAYOUT_MAX_ROWS-1]. */
+  y: number;
   /** Column span in [1, LAYOUT_COLUMNS]. */
   w: number;
   /** Row span (most widgets are 1; timeline/mixer can be taller). */
@@ -76,9 +84,10 @@ export type RemoteLayout = {
   activeTabId: string;
 };
 
-// Bumped to 2 when the model gained tabs. normalizeLayout migrates v1 (a flat
-// `widgets` array) into a single tab, so old stored/exported layouts keep working.
-export const LAYOUT_VERSION = 2;
+// v2 gained tabs; v3 gained absolute x/y positions per widget (Mixing-Station
+// grid). normalizeLayout migrates v1 (flat array) and v2/v3 widgets that lack
+// x/y by auto-placing them, so old stored/exported layouts keep working.
+export const LAYOUT_VERSION = 3;
 const LAYOUT_STORAGE_KEY = "libretracks.remote.layout";
 
 let instanceCounter = 0;
@@ -95,33 +104,72 @@ export function newTabId(): string {
   return `tab-${Date.now().toString(36)}-${instanceCounter}`;
 }
 
-function placement(type: WidgetType, w: number, h = 1): WidgetPlacement {
-  return { id: newWidgetId(type), type, w, h };
+function placement(
+  type: WidgetType,
+  x: number,
+  y: number,
+  w: number,
+  h = 1,
+): WidgetPlacement {
+  return { id: newWidgetId(type), type, x, y, w, h };
 }
 
 /**
  * The default layout reproduces the classic two-view remote: a "Controles" tab
- * (readouts + transport + timeline + control deck + marker grid) and a "Mixer"
- * tab. No live/counter widgets by default — those are opt-in from the palette.
+ * (readouts + transport + timeline + control deck + marker grid, stacked in
+ * rows) and a "Mixer" tab. No live/counter widgets by default — opt-in from the
+ * palette.
  */
 export function defaultLayout(): RemoteLayout {
   const controls: LayoutTab = {
     id: newTabId(),
     name: "Controles",
     widgets: [
-      placement("readouts", LAYOUT_COLUMNS, 1),
-      placement("transportButtons", LAYOUT_COLUMNS, 1),
-      placement("timeline", LAYOUT_COLUMNS, 1),
-      placement("controlDeck", LAYOUT_COLUMNS, 1),
-      placement("markerGrid", LAYOUT_COLUMNS, 1),
+      placement("readouts", 0, 0, LAYOUT_COLUMNS, 1),
+      placement("transportButtons", 0, 1, LAYOUT_COLUMNS, 1),
+      placement("timeline", 0, 2, LAYOUT_COLUMNS, 1),
+      placement("controlDeck", 0, 3, LAYOUT_COLUMNS, 1),
+      placement("markerGrid", 0, 4, LAYOUT_COLUMNS, 1),
     ],
   };
   const mixer: LayoutTab = {
     id: newTabId(),
     name: "Mixer",
-    widgets: [placement("mixer", LAYOUT_COLUMNS, 2)],
+    widgets: [placement("mixer", 0, 0, LAYOUT_COLUMNS, 2)],
   };
   return { version: LAYOUT_VERSION, tabs: [controls, mixer], activeTabId: controls.id };
+}
+
+/**
+ * Assign x/y to widgets that lack them (migration from the pre-X/Y flow-packed
+ * model). Walks a LAYOUT_COLUMNS-wide grid left→right, top→bottom, honouring
+ * each widget's width and wrapping to the next row when it doesn't fit —
+ * reproducing the old dense-flow order as absolute coordinates. Widgets that
+ * already have valid x/y are left untouched.
+ */
+function autoPlace(widgets: WidgetPlacement[]): WidgetPlacement[] {
+  let cursorX = 0;
+  let cursorY = 0;
+  return widgets.map((widget) => {
+    if (
+      Number.isFinite((widget as { x?: number }).x) &&
+      Number.isFinite((widget as { y?: number }).y)
+    ) {
+      return widget;
+    }
+    const w = Math.min(LAYOUT_COLUMNS, Math.max(1, widget.w));
+    if (cursorX + w > LAYOUT_COLUMNS) {
+      cursorX = 0;
+      cursorY += 1;
+    }
+    const placed = { ...widget, x: cursorX, y: cursorY };
+    cursorX += w;
+    if (cursorX >= LAYOUT_COLUMNS) {
+      cursorX = 0;
+      cursorY += 1;
+    }
+    return placed;
+  });
 }
 
 /** A fresh empty tab with the given (or a default) name. */
@@ -135,7 +183,12 @@ function isWidgetType(value: unknown): value is WidgetType {
   );
 }
 
-/** Normalise a raw widgets array: drop unknown types, clamp spans, keep ids. */
+/**
+ * Normalise a raw widgets array: drop unknown types, clamp spans and (when
+ * present) x/y, keep ids. Widgets missing valid x/y keep them undefined here;
+ * the caller runs autoPlace to assign coordinates, so a mix of positioned and
+ * legacy widgets all end up placed.
+ */
 function normalizeWidgets(raw: unknown): WidgetPlacement[] {
   if (!Array.isArray(raw)) {
     return [];
@@ -149,14 +202,25 @@ function normalizeWidgets(raw: unknown): WidgetPlacement[] {
     if (!isWidgetType(item.type)) {
       continue;
     }
+    const w = clampSpan(item.w, LAYOUT_COLUMNS);
+    const h = clampSpan(item.h, 4);
+    // x/y only kept when both are finite; otherwise left off so autoPlace fills
+    // them (migration from the pre-X/Y model).
+    const hasPos =
+      typeof item.x === "number" &&
+      Number.isFinite(item.x) &&
+      typeof item.y === "number" &&
+      Number.isFinite(item.y);
     widgets.push({
       id: typeof item.id === "string" && item.id ? item.id : newWidgetId(item.type),
       type: item.type,
-      w: clampSpan(item.w, LAYOUT_COLUMNS),
-      h: clampSpan(item.h, 4),
+      x: hasPos ? Math.max(0, Math.min(LAYOUT_COLUMNS - 1, Math.round(item.x as number))) : (undefined as unknown as number),
+      y: hasPos ? Math.max(0, Math.min(LAYOUT_MAX_ROWS - 1, Math.round(item.y as number))) : (undefined as unknown as number),
+      w,
+      h,
     });
   }
-  return widgets;
+  return autoPlace(widgets);
 }
 
 /**
