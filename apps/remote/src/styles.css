@@ -2563,3 +2563,189 @@ button {
   );
   transition: width 0.12s linear;
 }
+
+/* ------------------------------------------------------------------ */
+/* Layout canvas + editor (Fase 2): a single fixed-column grid holding */
+/* every widget; edit mode adds drag handles, sizers and a palette.   */
+/* ------------------------------------------------------------------ */
+.layout-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.layout-canvas {
+  display: grid;
+  grid-auto-rows: minmax(min-content, auto);
+  grid-auto-flow: row dense;
+  gap: 0.45rem;
+  align-items: start;
+}
+
+.layout-widget {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* In edit mode each widget gets a dashed frame and its live content is made
+   inert (pointer-events off) so dragging/sizing never triggers the control. */
+.layout-canvas-wrap.is-editing .layout-widget {
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--outline));
+  border-radius: 0.7rem;
+  padding: 0.3rem;
+  background: rgb(255 255 255 / 0.02);
+}
+
+.layout-widget.is-dragging {
+  opacity: 0.55;
+}
+
+.layout-widget.is-drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 0.7rem;
+}
+
+.layout-widget-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.layout-widget-drag {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.72rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.layout-widget-drag:active {
+  cursor: grabbing;
+}
+
+.layout-widget-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-widget-sizers {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.layout-sizer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  font-size: 0.64rem;
+  color: var(--muted);
+}
+
+.layout-sizer strong {
+  min-width: 1ch;
+  text-align: center;
+  color: var(--text);
+}
+
+.layout-sizer button,
+.layout-widget-remove {
+  min-width: 1.6rem;
+  min-height: 1.6rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.4rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.layout-sizer button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.layout-widget-remove {
+  padding: 0.2rem 0.55rem;
+  min-width: auto;
+  font-size: 0.66rem;
+  color: #ffb4b4;
+  border-color: color-mix(in srgb, #ff6b6b 45%, var(--outline));
+}
+
+.layout-widget-body.is-inert {
+  pointer-events: none;
+  user-select: none;
+}
+
+.layout-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.7rem;
+  background: var(--panel);
+}
+
+.layout-palette-item {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.layout-palette-item:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.remote-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.layout-edit-button,
+.layout-reset-button {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.6rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.layout-edit-button.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.layout-reset-button {
+  color: var(--muted);
+}

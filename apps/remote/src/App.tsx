@@ -8,6 +8,7 @@ import {
   type ChangeEvent as ReactChangeEvent,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactElement,
 } from "react";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
@@ -63,9 +64,19 @@ import {
   ProgressToSongWidget,
   useLiveMusicalContext,
 } from "./liveWidgets";
+import {
+  LAYOUT_COLUMNS,
+  clearStoredLayout,
+  defaultLayout,
+  newWidgetId,
+  readStoredLayout,
+  writeStoredLayout,
+  type RemoteLayout,
+  type WidgetPlacement,
+  type WidgetType,
+} from "./remoteLayout";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
-type RemoteView = "transport" | "mixer";
 type JumpMode = "immediate" | "next_marker" | "after_bars";
 type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
 type SongTransitionMode = "instant" | "fade_out";
@@ -1389,142 +1400,6 @@ function TransportControlButtons() {
   );
 }
 
-function TransportTopline() {
-  const readout = useTransportReadout();
-
-  return (
-    <div className="transport-topline">
-      <div className="transport-readouts transport-readouts-inline">
-        <div className="readout-card">
-          <span>{STRINGS.time}</span>
-          <strong>{readout.timecode}</strong>
-        </div>
-        <div className="readout-card readout-card-compact">
-          <span>{STRINGS.barBeat}</span>
-          <strong>{readout.musicalDisplay}</strong>
-        </div>
-        <div className="readout-card readout-card-compact">
-          <span>{STRINGS.bpm}</span>
-          <strong>{readout.bpm.toFixed(2)}</strong>
-        </div>
-        <div className="readout-card readout-card-song">
-          <span>{STRINGS.region}</span>
-          <strong title={readout.regionName}>{readout.regionName}</strong>
-        </div>
-      </div>
-
-      <TransportControlButtons />
-    </div>
-  );
-}
-
-function TransportChrome() {
-  const songView = useRemoteSyncStore((state) => state.songView);
-  const snapshot = useRemoteSyncStore((state) => state.snapshot);
-  const snapshotReceivedAtMs = useRemoteSyncStore((state) => state.snapshotReceivedAtMs);
-  const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
-  const readout = useTransportReadout();
-
-  return (
-    <section className="transport-chrome">
-      <div className="transport-topline transport-topline-mobile-only">
-        <div className="transport-readouts transport-readouts-inline">
-          <div className="readout-card">
-            <span>{STRINGS.time}</span>
-            <strong>{readout.timecode}</strong>
-          </div>
-          <div className="readout-card readout-card-compact">
-            <span>{STRINGS.barBeat}</span>
-            <strong>{readout.musicalDisplay}</strong>
-          </div>
-          <div className="readout-card readout-card-compact">
-            <span>{STRINGS.bpm}</span>
-            <strong>{readout.bpm.toFixed(2)}</strong>
-          </div>
-          <div className="readout-card readout-card-compact">
-            <span>{STRINGS.meter}</span>
-            <strong>{readout.timeSignature}</strong>
-          </div>
-          <div className="readout-card readout-card-song">
-            <span>{STRINGS.region}</span>
-            <strong title={readout.regionName}>{readout.regionName}</strong>
-          </div>
-        </div>
-
-        <TransportControlButtons />
-      </div>
-
-      <SharedTimeline
-        songView={songView}
-        snapshot={snapshot}
-        snapshotReceivedAtMs={snapshotReceivedAtMs}
-        pendingJumpTargetId={pendingJumpTargetId}
-      />
-    </section>
-  );
-}
-
-function HeaderTransportTopline() {
-  const readout = useTransportReadout();
-
-  return (
-    <section className="transport-chrome transport-chrome-inline-shell">
-      <div className="transport-topline">
-        <div className="transport-readouts transport-readouts-inline">
-          <div className="readout-card">
-            <span>{STRINGS.time}</span>
-            <strong>{readout.timecode}</strong>
-          </div>
-          <div className="readout-card readout-card-compact">
-            <span>{STRINGS.barBeat}</span>
-            <strong>{readout.musicalDisplay}</strong>
-          </div>
-          <div className="readout-card readout-card-compact">
-            <span>{STRINGS.bpm}</span>
-            <strong>{readout.bpm.toFixed(2)}</strong>
-          </div>
-          <div className="readout-card readout-card-compact">
-            <span>{STRINGS.meter}</span>
-            <strong>{readout.timeSignature}</strong>
-          </div>
-          <div className="readout-card readout-card-song">
-            <span>{STRINGS.region}</span>
-            <strong title={readout.regionName}>{readout.regionName}</strong>
-          </div>
-        </div>
-
-        <TransportControlButtons />
-      </div>
-    </section>
-  );
-}
-
-/**
- * Row of live visualization widgets shown under the timeline: next section,
- * next song, current key, progress bars and a countdown to the next event.
- * All are derived from the live playhead by a single shared rAF loop
- * ({@link useLiveMusicalContext}) reading the sync store each frame, so adding
- * widgets stays cheap. This is the Fase 1 fixed layout; a user-arrangeable
- * grid editor will place these same widgets in a later iteration.
- */
-function LiveWidgetsRow() {
-  const context = useLiveMusicalContext(() => {
-    const { snapshot, songView, snapshotReceivedAtMs } = useRemoteSyncStore.getState();
-    return { snapshot, songView, snapshotReceivedAtMs };
-  });
-
-  return (
-    <div className="live-widgets-row">
-      <CountdownWidget context={context} target="marker" unit="bars" />
-      <NextMarkerWidget context={context} />
-      <ProgressToMarkerWidget context={context} />
-      <CurrentKeyWidget context={context} />
-      <NextSongWidget context={context} />
-      <ProgressToSongWidget context={context} />
-    </div>
-  );
-}
-
 /**
  * Section markers navigable from the remote — dynamic cues (Build, All In, ...)
  * are spoken by the voice guide, not jump destinations, so they're excluded.
@@ -2128,22 +2003,6 @@ function MarkerGrid() {
   );
 }
 
-/**
- * The transport tab: composes the live-widgets row, the control deck and the
- * marker jump grid. In Fase 1 this was one monolithic component; each block is
- * now an autonomous widget reading shared state from the stores, ready to be
- * placed by the layout canvas (Fase 2b) instead of this fixed stack.
- */
-function TransportView() {
-  return (
-    <section className="remote-panel">
-      <LiveWidgetsRow />
-      <ControlDeck />
-      <MarkerGrid />
-    </section>
-  );
-}
-
 function MeterBar({ trackId }: { trackId: string }) {
   const fillRef = useRef<HTMLDivElement | null>(null);
   const clipRef = useRef<HTMLDivElement | null>(null);
@@ -2741,19 +2600,337 @@ function MixerView() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Layout widgets: thin, prop-free wrappers so every block can be placed on the
+// layout canvas the same way. Each pulls what it needs from the stores.
+// ---------------------------------------------------------------------------
+
+/** Transport readouts (time / bar / bpm / signature / song) as a widget. */
+function ReadoutsWidget() {
+  const readout = useTransportReadout();
+  return (
+    <div className="transport-readouts transport-readouts-inline">
+      <div className="readout-card">
+        <span>{STRINGS.time}</span>
+        <strong>{readout.timecode}</strong>
+      </div>
+      <div className="readout-card readout-card-compact">
+        <span>{STRINGS.barBeat}</span>
+        <strong>{readout.musicalDisplay}</strong>
+      </div>
+      <div className="readout-card readout-card-compact">
+        <span>{STRINGS.bpm}</span>
+        <strong>{readout.bpm.toFixed(2)}</strong>
+      </div>
+      <div className="readout-card readout-card-compact">
+        <span>{STRINGS.meter}</span>
+        <strong>{readout.timeSignature}</strong>
+      </div>
+      <div className="readout-card readout-card-song">
+        <span>{STRINGS.region}</span>
+        <strong title={readout.regionName}>{readout.regionName}</strong>
+      </div>
+    </div>
+  );
+}
+
+/** The scrolling timeline (cinta) as a standalone widget. */
+function TimelineWidget() {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  const snapshot = useRemoteSyncStore((state) => state.snapshot);
+  const snapshotReceivedAtMs = useRemoteSyncStore((state) => state.snapshotReceivedAtMs);
+  const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
+  return (
+    <SharedTimeline
+      songView={songView}
+      snapshot={snapshot}
+      snapshotReceivedAtMs={snapshotReceivedAtMs}
+      pendingJumpTargetId={pendingJumpTargetId}
+    />
+  );
+}
+
+// The live widgets need the derived musical context; each wrapper reads it from
+// the shared rAF hook so they stay drop-in placeable. Cheap: the hook only
+// re-renders when a displayed value changes.
+function useSharedLiveContext() {
+  return useLiveMusicalContext(() => {
+    const { snapshot, songView, snapshotReceivedAtMs } = useRemoteSyncStore.getState();
+    return { snapshot, songView, snapshotReceivedAtMs };
+  });
+}
+
+function NextMarkerWidgetHost() {
+  return <NextMarkerWidget context={useSharedLiveContext()} />;
+}
+function NextSongWidgetHost() {
+  return <NextSongWidget context={useSharedLiveContext()} />;
+}
+function CurrentKeyWidgetHost() {
+  return <CurrentKeyWidget context={useSharedLiveContext()} />;
+}
+function ProgressToMarkerWidgetHost() {
+  return <ProgressToMarkerWidget context={useSharedLiveContext()} />;
+}
+function ProgressToSongWidgetHost() {
+  return <ProgressToSongWidget context={useSharedLiveContext()} />;
+}
+function CountdownMarkerBarsHost() {
+  return <CountdownWidget context={useSharedLiveContext()} target="marker" unit="bars" />;
+}
+function CountdownSongTimeHost() {
+  return <CountdownWidget context={useSharedLiveContext()} target="song" unit="seconds" />;
+}
+
+type WidgetDefinition = {
+  /** i18n label shown in the editor palette. */
+  labelKey: keyof typeof STRINGS;
+  Component: () => ReactElement;
+  /** Default column span when added from the palette. */
+  defaultW: number;
+  defaultH: number;
+};
+
+// Binds every WidgetType to its component + palette metadata. The single source
+// of truth the canvas and the (Fase 2c) editor palette both read.
+const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
+  readouts: { labelKey: "widgetReadouts", Component: ReadoutsWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  transportButtons: { labelKey: "widgetTransport", Component: TransportControlButtons, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  timeline: { labelKey: "widgetTimeline", Component: TimelineWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  controlDeck: { labelKey: "widgetDeck", Component: ControlDeck, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  markerGrid: { labelKey: "widgetMarkers", Component: MarkerGrid, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  mixer: { labelKey: "widgetMixer", Component: MixerView, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
+  nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 1, defaultH: 1 },
+  nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 1, defaultH: 1 },
+  currentKey: { labelKey: "widgetKey", Component: CurrentKeyWidgetHost, defaultW: 1, defaultH: 1 },
+  progressMarker: { labelKey: "widgetProgressMarker", Component: ProgressToMarkerWidgetHost, defaultW: 1, defaultH: 1 },
+  progressSong: { labelKey: "widgetProgressSong", Component: ProgressToSongWidgetHost, defaultW: 1, defaultH: 1 },
+  countdownMarkerBars: { labelKey: "widgetCountdownMarker", Component: CountdownMarkerBarsHost, defaultW: 1, defaultH: 1 },
+  countdownSongTime: { labelKey: "widgetCountdownSong", Component: CountdownSongTimeHost, defaultW: 1, defaultH: 1 },
+};
+
+/** Renders one placed widget: its registry component, plus edit-mode chrome
+ * (drag handle, width/height steppers, remove) when editing. */
+function LayoutWidgetHost({
+  placement,
+  editing,
+  onRemove,
+  onResize,
+  dragHandlers,
+  isDragging,
+  isDropTarget,
+}: {
+  placement: WidgetPlacement;
+  editing: boolean;
+  onRemove: () => void;
+  onResize: (patch: { w?: number; h?: number }) => void;
+  dragHandlers: {
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+    onPointerEnter: () => void;
+  };
+  isDragging: boolean;
+  isDropTarget: boolean;
+}) {
+  const definition = WIDGET_REGISTRY[placement.type];
+  if (!definition) {
+    return null;
+  }
+  const { Component } = definition;
+
+  return (
+    <div
+      className={`layout-widget ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""} ${isDropTarget ? "is-drop-target" : ""}`}
+      style={{
+        gridColumn: `span ${Math.min(LAYOUT_COLUMNS, placement.w)}`,
+        gridRow: `span ${placement.h}`,
+      }}
+      onPointerEnter={editing ? dragHandlers.onPointerEnter : undefined}
+    >
+      {editing ? (
+        <div className="layout-widget-chrome">
+          <button
+            type="button"
+            className="layout-widget-drag"
+            aria-label={STRINGS[definition.labelKey]}
+            onPointerDown={dragHandlers.onPointerDown}
+          >
+            <span className="layout-widget-title">⠿ {STRINGS[definition.labelKey]}</span>
+          </button>
+          <div className="layout-widget-sizers">
+            <div className="layout-sizer" role="group" aria-label={STRINGS.widthLabel}>
+              <span>{STRINGS.widthLabel}</span>
+              <button type="button" onClick={() => onResize({ w: placement.w - 1 })} disabled={placement.w <= 1}>-</button>
+              <strong>{placement.w}</strong>
+              <button type="button" onClick={() => onResize({ w: placement.w + 1 })} disabled={placement.w >= LAYOUT_COLUMNS}>+</button>
+            </div>
+            <div className="layout-sizer" role="group" aria-label={STRINGS.heightLabel}>
+              <span>{STRINGS.heightLabel}</span>
+              <button type="button" onClick={() => onResize({ h: placement.h - 1 })} disabled={placement.h <= 1}>-</button>
+              <strong>{placement.h}</strong>
+              <button type="button" onClick={() => onResize({ h: placement.h + 1 })} disabled={placement.h >= 4}>+</button>
+            </div>
+            <button type="button" className="layout-widget-remove" onClick={onRemove}>
+              {STRINGS.removeWidget}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div className={`layout-widget-body ${editing ? "is-inert" : ""}`}>
+        <Component />
+      </div>
+    </div>
+  );
+}
+
+/** The palette drawer shown in edit mode: one button per widget type to append. */
+function WidgetPalette({ onAdd }: { onAdd: (type: WidgetType) => void }) {
+  return (
+    <div className="layout-palette" role="group" aria-label={STRINGS.addWidget}>
+      {(Object.keys(WIDGET_REGISTRY) as WidgetType[]).map((type) => (
+        <button key={type} type="button" className="layout-palette-item" onClick={() => onAdd(type)}>
+          + {STRINGS[WIDGET_REGISTRY[type].labelKey]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The single editable canvas: places every widget of the layout on a
+ * fixed-column grid. In edit mode widgets can be reordered by dragging their
+ * handle (pointer-based, touch-friendly), resized via width/height steppers,
+ * removed, and new ones appended from the palette. Layout changes persist to
+ * localStorage. Reordering uses a simple drag-over-index swap; grid flow then
+ * repacks the rows.
+ */
+function LayoutCanvas({
+  layout,
+  editing,
+  onChange,
+}: {
+  layout: RemoteLayout;
+  editing: boolean;
+  onChange: (next: RemoteLayout) => void;
+}) {
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  const commit = (widgets: WidgetPlacement[]) => {
+    onChange({ version: layout.version, widgets });
+  };
+
+  const beginDrag = (index: number, event: ReactPointerEvent<HTMLElement>) => {
+    dragIndexRef.current = index;
+    setDragId(layout.widgets[index]?.id ?? null);
+    setDropIndex(index);
+    // Capture so pointermove/up keep flowing even off the handle.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const hoverIndex = (index: number) => {
+    if (dragIndexRef.current === null || dragIndexRef.current === index) {
+      setDropIndex(index);
+      return;
+    }
+    setDropIndex(index);
+  };
+
+  const endDrag = () => {
+    const from = dragIndexRef.current;
+    const to = dropIndex;
+    dragIndexRef.current = null;
+    setDragId(null);
+    setDropIndex(null);
+    if (from === null || to === null || from === to) {
+      return;
+    }
+    const next = [...layout.widgets];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    commit(next);
+  };
+
+  const removeAt = (index: number) => {
+    const next = layout.widgets.filter((_, i) => i !== index);
+    commit(next);
+  };
+
+  const resizeAt = (index: number, patch: { w?: number; h?: number }) => {
+    const next = layout.widgets.map((widget, i) =>
+      i === index
+        ? {
+            ...widget,
+            w: patch.w !== undefined ? Math.max(1, Math.min(LAYOUT_COLUMNS, patch.w)) : widget.w,
+            h: patch.h !== undefined ? Math.max(1, Math.min(4, patch.h)) : widget.h,
+          }
+        : widget,
+    );
+    commit(next);
+  };
+
+  const addWidget = (type: WidgetType) => {
+    const definition = WIDGET_REGISTRY[type];
+    commit([
+      ...layout.widgets,
+      { id: newWidgetId(type), type, w: definition.defaultW, h: definition.defaultH },
+    ]);
+  };
+
+  return (
+    <div className={`layout-canvas-wrap ${editing ? "is-editing" : ""}`}>
+      {editing ? <WidgetPalette onAdd={addWidget} /> : null}
+      <div
+        className="layout-canvas"
+        style={{ gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))` }}
+        onPointerUp={editing ? endDrag : undefined}
+        onPointerCancel={editing ? endDrag : undefined}
+      >
+        {layout.widgets.map((placement, index) => (
+          <LayoutWidgetHost
+            key={placement.id}
+            placement={placement}
+            editing={editing}
+            isDragging={dragId === placement.id}
+            isDropTarget={editing && dropIndex === index && dragId !== null && dragId !== placement.id}
+            onRemove={() => removeAt(index)}
+            onResize={(patch) => resizeAt(index, patch)}
+            dragHandlers={{
+              onPointerDown: (event) => beginDrag(index, event),
+              onPointerEnter: () => hoverIndex(index),
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   useRemoteBridge();
-  const [view, setView] = useState<RemoteView>("transport");
   const [sizeLevel, setSizeLevel] = useState(readRemoteSizeLevel);
+  const [layout, setLayout] = useState<RemoteLayout>(readStoredLayout);
+  const [editing, setEditing] = useState(false);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
 
   useEffect(() => {
     window.localStorage.setItem(REMOTE_SIZE_STORAGE_KEY, String(sizeLevel));
   }, [sizeLevel]);
 
+  const updateLayout = useCallback((next: RemoteLayout) => {
+    setLayout(next);
+    writeStoredLayout(next);
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const fresh = defaultLayout();
+    clearStoredLayout();
+    setLayout(fresh);
+  }, []);
+
   return (
     <main
-      className={`remote-shell remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""}`}
+      className={`remote-shell remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""}`}
     >
       {/* Phones in landscape are too short to fit the transport view; the CSS
           media query (orientation:landscape + short height) reveals this
@@ -2770,20 +2947,21 @@ export function App() {
           <small>LibreTracks</small>
           <h1>{STRINGS.appTitle}</h1>
         </div>
-        <nav className="remote-view-tabs" aria-label={STRINGS.transport}>
+        <div className="remote-header-actions">
+          {editing ? (
+            <button type="button" className="layout-reset-button" onClick={resetLayout}>
+              {STRINGS.resetLayout}
+            </button>
+          ) : null}
           <button
-            className={view === "transport" ? "is-active" : ""}
-            onClick={() => setView("transport")}
+            type="button"
+            className={`layout-edit-button ${editing ? "is-active" : ""}`}
+            aria-pressed={editing}
+            onClick={() => setEditing((current) => !current)}
           >
-            {STRINGS.transport}
+            {editing ? STRINGS.doneEditing : STRINGS.editLayout}
           </button>
-          <button
-            className={view === "mixer" ? "is-active" : ""}
-            onClick={() => setView("mixer")}
-          >
-            {STRINGS.mixer}
-          </button>
-        </nav>
+        </div>
         <div className="status-pill">
           {snapshot?.playbackState ? STRINGS[snapshot.playbackState] : STRINGS.idle}
         </div>
@@ -2809,10 +2987,8 @@ export function App() {
         </div>
       </header>
 
-      <TransportChrome />
-
       <div className="remote-content">
-        {view === "transport" ? <TransportView /> : <MixerView />}
+        <LayoutCanvas layout={layout} editing={editing} onChange={updateLayout} />
       </div>
     </main>
   );
