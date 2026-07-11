@@ -2461,3 +2461,105 @@ button {
     line-height: 1.35;
   }
 }
+
+/* Live visualization widgets (Fase 1: fixed row under the timeline). Each tile
+   derives its value from the live playhead. `--live-widget-accent` is set
+   per-tile from the target marker colour; it falls back to the app accent. */
+.live-widgets-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.4rem;
+  padding: 0.35rem 0 0.5rem;
+}
+
+.live-widget {
+  --live-widget-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-height: 4.25rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.7rem;
+  background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+}
+
+.live-widget-marker {
+  border-color: color-mix(in srgb, var(--live-widget-accent) 45%, var(--outline));
+}
+
+.live-widget-song {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--outline));
+}
+
+.live-widget-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.live-widget-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.live-widget-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-widget-marker .live-widget-name {
+  color: var(--live-widget-accent);
+}
+
+.live-widget-key {
+  font-family: "Space Grotesk", "Inter", sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.live-widget-countdown {
+  font-family: "Space Grotesk", "Inter", sans-serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--live-widget-accent);
+}
+
+.live-widget-sub {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.live-widget-progress {
+  position: relative;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  overflow: hidden;
+}
+
+.live-widget-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--live-widget-accent) 70%, transparent),
+    var(--live-widget-accent)
+  );
+  transition: width 0.12s linear;
+}

@@ -54,6 +54,15 @@ import {
   positionToGain,
 } from "@libretracks/shared/faderScale";
 import { getRemoteStrings } from "./i18n";
+import {
+  CountdownWidget,
+  CurrentKeyWidget,
+  NextMarkerWidget,
+  NextSongWidget,
+  ProgressToMarkerWidget,
+  ProgressToSongWidget,
+  useLiveMusicalContext,
+} from "./liveWidgets";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 type RemoteView = "transport" | "mixer";
@@ -1439,6 +1448,32 @@ function HeaderTransportTopline() {
   );
 }
 
+/**
+ * Row of live visualization widgets shown under the timeline: next section,
+ * next song, current key, progress bars and a countdown to the next event.
+ * All are derived from the live playhead by a single shared rAF loop
+ * ({@link useLiveMusicalContext}) reading the sync store each frame, so adding
+ * widgets stays cheap. This is the Fase 1 fixed layout; a user-arrangeable
+ * grid editor will place these same widgets in a later iteration.
+ */
+function LiveWidgetsRow() {
+  const context = useLiveMusicalContext(() => {
+    const { snapshot, songView, snapshotReceivedAtMs } = useRemoteSyncStore.getState();
+    return { snapshot, songView, snapshotReceivedAtMs };
+  });
+
+  return (
+    <div className="live-widgets-row">
+      <CountdownWidget context={context} target="marker" unit="bars" />
+      <NextMarkerWidget context={context} />
+      <ProgressToMarkerWidget context={context} />
+      <CurrentKeyWidget context={context} />
+      <NextSongWidget context={context} />
+      <ProgressToSongWidget context={context} />
+    </div>
+  );
+}
+
 function TransportView() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
@@ -1800,6 +1835,8 @@ function TransportView() {
 
   return (
     <section className="remote-panel">
+      <LiveWidgetsRow />
+
       <div className="transport-control-deck">
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
