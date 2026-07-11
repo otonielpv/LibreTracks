@@ -326,8 +326,8 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
             file.write_all(&chunk)
                 .map_err(|e| format!("write zip failed: {e}"))?;
             downloaded += chunk.len() as u64;
-            // Map download to the 0..70% band.
-            let pct = ((downloaded.min(total) as f64 / total as f64) * 70.0) as u8;
+            // Map download to the 0..55% band (decode is the heavy tail).
+            let pct = ((downloaded.min(total) as f64 / total as f64) * 55.0) as u8;
             if pct != last_pct {
                 last_pct = pct;
                 emit_pad_progress(
@@ -347,9 +347,9 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
         file.flush().map_err(|e| format!("flush zip failed: {e}"))?;
     }
 
-    // Unzip into the temp dir (70..90%). Runs on a blocking task so the async
+    // Unzip into the temp dir (55..65%). Runs on a blocking task so the async
     // runtime isn't stalled; never holds any session lock.
-    emit_pad_progress(app, pad_id, 70, "Descomprimiendo…", false, None);
+    emit_pad_progress(app, pad_id, 55, "Descomprimiendo…", false, None);
     let extract_root = tmp_dir.join("extracted");
     fs::create_dir_all(&extract_root).map_err(|e| format!("create extract dir failed: {e}"))?;
     {
@@ -385,7 +385,7 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
                         .map_err(|e| format!("extract copy failed: {e}"))?;
                 }
                 if count > 0 {
-                    let pct = 70 + ((i + 1) as f64 / count as f64 * 20.0) as u8;
+                    let pct = 55 + ((i + 1) as f64 / count as f64 * 10.0) as u8;
                     emit_pad_progress(&app, &pad_id_owned, pct, "Descomprimiendo…", false, None);
                 }
             }
@@ -397,36 +397,218 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
 
     // Locate the key files. The zip may wrap them in a top-level folder
     // (<pad_id>/C.mp3) or place them at the root (C.mp3); handle both.
-    emit_pad_progress(app, pad_id, 90, "Instalando…", false, None);
+    emit_pad_progress(app, pad_id, 65, "Preparando pads…", false, None);
     let source_dir = resolve_pad_key_source(&extract_root, pad_id)
         .ok_or_else(|| "no pad key files found in archive".to_string())?;
 
-    // Move into the final location atomically-ish: write to pads/<id> via a
-    // fresh dir, then swap. Remove any previous install first.
+    // Install into pads/<id>. Each key is PRE-DECODED to a 16-bit WAV here (the
+    // "Preparando pads…" phase, 65..99%), so switching key at play time reads
+    // ready PCM instead of decoding a ~15-min MP3 live. A source that is already
+    // a .wav is copied as-is. The decode is CPU-heavy (12 files), so it runs on
+    // a blocking task off the async runtime; it never holds the engine lock.
     let final_dir = base.join(pad_id);
     let _ = fs::remove_dir_all(&final_dir);
     fs::create_dir_all(&final_dir).map_err(|e| format!("create pad dir failed: {e}"))?;
-    // Copy only recognised key files (skip stray archive extras).
-    let mut copied = 0u32;
-    for stem in KEY_STEMS {
-        for ext in PAD_KEY_EXTENSIONS {
-            let candidate = source_dir.join(format!("{stem}{ext}"));
-            if candidate.is_file() {
-                let dest = final_dir.join(format!("{stem}{ext}"));
-                fs::copy(&candidate, &dest)
-                    .map_err(|e| format!("copy key {stem}{ext} failed: {e}"))?;
-                copied += 1;
-                break;
+
+    let copied = {
+        let source_dir = source_dir.clone();
+        let final_dir = final_dir.clone();
+        let app = app.clone();
+        let pad_id_owned = pad_id.to_string();
+        tokio::task::spawn_blocking(move || -> Result<u32, String> {
+            let mut done = 0u32;
+            let total = KEY_STEMS.len() as u32;
+            for (i, stem) in KEY_STEMS.iter().enumerate() {
+                // Find the source file for this key (any accepted extension).
+                let mut src_path: Option<PathBuf> = None;
+                for ext in PAD_KEY_EXTENSIONS {
+                    let candidate = source_dir.join(format!("{stem}{ext}"));
+                    if candidate.is_file() {
+                        src_path = Some(candidate);
+                        break;
+                    }
+                }
+                let Some(src) = src_path else { continue };
+                let dst = final_dir.join(format!("{stem}.wav"));
+                if src.extension().and_then(|e| e.to_str()) == Some("wav") {
+                    fs::copy(&src, &dst).map_err(|e| format!("copy {stem}.wav: {e}"))?;
+                } else {
+                    decode_to_wav16(&src, &dst)?;
+                }
+                done += 1;
+                let pct = 65 + ((i as f64 + 1.0) / total as f64 * 34.0) as u8;
+                emit_pad_progress(&app, &pad_id_owned, pct, "Preparando pads…", false, None);
             }
-        }
-    }
-    // Best-effort cleanup of the temp working dir.
+            Ok(done)
+        })
+        .await
+        .map_err(|e| format!("prepare task panicked: {e}"))??
+    };
+
+    // Best-effort cleanup of the temp working dir (removes the source MP3s too).
     let _ = fs::remove_dir_all(&tmp_dir);
 
     if copied == 0 {
         let _ = fs::remove_dir_all(&final_dir);
         return Err("archive contained no recognised pad keys".to_string());
     }
+    Ok(())
+}
+
+/// Decode a compressed audio file (MP3/…) to a 16-bit PCM WAV at its native
+/// sample rate, mirroring the engine's normal decoding-cache format (Ableton
+/// style: WAV int16, half the size of float32). Pre-decoding at download time
+/// means switching pad key later reads ready PCM instead of decoding a ~15-min
+/// MP3 live. Uses `symphonia` (the Rust side's decoder — FFmpeg lives only in
+/// the native engine), consistent with how the app decodes waveforms/imports.
+fn decode_to_wav16(src: &Path, dst: &Path) -> Result<(), String> {
+    use symphonia::core::audio::{AudioBufferRef, Signal};
+    use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+    use symphonia::core::probe::Hint;
+
+    let file = fs::File::open(src).map_err(|e| format!("open {src:?}: {e}"))?;
+    let mut hint = Hint::new();
+    if let Some(ext) = src.extension().and_then(|v| v.to_str()) {
+        hint.with_extension(ext);
+    }
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|e| format!("probe {src:?}: {e}"))?;
+    let mut format = probed.format;
+    let track = format
+        .default_track()
+        .or_else(|| {
+            format
+                .tracks()
+                .iter()
+                .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        })
+        .ok_or_else(|| format!("no audio track in {src:?}"))?;
+    let track_id = track.id;
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .ok_or_else(|| format!("missing sample rate in {src:?}"))?;
+    let channels = track
+        .codec_params
+        .channels
+        .map(|c| c.count() as u16)
+        .unwrap_or(2)
+        .max(1)
+        .min(2);
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params.clone(), &DecoderOptions::default())
+        .map_err(|e| format!("make decoder {src:?}: {e}"))?;
+
+    let spec = hound::WavSpec {
+        channels,
+        sample_rate,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer =
+        hound::WavWriter::create(dst, spec).map_err(|e| format!("create wav {dst:?}: {e}"))?;
+
+    let to_i16 = |s: f32| -> i16 {
+        (s.clamp(-1.0, 1.0) * 32767.0).round() as i16
+    };
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            // Clean EOF: symphonia surfaces it as an IoError(UnexpectedEof).
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(e) => return Err(format!("decode {src:?}: {e}")),
+        };
+        if packet.track_id() != track_id {
+            continue;
+        }
+        let decoded = match decoder.decode(&packet) {
+            Ok(d) => d,
+            Err(symphonia::core::errors::Error::DecodeError(_)) => continue, // skip bad frame
+            Err(e) => return Err(format!("decode packet {src:?}: {e}")),
+        };
+        // Interleave to the WAV writer. Downmix/upmix to `channels` (1 or 2).
+        macro_rules! write_buf {
+            ($buf:expr) => {{
+                let b = $buf;
+                let frames = b.frames();
+                let src_ch = b.spec().channels.count();
+                for f in 0..frames {
+                    for c in 0..channels as usize {
+                        let sc = c.min(src_ch - 1);
+                        let v = b.chan(sc)[f];
+                        writer
+                            .write_sample(to_i16(v as f32))
+                            .map_err(|e| format!("write sample: {e}"))?;
+                    }
+                }
+            }};
+        }
+        match decoded {
+            AudioBufferRef::F32(buf) => write_buf!(buf.as_ref()),
+            AudioBufferRef::S16(buf) => {
+                let b = buf.as_ref();
+                let frames = b.frames();
+                let src_ch = b.spec().channels.count();
+                for f in 0..frames {
+                    for c in 0..channels as usize {
+                        let sc = c.min(src_ch - 1);
+                        writer
+                            .write_sample(b.chan(sc)[f])
+                            .map_err(|e| format!("write sample: {e}"))?;
+                    }
+                }
+            }
+            AudioBufferRef::S32(buf) => {
+                let b = buf.as_ref();
+                let frames = b.frames();
+                let src_ch = b.spec().channels.count();
+                for f in 0..frames {
+                    for c in 0..channels as usize {
+                        let sc = c.min(src_ch - 1);
+                        let v = b.chan(sc)[f] as f32 / i32::MAX as f32;
+                        writer
+                            .write_sample(to_i16(v))
+                            .map_err(|e| format!("write sample: {e}"))?;
+                    }
+                }
+            }
+            other => {
+                // Fallback: copy into an f32 buffer via the generic path.
+                let spec = *other.spec();
+                let capacity = other.capacity() as u64;
+                let src_ch = spec.channels.count();
+                let mut sample_buf =
+                    symphonia::core::audio::SampleBuffer::<f32>::new(capacity, spec);
+                sample_buf.copy_interleaved_ref(other);
+                let samples = sample_buf.samples();
+                let frames = samples.len() / src_ch.max(1);
+                for f in 0..frames {
+                    for c in 0..channels as usize {
+                        let sc = c.min(src_ch - 1);
+                        writer
+                            .write_sample(to_i16(samples[f * src_ch + sc]))
+                            .map_err(|e| format!("write sample: {e}"))?;
+                    }
+                }
+            }
+        }
+    }
+    writer.finalize().map_err(|e| format!("finalize wav {dst:?}: {e}"))?;
     Ok(())
 }
 
@@ -560,4 +742,38 @@ pub async fn load_pad_key(
         .map_err(|e| e.to_string())?;
     save_app_settings(&app, &settings).map_err(|e| e.to_string())?;
     Ok(settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Converts a real MP3 to WAV16 and validates the result. Skipped unless a
+    // sample MP3 is present (env LT_PAD_TEST_MP3), so CI without the audio asset
+    // still passes.
+    #[test]
+    fn decode_to_wav16_produces_valid_wav() {
+        let src = std::env::var("LT_PAD_TEST_MP3").unwrap_or_default();
+        let src = PathBuf::from(src);
+        if !src.is_file() {
+            eprintln!("skipping decode_to_wav16 test: set LT_PAD_TEST_MP3 to a sample MP3");
+            return;
+        }
+
+        let dir = std::env::temp_dir().join("lt_pad_wav_test");
+        let _ = fs::create_dir_all(&dir);
+        let dst = dir.join("out.wav");
+        let _ = fs::remove_file(&dst);
+
+        decode_to_wav16(&src, &dst).expect("conversion should succeed");
+
+        let reader = hound::WavReader::open(&dst).expect("output should be a valid WAV");
+        let spec = reader.spec();
+        assert_eq!(spec.bits_per_sample, 16);
+        assert!(spec.channels >= 1 && spec.channels <= 2);
+        assert!(spec.sample_rate >= 8000);
+        assert!(reader.len() > 0, "WAV should contain samples");
+
+        let _ = fs::remove_file(&dst);
+    }
 }
