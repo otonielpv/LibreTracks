@@ -169,6 +169,42 @@ TEST_CASE("parse UpsertSongTracks full structural snapshot") {
     CHECK(c.bpm == doctest::Approx(128.0));
 }
 
+TEST_CASE("parse SetSongTimelineWindow keeps region master_gain") {
+    // Regression: warp/transpose edits go through SetSongTimelineWindow; if the
+    // parser drops master_gain the song master fader snaps back to unity.
+    auto cmd = command_from_json(R"({
+        "type":"SetSongTimelineWindow",
+        "song_id":"song1",
+        "clips":[],
+        "regions":[{"id":"reg1","name":"A","start_frame":0,"end_frame":480000,
+                    "transpose_semitones":2,"warp_enabled":true,
+                    "warp_source_bpm":91.0,"master_gain":0.46}],
+        "markers":[],
+        "bpm":128.0,"beats_per_bar":4,"beat_unit":4,
+        "tempo_markers":[],"time_signature_markers":[]
+    })");
+    REQUIRE(std::holds_alternative<CmdSetSongTimelineWindow>(cmd));
+    auto& c = std::get<CmdSetSongTimelineWindow>(cmd);
+    REQUIRE(c.regions.size() == 1);
+    CHECK(c.regions[0].master_gain == doctest::Approx(0.46f));
+    CHECK(c.regions[0].warp_enabled == true);
+    CHECK(c.regions[0].warp_source_bpm == doctest::Approx(91.0));
+
+    // Absent field falls back to unity (older callers).
+    auto legacy = command_from_json(R"({
+        "type":"SetSongTimelineWindow",
+        "song_id":"song1",
+        "clips":[],
+        "regions":[{"id":"reg1","start_frame":0,"end_frame":480000}],
+        "markers":[],
+        "bpm":128.0,"beats_per_bar":4,"beat_unit":4,
+        "tempo_markers":[],"time_signature_markers":[]
+    })");
+    auto& l = std::get<CmdSetSongTimelineWindow>(legacy);
+    REQUIRE(l.regions.size() == 1);
+    CHECK(l.regions[0].master_gain == doctest::Approx(1.0f));
+}
+
 TEST_CASE("parse SetTrackGain") {
     auto cmd = command_from_json(R"({"type":"SetTrackGain","track_id":"t1","gain":0.75})");
     REQUIRE(std::holds_alternative<CmdSetTrackGain>(cmd));
