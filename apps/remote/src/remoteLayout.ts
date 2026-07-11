@@ -3,10 +3,12 @@
  * can be unit-tested in isolation; the widget registry that binds these types
  * to actual components lives in App.tsx.
  *
- * A layout is a list of placed widgets on a fixed-column grid. Each placement
- * gives a widget a column span and an order; rows flow implicitly (dense
- * packing) so we don't have to store absolute y for every item. Widgets that
- * must own a full row (timeline, mixer) simply span all columns.
+ * A layout is a list of user-named TABS; each tab holds its own list of placed
+ * widgets on a fixed-column grid. Each placement gives a widget a column span
+ * and an order; rows flow implicitly (dense packing) so we don't store an
+ * absolute y. Widgets that must own a full row (timeline, mixer) span all
+ * columns. Layouts saved before tabs existed (a flat `widgets` array) are
+ * migrated to a single "Principal" tab by normalizeLayout.
  */
 
 /** Every widget type the remote can place. Adding one here + in the registry
@@ -59,12 +61,24 @@ export type WidgetPlacement = {
   h: number;
 };
 
-export type RemoteLayout = {
-  version: number;
+export type LayoutTab = {
+  /** Stable id used for React keys, the active-tab pointer and reorder. */
+  id: string;
+  /** User-chosen tab name. */
+  name: string;
   widgets: WidgetPlacement[];
 };
 
-export const LAYOUT_VERSION = 1;
+export type RemoteLayout = {
+  version: number;
+  tabs: LayoutTab[];
+  /** Id of the tab shown by default; falls back to the first tab if stale. */
+  activeTabId: string;
+};
+
+// Bumped to 2 when the model gained tabs. normalizeLayout migrates v1 (a flat
+// `widgets` array) into a single tab, so old stored/exported layouts keep working.
+export const LAYOUT_VERSION = 2;
 const LAYOUT_STORAGE_KEY = "libretracks.remote.layout";
 
 let instanceCounter = 0;
@@ -75,18 +89,25 @@ export function newWidgetId(type: WidgetType): string {
   return `${type}-${Date.now().toString(36)}-${instanceCounter}`;
 }
 
+/** Fresh tab id, unique within a session. */
+export function newTabId(): string {
+  instanceCounter += 1;
+  return `tab-${Date.now().toString(36)}-${instanceCounter}`;
+}
+
 function placement(type: WidgetType, w: number, h = 1): WidgetPlacement {
   return { id: newWidgetId(type), type, w, h };
 }
 
 /**
- * The default layout reproduces the pre-editor fixed stack: the live-widgets
- * row, the timeline, the control deck, the marker grid, and the mixer — so a
- * user who never opens the editor sees exactly what they saw before.
+ * The default layout: a single "Principal" tab reproducing the pre-editor
+ * fixed stack (live widgets row + timeline + control deck + marker grid +
+ * mixer), so a user who never opens the editor sees what they saw before.
  */
 export function defaultLayout(): RemoteLayout {
-  return {
-    version: LAYOUT_VERSION,
+  const tab: LayoutTab = {
+    id: newTabId(),
+    name: "Principal",
     widgets: [
       placement("countdownMarkerBars", 1),
       placement("nextMarker", 1),
@@ -100,6 +121,12 @@ export function defaultLayout(): RemoteLayout {
       placement("mixer", LAYOUT_COLUMNS, 2),
     ],
   };
+  return { version: LAYOUT_VERSION, tabs: [tab], activeTabId: tab.id };
+}
+
+/** A fresh empty tab with the given (or a default) name. */
+export function makeEmptyTab(name: string): LayoutTab {
+  return { id: newTabId(), name: name.trim() || "Nueva", widgets: [] };
 }
 
 function isWidgetType(value: unknown): value is WidgetType {
@@ -108,23 +135,13 @@ function isWidgetType(value: unknown): value is WidgetType {
   );
 }
 
-/**
- * Validate + normalise a parsed layout. Unknown widget types are dropped
- * (forward-compat with layouts from newer builds), spans are clamped, and a
- * missing/empty result falls back to the default so the remote never renders
- * an empty canvas.
- */
-export function normalizeLayout(raw: unknown): RemoteLayout {
-  if (!raw || typeof raw !== "object") {
-    return defaultLayout();
+/** Normalise a raw widgets array: drop unknown types, clamp spans, keep ids. */
+function normalizeWidgets(raw: unknown): WidgetPlacement[] {
+  if (!Array.isArray(raw)) {
+    return [];
   }
-  const candidate = raw as Partial<RemoteLayout>;
-  if (!Array.isArray(candidate.widgets)) {
-    return defaultLayout();
-  }
-
   const widgets: WidgetPlacement[] = [];
-  for (const entry of candidate.widgets) {
+  for (const entry of raw) {
     if (!entry || typeof entry !== "object") {
       continue;
     }
@@ -132,20 +149,68 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
     if (!isWidgetType(item.type)) {
       continue;
     }
-    const w = clampSpan(item.w, LAYOUT_COLUMNS);
-    const h = clampSpan(item.h, 4);
     widgets.push({
       id: typeof item.id === "string" && item.id ? item.id : newWidgetId(item.type),
       type: item.type,
-      w,
-      h,
+      w: clampSpan(item.w, LAYOUT_COLUMNS),
+      h: clampSpan(item.h, 4),
     });
   }
+  return widgets;
+}
 
-  if (widgets.length === 0) {
+/**
+ * Validate + normalise a parsed layout into the tabbed shape. Handles three
+ * inputs: a v2 tabbed layout (validated), a v1 flat `{ widgets }` layout
+ * (migrated into one "Principal" tab), and garbage (falls back to default).
+ * Unknown widget types are dropped (forward-compat) and spans clamped. A tab
+ * with no widgets is kept (users may empty a tab on purpose), but a layout
+ * with no valid tabs at all falls back to the default so we never render an
+ * empty shell.
+ */
+export function normalizeLayout(raw: unknown): RemoteLayout {
+  if (!raw || typeof raw !== "object") {
     return defaultLayout();
   }
-  return { version: LAYOUT_VERSION, widgets };
+  const candidate = raw as { tabs?: unknown; widgets?: unknown; activeTabId?: unknown };
+
+  // v1 → v2 migration: a flat widgets array becomes a single tab.
+  if (!Array.isArray(candidate.tabs) && Array.isArray(candidate.widgets)) {
+    const widgets = normalizeWidgets(candidate.widgets);
+    if (widgets.length === 0) {
+      return defaultLayout();
+    }
+    const tab: LayoutTab = { id: newTabId(), name: "Principal", widgets };
+    return { version: LAYOUT_VERSION, tabs: [tab], activeTabId: tab.id };
+  }
+
+  if (!Array.isArray(candidate.tabs)) {
+    return defaultLayout();
+  }
+
+  const tabs: LayoutTab[] = [];
+  for (const entry of candidate.tabs) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const item = entry as Partial<LayoutTab>;
+    const id = typeof item.id === "string" && item.id ? item.id : newTabId();
+    const name =
+      typeof item.name === "string" && item.name.trim() ? item.name.trim() : "Pestaña";
+    tabs.push({ id, name, widgets: normalizeWidgets(item.widgets) });
+  }
+
+  if (tabs.length === 0) {
+    return defaultLayout();
+  }
+
+  const activeTabId =
+    typeof candidate.activeTabId === "string" &&
+    tabs.some((tab) => tab.id === candidate.activeTabId)
+      ? candidate.activeTabId
+      : tabs[0].id;
+
+  return { version: LAYOUT_VERSION, tabs, activeTabId };
 }
 
 function clampSpan(value: unknown, max: number): number {

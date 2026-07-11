@@ -2,7 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { App } from "./App";
-import { defaultLayout, serializeLayoutFile } from "./remoteLayout";
+import { defaultLayout, serializeLayoutFile, type RemoteLayout } from "./remoteLayout";
+
+/** Total widget count across every tab of the persisted layout. */
+function storedWidgetCount(): number {
+  const stored = JSON.parse(
+    window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+  ) as Partial<RemoteLayout>;
+  return (stored.tabs ?? []).reduce((sum, tab) => sum + (tab.widgets?.length ?? 0), 0);
+}
+
+/** Widget count in the default layout (single tab). */
+function defaultWidgetCount(): number {
+  return defaultLayout().tabs.reduce((sum, tab) => sum + tab.widgets.length, 0);
+}
 
 // App opens a WebSocket in useRemoteBridge; jsdom has none. Provide an inert
 // stub so mounting doesn't throw. We never drive live data in these tests —
@@ -54,16 +67,13 @@ describe("layout editor", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
 
-    const before = defaultLayout().widgets.length;
+    const before = defaultWidgetCount();
     const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
     // Add another "Key" widget.
     const keyButtons = within(palette).getAllByRole("button", { name: /key|tonalidad/i });
     fireEvent.click(keyButtons[0]);
 
-    const stored = JSON.parse(
-      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
-    );
-    expect(stored.widgets.length).toBe(before + 1);
+    expect(storedWidgetCount()).toBe(before + 1);
   });
 
   it("reset restores the default layout after edits", () => {
@@ -72,9 +82,7 @@ describe("layout editor", () => {
 
     const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
     fireEvent.click(within(palette).getAllByRole("button", { name: /key|tonalidad/i })[0]);
-    expect(
-      JSON.parse(window.localStorage.getItem("libretracks.remote.layout") ?? "{}").widgets.length,
-    ).toBe(defaultLayout().widgets.length + 1);
+    expect(storedWidgetCount()).toBe(defaultWidgetCount() + 1);
 
     fireEvent.click(screen.getByRole("button", { name: /reset layout|restaurar layout/i }));
     // Reset clears storage; the next stored write would be the default. The
@@ -107,15 +115,15 @@ describe("layout editor", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
 
-    // A layout file with just two widgets, carried from "another device".
-    const incoming = {
-      version: 1,
-      widgets: [
-        { id: "x", type: "timeline" as const, w: 6, h: 1 },
-        { id: "y", type: "currentKey" as const, w: 1, h: 1 },
+    // A tabbed layout file carried from "another device": two tabs.
+    const fileText = serializeLayoutFile({
+      version: 2,
+      activeTabId: "t1",
+      tabs: [
+        { id: "t1", name: "Live", widgets: [{ id: "x", type: "timeline", w: 6, h: 1 }] },
+        { id: "t2", name: "Mixer", widgets: [{ id: "y", type: "mixer", w: 6, h: 2 }] },
       ],
-    };
-    const fileText = serializeLayoutFile(incoming);
+    });
     const file = new File([fileText], "layout.json", { type: "application/json" });
     // jsdom's File may not implement text(); the browser does. Provide it so the
     // import handler's `await file.text()` resolves in the test environment.
@@ -133,15 +141,54 @@ describe("layout editor", () => {
     fireEvent.change(input);
 
     // The import reads the file asynchronously (file.text()) then persists;
-    // wait until localStorage reflects the imported two-widget layout.
+    // wait until localStorage reflects the imported two-tab layout.
     await waitFor(() => {
       const stored = JSON.parse(
         window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
       );
-      expect(stored.widgets?.map((w: { type: string }) => w.type)).toEqual([
-        "timeline",
-        "currentKey",
-      ]);
+      expect(stored.tabs?.map((t: { name: string }) => t.name)).toEqual(["Live", "Mixer"]);
     });
+  });
+
+  it("adds a new tab and switches to it", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    // Start with one tab ("Principal").
+    expect(screen.getAllByRole("tab").length).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /\+ (tab|pestaña)/i }));
+
+    // Two tabs now, and the new one is persisted + active.
+    expect(screen.getAllByRole("tab").length).toBe(2);
+    const stored = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    );
+    expect(stored.tabs.length).toBe(2);
+    expect(stored.activeTabId).toBe(stored.tabs[1].id);
+  });
+
+  it("reorders tabs with the move buttons", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    // Add a second tab so there are two to reorder.
+    fireEvent.click(screen.getByRole("button", { name: /\+ (tab|pestaña)/i }));
+
+    const before = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    );
+    const [firstId, secondId] = before.tabs.map((t: { id: string }) => t.id);
+
+    // Move the second tab left (its "move left" button is enabled).
+    const moveLeft = screen.getAllByRole("button", {
+      name: /move tab left|mover pestaña a la izquierda/i,
+    });
+    // The first tab's "move left" is disabled; click the last enabled one.
+    fireEvent.click(moveLeft[moveLeft.length - 1]);
+
+    const after = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    );
+    expect(after.tabs.map((t: { id: string }) => t.id)).toEqual([secondId, firstId]);
   });
 });

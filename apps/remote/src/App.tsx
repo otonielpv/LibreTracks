@@ -69,11 +69,13 @@ import {
   clearStoredLayout,
   defaultLayout,
   layoutExportFilename,
+  makeEmptyTab,
   newWidgetId,
   parseLayoutFile,
   readStoredLayout,
   serializeLayoutFile,
   writeStoredLayout,
+  type LayoutTab,
   type RemoteLayout,
   type WidgetPlacement,
   type WidgetType,
@@ -3015,12 +3017,116 @@ function WidgetPalette({ onAdd }: { onAdd: (type: WidgetType) => void }) {
 }
 
 /**
- * The single editable canvas: places every widget of the layout on a
- * fixed-column grid. In edit mode widgets can be reordered by dragging their
- * handle (pointer-based, touch-friendly), resized via width/height steppers,
- * removed, and new ones appended from the palette. Layout changes persist to
- * localStorage. Reordering uses a simple drag-over-index swap; grid flow then
- * repacks the rows.
+ * The tab bar shown above the canvas. Always lets you switch tabs; in edit mode
+ * it also lets you add, rename (double-click / edit button) and delete tabs.
+ * Deleting the last tab is disallowed so the layout always has one.
+ */
+function LayoutTabBar({
+  tabs,
+  activeTabId,
+  editing,
+  onSelect,
+  onAdd,
+  onRename,
+  onDelete,
+  onMove,
+}: {
+  tabs: LayoutTab[];
+  activeTabId: string;
+  editing: boolean;
+  onSelect: (tabId: string) => void;
+  onAdd: () => void;
+  onRename: (tabId: string, name: string) => void;
+  onDelete: (tabId: string) => void;
+  onMove: (tabId: string, direction: -1 | 1) => void;
+}) {
+  const renameTab = (tab: LayoutTab) => {
+    const next = window.prompt(STRINGS.renameTabPrompt, tab.name);
+    if (next !== null && next.trim()) {
+      onRename(tab.id, next.trim());
+    }
+  };
+
+  return (
+    <div className="layout-tabbar" role="tablist" aria-label={STRINGS.tabs}>
+      {tabs.map((tab, index) => (
+        <div
+          key={tab.id}
+          className={`layout-tab ${tab.id === activeTabId ? "is-active" : ""}`}
+        >
+          {editing ? (
+            <button
+              type="button"
+              className="layout-tab-move"
+              aria-label={STRINGS.moveTabLeft}
+              title={STRINGS.moveTabLeft}
+              disabled={index === 0}
+              onClick={() => onMove(tab.id, -1)}
+            >
+              ‹
+            </button>
+          ) : null}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab.id === activeTabId}
+            className="layout-tab-select"
+            onClick={() => onSelect(tab.id)}
+            onDoubleClick={editing ? () => renameTab(tab) : undefined}
+          >
+            {tab.name}
+          </button>
+          {editing ? (
+            <>
+              <button
+                type="button"
+                className="layout-tab-move"
+                aria-label={STRINGS.moveTabRight}
+                title={STRINGS.moveTabRight}
+                disabled={index === tabs.length - 1}
+                onClick={() => onMove(tab.id, 1)}
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                className="layout-tab-rename"
+                aria-label={`${STRINGS.renameTab}: ${tab.name}`}
+                title={STRINGS.renameTab}
+                onClick={() => renameTab(tab)}
+              >
+                ✎
+              </button>
+              <button
+                type="button"
+                className="layout-tab-delete"
+                aria-label={`${STRINGS.deleteTab}: ${tab.name}`}
+                title={STRINGS.deleteTab}
+                disabled={tabs.length <= 1}
+                onClick={() => onDelete(tab.id)}
+              >
+                ×
+              </button>
+            </>
+          ) : null}
+        </div>
+      ))}
+      {editing ? (
+        <button type="button" className="layout-tab-add" onClick={onAdd}>
+          + {STRINGS.addTab}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The editable canvas: a tab bar plus the grid of the active tab's widgets. In
+ * edit mode widgets can be reordered by dragging their handle (pointer-based,
+ * touch-friendly), resized via width/height steppers, removed, and appended
+ * from the palette (into the active tab). Tabs can be added, renamed, deleted
+ * and switched. All changes persist via onChange. Reordering uses a simple
+ * drag-over-index swap; grid flow then repacks the rows.
  */
 function LayoutCanvas({
   layout,
@@ -3035,23 +3141,69 @@ function LayoutCanvas({
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
-  const commit = (widgets: WidgetPlacement[]) => {
-    onChange({ version: layout.version, widgets });
+  const activeTab =
+    layout.tabs.find((tab) => tab.id === layout.activeTabId) ?? layout.tabs[0];
+  const widgets = activeTab?.widgets ?? [];
+
+  // Replace the active tab's widgets, keeping every other tab untouched.
+  const commit = (nextWidgets: WidgetPlacement[]) => {
+    if (!activeTab) {
+      return;
+    }
+    onChange({
+      ...layout,
+      tabs: layout.tabs.map((tab) =>
+        tab.id === activeTab.id ? { ...tab, widgets: nextWidgets } : tab,
+      ),
+    });
+  };
+
+  const selectTab = (tabId: string) => {
+    onChange({ ...layout, activeTabId: tabId });
+  };
+
+  const addTab = () => {
+    const tab = makeEmptyTab(STRINGS.newTabName);
+    onChange({ ...layout, tabs: [...layout.tabs, tab], activeTabId: tab.id });
+  };
+
+  const renameTab = (tabId: string, name: string) => {
+    onChange({
+      ...layout,
+      tabs: layout.tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)),
+    });
+  };
+
+  const deleteTab = (tabId: string) => {
+    if (layout.tabs.length <= 1) {
+      return;
+    }
+    const remaining = layout.tabs.filter((tab) => tab.id !== tabId);
+    const nextActive =
+      layout.activeTabId === tabId ? remaining[0].id : layout.activeTabId;
+    onChange({ ...layout, tabs: remaining, activeTabId: nextActive });
+  };
+
+  const moveTab = (tabId: string, direction: -1 | 1) => {
+    const index = layout.tabs.findIndex((tab) => tab.id === tabId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= layout.tabs.length) {
+      return;
+    }
+    const tabs = [...layout.tabs];
+    [tabs[index], tabs[target]] = [tabs[target], tabs[index]];
+    onChange({ ...layout, tabs });
   };
 
   const beginDrag = (index: number, event: ReactPointerEvent<HTMLElement>) => {
     dragIndexRef.current = index;
-    setDragId(layout.widgets[index]?.id ?? null);
+    setDragId(widgets[index]?.id ?? null);
     setDropIndex(index);
     // Capture so pointermove/up keep flowing even off the handle.
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
   const hoverIndex = (index: number) => {
-    if (dragIndexRef.current === null || dragIndexRef.current === index) {
-      setDropIndex(index);
-      return;
-    }
     setDropIndex(index);
   };
 
@@ -3064,63 +3216,77 @@ function LayoutCanvas({
     if (from === null || to === null || from === to) {
       return;
     }
-    const next = [...layout.widgets];
+    const next = [...widgets];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     commit(next);
   };
 
   const removeAt = (index: number) => {
-    const next = layout.widgets.filter((_, i) => i !== index);
-    commit(next);
+    commit(widgets.filter((_, i) => i !== index));
   };
 
   const resizeAt = (index: number, patch: { w?: number; h?: number }) => {
-    const next = layout.widgets.map((widget, i) =>
-      i === index
-        ? {
-            ...widget,
-            w: patch.w !== undefined ? Math.max(1, Math.min(LAYOUT_COLUMNS, patch.w)) : widget.w,
-            h: patch.h !== undefined ? Math.max(1, Math.min(4, patch.h)) : widget.h,
-          }
-        : widget,
+    commit(
+      widgets.map((widget, i) =>
+        i === index
+          ? {
+              ...widget,
+              w: patch.w !== undefined ? Math.max(1, Math.min(LAYOUT_COLUMNS, patch.w)) : widget.w,
+              h: patch.h !== undefined ? Math.max(1, Math.min(4, patch.h)) : widget.h,
+            }
+          : widget,
+      ),
     );
-    commit(next);
   };
 
   const addWidget = (type: WidgetType) => {
     const definition = WIDGET_REGISTRY[type];
     commit([
-      ...layout.widgets,
+      ...widgets,
       { id: newWidgetId(type), type, w: definition.defaultW, h: definition.defaultH },
     ]);
   };
 
   return (
     <div className={`layout-canvas-wrap ${editing ? "is-editing" : ""}`}>
+      <LayoutTabBar
+        tabs={layout.tabs}
+        activeTabId={activeTab?.id ?? layout.activeTabId}
+        editing={editing}
+        onSelect={selectTab}
+        onAdd={addTab}
+        onRename={renameTab}
+        onDelete={deleteTab}
+        onMove={moveTab}
+      />
       {editing ? <WidgetPalette onAdd={addWidget} /> : null}
-      <div
-        className="layout-canvas"
-        style={{ gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))` }}
-        onPointerUp={editing ? endDrag : undefined}
-        onPointerCancel={editing ? endDrag : undefined}
-      >
-        {layout.widgets.map((placement, index) => (
-          <LayoutWidgetHost
-            key={placement.id}
-            placement={placement}
-            editing={editing}
-            isDragging={dragId === placement.id}
-            isDropTarget={editing && dropIndex === index && dragId !== null && dragId !== placement.id}
-            onRemove={() => removeAt(index)}
-            onResize={(patch) => resizeAt(index, patch)}
-            dragHandlers={{
-              onPointerDown: (event) => beginDrag(index, event),
-              onPointerEnter: () => hoverIndex(index),
-            }}
-          />
-        ))}
-      </div>
+      {widgets.length === 0 ? (
+        <div className="layout-canvas-empty">{STRINGS.emptyTab}</div>
+      ) : (
+        <div
+          className="layout-canvas"
+          style={{ gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))` }}
+          onPointerUp={editing ? endDrag : undefined}
+          onPointerCancel={editing ? endDrag : undefined}
+        >
+          {widgets.map((placement, index) => (
+            <LayoutWidgetHost
+              key={placement.id}
+              placement={placement}
+              editing={editing}
+              isDragging={dragId === placement.id}
+              isDropTarget={editing && dropIndex === index && dragId !== null && dragId !== placement.id}
+              onRemove={() => removeAt(index)}
+              onResize={(patch) => resizeAt(index, patch)}
+              dragHandlers={{
+                onPointerDown: (event) => beginDrag(index, event),
+                onPointerEnter: () => hoverIndex(index),
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

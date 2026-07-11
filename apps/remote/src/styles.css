@@ -2755,6 +2755,99 @@ button {
 }
 
 /* ------------------------------------------------------------------ */
+/* Layout tab bar — user-named tabs above the canvas.                 */
+/* ------------------------------------------------------------------ */
+.layout-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--outline);
+  margin-bottom: 0.5rem;
+}
+
+.layout-tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.layout-tab.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.layout-tab-select {
+  padding: 0.3rem 0.7rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-tab.is-active .layout-tab-select {
+  color: var(--accent);
+}
+
+.layout-tab-rename,
+.layout-tab-delete,
+.layout-tab-move {
+  padding: 0.2rem 0.4rem;
+  border: none;
+  border-left: 1px solid var(--outline);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.layout-tab-move {
+  border-left: none;
+  border-right: 1px solid var(--outline);
+}
+
+.layout-tab-delete:disabled,
+.layout-tab-move:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.layout-tab-add {
+  padding: 0.3rem 0.6rem;
+  border: 1px dashed var(--outline);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.layout-tab-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.layout-canvas-empty {
+  padding: 1.5rem;
+  border: 1px dashed var(--outline);
+  border-radius: 0.7rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
 /* Song header + clip list widgets (compact/Ableton projection).      */
 /* ------------------------------------------------------------------ */
 .song-header-widget,
