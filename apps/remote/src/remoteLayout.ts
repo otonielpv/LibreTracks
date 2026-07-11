@@ -34,6 +34,9 @@ export type WidgetType =
   | "deckRegion"
   | "markerGrid"
   | "mixer"
+  | "mixerSongFilter"
+  | "mixerSongMaster"
+  | "mixerFaders"
   | "songHeader"
   | "clipList"
   | "nextMarker"
@@ -65,6 +68,9 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "deckRegion",
   "markerGrid",
   "mixer",
+  "mixerSongFilter",
+  "mixerSongMaster",
+  "mixerFaders",
   "songHeader",
   "clipList",
   "nextMarker",
@@ -77,7 +83,10 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
 ];
 
 /** The layout grid is this many columns wide; widget widths are 1..COLUMNS. */
-export const LAYOUT_COLUMNS = 6;
+/** A fine grid keeps placement predictable while allowing near pixel-level
+ * control on phones. v3 used six columns; v4 multiplies old coordinates by
+ * four so existing layouts keep exactly the same visual proportions. */
+export const LAYOUT_COLUMNS = 24;
 /** Max rows a widget may span, and the tallest y a widget may start at. The
  * grid grows to fit, but we clamp starts/spans to keep numbers sane. */
 export const LAYOUT_MAX_ROWS = 60;
@@ -115,7 +124,8 @@ export type RemoteLayout = {
 // v2 gained tabs; v3 gained absolute x/y positions per widget (Mixing-Station
 // grid). normalizeLayout migrates v1 (flat array) and v2/v3 widgets that lack
 // x/y by auto-placing them, so old stored/exported layouts keep working.
-export const LAYOUT_VERSION = 3;
+export const LAYOUT_VERSION = 4;
+const LEGACY_GRID_SCALE = 4;
 const LAYOUT_STORAGE_KEY = "libretracks.remote.layout";
 
 let instanceCounter = 0;
@@ -153,17 +163,17 @@ export function defaultLayout(): RemoteLayout {
     id: newTabId(),
     name: "Controles",
     widgets: [
-      placement("readouts", 0, 0, LAYOUT_COLUMNS, 1),
-      placement("transportButtons", 0, 1, LAYOUT_COLUMNS, 1),
-      placement("timeline", 0, 2, LAYOUT_COLUMNS, 1),
-      placement("controlDeck", 0, 3, LAYOUT_COLUMNS, 1),
-      placement("markerGrid", 0, 4, LAYOUT_COLUMNS, 1),
+      placement("readouts", 0, 0, LAYOUT_COLUMNS, 4),
+      placement("transportButtons", 0, 4, LAYOUT_COLUMNS, 5),
+      placement("timeline", 0, 9, LAYOUT_COLUMNS, 7),
+      placement("controlDeck", 0, 16, LAYOUT_COLUMNS, 9),
+      placement("markerGrid", 0, 25, LAYOUT_COLUMNS, 12),
     ],
   };
   const mixer: LayoutTab = {
     id: newTabId(),
     name: "Mixer",
-    widgets: [placement("mixer", 0, 0, LAYOUT_COLUMNS, 2)],
+    widgets: [placement("mixer", 0, 0, LAYOUT_COLUMNS, 28)],
   };
   return { version: LAYOUT_VERSION, tabs: [controls, mixer], activeTabId: controls.id };
 }
@@ -178,6 +188,7 @@ export function defaultLayout(): RemoteLayout {
 function autoPlace(widgets: WidgetPlacement[]): WidgetPlacement[] {
   let cursorX = 0;
   let cursorY = 0;
+  let rowHeight = 1;
   return widgets.map((widget) => {
     if (
       Number.isFinite((widget as { x?: number }).x) &&
@@ -188,13 +199,16 @@ function autoPlace(widgets: WidgetPlacement[]): WidgetPlacement[] {
     const w = Math.min(LAYOUT_COLUMNS, Math.max(1, widget.w));
     if (cursorX + w > LAYOUT_COLUMNS) {
       cursorX = 0;
-      cursorY += 1;
+      cursorY += rowHeight;
+      rowHeight = 1;
     }
     const placed = { ...widget, x: cursorX, y: cursorY };
     cursorX += w;
+    rowHeight = Math.max(rowHeight, widget.h);
     if (cursorX >= LAYOUT_COLUMNS) {
       cursorX = 0;
-      cursorY += 1;
+      cursorY += rowHeight;
+      rowHeight = 1;
     }
     return placed;
   });
@@ -217,7 +231,7 @@ function isWidgetType(value: unknown): value is WidgetType {
  * the caller runs autoPlace to assign coordinates, so a mix of positioned and
  * legacy widgets all end up placed.
  */
-function normalizeWidgets(raw: unknown): WidgetPlacement[] {
+function normalizeWidgets(raw: unknown, legacyGrid = false): WidgetPlacement[] {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -230,8 +244,12 @@ function normalizeWidgets(raw: unknown): WidgetPlacement[] {
     if (!isWidgetType(item.type)) {
       continue;
     }
-    const w = clampSpan(item.w, LAYOUT_COLUMNS);
-    const h = clampSpan(item.h, 4);
+    const scale = legacyGrid ? LEGACY_GRID_SCALE : 1;
+    const w = clampSpan(
+      typeof item.w === "number" ? item.w * scale : item.w,
+      LAYOUT_COLUMNS,
+    );
+    const h = clampSpan(typeof item.h === "number" ? item.h * scale : item.h, LAYOUT_MAX_ROWS);
     // x/y only kept when both are finite; otherwise left off so autoPlace fills
     // them (migration from the pre-X/Y model).
     const hasPos =
@@ -242,8 +260,8 @@ function normalizeWidgets(raw: unknown): WidgetPlacement[] {
     widgets.push({
       id: typeof item.id === "string" && item.id ? item.id : newWidgetId(item.type),
       type: item.type,
-      x: hasPos ? Math.max(0, Math.min(LAYOUT_COLUMNS - 1, Math.round(item.x as number))) : (undefined as unknown as number),
-      y: hasPos ? Math.max(0, Math.min(LAYOUT_MAX_ROWS - 1, Math.round(item.y as number))) : (undefined as unknown as number),
+      x: hasPos ? Math.max(0, Math.min(LAYOUT_COLUMNS - 1, Math.round((item.x as number) * scale))) : (undefined as unknown as number),
+      y: hasPos ? Math.max(0, Math.min(LAYOUT_MAX_ROWS - 1, Math.round((item.y as number) * scale))) : (undefined as unknown as number),
       w,
       h,
     });
@@ -264,11 +282,12 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
   if (!raw || typeof raw !== "object") {
     return defaultLayout();
   }
-  const candidate = raw as { tabs?: unknown; widgets?: unknown; activeTabId?: unknown };
+  const candidate = raw as { version?: unknown; tabs?: unknown; widgets?: unknown; activeTabId?: unknown };
+  const legacyGrid = typeof candidate.version !== "number" || candidate.version < 4;
 
   // v1 → v2 migration: a flat widgets array becomes a single tab.
   if (!Array.isArray(candidate.tabs) && Array.isArray(candidate.widgets)) {
-    const widgets = normalizeWidgets(candidate.widgets);
+    const widgets = normalizeWidgets(candidate.widgets, legacyGrid);
     if (widgets.length === 0) {
       return defaultLayout();
     }
@@ -289,7 +308,7 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
     const id = typeof item.id === "string" && item.id ? item.id : newTabId();
     const name =
       typeof item.name === "string" && item.name.trim() ? item.name.trim() : "Pestaña";
-    tabs.push({ id, name, widgets: normalizeWidgets(item.widgets) });
+    tabs.push({ id, name, widgets: normalizeWidgets(item.widgets, legacyGrid) });
   }
 
   if (tabs.length === 0) {

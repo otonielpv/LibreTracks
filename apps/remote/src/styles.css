@@ -2524,11 +2524,16 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  min-height: 4.25rem;
-  padding: 0.5rem 0.6rem;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(0.25rem, 5cqh, 0.8rem) clamp(0.3rem, 5cqi, 1rem);
   border: 1px solid var(--outline);
   border-radius: 0.7rem;
   background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+  box-sizing: border-box;
+  container-type: size;
 }
 
 .live-widget-marker {
@@ -2540,7 +2545,8 @@ button {
 }
 
 .live-widget-label {
-  font-size: 0.62rem;
+  flex: 0 0 auto;
+  font-size: clamp(0.48rem, min(7cqi, 11cqh), 1.1rem);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2553,10 +2559,15 @@ button {
   gap: 0.25rem;
   flex: 1 1 auto;
   justify-content: center;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+  text-align: center;
 }
 
 .live-widget-name {
-  font-size: 1.05rem;
+  width: 100%;
+  font-size: clamp(0.72rem, min(14cqi, 34cqh), 3.5rem);
   font-weight: 700;
   line-height: 1.15;
   color: var(--text);
@@ -2571,7 +2582,7 @@ button {
 
 .live-widget-key {
   font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 1.6rem;
+  font-size: clamp(0.9rem, min(24cqi, 48cqh), 5rem);
   font-weight: 700;
   line-height: 1;
   color: var(--accent);
@@ -2579,20 +2590,21 @@ button {
 
 .live-widget-countdown {
   font-family: "Space Grotesk", "Inter", sans-serif;
-  font-size: 1.7rem;
+  font-size: clamp(0.9rem, min(24cqi, 48cqh), 5rem);
   font-weight: 700;
   line-height: 1;
   color: var(--live-widget-accent);
 }
 
 .live-widget-sub {
-  font-size: 0.68rem;
+  font-size: clamp(0.48rem, min(8cqi, 12cqh), 1rem);
   color: var(--muted);
   text-transform: lowercase;
 }
 
 .live-widget-progress {
   position: relative;
+  width: 100%;
   height: 0.55rem;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.08);
@@ -2609,6 +2621,59 @@ button {
     var(--live-widget-accent)
   );
   transition: width 0.12s linear;
+}
+
+.timeline-widget-host {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+}
+
+.timeline-widget-host .timeline-shell-shared {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin-top: 0;
+  border-radius: clamp(0.35rem, 3cqh, 1rem);
+  box-sizing: border-box;
+}
+
+@container (max-height: 64px) {
+  .timeline-widget-host .timeline-header-row {
+    display: none;
+  }
+
+  .timeline-widget-host .timeline-marker-mini {
+    top: 50%;
+    translate: 0 -50%;
+    padding-block: 0.12rem;
+  }
+}
+
+@container (max-height: 38px) {
+  .timeline-widget-host .timeline-header-row,
+  .timeline-widget-host .timeline-marker-mini::before {
+    display: none;
+  }
+
+  .timeline-widget-host .timeline-marker-mini {
+    top: 50%;
+    translate: 0 -50%;
+  }
+}
+
+@container (max-height: 46px) {
+  .live-widget-label,
+  .live-widget-sub {
+    display: none;
+  }
+
+  .live-widget {
+    gap: 0;
+    padding-block: 0.12rem;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -2639,20 +2704,121 @@ button {
 
 .layout-canvas {
   display: grid;
-  gap: 0.45rem;
+  gap: 2px;
   align-items: stretch;
   position: relative;
 }
 
-/* In view mode, rows size to content so widgets aren't forced to a fixed
-   height; in edit mode the inline style pins fixed row heights so absolute
-   x/y placement + drag math line up. */
-.layout-canvas:not(.is-editing) {
-  grid-auto-rows: minmax(min-content, auto);
+/* The editor is a full-screen placement surface, even when the active tab has
+   only one short row of widgets. Pointer coordinates can therefore resolve to
+   any visible row instead of the drop zone ending after the last widget. */
+.layout-canvas-wrap.is-editing .layout-canvas {
+  flex: 1 0 auto;
+  min-height: 0;
+  align-content: start;
 }
 
-.layout-canvas.is-editing .layout-widget {
+/* Fixed fine rows are used in both modes: the rectangle edited by the user is
+   therefore the exact rectangle displayed after leaving edit mode. */
+.layout-canvas .layout-widget {
   overflow: hidden;
+}
+
+/* The classic Mixer tab is a workspace rather than a card stack. When it is
+   the only widget, let it consume the complete remaining viewport without a
+   guessed pixel/row height. Edit mode keeps the explicit grid rectangle so it
+   can still be moved, resized or combined with other widgets. */
+.layout-canvas.is-single-full-height-mixer:not(.is-editing) {
+  flex: 1 1 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) !important;
+}
+
+.layout-canvas.is-single-full-height-mixer:not(.is-editing) > .layout-widget-type-mixer {
+  grid-row: 1 !important;
+  height: 100%;
+  min-height: 0;
+}
+
+.layout-canvas.is-single-full-height-mixer:not(.is-editing) .layout-widget-body,
+.layout-canvas.is-single-full-height-mixer:not(.is-editing) .remote-panel-mixer {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Preserve the original phone remote for the untouched default Controls tab.
+   Its content used natural block heights and the existing mobile component
+   breakpoints, which is more useful than projecting the desktop grid onto a
+   narrow screen. Any actual customization removes this exact-layout marker
+   and returns to the free-position grid. */
+@media (max-width: 600px) {
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .layout-widget-body {
+    display: block;
+    height: auto;
+    min-height: 1px;
+    overflow: visible;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-readouts-inline,
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-controls-inline,
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-control-deck,
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .marker-grid {
+    height: auto;
+    min-height: max-content;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-readouts {
+    min-height: 7rem;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-transportButtons {
+    min-height: 6.5rem;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-controlDeck {
+    min-height: 9rem;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-markerGrid {
+    min-height: 12rem;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .timeline-widget-host,
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .timeline-shell-shared {
+    height: 5.1rem !important;
+    max-height: none;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-control-deck {
+    position: static;
+  }
+}
+
+/* Editing controls float over the real viewport. They no longer shrink the
+   canvas, so the rectangles being arranged have the same available space as
+   they will after pressing Done. */
+.remote-shell.is-editing-layout .layout-edit-toolbar {
+  position: fixed;
+  z-index: 40;
+  top: calc(3.4rem + env(safe-area-inset-top));
+  right: 0.75rem;
+  width: min(34rem, calc(100vw - 1.5rem));
+  border: 1px solid var(--outline);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.8rem 2.5rem rgb(0 0 0 / 0.45);
 }
 
 .layout-canvas-empty-inline {
@@ -2664,9 +2830,53 @@ button {
    section looks intentional rather than shrink-wrapped. */
 .readout-solo {
   height: 100%;
+  width: 100%;
+  container-type: size;
 }
 .readout-solo .readout-card {
   height: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.1rem, 2cqh, 0.7rem);
+  padding: clamp(0.2rem, 4cqh, 1.2rem) clamp(0.25rem, 4cqi, 1.4rem);
+  text-align: center;
+}
+
+/* Atomic readouts are display widgets, not fixed-size chips. Their label and
+   value scale from both container axes, so making a BPM/time/song tile larger
+   actually makes its information larger and keeps it visually centred. */
+.readout-solo .readout-card span {
+  flex: 0 0 auto;
+  font-size: clamp(0.5rem, min(8cqi, 12cqh), 1.35rem);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.readout-solo .readout-card strong,
+.remote-shell.is-large-controls .readout-solo .readout-card strong,
+.remote-shell.remote-size-2 .readout-solo .readout-card strong,
+.remote-shell.remote-size-3 .readout-solo .readout-card strong {
+  width: 100%;
+  margin: 0;
+  font-size: clamp(0.8rem, min(20cqi, 48cqh), 6rem);
+  line-height: 1;
+  text-align: center;
+}
+
+@container (max-height: 42px) {
+  .readout-solo .readout-card {
+    gap: 0;
+    padding-block: 0.1rem;
+  }
+
+  .readout-solo .readout-card span {
+    display: none;
+  }
 }
 .transport-controls-solo {
   height: 100%;
@@ -2686,6 +2896,7 @@ button {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  isolation: isolate;
 }
 
 /* In edit mode each widget gets a dashed frame and its live content is made
@@ -2693,7 +2904,7 @@ button {
 .layout-canvas-wrap.is-editing .layout-widget {
   border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--outline));
   border-radius: 0.7rem;
-  padding: 0.3rem;
+  padding: 0;
   background: rgb(255 255 255 / 0.02);
 }
 
@@ -2724,6 +2935,7 @@ button {
   cursor: nwse-resize;
   touch-action: none;
   border-radius: 0.5rem 0 0.5rem 0;
+  z-index: 12;
   background:
     linear-gradient(
       135deg,
@@ -2746,11 +2958,16 @@ button {
 }
 
 .layout-widget-chrome {
+  position: absolute;
+  z-index: 100;
+  top: 0.2rem;
+  left: 0.2rem;
+  right: 0.2rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
-  margin-bottom: 0.35rem;
+  pointer-events: none;
 }
 
 .layout-widget-drag {
@@ -2767,6 +2984,7 @@ button {
   font-size: 0.72rem;
   cursor: grab;
   touch-action: none;
+  pointer-events: auto;
 }
 
 .layout-widget-drag:active {
@@ -2784,6 +3002,7 @@ button {
   align-items: center;
   gap: 0.35rem;
   flex-wrap: wrap;
+  pointer-events: auto;
 }
 
 .layout-sizer {
@@ -2832,6 +3051,102 @@ button {
 .layout-widget-body.is-inert {
   pointer-events: none;
   user-select: none;
+  opacity: 0.68;
+}
+
+.layout-drop-preview {
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--accent) 22%, rgb(10 18 17 / 0.88));
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.5), 0 0 1.2rem color-mix(in srgb, var(--accent) 35%, transparent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.layout-widget-body {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  container-type: size;
+}
+
+/* Composite controls normally stay sticky while the remote scrolls. Inside an
+   editable widget that sticky layer would cover the editor chrome, so flatten
+   it only for the duration of layout editing. */
+.layout-canvas-wrap.is-editing .layout-widget-body .transport-control-deck {
+  position: relative;
+  top: auto;
+  z-index: 0;
+}
+
+/* Common contract for every registry widget: descendants may shrink inside
+   the assigned rectangle instead of forcing their intrinsic desktop width. */
+.layout-widget-body > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* The timeline owns its horizontal scrub interaction and clips its ruler
+   itself; the generic widget scroller must not add a second scrollbar. */
+.layout-widget-type-timeline .layout-widget-body {
+  overflow: hidden;
+}
+
+/* Layout timelines are sized by their widget rectangle. This deliberately
+   comes after the legacy viewport/size-level rules, which otherwise restore a
+   fixed 5.1rem height and make the widget look merely clipped. */
+.layout-widget-type-timeline .timeline-widget-host,
+.layout-widget-type-timeline .timeline-widget-host .timeline-shell-shared,
+.remote-shell.is-large-controls .layout-widget-type-timeline .timeline-shell-shared,
+.remote-shell.remote-size-2 .layout-widget-type-timeline .timeline-shell-shared,
+.remote-shell.remote-size-3 .layout-widget-type-timeline .timeline-shell-shared {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+@container (max-height: 64px) {
+  .layout-widget-type-timeline .timeline-header-row {
+    display: none;
+  }
+
+  .layout-widget-type-timeline .timeline-marker-mini {
+    top: 50%;
+    translate: 0 -50%;
+    max-height: calc(100cqh - 0.5rem);
+    padding: clamp(0.08rem, 4cqh, 0.22rem) clamp(0.25rem, 2cqi, 0.45rem);
+    font-size: clamp(0.48rem, 18cqh, 0.66rem);
+    line-height: 1;
+    box-sizing: border-box;
+  }
+}
+
+@container (max-height: 34px) {
+  .layout-widget-type-timeline .timeline-marker-mini::before {
+    display: none;
+  }
+
+  .layout-widget-type-timeline .timeline-marker-mini {
+    border-width: 1px;
+    max-width: 5rem;
+  }
+
+  .layout-widget-type-timeline .fixed-playhead {
+    box-shadow: none;
+  }
 }
 
 .layout-palette {
@@ -2994,6 +3309,8 @@ button {
   flex-direction: column;
   gap: 0.4rem;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .song-widget-head {
@@ -3047,6 +3364,8 @@ button {
 .song-header-columns {
   display: grid;
   gap: 0.5rem;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .song-header-columns.is-all {
@@ -3065,6 +3384,7 @@ button {
   border: 1px solid var(--outline);
   border-radius: 0.7rem;
   background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+  height: 100%;
 }
 
 .song-header-columns.is-all .song-header-column {
@@ -3102,6 +3422,140 @@ button {
   white-space: nowrap;
   font-weight: 700;
   color: var(--text);
+  font-size: clamp(0.7rem, 18cqh, 1.4rem);
+}
+
+.layout-canvas-wrap.is-editing .layout-palette {
+  position: fixed;
+  z-index: 35;
+  left: 50%;
+  bottom: calc(0.65rem + env(safe-area-inset-bottom));
+  translate: -50% 0;
+  width: min(58rem, calc(100vw - 1.5rem));
+  max-height: min(32vh, 15rem);
+  overflow: auto;
+  box-shadow: 0 0.8rem 2.5rem rgb(0 0 0 / 0.55);
+}
+
+.layout-palette-close {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex: 1 0 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--outline));
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+  color: var(--accent);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.layout-palette-open {
+  position: fixed;
+  z-index: 35;
+  right: 0.75rem;
+  bottom: calc(0.65rem + env(safe-area-inset-bottom));
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-weight: 800;
+  box-shadow: 0 0.6rem 1.8rem rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+
+.mixer-filter-widget,
+.mixer-master-widget {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0.4rem;
+  box-sizing: border-box;
+}
+
+.mixer-filter-widget .mixer-filter-toggle {
+  width: 100%;
+  height: 100%;
+}
+
+.mixer-master-widget .song-master {
+  width: 100%;
+}
+
+.mixer-scroll-widget {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  container-type: size;
+  gap: clamp(0.25rem, 2cqi, 0.8rem);
+}
+
+.mixer-scroll-widget .mixer-strip {
+  flex-basis: clamp(5.5rem, 28cqi, 11rem);
+  max-height: 100%;
+  gap: clamp(0.3rem, 2.5cqh, 0.8rem);
+  padding: clamp(0.35rem, 2.5cqh, 0.95rem) clamp(0.35rem, 2cqi, 0.8rem);
+  border-radius: clamp(0.55rem, 3cqi, 1.1rem);
+}
+
+@container (max-width: 420px) {
+  .mixer-scroll-widget .mixer-strip {
+    flex-basis: clamp(5rem, 46cqi, 9rem);
+  }
+}
+
+@container (max-height: 310px) {
+  .mixer-scroll-widget .mixer-strip-header {
+    min-height: 1.7rem;
+  }
+
+  .mixer-scroll-widget .pan-section {
+    gap: 0.2rem;
+  }
+
+  .mixer-scroll-widget .volume-section {
+    height: auto;
+    min-height: 4rem;
+    gap: 0.15rem;
+  }
+}
+
+@container (max-height: 220px) {
+  .mixer-scroll-widget .mixer-strip-header small,
+  .mixer-scroll-widget .pan-scale,
+  .mixer-scroll-widget .volume-scale {
+    display: none;
+  }
+
+  .mixer-scroll-widget .mixer-strip-header {
+    min-height: 1rem;
+  }
+
+  .mixer-scroll-widget .mixer-strip-header strong {
+    margin-top: 0;
+  }
+
+  .mixer-scroll-widget .mini-action {
+    padding: 0.18rem 0.35rem;
+  }
+}
+
+@container (max-height: 58px) {
+  .song-widget-head {
+    display: none;
+  }
+  .song-header-column {
+    padding: 0.2rem;
+    gap: 0.15rem;
+  }
+  .song-header-play {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
 }
 
 .song-header-bpm,

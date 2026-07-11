@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   ALL_WIDGET_TYPES,
   LAYOUT_COLUMNS,
+  LAYOUT_MAX_ROWS,
   clearStoredLayout,
   defaultLayout,
   layoutExportFilename,
@@ -79,8 +80,8 @@ describe("remoteLayout", () => {
     });
     expect(migrated.tabs[0].widgets.map((w) => [w.x, w.y])).toEqual([
       [0, 0],
-      [0, 1],
-      [0, 2],
+      [0, 4],
+      [0, 8],
     ]);
   });
 
@@ -104,8 +105,8 @@ describe("remoteLayout", () => {
     });
     expect(migrated.tabs[0].widgets.map((w) => [w.x, w.y])).toEqual([
       [0, 0],
-      [2, 0],
-      [0, 1],
+      [8, 0],
+      [0, 4],
     ]);
   });
 
@@ -125,7 +126,7 @@ describe("remoteLayout", () => {
       ],
     });
     const [a, b] = result.tabs[0].widgets;
-    expect([a.x, a.y]).toEqual([3, 2]);
+    expect([a.x, a.y]).toEqual([12, 8]);
     expect(b.x).toBe(LAYOUT_COLUMNS - 1);
     expect(b.y).toBe(0);
   });
@@ -207,7 +208,7 @@ describe("remoteLayout", () => {
     expect(a.w).toBe(LAYOUT_COLUMNS);
     expect(a.h).toBe(1);
     expect(b.w).toBe(1);
-    expect(b.h).toBe(4);
+    expect(b.h).toBe(LAYOUT_MAX_ROWS);
   });
 
   it("round-trips through localStorage", () => {

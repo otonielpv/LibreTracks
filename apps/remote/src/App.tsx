@@ -184,6 +184,23 @@ const MASTER_SNAP_TARGET = 1.0;
 const MASTER_SNAP_THRESHOLD = MASTER_GAIN_MAX * 0.03;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
 const MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY = "libretracks.remote.mixerFilterActiveSong";
+
+const useMixerUiStore = create<{
+  filterActiveSong: boolean;
+  setFilterActiveSong: (value: boolean) => void;
+}>((set) => ({
+  filterActiveSong:
+    typeof window !== "undefined" &&
+    window.localStorage.getItem(MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY) === "1",
+  setFilterActiveSong: (value) => {
+    try {
+      window.localStorage.setItem(MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // Storage can be unavailable; the in-memory editor still works.
+    }
+    set({ filterActiveSong: value });
+  },
+}));
 const HIDDEN_MARKERS_STORAGE_KEY = "libretracks.remote.hiddenMarkerIds";
 const MAX_REMOTE_SIZE_LEVEL = 3;
 const TIMELINE_JITTER_RESET_THRESHOLD_SECONDS = 0.18;
@@ -2489,13 +2506,6 @@ function MixerStrip({
   );
 }
 
-function readMixerFilterActiveSong() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  return window.localStorage.getItem(MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY) === "1";
-}
-
 /**
  * Tracks which song region the live playhead is inside, re-rendering only
  * when that crosses a region boundary (not on every animation frame). Used
@@ -2622,24 +2632,16 @@ function SongMasterFader({ region }: { region: SongRegionSummary | null }) {
   );
 }
 
-function MixerView() {
+function useMixerWidgetModel() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const tracks = songView?.tracks ?? [];
   const folderPaletteMap = useMemo(() => buildFolderPaletteMap(tracks), [tracks]);
-
-  const [filterActiveSong, setFilterActiveSong] = useState(readMixerFilterActiveSong);
+  const filterActiveSong = useMixerUiStore((state) => state.filterActiveSong);
   const activeRegionId = useActiveRegionId();
   const activeRegion = useMemo(
     () => songView?.regions.find((region) => region.id === activeRegionId) ?? null,
     [songView, activeRegionId],
   );
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY,
-      filterActiveSong ? "1" : "0",
-    );
-  }, [filterActiveSong]);
 
   // Recomputed whenever the active region changes (a boundary crossing) or
   // the song view updates. The active region drives which clips count, so
@@ -2667,40 +2669,55 @@ function MixerView() {
   // has no target right now (matches the desktop compact-view behaviour).
   const filterAvailable = activeSongTrackIds !== null;
 
+  return { activeRegion, filterActiveSong, filterAvailable, folderPaletteMap, visibleTracks };
+}
+
+function MixerSongFilterWidget() {
+  const { filterActiveSong, filterAvailable } = useMixerWidgetModel();
+  const setFilterActiveSong = useMixerUiStore((state) => state.setFilterActiveSong);
+  return (
+    <div className="mixer-filter-widget">
+      <button
+        type="button"
+        className={`mixer-filter-toggle ${filterActiveSong ? "is-active" : ""}`}
+        aria-pressed={filterActiveSong}
+        disabled={!filterAvailable && !filterActiveSong}
+        title={filterActiveSong ? STRINGS.activeSongFilterOn : STRINGS.activeSongFilterOff}
+        onClick={() => setFilterActiveSong(!filterActiveSong)}
+      >
+        {STRINGS.activeSongOnly}
+      </button>
+    </div>
+  );
+}
+
+function MixerSongMasterWidget() {
+  const { activeRegion } = useMixerWidgetModel();
+  return <div className="mixer-master-widget"><SongMasterFader region={activeRegion} /></div>;
+}
+
+function MixerFadersWidget() {
+  const { folderPaletteMap, visibleTracks } = useMixerWidgetModel();
+  return (
+    <div className="mixer-scroll mixer-scroll-widget">
+      {visibleTracks.map((track) => {
+        const directPalette = paletteFromTrackColor(track.color);
+        const inheritedPalette = directPalette ? null : (folderPaletteMap.get(track.id) ?? null);
+        return <MixerStrip key={track.id} track={track} palette={directPalette ?? inheritedPalette} inheritsParentPalette={inheritedPalette !== null} />;
+      })}
+    </div>
+  );
+}
+
+function MixerView() {
+
   return (
     <section className="remote-panel remote-panel-mixer">
       <div className="mixer-filter-bar">
-        <button
-          type="button"
-          className={`mixer-filter-toggle ${filterActiveSong ? "is-active" : ""}`}
-          aria-pressed={filterActiveSong}
-          disabled={!filterAvailable && !filterActiveSong}
-          title={
-            filterActiveSong
-              ? STRINGS.activeSongFilterOn
-              : STRINGS.activeSongFilterOff
-          }
-          onClick={() => setFilterActiveSong((current) => !current)}
-        >
-          {STRINGS.activeSongOnly}
-        </button>
-        <SongMasterFader region={activeRegion} />
+        <MixerSongFilterWidget />
+        <MixerSongMasterWidget />
       </div>
-      <div className="mixer-scroll">
-        {visibleTracks.map((track) => {
-          const directPalette = paletteFromTrackColor(track.color);
-          const inheritedPalette = directPalette ? null : (folderPaletteMap.get(track.id) ?? null);
-
-          return (
-            <MixerStrip
-              key={track.id}
-              track={track}
-              palette={directPalette ?? inheritedPalette}
-              inheritsParentPalette={inheritedPalette !== null}
-            />
-          );
-        })}
-      </div>
+      <MixerFadersWidget />
     </section>
   );
 }
@@ -2998,12 +3015,14 @@ function TimelineWidget() {
   const snapshotReceivedAtMs = useRemoteSyncStore((state) => state.snapshotReceivedAtMs);
   const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
   return (
-    <SharedTimeline
-      songView={songView}
-      snapshot={snapshot}
-      snapshotReceivedAtMs={snapshotReceivedAtMs}
-      pendingJumpTargetId={pendingJumpTargetId}
-    />
+    <div className="timeline-widget-host">
+      <SharedTimeline
+        songView={songView}
+        snapshot={snapshot}
+        snapshotReceivedAtMs={snapshotReceivedAtMs}
+        pendingJumpTargetId={pendingJumpTargetId}
+      />
+    </div>
   );
 }
 
@@ -3051,53 +3070,57 @@ type WidgetDefinition = {
 // Binds every WidgetType to its component + palette metadata. The single source
 // of truth the canvas and the (Fase 2c) editor palette both read.
 const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
-  readouts: { labelKey: "widgetReadouts", Component: ReadoutsWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  readoutTime: { labelKey: "widgetReadoutTime", Component: ReadoutTimeWidget, defaultW: 2, defaultH: 1 },
-  readoutBar: { labelKey: "widgetReadoutBar", Component: ReadoutBarWidget, defaultW: 2, defaultH: 1 },
-  readoutBpm: { labelKey: "widgetReadoutBpm", Component: ReadoutBpmWidget, defaultW: 2, defaultH: 1 },
-  readoutSignature: { labelKey: "widgetReadoutSignature", Component: ReadoutSignatureWidget, defaultW: 2, defaultH: 1 },
-  readoutSong: { labelKey: "widgetReadoutSong", Component: ReadoutSongWidget, defaultW: 2, defaultH: 1 },
-  transportButtons: { labelKey: "widgetTransport", Component: TransportControlButtons, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  playButton: { labelKey: "play", Component: PlayButtonWidget, defaultW: 1, defaultH: 1 },
-  pauseButton: { labelKey: "pause", Component: PauseButtonWidget, defaultW: 1, defaultH: 1 },
-  stopButton: { labelKey: "stop", Component: StopButtonWidget, defaultW: 1, defaultH: 1 },
-  clickButton: { labelKey: "click", Component: ClickButtonWidget, defaultW: 1, defaultH: 1 },
-  guideButton: { labelKey: "guide", Component: GuideButtonWidget, defaultW: 1, defaultH: 1 },
-  timeline: { labelKey: "widgetTimeline", Component: TimelineWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  controlDeck: { labelKey: "widgetDeck", Component: DeckWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  deckVamp: { labelKey: "widgetDeckVamp", Component: VampSectionWidget, defaultW: 2, defaultH: 1 },
-  deckJump: { labelKey: "widgetDeckJump", Component: JumpSectionWidget, defaultW: 2, defaultH: 1 },
-  deckSong: { labelKey: "widgetDeckSong", Component: SongSectionWidget, defaultW: 2, defaultH: 1 },
-  deckRegion: { labelKey: "widgetDeckRegion", Component: RegionSectionWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  markerGrid: { labelKey: "widgetMarkers", Component: MarkerGrid, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  mixer: { labelKey: "widgetMixer", Component: MixerView, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
-  songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  clipList: { labelKey: "widgetClipList", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
-  nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 1, defaultH: 1 },
-  nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 1, defaultH: 1 },
-  currentKey: { labelKey: "widgetKey", Component: CurrentKeyWidgetHost, defaultW: 1, defaultH: 1 },
-  progressMarker: { labelKey: "widgetProgressMarker", Component: ProgressToMarkerWidgetHost, defaultW: 1, defaultH: 1 },
-  progressSong: { labelKey: "widgetProgressSong", Component: ProgressToSongWidgetHost, defaultW: 1, defaultH: 1 },
-  countdownMarkerBars: { labelKey: "widgetCountdownMarker", Component: CountdownMarkerBarsHost, defaultW: 1, defaultH: 1 },
-  countdownSongTime: { labelKey: "widgetCountdownSong", Component: CountdownSongTimeHost, defaultW: 1, defaultH: 1 },
+  readouts: { labelKey: "widgetReadouts", Component: ReadoutsWidget, defaultW: LAYOUT_COLUMNS, defaultH: 4 },
+  readoutTime: { labelKey: "widgetReadoutTime", Component: ReadoutTimeWidget, defaultW: 8, defaultH: 4 },
+  readoutBar: { labelKey: "widgetReadoutBar", Component: ReadoutBarWidget, defaultW: 8, defaultH: 4 },
+  readoutBpm: { labelKey: "widgetReadoutBpm", Component: ReadoutBpmWidget, defaultW: 8, defaultH: 4 },
+  readoutSignature: { labelKey: "widgetReadoutSignature", Component: ReadoutSignatureWidget, defaultW: 8, defaultH: 4 },
+  readoutSong: { labelKey: "widgetReadoutSong", Component: ReadoutSongWidget, defaultW: 8, defaultH: 4 },
+  transportButtons: { labelKey: "widgetTransport", Component: TransportControlButtons, defaultW: LAYOUT_COLUMNS, defaultH: 5 },
+  playButton: { labelKey: "play", Component: PlayButtonWidget, defaultW: 4, defaultH: 4 },
+  pauseButton: { labelKey: "pause", Component: PauseButtonWidget, defaultW: 4, defaultH: 4 },
+  stopButton: { labelKey: "stop", Component: StopButtonWidget, defaultW: 4, defaultH: 4 },
+  clickButton: { labelKey: "click", Component: ClickButtonWidget, defaultW: 4, defaultH: 4 },
+  guideButton: { labelKey: "guide", Component: GuideButtonWidget, defaultW: 4, defaultH: 4 },
+  timeline: { labelKey: "widgetTimeline", Component: TimelineWidget, defaultW: LAYOUT_COLUMNS, defaultH: 7 },
+  controlDeck: { labelKey: "widgetDeck", Component: DeckWidget, defaultW: LAYOUT_COLUMNS, defaultH: 9 },
+  deckVamp: { labelKey: "widgetDeckVamp", Component: VampSectionWidget, defaultW: 8, defaultH: 4 },
+  deckJump: { labelKey: "widgetDeckJump", Component: JumpSectionWidget, defaultW: 8, defaultH: 4 },
+  deckSong: { labelKey: "widgetDeckSong", Component: SongSectionWidget, defaultW: 8, defaultH: 4 },
+  deckRegion: { labelKey: "widgetDeckRegion", Component: RegionSectionWidget, defaultW: LAYOUT_COLUMNS, defaultH: 4 },
+  markerGrid: { labelKey: "widgetMarkers", Component: MarkerGrid, defaultW: LAYOUT_COLUMNS, defaultH: 12 },
+  mixer: { labelKey: "widgetMixer", Component: MixerView, defaultW: LAYOUT_COLUMNS, defaultH: 28 },
+  mixerSongFilter: { labelKey: "widgetMixerSongFilter", Component: MixerSongFilterWidget, defaultW: 8, defaultH: 4 },
+  mixerSongMaster: { labelKey: "widgetMixerSongMaster", Component: MixerSongMasterWidget, defaultW: 16, defaultH: 4 },
+  mixerFaders: { labelKey: "widgetMixerFaders", Component: MixerFadersWidget, defaultW: LAYOUT_COLUMNS, defaultH: 24 },
+  songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 4 },
+  clipList: { labelKey: "widgetClipList", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 8 },
+  nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 4, defaultH: 4 },
+  nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 4, defaultH: 4 },
+  currentKey: { labelKey: "widgetKey", Component: CurrentKeyWidgetHost, defaultW: 4, defaultH: 4 },
+  progressMarker: { labelKey: "widgetProgressMarker", Component: ProgressToMarkerWidgetHost, defaultW: 4, defaultH: 4 },
+  progressSong: { labelKey: "widgetProgressSong", Component: ProgressToSongWidgetHost, defaultW: 4, defaultH: 4 },
+  countdownMarkerBars: { labelKey: "widgetCountdownMarker", Component: CountdownMarkerBarsHost, defaultW: 4, defaultH: 4 },
+  countdownSongTime: { labelKey: "widgetCountdownSong", Component: CountdownSongTimeHost, defaultW: 4, defaultH: 4 },
 };
 
 /** Fixed pixel height of one grid row in the absolute (X/Y) layout. The grid
  * uses fixed-height rows so a widget's row-span maps to a predictable size and
  * drag math stays simple. */
-const ROW_HEIGHT_PX = 72;
+const ROW_HEIGHT_PX = 18;
+const GRID_GAP_PX = 2;
 
 /**
  * Renders one placed widget at its absolute grid cell (x/y, w/h). In edit mode
  * the whole top chrome is the move handle and a corner grip resizes it; both
  * only emit pointer-down — the canvas owns the move/resize math (it knows the
- * grid geometry). Width/height steppers + a remove button round out the chrome.
+ * grid geometry). The chrome only contains move/remove actions: dimensions are
+ * changed directly with the corner grip.
  */
 function LayoutWidgetHost({
   placement,
   editing,
   onRemove,
-  onResize,
   onMovePointerDown,
   onResizePointerDown,
   isDragging,
@@ -3105,7 +3128,6 @@ function LayoutWidgetHost({
   placement: WidgetPlacement;
   editing: boolean;
   onRemove: () => void;
-  onResize: (patch: { w?: number; h?: number }) => void;
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onResizePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   isDragging: boolean;
@@ -3118,7 +3140,7 @@ function LayoutWidgetHost({
 
   return (
     <div
-      className={`layout-widget ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""}`}
+      className={`layout-widget layout-widget-type-${placement.type} ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""}`}
       style={{
         gridColumn: `${placement.x + 1} / span ${Math.min(LAYOUT_COLUMNS, placement.w)}`,
         gridRow: `${placement.y + 1} / span ${placement.h}`,
@@ -3136,18 +3158,6 @@ function LayoutWidgetHost({
             <span className="layout-widget-title">⠿ {STRINGS[definition.labelKey]}</span>
           </div>
           <div className="layout-widget-sizers">
-            <div className="layout-sizer" role="group" aria-label={STRINGS.widthLabel}>
-              <span>{STRINGS.widthLabel}</span>
-              <button type="button" onClick={() => onResize({ w: placement.w - 1 })} disabled={placement.w <= 1}>-</button>
-              <strong>{placement.w}</strong>
-              <button type="button" onClick={() => onResize({ w: placement.w + 1 })} disabled={placement.w >= LAYOUT_COLUMNS}>+</button>
-            </div>
-            <div className="layout-sizer" role="group" aria-label={STRINGS.heightLabel}>
-              <span>{STRINGS.heightLabel}</span>
-              <button type="button" onClick={() => onResize({ h: placement.h - 1 })} disabled={placement.h <= 1}>-</button>
-              <strong>{placement.h}</strong>
-              <button type="button" onClick={() => onResize({ h: placement.h + 1 })} disabled={placement.h >= 4}>+</button>
-            </div>
             <button type="button" className="layout-widget-remove" onClick={onRemove}>
               {STRINGS.removeWidget}
             </button>
@@ -3178,12 +3188,17 @@ function LayoutWidgetHost({
 function WidgetPalette({
   onAdd,
   onDragAdd,
+  onClose,
 }: {
   onAdd: (type: WidgetType) => void;
   onDragAdd: (type: WidgetType, event: ReactPointerEvent<HTMLElement>) => void;
+  onClose: () => void;
 }) {
   return (
     <div className="layout-palette" role="group" aria-label={STRINGS.addWidget}>
+      <button type="button" className="layout-palette-close" onClick={onClose}>
+        × {STRINGS.hideWidgetPalette}
+      </button>
       {(Object.keys(WIDGET_REGISTRY) as WidgetType[]).map((type) => (
         <button
           key={type}
@@ -3313,7 +3328,7 @@ function LayoutTabBar({
  * The editable canvas: a tab bar plus the grid of the active tab's widgets.
  * In edit mode (Mixing-Station-style, on the current dense-flow grid) widgets
  * can be moved by dragging their chrome (with a drop-target indicator), resized
- * by dragging the corner grip (or the width/height steppers), removed, and
+ * by dragging the corner grip, removed, and
  * dropped in from the palette at a chosen position. Tabs can be added, renamed,
  * deleted, reordered and switched. All changes persist via onChange.
  */
@@ -3336,10 +3351,14 @@ function LayoutCanvas({
   const gestureRef = useRef<Gesture | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [pendingAddType, setPendingAddType] = useState<WidgetType | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const [dropPreview, setDropPreview] = useState<{
+    x: number; y: number; w: number; h: number; label: string;
+  } | null>(null);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
   const cellWidthRef = useRef(0);
-  const rowHeightRef = useRef(ROW_HEIGHT_PX);
+  const rowHeightRef = useRef(ROW_HEIGHT_PX + GRID_GAP_PX);
 
   const activeTab =
     layout.tabs.find((tab) => tab.id === layout.activeTabId) ?? layout.tabs[0];
@@ -3350,8 +3369,7 @@ function LayoutCanvas({
     const measure = () => {
       const el = gridRef.current;
       if (!el) return;
-      const gapTotal = 7.2 * (LAYOUT_COLUMNS - 1); // ~0.45rem gaps
-      cellWidthRef.current = Math.max(1, (el.clientWidth - gapTotal) / LAYOUT_COLUMNS);
+      cellWidthRef.current = Math.max(1, (el.clientWidth + GRID_GAP_PX) / LAYOUT_COLUMNS);
     };
     measure();
     if (typeof ResizeObserver === "undefined" || !gridRef.current) {
@@ -3415,7 +3433,7 @@ function LayoutCanvas({
           ? {
               ...widget,
               w: patch.w !== undefined ? Math.max(1, Math.min(LAYOUT_COLUMNS, patch.w)) : widget.w,
-              h: patch.h !== undefined ? Math.max(1, Math.min(4, patch.h)) : widget.h,
+              h: patch.h !== undefined ? Math.max(1, Math.min(LAYOUT_MAX_ROWS, patch.h)) : widget.h,
             }
           : widget,
       ),
@@ -3459,6 +3477,7 @@ function LayoutCanvas({
       grabDY: event.clientY - originY,
     };
     setDragId(id);
+    setDropPreview({ x: widget.x, y: widget.y, w: widget.w, h: widget.h, label: STRINGS[WIDGET_REGISTRY[widget.type].labelKey] });
     gridRef.current?.setPointerCapture?.(event.pointerId);
   };
 
@@ -3481,6 +3500,8 @@ function LayoutCanvas({
   const beginAdd = (type: WidgetType, event: ReactPointerEvent<HTMLElement>) => {
     gestureRef.current = { kind: "add", type };
     setPendingAddType(type);
+    const definition = WIDGET_REGISTRY[type];
+    setDropPreview({ x: 0, y: 0, w: definition.defaultW, h: definition.defaultH, label: STRINGS[definition.labelKey] });
     gridRef.current?.setPointerCapture?.(event.pointerId);
   };
 
@@ -3493,16 +3514,22 @@ function LayoutCanvas({
       const widget = widgets.find((w) => w.id === gesture.id);
       if (widget && (widget.x !== col || widget.y !== row)) {
         const maxX = LAYOUT_COLUMNS - widget.w;
-        updatePos(gesture.id, Math.min(col, Math.max(0, maxX)), row);
+        const x = Math.min(col, Math.max(0, maxX));
+        setDropPreview({ x, y: row, w: widget.w, h: widget.h, label: STRINGS[WIDGET_REGISTRY[widget.type].labelKey] });
+        updatePos(gesture.id, x, row);
       }
     } else if (gesture.kind === "resize") {
       const dw = Math.round((event.clientX - gesture.startX) / cellWidthRef.current);
       const dh = Math.round((event.clientY - gesture.startY) / rowHeightRef.current);
       const nextW = Math.max(1, Math.min(LAYOUT_COLUMNS, gesture.startW + dw));
-      const nextH = Math.max(1, Math.min(4, gesture.startH + dh));
+      const nextH = Math.max(1, Math.min(LAYOUT_MAX_ROWS, gesture.startH + dh));
       resizeWidget(gesture.id, { w: nextW, h: nextH });
+    } else if (gesture.kind === "add") {
+      const definition = WIDGET_REGISTRY[gesture.type];
+      const { col, row } = cellFromClient(event.clientX, event.clientY);
+      const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - definition.defaultW));
+      setDropPreview({ x, y: row, w: definition.defaultW, h: definition.defaultH, label: STRINGS[definition.labelKey] });
     }
-    // "add" only resolves its cell on pointer-up (below).
   };
 
   const onGridPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -3510,6 +3537,7 @@ function LayoutCanvas({
     gestureRef.current = null;
     setDragId(null);
     setPendingAddType(null);
+    setDropPreview(null);
     if (!gesture) return;
     if (gesture.kind === "add") {
       const definition = WIDGET_REGISTRY[gesture.type];
@@ -3536,7 +3564,13 @@ function LayoutCanvas({
   const gridRows = Math.max(
     6,
     widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0) + 2,
+    dropPreview ? dropPreview.y + dropPreview.h + 2 : 0,
   );
+  const singleFullHeightMixer = widgets.length === 1 && widgets[0]?.type === "mixer";
+  const classicMobileControls =
+    widgets.length === 5 &&
+    (["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"] as const)
+      .every((type, index) => widgets[index]?.type === type);
 
   return (
     <div className={`layout-canvas-wrap ${editing ? "is-editing" : ""}`}>
@@ -3550,18 +3584,31 @@ function LayoutCanvas({
         onDelete={deleteTab}
         onMove={moveTab}
       />
-      {editing ? <WidgetPalette onAdd={appendWidget} onDragAdd={beginAdd} /> : null}
+      {editing && paletteOpen ? (
+        <WidgetPalette
+          onAdd={appendWidget}
+          onDragAdd={beginAdd}
+          onClose={() => setPaletteOpen(false)}
+        />
+      ) : null}
+      {editing && !paletteOpen ? (
+        <button
+          type="button"
+          className="layout-palette-open"
+          onClick={() => setPaletteOpen(true)}
+        >
+          + {STRINGS.showWidgetPalette}
+        </button>
+      ) : null}
       {widgets.length === 0 && !editing ? (
         <div className="layout-canvas-empty">{STRINGS.emptyTab}</div>
       ) : (
         <div
           ref={gridRef}
-          className={`layout-canvas ${editing ? "is-editing" : ""} ${pendingAddType ? "is-adding" : ""}`}
+          className={`layout-canvas ${editing ? "is-editing" : ""} ${pendingAddType ? "is-adding" : ""} ${singleFullHeightMixer ? "is-single-full-height-mixer" : ""} ${classicMobileControls ? "is-classic-mobile-controls" : ""}`}
           style={{
             gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))`,
-            gridTemplateRows: editing
-              ? `repeat(${gridRows}, ${ROW_HEIGHT_PX}px)`
-              : `repeat(${gridRows}, minmax(min-content, auto))`,
+            gridTemplateRows: `repeat(${gridRows}, ${ROW_HEIGHT_PX}px)`,
           }}
           onPointerMove={editing ? onGridPointerMove : undefined}
           onPointerUp={editing ? onGridPointerUp : undefined}
@@ -3572,6 +3619,17 @@ function LayoutCanvas({
               {pendingAddType ? STRINGS.dropHere : STRINGS.emptyTab}
             </div>
           ) : null}
+          {editing && dropPreview ? (
+            <div
+              className="layout-drop-preview"
+              style={{
+                gridColumn: `${dropPreview.x + 1} / span ${dropPreview.w}`,
+                gridRow: `${dropPreview.y + 1} / span ${dropPreview.h}`,
+              }}
+            >
+              <span>{dropPreview.label}</span>
+            </div>
+          ) : null}
           {widgets.map((placement) => (
             <LayoutWidgetHost
               key={placement.id}
@@ -3579,7 +3637,6 @@ function LayoutCanvas({
               editing={editing}
               isDragging={dragId === placement.id}
               onRemove={() => removeWidget(placement.id)}
-              onResize={(patch) => resizeWidget(placement.id, patch)}
               onMovePointerDown={(event) => beginMove(placement.id, event)}
               onResizePointerDown={(event) => beginResize(placement.id, event)}
             />

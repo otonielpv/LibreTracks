@@ -61,6 +61,21 @@ describe("layout editor", () => {
     expect(palette).toBeTruthy();
     // Every default widget now shows a drag handle (its label as a button).
     expect(within(palette).getAllByRole("button").length).toBeGreaterThan(5);
+    // Dimensions are edited directly through the corner grip, not steppers.
+    expect(screen.queryByRole("group", { name: /width|ancho/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /height|alto/i })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /resize widget|redimensionar widget/i }).length)
+      .toBeGreaterThan(0);
+  });
+
+  it("can hide and restore the floating widget palette", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    fireEvent.click(screen.getByRole("button", { name: /hide widgets|ocultar widgets/i }));
+    expect(screen.queryByRole("group", { name: /add widget|añadir widget/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /show widgets|mostrar widgets/i }));
+    expect(screen.getByRole("group", { name: /add widget|añadir widget/i })).toBeTruthy();
   });
 
   it("adds a widget from the palette and persists the layout", () => {
@@ -160,6 +175,20 @@ describe("layout editor", () => {
     fireEvent.click(bpmItem);
     // The tile renders a BPM label somewhere on the canvas now.
     expect(screen.getAllByText(/^bpm$/i).length).toBeGreaterThan(0);
+  });
+
+  it("offers the mixer filter, song master and faders as separate widgets", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+
+    for (const name of [
+      /current song filter|filtro de canción actual/i,
+      /song master|master de canción/i,
+      /mixer faders|faders del mezclador/i,
+    ]) {
+      expect(within(palette).getAllByRole("button", { name }).length).toBeGreaterThan(0);
+    }
   });
 
   it("imports a layout file and persists it", async () => {
