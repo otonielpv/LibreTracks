@@ -144,6 +144,22 @@ LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
     return buf.c_str();
 }
 
+LT_API void lt_audio_engine_load_pad_clip(LtEngine* engine,
+                                          const char* pads_dir,
+                                          const char* pad_id,
+                                          int32_t key,
+                                          int32_t sample_rate) {
+    if (!engine || !pads_dir || !pad_id) return;
+    try {
+        as_impl(engine)->load_pad_clip_now(pads_dir, pad_id,
+                                           static_cast<int>(key),
+                                           static_cast<int>(sample_rate));
+    } catch (...) {
+        // A failed decode leaves the previous clip untouched; never throw across
+        // the FFI boundary.
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Cache maintenance — no engine handle required. These operate on the
 // env-resolved PCM cache directory ($LIBRETRACKS_CACHE_DIR), so the UI can

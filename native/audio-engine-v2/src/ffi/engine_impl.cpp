@@ -1302,6 +1302,27 @@ void EngineImpl::reload_pad_clip_for_new_sample_rate() {
     mixer_->set_pad_clip(std::move(clip));
 }
 
+void EngineImpl::load_pad_clip_now(const std::string& pads_dir,
+                                   const std::string& pad_id,
+                                   int key,
+                                   int sample_rate) {
+    if (!mixer_) return;
+    const int rate = sample_rate > 0
+        ? sample_rate
+        : (clock_ && clock_->sample_rate() > 0 ? clock_->sample_rate() : 48000);
+    const int clamped_key = std::clamp(key, 0, 11);
+    // Remember the source params so the active key can be re-decoded on a device
+    // SR change (matches the command-path bookkeeping).
+    pad_pads_dir_ = pads_dir;
+    pad_loaded_pad_id_ = pad_id;
+    pad_loaded_key_ = clamped_key;
+    // The slow part. Runs on the CALLER's thread (the Rust side deliberately
+    // does NOT hold its engine lock here), so decoding a 15-min MP3 never stalls
+    // playback or snapshots. The swap below is realtime-safe.
+    auto clip = load_pad_clip(pads_dir, pad_id, clamped_key, rate);
+    mixer_->set_pad_clip(std::move(clip));
+}
+
 void EngineImpl::rescale_session_for_new_sample_rate(int old_sr) {
     // Nothing to re-bake without the source JSON or a clock.
     if (current_project_json_.empty() || !clock_ || old_sr <= 0)
@@ -1708,18 +1729,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdLoadPadClip>) {
-            // Decode happens here on the command thread (never the audio thread).
-            const int rate = clock_ && clock_->sample_rate() > 0
-                ? clock_->sample_rate()
-                : 48000;
-            // Remember the source params so the active key can be re-decoded at
-            // the new device rate on an SR change (same reasoning as the voice
-            // guide bank above).
-            pad_pads_dir_ = c.pads_dir;
-            pad_loaded_pad_id_ = c.pad_id;
-            pad_loaded_key_ = std::clamp(c.key, 0, 11);
-            auto clip = load_pad_clip(c.pads_dir, c.pad_id, pad_loaded_key_, rate);
-            if (mixer_) mixer_->set_pad_clip(std::move(clip));
+            // NOTE: prefer the dedicated FFI (lt_audio_engine_load_pad_clip),
+            // which runs off the Rust engine lock. This command path is kept for
+            // completeness / tests; it decodes synchronously here.
+            load_pad_clip_now(c.pads_dir, c.pad_id, c.key, /*sample_rate=*/0);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdJumpToMarker>) {

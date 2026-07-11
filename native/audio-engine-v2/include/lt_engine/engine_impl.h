@@ -49,6 +49,17 @@ public:
     std::string  get_source_peaks(const std::string& source_id,
                                   int resolution_frames) const;
 
+    // Decode a pad key from disk and swap it into the renderer, RIGHT NOW, on
+    // the calling thread. Bypasses the command queue so the (multi-second) MP3
+    // decode of a ~15-min pad does NOT run under the caller's engine lock — the
+    // Rust side calls this WITHOUT holding its state lock, so playback/snapshots
+    // never stall. The swap itself is a realtime-safe atomic shared_ptr store.
+    // `sample_rate <= 0` uses the current device rate.
+    void load_pad_clip_now(const std::string& pads_dir,
+                           const std::string& pad_id,
+                           int key,
+                           int sample_rate);
+
 private:
     // ── State machine ────────────────────────────────────────────────────
     enum class State { Created, Initialized, ShutDown };

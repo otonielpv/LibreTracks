@@ -57,6 +57,13 @@ extern "C" {
         file_path: *const c_char,
         resolution_frames: i32,
     ) -> *const c_char;
+    pub fn lt_audio_engine_load_pad_clip(
+        engine: *mut LtEngine,
+        pads_dir: *const c_char,
+        pad_id: *const c_char,
+        key: i32,
+        sample_rate: i32,
+    );
     pub fn lt_audio_engine_source_cache_dir() -> *const c_char;
     pub fn lt_audio_engine_source_cache_size_bytes() -> u64;
     pub fn lt_audio_engine_purge_source_cache() -> u64;
@@ -194,6 +201,18 @@ pub unsafe fn lt_audio_engine_get_source_peaks(
 ))]
 pub unsafe fn lt_audio_engine_analyze_file_peaks(_: *const c_char, _: i32) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_load_pad_clip(
+    _: *mut LtEngine,
+    _: *const c_char,
+    _: *const c_char,
+    _: i32,
+    _: i32,
+) {
 }
 #[cfg(any(
     feature = "no-link",

@@ -1386,16 +1386,41 @@ impl AudioController {
 
     /// Decode a single ambient-pad key from disk and swap it into the renderer.
     /// `pads_dir` is the installed-pads base dir (resolved by the command
-    /// layer). Decoding happens on the engine command thread.
+    /// layer).
+    ///
+    /// The (multi-second) MP3 decode of a ~15-min pad runs WITHOUT the engine
+    /// state lock held: we take the lock only briefly to obtain a detached
+    /// `PadClipLoader`, release it, and then decode. Previously this ran the
+    /// decode under `with_engine_state`, holding `self.state` for seconds — and
+    /// `engine_snapshot` (polled constantly for meters/playhead) takes the same
+    /// lock, so the whole UI and playback froze on every key change. See the
+    /// engine-lock-wait freeze notes.
     pub fn load_pad_clip(&self, pads_dir: &str, pad_id: &str, key: i32) -> Result<(), DesktopError> {
-        self.with_engine_state("load_pad_clip", None, |engine, _state| {
-            engine.send_command(&EngineCommand::LoadPadClip {
-                pads_dir: pads_dir.to_string(),
-                pad_id: pad_id.to_string(),
-                key,
-            })?;
-            Ok(())
-        })
+        // Brief lock: ensure the engine exists and grab the detached loader.
+        let loader = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
+            if state.engine.is_none() {
+                let engine =
+                    Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+                engine
+                    .initialize()
+                    .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+                state.engine = Some(engine);
+            }
+            state
+                .engine
+                .as_ref()
+                .expect("engine initialized above")
+                .pad_loader()
+            // lock dropped here
+        };
+        // Slow decode + atomic swap, OFF the lock. sample_rate=0 → engine uses
+        // its current device rate.
+        loader.load(pads_dir, pad_id, key, 0);
+        Ok(())
     }
 
     pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {

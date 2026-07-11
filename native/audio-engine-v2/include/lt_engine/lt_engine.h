@@ -117,6 +117,17 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
 LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
                                                       int32_t resolution_frames);
 
+/** Decode a pad key (`<pads_dir>/<pad_id>/<key>.<ext>`) and swap it into the
+ *  ambient-pad renderer immediately, on the calling thread. Intended to be
+ *  called WITHOUT holding the host's engine lock, so the multi-second MP3
+ *  decode of a long pad never stalls playback. `sample_rate <= 0` uses the
+ *  current device rate. The swap itself is realtime-safe. */
+LT_API void lt_audio_engine_load_pad_clip(LtEngine* engine,
+                                          const char* pads_dir,
+                                          const char* pad_id,
+                                          int32_t key,
+                                          int32_t sample_rate);
+
 // ---------------------------------------------------------------------------
 // Decoding cache maintenance (no engine handle required)
 //

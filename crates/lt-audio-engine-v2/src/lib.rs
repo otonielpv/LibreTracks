@@ -69,6 +69,49 @@ struct SourcePeaksResponse {
 // does not expose &-sharing across threads.
 unsafe impl Send for Engine {}
 
+/// A detached handle for loading an ambient-pad key WITHOUT holding the host's
+/// engine lock. The host briefly locks to obtain this (via `Engine::pad_loader`)
+/// then releases the lock and runs the (slow) decode through it, so a ~15-min
+/// MP3 decode never stalls playback or snapshots. The underlying FFI decodes on
+/// the calling thread and swaps the clip in atomically (realtime-safe). Only
+/// valid while the engine it came from is alive; the host guarantees that (the
+/// engine is never dropped between obtaining the loader and using it).
+#[derive(Clone, Copy)]
+pub struct PadClipLoader {
+    handle: *mut LtEngine,
+}
+
+// SAFETY: the FFI target only decodes a file and performs an atomic shared_ptr
+// swap into the mixer; it touches no non-thread-safe engine state. It is
+// therefore safe to invoke from a worker thread while the engine's own lock is
+// not held.
+unsafe impl Send for PadClipLoader {}
+
+impl PadClipLoader {
+    /// Decode `<pads_dir>/<pad_id>/<key>.<ext>` and swap it into the pad
+    /// renderer. Blocks for the decode duration (call off the engine lock, e.g.
+    /// on a blocking task). `sample_rate <= 0` uses the current device rate.
+    pub fn load(&self, pads_dir: &str, pad_id: &str, key: i32, sample_rate: i32) {
+        let pads_dir = match std::ffi::CString::new(pads_dir) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let pad_id = match std::ffi::CString::new(pad_id) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        unsafe {
+            lt_audio_engine_load_pad_clip(
+                self.handle,
+                pads_dir.as_ptr(),
+                pad_id.as_ptr(),
+                key,
+                sample_rate,
+            );
+        }
+    }
+}
+
 impl Engine {
     /// Allocate a new engine instance.
     pub fn new() -> Result<Self, EngineError> {
@@ -176,6 +219,15 @@ impl Engine {
     /// Call once before dispatching a batch of `send_command` calls.
     pub fn service_control_thread(&self) {
         unsafe { lt_audio_engine_service_control_thread(self.handle) };
+    }
+
+    /// Obtain a detached [`PadClipLoader`] for decoding a pad key off the host's
+    /// engine lock. Grab this under a brief lock, drop the lock, then call
+    /// `.load(...)` so the slow MP3 decode never blocks playback/snapshots.
+    pub fn pad_loader(&self) -> PadClipLoader {
+        PadClipLoader {
+            handle: self.handle,
+        }
     }
 
     /// Drain all pending events from the engine.
