@@ -82,6 +82,27 @@ describe("layout editor", () => {
     expect(window.localStorage.getItem("libretracks.remote.layout")).toBeNull();
   });
 
+  it("song-header and clip-list widgets are available in the palette and mount", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+
+    // Both new widgets are offered.
+    const songHeader = within(palette).getAllByRole("button", {
+      name: /song header|cabecera de canción/i,
+    });
+    const clipList = within(palette).getAllByRole("button", {
+      name: /clip list|lista de clips/i,
+    });
+    expect(songHeader.length).toBeGreaterThan(0);
+    expect(clipList.length).toBeGreaterThan(0);
+
+    // Adding the clip list mounts it; with no song view it shows the empty
+    // "no active song" state rather than throwing.
+    fireEvent.click(clipList[0]);
+    expect(screen.getAllByText(/no active song|sin canción activa/i).length).toBeGreaterThan(0);
+  });
+
   it("imports a layout file and persists it", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));

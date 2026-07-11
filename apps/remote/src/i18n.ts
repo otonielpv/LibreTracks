@@ -111,6 +111,13 @@ const STRINGS = {
     exportLayout: "Export",
     importLayout: "Import",
     importFailed: "That file isn't a valid LibreTracks layout.",
+    widgetSongHeader: "Song header",
+    widgetClipList: "Clip list",
+    songScope: "Song scope",
+    scopeActive: "Active",
+    scopeAll: "All",
+    songNoActive: "No active song",
+    songNoClips: "No clips",
   },
   es: {
     appTitle: "Remote",
@@ -199,6 +206,13 @@ const STRINGS = {
     exportLayout: "Exportar",
     importLayout: "Importar",
     importFailed: "Ese archivo no es un layout válido de LibreTracks.",
+    widgetSongHeader: "Cabecera de canción",
+    widgetClipList: "Lista de clips",
+    songScope: "Ámbito de canción",
+    scopeActive: "Activa",
+    scopeAll: "Todas",
+    songNoActive: "Sin canción activa",
+    songNoClips: "Sin clips",
   },
 } as const;
 

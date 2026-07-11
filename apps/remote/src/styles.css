@@ -2753,3 +2753,202 @@ button {
 .layout-import-input {
   display: none;
 }
+
+/* ------------------------------------------------------------------ */
+/* Song header + clip list widgets (compact/Ableton projection).      */
+/* ------------------------------------------------------------------ */
+.song-header-widget,
+.clip-list-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.song-widget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.song-widget-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.song-scope-toggle {
+  display: inline-flex;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.song-scope-toggle button {
+  padding: 0.2rem 0.6rem;
+  border: none;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.song-scope-toggle button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.song-widget-empty,
+.clip-stack-empty {
+  padding: 0.6rem;
+  border: 1px dashed var(--outline);
+  border-radius: 0.6rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+/* Active = one column; All = Ableton-style horizontal scroll of columns. */
+.song-header-columns {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.song-header-columns.is-all {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.song-header-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.7rem;
+  background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+}
+
+.song-header-columns.is-all .song-header-column {
+  flex: 0 0 14rem;
+}
+
+.song-header-column.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--outline));
+}
+
+.song-header-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.song-header-play {
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.song-header-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.song-header-bpm,
+.song-header-key {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.4rem;
+  background: rgb(255 255 255 / 0.06);
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.song-header-key {
+  color: var(--accent);
+}
+
+.clip-list-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow-y: auto;
+}
+
+.clip-list-group-title {
+  position: sticky;
+  top: 0;
+  padding: 0.25rem 0.4rem;
+  margin-bottom: 0.3rem;
+  border-radius: 0.4rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.clip-entry {
+  --lt-track-color: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--outline);
+  border-left: 3px solid var(--lt-track-color, var(--outline));
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+
+.clip-entry.is-coloured {
+  border-left-color: var(--lt-track-color);
+}
+
+.clip-entry-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-entry.is-coloured .clip-entry-name {
+  color: color-mix(in srgb, var(--lt-track-color) 55%, var(--text));
+}
+
+.clip-entry-track {
+  font-size: 0.66rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

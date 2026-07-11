@@ -78,6 +78,13 @@ import {
   type WidgetPlacement,
   type WidgetType,
 } from "./remoteLayout";
+import {
+  bpmForRegion,
+  clipsForRegion,
+  formatBpm,
+  keyForRegion,
+  type SongClipEntry,
+} from "./songWidgets";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 type JumpMode = "immediate" | "next_marker" | "after_bars";
@@ -424,6 +431,24 @@ function sendSettingsUpdate(settings: AppSettings) {
   sendCommand({
     cmd: "updateSettings",
     settings,
+  });
+}
+
+/**
+ * Schedule a jump to a song region honouring the project's global song-jump
+ * config (trigger + transition), read from the jump store. Shared by the
+ * control deck and the song-header widget so "play this song" behaves the same
+ * everywhere — same path the desktop compact view's per-song play uses.
+ */
+function scheduleRegionJumpFromStore(regionId: string) {
+  const jump = useRemoteJumpStore.getState();
+  sendCommand({
+    cmd: "scheduleRegionJump",
+    targetRegionId: regionId,
+    trigger: jump.songTrigger,
+    bars: jump.songTrigger === "after_bars" ? jump.songBars : undefined,
+    transition: jump.songTransition,
+    durationSeconds: jump.songTransition === "fade_out" ? 0.35 : undefined,
   });
 }
 
@@ -1505,16 +1530,7 @@ function ControlDeck() {
     sendCommand({ cmd: "cancelMarkerJump" });
   };
 
-  const scheduleRegionJump = (regionId: string) => {
-    sendCommand({
-      cmd: "scheduleRegionJump",
-      targetRegionId: regionId,
-      trigger: songTrigger,
-      bars: songTrigger === "after_bars" ? songBars : undefined,
-      transition: songTransition,
-      durationSeconds: songTransition === "fade_out" ? 0.35 : undefined,
-    });
-  };
+  const scheduleRegionJump = scheduleRegionJumpFromStore;
 
   const updateSelectedRegionTranspose = (delta: number) => {
     if (!selectedRegion) {
@@ -2604,6 +2620,204 @@ function MixerView() {
 }
 
 // ---------------------------------------------------------------------------
+// Song widgets: the remote's projection of the desktop compact (Ableton) view.
+// Two pieces the user asked for — the song header (play + name + master fader +
+// BPM + key) and the clip list — each toggleable between "active song" and
+// "all songs" (all songs = Ableton-style columns, the whole set at once).
+// ---------------------------------------------------------------------------
+
+type SongWidgetScope = "active" | "all";
+
+/** Per-device persisted Active/All toggle for the song widgets. */
+function useSongScope(storageKey: string): [SongWidgetScope, (scope: SongWidgetScope) => void] {
+  const [scope, setScope] = useState<SongWidgetScope>(() => {
+    if (typeof window === "undefined") return "active";
+    return window.localStorage.getItem(storageKey) === "all" ? "all" : "active";
+  });
+  const update = useCallback(
+    (next: SongWidgetScope) => {
+      setScope(next);
+      try {
+        window.localStorage.setItem(storageKey, next);
+      } catch {
+        // Storage blocked — keep the in-memory choice only.
+      }
+    },
+    [storageKey],
+  );
+  return [scope, update];
+}
+
+/** Active/All segmented toggle shared by both song widgets. */
+function SongScopeToggle({
+  scope,
+  onChange,
+}: {
+  scope: SongWidgetScope;
+  onChange: (scope: SongWidgetScope) => void;
+}) {
+  return (
+    <div className="song-scope-toggle" role="group" aria-label={STRINGS.songScope}>
+      <button
+        type="button"
+        className={scope === "active" ? "is-active" : ""}
+        onClick={() => onChange("active")}
+      >
+        {STRINGS.scopeActive}
+      </button>
+      <button
+        type="button"
+        className={scope === "all" ? "is-active" : ""}
+        onClick={() => onChange("all")}
+      >
+        {STRINGS.scopeAll}
+      </button>
+    </div>
+  );
+}
+
+/** The header row for one song: play + name + BPM + key + master fader. */
+function SongHeaderColumn({
+  region,
+  bpm,
+  isActive,
+}: {
+  region: SongRegionSummary;
+  bpm: number;
+  isActive: boolean;
+}) {
+  const key = keyForRegion(region);
+  return (
+    <div className={`song-header-column ${isActive ? "is-active" : ""}`}>
+      <div className="song-header-name-row">
+        <button
+          type="button"
+          className="song-header-play"
+          aria-label={`${STRINGS.play} ${region.name}`}
+          title={`${STRINGS.play} ${region.name}`}
+          onClick={() => scheduleRegionJumpFromStore(region.id)}
+        >
+          ▶
+        </button>
+        <div className="song-header-name" title={region.name}>
+          {region.name}
+        </div>
+        <div className="song-header-bpm">{formatBpm(bpm)} BPM</div>
+        {key ? <div className="song-header-key">{key}</div> : null}
+      </div>
+      <SongMasterFader region={region} />
+    </div>
+  );
+}
+
+/**
+ * Song header widget: play + name + master fader + BPM + key. In "active" mode
+ * it shows the song under the playhead; in "all" mode, an Ableton-style row of
+ * columns, one per song (horizontal scroll).
+ */
+function SongHeaderWidget() {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  const [scope, setScope] = useSongScope("libretracks.remote.songHeaderScope");
+  const activeRegionId = useActiveRegionId();
+  const regions = songView?.regions ?? [];
+  const activeReg = regions.find((region) => region.id === activeRegionId) ?? null;
+
+  const shown = scope === "all" ? regions : activeReg ? [activeReg] : [];
+
+  return (
+    <div className="song-header-widget">
+      <div className="song-widget-head">
+        <span className="song-widget-title">{STRINGS.widgetSongHeader}</span>
+        <SongScopeToggle scope={scope} onChange={setScope} />
+      </div>
+      {shown.length === 0 ? (
+        <div className="song-widget-empty">{STRINGS.songNoActive}</div>
+      ) : (
+        <div className={`song-header-columns ${scope === "all" ? "is-all" : ""}`}>
+          {shown.map((region) => (
+            <SongHeaderColumn
+              key={region.id}
+              region={region}
+              bpm={bpmForRegion(songView, region)}
+              isActive={region.id === activeRegionId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A vertical stack of clip cards for one region (name + track, tinted). */
+function ClipStack({ clips }: { clips: SongClipEntry[] }) {
+  if (clips.length === 0) {
+    return <div className="clip-stack-empty">{STRINGS.songNoClips}</div>;
+  }
+  return (
+    <div className="clip-stack">
+      {clips.map((clip) => (
+        <div
+          key={clip.id}
+          className={`clip-entry ${clip.trackColor ? "is-coloured" : ""}`}
+          style={
+            clip.trackColor
+              ? ({ "--lt-track-color": clip.trackColor } as CSSProperties)
+              : undefined
+          }
+        >
+          <span className="clip-entry-name" title={clip.clipName}>
+            {clip.clipName}
+          </span>
+          <span className="clip-entry-track" title={clip.trackName}>
+            {clip.trackName}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Clip list widget: the clips inside a song. In "active" mode, the song under
+ * the playhead; in "all" mode, every song's full clip set grouped by song (the
+ * whole set at once, no per-song selection).
+ */
+function ClipListWidget() {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  const [scope, setScope] = useSongScope("libretracks.remote.clipListScope");
+  const activeRegionId = useActiveRegionId();
+  const regions = songView?.regions ?? [];
+  const activeReg = regions.find((region) => region.id === activeRegionId) ?? null;
+
+  const shown = scope === "all" ? regions : activeReg ? [activeReg] : [];
+
+  return (
+    <div className="clip-list-widget">
+      <div className="song-widget-head">
+        <span className="song-widget-title">{STRINGS.widgetClipList}</span>
+        <SongScopeToggle scope={scope} onChange={setScope} />
+      </div>
+      {shown.length === 0 ? (
+        <div className="song-widget-empty">{STRINGS.songNoActive}</div>
+      ) : (
+        <div className={`clip-list-groups ${scope === "all" ? "is-all" : ""}`}>
+          {shown.map((region) => (
+            <div key={region.id} className="clip-list-group">
+              {scope === "all" ? (
+                <div className="clip-list-group-title" title={region.name}>
+                  {region.name}
+                </div>
+              ) : null}
+              <ClipStack clips={clipsForRegion(songView, region)} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Layout widgets: thin, prop-free wrappers so every block can be placed on the
 // layout canvas the same way. Each pulls what it needs from the stores.
 // ---------------------------------------------------------------------------
@@ -2703,6 +2917,8 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   controlDeck: { labelKey: "widgetDeck", Component: ControlDeck, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
   markerGrid: { labelKey: "widgetMarkers", Component: MarkerGrid, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
   mixer: { labelKey: "widgetMixer", Component: MixerView, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
+  songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  clipList: { labelKey: "widgetClipList", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
   nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 1, defaultH: 1 },
   nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 1, defaultH: 1 },
   currentKey: { labelKey: "widgetKey", Component: CurrentKeyWidgetHost, defaultW: 1, defaultH: 1 },

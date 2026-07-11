@@ -18,6 +18,8 @@ export type WidgetType =
   | "controlDeck"
   | "markerGrid"
   | "mixer"
+  | "songHeader"
+  | "clipList"
   | "nextMarker"
   | "nextSong"
   | "currentKey"
@@ -33,6 +35,8 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "controlDeck",
   "markerGrid",
   "mixer",
+  "songHeader",
+  "clipList",
   "nextMarker",
   "nextSong",
   "currentKey",
