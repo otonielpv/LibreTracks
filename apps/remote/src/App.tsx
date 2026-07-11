@@ -334,6 +334,57 @@ const useRemoteJumpStore = create<RemoteJumpState>()((set) => ({
   },
 }));
 
+type RemoteUiState = {
+  /** Region whose markers/transpose the control deck acts on. */
+  selectedRegionId: string | null;
+  /** Which inline settings sheet (vamp/jump/song) is open in the deck. */
+  activePanel: RemotePanelKey | null;
+  /** Marker ids hidden from the jump grid, mirrored to localStorage. */
+  hiddenMarkerIds: Set<string>;
+  /** Whether hidden markers are temporarily revealed (dimmed) for restoring. */
+  revealHiddenMarkers: boolean;
+  setSelectedRegionId: (regionId: string | null) => void;
+  setActivePanel: (panel: RemotePanelKey | null) => void;
+  toggleActivePanel: (panel: RemotePanelKey) => void;
+  toggleMarkerHidden: (markerId: string) => void;
+  setRevealHiddenMarkers: (reveal: boolean) => void;
+};
+
+// UI state shared by the (soon independent) control-deck and marker-grid
+// widgets. Lifted out of TransportView so each can be an autonomous widget on
+// the layout canvas without prop-drilling. `hiddenMarkerIds` keeps its
+// localStorage persistence here so the store stays the single source of truth.
+const useRemoteUiStore = create<RemoteUiState>()((set) => ({
+  selectedRegionId: null,
+  activePanel: null,
+  hiddenMarkerIds: readHiddenMarkerIds(),
+  revealHiddenMarkers: false,
+  setSelectedRegionId: (selectedRegionId) => {
+    set({ selectedRegionId });
+  },
+  setActivePanel: (activePanel) => {
+    set({ activePanel });
+  },
+  toggleActivePanel: (panel) => {
+    set((state) => ({ activePanel: state.activePanel === panel ? null : panel }));
+  },
+  toggleMarkerHidden: (markerId) => {
+    set((state) => {
+      const next = new Set(state.hiddenMarkerIds);
+      if (next.has(markerId)) {
+        next.delete(markerId);
+      } else {
+        next.add(markerId);
+      }
+      writeHiddenMarkerIds(next);
+      return { hiddenMarkerIds: next };
+    });
+  },
+  setRevealHiddenMarkers: (revealHiddenMarkers) => {
+    set({ revealHiddenMarkers });
+  },
+}));
+
 function getSocketUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/ws`;
@@ -1474,11 +1525,28 @@ function LiveWidgetsRow() {
   );
 }
 
-function TransportView() {
+/**
+ * Section markers navigable from the remote — dynamic cues (Build, All In, ...)
+ * are spoken by the voice guide, not jump destinations, so they're excluded.
+ */
+function useSectionMarkers() {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  return (songView?.sectionMarkers ?? []).filter(
+    (marker) => markerKindCategory(marker.kind) === "section",
+  );
+}
+
+/**
+ * The control deck: Vamp/Loop, Jump config, Song transition, the region
+ * carousel with transpose, and the inline settings sheets. Reads its shared UI
+ * state (selected region, open panel) from `useRemoteUiStore` and its jump
+ * config from `useRemoteJumpStore`, so it stands alone as a layout widget with
+ * no props. Behaviour is unchanged from the former inline TransportView block.
+ */
+function ControlDeck() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
   const settings = useRemoteSyncStore((state) => state.settings);
-  const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
   const jumpMode = useRemoteJumpStore((state) => state.mode);
   const jumpBars = useRemoteJumpStore((state) => state.bars);
   const songTrigger = useRemoteJumpStore((state) => state.songTrigger);
@@ -1493,35 +1561,15 @@ function TransportView() {
   const setSongTransition = useRemoteJumpStore((state) => state.setSongTransition);
   const setVampMode = useRemoteJumpStore((state) => state.setVampMode);
   const setVampBars = useRemoteJumpStore((state) => state.setVampBars);
-  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
-  // Per-marker visibility: users hide individual jump buttons they never use.
-  // Persisted as a set of marker ids in localStorage.
-  const [hiddenMarkerIds, setHiddenMarkerIds] = useState<Set<string>>(
-    readHiddenMarkerIds,
-  );
-  const [revealHiddenMarkers, setRevealHiddenMarkers] = useState(false);
+  const selectedRegionId = useRemoteUiStore((state) => state.selectedRegionId);
+  const setSelectedRegionId = useRemoteUiStore((state) => state.setSelectedRegionId);
+  const activePanel = useRemoteUiStore((state) => state.activePanel);
+  const setActivePanel = useRemoteUiStore((state) => state.setActivePanel);
+  const toggleActivePanel = useRemoteUiStore((state) => state.toggleActivePanel);
 
-  const toggleMarkerHidden = useCallback((markerId: string) => {
-    setHiddenMarkerIds((current) => {
-      const next = new Set(current);
-      if (next.has(markerId)) {
-        next.delete(markerId);
-      } else {
-        next.add(markerId);
-      }
-      writeHiddenMarkerIds(next);
-      return next;
-    });
-  }, []);
-  // Only section markers are navigable from the remote — dynamic cues (Build,
-  // All In, ...) are spoken by the voice guide, not jump destinations.
-  const markers = (songView?.sectionMarkers ?? []).filter(
-    (marker) => markerKindCategory(marker.kind) === "section",
-  );
   const regions = songView?.regions ?? [];
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
-  const [activePanel, setActivePanel] = useState<RemotePanelKey | null>(null);
 
   const patchRemoteSettings = (patch: Partial<AppSettings>) => {
     if (!settings) {
@@ -1572,33 +1620,7 @@ function TransportView() {
     regions.find((region) => region.id === selectedRegionId) ??
     regions[0] ??
     null;
-  const visibleMarkers = selectedRegion
-    ? markers.filter(
-        (marker) =>
-          marker.startSeconds >= selectedRegion.startSeconds &&
-          marker.startSeconds <= selectedRegion.endSeconds,
-      )
-    : markers;
-  // The markers hidden by the user within the current region — drives the
-  // "show hidden (N)" affordance. When revealing, hidden cards render dimmed
-  // with a restore button; otherwise they're filtered out entirely.
-  const hiddenVisibleMarkers = visibleMarkers.filter((marker) =>
-    hiddenMarkerIds.has(marker.id),
-  );
-  const shownMarkers = revealHiddenMarkers
-    ? visibleMarkers
-    : visibleMarkers.filter((marker) => !hiddenMarkerIds.has(marker.id));
   const pendingJumpMode = parsePendingJumpMode(pendingJump?.trigger);
-
-  const scheduleJump = (markerId: string) => {
-    useOptimisticStore.getState().setPendingJumpTarget(markerId);
-    sendCommand({
-      cmd: "scheduleMarkerJump",
-      targetMarkerId: markerId,
-      trigger: jumpMode,
-      bars: jumpMode === "after_bars" ? jumpBars : undefined,
-    });
-  };
 
   const cancelJump = () => {
     useOptimisticStore.getState().setPendingJumpTarget(null);
@@ -1834,10 +1856,7 @@ function TransportView() {
   );
 
   return (
-    <section className="remote-panel">
-      <LiveWidgetsRow />
-
-      <div className="transport-control-deck">
+    <div className="transport-control-deck">
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
@@ -1848,7 +1867,7 @@ function TransportView() {
               type="button"
               className={`group-settings-button ${activePanel === "vamp" ? "is-active" : ""}`}
               aria-expanded={activePanel === "vamp"}
-              onClick={() => setActivePanel((current) => (current === "vamp" ? null : "vamp"))}
+              onClick={() => toggleActivePanel("vamp")}
             >
               {STRINGS.settings}
             </button>
@@ -1871,7 +1890,7 @@ function TransportView() {
               type="button"
               className={`group-settings-button ${activePanel === "jump" ? "is-active" : ""}`}
               aria-expanded={activePanel === "jump"}
-              onClick={() => setActivePanel((current) => (current === "jump" ? null : "jump"))}
+              onClick={() => toggleActivePanel("jump")}
             >
               {STRINGS.settings}
             </button>
@@ -1894,7 +1913,7 @@ function TransportView() {
               type="button"
               className={`group-settings-button ${activePanel === "song" ? "is-active" : ""}`}
               aria-expanded={activePanel === "song"}
-              onClick={() => setActivePanel((current) => (current === "song" ? null : "song"))}
+              onClick={() => toggleActivePanel("song")}
             >
               {STRINGS.settings}
             </button>
@@ -1986,14 +2005,77 @@ function TransportView() {
           </div>
         ) : null}
       </div>
+  );
+}
 
+/**
+ * The jump grid: one card per section marker in the selected region, plus the
+ * "show hidden" affordance. Schedules/cancels marker jumps and toggles
+ * per-marker visibility. Reads selected region and hidden-marker state from
+ * `useRemoteUiStore`, so it's an autonomous layout widget. Behaviour is
+ * unchanged from the former inline TransportView block.
+ */
+function MarkerGrid() {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  const snapshot = useRemoteSyncStore((state) => state.snapshot);
+  const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
+  const jumpMode = useRemoteJumpStore((state) => state.mode);
+  const jumpBars = useRemoteJumpStore((state) => state.bars);
+  const selectedRegionId = useRemoteUiStore((state) => state.selectedRegionId);
+  const hiddenMarkerIds = useRemoteUiStore((state) => state.hiddenMarkerIds);
+  const revealHiddenMarkers = useRemoteUiStore((state) => state.revealHiddenMarkers);
+  const toggleMarkerHidden = useRemoteUiStore((state) => state.toggleMarkerHidden);
+  const setRevealHiddenMarkers = useRemoteUiStore((state) => state.setRevealHiddenMarkers);
+
+  const markers = useSectionMarkers();
+  const regions = songView?.regions ?? [];
+  const pendingJump = snapshot?.pendingMarkerJump ?? null;
+
+  const selectedRegion =
+    regions.find((region) => region.id === selectedRegionId) ??
+    regions[0] ??
+    null;
+  const visibleMarkers = selectedRegion
+    ? markers.filter(
+        (marker) =>
+          marker.startSeconds >= selectedRegion.startSeconds &&
+          marker.startSeconds <= selectedRegion.endSeconds,
+      )
+    : markers;
+  // The markers hidden by the user within the current region — drives the
+  // "show hidden (N)" affordance. When revealing, hidden cards render dimmed
+  // with a restore button; otherwise they're filtered out entirely.
+  const hiddenVisibleMarkers = visibleMarkers.filter((marker) =>
+    hiddenMarkerIds.has(marker.id),
+  );
+  const shownMarkers = revealHiddenMarkers
+    ? visibleMarkers
+    : visibleMarkers.filter((marker) => !hiddenMarkerIds.has(marker.id));
+
+  const scheduleJump = (markerId: string) => {
+    useOptimisticStore.getState().setPendingJumpTarget(markerId);
+    sendCommand({
+      cmd: "scheduleMarkerJump",
+      targetMarkerId: markerId,
+      trigger: jumpMode,
+      bars: jumpMode === "after_bars" ? jumpBars : undefined,
+    });
+  };
+
+  const cancelJump = () => {
+    useOptimisticStore.getState().setPendingJumpTarget(null);
+    sendCommand({ cmd: "cancelMarkerJump" });
+  };
+
+  return (
+    <div className="marker-grid-shell">
       {hiddenVisibleMarkers.length > 0 ? (
         <div className="marker-grid-header">
           <button
             type="button"
             className={`marker-grid-toggle ${revealHiddenMarkers ? "is-on" : ""}`}
             aria-pressed={revealHiddenMarkers}
-            onClick={() => setRevealHiddenMarkers((current) => !current)}
+            onClick={() => setRevealHiddenMarkers(!revealHiddenMarkers)}
           >
             {revealHiddenMarkers
               ? STRINGS.hideHiddenMarkers
@@ -2042,7 +2124,22 @@ function TransportView() {
           );
         })}
       </div>
+    </div>
+  );
+}
 
+/**
+ * The transport tab: composes the live-widgets row, the control deck and the
+ * marker jump grid. In Fase 1 this was one monolithic component; each block is
+ * now an autonomous widget reading shared state from the stores, ready to be
+ * placed by the layout canvas (Fase 2b) instead of this fixed stack.
+ */
+function TransportView() {
+  return (
+    <section className="remote-panel">
+      <LiveWidgetsRow />
+      <ControlDeck />
+      <MarkerGrid />
     </section>
   );
 }
