@@ -2658,6 +2658,44 @@ button {
   border-radius: 0.7rem;
 }
 
+/* Editing widgets are position:relative so the corner resize grip can anchor
+   to the bottom-right. */
+.layout-canvas-wrap.is-editing .layout-widget {
+  position: relative;
+}
+
+/* Corner grip: drag to resize (Mixing-Station style). Sits on the bottom-right,
+   large enough to grab with a fingertip. */
+.layout-widget-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  cursor: nwse-resize;
+  touch-action: none;
+  border-radius: 0.5rem 0 0.5rem 0;
+  background:
+    linear-gradient(
+      135deg,
+      transparent 45%,
+      color-mix(in srgb, var(--accent) 60%, transparent) 45%,
+      color-mix(in srgb, var(--accent) 60%, transparent) 60%,
+      transparent 60%,
+      transparent 70%,
+      color-mix(in srgb, var(--accent) 60%, transparent) 70%,
+      color-mix(in srgb, var(--accent) 60%, transparent) 85%,
+      transparent 85%
+    );
+}
+
+/* While dragging a palette item in, hint the grid is a drop zone. */
+.layout-canvas.is-adding {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 4px;
+  border-radius: 0.7rem;
+}
+
 .layout-widget-chrome {
   display: flex;
   flex-wrap: wrap;

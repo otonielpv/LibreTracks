@@ -127,6 +127,9 @@ const STRINGS = {
     emptyTab: "This tab is empty. Add widgets from the palette in edit mode.",
     moveTabLeft: "Move tab left",
     moveTabRight: "Move tab right",
+    moveWidget: "Move widget",
+    resizeWidget: "Resize widget",
+    dropHere: "Drop here",
   },
   es: {
     appTitle: "Remote",
@@ -231,6 +234,9 @@ const STRINGS = {
     emptyTab: "Esta pestaña está vacía. Añade widgets desde la paleta en modo edición.",
     moveTabLeft: "Mover pestaña a la izquierda",
     moveTabRight: "Mover pestaña a la derecha",
+    moveWidget: "Mover widget",
+    resizeWidget: "Redimensionar widget",
+    dropHere: "Suelta aquí",
   },
 } as const;
 

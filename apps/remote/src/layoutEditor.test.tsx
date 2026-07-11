@@ -111,6 +111,22 @@ describe("layout editor", () => {
     expect(screen.getAllByText(/no active song|sin canción activa/i).length).toBeGreaterThan(0);
   });
 
+  it("drag-adds a widget from the palette via pointer (down on item, up on grid)", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    const before = storedWidgetCount() || defaultWidgetCount();
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+    const keyItem = within(palette).getAllByRole("button", { name: /key|tonalidad/i })[0];
+
+    // Pointer add-drag: down on the palette item starts it; up ends it and
+    // inserts the widget (at the end when nothing was hovered).
+    fireEvent.pointerDown(keyItem, { pointerId: 1 });
+    fireEvent.pointerUp(document.querySelector(".layout-canvas")!, { pointerId: 1 });
+
+    expect(storedWidgetCount()).toBe(before + 1);
+  });
+
   it("imports a layout file and persists it", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
