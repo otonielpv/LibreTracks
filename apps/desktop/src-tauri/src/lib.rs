@@ -198,6 +198,7 @@ pub fn run() {
             commands::pads::download_pad,
             commands::pads::delete_pad,
             commands::pads::set_pad_config_realtime,
+            commands::pads::load_pad_key,
             commands::settings::get_decoding_cache_info,
             commands::settings::set_decoding_cache_dir,
             commands::settings::set_decoding_cache_max_gb,

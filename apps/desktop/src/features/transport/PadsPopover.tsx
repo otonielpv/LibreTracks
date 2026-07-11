@@ -115,8 +115,17 @@ function PadsPopoverImpl({
     void refreshCatalog();
     const handlePointer = (event: MouseEvent) => {
       const target = event.target as Node | null;
+      if (!target) return;
+      // The routing combobox portals its listbox to <body>, i.e. OUTSIDE our
+      // panel. Without this guard, clicking a route option counts as an
+      // outside click and closes the popover before the option's click can
+      // commit — so the route never changes. Treat clicks inside any portalled
+      // route dropdown as inside the popover.
+      const el = target instanceof Element ? target : (target as Node).parentElement;
+      if (el?.closest(".lt-audio-route-list, .lt-audio-route-combobox")) {
+        return;
+      }
       if (
-        target &&
         !panelRef.current?.contains(target) &&
         !anchorRef.current?.contains(target)
       ) {

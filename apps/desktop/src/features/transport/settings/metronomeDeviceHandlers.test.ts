@@ -49,6 +49,7 @@ function setup(overrides: Partial<MetronomeDeviceHandlerDeps> = {}) {
     setMetronomeVolumeRealtime: vi.fn(async () => {}),
     setVoiceGuideConfigRealtime: vi.fn(async (s: AppSettings) => s),
     setPadConfigRealtime: vi.fn(async (s: AppSettings) => s),
+    loadPadKey: vi.fn(async (s: AppSettings) => s),
     saveSettings: vi.fn(async (s: AppSettings) => s),
     ...overrides,
   };

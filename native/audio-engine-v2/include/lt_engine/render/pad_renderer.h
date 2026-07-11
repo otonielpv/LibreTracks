@@ -112,6 +112,19 @@ private:
     // resets its cursor without a lock.
     std::atomic<std::uint64_t> clip_seq_{0};
     std::uint64_t applied_clip_seq_ = 0;
+    // The clip the audio thread is actually reading. set_clip() publishes the
+    // new clip into clip_ immediately, but the audio thread only ADOPTS it
+    // (swaps active_clip_ + rewinds the cursor) at a silent point of the swap
+    // fade, so a key change never clicks. Held here so the buffer stays alive
+    // for the whole fade-out of the OLD clip.
+    std::shared_ptr<const PadClip> active_clip_;
+    // Swap fade: > 0 while fading the old clip out before adopting the new one.
+    // Counts down; on reaching 0 the pending clip is adopted and a fade-in
+    // begins. swap_gain_ multiplies the output on top of current_output_gain_.
+    int   swap_fade_out_remaining_ = 0;
+    int   swap_fade_total_ = 0;
+    bool  swap_pending_ = false;      // a new clip is waiting to be adopted
+    float swap_gain_ = 1.0f;          // 0..1 crossfade envelope for the swap
 
     float current_output_gain_ = 0.0f;
 

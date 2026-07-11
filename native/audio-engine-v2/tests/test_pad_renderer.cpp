@@ -66,8 +66,8 @@ TEST_CASE("pad plays and loops the clip when enabled") {
     // Short clip so a single block wraps it several times.
     pad.set_clip(make_clip(64, 0.5f, 0.5f));
 
-    // Warm up the gain ramp, then measure a steady block.
-    render_block(pad, 2, 256);
+    // Warm up the volume ramp AND the initial swap fade-in, then measure.
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
     auto out = render_block(pad, 2, 256);
     // After ramp-in the constant clip should be clearly audible on both channels.
     CHECK(max_abs(out[0]) > 0.3f);
@@ -122,11 +122,42 @@ TEST_CASE("pad clip swap resets the read cursor and updates diagnostics") {
     render_block(pad, 2, 256);
     CHECK(pad.diagnostics().clip_key == 0);
 
-    // Swap to a different key/clip; diagnostics should reflect it.
+    // Swap to a different key/clip; diagnostics reflect the newest clip
+    // immediately (clip_key comes from set_clip). The renderer crossfades the
+    // adoption over ~15 ms, so render enough frames to let the swap settle.
     pad.set_clip(make_clip(64, 0.5f, 0.5f, /*key=*/7));
-    render_block(pad, 2, 256);
+    render_block(pad, 2, 4096);
     CHECK(pad.diagnostics().clip_key == 7);
     CHECK(pad.diagnostics().clip_loaded == true);
+}
+
+TEST_CASE("key swap is click-free (no abrupt sample jump)") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    pad.set_config(cfg);
+
+    // Clip A: constant +0.8. Clip B: constant -0.8. A raw swap would jump 1.6
+    // between adjacent samples; the swap fade must dip through silence instead.
+    pad.set_clip(make_clip(2048, 0.8f, 0.8f, /*key=*/0));
+    for (int i = 0; i < 12; ++i) render_block(pad, 2, 256);  // settle at +0.8
+
+    pad.set_clip(make_clip(2048, -0.8f, -0.8f, /*key=*/1));
+
+    // Render across the swap and check no single-sample delta exceeds a small
+    // threshold (a hard swap would show ~1.6; the fade keeps steps tiny).
+    float max_delta = 0.0f;
+    float prev = 0.8f;  // last value before the swap block
+    for (int b = 0; b < 16; ++b) {
+        auto out = render_block(pad, 2, 256);
+        for (float s : out[0]) {
+            max_delta = std::max(max_delta, std::abs(s - prev));
+            prev = s;
+        }
+    }
+    CHECK(max_delta < 0.2f);  // smooth; no click
 }
 
 TEST_CASE("empty clip yields silence and a muted reason") {

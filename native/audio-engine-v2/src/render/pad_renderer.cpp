@@ -207,20 +207,39 @@ void PadRenderer::render(float** output_channels,
         return;
     }
 
-    std::shared_ptr<const PadClip> clip = std::atomic_load(&clip_);
+    // Newest published clip (may be the same one we're already reading, or a
+    // pending new key). We keep reading `active_clip_` until the swap fade
+    // reaches silence, then adopt the pending clip — so a key change is
+    // click-free instead of snapping the waveform to sample 0.
+    std::shared_ptr<const PadClip> pending = std::atomic_load(&clip_);
+
+    // Detect a NEW clip (key change). Begin a short fade-out of the old clip;
+    // the adoption + fade-in happen at the silent point below.
+    const std::uint64_t seq = clip_seq_.load(std::memory_order_acquire);
+    if (seq != applied_clip_seq_) {
+        applied_clip_seq_ = seq;
+        if (active_clip_) {
+            // Fade the current clip out first (~15 ms), then adopt.
+            swap_fade_total_ = std::max(1, static_cast<int>(sample_rate * 0.015));
+            swap_fade_out_remaining_ = swap_fade_total_;
+            swap_pending_ = true;
+        } else {
+            // Nothing playing yet — adopt immediately and fade in.
+            active_clip_ = pending;
+            read_frame_ = 0;
+            swap_pending_ = false;
+            swap_fade_out_remaining_ = 0;
+            swap_gain_ = 0.0f;
+            swap_fade_total_ = std::max(1, static_cast<int>(sample_rate * 0.015));
+        }
+    }
+
+    std::shared_ptr<const PadClip>& clip = active_clip_;
     if (!clip || clip->empty()) {
         copy_text(muted_reason_, "no_clip");
         // Ramp remaining gain to zero so a mid-play disable fades cleanly, but
         // there's nothing to read — bail once silent.
-        if (current_output_gain_ <= 0.000001f) return;
-    }
-
-    // Notice a clip swap and rewind the cursor. Done here (audio thread) so the
-    // control thread never touches read_frame_.
-    const std::uint64_t seq = clip_seq_.load(std::memory_order_acquire);
-    if (seq != applied_clip_seq_) {
-        applied_clip_seq_ = seq;
-        read_frame_ = 0;
+        if (current_output_gain_ <= 0.000001f && !swap_pending_) return;
     }
 
     // Resolve the configured output route (same scheme as the metronome / voice
@@ -245,28 +264,62 @@ void PadRenderer::render(float** output_channels,
     }
     copy_text(muted_reason_, "");
 
-    const int   ch = clip ? clip->channels : 0;
-    const std::int64_t total_frames =
-        clip && ch > 0 ? static_cast<std::int64_t>(clip->samples.size() / static_cast<std::size_t>(ch))
-                       : 0;
-    const float* data = clip ? clip->samples.data() : nullptr;
-
-    // Loop-seam crossfade length: blend the tail back into the head so the wrap
-    // is click-free even when the file doesn't start/end at zero crossings.
-    const std::int64_t xfade =
-        total_frames > 0
-            ? std::min<std::int64_t>(total_frames / 4,
-                                     static_cast<std::int64_t>(sample_rate * 0.020))  // ~20 ms
+    // Clip params. Recomputed after a mid-block adoption (key swap) because the
+    // clip pointer/length changes at the silent point.
+    auto clip_params = [](const std::shared_ptr<const PadClip>& c,
+                          int& ch_out, std::int64_t& total_out,
+                          const float*& data_out, std::int64_t& xfade_out,
+                          double sr) {
+        ch_out = c ? c->channels : 0;
+        total_out = c && ch_out > 0
+            ? static_cast<std::int64_t>(c->samples.size() / static_cast<std::size_t>(ch_out))
             : 0;
+        data_out = c ? c->samples.data() : nullptr;
+        // Loop-seam crossfade so the wrap is click-free.
+        xfade_out = total_out > 0
+            ? std::min<std::int64_t>(total_out / 4,
+                                     static_cast<std::int64_t>(sr * 0.020))
+            : 0;
+    };
+
+    int ch = 0;
+    std::int64_t total_frames = 0;
+    const float* data = nullptr;
+    std::int64_t xfade = 0;
+    clip_params(clip, ch, total_frames, data, xfade, sample_rate);
 
     const float ramp_frames = static_cast<float>(std::max(1.0, sample_rate * 0.010));
+    const float swap_step =
+        1.0f / static_cast<float>(std::max(1, swap_fade_total_));
 
     for (int f = 0; f < num_frames; ++f) {
         current_output_gain_ += (target_gain - current_output_gain_) / ramp_frames;
         if (std::abs(current_output_gain_ - target_gain) < 1.0e-6f)
             current_output_gain_ = target_gain;
 
-        if (total_frames <= 0 || current_output_gain_ <= 0.0f) continue;
+        // Swap fade: ramp the old clip out; at silence, adopt the pending clip
+        // and ramp the new one in. This keys off `swap_gain_`, applied on top of
+        // the volume ramp so a key change never clicks.
+        if (swap_pending_) {
+            swap_fade_out_remaining_ -= 1;
+            swap_gain_ = std::max(0.0f,
+                static_cast<float>(swap_fade_out_remaining_)
+                    / static_cast<float>(std::max(1, swap_fade_total_)));
+            if (swap_fade_out_remaining_ <= 0) {
+                // Silent point: adopt the new clip and start fading in.
+                active_clip_ = pending;
+                clip = active_clip_;
+                clip_params(clip, ch, total_frames, data, xfade, sample_rate);
+                read_frame_ = 0;
+                swap_pending_ = false;
+                swap_gain_ = 0.0f;
+            }
+        } else if (swap_gain_ < 1.0f) {
+            swap_gain_ = std::min(1.0f, swap_gain_ + swap_step);
+        }
+
+        const float g = current_output_gain_ * swap_gain_;
+        if (total_frames <= 0 || g <= 0.0f) continue;
 
         std::int64_t pos = read_frame_;
         if (pos >= total_frames) pos %= total_frames;
@@ -274,29 +327,25 @@ void PadRenderer::render(float** output_channels,
         float sl = data[pos * ch];
         float sr = ch >= 2 ? data[pos * ch + 1] : sl;
 
-        // Crossfade the last `xfade` frames of the clip with the first `xfade`
-        // frames so the loop point doesn't pop.
+        // Crossfade the last `xfade` frames with the first `xfade` frames so the
+        // loop point doesn't pop.
         if (xfade > 0 && pos >= total_frames - xfade) {
             const std::int64_t into = pos - (total_frames - xfade);  // 0..xfade-1
             const float t = static_cast<float>(into) / static_cast<float>(xfade);
-            const std::int64_t head = into;  // corresponding head frame
+            const std::int64_t head = into;
             const float hl = data[head * ch];
             const float hr = ch >= 2 ? data[head * ch + 1] : hl;
             sl = sl * (1.0f - t) + hl * t;
             sr = sr * (1.0f - t) + hr * t;
         }
 
-        const float g = current_output_gain_;
         output_channels[left][f] += sl * g;
         if (right != left)
             output_channels[right][f] += sr * g;
 
-        // Advance the cursor. When we reach the crossfade region we have already
-        // pre-mixed the head, so wrap so that the frame AFTER the tail is the
-        // frame just past where the head blend ended.
         ++read_frame_;
         if (read_frame_ >= total_frames)
-            read_frame_ = xfade;  // head frames [0, xfade) were already played in the blend
+            read_frame_ = xfade;
     }
 }
 

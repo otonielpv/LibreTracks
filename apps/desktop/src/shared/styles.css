@@ -3926,7 +3926,9 @@ textarea {
 /* Dropdown panel: portalled and positioned via inline `top/left/width` to
    match the trigger; capped at ~5 items with scroll for long routing lists. */
 .lt-audio-route-list {
-  z-index: 60;
+  /* Above the pads popover (z-index 70) so the routing dropdown isn't hidden
+     behind it; still below modals. Track-header usage is unaffected. */
+  z-index: 90;
   margin: 0;
   padding: 0.15rem 0;
   list-style: none;

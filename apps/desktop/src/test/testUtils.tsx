@@ -171,6 +171,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     downloadPad: vi.fn(testDesktopApiMock.downloadPad),
     deletePad: vi.fn(testDesktopApiMock.deletePad),
     setPadConfigRealtime: vi.fn(testDesktopApiMock.setPadConfigRealtime),
+    loadPadKey: vi.fn(testDesktopApiMock.loadPadKey),
     listenToPadDownloadProgress: vi.fn(testDesktopApiMock.listenToPadDownloadProgress),
     deleteTrack: vi.fn(testDesktopApiMock.deleteTrack),
   };

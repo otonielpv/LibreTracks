@@ -55,6 +55,7 @@ export type MetronomeDeviceHandlerDeps = {
   setMetronomeVolumeRealtime: (volume: number) => Promise<void>;
   setVoiceGuideConfigRealtime: (settings: AppSettings) => Promise<AppSettings>;
   setPadConfigRealtime: (settings: AppSettings) => Promise<AppSettings>;
+  loadPadKey: (settings: AppSettings) => Promise<AppSettings>;
   saveSettings: (settings: AppSettings) => Promise<AppSettings>;
 };
 
@@ -98,6 +99,7 @@ export function createMetronomeDeviceHandlers(
     setMetronomeVolumeRealtime,
     setVoiceGuideConfigRealtime,
     setPadConfigRealtime,
+    loadPadKey,
     saveSettings,
   } = deps;
 
@@ -223,15 +225,22 @@ export function createMetronomeDeviceHandlers(
       });
     },
 
-    // Apply any ambient-pad settings patch (enable/key/volume/route/pad_id):
-    // decode the selected key + push config to the engine + persist, without
-    // reopening the audio device. Mirrors handleVoiceGuideChange.
+    // Apply an ambient-pad settings patch. Only a pad/key change decodes audio
+    // (via loadPadKey, which runs the slow MP3 decode off the command path);
+    // volume / routing changes take the cheap realtime path so the fader and
+    // routing selector never stall playback. Persists either way.
     handlePadChange(patch: Partial<AppSettings>) {
+      const before = appSettingsRef.current;
       const nextSettings = applyLocal(patch);
+      const keyChanged =
+        nextSettings.padId !== before.padId ||
+        nextSettings.padKey !== before.padKey;
       void runAction(async () => {
         try {
           const savedSettings = normalizeAppSettings(
-            await setPadConfigRealtime(nextSettings),
+            keyChanged
+              ? await loadPadKey(nextSettings)
+              : await setPadConfigRealtime(nextSettings),
           );
           appSettingsRef.current = savedSettings;
           setAppSettings(savedSettings);

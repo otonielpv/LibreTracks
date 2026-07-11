@@ -1291,6 +1291,15 @@ export async function setPadConfigRealtime(
   return invokeCommand<AppSettings>("set_pad_config_realtime", { settings });
 }
 
+// Decodes and swaps in the selected key — call ONLY when the pad id or key
+// changes (it does the slow MP3 decode off the command path). Volume / enable /
+// routing must use setPadConfigRealtime instead, which never decodes.
+export async function loadPadKey(
+  settings: AppSettings,
+): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("load_pad_key", { settings });
+}
+
 export async function listenToPadDownloadProgress(
   handler: (event: PadDownloadProgressEvent) => void,
 ): Promise<() => void> {

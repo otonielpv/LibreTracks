@@ -488,9 +488,12 @@ pub fn delete_pad(
     Ok(settings)
 }
 
-/// Apply pad settings live (enabled/volume/route/key/pad_id): decode the
-/// selected key for the current pad, hand it to the renderer, apply config, and
-/// persist. Mirrors `set_voice_guide_config_realtime`.
+/// Apply pad settings live (enabled/volume/route/key/pad_id) WITHOUT decoding.
+/// This is the hot path for the volume fader, the on/off toggle and the routing
+/// selector — it only pushes cheap atomics to the renderer and persists. It
+/// must never touch the disk decoder: decoding a ~15-minute MP3 here is what
+/// froze playback on every fader tick / toggle. Selecting a new key or pad is a
+/// separate call (`load_pad_key`) that decodes off the command path.
 #[tauri::command]
 pub fn set_pad_config_realtime(
     app: AppHandle,
@@ -498,16 +501,52 @@ pub fn set_pad_config_realtime(
     settings_store: State<'_, AppSettingsStore>,
     state: State<'_, DesktopState>,
 ) -> Result<AppSettings, String> {
-    // Load the selected key first so the renderer has audio before it's enabled.
+    state
+        .audio
+        .set_pad_config_realtime(&settings)
+        .map_err(|e| e.to_string())?;
+    state
+        .audio
+        .replace_settings(settings.clone())
+        .map_err(|e| e.to_string())?;
+    settings_store
+        .set(settings.clone())
+        .map_err(|e| e.to_string())?;
+    save_app_settings(&app, &settings).map_err(|e| e.to_string())?;
+    Ok(settings)
+}
+
+/// Decode the selected key of the current pad and swap it into the renderer.
+/// Runs the slow MP3 decode on a blocking task so neither the audio thread nor
+/// the UI stalls; the renderer crossfades the swap so there is no click. Call
+/// this ONLY when the pad id or key actually changes — not for volume/enable/
+/// routing. Also (re)applies config so a freshly-selected key is audible.
+#[tauri::command]
+pub async fn load_pad_key(
+    app: AppHandle,
+    settings: AppSettings,
+    settings_store: State<'_, AppSettingsStore>,
+    state: State<'_, DesktopState>,
+) -> Result<AppSettings, String> {
     if !settings.pad_id.is_empty() {
         if let Ok(base) = pads_install_dir(&app) {
             if let Some(dir) = base.to_str() {
-                let _ = state
-                    .audio
-                    .load_pad_clip(dir, &settings.pad_id, settings.pad_key);
+                let dir = dir.to_string();
+                let pad_id = settings.pad_id.clone();
+                let key = settings.pad_key;
+                let audio = state.audio.clone();
+                // The engine command that carries this is itself dispatched to
+                // the engine's command thread (which owns the decode); we still
+                // hop onto a blocking task so awaiting it never parks the async
+                // runtime under the fader.
+                let _ = tokio::task::spawn_blocking(move || {
+                    audio.load_pad_clip(&dir, &pad_id, key)
+                })
+                .await;
             }
         }
     }
+    // Re-push config so the newly loaded key plays at the right level/route.
     state
         .audio
         .set_pad_config_realtime(&settings)

@@ -1963,6 +1963,10 @@ export const testDesktopApiMock = {
     state.appSettings = { ...settings };
     return clone(state.appSettings);
   },
+  loadPadKey: async (settings: AppSettings) => {
+    state.appSettings = { ...settings };
+    return clone(state.appSettings);
+  },
   listenToPadDownloadProgress:
     async (_handler: (event: PadDownloadProgressEvent) => void) => () => {},
   deleteTrack: async (trackId: string) => {
