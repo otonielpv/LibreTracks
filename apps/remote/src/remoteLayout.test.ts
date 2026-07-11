@@ -5,8 +5,11 @@ import {
   LAYOUT_COLUMNS,
   clearStoredLayout,
   defaultLayout,
+  layoutExportFilename,
   normalizeLayout,
+  parseLayoutFile,
   readStoredLayout,
+  serializeLayoutFile,
   writeStoredLayout,
 } from "./remoteLayout";
 
@@ -74,5 +77,44 @@ describe("remoteLayout", () => {
     expect(readStoredLayout().widgets.map((w) => w.type)).toEqual(
       defaultLayout().widgets.map((w) => w.type),
     );
+  });
+
+  it("export/import round-trips a layout through a file", () => {
+    const layout = defaultLayout();
+    const text = serializeLayoutFile(layout);
+    const imported = parseLayoutFile(text);
+    expect(imported.widgets.map((w) => `${w.type}:${w.w}x${w.h}`)).toEqual(
+      layout.widgets.map((w) => `${w.type}:${w.w}x${w.h}`),
+    );
+  });
+
+  it("parseLayoutFile rejects non-JSON and unrelated JSON", () => {
+    expect(() => parseLayoutFile("not json")).toThrow("invalid-json");
+    expect(() => parseLayoutFile(JSON.stringify({ hello: "world" }))).toThrow(
+      "not-a-layout-file",
+    );
+    expect(() => parseLayoutFile(JSON.stringify({ kind: "something-else" }))).toThrow(
+      "not-a-layout-file",
+    );
+  });
+
+  it("parseLayoutFile normalises an imported layout (drops unknown widgets)", () => {
+    const text = JSON.stringify({
+      kind: "libretracks.remote.layout",
+      version: 1,
+      layout: {
+        version: 1,
+        widgets: [
+          { id: "a", type: "timeline", w: 6, h: 1 },
+          { id: "z", type: "ghost-from-future", w: 2, h: 1 },
+        ],
+      },
+    });
+    const imported = parseLayoutFile(text);
+    expect(imported.widgets.map((w) => w.type)).toEqual(["timeline"]);
+  });
+
+  it("export filename is filesystem-friendly", () => {
+    expect(layoutExportFilename()).toMatch(/^libretracks-remote-layout-[\d-]+\.json$/);
   });
 });

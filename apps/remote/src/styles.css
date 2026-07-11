@@ -2749,3 +2749,7 @@ button {
 .layout-reset-button {
   color: var(--muted);
 }
+
+.layout-import-input {
+  display: none;
+}

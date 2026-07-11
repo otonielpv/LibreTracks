@@ -68,8 +68,11 @@ import {
   LAYOUT_COLUMNS,
   clearStoredLayout,
   defaultLayout,
+  layoutExportFilename,
   newWidgetId,
+  parseLayoutFile,
   readStoredLayout,
+  serializeLayoutFile,
   writeStoredLayout,
   type RemoteLayout,
   type WidgetPlacement,
@@ -2917,6 +2920,8 @@ export function App() {
     window.localStorage.setItem(REMOTE_SIZE_STORAGE_KEY, String(sizeLevel));
   }, [sizeLevel]);
 
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
   const updateLayout = useCallback((next: RemoteLayout) => {
     setLayout(next);
     writeStoredLayout(next);
@@ -2927,6 +2932,45 @@ export function App() {
     clearStoredLayout();
     setLayout(fresh);
   }, []);
+
+  // Export the current layout as a JSON file so it can be carried to another
+  // device (AirDrop / email / USB) and imported there. Uses a Blob + object
+  // URL download, which works in any tablet/phone browser without native APIs.
+  const exportLayout = useCallback(() => {
+    try {
+      const blob = new Blob([serializeLayoutFile(layout)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = layoutExportFilename();
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Download blocked — nothing else we can do from the browser sandbox.
+    }
+  }, [layout]);
+
+  const onImportFileChosen = useCallback(
+    async (event: ReactChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0];
+      // Reset the input so choosing the same file again re-fires change.
+      event.currentTarget.value = "";
+      if (!file) {
+        return;
+      }
+      try {
+        const text = await file.text();
+        const imported = parseLayoutFile(text);
+        setLayout(imported);
+        writeStoredLayout(imported);
+      } catch {
+        window.alert(STRINGS.importFailed);
+      }
+    },
+    [],
+  );
 
   return (
     <main
@@ -2949,9 +2993,28 @@ export function App() {
         </div>
         <div className="remote-header-actions">
           {editing ? (
-            <button type="button" className="layout-reset-button" onClick={resetLayout}>
-              {STRINGS.resetLayout}
-            </button>
+            <>
+              <button type="button" className="layout-reset-button" onClick={exportLayout}>
+                {STRINGS.exportLayout}
+              </button>
+              <button
+                type="button"
+                className="layout-reset-button"
+                onClick={() => importInputRef.current?.click()}
+              >
+                {STRINGS.importLayout}
+              </button>
+              <button type="button" className="layout-reset-button" onClick={resetLayout}>
+                {STRINGS.resetLayout}
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="layout-import-input"
+                onChange={onImportFileChosen}
+              />
+            </>
           ) : null}
           <button
             type="button"

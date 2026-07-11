@@ -185,3 +185,56 @@ export function clearStoredLayout(): void {
     // Ignore — nothing else to do.
   }
 }
+
+// ---------------------------------------------------------------------------
+// Export / import: move a layout between devices as a small JSON file. The
+// file carries a magic tag so import can reject unrelated JSON, and it reuses
+// normalizeLayout so an imported layout from an older/newer build is validated
+// the same way stored layouts are.
+// ---------------------------------------------------------------------------
+
+const LAYOUT_FILE_KIND = "libretracks.remote.layout";
+
+export type LayoutFile = {
+  kind: typeof LAYOUT_FILE_KIND;
+  version: number;
+  layout: RemoteLayout;
+};
+
+/** Serialize a layout to the pretty-printed JSON written to the export file. */
+export function serializeLayoutFile(layout: RemoteLayout): string {
+  const file: LayoutFile = {
+    kind: LAYOUT_FILE_KIND,
+    version: LAYOUT_VERSION,
+    layout,
+  };
+  return JSON.stringify(file, null, 2);
+}
+
+/**
+ * Parse the contents of an imported layout file. Throws with a stable message
+ * when the text isn't valid JSON or isn't a LibreTracks layout file, so the
+ * caller can show a friendly error. The returned layout is normalised.
+ */
+export function parseLayoutFile(text: string): RemoteLayout {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("invalid-json");
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    (parsed as { kind?: unknown }).kind !== LAYOUT_FILE_KIND
+  ) {
+    throw new Error("not-a-layout-file");
+  }
+  return normalizeLayout((parsed as { layout?: unknown }).layout);
+}
+
+/** A filesystem-friendly, timestamped name for the exported layout file. */
+export function layoutExportFilename(): string {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  return `libretracks-remote-layout-${stamp}.json`;
+}

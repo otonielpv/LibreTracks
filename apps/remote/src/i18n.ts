@@ -108,6 +108,9 @@ const STRINGS = {
     removeWidget: "Remove",
     widthLabel: "Width",
     heightLabel: "Height",
+    exportLayout: "Export",
+    importLayout: "Import",
+    importFailed: "That file isn't a valid LibreTracks layout.",
   },
   es: {
     appTitle: "Remote",
@@ -193,6 +196,9 @@ const STRINGS = {
     removeWidget: "Quitar",
     widthLabel: "Ancho",
     heightLabel: "Alto",
+    exportLayout: "Exportar",
+    importLayout: "Importar",
+    importFailed: "Ese archivo no es un layout válido de LibreTracks.",
   },
 } as const;
 

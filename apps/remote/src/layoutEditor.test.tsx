@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { App } from "./App";
-import { defaultLayout } from "./remoteLayout";
+import { defaultLayout, serializeLayoutFile } from "./remoteLayout";
 
 // App opens a WebSocket in useRemoteBridge; jsdom has none. Provide an inert
 // stub so mounting doesn't throw. We never drive live data in these tests —
@@ -80,5 +80,47 @@ describe("layout editor", () => {
     // Reset clears storage; the next stored write would be the default. The
     // in-memory layout is back to default length.
     expect(window.localStorage.getItem("libretracks.remote.layout")).toBeNull();
+  });
+
+  it("imports a layout file and persists it", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    // A layout file with just two widgets, carried from "another device".
+    const incoming = {
+      version: 1,
+      widgets: [
+        { id: "x", type: "timeline" as const, w: 6, h: 1 },
+        { id: "y", type: "currentKey" as const, w: 1, h: 1 },
+      ],
+    };
+    const fileText = serializeLayoutFile(incoming);
+    const file = new File([fileText], "layout.json", { type: "application/json" });
+    // jsdom's File may not implement text(); the browser does. Provide it so the
+    // import handler's `await file.text()` resolves in the test environment.
+    if (typeof file.text !== "function") {
+      Object.defineProperty(file, "text", {
+        value: () => Promise.resolve(fileText),
+        configurable: true,
+      });
+    }
+
+    const input = document.querySelector(
+      "input.layout-import-input",
+    ) as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    fireEvent.change(input);
+
+    // The import reads the file asynchronously (file.text()) then persists;
+    // wait until localStorage reflects the imported two-widget layout.
+    await waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+      );
+      expect(stored.widgets?.map((w: { type: string }) => w.type)).toEqual([
+        "timeline",
+        "currentKey",
+      ]);
+    });
   });
 });
