@@ -144,6 +144,24 @@ describe("layout editor", () => {
     expect(screen.queryByRole("group", { name: /add widget|añadir widget/i })).toBeNull();
   });
 
+  it("offers the split atomic widgets in the palette and they mount", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+
+    // A representative atomic from each split: a single readout, a single
+    // transport button, and a deck section.
+    for (const name of [/^\+ time$|^\+ tiempo$/i, /^\+ play$|^\+ reproducir$/i, /vamp \/ loop/i]) {
+      expect(within(palette).getAllByRole("button", { name }).length).toBeGreaterThan(0);
+    }
+
+    // Adding the BPM readout mounts it (shows the "BPM" label tile).
+    const bpmItem = within(palette).getAllByRole("button", { name: /^\+ bpm$/i })[0];
+    fireEvent.click(bpmItem);
+    // The tile renders a BPM label somewhere on the canvas now.
+    expect(screen.getAllByText(/^bpm$/i).length).toBeGreaterThan(0);
+  });
+
   it("imports a layout file and persists it", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));

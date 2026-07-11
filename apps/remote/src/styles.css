@@ -2660,6 +2660,28 @@ button {
   grid-row: 1 / 3;
 }
 
+/* Atomic (split) widgets fill their cell so a single readout / button / deck
+   section looks intentional rather than shrink-wrapped. */
+.readout-solo {
+  height: 100%;
+}
+.readout-solo .readout-card {
+  height: 100%;
+}
+.transport-controls-solo {
+  height: 100%;
+}
+.transport-controls-solo .pill-button {
+  width: 100%;
+  height: 100%;
+}
+.transport-control-deck.is-section {
+  height: 100%;
+}
+.transport-control-deck.is-section .transport-control-card {
+  flex: 1 1 auto;
+}
+
 .layout-widget {
   min-width: 0;
   display: flex;

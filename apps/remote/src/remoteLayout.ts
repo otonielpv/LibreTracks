@@ -15,9 +15,23 @@
  * (App.tsx) makes it available to the layout and the editor palette. */
 export type WidgetType =
   | "readouts"
+  | "readoutTime"
+  | "readoutBar"
+  | "readoutBpm"
+  | "readoutSignature"
+  | "readoutSong"
   | "transportButtons"
+  | "playButton"
+  | "pauseButton"
+  | "stopButton"
+  | "clickButton"
+  | "guideButton"
   | "timeline"
   | "controlDeck"
+  | "deckVamp"
+  | "deckJump"
+  | "deckSong"
+  | "deckRegion"
   | "markerGrid"
   | "mixer"
   | "songHeader"
@@ -32,9 +46,23 @@ export type WidgetType =
 
 export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "readouts",
+  "readoutTime",
+  "readoutBar",
+  "readoutBpm",
+  "readoutSignature",
+  "readoutSong",
   "transportButtons",
+  "playButton",
+  "pauseButton",
+  "stopButton",
+  "clickButton",
+  "guideButton",
   "timeline",
   "controlDeck",
+  "deckVamp",
+  "deckJump",
+  "deckSong",
+  "deckRegion",
   "markerGrid",
   "mixer",
   "songHeader",

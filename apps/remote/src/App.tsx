@@ -1431,6 +1431,67 @@ function TransportControlButtons() {
   );
 }
 
+/** Individual transport buttons, so each can be placed as its own widget. */
+function PlayButtonWidget() {
+  return (
+    <div className="transport-controls transport-controls-inline transport-controls-solo">
+      <button className="pill-button" onClick={() => sendCommand({ cmd: "play" })}>
+        {STRINGS.play}
+      </button>
+    </div>
+  );
+}
+function PauseButtonWidget() {
+  return (
+    <div className="transport-controls transport-controls-inline transport-controls-solo">
+      <button className="pill-button" onClick={() => sendCommand({ cmd: "pause" })}>
+        {STRINGS.pause}
+      </button>
+    </div>
+  );
+}
+function StopButtonWidget() {
+  return (
+    <div className="transport-controls transport-controls-inline transport-controls-solo">
+      <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
+        {STRINGS.stop}
+      </button>
+    </div>
+  );
+}
+function ClickButtonWidget() {
+  const settings = useRemoteSyncStore((state) => state.settings);
+  const metronomeEnabled = settings?.metronomeEnabled ?? false;
+  return (
+    <div className="transport-controls transport-controls-inline transport-controls-solo">
+      <button
+        className={`pill-button ${metronomeEnabled ? "is-active" : ""}`}
+        onClick={() => sendMetronomePatch({ enabled: !metronomeEnabled })}
+      >
+        {STRINGS.click}
+      </button>
+    </div>
+  );
+}
+function GuideButtonWidget() {
+  const settings = useRemoteSyncStore((state) => state.settings);
+  const voiceGuideEnabled = settings?.voiceGuideEnabled ?? false;
+  return (
+    <div className="transport-controls transport-controls-inline transport-controls-solo">
+      <button
+        className={`pill-button ${voiceGuideEnabled ? "is-active" : ""}`}
+        disabled={!settings}
+        onClick={() => {
+          if (!settings) return;
+          sendSettingsUpdate({ ...settings, voiceGuideEnabled: !voiceGuideEnabled });
+        }}
+      >
+        {STRINGS.guide}
+      </button>
+    </div>
+  );
+}
+
 /**
  * Section markers navigable from the remote — dynamic cues (Build, All In, ...)
  * are spoken by the voice guide, not jump destinations, so they're excluded.
@@ -1442,14 +1503,19 @@ function useSectionMarkers() {
   );
 }
 
+/** Which slice of the control deck to render. Undefined = the whole deck. */
+type ControlDeckSection = "vamp" | "jump" | "song" | "region";
+
 /**
  * The control deck: Vamp/Loop, Jump config, Song transition, the region
  * carousel with transpose, and the inline settings sheets. Reads its shared UI
  * state (selected region, open panel) from `useRemoteUiStore` and its jump
- * config from `useRemoteJumpStore`, so it stands alone as a layout widget with
- * no props. Behaviour is unchanged from the former inline TransportView block.
+ * config from `useRemoteJumpStore`. With no `section` it renders the whole deck
+ * (the composite widget); with a `section` it renders just that card + its
+ * inline settings sheet, so each slice can be placed as its own widget. The
+ * shared sync effects/handlers run either way, so behaviour is identical.
  */
-function ControlDeck() {
+function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
   const settings = useRemoteSyncStore((state) => state.settings);
@@ -1752,8 +1818,16 @@ function ControlDeck() {
     </div>
   );
 
+  // Which cards to render: a single section (atomic widget) or all (composite).
+  const show = (candidate: ControlDeckSection) => !section || section === candidate;
+  // The inline settings sheet belongs to the section it configures; only render
+  // it when that section's card is visible in this instance.
+  const showPanel =
+    activePanel !== null && (!section || section === activePanel);
+
   return (
-    <div className="transport-control-deck">
+    <div className={`transport-control-deck ${section ? "is-section" : ""}`}>
+        {show("vamp") ? (
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
@@ -1776,7 +1850,9 @@ function ControlDeck() {
             {activeVamp ? STRINGS.on : STRINGS.vamp}
           </button>
         </article>
+        ) : null}
 
+        {show("jump") ? (
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
@@ -1799,7 +1875,9 @@ function ControlDeck() {
             </div>
           ) : null}
         </article>
+        ) : null}
 
+        {show("song") ? (
         <article className="transport-control-card transport-control-card-song transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
@@ -1816,7 +1894,9 @@ function ControlDeck() {
             </button>
           </div>
         </article>
+        ) : null}
 
+        {show("jump") ? (
         <button
           type="button"
           className={`transport-control-card remote-global-cancel-button ${pendingJump ? "is-warning" : ""}`}
@@ -1829,7 +1909,9 @@ function ControlDeck() {
         >
           <span>{STRINGS.cancelJump}</span>
         </button>
+        ) : null}
 
+        {show("region") ? (
         <div className="transport-control-card transport-control-card-region">
           <div className="region-actions-row">
             <div className="region-carousel">
@@ -1878,8 +1960,9 @@ function ControlDeck() {
             ) : null}
           </div>
         </div>
+        ) : null}
 
-        {activePanel ? (
+        {showPanel ? (
           <div
             className="remote-inline-panel"
             role="dialog"
@@ -2854,6 +2937,60 @@ function ReadoutsWidget() {
   );
 }
 
+/** A single readout tile — the atomic building block for the split readouts. */
+function ReadoutTile({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="transport-readouts transport-readouts-inline readout-solo">
+      <div className="readout-card readout-card-song">
+        <span>{label}</span>
+        <strong title={title ?? value}>{value}</strong>
+      </div>
+    </div>
+  );
+}
+
+function ReadoutTimeWidget() {
+  const readout = useTransportReadout();
+  return <ReadoutTile label={STRINGS.time} value={readout.timecode} />;
+}
+function ReadoutBarWidget() {
+  const readout = useTransportReadout();
+  return <ReadoutTile label={STRINGS.barBeat} value={readout.musicalDisplay} />;
+}
+function ReadoutBpmWidget() {
+  const readout = useTransportReadout();
+  return <ReadoutTile label={STRINGS.bpm} value={readout.bpm.toFixed(2)} />;
+}
+function ReadoutSignatureWidget() {
+  const readout = useTransportReadout();
+  return <ReadoutTile label={STRINGS.meter} value={readout.timeSignature} />;
+}
+function ReadoutSongWidget() {
+  const readout = useTransportReadout();
+  return <ReadoutTile label={STRINGS.region} value={readout.regionName} />;
+}
+
+/** The whole control deck as a widget (registry needs a zero-arg component). */
+function DeckWidget() {
+  return <ControlDeck />;
+}
+
+// Individual control-deck sections as widgets (the deck renders just one slice
+// when given a `section`). The shared sync effects run in each, converging on
+// the same store state.
+function VampSectionWidget() {
+  return <ControlDeck section="vamp" />;
+}
+function JumpSectionWidget() {
+  return <ControlDeck section="jump" />;
+}
+function SongSectionWidget() {
+  return <ControlDeck section="song" />;
+}
+function RegionSectionWidget() {
+  return <ControlDeck section="region" />;
+}
+
 /** The scrolling timeline (cinta) as a standalone widget. */
 function TimelineWidget() {
   const songView = useRemoteSyncStore((state) => state.songView);
@@ -2915,9 +3052,23 @@ type WidgetDefinition = {
 // of truth the canvas and the (Fase 2c) editor palette both read.
 const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   readouts: { labelKey: "widgetReadouts", Component: ReadoutsWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  readoutTime: { labelKey: "widgetReadoutTime", Component: ReadoutTimeWidget, defaultW: 2, defaultH: 1 },
+  readoutBar: { labelKey: "widgetReadoutBar", Component: ReadoutBarWidget, defaultW: 2, defaultH: 1 },
+  readoutBpm: { labelKey: "widgetReadoutBpm", Component: ReadoutBpmWidget, defaultW: 2, defaultH: 1 },
+  readoutSignature: { labelKey: "widgetReadoutSignature", Component: ReadoutSignatureWidget, defaultW: 2, defaultH: 1 },
+  readoutSong: { labelKey: "widgetReadoutSong", Component: ReadoutSongWidget, defaultW: 2, defaultH: 1 },
   transportButtons: { labelKey: "widgetTransport", Component: TransportControlButtons, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  playButton: { labelKey: "play", Component: PlayButtonWidget, defaultW: 1, defaultH: 1 },
+  pauseButton: { labelKey: "pause", Component: PauseButtonWidget, defaultW: 1, defaultH: 1 },
+  stopButton: { labelKey: "stop", Component: StopButtonWidget, defaultW: 1, defaultH: 1 },
+  clickButton: { labelKey: "click", Component: ClickButtonWidget, defaultW: 1, defaultH: 1 },
+  guideButton: { labelKey: "guide", Component: GuideButtonWidget, defaultW: 1, defaultH: 1 },
   timeline: { labelKey: "widgetTimeline", Component: TimelineWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
-  controlDeck: { labelKey: "widgetDeck", Component: ControlDeck, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  controlDeck: { labelKey: "widgetDeck", Component: DeckWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
+  deckVamp: { labelKey: "widgetDeckVamp", Component: VampSectionWidget, defaultW: 2, defaultH: 1 },
+  deckJump: { labelKey: "widgetDeckJump", Component: JumpSectionWidget, defaultW: 2, defaultH: 1 },
+  deckSong: { labelKey: "widgetDeckSong", Component: SongSectionWidget, defaultW: 2, defaultH: 1 },
+  deckRegion: { labelKey: "widgetDeckRegion", Component: RegionSectionWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
   markerGrid: { labelKey: "widgetMarkers", Component: MarkerGrid, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
   mixer: { labelKey: "widgetMixer", Component: MixerView, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
   songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 1 },
