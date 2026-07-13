@@ -62,6 +62,7 @@ Use complete widgets or split a section into independent controls:
 - Full mixer or separate song filter, song master, and fader widgets.
 - Compact song and clip view with **Active/All** scope. Songs flow into multiple columns when horizontal space is available.
 - Ambient Pads, metronome settings, and voice guide settings.
+- Visual separator for grouping controls and adding space. It draws horizontally or vertically from the shape assigned with the resize grip and never captures interaction outside the editor.
 
 Widgets adapt their content, typography, columns, and internal scrolling to their rectangle. A small box does not squeeze every marker or control until it becomes unreadable; long areas receive their own scroll.
 

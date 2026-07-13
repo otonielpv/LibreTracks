@@ -80,12 +80,13 @@ describe("layout editor", () => {
       /songs|canciones/i,
       /^mixer$|^mezclador$/i,
       /tools|herramientas/i,
+      /^layout$|^diseño$/i,
     ]) {
       expect(within(palette).getByRole("heading", { name: category })).toBeTruthy();
     }
 
     expect(palette.querySelectorAll(".layout-palette-item").length).toBeGreaterThan(0);
-    expect(palette.querySelectorAll(".layout-palette-category").length).toBe(6);
+    expect(palette.querySelectorAll(".layout-palette-category").length).toBe(7);
   });
 
   it("can hide and restore the floating widget palette", () => {
@@ -226,6 +227,19 @@ describe("layout editor", () => {
     expect(within(palette).queryByRole("button", {
       name: /^\+ (click and guide|click y guía)$/i,
     })).toBeNull();
+  });
+
+  it("offers a resizeable visual separator in the layout category", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+
+    const separator = within(palette).getByRole("button", {
+      name: /^\+ (separator|separador)$/i,
+    });
+    fireEvent.click(separator);
+
+    expect(document.querySelector(".layout-separator")).not.toBeNull();
   });
 
   it("imports a layout file and persists it", async () => {

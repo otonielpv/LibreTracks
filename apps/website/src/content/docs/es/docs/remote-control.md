@@ -62,6 +62,7 @@ Puedes usar widgets completos o dividir una sección en controles independientes
 - Mixer completo o widgets separados de filtro de canción, master y faders.
 - Vista compacta de canciones y clips, con selector **Activa/Todas**. Cuando hay ancho, las canciones se distribuyen en varias columnas.
 - Pads ambientales, configuración del metrónomo y configuración de la guía de voz.
+- Separador visual para crear bloques y espacio entre controles. Se dibuja horizontal o vertical según la forma que le des con el tirador de tamaño y nunca captura interacción fuera del editor.
 
 Los widgets ajustan contenido, tipografía, columnas y scroll interno a su rectángulo. Una caja pequeña no intenta comprimir todas las marcas o todos los controles hasta hacerlos ilegibles: las zonas largas usan scroll propio.
 

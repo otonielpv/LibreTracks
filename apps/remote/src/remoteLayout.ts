@@ -42,6 +42,7 @@ export type WidgetType =
   | "pads"
   | "metronomeSettings"
   | "voiceGuideSettings"
+  | "separator"
   | "performanceSettings"
   | "nextMarker"
   | "nextSong"
@@ -80,6 +81,7 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "pads",
   "metronomeSettings",
   "voiceGuideSettings",
+  "separator",
   "performanceSettings",
   "nextMarker",
   "nextSong",

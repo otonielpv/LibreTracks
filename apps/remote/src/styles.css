@@ -3365,6 +3365,50 @@ button {
   box-sizing: border-box;
 }
 
+/* A non-interactive visual spacer. Wide rectangles draw a horizontal rule;
+   resizing it into a tall/narrow rectangle turns the same widget vertical. */
+.layout-widget-type-separator .layout-widget-body {
+  overflow: hidden;
+}
+
+.layout-separator {
+  container: layout-separator / size;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0.2rem;
+  pointer-events: none;
+}
+
+.layout-separator::before {
+  width: 100%;
+  height: 1px;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 38%, var(--outline)) 12%,
+    color-mix(in srgb, var(--accent) 38%, var(--outline)) 88%,
+    transparent
+  );
+}
+
+@container layout-separator (max-aspect-ratio: 1 / 1) {
+  .layout-separator::before {
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      color-mix(in srgb, var(--accent) 38%, var(--outline)) 12%,
+      color-mix(in srgb, var(--accent) 38%, var(--outline)) 88%,
+      transparent
+    );
+  }
+}
+
 /* The timeline owns its horizontal scrub interaction and clips its ruler
    itself; the generic widget scroller must not add a second scrollbar. */
 .layout-widget-type-timeline .layout-widget-body {

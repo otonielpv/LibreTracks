@@ -3122,6 +3122,12 @@ function VoiceGuideSettingsWidget() {
   return <PerformanceSettingsWidget mode="guide" />;
 }
 
+/** Purely visual layout aid. Its line follows the widget aspect ratio and the
+ * host keeps it inert outside edit mode, so it never blocks live controls. */
+function SeparatorWidget() {
+  return <div className="layout-separator" aria-hidden="true" />;
+}
+
 function LegacyPerformanceSettingsWidget() {
   return <PerformanceSettingsWidget />;
 }
@@ -3316,7 +3322,7 @@ type WidgetDefinition = {
   palette?: boolean;
 };
 
-type WidgetCategory = "information" | "transport" | "live" | "songs" | "mixer" | "tools";
+type WidgetCategory = "information" | "transport" | "live" | "songs" | "mixer" | "tools" | "layout";
 
 const WIDGET_CATEGORIES: readonly {
   id: WidgetCategory;
@@ -3328,6 +3334,7 @@ const WIDGET_CATEGORIES: readonly {
   { id: "songs", labelKey: "widgetCategorySongs" },
   { id: "mixer", labelKey: "widgetCategoryMixer" },
   { id: "tools", labelKey: "widgetCategoryTools" },
+  { id: "layout", labelKey: "widgetCategoryLayout" },
 ];
 
 // Binds every WidgetType to its component + palette metadata. The single source
@@ -3361,6 +3368,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: 20 },
   metronomeSettings: { labelKey: "widgetMetronomeSettings", Component: MetronomeSettingsWidget, defaultW: 8, defaultH: DEFAULT_METRONOME_WIDGET_HEIGHT },
   voiceGuideSettings: { labelKey: "widgetVoiceGuideSettings", Component: VoiceGuideSettingsWidget, defaultW: 8, defaultH: 20 },
+  separator: { labelKey: "widgetSeparator", Component: SeparatorWidget, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
   performanceSettings: { labelKey: "widgetPerformanceSettings", Component: LegacyPerformanceSettingsWidget, defaultW: 12, defaultH: 20, palette: false },
   nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 4, defaultH: 4 },
   nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 4, defaultH: 4 },
@@ -3409,6 +3417,7 @@ const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
   pads: "tools",
   metronomeSettings: "tools",
   voiceGuideSettings: "tools",
+  separator: "layout",
   performanceSettings: "tools",
 };
 
@@ -3465,6 +3474,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "pads": return { w: 24, h: 18 };
     case "metronomeSettings": return { w: 24, h: DEFAULT_METRONOME_WIDGET_HEIGHT };
     case "voiceGuideSettings": return { w: 24, h: 14 };
+    case "separator": return { w: 24, h: 2 };
     case "performanceSettings": return { w: 24, h: 20 };
     case "nextMarker": case "nextSong": case "currentKey":
     case "progressMarker": case "progressSong":
