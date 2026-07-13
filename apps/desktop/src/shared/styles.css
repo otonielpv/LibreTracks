@@ -4651,6 +4651,20 @@ textarea {
   min-width: 39rem;
 }
 
+/* The song popover packs four trigger options, the transition pair and —
+   with "Tras X compases" — a bars stepper into a single nowrap row, which
+   is wider than the panel's max-width cap and spills outside the panel.
+   Let the row wrap instead, same recipe as the Jump control group. */
+.lt-control-group-song .lt-control-group-body {
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
+}
+
+.lt-control-group-song .lt-control-group-actions {
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
+}
+
 .lt-control-popover-header {
   display: flex;
   align-items: baseline;
