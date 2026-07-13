@@ -12,6 +12,7 @@ import {
   bpmForRegion,
   clipDisplayName,
   clipsForRegion,
+  compactSongPlayIntent,
   formatBpm,
   keyForRegion,
 } from "./songWidgets";
@@ -156,4 +157,22 @@ describe("bpm / key / active", () => {
     expect(activeRegion(song, 30)?.id).toBe("B");
     expect(activeRegion(song, 100)).toBeNull();
   });
+});
+
+describe("compact song play", () => {
+  const target = region({ id: "B", startSeconds: 20, endSeconds: 40 });
+
+  it("uses the configured jump scheduler while transport is playing", () => {
+    expect(compactSongPlayIntent("playing", target)).toEqual({ kind: "schedule" });
+  });
+
+  it.each(["stopped", "paused", "empty"] as const)(
+    "seeks to the song and starts transport from %s",
+    (playbackState) => {
+      expect(compactSongPlayIntent(playbackState, target)).toEqual({
+        kind: "start",
+        positionSeconds: 20,
+      });
+    },
+  );
 });

@@ -4,13 +4,17 @@ import {
   ALL_WIDGET_TYPES,
   LAYOUT_COLUMNS,
   LAYOUT_MAX_ROWS,
+  LAYOUT_VERSION,
   DEFAULT_METRONOME_WIDGET_HEIGHT,
   clearStoredLayout,
+  containingGroupId,
   defaultLayout,
   layoutExportFilename,
+  moveWidgetWithGroup,
   normalizeLayout,
   parseLayoutFile,
   readStoredLayout,
+  reconcileWidgetGroup,
   serializeLayoutFile,
   writeStoredLayout,
   type RemoteLayout,
@@ -241,6 +245,90 @@ describe("remoteLayout", () => {
     expect(result.tabs[0].widgets.map((w) => w.type)).toEqual(["timeline", "currentKey"]);
   });
 
+  it("preserves only valid configuration for design widgets", () => {
+    const result = normalizeLayout({
+      version: 4,
+      activeTabId: "design",
+      tabs: [{
+        id: "design",
+        name: "Design",
+        widgets: [
+          {
+            id: "title",
+            type: "layoutTitle",
+            x: 0, y: 0, w: 24, h: 3,
+            config: { text: "Directo", align: "center", separatorStyle: "dashed", unknown: true },
+          },
+          {
+            id: "separator",
+            type: "separator",
+            x: 0, y: 3, w: 24, h: 2,
+            config: { separatorStyle: "dashed", text: "ignored" },
+          },
+          {
+            id: "invalid",
+            type: "layoutNote",
+            x: 0, y: 5, w: 12, h: 6,
+            config: { align: "sideways", separatorStyle: "rainbow" },
+          },
+        ],
+      }],
+    });
+
+    expect(result.tabs[0].widgets.map((widget) => widget.config)).toEqual([
+      { text: "Directo", align: "center" },
+      { separatorStyle: "dashed" },
+      undefined,
+    ]);
+  });
+
+  it("groups contained widgets and moves them with the group", () => {
+    const widgets = [
+      { id: "group", type: "layoutGroup" as const, x: 0, y: 0, w: 12, h: 12 },
+      { id: "inside", type: "currentKey" as const, x: 2, y: 3, w: 4, h: 4 },
+      { id: "outside", type: "nextSong" as const, x: 14, y: 3, w: 4, h: 4 },
+    ];
+    const grouped = reconcileWidgetGroup(widgets, "group");
+    expect(grouped.find((widget) => widget.id === "inside")?.groupId).toBe("group");
+    expect(grouped.find((widget) => widget.id === "outside")?.groupId).toBeUndefined();
+
+    const moved = moveWidgetWithGroup(grouped, "group", 5, 6);
+    expect(moved.find((widget) => widget.id === "group")).toMatchObject({ x: 5, y: 6 });
+    expect(moved.find((widget) => widget.id === "inside")).toMatchObject({ x: 7, y: 9 });
+    expect(moved.find((widget) => widget.id === "outside")).toMatchObject({ x: 14, y: 3 });
+
+    const childOutside = moveWidgetWithGroup(moved, "inside", 20, 20);
+    const ungrouped = reconcileWidgetGroup(childOutside, "inside");
+    expect(ungrouped.find((widget) => widget.id === "inside")?.groupId).toBeUndefined();
+  });
+
+  it("uses the visible group content area and reserves its title rows", () => {
+    const group = { id: "group", type: "layoutGroup" as const, x: 0, y: 4, w: 12, h: 12 };
+    const belowTitle = { id: "inside", type: "currentKey" as const, x: 1, y: 6, w: 4, h: 4 };
+    const overTitle = { id: "title-overlap", type: "currentKey" as const, x: 1, y: 5, w: 4, h: 4 };
+
+    expect(containingGroupId([group, belowTitle], belowTitle)).toBe("group");
+    expect(containingGroupId([group, overTitle], overTitle)).toBeNull();
+  });
+
+  it("drops stale group references when importing a layout", () => {
+    const result = normalizeLayout({
+      version: 4,
+      activeTabId: "t",
+      tabs: [{
+        id: "t",
+        name: "Groups",
+        widgets: [
+          { id: "group", type: "layoutGroup", x: 0, y: 0, w: 12, h: 12 },
+          { id: "valid", type: "currentKey", x: 1, y: 1, w: 4, h: 4, groupId: "group" },
+          { id: "stale", type: "nextSong", x: 14, y: 1, w: 4, h: 4, groupId: "missing" },
+        ],
+      }],
+    });
+    expect(result.tabs[0].widgets.find((widget) => widget.id === "valid")?.groupId).toBe("group");
+    expect(result.tabs[0].widgets.find((widget) => widget.id === "stale")?.groupId).toBeUndefined();
+  });
+
   it("clamps out-of-range spans", () => {
     const result = normalizeLayout({
       version: 2,
@@ -292,6 +380,55 @@ describe("remoteLayout", () => {
     expect(allWidgets(imported).map((w) => `${w.type}:${w.w}x${w.h}`)).toEqual(
       allWidgets(layout).map((w) => `${w.type}:${w.w}x${w.h}`),
     );
+  });
+
+  it("exports group frames and child membership in the raw file and round-trips them", () => {
+    const layout: RemoteLayout = {
+      version: 4,
+      activeTabId: "group-tab",
+      customized: true,
+      tabs: [{
+        id: "group-tab",
+        name: "Groups",
+        widgets: [
+          {
+            id: "band",
+            type: "layoutGroup",
+            x: 0, y: 0, w: 16, h: 14,
+            config: { text: "Banda", align: "center" },
+          },
+          {
+            id: "transport",
+            type: "transportButtons",
+            x: 1, y: 3, w: 14, h: 5,
+            groupId: "band",
+          },
+        ],
+      }],
+    };
+
+    const text = serializeLayoutFile(layout);
+    const raw = JSON.parse(text) as {
+      version: number;
+      layout: RemoteLayout;
+    };
+    expect(raw.version).toBe(LAYOUT_VERSION);
+    expect(raw.layout.version).toBe(LAYOUT_VERSION);
+    expect(raw.layout.tabs[0].widgets[0]).toMatchObject({
+      id: "band",
+      type: "layoutGroup",
+      config: { text: "Banda", align: "center" },
+    });
+    expect(raw.layout.tabs[0].widgets[1]).toMatchObject({
+      id: "transport",
+      groupId: "band",
+    });
+
+    const imported = parseLayoutFile(text);
+    expect(imported.tabs[0].widgets.find((widget) => widget.id === "band")?.type)
+      .toBe("layoutGroup");
+    expect(imported.tabs[0].widgets.find((widget) => widget.id === "transport")?.groupId)
+      .toBe("band");
   });
 
   it("imports a v1 file and migrates it to tabs", () => {

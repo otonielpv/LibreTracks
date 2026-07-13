@@ -39,7 +39,7 @@ Press **Edit layout** to open an absolute 24-column grid inspired by Mixing Stat
 - Use **Hide widgets** when the component panel covers a resize grip underneath it.
 - Add, rename, or remove tabs to separate controls by purpose.
 
-The widget panel is grouped into **Information**, **Transport**, **Live control**, **Songs**, **Mixer**, and **Tools**.
+The widget panel is grouped into **Information**, **Transport**, **Live control**, **Songs**, **Mixer**, **Tools**, and **Layout**.
 
 When finished:
 
@@ -60,11 +60,13 @@ Use complete widgets or split a section into independent controls:
 - Centered timeline, combined control deck, or separate Vamp, jump, transition, and song/transpose panels.
 - Marker grid, next section/song, current key, and progress/countdown readouts.
 - Full mixer or separate song filter, song master, and fader widgets.
-- Compact song and clip view with **Active/All** scope. Songs flow into multiple columns when horizontal space is available.
+- Compact song and clip view with **Active/All** scope. Every clip explicitly identifies its track. In **All**, songs always stay in one horizontally scrolling row; increasing the widget height enlarges the cards but never creates another row. Clip lists scroll independently, but vertical gestures continue scrolling the tab when a list reaches its edge. Playing a song starts transport from its beginning when stopped or paused; during playback it honours the configured global transition.
 - Ambient Pads, metronome settings, and voice guide settings.
-- Visual separator for grouping controls and adding space. It draws horizontally or vertically from the shape assigned with the resize grip and never captures interaction outside the editor.
+- **Layout** offers configurable titles and notes, invisible blank spaces, separators, and groups. In the editor, drag a widget completely inside the group area below its header: the frame highlights to confirm it will be associated when dropped. It then moves with the group; dragging it outside makes it independent again. Removing the group does not remove its controls.
 
 Widgets adapt their content, typography, columns, and internal scrolling to their rectangle. A small box does not squeeze every marker or control until it becomes unreadable; long areas receive their own scroll.
+
+The **Config** buttons for Vamp, jump, and transition open a floating panel above the layout. Its content neither increases the widget height nor gets clipped when the widget is small; the panel scrolls internally when needed and closes by pressing outside, its close button, or `Escape`.
 
 ## Live Tools
 

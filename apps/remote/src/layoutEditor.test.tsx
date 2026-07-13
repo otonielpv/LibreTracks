@@ -52,6 +52,20 @@ describe("layout editor", () => {
     expect(screen.getByText("Vamp / Loop")).toBeTruthy();
   });
 
+  it("opens control configuration in a floating layer outside the widget", () => {
+    render(<App />);
+    const configButtons = screen.getAllByRole("button", { name: /settings|config/i });
+    fireEvent.click(configButtons[0]);
+
+    expect(screen.getByRole("dialog", { name: /settings|config/i })).toBeTruthy();
+    const layer = document.querySelector(".remote-floating-panel-layer");
+    expect(layer).not.toBeNull();
+    expect(layer?.querySelector(".remote-inline-panel.is-floating")).not.toBeNull();
+
+    fireEvent.pointerDown(layer!);
+    expect(screen.queryByRole("dialog", { name: /settings|config/i })).toBeNull();
+  });
+
   it("toggles edit mode and shows the palette", () => {
     render(<App />);
     const editButton = screen.getByRole("button", { name: /edit layout|editar layout/i });
@@ -240,6 +254,45 @@ describe("layout editor", () => {
     fireEvent.click(separator);
 
     expect(document.querySelector(".layout-separator")).not.toBeNull();
+  });
+
+  it("adds and configures the design widgets per instance", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+
+    for (const name of [
+      /section title|título de sección/i,
+      /^\+ (note|nota)$/i,
+      /widget group|grupo de widgets/i,
+      /blank space|espacio en blanco/i,
+    ]) {
+      expect(within(palette).getByRole("button", { name })).toBeTruthy();
+    }
+
+    fireEvent.click(within(palette).getByRole("button", {
+      name: /^\+ (widget group|grupo de widgets)$/i,
+    }));
+    expect(document.querySelector(".layout-design-group")).not.toBeNull();
+
+    fireEvent.click(within(palette).getByRole("button", {
+      name: /^\+ (section title|título de sección)$/i,
+    }));
+    const configureButtons = screen.getAllByRole("button", { name: /^configure$|^configurar$/i });
+    fireEvent.click(configureButtons[configureButtons.length - 1]);
+
+    const dialog = screen.getByRole("dialog", {
+      name: /section title|título de sección/i,
+    });
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Escena acústica" } });
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "center" } });
+
+    const stored = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    ) as RemoteLayout;
+    const title = stored.tabs.flatMap((tab) => tab.widgets)
+      .find((widget) => widget.type === "layoutTitle");
+    expect(title?.config).toEqual({ text: "Escena acústica", align: "center" });
   });
 
   it("imports a layout file and persists it", async () => {

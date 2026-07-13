@@ -2,14 +2,17 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   type ChangeEvent as ReactChangeEvent,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from "react";
+import { createPortal } from "react-dom";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
@@ -72,23 +75,28 @@ import {
   LAYOUT_COLUMNS,
   LAYOUT_MAX_ROWS,
   clearStoredLayout,
+  containingGroupId,
   defaultLayout,
   layoutExportFilename,
   makeEmptyTab,
+  moveWidgetWithGroup,
   newWidgetId,
   parseLayoutFile,
   readStoredLayout,
+  reconcileWidgetGroup,
   serializeLayoutFile,
   writeStoredLayout,
   type LayoutTab,
   type LayoutPresetProfile,
   type RemoteLayout,
+  type WidgetConfig,
   type WidgetPlacement,
   type WidgetType,
 } from "./remoteLayout";
 import {
   bpmForRegion,
   clipsForRegion,
+  compactSongPlayIntent,
   formatBpm,
   keyForRegion,
   type SongClipEntry,
@@ -391,13 +399,15 @@ type RemoteUiState = {
   selectedRegionId: string | null;
   /** Which inline settings sheet (vamp/jump/song) is open in the deck. */
   activePanel: RemotePanelKey | null;
+  activePanelOwnerId: string | null;
+  activePanelAnchor: RemotePanelAnchor | null;
   /** Marker ids hidden from the jump grid, mirrored to localStorage. */
   hiddenMarkerIds: Set<string>;
   /** Whether hidden markers are temporarily revealed (dimmed) for restoring. */
   revealHiddenMarkers: boolean;
   setSelectedRegionId: (regionId: string | null) => void;
-  setActivePanel: (panel: RemotePanelKey | null) => void;
-  toggleActivePanel: (panel: RemotePanelKey) => void;
+  toggleActivePanel: (panel: RemotePanelKey, ownerId: string, anchor: RemotePanelAnchor) => void;
+  closeActivePanel: () => void;
   toggleMarkerHidden: (markerId: string) => void;
   setRevealHiddenMarkers: (reveal: boolean) => void;
 };
@@ -409,16 +419,23 @@ type RemoteUiState = {
 const useRemoteUiStore = create<RemoteUiState>()((set) => ({
   selectedRegionId: null,
   activePanel: null,
+  activePanelOwnerId: null,
+  activePanelAnchor: null,
   hiddenMarkerIds: readHiddenMarkerIds(),
   revealHiddenMarkers: false,
   setSelectedRegionId: (selectedRegionId) => {
     set({ selectedRegionId });
   },
-  setActivePanel: (activePanel) => {
-    set({ activePanel });
+  toggleActivePanel: (panel, ownerId, activePanelAnchor) => {
+    set((state) => {
+      const closing = state.activePanel === panel && state.activePanelOwnerId === ownerId;
+      return closing
+        ? { activePanel: null, activePanelOwnerId: null, activePanelAnchor: null }
+        : { activePanel: panel, activePanelOwnerId: ownerId, activePanelAnchor };
+    });
   },
-  toggleActivePanel: (panel) => {
-    set((state) => ({ activePanel: state.activePanel === panel ? null : panel }));
+  closeActivePanel: () => {
+    set({ activePanel: null, activePanelOwnerId: null, activePanelAnchor: null });
   },
   toggleMarkerHidden: (markerId) => {
     set((state) => {
@@ -474,8 +491,8 @@ function sendPadSettingsUpdate(settings: AppSettings) {
 /**
  * Schedule a jump to a song region honouring the project's global song-jump
  * config (trigger + transition), read from the jump store. Shared by the
- * control deck and the song-header widget so "play this song" behaves the same
- * everywhere — same path the desktop compact view's per-song play uses.
+ * control deck and the compact-song widget while transport is already running.
+ * Starting a song from stopped/paused uses playCompactSong below instead.
  */
 function scheduleRegionJumpFromStore(regionId: string) {
   const jump = useRemoteJumpStore.getState();
@@ -559,6 +576,7 @@ function StepperField({
 }
 
 type RemotePanelKey = "jump" | "vamp" | "song";
+type RemotePanelAnchor = { top: number; right: number; bottom: number; left: number };
 
 function magnetizePanValue(value: number) {
   return Math.abs(value) <= PAN_CENTER_MAGNET ? 0 : value;
@@ -1559,16 +1577,66 @@ function useSectionMarkers() {
 /** Which slice of the control deck to render. Undefined = the whole deck. */
 type ControlDeckSection = "vamp" | "jump" | "song" | "region";
 
+function RemoteFloatingPanel({
+  anchor,
+  onClose,
+  children,
+}: {
+  anchor: RemotePanelAnchor;
+  onClose: () => void;
+  children: ReactElement;
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const narrow = window.innerWidth <= 600;
+  const panelWidth = Math.min(640, window.innerWidth - 24);
+  const left = Math.max(12, Math.min(anchor.right - panelWidth, window.innerWidth - panelWidth - 12));
+  const spaceBelow = window.innerHeight - anchor.bottom - 12;
+  const openAbove = !narrow && spaceBelow < Math.min(280, window.innerHeight * 0.45);
+  const style: CSSProperties | undefined = narrow
+    ? undefined
+    : {
+        left,
+        width: panelWidth,
+        maxHeight: Math.max(160, openAbove ? anchor.top - 20 : spaceBelow),
+        ...(openAbove
+          ? { bottom: window.innerHeight - anchor.top + 8 }
+          : { top: anchor.bottom + 8 }),
+      };
+
+  return createPortal(
+    <div className="remote-floating-panel-layer" onPointerDown={onClose}>
+      <div
+        className="remote-inline-panel is-floating"
+        role="dialog"
+        aria-label={STRINGS.settings}
+        style={style}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /**
  * The control deck: Vamp/Loop, Jump config, Song transition, the region
- * carousel with transpose, and the inline settings sheets. Reads its shared UI
+ * carousel with transpose, and floating settings sheets. Reads its shared UI
  * state (selected region, open panel) from `useRemoteUiStore` and its jump
  * config from `useRemoteJumpStore`. With no `section` it renders the whole deck
  * (the composite widget); with a `section` it renders just that card + its
- * inline settings sheet, so each slice can be placed as its own widget. The
+ * floating settings sheet, so each slice can be placed as its own widget. The
  * shared sync effects/handlers run either way, so behaviour is identical.
  */
 function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
+  const panelOwnerId = useId();
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
   const settings = useRemoteSyncStore((state) => state.settings);
@@ -1589,8 +1657,26 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
   const selectedRegionId = useRemoteUiStore((state) => state.selectedRegionId);
   const setSelectedRegionId = useRemoteUiStore((state) => state.setSelectedRegionId);
   const activePanel = useRemoteUiStore((state) => state.activePanel);
-  const setActivePanel = useRemoteUiStore((state) => state.setActivePanel);
+  const activePanelOwnerId = useRemoteUiStore((state) => state.activePanelOwnerId);
+  const activePanelAnchor = useRemoteUiStore((state) => state.activePanelAnchor);
   const toggleActivePanel = useRemoteUiStore((state) => state.toggleActivePanel);
+  const closeActivePanel = useRemoteUiStore((state) => state.closeActivePanel);
+  const ownedPanel = activePanelOwnerId === panelOwnerId ? activePanel : null;
+
+  const togglePanel = (panel: RemotePanelKey, event: ReactMouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    toggleActivePanel(panel, panelOwnerId, {
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
+    });
+  };
+
+  useEffect(() => () => {
+    const ui = useRemoteUiStore.getState();
+    if (ui.activePanelOwnerId === panelOwnerId) ui.closeActivePanel();
+  }, [panelOwnerId]);
 
   const regions = songView?.regions ?? [];
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
@@ -1876,7 +1962,7 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
   // The inline settings sheet belongs to the section it configures; only render
   // it when that section's card is visible in this instance.
   const showPanel =
-    activePanel !== null && (!section || section === activePanel);
+    ownedPanel !== null && activePanelAnchor !== null && (!section || section === ownedPanel);
 
   return (
     <div className={`transport-control-deck ${section ? "is-section" : ""}`}>
@@ -1889,9 +1975,9 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
             </div>
             <button
               type="button"
-              className={`group-settings-button ${activePanel === "vamp" ? "is-active" : ""}`}
-              aria-expanded={activePanel === "vamp"}
-              onClick={() => toggleActivePanel("vamp")}
+              className={`group-settings-button ${ownedPanel === "vamp" ? "is-active" : ""}`}
+              aria-expanded={ownedPanel === "vamp"}
+              onClick={(event) => togglePanel("vamp", event)}
             >
               {STRINGS.settings}
             </button>
@@ -1914,9 +2000,9 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
             </div>
             <button
               type="button"
-              className={`group-settings-button ${activePanel === "jump" ? "is-active" : ""}`}
-              aria-expanded={activePanel === "jump"}
-              onClick={() => toggleActivePanel("jump")}
+              className={`group-settings-button ${ownedPanel === "jump" ? "is-active" : ""}`}
+              aria-expanded={ownedPanel === "jump"}
+              onClick={(event) => togglePanel("jump", event)}
             >
               {STRINGS.settings}
             </button>
@@ -1939,9 +2025,9 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
             </div>
             <button
               type="button"
-              className={`group-settings-button ${activePanel === "song" ? "is-active" : ""}`}
-              aria-expanded={activePanel === "song"}
-              onClick={() => toggleActivePanel("song")}
+              className={`group-settings-button ${ownedPanel === "song" ? "is-active" : ""}`}
+              aria-expanded={ownedPanel === "song"}
+              onClick={(event) => togglePanel("song", event)}
             >
               {STRINGS.settings}
             </button>
@@ -2015,27 +2101,22 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
         </div>
         ) : null}
 
-        {showPanel ? (
-          <div
-            className="remote-inline-panel"
-            role="dialog"
-            aria-label={STRINGS.settings}
-          >
-            {/* Close button — only visible when the panel is presented as a
-                bottom sheet (phone / short-height); on wider screens it stays
-                an in-flow panel and the CSS hides this affordance. */}
+        {showPanel && activePanelAnchor ? (
+          <RemoteFloatingPanel anchor={activePanelAnchor} onClose={closeActivePanel}>
+            <>
             <button
               type="button"
               className="remote-inline-panel-close"
               aria-label={STRINGS.close}
-              onClick={() => setActivePanel(null)}
+              onClick={closeActivePanel}
             >
               ×
             </button>
-            {activePanel === "jump" ? renderJumpControls() : null}
-            {activePanel === "vamp" ? renderVampControls() : null}
-            {activePanel === "song" ? renderSongControls() : null}
-          </div>
+            {ownedPanel === "jump" ? renderJumpControls() : null}
+            {ownedPanel === "vamp" ? renderVampControls() : null}
+            {ownedPanel === "song" ? renderSongControls() : null}
+            </>
+          </RemoteFloatingPanel>
         ) : null}
       </div>
   );
@@ -2708,6 +2789,20 @@ function useMixerWidgetModel() {
   return { activeRegion, filterActiveSong, filterAvailable, folderPaletteMap, visibleTracks };
 }
 
+/** Match Desktop's compact view: while playing, honour the configured song
+ * transition; otherwise seek to the song start and start playback. WebSocket
+ * commands are consumed in order by the Desktop bridge. */
+function playCompactSong(region: SongRegionSummary) {
+  const playbackState = useRemoteSyncStore.getState().snapshot?.playbackState;
+  const intent = compactSongPlayIntent(playbackState, region);
+  if (intent.kind === "schedule") {
+    scheduleRegionJumpFromStore(region.id);
+    return;
+  }
+  sendCommand({ cmd: "seek", positionSeconds: intent.positionSeconds });
+  sendCommand({ cmd: "play" });
+}
+
 function currentLayoutPresetProfile(): LayoutPresetProfile {
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -2857,7 +2952,7 @@ function SongHeaderColumn({
           className="song-header-play"
           aria-label={`${STRINGS.play} ${region.name}`}
           title={`${STRINGS.play} ${region.name}`}
-          onClick={() => scheduleRegionJumpFromStore(region.id)}
+          onClick={() => playCompactSong(region)}
         >
           ▶
         </button>
@@ -2934,7 +3029,8 @@ function ClipStack({ clips }: { clips: SongClipEntry[] }) {
           <span className="clip-entry-name" title={clip.clipName}>
             {clip.clipName}
           </span>
-          <span className="clip-entry-track" title={clip.trackName}>
+          <span className="clip-entry-track" title={`${STRINGS.clipTrackLabel} ${clip.trackName}`}>
+            <span className="clip-entry-track-label">{STRINGS.clipTrackLabel}</span>{" "}
             {clip.trackName}
           </span>
         </div>
@@ -3124,8 +3220,37 @@ function VoiceGuideSettingsWidget() {
 
 /** Purely visual layout aid. Its line follows the widget aspect ratio and the
  * host keeps it inert outside edit mode, so it never blocks live controls. */
-function SeparatorWidget() {
-  return <div className="layout-separator" aria-hidden="true" />;
+type DesignWidgetProps = { placement: WidgetPlacement };
+
+function LayoutTitleWidget({ placement }: DesignWidgetProps) {
+  const text = placement.config?.text?.trim() || STRINGS.layoutTitleDefault;
+  const align = placement.config?.align ?? "left";
+  return <div className={`layout-design-title is-${align}`}>{text}</div>;
+}
+
+function LayoutNoteWidget({ placement }: DesignWidgetProps) {
+  const text = placement.config?.text?.trim() || STRINGS.layoutNoteDefault;
+  const align = placement.config?.align ?? "left";
+  return <div className={`layout-design-note is-${align}`}>{text}</div>;
+}
+
+function LayoutGroupWidget({ placement }: DesignWidgetProps) {
+  const text = placement.config?.text?.trim() || STRINGS.layoutGroupDefault;
+  const align = placement.config?.align ?? "left";
+  return (
+    <div className="layout-design-group" aria-label={text}>
+      <span className={`is-${align}`}>{text}</span>
+    </div>
+  );
+}
+
+function SpacerWidget() {
+  return <div className="layout-spacer" aria-hidden="true" />;
+}
+
+function SeparatorWidget({ placement }: DesignWidgetProps) {
+  const style = placement.config?.separatorStyle ?? "line";
+  return <div className={`layout-separator is-${style}`} aria-hidden="true" />;
 }
 
 function LegacyPerformanceSettingsWidget() {
@@ -3314,7 +3439,7 @@ function CountdownSongTimeHost() {
 type WidgetDefinition = {
   /** i18n label shown in the editor palette. */
   labelKey: keyof typeof STRINGS;
-  Component: () => ReactElement;
+  Component: (props: DesignWidgetProps) => ReactElement;
   /** Default column span when added from the palette. */
   defaultW: number;
   defaultH: number;
@@ -3368,6 +3493,10 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: 20 },
   metronomeSettings: { labelKey: "widgetMetronomeSettings", Component: MetronomeSettingsWidget, defaultW: 8, defaultH: DEFAULT_METRONOME_WIDGET_HEIGHT },
   voiceGuideSettings: { labelKey: "widgetVoiceGuideSettings", Component: VoiceGuideSettingsWidget, defaultW: 8, defaultH: 20 },
+  layoutTitle: { labelKey: "widgetLayoutTitle", Component: LayoutTitleWidget, defaultW: LAYOUT_COLUMNS, defaultH: 3 },
+  layoutNote: { labelKey: "widgetLayoutNote", Component: LayoutNoteWidget, defaultW: 12, defaultH: 6 },
+  layoutGroup: { labelKey: "widgetLayoutGroup", Component: LayoutGroupWidget, defaultW: 12, defaultH: 12 },
+  spacer: { labelKey: "widgetSpacer", Component: SpacerWidget, defaultW: 6, defaultH: 4 },
   separator: { labelKey: "widgetSeparator", Component: SeparatorWidget, defaultW: LAYOUT_COLUMNS, defaultH: 2 },
   performanceSettings: { labelKey: "widgetPerformanceSettings", Component: LegacyPerformanceSettingsWidget, defaultW: 12, defaultH: 20, palette: false },
   nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 4, defaultH: 4 },
@@ -3417,6 +3546,10 @@ const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
   pads: "tools",
   metronomeSettings: "tools",
   voiceGuideSettings: "tools",
+  layoutTitle: "layout",
+  layoutNote: "layout",
+  layoutGroup: "layout",
+  spacer: "layout",
   separator: "layout",
   performanceSettings: "tools",
 };
@@ -3474,6 +3607,10 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "pads": return { w: 24, h: 18 };
     case "metronomeSettings": return { w: 24, h: DEFAULT_METRONOME_WIDGET_HEIGHT };
     case "voiceGuideSettings": return { w: 24, h: 14 };
+    case "layoutTitle": return { w: 24, h: 3 };
+    case "layoutNote": return { w: 24, h: 6 };
+    case "layoutGroup": return { w: 24, h: 12 };
+    case "spacer": return { w: 12, h: 4 };
     case "separator": return { w: 24, h: 2 };
     case "performanceSettings": return { w: 24, h: 20 };
     case "nextMarker": case "nextSong": case "currentKey":
@@ -3491,6 +3628,91 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
 const ROW_HEIGHT_PX = 18;
 const GRID_GAP_PX = 2;
 
+function isConfigurableDesignWidget(type: WidgetType): boolean {
+  return type === "layoutTitle" || type === "layoutNote" || type === "layoutGroup" || type === "separator";
+}
+
+function DesignWidgetConfigDialog({
+  placement,
+  onChange,
+  onClose,
+}: {
+  placement: WidgetPlacement;
+  onChange: (config: WidgetConfig) => void;
+  onClose: () => void;
+}) {
+  const config = placement.config ?? {};
+  const isText = placement.type === "layoutTitle" || placement.type === "layoutNote" || placement.type === "layoutGroup";
+  const label = STRINGS[WIDGET_REGISTRY[placement.type].labelKey];
+  return (
+    <div className="layout-config-backdrop" role="presentation" onPointerDown={onClose}>
+      <section
+        className="layout-config-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${STRINGS.configureWidget}: ${label}`}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <strong>{label}</strong>
+          <button type="button" onClick={onClose} aria-label={STRINGS.close}>×</button>
+        </header>
+        {isText ? (
+          <>
+            <label className="layout-config-field">
+              <span>{STRINGS.widgetText}</span>
+              {placement.type === "layoutNote" ? (
+                <textarea
+                  value={config.text ?? ""}
+                  maxLength={1000}
+                  placeholder={STRINGS.layoutNoteDefault}
+                  onChange={(event) => onChange({ ...config, text: event.currentTarget.value })}
+                />
+              ) : (
+                <input
+                  value={config.text ?? ""}
+                  maxLength={120}
+                  placeholder={placement.type === "layoutGroup" ? STRINGS.layoutGroupDefault : STRINGS.layoutTitleDefault}
+                  onChange={(event) => onChange({ ...config, text: event.currentTarget.value })}
+                />
+              )}
+            </label>
+            <label className="layout-config-field">
+              <span>{STRINGS.textAlignment}</span>
+              <select
+                value={config.align ?? "left"}
+                onChange={(event) => onChange({
+                  ...config,
+                  align: event.currentTarget.value as NonNullable<WidgetConfig["align"]>,
+                })}
+              >
+                <option value="left">{STRINGS.alignLeft}</option>
+                <option value="center">{STRINGS.alignCenter}</option>
+                <option value="right">{STRINGS.alignRight}</option>
+              </select>
+            </label>
+          </>
+        ) : (
+          <label className="layout-config-field">
+            <span>{STRINGS.separatorStyle}</span>
+            <select
+              value={config.separatorStyle ?? "line"}
+              onChange={(event) => onChange({
+                ...config,
+                separatorStyle: event.currentTarget.value as NonNullable<WidgetConfig["separatorStyle"]>,
+              })}
+            >
+              <option value="line">{STRINGS.separatorLine}</option>
+              <option value="dashed">{STRINGS.separatorDashed}</option>
+              <option value="space">{STRINGS.separatorSpace}</option>
+            </select>
+          </label>
+        )}
+      </section>
+    </div>
+  );
+}
+
 /**
  * Renders one placed widget at its absolute grid cell (x/y, w/h). In edit mode
  * the whole top chrome is the move handle and a corner grip resizes it; both
@@ -3504,14 +3726,18 @@ function LayoutWidgetHost({
   onRemove,
   onMovePointerDown,
   onResizePointerDown,
+  onConfigure,
   isDragging,
+  isGroupDropTarget,
 }: {
   placement: WidgetPlacement;
   editing: boolean;
   onRemove: () => void;
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onResizePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onConfigure: () => void;
   isDragging: boolean;
+  isGroupDropTarget: boolean;
 }) {
   const definition = WIDGET_REGISTRY[placement.type];
   if (!definition) {
@@ -3521,7 +3747,7 @@ function LayoutWidgetHost({
 
   return (
     <div
-      className={`layout-widget layout-widget-type-${placement.type} ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""}`}
+      className={`layout-widget layout-widget-type-${placement.type} ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""} ${isGroupDropTarget ? "is-group-drop-target" : ""}`}
       style={{
         gridColumn: `${placement.x + 1} / span ${Math.min(LAYOUT_COLUMNS, placement.w)}`,
         gridRow: `${placement.y + 1} / span ${placement.h}`,
@@ -3539,6 +3765,11 @@ function LayoutWidgetHost({
             <span className="layout-widget-title">⠿ {STRINGS[definition.labelKey]}</span>
           </div>
           <div className="layout-widget-sizers">
+            {isConfigurableDesignWidget(placement.type) ? (
+              <button type="button" className="layout-widget-configure" onClick={onConfigure}>
+                {STRINGS.configureWidget}
+              </button>
+            ) : null}
             <button type="button" className="layout-widget-remove" onClick={onRemove}>
               {STRINGS.removeWidget}
             </button>
@@ -3546,7 +3777,7 @@ function LayoutWidgetHost({
         </div>
       ) : null}
       <div className={`layout-widget-body ${editing ? "is-inert" : ""}`}>
-        <Component />
+        <Component placement={placement} />
       </div>
       {editing ? (
         <div
@@ -3756,6 +3987,8 @@ function LayoutCanvas({
   const [dragId, setDragId] = useState<string | null>(null);
   const [pendingAddType, setPendingAddType] = useState<WidgetType | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  const [configWidgetId, setConfigWidgetId] = useState<string | null>(null);
+  const [groupDropId, setGroupDropId] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{
     x: number; y: number; w: number; h: number; label: string;
   } | null>(null);
@@ -3767,6 +4000,8 @@ function LayoutCanvas({
   const activeTab =
     layout.tabs.find((tab) => tab.id === layout.activeTabId) ?? layout.tabs[0];
   const widgets = activeTab?.widgets ?? [];
+  const widgetsRef = useRef(widgets);
+  widgetsRef.current = widgets;
 
   // Measure the column width from the grid so pointer coordinates map to cells.
   useEffect(() => {
@@ -3788,6 +4023,10 @@ function LayoutCanvas({
   // Replace the active tab's widgets, keeping every other tab untouched.
   const commit = (nextWidgets: WidgetPlacement[]) => {
     if (!activeTab) return;
+    // Pointer move/up events can arrive before React has rendered the previous
+    // geometry update. Keep the latest committed array available synchronously
+    // so dropping into a group always uses the visible final rectangle.
+    widgetsRef.current = nextWidgets;
     onChange({
       ...layout,
       customized: true,
@@ -3828,12 +4067,24 @@ function LayoutCanvas({
   };
 
   const removeWidget = (id: string) => {
-    commit(widgets.filter((widget) => widget.id !== id));
+    if (configWidgetId === id) setConfigWidgetId(null);
+    commit(widgets
+      .filter((widget) => widget.id !== id)
+      .map((widget) => {
+        if (widget.groupId !== id) return widget;
+        const { groupId: _groupId, ...withoutGroup } = widget;
+        return withoutGroup;
+      }));
+  };
+
+  const updateWidgetConfig = (id: string, config: WidgetConfig) => {
+    commit(widgets.map((widget) => widget.id === id ? { ...widget, config } : widget));
   };
 
   const resizeWidget = (id: string, patch: { w?: number; h?: number }) => {
+    const currentWidgets = widgetsRef.current;
     commit(
-      widgets.map((widget) =>
+      currentWidgets.map((widget) =>
         widget.id === id
           ? {
               ...widget,
@@ -3845,10 +4096,10 @@ function LayoutCanvas({
     );
   };
 
-  const updatePos = (id: string, x: number, y: number) => {
-    commit(
-      widgets.map((widget) => (widget.id === id ? { ...widget, x, y } : widget)),
-    );
+  const updatePos = (id: string, x: number, y: number): WidgetPlacement[] => {
+    const nextWidgets = moveWidgetWithGroup(widgetsRef.current, id, x, y);
+    commit(nextWidgets);
+    return nextWidgets;
   };
 
   // Client coords → grid cell (col, row), clamped to the grid.
@@ -3868,7 +4119,7 @@ function LayoutCanvas({
 
   // --- Gesture starts (from the widget host / palette) -------------------
   const beginMove = (id: string, event: ReactPointerEvent<HTMLElement>) => {
-    const widget = widgets.find((w) => w.id === id);
+    const widget = widgetsRef.current.find((w) => w.id === id);
     if (!widget) return;
     const rect = gridRef.current?.getBoundingClientRect();
     // Remember where inside the widget the finger grabbed, so the widget
@@ -3882,12 +4133,13 @@ function LayoutCanvas({
       grabDY: event.clientY - originY,
     };
     setDragId(id);
+    setGroupDropId(widget.type === "layoutGroup" ? null : widget.groupId ?? null);
     setDropPreview({ x: widget.x, y: widget.y, w: widget.w, h: widget.h, label: STRINGS[WIDGET_REGISTRY[widget.type].labelKey] });
     gridRef.current?.setPointerCapture?.(event.pointerId);
   };
 
   const beginResize = (id: string, event: ReactPointerEvent<HTMLElement>) => {
-    const widget = widgets.find((w) => w.id === id);
+    const widget = widgetsRef.current.find((w) => w.id === id);
     if (!widget) return;
     event.stopPropagation();
     gestureRef.current = {
@@ -3899,6 +4151,7 @@ function LayoutCanvas({
       startH: widget.h,
     };
     setDragId(id);
+    setGroupDropId(null);
     gridRef.current?.setPointerCapture?.(event.pointerId);
   };
 
@@ -3911,6 +4164,7 @@ function LayoutCanvas({
       moved: false,
     };
     setPendingAddType(type);
+    setGroupDropId(null);
     const definition = WIDGET_REGISTRY[type];
     const size = widgetDefaultSize(type, gridRef.current?.clientWidth ?? window.innerWidth);
     setDropPreview({ x: 0, y: 0, ...size, label: STRINGS[definition.labelKey] });
@@ -3923,12 +4177,18 @@ function LayoutCanvas({
     if (!gesture) return;
     if (gesture.kind === "move") {
       const { col, row } = cellFromClient(event.clientX - gesture.grabDX, event.clientY - gesture.grabDY);
-      const widget = widgets.find((w) => w.id === gesture.id);
+      const widget = widgetsRef.current.find((w) => w.id === gesture.id);
       if (widget && (widget.x !== col || widget.y !== row)) {
         const maxX = LAYOUT_COLUMNS - widget.w;
         const x = Math.min(col, Math.max(0, maxX));
         setDropPreview({ x, y: row, w: widget.w, h: widget.h, label: STRINGS[WIDGET_REGISTRY[widget.type].labelKey] });
-        updatePos(gesture.id, x, row);
+        const nextWidgets = updatePos(gesture.id, x, row);
+        const moved = nextWidgets.find((candidate) => candidate.id === gesture.id);
+        setGroupDropId(
+          moved && moved.type !== "layoutGroup"
+            ? containingGroupId(nextWidgets, moved)
+            : null,
+        );
       }
     } else if (gesture.kind === "resize") {
       const dw = Math.round((event.clientX - gesture.startX) / cellWidthRef.current);
@@ -3949,6 +4209,14 @@ function LayoutCanvas({
       const { col, row } = cellFromClient(event.clientX, event.clientY);
       const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - size.w));
       setDropPreview({ x, y: row, ...size, label: STRINGS[definition.labelKey] });
+      const candidate: WidgetPlacement = {
+        id: "layout-add-preview",
+        type: gesture.type,
+        x,
+        y: row,
+        ...size,
+      };
+      setGroupDropId(containingGroupId(widgetsRef.current, candidate));
     }
   };
 
@@ -3958,17 +4226,21 @@ function LayoutCanvas({
     setDragId(null);
     setPendingAddType(null);
     setDropPreview(null);
+    setGroupDropId(null);
     if (!gesture) return;
     if (gesture.kind === "add") {
       const size = widgetDefaultSize(gesture.type, gridRef.current?.clientWidth ?? window.innerWidth);
       const cell = gesture.moved
         ? cellFromClient(event.clientX, event.clientY)
-        : { col: 0, row: widgets.reduce((max, widget) => Math.max(max, widget.y + widget.h), 0) };
+        : { col: 0, row: widgetsRef.current.reduce((max, widget) => Math.max(max, widget.y + widget.h), 0) };
       const x = Math.min(cell.col, Math.max(0, LAYOUT_COLUMNS - size.w));
-      commit([
-        ...widgets,
+      const added = [
+        ...widgetsRef.current,
         { id: newWidgetId(gesture.type), type: gesture.type, x, y: cell.row, ...size },
-      ]);
+      ];
+      commit(reconcileWidgetGroup(added, added[added.length - 1].id));
+    } else if (gesture.kind === "move" || gesture.kind === "resize") {
+      commit(reconcileWidgetGroup(widgetsRef.current, gesture.id));
     }
   };
 
@@ -4050,19 +4322,33 @@ function LayoutCanvas({
               <span>{dropPreview.label}</span>
             </div>
           ) : null}
-          {widgets.map((placement) => (
+          {[...widgets]
+            .sort((a, b) => Number(a.type !== "layoutGroup") - Number(b.type !== "layoutGroup"))
+            .map((placement) => (
             <LayoutWidgetHost
               key={placement.id}
               placement={placement}
               editing={editing}
               isDragging={dragId === placement.id}
+              isGroupDropTarget={groupDropId === placement.id}
               onRemove={() => removeWidget(placement.id)}
+              onConfigure={() => setConfigWidgetId(placement.id)}
               onMovePointerDown={(event) => beginMove(placement.id, event)}
               onResizePointerDown={(event) => beginResize(placement.id, event)}
             />
           ))}
         </div>
       )}
+      {editing && configWidgetId ? (() => {
+        const placement = widgets.find((widget) => widget.id === configWidgetId);
+        return placement ? (
+          <DesignWidgetConfigDialog
+            placement={placement}
+            onChange={(config) => updateWidgetConfig(placement.id, config)}
+            onClose={() => setConfigWidgetId(null)}
+          />
+        ) : null;
+      })() : null}
     </div>
   );
 }

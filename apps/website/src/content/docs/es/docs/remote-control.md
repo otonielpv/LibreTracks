@@ -39,7 +39,7 @@ Pulsa **Editar layout** para abrir una cuadrícula absoluta de 24 columnas al es
 - Usa **Ocultar widgets** cuando el panel de componentes tape el tirador de algo colocado debajo.
 - Añade, renombra o elimina pestañas para separar controles por función.
 
-El panel de widgets está organizado en **Información**, **Transporte**, **Control en directo**, **Canciones**, **Mezclador** y **Herramientas**.
+El panel de widgets está organizado en **Información**, **Transporte**, **Control en directo**, **Canciones**, **Mezclador**, **Herramientas** y **Diseño**.
 
 Al terminar:
 
@@ -60,11 +60,13 @@ Puedes usar widgets completos o dividir una sección en controles independientes
 - Timeline centrado, panel de control completo o paneles separados de Vamp, salto, transición y canción/transposición.
 - Rejilla de marcas, siguiente sección/canción, tonalidad y contadores de progreso.
 - Mixer completo o widgets separados de filtro de canción, master y faders.
-- Vista compacta de canciones y clips, con selector **Activa/Todas**. Cuando hay ancho, las canciones se distribuyen en varias columnas.
+- Vista compacta de canciones y clips, con selector **Activa/Todas**. Cada clip identifica explícitamente su pista. En **Todas**, las canciones permanecen siempre en una sola fila con scroll horizontal; aumentar la altura agranda las tarjetas, pero nunca crea otra fila. Las listas de clips tienen scroll propio, pero al alcanzar su límite el gesto vertical continúa desplazando la pestaña. Reproducir una canción inicia el transporte desde su comienzo si estaba detenido o pausado; durante la reproducción respeta la transición global configurada.
 - Pads ambientales, configuración del metrónomo y configuración de la guía de voz.
-- Separador visual para crear bloques y espacio entre controles. Se dibuja horizontal o vertical según la forma que le des con el tirador de tamaño y nunca captura interacción fuera del editor.
+- En **Diseño** puedes añadir títulos y notas con texto y alineación configurables, espacios en blanco invisibles, separadores y grupos. En el editor, arrastra un widget hasta dejarlo completamente dentro del área del grupo, debajo de su cabecera: el marco se ilumina para confirmar que al soltar quedará asociado. Desde entonces se mueve junto al grupo; al arrastrarlo fuera vuelve a ser independiente. Quitar el grupo no elimina sus controles.
 
 Los widgets ajustan contenido, tipografía, columnas y scroll interno a su rectángulo. Una caja pequeña no intenta comprimir todas las marcas o todos los controles hasta hacerlos ilegibles: las zonas largas usan scroll propio.
+
+Los botones **Config** de Vamp, salto y transición abren un panel flotante por encima del layout. Su contenido no aumenta la altura del widget ni queda recortado si este es pequeño; el panel usa scroll propio cuando no cabe y se cierra tocando fuera, con su botón de cierre o con `Escape`.
 
 ## Herramientas De Directo
 

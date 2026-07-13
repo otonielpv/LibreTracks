@@ -8,6 +8,7 @@
 import {
   getEffectiveBpmAt,
   regionEffectiveKey,
+  type PlaybackState,
   type SongRegionSummary,
   type SongView,
 } from "@libretracks/shared/models";
@@ -23,6 +24,22 @@ export type SongClipEntry = {
   /** Timeline start, used only to order the stack the way the DAW does. */
   timelineStartSeconds: number;
 };
+
+export type CompactSongPlayIntent =
+  | { kind: "schedule" }
+  | { kind: "start"; positionSeconds: number };
+
+/** Mirrors Desktop's compact-song play button: transition-aware scheduling is
+ * only useful during playback. From stopped/paused/empty, seek to the selected
+ * song first and then start the transport. */
+export function compactSongPlayIntent(
+  playbackState: PlaybackState | null | undefined,
+  region: SongRegionSummary,
+): CompactSongPlayIntent {
+  return playbackState === "playing"
+    ? { kind: "schedule" }
+    : { kind: "start", positionSeconds: region.startSeconds };
+}
 
 /** Human clip name from its file path: basename without extension. Mirrors the
  * desktop's `filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "")`. */

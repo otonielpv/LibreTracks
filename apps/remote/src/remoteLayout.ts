@@ -42,6 +42,10 @@ export type WidgetType =
   | "pads"
   | "metronomeSettings"
   | "voiceGuideSettings"
+  | "layoutTitle"
+  | "layoutNote"
+  | "layoutGroup"
+  | "spacer"
   | "separator"
   | "performanceSettings"
   | "nextMarker"
@@ -81,6 +85,10 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "pads",
   "metronomeSettings",
   "voiceGuideSettings",
+  "layoutTitle",
+  "layoutNote",
+  "layoutGroup",
+  "spacer",
   "separator",
   "performanceSettings",
   "nextMarker",
@@ -104,6 +112,17 @@ export const LAYOUT_MAX_ROWS = 60;
  * without forcing the tool widget to start with its own scrollbar. */
 export const DEFAULT_METRONOME_WIDGET_HEIGHT = 26;
 
+export type WidgetTextAlign = "left" | "center" | "right";
+export type SeparatorStyle = "line" | "dashed" | "space";
+
+/** Optional, type-specific presentation settings stored with one widget
+ * instance. Keeping this deliberately small makes exported layouts portable. */
+export type WidgetConfig = {
+  text?: string;
+  align?: WidgetTextAlign;
+  separatorStyle?: SeparatorStyle;
+};
+
 export type WidgetPlacement = {
   /** Stable instance id (a type may appear more than once). */
   id: string;
@@ -117,6 +136,10 @@ export type WidgetPlacement = {
   w: number;
   /** Row span (most widgets are 1; timeline/mixer can be taller). */
   h: number;
+  /** Presentation settings for configurable design widgets. */
+  config?: WidgetConfig;
+  /** Id of a layoutGroup that moves this widget as one of its contents. */
+  groupId?: string;
 };
 
 export type LayoutTab = {
@@ -141,10 +164,10 @@ export type RemoteLayout = {
 
 export type LayoutPresetProfile = "standard" | "tablet" | "phone";
 
-// v2 gained tabs; v3 gained absolute x/y positions per widget (Mixing-Station
-// grid). normalizeLayout migrates v1 (flat array) and v2/v3 widgets that lack
-// x/y by auto-placing them, so old stored/exported layouts keep working.
-export const LAYOUT_VERSION = 4;
+// v2 gained tabs; v3 gained absolute x/y positions; v4 moved to the 24-column
+// grid; v5 adds configurable design widgets and persisted widget groups.
+// normalizeLayout keeps every older shape compatible.
+export const LAYOUT_VERSION = 5;
 const LEGACY_GRID_SCALE = 4;
 const LAYOUT_STORAGE_KEY = "libretracks.remote.layout";
 
@@ -267,6 +290,29 @@ function isWidgetType(value: unknown): value is WidgetType {
   );
 }
 
+function normalizeWidgetConfig(type: WidgetType, raw: unknown): WidgetConfig | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const input = raw as Record<string, unknown>;
+  const config: WidgetConfig = {};
+
+  if (type === "layoutTitle" || type === "layoutNote" || type === "layoutGroup") {
+    if (typeof input.text === "string") {
+      config.text = input.text.slice(0, type === "layoutNote" ? 1000 : 120);
+    }
+    if (input.align === "left" || input.align === "center" || input.align === "right") {
+      config.align = input.align;
+    }
+  }
+  if (
+    type === "separator" &&
+    (input.separatorStyle === "line" || input.separatorStyle === "dashed" || input.separatorStyle === "space")
+  ) {
+    config.separatorStyle = input.separatorStyle;
+  }
+
+  return Object.keys(config).length > 0 ? config : undefined;
+}
+
 /**
  * Normalise a raw widgets array: drop unknown types, clamp spans and (when
  * present) x/y, keep ids. Widgets missing valid x/y keep them undefined here;
@@ -299,6 +345,7 @@ function normalizeWidgets(raw: unknown, legacyGrid = false): WidgetPlacement[] {
       Number.isFinite(item.x) &&
       typeof item.y === "number" &&
       Number.isFinite(item.y);
+    const config = normalizeWidgetConfig(item.type, item.config);
     widgets.push({
       id: typeof item.id === "string" && item.id ? item.id : newWidgetId(item.type),
       type: item.type,
@@ -306,9 +353,101 @@ function normalizeWidgets(raw: unknown, legacyGrid = false): WidgetPlacement[] {
       y: hasPos ? Math.max(0, Math.min(LAYOUT_MAX_ROWS - 1, Math.round((item.y as number) * scale))) : (undefined as unknown as number),
       w,
       h,
+      ...(config ? { config } : {}),
+      ...(typeof item.groupId === "string" && item.groupId ? { groupId: item.groupId } : {}),
     });
   }
-  return autoPlace(widgets);
+  const placed = autoPlace(widgets);
+  const validGroupIds = new Set(
+    placed.filter((widget) => widget.type === "layoutGroup").map((widget) => widget.id),
+  );
+  return placed.map((widget) => {
+    if (
+      widget.type !== "layoutGroup" &&
+      widget.groupId &&
+      validGroupIds.has(widget.groupId)
+    ) {
+      return widget;
+    }
+    if (!widget.groupId) return widget;
+    const { groupId: _groupId, ...withoutGroup } = widget;
+    return withoutGroup;
+  });
+}
+
+const GROUP_HEADER_ROWS = 2;
+
+function isInsideGroup(widget: WidgetPlacement, group: WidgetPlacement): boolean {
+  return (
+    group.type === "layoutGroup" &&
+    widget.type !== "layoutGroup" &&
+    widget.x >= group.x &&
+    widget.y >= group.y + GROUP_HEADER_ROWS &&
+    widget.x + widget.w <= group.x + group.w &&
+    widget.y + widget.h <= group.y + group.h
+  );
+}
+
+/** Smallest group whose content area fully contains the widget. The first two
+ * rows are reserved for the group title, matching the visible editor frame. */
+export function containingGroupId(
+  widgets: WidgetPlacement[],
+  widget: WidgetPlacement,
+): string | null {
+  return widgets
+    .filter((candidate) => isInsideGroup(widget, candidate))
+    .sort((a, b) => a.w * a.h - b.w * b.h)[0]?.id ?? null;
+}
+
+/** Move a placement. Moving a group applies the same delta to all its direct
+ * contents, preserving their relative geometry. */
+export function moveWidgetWithGroup(
+  widgets: WidgetPlacement[],
+  id: string,
+  x: number,
+  y: number,
+): WidgetPlacement[] {
+  const target = widgets.find((widget) => widget.id === id);
+  if (!target) return widgets;
+  const dx = x - target.x;
+  const dy = y - target.y;
+  return widgets.map((widget) => {
+    if (widget.id === id) return { ...widget, x, y };
+    if (target.type === "layoutGroup" && widget.groupId === target.id) {
+      return { ...widget, x: widget.x + dx, y: widget.y + dy };
+    }
+    return widget;
+  });
+}
+
+/** Re-evaluate membership after a drop or group resize. A normal widget joins
+ * the smallest group that fully contains it; a group captures every widget
+ * inside its frame and releases its former contents that no longer fit. */
+export function reconcileWidgetGroup(
+  widgets: WidgetPlacement[],
+  id: string,
+): WidgetPlacement[] {
+  const target = widgets.find((widget) => widget.id === id);
+  if (!target) return widgets;
+
+  if (target.type === "layoutGroup") {
+    return widgets.map((widget) => {
+      if (widget.type === "layoutGroup") return widget;
+      if (isInsideGroup(widget, target)) return { ...widget, groupId: target.id };
+      if (widget.groupId !== target.id) return widget;
+      const { groupId: _groupId, ...withoutGroup } = widget;
+      return withoutGroup;
+    });
+  }
+
+  const groupId = containingGroupId(widgets, target);
+  if (groupId) return widgets.map((widget) => widget.id === id ? { ...widget, groupId } : widget);
+  if (!target.groupId) return widgets;
+  return widgets.map((widget) => {
+    if (widget.id !== id) return widget;
+    const { groupId: _groupId, ...withoutGroup } = widget;
+    return withoutGroup;
+  });
 }
 
 /** v4 offered the song header and clip list as separate widgets. When the
@@ -471,7 +610,10 @@ export function serializeLayoutFile(layout: RemoteLayout): string {
   const file: LayoutFile = {
     kind: LAYOUT_FILE_KIND,
     version: LAYOUT_VERSION,
-    layout,
+    // Stored layouts may still carry their original schema number after being
+    // migrated in memory. An export always advertises the schema it actually
+    // writes, including layoutGroup placements and child groupId references.
+    layout: { ...layout, version: LAYOUT_VERSION },
   };
   return JSON.stringify(file, null, 2);
 }

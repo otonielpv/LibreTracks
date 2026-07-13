@@ -3114,6 +3114,7 @@ button {
 }
 
 .layout-sizer button,
+.layout-widget-configure,
 .layout-widget-remove {
   min-width: 1.6rem;
   min-height: 1.6rem;
@@ -3142,6 +3143,13 @@ button {
   pointer-events: none;
   user-select: none;
   opacity: 0.68;
+}
+
+.layout-widget-configure {
+  padding: 0.2rem 0.55rem;
+  min-width: auto;
+  font-size: 0.66rem;
+  color: var(--accent);
 }
 
 .layout-drop-preview {
@@ -3365,12 +3373,127 @@ button {
   box-sizing: border-box;
 }
 
-/* A non-interactive visual spacer. Wide rectangles draw a horizontal rule;
-   resizing it into a tall/narrow rectangle turns the same widget vertical. */
+/* Small design primitives. They use their assigned rectangle rather than an
+   intrinsic desktop size, so resizing changes the visible result immediately. */
+.layout-widget-type-layoutTitle .layout-widget-body,
+.layout-widget-type-layoutNote .layout-widget-body,
+.layout-widget-type-layoutGroup .layout-widget-body,
+.layout-widget-type-spacer .layout-widget-body,
 .layout-widget-type-separator .layout-widget-body {
   overflow: hidden;
 }
 
+.layout-design-title,
+.layout-design-note {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.layout-design-title {
+  display: flex;
+  align-items: center;
+  padding: clamp(0.2rem, 5cqh, 0.75rem) clamp(0.35rem, 3cqi, 1rem);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 42%, var(--outline));
+  font-size: clamp(0.78rem, min(7cqi, 34cqh), 2rem);
+  line-height: 1.05;
+  font-weight: 850;
+}
+
+.layout-design-note {
+  display: flex;
+  align-items: center;
+  padding: clamp(0.35rem, 7cqh, 0.85rem) clamp(0.45rem, 4cqi, 1rem);
+  border: 1px solid var(--outline);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--panel-2) 75%, transparent);
+  color: var(--muted);
+  font-size: clamp(0.68rem, min(5cqi, 22cqh), 1.15rem);
+  line-height: 1.3;
+}
+
+.layout-design-title.is-center,
+.layout-design-note.is-center { justify-content: center; text-align: center; }
+.layout-design-title.is-right,
+.layout-design-note.is-right { justify-content: flex-end; text-align: right; }
+
+.layout-spacer {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Groups are grid siblings rather than DOM parents. Their frame sits above
+   the contained widgets visually, while pointer-events pass through everywhere
+   except the editor chrome and resize grip. */
+.layout-widget-type-layoutGroup {
+  z-index: 2;
+  pointer-events: none;
+}
+
+.layout-widget-type-layoutGroup .layout-widget-chrome,
+.layout-widget-type-layoutGroup .layout-widget-drag,
+.layout-widget-type-layoutGroup .layout-widget-sizers,
+.layout-widget-type-layoutGroup .layout-widget-resize {
+  pointer-events: auto;
+}
+
+.layout-design-group {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--outline));
+  border-radius: 0.7rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-2) 82%, transparent) 0 1.65rem,
+    transparent 1.65rem
+  );
+  pointer-events: none;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.layout-design-group > span {
+  position: absolute;
+  z-index: 1;
+  top: 0.32rem;
+  left: 0.75rem;
+  max-width: calc(100% - 1.5rem);
+  padding: 0 0.15rem;
+  overflow: hidden;
+  line-height: 1.1;
+  color: var(--accent);
+  font-size: clamp(0.62rem, min(4cqi, 16cqh), 0.9rem);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-design-group > span.is-center {
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.layout-widget-type-layoutGroup.is-group-drop-target .layout-design-group {
+  border-color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--accent) 36%, transparent),
+    0 0 1rem color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.layout-design-group > span.is-right {
+  right: 0.75rem;
+  left: auto;
+  text-align: right;
+}
+
+/* A non-interactive visual spacer. Wide rectangles draw a horizontal rule;
+   resizing it into a tall/narrow rectangle turns the same widget vertical. */
 .layout-separator {
   container: layout-separator / size;
   display: grid;
@@ -3380,6 +3503,18 @@ button {
   min-height: 0;
   padding: 0.2rem;
   pointer-events: none;
+}
+
+.layout-separator.is-space::before {
+  display: none;
+}
+
+.layout-separator.is-dashed::before {
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 48%, var(--outline)) 0 0.65rem,
+    transparent 0.65rem 1rem
+  );
 }
 
 .layout-separator::before {
@@ -3406,6 +3541,139 @@ button {
       color-mix(in srgb, var(--accent) 38%, var(--outline)) 88%,
       transparent
     );
+  }
+
+  .layout-separator.is-dashed::before {
+    background: repeating-linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 48%, var(--outline)) 0 0.65rem,
+      transparent 0.65rem 1rem
+    );
+  }
+}
+
+.layout-config-backdrop {
+  position: fixed;
+  z-index: 500;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 0.56);
+}
+
+.layout-config-dialog {
+  width: min(28rem, 100%);
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--outline-strong, var(--outline));
+  border-radius: 0.8rem;
+  background: var(--panel);
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.5);
+}
+
+.layout-config-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.layout-config-dialog > header button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 1.25rem;
+}
+
+.layout-config-field {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.layout-config-field input,
+.layout-config-field textarea,
+.layout-config-field select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.layout-config-field textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+/* Control-deck configuration lives in a document-level portal. It therefore
+   escapes the widget's resize rectangle and can overlay neighbouring widgets
+   without changing their geometry or being clipped by container queries. */
+.remote-floating-panel-layer {
+  position: fixed;
+  z-index: 450;
+  inset: 0;
+  background: rgb(0 0 0 / 0.16);
+}
+
+.remote-floating-panel-layer .remote-inline-panel.is-floating {
+  position: fixed;
+  z-index: 451;
+  display: block;
+  flex: none;
+  order: initial;
+  min-width: 0;
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 0.75rem;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 0.62);
+}
+
+.remote-floating-panel-layer .remote-inline-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  float: right;
+  width: 2rem;
+  height: 2rem;
+  margin: 0 0 0.35rem 0.5rem;
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .remote-floating-panel-layer .remote-inline-panel.is-floating {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-height: min(75vh, 34rem);
+    border-radius: 0.9rem 0.9rem 0 0;
+    padding-bottom: calc(0.9rem + env(safe-area-inset-bottom));
   }
 }
 
@@ -3843,6 +4111,13 @@ button {
   height: 100%;
 }
 
+/* `.song-master` is also used in horizontal mixer rows, where it legitimately
+   grows. Inside a vertical song card it must keep its intrinsic height so an
+   empty clip list cannot push the fader and divider towards the middle. */
+.song-header-column > .song-master {
+  flex: 0 0 auto;
+}
+
 .mixer-master-widget .song-master {
   width: 100%;
 }
@@ -3994,14 +4269,20 @@ button {
 .clip-entry-track {
   font-size: 0.66rem;
   color: var(--muted);
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Unified compact song view. In All mode the available widget width decides
-   how many complete song columns fit; columns wrap instead of producing the
-   old, sparse horizontal strip. Each column owns its header, master and clips. */
+.clip-entry-track-label {
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
+  font-weight: 500;
+}
+
+/* Unified compact song view. All mode is always one horizontal row: resizing
+   vertically changes the height of every song card, never the row count. */
 .song-compact-widget {
   container-type: size;
 }
@@ -4010,20 +4291,27 @@ button {
 .song-header-columns.song-compact-columns.is-all {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: minmax(9rem, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
   align-content: start;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   gap: 0.5rem;
   padding-bottom: 0;
 }
 
 .song-header-columns.song-compact-columns.is-all {
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(16rem, 100%), 1fr)
-  );
+  grid-template-columns: none;
+  grid-template-rows: minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(min(16rem, 100%), 1fr);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.3rem;
 }
 
 .song-compact-columns .song-header-column,
@@ -4041,8 +4329,17 @@ button {
   overflow-y: auto;
   padding-top: 0.4rem;
   border-top: 1px solid var(--outline);
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+/* The generic widget body contains overscroll so mixer/fader panels do not
+   fling the whole page. Compact songs are the exception: when an inner clip
+   list reaches its vertical edge, the gesture should continue on the tab. */
+.layout-widget-type-songHeader .layout-widget-body,
+.layout-widget-type-clipList .layout-widget-body {
+  overscroll-behavior-y: auto;
 }
 
 @container (max-height: 150px) {
