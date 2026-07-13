@@ -27,7 +27,7 @@ Con la [Voz Guia](/es/docs/voice-guide/) activada, un salto armado a una marca c
 
 Los saltos de cancion apuntan a regiones de cancion. Son utiles cuando una sesion contiene un set completo, una sesion de ensayo o varios cues.
 
-El disparador puede ser inmediato, tras un numero de compases o al final de la cancion/region actual.
+El disparador puede ser inmediato, tras un numero de compases, al final de la cancion/region actual o en la siguiente marca de seccion.
 
 `Song Transition` controla como pasa la cancion actual a la siguiente:
 

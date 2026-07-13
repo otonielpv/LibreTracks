@@ -2,7 +2,11 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
 export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
-export type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
+export type SongJumpTrigger =
+  | "immediate"
+  | "region_end"
+  | "after_bars"
+  | "next_marker";
 export type SongTransitionMode = "instant" | "fade_out";
 export type VampMode = "section" | "bars";
 

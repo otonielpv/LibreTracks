@@ -729,6 +729,7 @@ function createPendingJump(
       trigger === "immediate"
         ? marker.startSeconds
         : Math.max(state.playbackPositionSeconds, marker.startSeconds),
+    targetSeconds: marker.startSeconds,
     transition,
   };
 }
@@ -1243,6 +1244,25 @@ export const testDesktopApiMock = {
 
     const transitionLabel: TransitionTypeLabel =
       transition === "fade_out" ? "fade_out:0.35" : "instant";
+
+    if (trigger === "next_marker") {
+      const hasMarkerAhead = state.song.sectionMarkers.some(
+        (entry) => entry.startSeconds > state.playbackPositionSeconds,
+      );
+      state.pendingMarkerJump = hasMarkerAhead
+        ? createPendingJump(
+            {
+              id: region.id,
+              name: region.name,
+              startSeconds: region.startSeconds,
+            },
+            "next_marker",
+            transitionLabel,
+          )
+        : null;
+      return clone(buildSnapshot());
+    }
+
     state.pendingMarkerJump = createPendingJump(
       {
         id: region.id,

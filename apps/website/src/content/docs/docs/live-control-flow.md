@@ -27,7 +27,7 @@ When the [Voice Guide](/docs/voice-guide/) is enabled, an armed jump to a typed 
 
 Song jumps target song regions. They are useful when one session contains a full set, a rehearsal timeline, or several cues.
 
-The trigger can be immediate, after a configured number of bars, or at the end of the current song/region.
+The trigger can be immediate, after a configured number of bars, at the end of the current song/region, or at the next section marker.
 
 `Song Transition` controls how the current song hands off to the next one:
 

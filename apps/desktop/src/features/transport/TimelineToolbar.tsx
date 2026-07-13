@@ -389,7 +389,9 @@ export function TimelineToolbar({
       ? `${songJumpBars} bars`
       : songJumpTrigger === "region_end"
         ? t("transport.jumpMode.regionEnd")
-        : t("transport.jumpMode.immediate");
+        : songJumpTrigger === "next_marker"
+          ? t("transport.jumpMode.nextMarker")
+          : t("transport.jumpMode.immediate");
   const songTransitionSummary =
     songTransitionMode === "fade_out"
       ? t("timelineToolbar.songTransitionFadeOut")
@@ -931,6 +933,19 @@ export function TimelineToolbar({
                 }
               >
                 {t("timelineToolbar.afterBarsOption")}
+              </button>
+              <button
+                type="button"
+                className={songJumpTrigger === "next_marker" ? "is-active" : ""}
+                disabled={controlsDisabled}
+                onClick={() =>
+                  handleModeButtonClick(
+                    "action:set_song_jump_trigger_next_marker",
+                    () => onSongJumpTriggerChange("next_marker"),
+                  )
+                }
+              >
+                {t("transport.jumpMode.nextMarker")}
               </button>
             </div>
             <div className="lt-song-transition-row">

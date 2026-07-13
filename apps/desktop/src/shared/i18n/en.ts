@@ -245,6 +245,7 @@ const en = {
       midiLearnSongJumpTriggerImmediate: "Song jump trigger: Immediate",
       midiLearnSongJumpTriggerAfterBars: "Song jump trigger: After bars",
       midiLearnSongJumpTriggerRegionEnd: "Song jump trigger: Region end",
+      midiLearnSongJumpTriggerNextMarker: "Song jump trigger: Next marker",
       midiLearnSongTransitionMode: "Song transition mode",
       midiLearnSongTransitionInstant: "Song transition: Instant",
       midiLearnSongTransitionFadeOut: "Song transition: Fade out",

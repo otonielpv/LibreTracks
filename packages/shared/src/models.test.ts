@@ -318,6 +318,12 @@ describe("normalizeAppSettings", () => {
           "sideways" as AppSettings["timelinePlayheadFollowMode"],
       }).timelinePlayheadFollowMode,
     ).toBe(DEFAULT_APP_SETTINGS.timelinePlayheadFollowMode);
+    expect(
+      normalizeAppSettings({
+        ...DEFAULT_APP_SETTINGS,
+        songJumpTrigger: "next_marker",
+      }).songJumpTrigger,
+    ).toBe("next_marker");
   });
 
   it("clamps pad key into [0, 11] and rounds it", () => {

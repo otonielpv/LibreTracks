@@ -137,6 +137,10 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
     labelKey: "transport.settingsModal.midiLearnSongJumpTriggerRegionEnd",
   },
   {
+    key: "action:set_song_jump_trigger_next_marker",
+    labelKey: "transport.settingsModal.midiLearnSongJumpTriggerNextMarker",
+  },
+  {
     key: "action:increase_song_jump_bars",
     labelKey: "transport.settingsModal.midiLearnSongJumpBarsIncrease",
   },

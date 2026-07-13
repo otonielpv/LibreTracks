@@ -261,6 +261,8 @@ const es = {
         "Disparador de salto de cancion: Tras compases",
       midiLearnSongJumpTriggerRegionEnd:
         "Disparador de salto de cancion: Final de region",
+      midiLearnSongJumpTriggerNextMarker:
+        "Disparador de salto de cancion: Siguiente marca",
       midiLearnSongTransitionMode: "Modo de transicion de cancion",
       midiLearnSongTransitionInstant: "Transicion de cancion: Inmediata",
       midiLearnSongTransitionFadeOut: "Transicion de cancion: Fade out",

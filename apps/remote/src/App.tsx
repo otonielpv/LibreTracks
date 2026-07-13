@@ -104,7 +104,7 @@ import {
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 type JumpMode = "immediate" | "next_marker" | "after_bars";
-type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
+type SongJumpTrigger = "immediate" | "region_end" | "after_bars" | "next_marker";
 type SongTransitionMode = "instant" | "fade_out";
 type VampMode = "section" | "bars";
 
@@ -549,6 +549,10 @@ function formatSongTriggerLabel(trigger: SongJumpTrigger, bars: number) {
 
   if (trigger === "region_end") {
     return STRINGS.songEnd;
+  }
+
+  if (trigger === "next_marker") {
+    return STRINGS.nextMarker;
   }
 
   return `${bars} ${STRINGS.bars.toLowerCase()}`;
@@ -1916,6 +1920,15 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
             }}
           >
             {STRINGS.bars}
+          </button>
+          <button
+            className={songTrigger === "next_marker" ? "is-active" : ""}
+            onClick={() => {
+              setSongTrigger("next_marker");
+              patchRemoteSettings({ songJumpTrigger: "next_marker" });
+            }}
+          >
+            {STRINGS.nextMarker}
           </button>
         </div>
       </div>

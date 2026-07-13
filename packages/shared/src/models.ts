@@ -231,6 +231,8 @@ export type PendingJumpSummary = {
   targetDigit?: number | null;
   trigger: JumpTriggerLabel;
   executeAtSeconds: number;
+  /** Jump destination in view seconds — marks where playback lands. */
+  targetSeconds?: number | null;
   transition: TransitionTypeLabel;
 };
 
@@ -701,7 +703,7 @@ export type AppSettings = {
   padOutput: string;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
-  songJumpTrigger: "immediate" | "region_end" | "after_bars";
+  songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker";
   songJumpBars: number;
   songTransitionMode: "instant" | "fade_out";
   vampMode: "section" | "bars";
@@ -873,7 +875,8 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       : DEFAULT_APP_SETTINGS.globalJumpMode;
   const songJumpTrigger =
     settings.songJumpTrigger === "after_bars" ||
-    settings.songJumpTrigger === "region_end"
+    settings.songJumpTrigger === "region_end" ||
+    settings.songJumpTrigger === "next_marker"
       ? settings.songJumpTrigger
       : DEFAULT_APP_SETTINGS.songJumpTrigger;
   const songTransitionMode =

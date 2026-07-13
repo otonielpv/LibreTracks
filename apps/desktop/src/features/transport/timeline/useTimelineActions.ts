@@ -81,12 +81,19 @@ export function useTimelineActions({
       return nextSnapshot;
     }
 
+    if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
+      setStatus(t("transport.status.noMarkersAhead"));
+      return nextSnapshot;
+    }
+
     const whenLabel =
       trigger === "immediate"
         ? t("transport.jumpMode.immediate")
         : trigger === "region_end"
           ? t("transport.jumpMode.regionEnd")
-          : t("transport.jumpMode.afterBars", { count: bars });
+          : trigger === "next_marker"
+            ? t("transport.jumpMode.nextMarker")
+            : t("transport.jumpMode.afterBars", { count: bars });
     const howLabel =
       transition === "fade_out"
         ? t("timelineToolbar.songTransitionFadeOut")

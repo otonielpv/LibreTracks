@@ -522,6 +522,14 @@ fn dispatch_midi_action(
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
+        "action:set_song_jump_trigger_next_marker" => {
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
+            next_settings.song_jump_trigger = "next_marker".into();
+            apply_midi_settings_update(app, settings_store, next_settings)?;
+            return Ok(());
+        }
         "action:increase_song_jump_bars" => {
             let mut next_settings = settings_store
                 .current()
@@ -713,9 +721,10 @@ fn dispatch_midi_parameter(
         }
         "param:song_jump_trigger" => {
             let next_trigger = match message.data2 {
-                0..=63 => "immediate",
-                64..=95 => "after_bars",
-                _ => "region_end",
+                0..=31 => "immediate",
+                32..=63 => "after_bars",
+                64..=95 => "region_end",
+                _ => "next_marker",
             };
             if next_settings.song_jump_trigger != next_trigger {
                 next_settings.song_jump_trigger = next_trigger.to_string();
