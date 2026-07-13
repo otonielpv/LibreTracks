@@ -330,7 +330,7 @@ export function TimelineRulerCanvas({
     [timeSignatureMarkers],
   );
   const pendingJumpSignature = pendingMarkerJump
-    ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
+    ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}:${pendingMarkerJump.targetSeconds ?? ""}`
     : "";
   const pendingAutomationSignature = pendingAutomationCue
     ? `${pendingAutomationCue.cueId}:${pendingAutomationCue.executeAtSeconds}`

@@ -195,10 +195,10 @@ export function PlayheadOverlay({
           playback?.pendingAutomationCue?.executeAtSeconds ??
           playback?.pendingMarkerJump?.executeAtSeconds ??
           null,
-        // Only automation cues carry the resolved destination seconds; marker
-        // jumps fall back to the freeze-clamp (no instant target available).
         pendingJumpTargetSeconds:
-          playback?.pendingAutomationCue?.targetSeconds ?? null,
+          playback?.pendingAutomationCue?.targetSeconds ??
+          playback?.pendingMarkerJump?.targetSeconds ??
+          null,
       };
     };
 
@@ -244,9 +244,9 @@ export function PlayheadOverlay({
       // immediately rather than waiting for the backend reanchor (which can lag
       // 80–250 ms, leaving the playhead visibly frozen at the cue). The audio
       // already jumped sample-exact; this just keeps the visual in step.
-      //  - Automation jumps carry the resolved targetSeconds → snap there.
-      //  - Marker jumps have no target seconds here → fall back to freezing at
-      //    the execute point so they at least don't overshoot.
+      // Both automation cues and marker/song jumps carry the resolved
+      // targetSeconds → snap there; if it's missing (no song loaded when the
+      // snapshot was built) freeze at the execute point so we don't overshoot.
       const execute = playbackRef.current.pendingJumpExecuteSeconds;
       const target = playbackRef.current.pendingJumpTargetSeconds;
       if (!activeDrag && execute != null && nextSeconds >= execute) {

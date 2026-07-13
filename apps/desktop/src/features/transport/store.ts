@@ -89,6 +89,7 @@ function jumpSignature(playback: TransportSnapshot | null) {
     jump.targetMarkerName,
     jump.trigger,
     jump.executeAtSeconds.toFixed(6),
+    typeof jump.targetSeconds === "number" ? jump.targetSeconds.toFixed(6) : "",
     jump.transition,
   ].join("|");
 }

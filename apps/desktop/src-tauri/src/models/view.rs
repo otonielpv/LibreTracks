@@ -328,6 +328,8 @@ pub struct PendingJumpSummary {
     pub target_digit: Option<u8>,
     pub trigger: String,
     pub execute_at_seconds: f64,
+    /// Jump destination in view seconds — lets the UI mark where playback lands.
+    pub target_seconds: Option<f64>,
     pub transition: String,
 }
 
@@ -840,8 +842,22 @@ pub(crate) fn pending_jump_to_summary(pending_jump: &PendingMarkerJump) -> Pendi
         target_digit: pending_jump.target_digit,
         trigger: pending_jump_trigger_label(&pending_jump.trigger),
         execute_at_seconds: pending_jump.execute_at_seconds,
+        target_seconds: None,
         transition: transition_type_label(&pending_jump.transition),
     }
+}
+
+/// The pending jump stores only the target id; it can point at a section
+/// marker (marker jump) or a song region (song jump), so try both.
+fn pending_jump_target_start_seconds(song: &Song, pending_jump: &PendingMarkerJump) -> Option<f64> {
+    song.marker_by_id(&pending_jump.target_marker_id)
+        .map(|marker| marker.start_seconds)
+        .or_else(|| {
+            song.regions
+                .iter()
+                .find(|region| region.id == pending_jump.target_marker_id)
+                .map(|region| region.start_seconds)
+        })
 }
 
 pub(crate) fn pending_jump_to_warped_summary(
@@ -854,6 +870,8 @@ pub(crate) fn pending_jump_to_warped_summary(
         target_digit: pending_jump.target_digit,
         trigger: pending_jump_trigger_label(&pending_jump.trigger),
         execute_at_seconds: warp_timeline_seconds_at(song, pending_jump.execute_at_seconds),
+        target_seconds: pending_jump_target_start_seconds(song, pending_jump)
+            .map(|seconds| warp_timeline_seconds_at(song, seconds)),
         transition: transition_type_label(&pending_jump.transition),
     }
 }

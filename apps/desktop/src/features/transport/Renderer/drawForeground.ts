@@ -24,23 +24,25 @@ export type RulerForegroundLayerArgs = {
   pulseAlpha: number;
 };
 
-export function drawPendingExecutionLine(
+function drawPendingDashedLine(
   context: CanvasRenderingContext2D,
   width: number,
   height: number,
   cameraX: number,
   pixelsPerSecond: number,
-  executeAtSeconds: number,
+  positionSeconds: number,
+  strokeStyle: string,
+  fillStyle: string,
 ) {
-  const x = secondsToScreenX(executeAtSeconds, cameraX, pixelsPerSecond);
+  const x = secondsToScreenX(positionSeconds, cameraX, pixelsPerSecond);
   if (x < -12 || x > width + 12) {
     return;
   }
 
   const snappedX = Math.round(x) + 0.5;
   context.save();
-  context.strokeStyle = "rgba(255, 226, 171, 0.88)";
-  context.fillStyle = "rgba(255, 226, 171, 0.92)";
+  context.strokeStyle = strokeStyle;
+  context.fillStyle = fillStyle;
   context.lineWidth = 1.5;
   context.setLineDash([6, 4]);
   context.beginPath();
@@ -57,11 +59,61 @@ export function drawPendingExecutionLine(
   context.restore();
 }
 
+export function drawPendingExecutionLine(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+  executeAtSeconds: number,
+) {
+  drawPendingDashedLine(
+    context,
+    width,
+    height,
+    cameraX,
+    pixelsPerSecond,
+    executeAtSeconds,
+    "rgba(255, 226, 171, 0.88)",
+    "rgba(255, 226, 171, 0.92)",
+  );
+}
+
+export function drawPendingTargetLine(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+  targetSeconds: number,
+) {
+  drawPendingDashedLine(
+    context,
+    width,
+    height,
+    cameraX,
+    pixelsPerSecond,
+    targetSeconds,
+    "rgba(87, 241, 219, 0.88)",
+    "rgba(87, 241, 219, 0.92)",
+  );
+}
+
 export function drawRulerForegroundLayer(
   context: CanvasRenderingContext2D,
   args: RulerForegroundLayerArgs,
 ) {
   if (args.pendingMarkerJump) {
+    if (typeof args.pendingMarkerJump.targetSeconds === "number") {
+      drawPendingTargetLine(
+        context,
+        args.width,
+        args.height,
+        args.cameraX,
+        args.pixelsPerSecond,
+        args.pendingMarkerJump.targetSeconds,
+      );
+    }
     drawPendingExecutionLine(
       context,
       args.width,
@@ -73,6 +125,14 @@ export function drawRulerForegroundLayer(
   }
 
   if (args.pendingAutomationCue) {
+    drawPendingTargetLine(
+      context,
+      args.width,
+      args.height,
+      args.cameraX,
+      args.pixelsPerSecond,
+      args.pendingAutomationCue.targetSeconds,
+    );
     drawPendingExecutionLine(
       context,
       args.width,
