@@ -1,6 +1,6 @@
 ---
 title: Automation
-description: A timeline automation track that fires cues — jumps, mute/solo, volume/pan, and mix scenes — at exact points during playback.
+description: A timeline automation track that fires jumps, mix changes, scenes, and complete Pad state at exact points during playback.
 ---
 
 The **Automation** track lets you place **cues** on the timeline that fire one or more actions at an exact point during playback. Use it to script a song that runs hands-free: jump to a section, drop a track out, push a fader, recall a mix scene, or wait a beat before the next move.
@@ -20,6 +20,7 @@ Left‑click a cue's diamond to open the editor; hovering shows a quick summary 
 - **Solo / unsolo track** — turn a track's solo on or off.
 - **Volume / pan** — set a track's volume (0–100) and pan (L‑100 / R+100), with an optional **smoothing** time so the change ramps instead of snapping.
 - **Apply scene** — recall a saved [mix scene](#mix-scenes) to reshape several tracks at once.
+- **Control Pads** — enable or disable the ambient voice and recall its pack, key, volume, and routing. Pack and key changes preserve loop position and use the same seamless crossfade as manual control. See [Ambient Pads](/docs/ambient-pads/).
 - **Wait** — pause the given number of seconds before the next action runs.
 
 ![Automation cue editor](/screenshots/Automation-Cue-Editor.gif)
@@ -40,4 +41,5 @@ Scenes are ideal for big mix moves at a section boundary — for example, pullin
 
 - Pair a jump cue with the [Voice Guide](/docs/voice-guide/) so the destination section is announced and counted in before the jump fires.
 - Use a short **smoothing** time on volume/pan changes to avoid clicks when a fader moves during playback.
+- Use **Control Pads** to prepare a modulation or the next song's texture without cutting the ambient bed.
 - See [Live Control Flow](/docs/live-control-flow/) for arming jumps manually from the transport, shortcuts, and the remote.

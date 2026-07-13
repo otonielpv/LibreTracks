@@ -129,6 +129,15 @@ pub enum AutomationAction {
         )]
         ramp_seconds: Option<f64>,
     },
+    SetPad {
+        enabled: bool,
+        #[serde(rename = "padId")]
+        pad_id: String,
+        #[serde(rename = "padKey")]
+        pad_key: i32,
+        volume: f64,
+        output: String,
+    },
     Wait {
         #[serde(rename = "durationSeconds")]
         duration_seconds: f64,
@@ -300,6 +309,13 @@ mod tests {
                     },
                     AutomationAction::Wait {
                         duration_seconds: 2.0,
+                    },
+                    AutomationAction::SetPad {
+                        enabled: true,
+                        pad_id: "organic".into(),
+                        pad_key: 7,
+                        volume: 0.7,
+                        output: "master".into(),
                     },
                     AutomationAction::Jump {
                         target: AutomationJumpTarget::Region {

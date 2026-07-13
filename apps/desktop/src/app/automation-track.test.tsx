@@ -316,4 +316,26 @@ describe("App / automation-track", () => {
       expect(hotspot?.getAttribute("title") ?? "").toMatch(/Wait|Mute/i);
     });
   });
+
+  it("offers the complete pad state as an automation action", async () => {
+    await renderApp();
+    await addAutomationTrackViaMenu();
+    const lane = await waitFor(() => {
+      const element = document.querySelector(".lt-track-lane.is-automation");
+      expect(element).toBeTruthy();
+      return element as HTMLElement;
+    });
+    await act(async () => {
+      fireEvent.contextMenu(lane, { clientX: 300, clientY: 130 });
+      fireEvent.click(await screen.findByRole("button", { name: /create automation/i }));
+    });
+    const dialog = await screen.findByRole("dialog", { name: /new automation/i });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /control pads/i }));
+    });
+
+    for (const label of [/pad state/i, /pad pack/i, /^key$/i, /^output$/i, /pad volume/i]) {
+      expect(within(dialog).getByText(label)).toBeTruthy();
+    }
+  });
 });

@@ -1,10 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type {
-  AutomationActionSummary,
-  AutomationJumpTargetSummary,
-  SongView,
+import {
+  AUX_FADER_SCALE,
+  formatGainDb,
+  gainToPosition,
+  positionToGain,
+} from "@libretracks/shared/faderScale";
+
+import {
+  getPadsCatalog,
+  type AppSettings,
+  type AutomationActionSummary,
+  type AutomationJumpTargetSummary,
+  type PadCatalogEntry,
+  type SongView,
 } from "../desktopApi";
 import { formatClock } from "../helpers";
 
@@ -24,6 +34,8 @@ export type AutomationCueDraft = {
 type AutomationCueModalProps = {
   draft: AutomationCueDraft | null;
   song: SongView | null;
+  appSettings: AppSettings;
+  padRouteOptions: Array<{ value: string; label: string }>;
   onCancel: () => void;
   onConfirm: (result: {
     actions: AutomationActionSummary[];
@@ -39,6 +51,7 @@ const ACTION_LABEL_KEYS: Record<AutomationActionSummary["type"], string> = {
   setTrackSolo: "transport.automation.actionSolo",
   setTrackMix: "transport.automation.actionMix",
   applyScene: "transport.automation.actionScene",
+  setPad: "transport.automation.actionPad",
   wait: "transport.automation.actionWait",
 };
 
@@ -70,6 +83,7 @@ function decodeTarget(
 function makeAction(
   type: AutomationActionSummary["type"],
   song: SongView | null,
+  appSettings: AppSettings,
 ): AutomationActionSummary {
   const firstTrack = song?.tracks.find((t) => t.kind !== "folder")?.id ?? "";
   const firstScene = song?.mixScenes?.[0]?.id ?? "";
@@ -92,6 +106,15 @@ function makeAction(
       return { type: "setTrackMix", trackId: firstTrack, volume: 1, pan: 0 };
     case "applyScene":
       return { type: "applyScene", sceneId: firstScene };
+    case "setPad":
+      return {
+        type: "setPad",
+        enabled: appSettings.padEnabled,
+        padId: appSettings.padId,
+        padKey: appSettings.padKey,
+        volume: appSettings.padVolume,
+        output: appSettings.padOutput,
+      };
     case "wait":
       return { type: "wait", durationSeconds: 1 };
   }
@@ -105,6 +128,8 @@ function makeAction(
 export function AutomationCueModal({
   draft,
   song,
+  appSettings,
+  padRouteOptions,
   onCancel,
   onConfirm,
 }: AutomationCueModalProps) {
@@ -116,6 +141,15 @@ export function AutomationCueModal({
   const [maxRuns, setMaxRuns] = useState<number | null>(
     () => draft?.maxRuns ?? null,
   );
+  const [installedPads, setInstalledPads] = useState<PadCatalogEntry[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getPadsCatalog().then((catalog) => {
+      if (!cancelled) setInstalledPads(catalog.pads.filter((pad) => pad.installed));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   if (!draft) {
     return null;
@@ -155,7 +189,7 @@ export function AutomationCueModal({
     });
 
   const addAction = (type: AutomationActionSummary["type"]) =>
-    setActions((prev) => normalize([...prev, makeAction(type, song)]));
+    setActions((prev) => normalize([...prev, makeAction(type, song, appSettings)]));
 
   const hasJump = actions.some((a) => a.type === "jump");
   // Highest index a non-jump row may move down to: the slot just above the
@@ -243,6 +277,8 @@ export function AutomationCueModal({
                   markers={markers}
                   tracks={tracks}
                   scenes={scenes}
+                  installedPads={installedPads}
+                  padRouteOptions={padRouteOptions}
                   t={t}
                   onChange={(next) => updateAt(index, next)}
                 />
@@ -262,6 +298,7 @@ export function AutomationCueModal({
                   "setTrackSolo",
                   "setTrackMix",
                   "applyScene",
+                  "setPad",
                   "wait",
                 ] as AutomationActionSummary["type"][]
               ).map((type) => (
@@ -356,6 +393,11 @@ function validateActions(actions: AutomationActionSummary[]): boolean {
         return action.trackId !== "";
       case "applyScene":
         return action.sceneId !== "";
+      case "setPad":
+        return action.padId.trim() !== "" &&
+          Number.isInteger(action.padKey) && action.padKey >= 0 && action.padKey <= 11 &&
+          Number.isFinite(action.volume) && action.volume >= 0 && action.volume <= 10 &&
+          action.output.trim() !== "";
       case "wait":
         return Number.isFinite(action.durationSeconds) &&
           action.durationSeconds >= 0;
@@ -369,6 +411,8 @@ type EditorProps = {
   markers: SongView["sectionMarkers"];
   tracks: SongView["tracks"];
   scenes: NonNullable<SongView["mixScenes"]>;
+  installedPads: PadCatalogEntry[];
+  padRouteOptions: Array<{ value: string; label: string }>;
   t: (key: string, options?: Record<string, unknown>) => string;
   onChange: (next: AutomationActionSummary) => void;
 };
@@ -379,6 +423,8 @@ function ActionEditor({
   markers,
   tracks,
   scenes,
+  installedPads,
+  padRouteOptions,
   t,
   onChange,
 }: EditorProps) {
@@ -624,6 +670,71 @@ function ActionEditor({
                 rampSeconds: seconds > 0 ? seconds : null,
               });
             }}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  if (action.type === "setPad") {
+    const selectedPadMissing = action.padId !== "" &&
+      !installedPads.some((pad) => pad.id === action.padId);
+    const keyLabels = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+    return (
+      <div className="lt-automation-action-fields">
+        <label className="lt-settings-field">
+          <span className="lt-settings-field-label">
+            {t("transport.automation.padState")}
+          </span>
+          <select
+            value={action.enabled ? "on" : "off"}
+            onChange={(event) => onChange({ ...action, enabled: event.target.value === "on" })}
+          >
+            <option value="on">{t("transport.automation.enableOption")}</option>
+            <option value="off">{t("transport.automation.disableOption")}</option>
+          </select>
+        </label>
+        <label className="lt-settings-field">
+          <span className="lt-settings-field-label">
+            {t("transport.automation.padPack")}
+          </span>
+          <select value={action.padId} onChange={(event) => onChange({ ...action, padId: event.target.value })}>
+            <option value="" disabled>{t("transport.automation.choosePadPack")}</option>
+            {selectedPadMissing ? <option value={action.padId}>{action.padId}</option> : null}
+            {installedPads.map((pad) => <option key={pad.id} value={pad.id}>{pad.name}</option>)}
+          </select>
+        </label>
+        <label className="lt-settings-field">
+          <span className="lt-settings-field-label">
+            {t("transport.automation.padKey")}
+          </span>
+          <select value={action.padKey} onChange={(event) => onChange({ ...action, padKey: Number(event.target.value) })}>
+            {keyLabels.map((key, index) => <option key={key} value={index}>{key}</option>)}
+          </select>
+        </label>
+        <label className="lt-settings-field">
+          <span className="lt-settings-field-label">
+            {t("transport.automation.padRouting")}
+          </span>
+          <select value={action.output} onChange={(event) => onChange({ ...action, output: event.target.value })}>
+            {padRouteOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="lt-settings-field lt-automation-pad-volume">
+          <span className="lt-settings-field-label">
+            {t("transport.automation.padVolume")}: {formatGainDb(action.volume)}
+          </span>
+          <input
+            className="lt-range-input"
+            type="range"
+            min={0}
+            max={1}
+            step={0.001}
+            value={gainToPosition(action.volume, AUX_FADER_SCALE)}
+            onChange={(event) => onChange({
+              ...action,
+              volume: positionToGain(Number(event.target.value), AUX_FADER_SCALE),
+            })}
           />
         </label>
       </div>

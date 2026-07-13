@@ -14,6 +14,11 @@ namespace lt {
 
 namespace {
 
+// Pad changes should feel immediate during performance. Both clips overlap for
+// 12 ms, preserving the fast response without a silent midpoint.
+constexpr double kPadSwapCrossfadeSeconds = 0.012;
+constexpr double kPadGainRampSeconds = 0.005;
+
 void copy_text(std::array<char, 64>& dst, const std::string& text) noexcept {
     std::fill(dst.begin(), dst.end(), '\0');
     const std::size_t count = std::min(dst.size() - 1, text.size());
@@ -207,39 +212,43 @@ void PadRenderer::render(float** output_channels,
         return;
     }
 
-    // Newest published clip (may be the same one we're already reading, or a
-    // pending new key). We keep reading `active_clip_` until the swap fade
-    // reaches silence, then adopt the pending clip — so a key change is
-    // click-free instead of snapping the waveform to sample 0.
+    // The newest decoded clip becomes the incoming voice while the previous
+    // one remains audible for the brief overlap.
     std::shared_ptr<const PadClip> pending = std::atomic_load(&clip_);
 
-    // Detect a NEW clip (key change). Begin a short fade-out of the old clip;
-    // the adoption + fade-in happen at the silent point below.
+    // Detect a newly decoded key or pack.
     const std::uint64_t seq = clip_seq_.load(std::memory_order_acquire);
     if (seq != applied_clip_seq_) {
         applied_clip_seq_ = seq;
-        if (active_clip_) {
-            // Fade the current clip out first (~15 ms), then adopt.
-            swap_fade_total_ = std::max(1, static_cast<int>(sample_rate * 0.015));
-            swap_fade_out_remaining_ = swap_fade_total_;
-            swap_pending_ = true;
-        } else {
-            // Nothing playing yet — adopt immediately and fade in.
+        if (pending && !pending->empty() && active_clip_) {
+            // Adopt now while retaining the old clip as the outgoing voice.
+            outgoing_clip_ = active_clip_;
+            outgoing_read_frame_ = read_frame_;
+            active_clip_ = pending;
+            const std::int64_t pending_frames = static_cast<std::int64_t>(
+                pending->samples.size() / static_cast<std::size_t>(pending->channels));
+            read_frame_ = pending_frames > 0
+                ? outgoing_read_frame_ % pending_frames
+                : 0;
+            crossfade_total_ = std::max(
+                1, static_cast<int>(sample_rate * kPadSwapCrossfadeSeconds));
+            crossfade_remaining_ = crossfade_total_;
+        } else if (pending && !pending->empty()) {
+            // First activation has no outgoing voice, so only fade it in.
             active_clip_ = pending;
             read_frame_ = 0;
-            swap_pending_ = false;
-            swap_fade_out_remaining_ = 0;
-            swap_gain_ = 0.0f;
-            swap_fade_total_ = std::max(1, static_cast<int>(sample_rate * 0.015));
+            outgoing_clip_.reset();
+            outgoing_read_frame_ = 0;
+            crossfade_total_ = std::max(
+                1, static_cast<int>(sample_rate * kPadSwapCrossfadeSeconds));
+            crossfade_remaining_ = crossfade_total_;
         }
     }
 
-    std::shared_ptr<const PadClip>& clip = active_clip_;
+    const std::shared_ptr<const PadClip>& clip = active_clip_;
     if (!clip || clip->empty()) {
         copy_text(muted_reason_, "no_clip");
-        // Ramp remaining gain to zero so a mid-play disable fades cleanly, but
-        // there's nothing to read — bail once silent.
-        if (current_output_gain_ <= 0.000001f && !swap_pending_) return;
+        return;
     }
 
     // Resolve the configured output route (same scheme as the metronome / voice
@@ -264,8 +273,7 @@ void PadRenderer::render(float** output_channels,
     }
     copy_text(muted_reason_, "");
 
-    // Clip params. Recomputed after a mid-block adoption (key swap) because the
-    // clip pointer/length changes at the silent point.
+    // Immutable playback data for each voice.
     auto clip_params = [](const std::shared_ptr<const PadClip>& c,
                           int& ch_out, std::int64_t& total_out,
                           const float*& data_out, std::int64_t& xfade_out,
@@ -288,64 +296,102 @@ void PadRenderer::render(float** output_channels,
     std::int64_t xfade = 0;
     clip_params(clip, ch, total_frames, data, xfade, sample_rate);
 
-    const float ramp_frames = static_cast<float>(std::max(1.0, sample_rate * 0.010));
-    const float swap_step =
-        1.0f / static_cast<float>(std::max(1, swap_fade_total_));
+    int outgoing_ch = 0;
+    std::int64_t outgoing_total_frames = 0;
+    const float* outgoing_data = nullptr;
+    std::int64_t outgoing_xfade = 0;
+    clip_params(outgoing_clip_, outgoing_ch, outgoing_total_frames,
+                outgoing_data, outgoing_xfade, sample_rate);
+
+    const float ramp_frames = static_cast<float>(std::max(1.0, sample_rate * kPadGainRampSeconds));
+
+    auto sample_clip = [](const float* clip_data, int clip_channels,
+                          std::int64_t clip_frames, std::int64_t seam_xfade,
+                          std::int64_t position, float& left_sample,
+                          float& right_sample) {
+        left_sample = 0.0f;
+        right_sample = 0.0f;
+        if (!clip_data || clip_channels <= 0 || clip_frames <= 0) return;
+
+        const std::int64_t pos = position % clip_frames;
+        left_sample = clip_data[pos * clip_channels];
+        right_sample = clip_channels >= 2
+            ? clip_data[pos * clip_channels + 1]
+            : left_sample;
+
+        if (seam_xfade > 0 && pos >= clip_frames - seam_xfade) {
+            const std::int64_t into = pos - (clip_frames - seam_xfade);
+            const float t = static_cast<float>(into) / static_cast<float>(seam_xfade);
+            const float head_left = clip_data[into * clip_channels];
+            const float head_right = clip_channels >= 2
+                ? clip_data[into * clip_channels + 1]
+                : head_left;
+            left_sample = left_sample * (1.0f - t) + head_left * t;
+            right_sample = right_sample * (1.0f - t) + head_right * t;
+        }
+    };
+
+    constexpr float kHalfPi = 1.57079632679489661923f;
 
     for (int f = 0; f < num_frames; ++f) {
         current_output_gain_ += (target_gain - current_output_gain_) / ramp_frames;
         if (std::abs(current_output_gain_ - target_gain) < 1.0e-6f)
             current_output_gain_ = target_gain;
 
-        // Swap fade: ramp the old clip out; at silence, adopt the pending clip
-        // and ramp the new one in. This keys off `swap_gain_`, applied on top of
-        // the volume ramp so a key change never clicks.
-        if (swap_pending_) {
-            swap_fade_out_remaining_ -= 1;
-            swap_gain_ = std::max(0.0f,
-                static_cast<float>(swap_fade_out_remaining_)
-                    / static_cast<float>(std::max(1, swap_fade_total_)));
-            if (swap_fade_out_remaining_ <= 0) {
-                // Silent point: adopt the new clip and start fading in.
-                active_clip_ = pending;
-                clip = active_clip_;
-                clip_params(clip, ch, total_frames, data, xfade, sample_rate);
-                read_frame_ = 0;
-                swap_pending_ = false;
-                swap_gain_ = 0.0f;
-            }
-        } else if (swap_gain_ < 1.0f) {
-            swap_gain_ = std::min(1.0f, swap_gain_ + swap_step);
+        // Constant-power overlap. There is no shared silent midpoint between
+        // the outgoing and incoming voices.
+        float incoming_mix = 1.0f;
+        float outgoing_mix = 0.0f;
+        if (crossfade_remaining_ > 0) {
+            const float progress = 1.0f
+                - static_cast<float>(crossfade_remaining_)
+                    / static_cast<float>(std::max(1, crossfade_total_));
+            incoming_mix = std::sin(progress * kHalfPi);
+            outgoing_mix = outgoing_clip_
+                ? std::cos(progress * kHalfPi)
+                : 0.0f;
         }
 
-        const float g = current_output_gain_ * swap_gain_;
-        if (total_frames <= 0 || g <= 0.0f) continue;
+        float incoming_left = 0.0f;
+        float incoming_right = 0.0f;
+        sample_clip(data, ch, total_frames, xfade, read_frame_,
+                    incoming_left, incoming_right);
 
-        std::int64_t pos = read_frame_;
-        if (pos >= total_frames) pos %= total_frames;
-
-        float sl = data[pos * ch];
-        float sr = ch >= 2 ? data[pos * ch + 1] : sl;
-
-        // Crossfade the last `xfade` frames with the first `xfade` frames so the
-        // loop point doesn't pop.
-        if (xfade > 0 && pos >= total_frames - xfade) {
-            const std::int64_t into = pos - (total_frames - xfade);  // 0..xfade-1
-            const float t = static_cast<float>(into) / static_cast<float>(xfade);
-            const std::int64_t head = into;
-            const float hl = data[head * ch];
-            const float hr = ch >= 2 ? data[head * ch + 1] : hl;
-            sl = sl * (1.0f - t) + hl * t;
-            sr = sr * (1.0f - t) + hr * t;
+        float outgoing_left = 0.0f;
+        float outgoing_right = 0.0f;
+        if (outgoing_mix > 0.0f) {
+            sample_clip(outgoing_data, outgoing_ch, outgoing_total_frames,
+                        outgoing_xfade, outgoing_read_frame_,
+                        outgoing_left, outgoing_right);
         }
 
-        output_channels[left][f] += sl * g;
+        const float g = current_output_gain_;
+        const float sl = (incoming_left * incoming_mix
+                          + outgoing_left * outgoing_mix) * g;
+        const float sr = (incoming_right * incoming_mix
+                          + outgoing_right * outgoing_mix) * g;
+
+        output_channels[left][f] += sl;
         if (right != left)
-            output_channels[right][f] += sr * g;
+            output_channels[right][f] += sr;
 
         ++read_frame_;
         if (read_frame_ >= total_frames)
             read_frame_ = xfade;
+
+        if (outgoing_clip_) {
+            ++outgoing_read_frame_;
+            if (outgoing_read_frame_ >= outgoing_total_frames)
+                outgoing_read_frame_ = outgoing_xfade;
+        }
+
+        if (crossfade_remaining_ > 0) {
+            --crossfade_remaining_;
+            if (crossfade_remaining_ == 0) {
+                outgoing_clip_.reset();
+                outgoing_read_frame_ = 0;
+            }
+        }
     }
 }
 

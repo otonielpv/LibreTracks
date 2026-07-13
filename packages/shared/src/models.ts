@@ -270,6 +270,14 @@ export type AutomationActionSummary =
       rampSeconds?: number | null;
     }
   | { type: "applyScene"; sceneId: string; rampSeconds?: number | null }
+  | {
+      type: "setPad";
+      enabled: boolean;
+      padId: string;
+      padKey: number;
+      volume: number;
+      output: string;
+    }
   | { type: "wait"; durationSeconds: number };
 
 export type AutomationCueSummary = {

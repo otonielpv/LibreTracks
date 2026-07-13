@@ -19,7 +19,7 @@ namespace lt {
 //
 // A pad ships one long (~15 min) audio file per musical key. Loading all 12
 // keys to RAM at once is prohibitive (~300 MB each), so the bank here holds
-// only the SINGLE active key; changing key swaps in a freshly-decoded clip.
+// only the active key plus the previous key for the brief live crossfade.
 // ---------------------------------------------------------------------------
 struct PadClip {
     std::vector<float> samples;    // interleaved stereo at `sample_rate`
@@ -76,9 +76,10 @@ public:
     void set_volume(float volume);
     PadConfig config() const;
 
-    // Swap in a freshly-decoded key clip (or nullptr to clear). Cheap; the old
-    // clip is released once no render() is mid-read. The read cursor resets to
-    // the start of the new clip.
+    // Publish a freshly-decoded key clip (or nullptr to clear). The audio
+    // thread keeps the old clip alive while it crossfades to the new one at the
+    // equivalent loop position, so live key/pack changes neither click nor
+    // restart the ambience from its attack.
     void set_clip(std::shared_ptr<const PadClip> clip) noexcept;
 
     void render(float** output_channels,
@@ -105,26 +106,20 @@ private:
     // lock-free diagnostics read.
     std::shared_ptr<const PadClip> clip_;
     std::atomic<bool> clip_present_{false};
-    // Read cursor into the active clip (in frames), advanced by render(). Reset
-    // to 0 by set_clip(). Only touched from the audio thread.
+    // Read cursor into the active clip (in frames), advanced by render(). Only
+    // touched from the audio thread.
     std::int64_t read_frame_ = 0;
-    // Sequence bumped by set_clip() so the audio thread notices a swap and
-    // resets its cursor without a lock.
+    // Sequence bumped by set_clip() so the audio thread notices a swap without
+    // taking a lock.
     std::atomic<std::uint64_t> clip_seq_{0};
     std::uint64_t applied_clip_seq_ = 0;
-    // The clip the audio thread is actually reading. set_clip() publishes the
-    // new clip into clip_ immediately, but the audio thread only ADOPTS it
-    // (swaps active_clip_ + rewinds the cursor) at a silent point of the swap
-    // fade, so a key change never clicks. Held here so the buffer stays alive
-    // for the whole fade-out of the OLD clip.
+    // The clip the audio thread is actually reading. During a live swap both
+    // active_clip_ and outgoing_clip_ are rendered concurrently.
     std::shared_ptr<const PadClip> active_clip_;
-    // Swap fade: > 0 while fading the old clip out before adopting the new one.
-    // Counts down; on reaching 0 the pending clip is adopted and a fade-in
-    // begins. swap_gain_ multiplies the output on top of current_output_gain_.
-    int   swap_fade_out_remaining_ = 0;
-    int   swap_fade_total_ = 0;
-    bool  swap_pending_ = false;      // a new clip is waiting to be adopted
-    float swap_gain_ = 1.0f;          // 0..1 crossfade envelope for the swap
+    std::shared_ptr<const PadClip> outgoing_clip_;
+    std::int64_t outgoing_read_frame_ = 0;
+    int crossfade_remaining_ = 0;
+    int crossfade_total_ = 0;
 
     float current_output_gain_ = 0.0f;
 

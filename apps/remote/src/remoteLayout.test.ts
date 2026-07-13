@@ -25,9 +25,14 @@ describe("remoteLayout", () => {
     window.localStorage.clear();
   });
 
-  it("default layout is the classic two tabs (Controles + Mixer) of known widgets", () => {
+  it("default layout includes controls, mixer and performance tools", () => {
     const layout = defaultLayout();
-    expect(layout.tabs.map((t) => t.name)).toEqual(["Controles", "Mixer"]);
+    expect(layout.tabs.map((t) => t.name)).toEqual(["Controles", "Mixer", "Herramientas"]);
+    expect(layout.tabs[2].widgets.map((widget) => widget.type)).toEqual([
+      "metronomeSettings",
+      "voiceGuideSettings",
+      "pads",
+    ]);
     expect(layout.activeTabId).toBe(layout.tabs[0].id);
     for (const widget of allWidgets(layout)) {
       expect(ALL_WIDGET_TYPES).toContain(widget.type);
@@ -61,6 +66,17 @@ describe("remoteLayout", () => {
     }
   });
 
+  it("uses a compact intermediate geometry for the tablet preset", () => {
+    const widgets = defaultLayout("tablet").tabs[0].widgets;
+    expect(widgets.map(({ type, y, h }) => [type, y, h])).toEqual([
+      ["readouts", 0, 3],
+      ["transportButtons", 3, 3],
+      ["timeline", 6, 4],
+      ["controlDeck", 10, 7],
+      ["markerGrid", 17, 10],
+    ]);
+  });
+
   it("auto-places widgets that lack x/y (migration from the flow model)", () => {
     // Three full-width widgets with no x/y should stack in rows 0,1,2 at col 0.
     const migrated = normalizeLayout({
@@ -82,6 +98,25 @@ describe("remoteLayout", () => {
       [0, 0],
       [0, 4],
       [0, 8],
+    ]);
+  });
+
+  it("fuses a legacy song header and clip list into their combined rectangle", () => {
+    const result = normalizeLayout({
+      version: 4,
+      activeTabId: "songs",
+      tabs: [{
+        id: "songs",
+        name: "Songs",
+        widgets: [
+          { id: "header", type: "songHeader", x: 0, y: 2, w: 24, h: 4 },
+          { id: "clips", type: "clipList", x: 0, y: 6, w: 24, h: 8 },
+        ],
+      }],
+    });
+
+    expect(result.tabs[0].widgets).toEqual([
+      { id: "header", type: "songHeader", x: 0, y: 2, w: 24, h: 12 },
     ]);
   });
 

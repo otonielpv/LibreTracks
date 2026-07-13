@@ -157,6 +157,20 @@ async fn run_remote_command_bridge(
     handle: RemoteServerHandle,
 ) {
     while let Some(command) = command_rx.recv().await {
+        if matches!(&command, RemoteCommand::RequestPadsCatalog) {
+            // Fetching the online manifest can take several seconds when the
+            // machine is offline. Keep it outside the serialized command
+            // bridge so transport commands remain immediate.
+            let catalog_app = app.clone();
+            let catalog_handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Ok(catalog) = crate::commands::pads::get_pads_catalog(catalog_app).await {
+                    catalog_handle.publish_pads_catalog(&catalog);
+                }
+            });
+            continue;
+        }
+
         let state = app.state::<DesktopState>();
         let mut session = match state.session.lock() {
             Ok(session) => session,
@@ -318,6 +332,42 @@ async fn run_remote_command_bridge(
                 handle.publish_settings(&saved_settings);
                 session.snapshot_with_sync(&state.audio)
             }
+            RemoteCommand::UpdatePadSettings { settings } => {
+                let settings_store = app.state::<AppSettingsStore>();
+                let Ok(next_settings) = serde_json::from_value::<AppSettings>(settings.clone())
+                else {
+                    continue;
+                };
+                let previous_settings = settings_store.current().ok();
+                let key_changed = previous_settings.as_ref().map_or(true, |previous| {
+                    previous.pad_id != next_settings.pad_id
+                        || previous.pad_key != next_settings.pad_key
+                });
+
+                if key_changed && !next_settings.pad_id.is_empty() {
+                    if let Ok(base) = crate::commands::pads::pads_install_dir(&app) {
+                        if let Some(directory) = base.to_str() {
+                            let _ = state.audio.load_pad_clip(
+                                directory,
+                                &next_settings.pad_id,
+                                next_settings.pad_key,
+                            );
+                        }
+                    }
+                }
+                if state.audio.set_pad_config_realtime(&next_settings).is_err()
+                    || state.audio.replace_settings(next_settings.clone()).is_err()
+                    || settings_store.set(next_settings.clone()).is_err()
+                    || save_app_settings(&app, &next_settings).is_err()
+                {
+                    continue;
+                }
+
+                let _ = app.emit("settings:updated", next_settings.clone());
+                handle.publish_settings(&next_settings);
+                session.snapshot_with_sync(&state.audio)
+            }
+            RemoteCommand::RequestPadsCatalog => unreachable!("handled before session lock"),
             RemoteCommand::Ping => continue,
         };
 

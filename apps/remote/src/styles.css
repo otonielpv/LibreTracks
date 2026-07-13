@@ -431,10 +431,11 @@ button {
   height: 100%;
 }
 
-/* Click + Voice-guide split control: occupies one transport slot and lays out
-   its two pills side by side, each sharing the slot equally. */
+/* Click + Voice-guide are wrapped together, but the wrapper occupies two
+   transport slots. This gives all five actions the same effective width and
+   keeps both short labels readable at enlarged UI levels on phones. */
 .pill-button-split {
-  flex: 1;
+  flex: 2 1 0;
   display: flex;
   gap: 0.24rem;
   min-width: 0;
@@ -2683,7 +2684,7 @@ button {
 .layout-canvas-wrap {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 2px;
   /* The canvas is the scroll container for a tab's widgets. Its parent
      (.remote-content) is overflow:hidden and flex:1, so the scroll must live
      here or tall layouts get clipped (no scroll). */
@@ -2691,7 +2692,7 @@ button {
   min-height: 0;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 0.5rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
+  padding: 0 0.75rem calc(1rem + env(safe-area-inset-bottom));
 }
 
 /* The tab bar stays pinned while the widgets below scroll. */
@@ -2770,6 +2771,7 @@ button {
     height: auto;
     min-height: 1px;
     overflow: visible;
+    container-type: inline-size;
   }
 
   .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-readouts-inline,
@@ -2785,7 +2787,7 @@ button {
   }
 
   .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-transportButtons {
-    min-height: 6.5rem;
+    min-height: 0;
   }
 
   .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-controlDeck {
@@ -2798,8 +2800,14 @@ button {
 
   .layout-canvas.is-classic-mobile-controls:not(.is-editing) .timeline-widget-host,
   .layout-canvas.is-classic-mobile-controls:not(.is-editing) .timeline-shell-shared {
-    height: 5.1rem !important;
+    height: 4rem !important;
     max-height: none;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-timeline {
+    display: block;
+    height: 4rem;
+    min-height: 4rem;
   }
 
   .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-control-deck {
@@ -2819,6 +2827,50 @@ button {
   border: 1px solid var(--outline);
   border-radius: 0.75rem;
   box-shadow: 0 0.8rem 2.5rem rgb(0 0 0 / 0.45);
+}
+
+@media (max-width: 600px) {
+  /* On phones a floating two-line toolbar covers both tab management and the
+     first widgets. Keep it in normal document flow as one compact, horizontally
+     scrollable row; the canvas then starts below it with no hidden controls. */
+  .remote-shell.is-editing-layout .layout-edit-toolbar {
+    position: static;
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0.3rem;
+    padding: 0.3rem 0.45rem;
+    border-width: 0 0 1px;
+    border-radius: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    box-shadow: none;
+  }
+
+  .remote-shell.is-editing-layout .layout-edit-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .remote-shell.is-editing-layout .layout-edit-done,
+  .remote-shell.is-editing-layout .layout-edit-cancel,
+  .remote-shell.is-editing-layout .layout-reset-button {
+    flex: 0 0 auto;
+    min-height: 2rem;
+    padding: 0.3rem 0.55rem;
+    white-space: nowrap;
+    font-size: 0.68rem;
+  }
+
+  .remote-shell.is-editing-layout .layout-edit-toolbar-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 0.3rem;
+    margin-left: 0;
+  }
 }
 
 .layout-canvas-empty-inline {
@@ -2897,6 +2949,44 @@ button {
   display: flex;
   flex-direction: column;
   isolation: isolate;
+}
+
+.layout-widget-type-transportButtons .transport-controls-inline,
+.layout-widget-type-transportButtons .pill-button-split,
+.layout-widget-type-transportButtons .pill-button {
+  min-height: 0;
+}
+
+/* A transport widget can be much narrower than the viewport. Give every
+   action one equal slot and scale its label from the widget itself, otherwise
+   the intrinsic width of labels such as "Reproducir" squeezes Click/Guide. */
+.layout-widget-type-transportButtons .transport-controls-inline > .pill-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.layout-widget-type-transportButtons .pill-button-split {
+  flex: 2 1 0;
+}
+
+.remote-shell .layout-widget-type-transportButtons .pill-button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding-inline: clamp(0.1rem, 1cqi, 0.7rem);
+  font-size: clamp(0.55rem, 3cqi, 1.02rem);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+}
+
+.layout-canvas:not(.is-classic-mobile-controls)
+  .layout-widget-type-transportButtons .transport-controls-inline,
+.layout-canvas:not(.is-classic-mobile-controls)
+  .layout-widget-type-transportButtons .pill-button-split,
+.layout-canvas:not(.is-classic-mobile-controls)
+  .layout-widget-type-transportButtons .pill-button {
+  height: 100%;
 }
 
 /* In edit mode each widget gets a dashed frame and its live content is made
@@ -3076,7 +3166,150 @@ button {
   min-height: 0;
   height: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   container-type: size;
+}
+
+.layout-widget-type-markerGrid .marker-grid-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.layout-widget-type-markerGrid .marker-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(8.25rem, 100%), 1fr)
+  ) !important;
+  grid-auto-rows: minmax(4.25rem, max-content);
+  padding-bottom: 0.35rem;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.layout-widget-type-markerGrid .marker-card,
+.layout-widget-type-markerGrid .marker-card-jump {
+  min-height: 4.25rem;
+  flex-shrink: 0;
+}
+
+/* Interface scaling also needs to change grid density. Larger text/padding in
+   levels 2-4 gets a correspondingly wider card instead of being squeezed into
+   the level-1 column count. auto-fit still keeps multiple columns on tablets. */
+.remote-shell.remote-size-1 .layout-widget-type-markerGrid .marker-grid {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(9.25rem, 100%), 1fr)
+  ) !important;
+  grid-auto-rows: minmax(5rem, max-content);
+}
+
+.remote-shell.remote-size-2 .layout-widget-type-markerGrid .marker-grid {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(10.5rem, 100%), 1fr)
+  ) !important;
+  grid-auto-rows: minmax(5.7rem, max-content);
+}
+
+.remote-shell.remote-size-3 .layout-widget-type-markerGrid .marker-grid {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(12rem, 100%), 1fr)
+  ) !important;
+  grid-auto-rows: minmax(6.5rem, max-content);
+  gap: 0.5rem;
+}
+
+/* The untouched tablet preset is intentionally denser than desktop. Its
+   readout strip is only three grid rows tall, so centre and enlarge the useful
+   values instead of leaving desktop-sized empty card surfaces around them. */
+.remote-shell.remote-profile-tablet.remote-size-0
+  .layout-widget-type-readouts .readout-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.3rem 0.48rem;
+}
+
+.remote-shell.remote-profile-tablet.remote-size-0
+  .layout-widget-type-readouts .readout-card span {
+  font-size: 0.5rem;
+}
+
+.remote-shell.remote-profile-tablet.remote-size-0
+  .layout-widget-type-readouts .readout-card strong,
+.remote-shell.remote-profile-tablet.remote-size-0
+  .layout-widget-type-readouts .readout-card-compact strong {
+  font-size: clamp(0.88rem, 1.35vw, 1.08rem);
+  line-height: 1.05;
+}
+
+.remote-shell.remote-profile-tablet
+  .layout-widget-type-markerGrid .marker-grid {
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+
+@media (max-width: 600px) {
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
+    .layout-widget-type-markerGrid .marker-grid-shell {
+    height: 100%;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
+    .layout-widget-type-markerGrid .marker-grid {
+    overflow-y: auto;
+    grid-auto-rows: minmax(4.25rem, max-content);
+  }
+
+  /* The untouched phone preset is a one-screen dashboard. Control settings
+     and marker cards keep readable intrinsic sizes, but scroll inside their
+     own fixed-height widgets instead of pushing the whole page downward. */
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
+    > .layout-widget-type-controlDeck {
+    display: flex;
+    height: 10rem;
+    min-height: 10rem;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
+    > .layout-widget-type-markerGrid {
+    display: flex;
+    height: 12rem;
+    min-height: 12rem;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
+    > .layout-widget-type-controlDeck .layout-widget-body,
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
+    > .layout-widget-type-markerGrid .layout-widget-body {
+    display: block;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
+    .layout-widget-type-controlDeck .transport-control-deck {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    align-content: flex-start;
+    padding-right: 0.15rem;
+  }
 }
 
 /* Composite controls normally stay sticky while the remote scrolls. Inside an
@@ -3425,6 +3658,12 @@ button {
   font-size: clamp(0.7rem, 18cqh, 1.4rem);
 }
 
+.layout-palette-item {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .layout-canvas-wrap.is-editing .layout-palette {
   position: fixed;
   z-index: 35;
@@ -3449,6 +3688,48 @@ button {
   color: var(--accent);
   font-weight: 800;
   cursor: pointer;
+}
+
+.layout-palette-categories {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  align-items: start;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.layout-palette-category {
+  min-width: 0;
+  padding: 0.45rem;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  border-radius: 0.6rem;
+  background: rgb(0 0 0 / 0.14);
+}
+
+.layout-palette-category h3 {
+  margin: 0 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.layout-palette-category-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+@media (max-width: 600px) {
+  .layout-canvas-wrap.is-editing .layout-palette {
+    max-height: min(42vh, 20rem);
+  }
+
+  .layout-palette-category {
+    padding: 0.4rem;
+  }
 }
 
 .layout-palette-open {
@@ -3636,4 +3917,271 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Unified compact song view. In All mode the available widget width decides
+   how many complete song columns fit; columns wrap instead of producing the
+   old, sparse horizontal strip. Each column owns its header, master and clips. */
+.song-compact-widget {
+  container-type: size;
+}
+
+.song-header-columns.song-compact-columns,
+.song-header-columns.song-compact-columns.is-all {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: minmax(9rem, 1fr);
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  gap: 0.5rem;
+  padding-bottom: 0;
+}
+
+.song-header-columns.song-compact-columns.is-all {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(16rem, 100%), 1fr)
+  );
+}
+
+.song-compact-columns .song-header-column,
+.song-header-columns.is-all.song-compact-columns .song-header-column {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.song-compact-clips {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--outline);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@container (max-height: 150px) {
+  .song-compact-clips {
+    padding-top: 0.2rem;
+  }
+
+  .song-compact-columns .clip-entry {
+    padding-block: 0.22rem;
+  }
+}
+
+/* Performance tools tab: two self-contained, scrollable widgets. */
+.performance-settings-widget,
+.pads-widget {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: clamp(0.45rem, 2.5cqi, 0.85rem);
+  border: 1px solid var(--outline);
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+  box-sizing: border-box;
+  container-type: size;
+}
+
+.performance-settings-widget {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  align-content: start;
+  gap: 0.65rem;
+}
+
+.performance-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.65rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 0.65rem;
+  background: rgb(0 0 0 / 0.14);
+}
+
+.performance-settings-section > header,
+.pads-widget > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.performance-settings-section > header > strong,
+.pads-widget > header strong {
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.pads-widget > header > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pads-widget > header small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.performance-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.65rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.performance-switch input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  accent-color: var(--accent);
+  pointer-events: none;
+}
+
+.performance-switch:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--outline));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.performance-switch:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.performance-switch.is-row {
+  justify-content: space-between;
+  width: 100%;
+}
+
+.performance-setting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.45rem;
+}
+
+.performance-setting-grid > .performance-setting-field > span:first-child {
+  display: flex;
+  min-height: 2.25em;
+  align-items: flex-end;
+}
+
+.performance-setting-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.performance-setting-field.is-range > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.performance-setting-field strong {
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.performance-setting-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.45rem;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.performance-setting-field input[type="range"] {
+  width: 100%;
+  margin: 0;
+}
+
+.pads-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pads-empty-hint {
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px dashed var(--outline);
+  border-radius: 0.55rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.pads-key-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.pads-key-grid button {
+  min-height: clamp(2.3rem, 10cqh, 4.25rem);
+  border: 1px solid var(--outline);
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: clamp(0.72rem, 4cqi, 1.1rem);
+  font-weight: 800;
+}
+
+.pads-key-grid button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 0 0.8rem rgb(87 241 219 / 0.18);
+}
+
+.pads-key-grid button:disabled {
+  opacity: 0.35;
+}
+
+@container (max-width: 360px) {
+  .performance-setting-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pads-key-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

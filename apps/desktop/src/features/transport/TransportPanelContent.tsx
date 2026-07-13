@@ -12095,6 +12095,8 @@ export function TransportPanelContent() {
               <AutomationCueModal
                 draft={automationCueDraft}
                 song={song}
+                appSettings={appSettings}
+                padRouteOptions={audioRoutingOptions}
                 onCancel={() => setAutomationCueDraft(null)}
                 onConfirm={handleConfirmAutomationCue}
               />

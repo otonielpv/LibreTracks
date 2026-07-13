@@ -18,11 +18,13 @@ import {
   getSongRegionAtPosition,
   getSongTempoRegionAtPosition,
   formatTransposeSemitones,
+  METRONOME_SOUND_PRESETS,
   markerColor,
   markerKindCategory,
   regionEffectiveKey,
   type AppSettings,
   type AudioMeterLevel,
+  type PadsCatalog,
   type SongRegionSummary,
   type SongView,
   type TrackSummary,
@@ -48,6 +50,7 @@ import {
   stepMeterDb,
 } from "@libretracks/shared/meterBallistics";
 import {
+  AUX_FADER_SCALE,
   TRACK_FADER_SCALE,
   faderTicks,
   formatGainDb,
@@ -77,6 +80,7 @@ import {
   serializeLayoutFile,
   writeStoredLayout,
   type LayoutTab,
+  type LayoutPresetProfile,
   type RemoteLayout,
   type WidgetPlacement,
   type WidgetType,
@@ -106,11 +110,13 @@ type RemoteSyncState = {
   snapshot: TransportSnapshot | null;
   songView: SongView | null;
   settings: AppSettings | null;
+  padsCatalog: PadsCatalog | null;
   meters: Record<string, AudioMeterLevel>;
   snapshotReceivedAtMs: number;
   setSnapshot: (snapshot: TransportSnapshot) => void;
   setSongView: (songView: SongView | null) => void;
   setSettings: (settings: AppSettings) => void;
+  setPadsCatalog: (catalog: PadsCatalog) => void;
   setMeters: (meters: AudioMeterLevel[]) => void;
 };
 
@@ -303,6 +309,7 @@ const useRemoteSyncStore = create<RemoteSyncState>()(
     snapshot: null,
     songView: null,
     settings: null,
+    padsCatalog: null,
     meters: {},
     snapshotReceivedAtMs: performance.now(),
     setSnapshot: (snapshot) => {
@@ -313,6 +320,9 @@ const useRemoteSyncStore = create<RemoteSyncState>()(
     },
     setSettings: (settings) => {
       set({ settings });
+    },
+    setPadsCatalog: (padsCatalog) => {
+      set({ padsCatalog });
     },
     setMeters: (meters) => {
       set({
@@ -448,10 +458,16 @@ function sendMetronomePatch(patch: { enabled?: boolean; volume?: number }) {
 }
 
 function sendSettingsUpdate(settings: AppSettings) {
+  useRemoteSyncStore.getState().setSettings(settings);
   sendCommand({
     cmd: "updateSettings",
     settings,
   });
+}
+
+function sendPadSettingsUpdate(settings: AppSettings) {
+  useRemoteSyncStore.getState().setSettings(settings);
+  sendCommand({ cmd: "updatePadSettings", settings });
 }
 
 /**
@@ -756,6 +772,7 @@ function useRemoteBridge() {
 
       socket.addEventListener("open", () => {
         useRemoteConnectionStore.getState().setConnection(socket, "connected");
+        socket.send(JSON.stringify({ cmd: "requestPadsCatalog" }));
       });
 
       socket.addEventListener("message", (event) => {
@@ -790,6 +807,11 @@ function useRemoteBridge() {
 
         if (message.event === "settings") {
           useRemoteSyncStore.getState().setSettings(message.payload as AppSettings);
+          return;
+        }
+
+        if (message.event === "padsCatalog") {
+          useRemoteSyncStore.getState().setPadsCatalog(message.payload as PadsCatalog);
           return;
         }
 
@@ -855,14 +877,20 @@ function resolveLivePosition(snapshot: TransportSnapshot | null, receivedAtMs: n
   }
 
   const transportClock = snapshot.transportClock;
-  if (snapshot.playbackState === "playing" && transportClock?.running) {
+  if (snapshot.playbackState === "playing") {
     const playbackRate =
-      Number.isFinite(transportClock.playbackRate) && transportClock.playbackRate !== undefined
+      Number.isFinite(transportClock?.playbackRate) && transportClock?.playbackRate !== undefined
         ? Math.max(0, transportClock.playbackRate)
         : 1;
+    // `playbackState` and the native clock can arrive in different snapshots
+    // on a remote connection. Keep advancing from the snapshot position while
+    // the clock is missing/stale instead of freezing the timeline on phones.
+    const anchorPositionSeconds = transportClock?.running
+      ? transportClock.anchorPositionSeconds
+      : snapshot.positionSeconds;
     return Math.max(
       0,
-      transportClock.anchorPositionSeconds + ((performance.now() - receivedAtMs) / 1000) * playbackRate,
+      anchorPositionSeconds + ((performance.now() - receivedAtMs) / 1000) * playbackRate,
     );
   }
 
@@ -936,7 +964,7 @@ function useTransportReadout(): TransportReadout {
         regionName: currentRegion?.name ?? "--",
       };
 
-      const isPlaying = currentSnapshot?.playbackState === "playing" && currentSnapshot.transportClock?.running === true;
+      const isPlaying = currentSnapshot?.playbackState === "playing";
       const now = performance.now();
 
       setReadout((currentReadout) => {
@@ -1141,11 +1169,18 @@ const SharedTimeline = memo(function SharedTimeline({
 
     const render = (frameAtMs: number) => {
       const width = shellRef.current?.clientWidth ?? viewportWidth;
-      const currentSnapshot = snapshotRef.current;
+      // Read the store in the animation loop as well as keeping the prop refs.
+      // This avoids waiting for a React effect when snapshots arrive rapidly or
+      // while a mobile browser is recovering from a throttled/background frame.
+      const syncState = useRemoteSyncStore.getState();
+      const currentSnapshot = syncState.snapshot ?? snapshotRef.current;
       const repositionToken = getTransportRepositionToken(currentSnapshot);
       const explicitTransportReposition = repositionToken !== lastTransportRepositionTokenRef.current;
-      const rawPositionSeconds = resolveLivePosition(currentSnapshot, snapshotReceivedAtMsRef.current);
-      const isPlaying = currentSnapshot?.playbackState === "playing" && currentSnapshot.transportClock?.running === true;
+      const rawPositionSeconds = resolveLivePosition(
+        currentSnapshot,
+        syncState.snapshot ? syncState.snapshotReceivedAtMs : snapshotReceivedAtMsRef.current,
+      );
+      const isPlaying = currentSnapshot?.playbackState === "playing";
       const lastFrameAtMs = lastFrameAtMsRef.current;
       const deltaSeconds = lastFrameAtMs === null ? 0 : Math.min(0.05, Math.max(0, frameAtMs - lastFrameAtMs) / 1000);
       lastFrameAtMsRef.current = frameAtMs;
@@ -1420,7 +1455,7 @@ function TransportControlButtons() {
       <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
         {STRINGS.stop}
       </button>
-      {/* Click + Voice guide share the last transport slot as a split control. */}
+      {/* Keep Click + Voice guide grouped while giving each a full action slot. */}
       <div className="pill-button-split">
         <button
           className={`pill-button ${metronomeEnabled ? "is-active" : ""}`}
@@ -2672,6 +2707,27 @@ function useMixerWidgetModel() {
   return { activeRegion, filterActiveSong, filterAvailable, folderPaletteMap, visibleTracks };
 }
 
+function currentLayoutPresetProfile(): LayoutPresetProfile {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const shortSide = Math.min(width, height);
+  const longSide = Math.max(width, height);
+  const touchCapable =
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia?.("(pointer: coarse)").matches === true;
+
+  // Using only viewport width classifies a landscape tablet as desktop and a
+  // landscape phone as tablet. The short side plus touch capability describes
+  // the physical family much more reliably across both orientations.
+  if (shortSide <= 520 || (!touchCapable && width <= 600)) {
+    return "phone";
+  }
+  if (touchCapable && shortSide <= 1024 && longSide <= 1600) {
+    return "tablet";
+  }
+  return "standard";
+}
+
 function MixerSongFilterWidget() {
   const { filterActiveSong, filterAvailable } = useMixerWidgetModel();
   const setFilterActiveSong = useMixerUiStore((state) => state.setFilterActiveSong);
@@ -2784,10 +2840,12 @@ function SongHeaderColumn({
   region,
   bpm,
   isActive,
+  clips,
 }: {
   region: SongRegionSummary;
   bpm: number;
   isActive: boolean;
+  clips: SongClipEntry[];
 }) {
   const key = keyForRegion(region);
   return (
@@ -2809,6 +2867,9 @@ function SongHeaderColumn({
         {key ? <div className="song-header-key">{key}</div> : null}
       </div>
       <SongMasterFader region={region} />
+      <div className="song-compact-clips">
+        <ClipStack clips={clips} />
+      </div>
     </div>
   );
 }
@@ -2820,7 +2881,7 @@ function SongHeaderColumn({
  */
 function SongHeaderWidget() {
   const songView = useRemoteSyncStore((state) => state.songView);
-  const [scope, setScope] = useSongScope("libretracks.remote.songHeaderScope");
+  const [scope, setScope] = useSongScope("libretracks.remote.songCompactScope");
   const activeRegionId = useActiveRegionId();
   const regions = songView?.regions ?? [];
   const activeReg = regions.find((region) => region.id === activeRegionId) ?? null;
@@ -2828,7 +2889,7 @@ function SongHeaderWidget() {
   const shown = scope === "all" ? regions : activeReg ? [activeReg] : [];
 
   return (
-    <div className="song-header-widget">
+    <div className="song-header-widget song-compact-widget">
       <div className="song-widget-head">
         <span className="song-widget-title">{STRINGS.widgetSongHeader}</span>
         <SongScopeToggle scope={scope} onChange={setScope} />
@@ -2836,13 +2897,14 @@ function SongHeaderWidget() {
       {shown.length === 0 ? (
         <div className="song-widget-empty">{STRINGS.songNoActive}</div>
       ) : (
-        <div className={`song-header-columns ${scope === "all" ? "is-all" : ""}`}>
+        <div className={`song-header-columns song-compact-columns ${scope === "all" ? "is-all" : ""}`}>
           {shown.map((region) => (
             <SongHeaderColumn
               key={region.id}
               region={region}
               bpm={bpmForRegion(songView, region)}
               isActive={region.id === activeRegionId}
+              clips={clipsForRegion(songView, region)}
             />
           ))}
         </div>
@@ -2886,36 +2948,220 @@ function ClipStack({ clips }: { clips: SongClipEntry[] }) {
  * whole set at once, no per-song selection).
  */
 function ClipListWidget() {
-  const songView = useRemoteSyncStore((state) => state.songView);
-  const [scope, setScope] = useSongScope("libretracks.remote.clipListScope");
-  const activeRegionId = useActiveRegionId();
-  const regions = songView?.regions ?? [];
-  const activeReg = regions.find((region) => region.id === activeRegionId) ?? null;
+  return <SongHeaderWidget />;
+}
 
-  const shown = scope === "all" ? regions : activeReg ? [activeReg] : [];
+const PAD_KEY_LABELS = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+
+function remoteOutputOptions(settings: AppSettings, includeMonitor = false) {
+  const options: Array<{ value: string; label: string }> = [
+    { value: "master", label: STRINGS.outputMaster },
+  ];
+  if (includeMonitor) {
+    options.push({ value: "monitor", label: STRINGS.outputMonitor });
+  }
+  const channels = Array.from(new Set(settings.enabledOutputChannels)).sort((a, b) => a - b);
+  for (let index = 0; index < channels.length; index += 2) {
+    const left = channels[index];
+    const right = channels[index + 1];
+    if (right === left + 1) {
+      options.push({ value: `ext:${left}-${right}`, label: `${STRINGS.outputExternal} ${left + 1}/${right + 1}` });
+    }
+  }
+  for (const channel of channels) {
+    options.push({ value: `ext:${channel}`, label: `${STRINGS.outputExternal} ${channel + 1}` });
+  }
+  return options;
+}
+
+function SettingsRange({
+  label,
+  gain,
+  onChange,
+}: {
+  label: string;
+  gain: number;
+  onChange: (gain: number) => void;
+}) {
+  return (
+    <label className="performance-setting-field is-range">
+      <span>{label}<strong>{formatGainDb(gain)}</strong></span>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.001}
+        value={gainToPosition(gain, AUX_FADER_SCALE)}
+        onChange={(event) => onChange(positionToGain(Number(event.currentTarget.value), AUX_FADER_SCALE))}
+      />
+    </label>
+  );
+}
+
+function SettingsPitchRange({
+  label,
+  pitch,
+  onChange,
+}: {
+  label: string;
+  pitch: number;
+  onChange: (pitch: number) => void;
+}) {
+  return (
+    <label className="performance-setting-field is-range">
+      <span>{label}<strong>{pitch > 0 ? "+" : ""}{pitch} st</strong></span>
+      <input
+        type="range"
+        min={-24}
+        max={24}
+        step={1}
+        value={pitch}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+      />
+    </label>
+  );
+}
+
+function PerformanceSettingsWidget({ mode = "combined" }: { mode?: "combined" | "metronome" | "guide" }) {
+  const settings = useRemoteSyncStore((state) => state.settings);
+  if (!settings) return <div className="song-widget-empty">{STRINGS.settingsLoading}</div>;
+  const patch = (next: Partial<AppSettings>) => sendSettingsUpdate({ ...settings, ...next });
+  const metronomeOutputs = remoteOutputOptions(settings);
+  const voiceOutputs = remoteOutputOptions(settings, true);
 
   return (
-    <div className="clip-list-widget">
-      <div className="song-widget-head">
-        <span className="song-widget-title">{STRINGS.widgetClipList}</span>
-        <SongScopeToggle scope={scope} onChange={setScope} />
-      </div>
-      {shown.length === 0 ? (
-        <div className="song-widget-empty">{STRINGS.songNoActive}</div>
-      ) : (
-        <div className={`clip-list-groups ${scope === "all" ? "is-all" : ""}`}>
-          {shown.map((region) => (
-            <div key={region.id} className="clip-list-group">
-              {scope === "all" ? (
-                <div className="clip-list-group-title" title={region.name}>
-                  {region.name}
-                </div>
-              ) : null}
-              <ClipStack clips={clipsForRegion(songView, region)} />
-            </div>
-          ))}
+    <div className={`performance-settings-widget performance-settings-widget-${mode}`}>
+      {mode !== "guide" ? (
+      <section className="performance-settings-section">
+        <header>
+          <strong>{STRINGS.metronomeSettings}</strong>
+          <label className="performance-switch">
+            <input type="checkbox" checked={settings.metronomeEnabled} onChange={(event) => patch({ metronomeEnabled: event.currentTarget.checked })} />
+            <span>{settings.metronomeEnabled ? STRINGS.on : STRINGS.off}</span>
+          </label>
+        </header>
+        <SettingsRange label={STRINGS.volume} gain={settings.metronomeVolume} onChange={(metronomeVolume) => patch({ metronomeVolume })} />
+        <label className="performance-setting-field">
+          <span>{STRINGS.routing}</span>
+          <select value={settings.metronomeOutput} onChange={(event) => patch({ metronomeOutput: event.currentTarget.value })}>
+            {metronomeOutputs.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="performance-switch is-row"><input type="checkbox" checked={settings.metronomeAccentEnabled} onChange={(event) => patch({ metronomeAccentEnabled: event.currentTarget.checked })} /><span>{STRINGS.accentEnabled}</span></label>
+        <div className="performance-setting-grid">
+          <label className="performance-setting-field">
+            <span>{STRINGS.accentSound}</span>
+            <select value={settings.metronomeAccentPreset} onChange={(event) => patch({ metronomeAccentPreset: Number(event.currentTarget.value) })}>
+              {METRONOME_SOUND_PRESETS.map((preset, index) => <option key={preset} value={index}>{preset}</option>)}
+            </select>
+          </label>
+          <SettingsPitchRange label={STRINGS.accentPitch} pitch={settings.metronomeAccentPitch} onChange={(metronomeAccentPitch) => patch({ metronomeAccentPitch })} />
         </div>
-      )}
+        <div className="performance-setting-grid">
+          <label className="performance-setting-field">
+            <span>{STRINGS.beatSound}</span>
+            <select value={settings.metronomeBeatPreset} onChange={(event) => patch({ metronomeBeatPreset: Number(event.currentTarget.value) })}>
+              {METRONOME_SOUND_PRESETS.map((preset, index) => <option key={preset} value={index}>{preset}</option>)}
+            </select>
+          </label>
+          <SettingsPitchRange label={STRINGS.beatPitch} pitch={settings.metronomeBeatPitch} onChange={(metronomeBeatPitch) => patch({ metronomeBeatPitch })} />
+        </div>
+        <div className="performance-setting-grid">
+          <label className="performance-setting-field">
+            <span>{STRINGS.subdivision}</span>
+            <select value={settings.metronomeSubdivision} onChange={(event) => patch({ metronomeSubdivision: Number(event.currentTarget.value) })}>
+              <option value={1}>{STRINGS.subdivisionOff}</option><option value={2}>1/8</option><option value={3}>{STRINGS.triplet}</option><option value={4}>1/16</option>
+            </select>
+          </label>
+          {settings.metronomeSubdivision > 1 ? (
+            <label className="performance-setting-field">
+              <span>{STRINGS.subdivisionSound}</span>
+              <select value={settings.metronomeSubdivisionPreset} onChange={(event) => patch({ metronomeSubdivisionPreset: Number(event.currentTarget.value) })}>
+                {METRONOME_SOUND_PRESETS.map((preset, index) => <option key={preset} value={index}>{preset}</option>)}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {settings.metronomeSubdivision > 1 ? (
+          <div className="performance-setting-grid">
+            <SettingsPitchRange label={STRINGS.subdivisionPitch} pitch={settings.metronomeSubdivisionPitch} onChange={(metronomeSubdivisionPitch) => patch({ metronomeSubdivisionPitch })} />
+            <SettingsRange label={STRINGS.subdivisionVolume} gain={settings.metronomeSubdivisionGain} onChange={(metronomeSubdivisionGain) => patch({ metronomeSubdivisionGain })} />
+          </div>
+        ) : null}
+      </section>
+      ) : null}
+
+      {mode !== "metronome" ? (
+      <section className="performance-settings-section">
+        <header>
+          <strong>{STRINGS.voiceGuideSettings}</strong>
+          <label className="performance-switch">
+            <input type="checkbox" checked={settings.voiceGuideEnabled} onChange={(event) => patch({ voiceGuideEnabled: event.currentTarget.checked })} />
+            <span>{settings.voiceGuideEnabled ? STRINGS.on : STRINGS.off}</span>
+          </label>
+        </header>
+        <SettingsRange label={STRINGS.volume} gain={settings.voiceGuideVolume} onChange={(voiceGuideVolume) => patch({ voiceGuideVolume })} />
+        <label className="performance-setting-field"><span>{STRINGS.routing}</span><select value={settings.voiceGuideOutput} onChange={(event) => patch({ voiceGuideOutput: event.currentTarget.value })}>{voiceOutputs.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        <div className="performance-setting-grid">
+          <label className="performance-setting-field"><span>{STRINGS.guideLanguage}</span><select value={settings.voiceGuideLanguage} onChange={(event) => patch({ voiceGuideLanguage: event.currentTarget.value })}><option value="es">Español</option><option value="en">English</option></select></label>
+          <label className="performance-setting-field"><span>{STRINGS.guideLeadBars}</span><select value={settings.voiceGuideLeadBars} onChange={(event) => patch({ voiceGuideLeadBars: Number(event.currentTarget.value) })}>{[1, 2, 3, 4].map((bars) => <option key={bars} value={bars}>{bars}</option>)}</select></label>
+        </div>
+        <label className="performance-switch is-row"><input type="checkbox" checked={settings.voiceGuideCountInEnabled} onChange={(event) => patch({ voiceGuideCountInEnabled: event.currentTarget.checked })} /><span>{STRINGS.guideCountIn}</span></label>
+      </section>
+      ) : null}
+    </div>
+  );
+}
+
+function MetronomeSettingsWidget() {
+  return <PerformanceSettingsWidget mode="metronome" />;
+}
+
+function VoiceGuideSettingsWidget() {
+  return <PerformanceSettingsWidget mode="guide" />;
+}
+
+function LegacyPerformanceSettingsWidget() {
+  return <PerformanceSettingsWidget />;
+}
+
+function PadsWidget() {
+  const settings = useRemoteSyncStore((state) => state.settings);
+  const catalog = useRemoteSyncStore((state) => state.padsCatalog);
+  if (!settings) return <div className="song-widget-empty">{STRINGS.settingsLoading}</div>;
+  const patch = (next: Partial<AppSettings>) => sendPadSettingsUpdate({ ...settings, ...next });
+  const installedPads = catalog?.pads.filter((pad) => pad.installed) ?? [];
+  const currentPad = installedPads.find((pad) => pad.id === settings.padId);
+  const padOutputs = remoteOutputOptions(settings, true);
+  return (
+    <div className="pads-widget">
+      <header>
+        <div><strong>{STRINGS.padsTitle}</strong><small>{currentPad?.name || settings.padId || STRINGS.padsNoPack}</small></div>
+        <label className="performance-switch"><input type="checkbox" checked={settings.padEnabled} disabled={!settings.padId} onChange={(event) => patch({ padEnabled: event.currentTarget.checked })} /><span>{settings.padEnabled ? STRINGS.on : STRINGS.off}</span></label>
+      </header>
+      <label className="performance-setting-field">
+        <span>{STRINGS.padPack}</span>
+        <select
+          value={settings.padId}
+          disabled={catalog === null || installedPads.length === 0}
+          onChange={(event) => patch({ padId: event.currentTarget.value })}
+        >
+          <option value="">{catalog === null ? STRINGS.padsCatalogLoading : STRINGS.padsNoPack}</option>
+          {settings.padId && !currentPad ? <option value={settings.padId}>{settings.padId}</option> : null}
+          {installedPads.map((pad) => <option key={pad.id} value={pad.id}>{pad.name}</option>)}
+        </select>
+      </label>
+      <label className="performance-setting-field">
+        <span>{STRINGS.routing}</span>
+        <select value={settings.padOutput} onChange={(event) => patch({ padOutput: event.currentTarget.value })}>
+          {padOutputs.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+      {catalog !== null && installedPads.length === 0 ? <p className="pads-empty-hint">{STRINGS.padsNoInstalled} {STRINGS.padsDesktopHint}</p> : null}
+      <div className="pads-key-grid" role="group" aria-label={STRINGS.padKey}>
+        {PAD_KEY_LABELS.map((label, index) => <button key={label} type="button" className={settings.padKey === index ? "is-active" : ""} disabled={!settings.padId} aria-pressed={settings.padKey === index} onClick={() => patch({ padKey: index })}>{label}</button>)}
+      </div>
+      <SettingsRange label={STRINGS.volume} gain={settings.padVolume} onChange={(padVolume) => patch({ padVolume })} />
     </div>
   );
 }
@@ -3065,7 +3311,23 @@ type WidgetDefinition = {
   /** Default column span when added from the palette. */
   defaultW: number;
   defaultH: number;
+  /** Legacy widget types may render existing layouts without appearing here. */
+  palette?: boolean;
 };
+
+type WidgetCategory = "information" | "transport" | "live" | "songs" | "mixer" | "tools";
+
+const WIDGET_CATEGORIES: readonly {
+  id: WidgetCategory;
+  labelKey: keyof typeof STRINGS;
+}[] = [
+  { id: "information", labelKey: "widgetCategoryInformation" },
+  { id: "transport", labelKey: "widgetCategoryTransport" },
+  { id: "live", labelKey: "widgetCategoryLive" },
+  { id: "songs", labelKey: "widgetCategorySongs" },
+  { id: "mixer", labelKey: "widgetCategoryMixer" },
+  { id: "tools", labelKey: "widgetCategoryTools" },
+];
 
 // Binds every WidgetType to its component + palette metadata. The single source
 // of truth the canvas and the (Fase 2c) editor palette both read.
@@ -3093,8 +3355,12 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   mixerSongFilter: { labelKey: "widgetMixerSongFilter", Component: MixerSongFilterWidget, defaultW: 8, defaultH: 4 },
   mixerSongMaster: { labelKey: "widgetMixerSongMaster", Component: MixerSongMasterWidget, defaultW: 16, defaultH: 4 },
   mixerFaders: { labelKey: "widgetMixerFaders", Component: MixerFadersWidget, defaultW: LAYOUT_COLUMNS, defaultH: 24 },
-  songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 4 },
-  clipList: { labelKey: "widgetClipList", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 8 },
+  songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12 },
+  clipList: { labelKey: "widgetSongHeader", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12, palette: false },
+  pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: 20 },
+  metronomeSettings: { labelKey: "widgetMetronomeSettings", Component: MetronomeSettingsWidget, defaultW: 8, defaultH: 24 },
+  voiceGuideSettings: { labelKey: "widgetVoiceGuideSettings", Component: VoiceGuideSettingsWidget, defaultW: 8, defaultH: 20 },
+  performanceSettings: { labelKey: "widgetPerformanceSettings", Component: LegacyPerformanceSettingsWidget, defaultW: 12, defaultH: 20, palette: false },
   nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 4, defaultH: 4 },
   nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 4, defaultH: 4 },
   currentKey: { labelKey: "widgetKey", Component: CurrentKeyWidgetHost, defaultW: 4, defaultH: 4 },
@@ -3103,6 +3369,110 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   countdownMarkerBars: { labelKey: "widgetCountdownMarker", Component: CountdownMarkerBarsHost, defaultW: 4, defaultH: 4 },
   countdownSongTime: { labelKey: "widgetCountdownSong", Component: CountdownSongTimeHost, defaultW: 4, defaultH: 4 },
 };
+
+// Kept exhaustive on purpose: adding a WidgetType also requires deciding where
+// it belongs in the editor instead of silently appending it to an unsorted list.
+const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
+  readouts: "information",
+  readoutTime: "information",
+  readoutBar: "information",
+  readoutBpm: "information",
+  readoutSignature: "information",
+  readoutSong: "information",
+  transportButtons: "transport",
+  playButton: "transport",
+  pauseButton: "transport",
+  stopButton: "transport",
+  clickButton: "transport",
+  guideButton: "transport",
+  timeline: "transport",
+  controlDeck: "live",
+  deckVamp: "live",
+  deckJump: "live",
+  deckSong: "live",
+  deckRegion: "live",
+  markerGrid: "live",
+  nextMarker: "live",
+  nextSong: "live",
+  currentKey: "live",
+  progressMarker: "live",
+  progressSong: "live",
+  countdownMarkerBars: "live",
+  countdownSongTime: "live",
+  songHeader: "songs",
+  clipList: "songs",
+  mixer: "mixer",
+  mixerSongFilter: "mixer",
+  mixerSongMaster: "mixer",
+  mixerFaders: "mixer",
+  pads: "tools",
+  metronomeSettings: "tools",
+  voiceGuideSettings: "tools",
+  performanceSettings: "tools",
+};
+
+type WidgetDefaultSize = { w: number; h: number };
+
+/** Device-aware starting rectangles. The 24-column grid remains identical on
+ * every device; only the initial span changes so a newly added widget is useful
+ * before the user touches a resize handle. */
+function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefaultSize {
+  const definition = WIDGET_REGISTRY[type];
+  const desktop = { w: definition.defaultW, h: definition.defaultH };
+  if (canvasWidth > 1024) return desktop;
+
+  const isPhone = canvasWidth <= 600;
+  if (!isPhone) {
+    switch (type) {
+      case "readoutTime": case "readoutBar": case "readoutBpm":
+      case "readoutSignature": case "readoutSong":
+      case "nextMarker": case "nextSong": case "currentKey":
+      case "progressMarker": case "progressSong":
+      case "countdownMarkerBars": case "countdownSongTime":
+        return { w: 8, h: 5 };
+      case "deckVamp": case "deckJump": case "deckSong":
+        return { w: 12, h: 7 };
+      case "mixerSongFilter":
+        return { w: 8, h: 4 };
+      case "mixerSongMaster":
+        return { w: 16, h: 5 };
+      default:
+        return desktop;
+    }
+  }
+
+  switch (type) {
+    case "readouts": return { w: 24, h: 8 };
+    case "readoutTime": case "readoutBar": case "readoutBpm":
+    case "readoutSignature": case "readoutSong":
+      return { w: 12, h: 5 };
+    case "transportButtons": return { w: 24, h: 6 };
+    case "playButton": case "pauseButton": case "stopButton":
+    case "clickButton": case "guideButton":
+      return { w: 8, h: 5 };
+    case "timeline": return { w: 24, h: 4 };
+    case "controlDeck": return { w: 24, h: 10 };
+    case "deckVamp": case "deckJump": case "deckSong":
+      return { w: 24, h: 7 };
+    case "deckRegion": return { w: 24, h: 6 };
+    case "markerGrid": return { w: 24, h: 14 };
+    case "mixer": return { w: 24, h: 30 };
+    case "mixerSongFilter": return { w: 24, h: 4 };
+    case "mixerSongMaster": return { w: 24, h: 5 };
+    case "mixerFaders": return { w: 24, h: 26 };
+    case "songHeader": case "clipList": return { w: 24, h: 14 };
+    case "pads": return { w: 24, h: 18 };
+    case "metronomeSettings": return { w: 24, h: 24 };
+    case "voiceGuideSettings": return { w: 24, h: 14 };
+    case "performanceSettings": return { w: 24, h: 20 };
+    case "nextMarker": case "nextSong": case "currentKey":
+    case "progressMarker": case "progressSong":
+    case "countdownMarkerBars": case "countdownSongTime":
+      return { w: 12, h: 6 };
+    default:
+      return desktop;
+  }
+}
 
 /** Fixed pixel height of one grid row in the absolute (X/Y) layout. The grid
  * uses fixed-height rows so a widget's row-span maps to a predictable size and
@@ -3188,10 +3558,14 @@ function LayoutWidgetHost({
 function WidgetPalette({
   onAdd,
   onDragAdd,
+  onDragMove,
+  onDragEnd,
   onClose,
 }: {
   onAdd: (type: WidgetType) => void;
   onDragAdd: (type: WidgetType, event: ReactPointerEvent<HTMLElement>) => void;
+  onDragMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onDragEnd: (event: ReactPointerEvent<HTMLElement>) => void;
   onClose: () => void;
 }) {
   return (
@@ -3199,23 +3573,42 @@ function WidgetPalette({
       <button type="button" className="layout-palette-close" onClick={onClose}>
         × {STRINGS.hideWidgetPalette}
       </button>
-      {(Object.keys(WIDGET_REGISTRY) as WidgetType[]).map((type) => (
-        <button
-          key={type}
-          type="button"
-          className="layout-palette-item"
-          onPointerDown={(event) => onDragAdd(type, event)}
-          // Fallback for keyboard activation (Enter/Space) where there is no
-          // pointer sequence; guarded so a pointer tap doesn't double-add.
-          onClick={(event) => {
-            if (event.detail === 0) {
-              onAdd(type);
-            }
-          }}
-        >
-          + {STRINGS[WIDGET_REGISTRY[type].labelKey]}
-        </button>
-      ))}
+      <div className="layout-palette-categories">
+        {WIDGET_CATEGORIES.map((category) => {
+          const widgetTypes = (Object.keys(WIDGET_REGISTRY) as WidgetType[])
+            .filter((type) => WIDGET_REGISTRY[type].palette !== false)
+            .filter((type) => WIDGET_CATEGORY[type] === category.id);
+          if (widgetTypes.length === 0) return null;
+
+          return (
+            <section className="layout-palette-category" key={category.id}>
+              <h3>{STRINGS[category.labelKey]}</h3>
+              <div className="layout-palette-category-items">
+                {widgetTypes.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className="layout-palette-item"
+                    onPointerDown={(event) => onDragAdd(type, event)}
+                    onPointerMove={onDragMove}
+                    onPointerUp={onDragEnd}
+                    onPointerCancel={onDragEnd}
+                    // Fallback for keyboard activation (Enter/Space) where there is no
+                    // pointer sequence; guarded so a pointer tap doesn't double-add.
+                    onClick={(event) => {
+                      if (event.detail === 0) {
+                        onAdd(type);
+                      }
+                    }}
+                  >
+                    + {STRINGS[WIDGET_REGISTRY[type].labelKey]}
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -3347,7 +3740,7 @@ function LayoutCanvas({
   type Gesture =
     | { kind: "move"; id: string; grabDX: number; grabDY: number }
     | { kind: "resize"; id: string; startX: number; startY: number; startW: number; startH: number }
-    | { kind: "add"; type: WidgetType };
+    | { kind: "add"; type: WidgetType; startX: number; startY: number; moved: boolean };
   const gestureRef = useRef<Gesture | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [pendingAddType, setPendingAddType] = useState<WidgetType | null>(null);
@@ -3386,6 +3779,7 @@ function LayoutCanvas({
     if (!activeTab) return;
     onChange({
       ...layout,
+      customized: true,
       tabs: layout.tabs.map((tab) =>
         tab.id === activeTab.id ? { ...tab, widgets: nextWidgets } : tab,
       ),
@@ -3498,15 +3892,22 @@ function LayoutCanvas({
   };
 
   const beginAdd = (type: WidgetType, event: ReactPointerEvent<HTMLElement>) => {
-    gestureRef.current = { kind: "add", type };
+    gestureRef.current = {
+      kind: "add",
+      type,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
     setPendingAddType(type);
     const definition = WIDGET_REGISTRY[type];
-    setDropPreview({ x: 0, y: 0, w: definition.defaultW, h: definition.defaultH, label: STRINGS[definition.labelKey] });
-    gridRef.current?.setPointerCapture?.(event.pointerId);
+    const size = widgetDefaultSize(type, gridRef.current?.clientWidth ?? window.innerWidth);
+    setDropPreview({ x: 0, y: 0, ...size, label: STRINGS[definition.labelKey] });
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
   // --- Shared move/up on the grid ----------------------------------------
-  const onGridPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onGridPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const gesture = gestureRef.current;
     if (!gesture) return;
     if (gesture.kind === "move") {
@@ -3525,14 +3926,22 @@ function LayoutCanvas({
       const nextH = Math.max(1, Math.min(LAYOUT_MAX_ROWS, gesture.startH + dh));
       resizeWidget(gesture.id, { w: nextW, h: nextH });
     } else if (gesture.kind === "add") {
+      if (
+        !gesture.moved &&
+        Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) >= 6
+      ) {
+        gesture.moved = true;
+      }
+      if (!gesture.moved) return;
       const definition = WIDGET_REGISTRY[gesture.type];
+      const size = widgetDefaultSize(gesture.type, gridRef.current?.clientWidth ?? window.innerWidth);
       const { col, row } = cellFromClient(event.clientX, event.clientY);
-      const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - definition.defaultW));
-      setDropPreview({ x, y: row, w: definition.defaultW, h: definition.defaultH, label: STRINGS[definition.labelKey] });
+      const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - size.w));
+      setDropPreview({ x, y: row, ...size, label: STRINGS[definition.labelKey] });
     }
   };
 
-  const onGridPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onGridPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const gesture = gestureRef.current;
     gestureRef.current = null;
     setDragId(null);
@@ -3540,23 +3949,25 @@ function LayoutCanvas({
     setDropPreview(null);
     if (!gesture) return;
     if (gesture.kind === "add") {
-      const definition = WIDGET_REGISTRY[gesture.type];
-      const { col, row } = cellFromClient(event.clientX, event.clientY);
-      const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - definition.defaultW));
+      const size = widgetDefaultSize(gesture.type, gridRef.current?.clientWidth ?? window.innerWidth);
+      const cell = gesture.moved
+        ? cellFromClient(event.clientX, event.clientY)
+        : { col: 0, row: widgets.reduce((max, widget) => Math.max(max, widget.y + widget.h), 0) };
+      const x = Math.min(cell.col, Math.max(0, LAYOUT_COLUMNS - size.w));
       commit([
         ...widgets,
-        { id: newWidgetId(gesture.type), type: gesture.type, x, y: row, w: definition.defaultW, h: definition.defaultH },
+        { id: newWidgetId(gesture.type), type: gesture.type, x, y: cell.row, ...size },
       ]);
     }
   };
 
   // Keyboard/no-pointer fallback: append the widget in the first free-ish row.
   const appendWidget = (type: WidgetType) => {
-    const definition = WIDGET_REGISTRY[type];
+    const size = widgetDefaultSize(type, gridRef.current?.clientWidth ?? window.innerWidth);
     const y = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
     commit([
       ...widgets,
-      { id: newWidgetId(type), type, x: 0, y, w: definition.defaultW, h: definition.defaultH },
+      { id: newWidgetId(type), type, x: 0, y, ...size },
     ]);
   };
 
@@ -3567,10 +3978,6 @@ function LayoutCanvas({
     dropPreview ? dropPreview.y + dropPreview.h + 2 : 0,
   );
   const singleFullHeightMixer = widgets.length === 1 && widgets[0]?.type === "mixer";
-  const classicMobileControls =
-    widgets.length === 5 &&
-    (["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"] as const)
-      .every((type, index) => widgets[index]?.type === type);
 
   return (
     <div className={`layout-canvas-wrap ${editing ? "is-editing" : ""}`}>
@@ -3588,6 +3995,8 @@ function LayoutCanvas({
         <WidgetPalette
           onAdd={appendWidget}
           onDragAdd={beginAdd}
+          onDragMove={onGridPointerMove}
+          onDragEnd={onGridPointerUp}
           onClose={() => setPaletteOpen(false)}
         />
       ) : null}
@@ -3605,7 +4014,7 @@ function LayoutCanvas({
       ) : (
         <div
           ref={gridRef}
-          className={`layout-canvas ${editing ? "is-editing" : ""} ${pendingAddType ? "is-adding" : ""} ${singleFullHeightMixer ? "is-single-full-height-mixer" : ""} ${classicMobileControls ? "is-classic-mobile-controls" : ""}`}
+          className={`layout-canvas ${editing ? "is-editing" : ""} ${pendingAddType ? "is-adding" : ""} ${singleFullHeightMixer ? "is-single-full-height-mixer" : ""}`}
           style={{
             gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))`,
             gridTemplateRows: `repeat(${gridRows}, ${ROW_HEIGHT_PX}px)`,
@@ -3650,7 +4059,25 @@ function LayoutCanvas({
 export function App() {
   useRemoteBridge();
   const [sizeLevel, setSizeLevel] = useState(readRemoteSizeLevel);
-  const [layout, setLayout] = useState<RemoteLayout>(readStoredLayout);
+  const presetProfile = currentLayoutPresetProfile();
+  const [layout, setLayout] = useState<RemoteLayout>(() => {
+    const stored = readStoredLayout();
+    const controls = stored.tabs.find((tab) => tab.name === "Controles") ?? stored.tabs[0];
+    const isUntouchedControlsPreset =
+      stored.customized !== true &&
+      controls?.widgets.length === 5 &&
+      (["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"] as const)
+        .every((type, index) => controls.widgets[index]?.type === type);
+    const presetWidgetTypes = new Set(stored.tabs.flatMap((tab) => tab.widgets.map((widget) => widget.type)));
+    const hasToolsPreset =
+      presetWidgetTypes.has("pads") &&
+      presetWidgetTypes.has("metronomeSettings") &&
+      presetWidgetTypes.has("voiceGuideSettings");
+    if (isUntouchedControlsPreset && (stored.presetProfile !== presetProfile || !hasToolsPreset)) {
+      return defaultLayout(presetProfile);
+    }
+    return stored;
+  });
   const [editing, setEditing] = useState(false);
   // Snapshot of the layout taken when edit mode opens, so "Cancel" can revert
   // every change made during the session. null when not editing.
@@ -3691,7 +4118,7 @@ export function App() {
   }, []);
 
   const resetLayout = useCallback(() => {
-    const fresh = defaultLayout();
+    const fresh = defaultLayout(currentLayoutPresetProfile());
     clearStoredLayout();
     setLayout(fresh);
   }, []);
@@ -3737,7 +4164,7 @@ export function App() {
 
   return (
     <main
-      className={`remote-shell remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""}`}
+      className={`remote-shell remote-profile-${presetProfile} remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""}`}
     >
       {/* Phones in landscape are too short to fit the transport view; the CSS
           media query (orientation:landscape + short height) reveals this

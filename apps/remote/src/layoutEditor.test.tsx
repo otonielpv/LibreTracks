@@ -68,6 +68,26 @@ describe("layout editor", () => {
       .toBeGreaterThan(0);
   });
 
+  it("organizes every palette widget into labelled categories", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+
+    for (const category of [
+      /information|información/i,
+      /^transport|transporte$/i,
+      /live control|control en directo/i,
+      /songs|canciones/i,
+      /^mixer$|^mezclador$/i,
+      /tools|herramientas/i,
+    ]) {
+      expect(within(palette).getByRole("heading", { name: category })).toBeTruthy();
+    }
+
+    expect(palette.querySelectorAll(".layout-palette-item").length).toBeGreaterThan(0);
+    expect(palette.querySelectorAll(".layout-palette-category").length).toBe(6);
+  });
+
   it("can hide and restore the floating widget palette", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
@@ -89,6 +109,10 @@ describe("layout editor", () => {
     fireEvent.click(keyButtons[0]);
 
     expect(storedWidgetCount()).toBe(before + 1);
+    const stored = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    ) as Partial<RemoteLayout>;
+    expect(stored.customized).toBe(true);
   });
 
   it("reset restores the default layout after edits", () => {
@@ -105,24 +129,21 @@ describe("layout editor", () => {
     expect(window.localStorage.getItem("libretracks.remote.layout")).toBeNull();
   });
 
-  it("song-header and clip-list widgets are available in the palette and mount", () => {
+  it("offers one fused compact-song widget and mounts it", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
     const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
 
-    // Both new widgets are offered.
-    const songHeader = within(palette).getAllByRole("button", {
-      name: /song header|cabecera de canción/i,
+    const compactView = within(palette).getAllByRole("button", {
+      name: /compact song view|vista compacta de canciones/i,
     });
-    const clipList = within(palette).getAllByRole("button", {
-      name: /clip list|lista de clips/i,
-    });
-    expect(songHeader.length).toBeGreaterThan(0);
-    expect(clipList.length).toBeGreaterThan(0);
+    expect(compactView).toHaveLength(1);
+    expect(within(palette).queryByRole("button", {
+      name: /^\+ (clip list|lista de clips)$/i,
+    })).toBeNull();
 
-    // Adding the clip list mounts it; with no song view it shows the empty
-    // "no active song" state rather than throwing.
-    fireEvent.click(clipList[0]);
+    // With no song view the combined widget shows its empty state.
+    fireEvent.click(compactView[0]);
     expect(screen.getAllByText(/no active song|sin canción activa/i).length).toBeGreaterThan(0);
   });
 
@@ -191,6 +212,22 @@ describe("layout editor", () => {
     }
   });
 
+  it("offers metronome and voice guide settings as independent widgets", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    const palette = screen.getByRole("group", { name: /add widget|añadir widget/i });
+
+    expect(within(palette).getByRole("button", {
+      name: /metronome settings|configuración del metrónomo/i,
+    })).toBeTruthy();
+    expect(within(palette).getByRole("button", {
+      name: /voice guide settings|configuración de la guía/i,
+    })).toBeTruthy();
+    expect(within(palette).queryByRole("button", {
+      name: /^\+ (click and guide|click y guía)$/i,
+    })).toBeNull();
+  });
+
   it("imports a layout file and persists it", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
@@ -239,9 +276,9 @@ describe("layout editor", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
 
-    // The default has two tabs (Controles + Mixer).
+    // The default has controls, mixer and performance tools.
     const initial = screen.getAllByRole("tab").length;
-    expect(initial).toBe(2);
+    expect(initial).toBe(3);
 
     fireEvent.click(screen.getByRole("button", { name: /\+ (tab|pestaña)/i }));
 
@@ -258,9 +295,9 @@ describe("layout editor", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
 
-    // Default order (before any persistence): Controles, Mixer.
+    // Default order (before any persistence): Controles, Mixer, Herramientas.
     const names = () => screen.getAllByRole("tab").map((el) => el.textContent);
-    expect(names()).toEqual(["Controles", "Mixer"]);
+    expect(names()).toEqual(["Controles", "Mixer", "Herramientas"]);
 
     // Move the second tab (Mixer) left; index 0's move-left is disabled.
     const moveLeft = screen.getAllByRole("button", {
@@ -269,13 +306,14 @@ describe("layout editor", () => {
     fireEvent.click(moveLeft[1]);
 
     // Order swapped in the UI and persisted.
-    expect(names()).toEqual(["Mixer", "Controles"]);
+    expect(names()).toEqual(["Mixer", "Controles", "Herramientas"]);
     const stored = JSON.parse(
       window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
     );
     expect(stored.tabs.map((t: { name: string }) => t.name)).toEqual([
       "Mixer",
       "Controles",
+      "Herramientas",
     ]);
   });
 });

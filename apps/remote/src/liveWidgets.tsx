@@ -36,14 +36,17 @@ function resolveLivePosition(snapshot: TransportSnapshot | null, receivedAtMs: n
     return 0;
   }
   const transportClock = snapshot.transportClock;
-  if (snapshot.playbackState === "playing" && transportClock?.running) {
+  if (snapshot.playbackState === "playing") {
     const playbackRate =
-      Number.isFinite(transportClock.playbackRate) && transportClock.playbackRate !== undefined
+      Number.isFinite(transportClock?.playbackRate) && transportClock?.playbackRate !== undefined
         ? Math.max(0, transportClock.playbackRate)
         : 1;
+    const anchorPositionSeconds = transportClock?.running
+      ? transportClock.anchorPositionSeconds
+      : snapshot.positionSeconds;
     return Math.max(
       0,
-      transportClock.anchorPositionSeconds +
+      anchorPositionSeconds +
         ((performance.now() - receivedAtMs) / 1000) * playbackRate,
     );
   }

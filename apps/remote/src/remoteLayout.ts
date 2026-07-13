@@ -39,6 +39,10 @@ export type WidgetType =
   | "mixerFaders"
   | "songHeader"
   | "clipList"
+  | "pads"
+  | "metronomeSettings"
+  | "voiceGuideSettings"
+  | "performanceSettings"
   | "nextMarker"
   | "nextSong"
   | "currentKey"
@@ -73,6 +77,10 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "mixerFaders",
   "songHeader",
   "clipList",
+  "pads",
+  "metronomeSettings",
+  "voiceGuideSettings",
+  "performanceSettings",
   "nextMarker",
   "nextSong",
   "currentKey",
@@ -119,7 +127,14 @@ export type RemoteLayout = {
   tabs: LayoutTab[];
   /** Id of the tab shown by default; falls back to the first tab if stale. */
   activeTabId: string;
+  /** Set after the user changes widget geometry/content. Mobile then respects
+   * the exact grid instead of applying the untouched classic preset flow. */
+  customized?: boolean;
+  /** Device family used to create an untouched preset. */
+  presetProfile?: LayoutPresetProfile;
 };
+
+export type LayoutPresetProfile = "standard" | "tablet" | "phone";
 
 // v2 gained tabs; v3 gained absolute x/y positions per widget (Mixing-Station
 // grid). normalizeLayout migrates v1 (flat array) and v2/v3 widgets that lack
@@ -158,16 +173,18 @@ function placement(
  * rows) and a "Mixer" tab. No live/counter widgets by default — opt-in from the
  * palette.
  */
-export function defaultLayout(): RemoteLayout {
+export function defaultLayout(profile: LayoutPresetProfile = "standard"): RemoteLayout {
+  const phone = profile === "phone";
+  const tablet = profile === "tablet";
   const controls: LayoutTab = {
     id: newTabId(),
     name: "Controles",
     widgets: [
-      placement("readouts", 0, 0, LAYOUT_COLUMNS, 4),
-      placement("transportButtons", 0, 4, LAYOUT_COLUMNS, 5),
-      placement("timeline", 0, 9, LAYOUT_COLUMNS, 7),
-      placement("controlDeck", 0, 16, LAYOUT_COLUMNS, 9),
-      placement("markerGrid", 0, 25, LAYOUT_COLUMNS, 12),
+      placement("readouts", 0, 0, LAYOUT_COLUMNS, phone ? 6 : tablet ? 3 : 4),
+      placement("transportButtons", 0, phone ? 6 : tablet ? 3 : 4, LAYOUT_COLUMNS, phone ? 3 : tablet ? 3 : 5),
+      placement("timeline", 0, phone ? 9 : tablet ? 6 : 9, LAYOUT_COLUMNS, phone ? 4 : tablet ? 4 : 7),
+      placement("controlDeck", 0, phone ? 13 : tablet ? 10 : 16, LAYOUT_COLUMNS, phone ? 8 : tablet ? 7 : 9),
+      placement("markerGrid", 0, phone ? 21 : tablet ? 17 : 25, LAYOUT_COLUMNS, phone ? 10 : tablet ? 10 : 12),
     ],
   };
   const mixer: LayoutTab = {
@@ -175,7 +192,27 @@ export function defaultLayout(): RemoteLayout {
     name: "Mixer",
     widgets: [placement("mixer", 0, 0, LAYOUT_COLUMNS, 28)],
   };
-  return { version: LAYOUT_VERSION, tabs: [controls, mixer], activeTabId: controls.id };
+  const tools: LayoutTab = {
+    id: newTabId(),
+    name: "Herramientas",
+    widgets: phone
+      ? [
+          placement("metronomeSettings", 0, 0, LAYOUT_COLUMNS, 24),
+          placement("voiceGuideSettings", 0, 24, LAYOUT_COLUMNS, 14),
+          placement("pads", 0, 38, LAYOUT_COLUMNS, 16),
+        ]
+      : [
+          placement("metronomeSettings", 0, 0, 8, 24),
+          placement("voiceGuideSettings", 8, 0, 8, 20),
+          placement("pads", 16, 0, 8, 20),
+        ],
+  };
+  return {
+    version: LAYOUT_VERSION,
+    tabs: [controls, mixer, tools],
+    activeTabId: controls.id,
+    presetProfile: profile,
+  };
 }
 
 /**
@@ -269,6 +306,36 @@ function normalizeWidgets(raw: unknown, legacyGrid = false): WidgetPlacement[] {
   return autoPlace(widgets);
 }
 
+/** v4 offered the song header and clip list as separate widgets. When the
+ * common one-of-each pair exists, preserve their combined rectangle and keep a
+ * single fused compact-song widget. Lone legacy clip lists remain valid and
+ * are rendered by the same combined component. */
+function fuseLegacySongWidgets(widgets: WidgetPlacement[]): WidgetPlacement[] {
+  const headers = widgets.filter((widget) => widget.type === "songHeader");
+  const clipLists = widgets.filter((widget) => widget.type === "clipList");
+  if (headers.length !== 1 || clipLists.length !== 1) {
+    return widgets;
+  }
+
+  const header = headers[0];
+  const clipList = clipLists[0];
+  const x = Math.min(header.x, clipList.x);
+  const y = Math.min(header.y, clipList.y);
+  const right = Math.max(header.x + header.w, clipList.x + clipList.w);
+  const bottom = Math.max(header.y + header.h, clipList.y + clipList.h);
+  const fused: WidgetPlacement = {
+    ...header,
+    x,
+    y,
+    w: Math.min(LAYOUT_COLUMNS - x, right - x),
+    h: Math.min(LAYOUT_MAX_ROWS - y, bottom - y),
+  };
+
+  return widgets
+    .filter((widget) => widget.id !== clipList.id)
+    .map((widget) => (widget.id === header.id ? fused : widget));
+}
+
 /**
  * Validate + normalise a parsed layout into the tabbed shape. Handles three
  * inputs: a v2 tabbed layout (validated), a v1 flat `{ widgets }` layout
@@ -282,12 +349,12 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
   if (!raw || typeof raw !== "object") {
     return defaultLayout();
   }
-  const candidate = raw as { version?: unknown; tabs?: unknown; widgets?: unknown; activeTabId?: unknown };
+  const candidate = raw as { version?: unknown; tabs?: unknown; widgets?: unknown; activeTabId?: unknown; customized?: unknown; presetProfile?: unknown };
   const legacyGrid = typeof candidate.version !== "number" || candidate.version < 4;
 
   // v1 → v2 migration: a flat widgets array becomes a single tab.
   if (!Array.isArray(candidate.tabs) && Array.isArray(candidate.widgets)) {
-    const widgets = normalizeWidgets(candidate.widgets, legacyGrid);
+    const widgets = fuseLegacySongWidgets(normalizeWidgets(candidate.widgets, legacyGrid));
     if (widgets.length === 0) {
       return defaultLayout();
     }
@@ -308,7 +375,11 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
     const id = typeof item.id === "string" && item.id ? item.id : newTabId();
     const name =
       typeof item.name === "string" && item.name.trim() ? item.name.trim() : "Pestaña";
-    tabs.push({ id, name, widgets: normalizeWidgets(item.widgets, legacyGrid) });
+    tabs.push({
+      id,
+      name,
+      widgets: fuseLegacySongWidgets(normalizeWidgets(item.widgets, legacyGrid)),
+    });
   }
 
   if (tabs.length === 0) {
@@ -321,7 +392,16 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
       ? candidate.activeTabId
       : tabs[0].id;
 
-  return { version: LAYOUT_VERSION, tabs, activeTabId };
+  return {
+    version: LAYOUT_VERSION,
+    tabs,
+    activeTabId,
+    customized: candidate.customized === true,
+    presetProfile:
+      candidate.presetProfile === "phone" ? "phone" :
+      candidate.presetProfile === "tablet" ? "tablet" :
+      candidate.presetProfile === "standard" ? "standard" : undefined,
+  };
 }
 
 function clampSpan(value: unknown, max: number): number {

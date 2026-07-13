@@ -91,9 +91,14 @@ GitHub and migrate to R2 later by editing `downloadUrl` in the manifest.
 
 ## Runtime behaviour
 
-- Only the **currently selected key** is decoded into RAM (~300 MB for 15 min
-  stereo) — decoding all 12 at once would be prohibitive. Changing the key
-  re-decodes and swaps the clip realtime-safely.
+- Only the **currently selected key** is normally decoded into RAM (~300 MB for
+  15 min stereo) — decoding all 12 at once would be prohibitive. During a live
+  key/pack change the old and new clips coexist only for the 12 ms crossfade.
+- Replacement audio is decoded off the playback thread while the old Pad keeps
+  playing. Once ready, the new clip inherits the equivalent loop frame and both
+  voices overlap with a constant-power crossfade; there is no fade-to-silence
+  midpoint and the recorded attack is not replayed. A failed replacement leaves
+  the current Pad audible.
 - The pad loops continuously while enabled, with a short (~20 ms) crossfade at
   the loop seam so the wrap is click-free.
 - The pad is mixed **after** the song master gain, alongside the metronome and

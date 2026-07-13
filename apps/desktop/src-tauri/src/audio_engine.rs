@@ -22,7 +22,7 @@ use lt_audio_engine_v2::{
     TimeSignatureMarkerUpdate, TrackClipUpdate, TrackUpsert,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
 use crate::{error::DesktopError, settings::AppSettings};
@@ -309,6 +309,9 @@ struct ControllerState {
     /// run — the "Preparing audio…" indicator must count only the current
     /// song's sources or the total grows with each session opened (2→4→13).
     current_song_source_ids: HashSet<String>,
+    /// Installed-pads base directory learned from the normal/manual load path.
+    /// Automation reuses it so pack/key changes follow the exact same decoder.
+    pads_dir: Option<String>,
 }
 
 impl ControllerState {
@@ -329,6 +332,7 @@ impl ControllerState {
             song_dir: None,
             loaded_session_signature: None,
             current_song_source_ids: HashSet::new(),
+            pads_dir: None,
         }
     }
 }
@@ -407,6 +411,15 @@ impl AudioController {
     }
 
     pub fn attach_app_handle(&self, app_handle: AppHandle) {
+        let pads_dir = app_handle
+            .path()
+            .app_local_data_dir()
+            .or_else(|_| app_handle.path().app_data_dir())
+            .ok()
+            .map(|base| base.join("pads").to_string_lossy().to_string());
+        if let Ok(mut state) = self.state.lock() {
+            state.pads_dir = pads_dir;
+        }
         if self
             .meter_thread_started
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -1384,6 +1397,54 @@ impl AudioController {
         })
     }
 
+    /// Apply a complete pad state from an automation cue. Pack/key changes use
+    /// the same detached decoder as manual changes; decoding runs on a worker
+    /// thread so the transport/session lock is never held while reading a long
+    /// pad file. The renderer performs the normal click-free swap on completion.
+    pub fn set_pad_automation_realtime(
+        &self,
+        enabled: bool,
+        pad_id: &str,
+        pad_key: i32,
+        volume: f64,
+        output: &str,
+    ) -> Result<(), DesktopError> {
+        let mut settings = self.current_settings()?;
+        let clip_changed = settings.pad_id != pad_id || settings.pad_key != pad_key;
+        settings.pad_enabled = enabled;
+        settings.pad_id = pad_id.to_string();
+        settings.pad_key = pad_key.clamp(0, 11);
+        settings.pad_volume = volume.clamp(0.0, 10.0);
+        settings.pad_output = output.to_string();
+        self.set_pad_config_realtime(&settings)?;
+        self.replace_settings(settings.clone())?;
+
+        if clip_changed && !settings.pad_id.is_empty() {
+            let (loader, pads_dir) = {
+                let mut state = self.state.lock().map_err(|_| {
+                    DesktopError::AudioCommand("audio v2 state lock poisoned".into())
+                })?;
+                let pads_dir = state.pads_dir.clone();
+                if state.engine.is_none() {
+                    let engine = Engine::new()
+                        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+                    engine
+                        .initialize()
+                        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+                    state.engine = Some(engine);
+                }
+                let loader = state.engine.as_ref().expect("engine initialized above").pad_loader();
+                (loader, pads_dir)
+            };
+            if let Some(pads_dir) = pads_dir {
+                let pad_id = settings.pad_id.clone();
+                let key = settings.pad_key;
+                std::thread::spawn(move || loader.load(&pads_dir, &pad_id, key, 0));
+            }
+        }
+        Ok(())
+    }
+
     /// Decode a single ambient-pad key from disk and swap it into the renderer.
     /// `pads_dir` is the installed-pads base dir (resolved by the command
     /// layer).
@@ -1402,6 +1463,7 @@ impl AudioController {
                 .state
                 .lock()
                 .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
+            state.pads_dir = Some(pads_dir.to_string());
             if state.engine.is_none() {
                 let engine =
                     Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;

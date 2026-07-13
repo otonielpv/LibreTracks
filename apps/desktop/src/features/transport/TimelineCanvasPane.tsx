@@ -30,6 +30,7 @@ import type {
 } from "./pendingAudioImports";
 import { formatTransposeSemitones, isAndroidApp } from "./desktopApi";
 import { buildSongTempoRegions } from "@libretracks/shared/models";
+import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
@@ -129,6 +130,15 @@ function describeAutomationCue(
       case "applyScene":
         return t("transport.automation.cueScene", {
           name: sceneName(action.sceneId),
+        });
+      case "setPad":
+        return t(action.enabled
+          ? "transport.automation.cuePadOn"
+          : "transport.automation.cuePadOff", {
+          pack: action.padId,
+          key: ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"][action.padKey] ?? "C",
+          volume: formatGainDb(action.volume),
+          output: action.output,
         });
       case "wait":
         return t("transport.automation.cueWait", {

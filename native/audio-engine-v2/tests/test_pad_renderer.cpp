@@ -25,6 +25,20 @@ std::shared_ptr<PadClip> make_clip(int frames, float left, float right,
     return clip;
 }
 
+// A clip whose recorded attack occupies only its first `silent_frames`. It
+// makes it possible to verify that a live replacement inherits the old pad's
+// playback position instead of restarting that attack.
+std::shared_ptr<PadClip> make_attack_clip(int frames, int silent_frames,
+                                          int key = 0,
+                                          double sr = 48000.0) {
+    auto clip = make_clip(frames, 1.0f, 1.0f, key, sr);
+    for (int f = 0; f < std::min(frames, silent_frames); ++f) {
+        clip->samples[static_cast<std::size_t>(f) * 2] = 0.0f;
+        clip->samples[static_cast<std::size_t>(f) * 2 + 1] = 0.0f;
+    }
+    return clip;
+}
+
 // Render `num_frames` into a fresh stereo (or n-channel) buffer and return it as
 // a channel-major vector of vectors.
 std::vector<std::vector<float>> render_block(PadRenderer& pad, int num_channels,
@@ -124,7 +138,7 @@ TEST_CASE("pad clip swap resets the read cursor and updates diagnostics") {
 
     // Swap to a different key/clip; diagnostics reflect the newest clip
     // immediately (clip_key comes from set_clip). The renderer crossfades the
-    // adoption over ~15 ms, so render enough frames to let the swap settle.
+    // adoption over a short fade, so render enough frames to let the swap settle.
     pad.set_clip(make_clip(64, 0.5f, 0.5f, /*key=*/7));
     render_block(pad, 2, 4096);
     CHECK(pad.diagnostics().clip_key == 7);
@@ -158,6 +172,70 @@ TEST_CASE("key swap is click-free (no abrupt sample jump)") {
         }
     }
     CHECK(max_delta < 0.2f);  // smooth; no click
+}
+
+TEST_CASE("key swap settles in under 15 milliseconds") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    pad.set_config(cfg);
+
+    pad.set_clip(make_clip(4096, 0.8f, 0.8f, /*key=*/0));
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+
+    pad.set_clip(make_clip(4096, -0.8f, -0.8f, /*key=*/1));
+    auto out = render_block(pad, 2, 720); // 15 ms at the test's 48 kHz rate.
+    CHECK(out[0].back() < -0.75f);
+}
+
+TEST_CASE("key swap overlaps both pads without a silent gap") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    pad.set_config(cfg);
+
+    pad.set_clip(make_clip(10000, 0.8f, 0.8f, /*key=*/0));
+    for (int i = 0; i < 12; ++i) render_block(pad, 2, 256);
+
+    pad.set_clip(make_clip(10000, 0.4f, 0.4f, /*key=*/7));
+    auto out = render_block(pad, 2, 720);
+    const float quietest = *std::min_element(out[0].begin(), out[0].end());
+    CHECK(quietest > 0.35f);
+}
+
+TEST_CASE("key swap preserves the playing position instead of replaying the attack") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    pad.set_config(cfg);
+
+    pad.set_clip(make_clip(10000, 0.5f, 0.5f, /*key=*/0));
+    for (int i = 0; i < 12; ++i) render_block(pad, 2, 256);
+
+    // The incoming clip is silent for its first 1000 frames. Since the old
+    // voice is already beyond frame 3000, a legato swap must enter its audible
+    // body rather than returning to frame zero.
+    pad.set_clip(make_attack_clip(10000, 1000, /*key=*/7));
+    auto out = render_block(pad, 2, 720);
+    CHECK(out[0].back() > 0.9f);
+}
+
+TEST_CASE("failed replacement keeps the current pad audible") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    pad.set_config(cfg);
+
+    pad.set_clip(make_clip(10000, 0.6f, 0.6f));
+    for (int i = 0; i < 12; ++i) render_block(pad, 2, 256);
+
+    pad.set_clip(std::make_shared<PadClip>());
+    auto out = render_block(pad, 2, 720);
+    CHECK(max_abs(out[0]) > 0.5f);
 }
 
 TEST_CASE("empty clip yields silence and a muted reason") {

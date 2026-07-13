@@ -194,6 +194,15 @@ pub enum AutomationActionSummary {
         #[serde(rename = "rampSeconds", skip_serializing_if = "Option::is_none")]
         ramp_seconds: Option<f64>,
     },
+    SetPad {
+        enabled: bool,
+        #[serde(rename = "padId")]
+        pad_id: String,
+        #[serde(rename = "padKey")]
+        pad_key: i32,
+        volume: f64,
+        output: String,
+    },
     Wait {
         #[serde(rename = "durationSeconds")]
         duration_seconds: f64,
@@ -677,6 +686,19 @@ pub(crate) fn automation_action_to_summary(
         } => AutomationActionSummary::ApplyScene {
             scene_id: scene_id.clone(),
             ramp_seconds: *ramp_seconds,
+        },
+        AutomationAction::SetPad {
+            enabled,
+            pad_id,
+            pad_key,
+            volume,
+            output,
+        } => AutomationActionSummary::SetPad {
+            enabled: *enabled,
+            pad_id: pad_id.clone(),
+            pad_key: *pad_key,
+            volume: *volume,
+            output: output.clone(),
         },
         AutomationAction::Wait { duration_seconds } => AutomationActionSummary::Wait {
             duration_seconds: *duration_seconds,

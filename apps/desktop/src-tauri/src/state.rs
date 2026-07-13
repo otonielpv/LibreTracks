@@ -2762,6 +2762,21 @@ impl DesktopSession {
             } => {
                 self.apply_mix_scene_runtime(scene_id, ramp_seconds.unwrap_or(0.0), audio)?;
             }
+            AutomationAction::SetPad {
+                enabled,
+                pad_id,
+                pad_key,
+                volume,
+                output,
+            } => {
+                audio.set_pad_automation_realtime(
+                    *enabled,
+                    pad_id,
+                    *pad_key,
+                    *volume,
+                    output,
+                )?;
+            }
             // Jump and Wait are handled by the scheduler/executor, not here.
             AutomationAction::Jump { .. } | AutomationAction::Wait { .. } => {}
         }
@@ -8569,6 +8584,34 @@ fn validate_automation_cue(
                 if ramp_seconds.is_some_and(|r| !r.is_finite() || r < 0.0) {
                     return Err(DesktopError::AudioCommand(
                         "automation scene ramp must be a finite, non-negative number".into(),
+                    ));
+                }
+            }
+            AutomationAction::SetPad {
+                pad_id,
+                pad_key,
+                volume,
+                output,
+                ..
+            } => {
+                if pad_id.trim().is_empty() {
+                    return Err(DesktopError::AudioCommand(
+                        "automation pad pack is required".into(),
+                    ));
+                }
+                if !(0..=11).contains(pad_key) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation pad key must be between 0 and 11".into(),
+                    ));
+                }
+                if !volume.is_finite() || !(0.0..=10.0).contains(volume) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation pad volume must be between 0 and 10".into(),
+                    ));
+                }
+                if output.trim().is_empty() {
+                    return Err(DesktopError::AudioCommand(
+                        "automation pad output is required".into(),
                     ));
                 }
             }

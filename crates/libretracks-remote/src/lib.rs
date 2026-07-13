@@ -139,6 +139,13 @@ pub enum RemoteCommand {
     UpdateSettings {
         settings: Value,
     },
+    /// Pad changes use a dedicated path so selecting a key also asks the audio
+    /// engine to load that key's clip, rather than merely persisting settings.
+    UpdatePadSettings {
+        settings: Value,
+    },
+    /// Ask Desktop to publish the ambient-pad catalog to connected remotes.
+    RequestPadsCatalog,
     Ping,
 }
 
@@ -147,6 +154,7 @@ enum ServerEvent {
     Snapshot(Value),
     SongView(Value),
     Settings(Value),
+    PadsCatalog(Value),
     Meters(Vec<u8>),
 }
 
@@ -155,6 +163,7 @@ struct RemoteStateCache {
     latest_snapshot: Option<Value>,
     latest_song_view: Option<Value>,
     latest_settings: Option<Value>,
+    latest_pads_catalog: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -273,6 +282,15 @@ impl RemoteServerHandle {
         }
     }
 
+    pub fn publish_pads_catalog<T: Serialize>(&self, catalog: &T) {
+        if let Ok(value) = serde_json::to_value(catalog) {
+            if let Ok(mut cache) = self.cache.write() {
+                cache.latest_pads_catalog = Some(value.clone());
+            }
+            let _ = self.events_tx.send(ServerEvent::PadsCatalog(value));
+        }
+    }
+
     pub fn publish_meters<T: Serialize>(&self, meters: &T) {
         let Ok(mut guard) = self.last_meter_emit_at.write() else {
             return;
@@ -349,16 +367,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     let mut events_rx = state.events_tx.subscribe();
 
-    let (latest_snapshot, latest_song_view, latest_settings) = if let Ok(cache) = state.cache.read()
-    {
-        (
-            cache.latest_snapshot.clone(),
-            cache.latest_song_view.clone(),
-            cache.latest_settings.clone(),
-        )
-    } else {
-        (None, None, None)
-    };
+    let (latest_snapshot, latest_song_view, latest_settings, latest_pads_catalog) =
+        if let Ok(cache) = state.cache.read() {
+            (
+                cache.latest_snapshot.clone(),
+                cache.latest_song_view.clone(),
+                cache.latest_settings.clone(),
+                cache.latest_pads_catalog.clone(),
+            )
+        } else {
+            (None, None, None, None)
+        };
 
     if let Some(snapshot) = latest_snapshot {
         let _ = sender
@@ -388,6 +407,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 serde_json::to_string(&OutboundEnvelope {
                     event: "settings",
                     payload: settings,
+                })
+                .unwrap_or_default(),
+            ))
+            .await;
+    }
+    if let Some(catalog) = latest_pads_catalog {
+        let _ = sender
+            .send(Message::Text(
+                serde_json::to_string(&OutboundEnvelope {
+                    event: "padsCatalog",
+                    payload: catalog,
                 })
                 .unwrap_or_default(),
             ))
@@ -424,6 +454,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         .send(Message::Text(
                             serde_json::to_string(&OutboundEnvelope {
                                 event: "settings",
+                                payload,
+                            })
+                            .unwrap_or_default(),
+                        ))
+                        .await;
+                }
+                Ok(ServerEvent::PadsCatalog(payload)) => {
+                    let _ = sender
+                        .send(Message::Text(
+                            serde_json::to_string(&OutboundEnvelope {
+                                event: "padsCatalog",
                                 payload,
                             })
                             .unwrap_or_default(),
@@ -508,6 +549,10 @@ mod tests {
         assert!(matches!(parse(r#"{"cmd":"pause"}"#), RemoteCommand::Pause));
         assert!(matches!(parse(r#"{"cmd":"stop"}"#), RemoteCommand::Stop));
         assert!(matches!(parse(r#"{"cmd":"ping"}"#), RemoteCommand::Ping));
+        assert!(matches!(
+            parse(r#"{"cmd":"requestPadsCatalog"}"#),
+            RemoteCommand::RequestPadsCatalog
+        ));
         assert!(matches!(
             parse(r#"{"cmd":"cancelMarkerJump"}"#),
             RemoteCommand::CancelMarkerJump
@@ -615,6 +660,16 @@ mod tests {
                 assert_eq!(settings["metronomeEnabled"], serde_json::json!(true));
             }
             other => panic!("expected updateSettings, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_update_pad_settings() {
+        match parse(r#"{"cmd":"updatePadSettings","settings":{"padKey":7}}"#) {
+            RemoteCommand::UpdatePadSettings { settings } => {
+                assert_eq!(settings["padKey"], serde_json::json!(7));
+            }
+            other => panic!("expected updatePadSettings, got {other:?}"),
         }
     }
 
