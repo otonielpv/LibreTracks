@@ -4,6 +4,7 @@ import {
   ALL_WIDGET_TYPES,
   LAYOUT_COLUMNS,
   LAYOUT_MAX_ROWS,
+  DEFAULT_METRONOME_WIDGET_HEIGHT,
   clearStoredLayout,
   defaultLayout,
   layoutExportFilename,
@@ -33,6 +34,7 @@ describe("remoteLayout", () => {
       "voiceGuideSettings",
       "pads",
     ]);
+    expect(layout.tabs[2].widgets[0].h).toBe(DEFAULT_METRONOME_WIDGET_HEIGHT);
     expect(layout.activeTabId).toBe(layout.tabs[0].id);
     for (const widget of allWidgets(layout)) {
       expect(ALL_WIDGET_TYPES).toContain(widget.type);
@@ -74,6 +76,21 @@ describe("remoteLayout", () => {
       ["timeline", 6, 4],
       ["controlDeck", 10, 7],
       ["markerGrid", 17, 10],
+    ]);
+  });
+
+  it("gives every default metronome enough height without overlapping phone tools", () => {
+    for (const profile of ["standard", "tablet", "phone"] as const) {
+      const tools = defaultLayout(profile).tabs[2].widgets;
+      expect(tools.find((widget) => widget.type === "metronomeSettings")?.h)
+        .toBe(DEFAULT_METRONOME_WIDGET_HEIGHT);
+    }
+
+    const phoneTools = defaultLayout("phone").tabs[2].widgets;
+    expect(phoneTools.map(({ type, y, h }) => [type, y, h])).toEqual([
+      ["metronomeSettings", 0, DEFAULT_METRONOME_WIDGET_HEIGHT],
+      ["voiceGuideSettings", DEFAULT_METRONOME_WIDGET_HEIGHT, 14],
+      ["pads", DEFAULT_METRONOME_WIDGET_HEIGHT + 14, 16],
     ]);
   });
 

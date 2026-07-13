@@ -98,6 +98,9 @@ export const LAYOUT_COLUMNS = 24;
 /** Max rows a widget may span, and the tallest y a widget may start at. The
  * grid grows to fit, but we clamp starts/spans to keep numbers sane. */
 export const LAYOUT_MAX_ROWS = 60;
+/** Enough room for every metronome field at the default interface scale
+ * without forcing the tool widget to start with its own scrollbar. */
+export const DEFAULT_METRONOME_WIDGET_HEIGHT = 26;
 
 export type WidgetPlacement = {
   /** Stable instance id (a type may appear more than once). */
@@ -197,12 +200,12 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
     name: "Herramientas",
     widgets: phone
       ? [
-          placement("metronomeSettings", 0, 0, LAYOUT_COLUMNS, 24),
-          placement("voiceGuideSettings", 0, 24, LAYOUT_COLUMNS, 14),
-          placement("pads", 0, 38, LAYOUT_COLUMNS, 16),
+          placement("metronomeSettings", 0, 0, LAYOUT_COLUMNS, DEFAULT_METRONOME_WIDGET_HEIGHT),
+          placement("voiceGuideSettings", 0, DEFAULT_METRONOME_WIDGET_HEIGHT, LAYOUT_COLUMNS, 14),
+          placement("pads", 0, DEFAULT_METRONOME_WIDGET_HEIGHT + 14, LAYOUT_COLUMNS, 16),
         ]
       : [
-          placement("metronomeSettings", 0, 0, 8, 24),
+          placement("metronomeSettings", 0, 0, 8, DEFAULT_METRONOME_WIDGET_HEIGHT),
           placement("voiceGuideSettings", 8, 0, 8, 20),
           placement("pads", 16, 0, 8, 20),
         ],

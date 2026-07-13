@@ -3228,6 +3228,42 @@ button {
   gap: 0.5rem;
 }
 
+/* The combined readout strip must scale from its assigned widget rectangle,
+   not from the browser viewport. Each card is its own size container so narrow
+   BPM/bar cells and the wide song cell use both available width and height. */
+.remote-shell.remote-size-0
+  .layout-widget-type-readouts .readout-card {
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(0.18rem, 5cqh, 0.75rem) clamp(0.26rem, 3cqi, 1rem);
+}
+
+.remote-shell.remote-size-0
+  .layout-widget-type-readouts .readout-card span {
+  flex: 0 0 auto;
+  font-size: clamp(0.45rem, min(4cqi, 13cqh), 1rem);
+  line-height: 1;
+}
+
+.remote-shell.remote-size-0
+  .layout-widget-type-readouts .readout-card strong,
+.remote-shell.remote-size-0
+  .layout-widget-type-readouts .readout-card-compact strong {
+  min-width: 0;
+  margin-top: clamp(0.05rem, 2cqh, 0.3rem);
+  font-size: clamp(0.72rem, min(8cqi, 27cqh), 2.4rem);
+  line-height: 1;
+}
+
+.remote-shell.remote-size-0
+  .layout-widget-type-readouts .readout-card-song strong {
+  font-size: clamp(0.72rem, min(5cqi, 27cqh), 2.4rem);
+}
+
 /* The untouched tablet preset is intentionally denser than desktop. Its
    readout strip is only three grid rows tall, so centre and enlarge the useful
    values instead of leaving desktop-sized empty card surfaces around them. */

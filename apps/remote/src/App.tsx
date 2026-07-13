@@ -68,6 +68,7 @@ import {
   useLiveMusicalContext,
 } from "./liveWidgets";
 import {
+  DEFAULT_METRONOME_WIDGET_HEIGHT,
   LAYOUT_COLUMNS,
   LAYOUT_MAX_ROWS,
   clearStoredLayout,
@@ -3358,7 +3359,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12 },
   clipList: { labelKey: "widgetSongHeader", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12, palette: false },
   pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: 20 },
-  metronomeSettings: { labelKey: "widgetMetronomeSettings", Component: MetronomeSettingsWidget, defaultW: 8, defaultH: 24 },
+  metronomeSettings: { labelKey: "widgetMetronomeSettings", Component: MetronomeSettingsWidget, defaultW: 8, defaultH: DEFAULT_METRONOME_WIDGET_HEIGHT },
   voiceGuideSettings: { labelKey: "widgetVoiceGuideSettings", Component: VoiceGuideSettingsWidget, defaultW: 8, defaultH: 20 },
   performanceSettings: { labelKey: "widgetPerformanceSettings", Component: LegacyPerformanceSettingsWidget, defaultW: 12, defaultH: 20, palette: false },
   nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 4, defaultH: 4 },
@@ -3462,7 +3463,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "mixerFaders": return { w: 24, h: 26 };
     case "songHeader": case "clipList": return { w: 24, h: 14 };
     case "pads": return { w: 24, h: 18 };
-    case "metronomeSettings": return { w: 24, h: 24 };
+    case "metronomeSettings": return { w: 24, h: DEFAULT_METRONOME_WIDGET_HEIGHT };
     case "voiceGuideSettings": return { w: 24, h: 14 };
     case "performanceSettings": return { w: 24, h: 20 };
     case "nextMarker": case "nextSong": case "currentKey":
@@ -4069,10 +4070,14 @@ export function App() {
       (["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"] as const)
         .every((type, index) => controls.widgets[index]?.type === type);
     const presetWidgetTypes = new Set(stored.tabs.flatMap((tab) => tab.widgets.map((widget) => widget.type)));
+    const storedMetronome = stored.tabs
+      .flatMap((tab) => tab.widgets)
+      .find((widget) => widget.type === "metronomeSettings");
     const hasToolsPreset =
       presetWidgetTypes.has("pads") &&
       presetWidgetTypes.has("metronomeSettings") &&
-      presetWidgetTypes.has("voiceGuideSettings");
+      presetWidgetTypes.has("voiceGuideSettings") &&
+      storedMetronome?.h === DEFAULT_METRONOME_WIDGET_HEIGHT;
     if (isUntouchedControlsPreset && (stored.presetProfile !== presetProfile || !hasToolsPreset)) {
       return defaultLayout(presetProfile);
     }
