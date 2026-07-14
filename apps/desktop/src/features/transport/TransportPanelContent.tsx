@@ -368,6 +368,18 @@ import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandler
 import { createLibraryHandlers } from "./library/libraryHandlers";
 import { runAudioImportPipeline } from "./library/importPipeline";
 import { createColorHandlers } from "./colors/colorHandlers";
+import {
+  TIMELINE_COLOR_PRESETS,
+  loadRecentColors,
+  normalizeTimelineColorInput,
+  pushRecentColor,
+} from "./colors/timelineColors";
+import {
+  automationTargetLabel,
+  createAutomationCueId,
+  createTimelineMenus,
+  type TimelineMenuDeps,
+} from "./menus/timelineMenus";
 import { createTrackHandlers } from "./tracks/trackHandlers";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
@@ -378,103 +390,6 @@ const MAX_SESSION_BPM = 300;
  * scale now, so track volume must clamp to this headroom, not to unity (1.0). */
 const MAX_TRACK_GAIN = positionToGain(1, TRACK_FADER_SCALE);
 const WAVEFORM_REQUEST_BATCH_SIZE = 4;
-const TIMELINE_COLOR_PRESETS = [
-  { label: "Rojo", value: "#E35D5B" },
-  { label: "Coral", value: "#F08A6C" },
-  { label: "Naranja", value: "#EE8A3C" },
-  { label: "Ambar", value: "#E0A83A" },
-  { label: "Lima", value: "#B7D34A" },
-  { label: "Verde", value: "#57B66C" },
-  { label: "Esmeralda", value: "#2FA98A" },
-  { label: "Cian", value: "#3CDDC7" },
-  { label: "Celeste", value: "#4FB8E6" },
-  { label: "Azul", value: "#5C8CE6" },
-  { label: "Indigo", value: "#6F6FE0" },
-  { label: "Violeta", value: "#9C73E6" },
-  { label: "Magenta", value: "#C96FD6" },
-  { label: "Rosa", value: "#DF6FA8" },
-] as const;
-
-const RECENT_COLORS_STORAGE_KEY = "libretracks.recentColors";
-const RECENT_COLORS_LIMIT = 8;
-
-/** Read the persisted recent-colors list, tolerating malformed storage. */
-function loadRecentColors(): string[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-  try {
-    const raw = window.localStorage.getItem(RECENT_COLORS_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    const seen = new Set<string>();
-    const colors: string[] = [];
-    for (const entry of parsed) {
-      const normalized =
-        typeof entry === "string" ? normalizeTimelineColorInput(entry) : null;
-      if (normalized && !seen.has(normalized)) {
-        seen.add(normalized);
-        colors.push(normalized);
-      }
-    }
-    return colors.slice(0, RECENT_COLORS_LIMIT);
-  } catch {
-    return [];
-  }
-}
-
-/** Push a color to the front (MRU), dedup case-insensitively, persist. */
-function pushRecentColor(previous: string[], color: string): string[] {
-  const normalized = normalizeTimelineColorInput(color);
-  if (!normalized) {
-    return previous;
-  }
-  const next = [
-    normalized,
-    ...previous.filter((entry) => entry !== normalized),
-  ].slice(0, RECENT_COLORS_LIMIT);
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(
-        RECENT_COLORS_STORAGE_KEY,
-        JSON.stringify(next),
-      );
-    } catch {
-      // Storage full/blocked — keep the in-memory list, drop persistence.
-    }
-  }
-  return next;
-}
-
-function normalizeTimelineColorInput(value: string | null | undefined) {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) {
-    return null;
-  }
-
-  const hex = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
-  return /^[\da-f]{6}$/i.test(hex) ? `#${hex.toUpperCase()}` : null;
-}
-
-function resolveSharedTimelineColor(tracks: TrackSummary[]) {
-  if (tracks.length === 0) {
-    return null;
-  }
-
-  const [firstTrack, ...remainingTracks] = tracks;
-  const firstColor = normalizeTimelineColorInput(firstTrack.color);
-  return remainingTracks.every(
-    (track) => normalizeTimelineColorInput(track.color) === firstColor,
-  )
-    ? firstColor
-    : null;
-}
-
 /**
  * Keep a floating overlay (context menu, colour popover) fully on-screen.
  *
@@ -5925,6 +5840,81 @@ export function TransportPanelContent() {
   })() : (
     t("transport.tempoSource.base")
   );
+  // Context-menu builders. Instantiated once; they read a fresh deps snapshot
+  // from timelineMenuDepsRef on every invocation (synced after each render),
+  // so their identities stay referentially stable without capturing stale
+  // state. See ./menus/timelineMenus.
+  const timelineMenuDepsRef = useRef<TimelineMenuDeps | null>(null);
+  useEffect(() => {
+    timelineMenuDepsRef.current = {
+      t,
+      shortcutHint,
+      song,
+      songBaseBpm,
+      displayedTimeSignature,
+      appSettings,
+      selectedClipIds,
+      selectedClipSummaries,
+      songRef,
+      displayPositionSecondsRef,
+      contextMenuPositionRef,
+      optimisticallyAppliedRevisionsRef,
+      tempoDraftDirtyRef,
+      runAction,
+      applyPlaybackSnapshot,
+      refreshSongView,
+      setStatus,
+      setContextMenu,
+      setColorPickerPopover,
+      setTempoDraft,
+      setTimeSignatureDraft,
+      setSelectedRegionId,
+      setSelectedTimelineRange,
+      setSelectedClipId,
+      setSelectedSectionId,
+      setExportSongTarget,
+      setAutomationCueDraft,
+      setIsMixSceneModalOpen,
+      clearSelection,
+      selectTrack,
+      recordRecentColor,
+      splitSongRegionAtCursor,
+      duplicateClipGroup,
+      syncSongLibraryFolderAfterRename,
+      clearLibraryDragPreview,
+      handleCreateTrack,
+      handleSetTrackColor,
+      handleSetTrackColors,
+      handleSetClipColor,
+    };
+  });
+  const timelineMenus = useMemo(
+    () =>
+      createTimelineMenus(() => {
+        const deps = timelineMenuDepsRef.current;
+        if (!deps) {
+          throw new Error("timeline menus invoked before first render commit");
+        }
+        return deps;
+      }),
+    [],
+  );
+  const {
+    openMenu,
+    createAutomationCueAt,
+    editAutomationCue,
+    automationCueContextMenu,
+    rulerContextMenu,
+    songRegionContextMenu,
+    tempoMarkerContextMenu,
+    timeSignatureMarkerContextMenu,
+    sectionContextMenu,
+    trackContextMenu,
+    globalTrackListContextMenu,
+    handleTrackHeaderContextMenu,
+    clipContextMenu,
+  } = timelineMenus;
+
   // Tap-tempo handler. song + playhead position read through getters/refs so
   // the factory stays stable across renders. See ./tempo/tapTempoHandler.
   const handleTapTempo = useMemo(
@@ -6303,179 +6293,6 @@ export function TransportPanelContent() {
     setStatus(message);
   }
 
-  function createAutomationCueId() {
-    return `automation_${Date.now().toString(36)}_${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-  }
-
-  function automationTargetLabel(
-    currentSong: SongView,
-    target: AutomationJumpTargetSummary,
-  ) {
-    if (target.kind === "region") {
-      return (
-        currentSong.regions.find((region) => region.id === target.regionId)
-          ?.name ?? t("transport.automation.defaultRegionTarget")
-      );
-    }
-
-    if (target.kind === "marker") {
-      return (
-        currentSong.sectionMarkers.find(
-          (marker) => marker.id === target.markerId,
-        )?.name ?? t("transport.automation.defaultMarkerTarget")
-      );
-    }
-
-    return formatClock(target.seconds);
-  }
-
-  function defaultAutomationTarget(
-    currentSong: SongView,
-    positionSeconds: number,
-  ): AutomationJumpTargetSummary | null {
-    const nextRegion = [...currentSong.regions]
-      .sort((left, right) => left.startSeconds - right.startSeconds)
-      .find((region) => region.startSeconds > positionSeconds + 0.01);
-    if (nextRegion) {
-      return { kind: "region", regionId: nextRegion.id };
-    }
-
-    const nextMarker = [...currentSong.sectionMarkers]
-      .filter((marker) => markerKindCategory(marker.kind) === "section")
-      .sort((left, right) => left.startSeconds - right.startSeconds)
-      .find((marker) => marker.startSeconds > positionSeconds + 0.01);
-    if (nextMarker) {
-      return { kind: "marker", markerId: nextMarker.id };
-    }
-
-    const firstRegion = currentSong.regions[0];
-    if (firstRegion) {
-      return { kind: "region", regionId: firstRegion.id };
-    }
-
-    const firstMarker = currentSong.sectionMarkers.find(
-      (marker) => markerKindCategory(marker.kind) === "section",
-    );
-    if (firstMarker) {
-      return { kind: "marker", markerId: firstMarker.id };
-    }
-
-    return null;
-  }
-
-
-  function automationCueContextMenu(cue: AutomationCueSummary) {
-    return [
-      {
-        label: t("transport.automation.editCue"),
-        onSelect: () => editAutomationCue(cue),
-      },
-      {
-        label: t("transport.automation.renameCue"),
-        onSelect: async () => {
-          const nextName = (
-            await promptDialog(t("transport.automation.renameCuePrompt"), cue.name)
-          )?.trim();
-          if (!nextName) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot = await upsertAutomationCue({
-              ...cue,
-              name: nextName,
-            });
-            applyPlaybackSnapshot(nextSnapshot);
-            await refreshSongView({ includeWaveforms: false, sync: true });
-            setStatus(
-              t("transport.automation.statusCueRenamed", {
-                name: nextName,
-              }),
-            );
-          });
-        },
-      },
-      {
-        label: t(
-          cue.enabled
-            ? "transport.automation.disableCue"
-            : "transport.automation.enableCue",
-        ),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await upsertAutomationCue({
-              ...cue,
-              enabled: !cue.enabled,
-            });
-            applyPlaybackSnapshot(nextSnapshot);
-            await refreshSongView({ includeWaveforms: false, sync: true });
-            setStatus(
-              t(
-                cue.enabled
-                  ? "transport.automation.statusCueDisabled"
-                  : "transport.automation.statusCueEnabled",
-              ),
-            );
-          });
-        },
-      },
-      {
-        label: t("transport.automation.deleteCue"),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await deleteAutomationCue(cue.id);
-            applyPlaybackSnapshot(nextSnapshot);
-            await refreshSongView({ includeWaveforms: false, sync: true });
-            setStatus(
-              t("transport.automation.statusCueDeleted", {
-                name: cue.name,
-              }),
-            );
-          });
-        },
-      },
-    ];
-  }
-
-  // Shared by the ruler menu and the automation-lane menu: open the visual cue
-  // editor seeded with a sensible default target. The actual upsert happens in
-  // handleConfirmAutomationCue when the user confirms. Creating a cue implies
-  // the automation track is present (the backend sets track_present).
-  function createAutomationCueAt(positionSeconds: number) {
-    const currentSong = songRef.current;
-    if (!currentSong) {
-      return;
-    }
-
-    // A new cue starts with a single jump action seeded to the next destination
-    // (if any). The user can then add/remove/reorder actions in the modal.
-    const defaultTarget = defaultAutomationTarget(currentSong, positionSeconds);
-    const seedActions: AutomationActionSummary[] = defaultTarget
-      ? [{ type: "jump", target: defaultTarget, transition: { mode: "instant" } }]
-      : [];
-
-    setAutomationCueDraft({
-      atSeconds: positionSeconds,
-      cueId: null,
-      name: null,
-      maxRuns: null,
-      actions: seedActions,
-    });
-  }
-
-  // Open the editor for an existing cue (used by the cue's context menu).
-  function editAutomationCue(cue: AutomationCueSummary) {
-    setAutomationCueDraft({
-      atSeconds: cue.atSeconds,
-      cueId: cue.id,
-      name: cue.name,
-      maxRuns: cue.maxRuns ?? null,
-      actions: cue.actions,
-    });
-  }
-
   // Commit the modal's result: create or update the cue, then refresh.
   const handleConfirmAutomationCue = useCallback(
     (result: { actions: AutomationActionSummary[]; maxRuns: number | null }) => {
@@ -6491,7 +6308,7 @@ export function TransportPanelContent() {
         const label =
           jump && jump.type === "jump"
             ? t("transport.automation.labelJumpTo", {
-                target: automationTargetLabel(currentSong, jump.target),
+                target: automationTargetLabel(currentSong, jump.target, t),
               })
             : t("transport.automation.labelActionsCount", {
                 count: result.actions.length,
@@ -6542,332 +6359,6 @@ export function TransportPanelContent() {
     },
     [runAction, applyPlaybackSnapshot, refreshSongView],
   );
-
-  function rulerContextMenu(
-    positionSeconds: number,
-    timelineRange: TimelineRangeSelection | null,
-  ): ContextMenuAction[] {
-    const createMarkerAction: ContextMenuAction = timelineRange
-      ? {
-          label: t("transport.menu.createSongRegionFromSelection"),
-          onSelect: async () => {
-            await runAction(async () => {
-              const nextSnapshot = await createSongRegion(
-                timelineRange.startSeconds,
-                timelineRange.endSeconds,
-              );
-              applyPlaybackSnapshot(nextSnapshot);
-              clearSelection();
-              setSelectedRegionId(null);
-              setSelectedTimelineRange(null);
-              setStatus(
-                t("transport.status.songCreatedInRange", {
-                  start: formatClock(timelineRange.startSeconds),
-                  end: formatClock(timelineRange.endSeconds),
-                }),
-              );
-            });
-          },
-        }
-      : {
-          // Creating a marker opens a Section / Cue / Custom chooser so the
-          // marker is born already typed and named — a cue lands in the cue
-          // lane instead of stacking on a section at the same position.
-          label: t("transport.menu.createMarker"),
-          onSelect: () => openCreateMarkerKindMenu(positionSeconds),
-        };
-
-    return [
-      createMarkerAction,
-      {
-        label: t("transport.menu.changeTimelineBpm"),
-        disabled: !song,
-        onSelect: async () => {
-          const nextBpm = Number(
-            await promptDialog(
-              t("transport.prompt.timelineBpm"),
-              songBaseBpm.toFixed(2),
-            ),
-          );
-          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot =
-              positionSeconds <= 0.0001
-                ? await updateSongTempo(nextBpm)
-                : await upsertSongTempoMarker(positionSeconds, nextBpm);
-            optimisticallyAppliedRevisionsRef.current.add(
-              nextSnapshot.projectRevision,
-            );
-            await refreshSongView({ includeWaveforms: false, sync: true });
-            applyPlaybackSnapshot(nextSnapshot);
-            tempoDraftDirtyRef.current = false;
-            setTempoDraft(formatBpmDraft(nextBpm));
-            setStatus(
-              positionSeconds <= 0.0001
-                ? t("transport.status.baseTimelineBpmUpdated", {
-                    bpm: nextBpm.toFixed(2),
-                  })
-                : t("transport.status.tempoMarkerCreated", {
-                    time: formatClock(positionSeconds),
-                    bpm: nextBpm.toFixed(2),
-                  }),
-            );
-          });
-        },
-      },
-      {
-        label: "Crear marca de metrica",
-        disabled: !song,
-        onSelect: async () => {
-          const nextSignature = (
-            await promptDialog("Compas", displayedTimeSignature)
-          )?.trim();
-          if (!nextSignature) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot =
-              positionSeconds <= 0.0001
-                ? await updateSongTimeSignature(nextSignature)
-                : await upsertSongTimeSignatureMarker(
-                    positionSeconds,
-                    nextSignature,
-                  );
-            applyPlaybackSnapshot(nextSnapshot);
-            setTimeSignatureDraft(nextSignature);
-            setStatus(
-              `Compas ${nextSignature} en ${formatClock(positionSeconds)}`,
-            );
-          });
-        },
-      },
-      {
-        label: t("transport.automation.createCue"),
-        disabled:
-          !song ||
-          ((song?.regions.length ?? 0) === 0 &&
-            (song?.sectionMarkers.length ?? 0) === 0),
-        onSelect: () => createAutomationCueAt(positionSeconds),
-      },
-      {
-        label: t("transport.menu.clearTimelineSelection"),
-        disabled: !timelineRange,
-        onSelect: () => {
-          setSelectedTimelineRange(null);
-          setStatus(t("transport.status.timelineSelectionCleared"));
-        },
-      },
-    ];
-  }
-
-  // Split a specific song region at the current playhead. Shared by the song
-  function songRegionContextMenu(region: SongRegionSummary) {
-    const cursorSeconds = displayPositionSecondsRef.current;
-    // Splitting needs the playhead strictly inside this song.
-    const canSplitSong =
-      cursorSeconds > region.startSeconds && cursorSeconds < region.endSeconds;
-    return [
-      {
-        label: t("transport.menu.renameSong"),
-        shortcut: shortcutHint("edit.rename"),
-        onSelect: async () => {
-          const nextName = (
-            await promptDialog(t("transport.prompt.songRename"), region.name)
-          )?.trim();
-          if (!nextName) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot = await updateSongRegion(
-              region.id,
-              nextName,
-              region.startSeconds,
-              region.endSeconds,
-            );
-            applyPlaybackSnapshot(nextSnapshot);
-            await syncSongLibraryFolderAfterRename(region.name, nextName);
-            setStatus(t("transport.status.songRenamed", { name: nextName }));
-          });
-        },
-      },
-      {
-        label: `${t("transport.menu.songKey", { defaultValue: "Nota de la canción" })} ▸`,
-        onSelect: () => openSongRegionKeyMenu(region),
-      },
-      {
-        label: t("transport.menu.splitSongAtCursor", {
-          defaultValue: "Partir canción en el cursor",
-        }),
-        shortcut: shortcutHint("edit.splitSong"),
-        disabled: !canSplitSong,
-        onSelect: async () => {
-          await splitSongRegionAtCursor(
-            region.id,
-            region.startSeconds,
-            region.endSeconds,
-          );
-        },
-      },
-      {
-        label: t("transport.menu.changeRegionWarpSourceBpm"),
-        onSelect: async () => {
-          const currentSourceBpm =
-            region.warpSourceBpm ?? getEffectiveBpmAt(song, region.startSeconds);
-          const input = (
-            await promptDialog(
-              t("transport.prompt.regionWarpSourceBpm"),
-              currentSourceBpm.toFixed(2),
-            )
-          )?.trim();
-          if (!input) {
-            return;
-          }
-          const nextSourceBpm = Number(input.replace(",", "."));
-          if (!Number.isFinite(nextSourceBpm) || nextSourceBpm <= 0) {
-            return;
-          }
-          await runAction(async () => {
-            const nextSnapshot = await updateSongRegionWarp(
-              region.id,
-              region.warpEnabled,
-              nextSourceBpm,
-            );
-            await refreshSongView({ includeWaveforms: false, sync: true });
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              t("transport.status.regionWarpSourceBpmUpdated", {
-                bpm: nextSourceBpm.toFixed(2),
-                name: region.name,
-              }),
-            );
-          });
-        },
-      },
-      {
-        label: t("transport.menu.exportSong", {
-          defaultValue: "Exportar Cancion",
-        }),
-        onSelect: () => {
-          setExportSongTarget({ regionId: region.id, regionName: region.name });
-        },
-      },
-      {
-        label: t("transport.menu.deleteSong"),
-        shortcut: shortcutHint("edit.delete"),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await deleteSongRegion(region.id);
-            applyPlaybackSnapshot(nextSnapshot);
-            setSelectedRegionId(null);
-            setStatus(t("transport.status.songDeleted", { name: region.name }));
-          });
-        },
-      },
-    ];
-  }
-
-  // Applies a new original key to a region (song) and refreshes the snapshot so
-  // the timeline/remote badges recompute from region.key + transpose.
-  async function setSongRegionKey(region: SongRegionSummary, key: string | null) {
-    await runAction(async () => {
-      const nextSnapshot = await updateSongRegionKey(region.id, key);
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(
-        key
-          ? t("transport.status.songKeyUpdated", {
-              defaultValue: `Nota de «{{name}}» → {{key}}`,
-              name: region.name,
-              key,
-            })
-          : t("transport.status.songKeyCleared", {
-              defaultValue: `Nota de «{{name}}» eliminada`,
-              name: region.name,
-            }),
-      );
-    });
-  }
-
-  // Submenu listing the 24 keys (plus "no key") for the region's original key.
-  // The region's current key is marked with a swatch dot so it reads as
-  // selected, mirroring the marker-kind picker's reopen-the-menu pattern.
-  function openSongRegionKeyMenu(region: SongRegionSummary) {
-    const next = bumpContextMenuPosition();
-    const currentKey = region.key ?? null;
-    setContextMenu({
-      x: next.x,
-      y: next.y,
-      title: t("transport.menu.songKey", { defaultValue: "Nota de la canción" }),
-      actions: [
-        {
-          label: t("transport.menu.songKeyNone", { defaultValue: "Sin nota" }),
-          swatch: currentKey === null ? "#3CDDC7" : undefined,
-          onSelect: () => setSongRegionKey(region, null),
-        },
-        ...SONG_KEY_OPTIONS.map((key) => ({
-          label: key,
-          swatch: currentKey === key ? "#3CDDC7" : undefined,
-          onSelect: () => setSongRegionKey(region, key),
-        })),
-      ],
-    });
-  }
-
-  function tempoMarkerContextMenu(marker: TempoMarkerSummary) {
-    return [
-      {
-        label: t("transport.menu.changeBpm"),
-        onSelect: async () => {
-          const nextBpm = Number(
-            await promptDialog(
-              t("transport.prompt.tempoMarkerBpm"),
-              marker.bpm.toFixed(2),
-            ),
-          );
-          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot = await upsertSongTempoMarker(
-              marker.sourceStartSeconds ?? marker.startSeconds,
-              nextBpm,
-            );
-            optimisticallyAppliedRevisionsRef.current.add(
-              nextSnapshot.projectRevision,
-            );
-            await refreshSongView({ includeWaveforms: false, sync: true });
-            applyPlaybackSnapshot(nextSnapshot);
-            tempoDraftDirtyRef.current = false;
-            setTempoDraft(formatBpmDraft(nextBpm));
-            setStatus(
-              t("transport.status.tempoMarkerUpdated", {
-                bpm: nextBpm.toFixed(2),
-              }),
-            );
-          });
-        },
-      },
-      {
-        label: t("transport.menu.deleteMarker"),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await deleteSongTempoMarker(marker.id);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              t("transport.status.tempoMarkerDeleted", {
-                time: formatClock(marker.startSeconds),
-              }),
-            );
-          });
-        },
-      },
-    ];
-  }
 
   function previewZoom(
     nextZoomLevel: number,
@@ -7024,552 +6515,6 @@ export function TransportPanelContent() {
     );
   }
 
-  function openMenu(
-    event: ReactMouseEvent,
-    title: string,
-    actions: ContextMenuAction[],
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
-    const { x, y } = clientToZoomedCoords(event.clientX, event.clientY);
-    contextMenuPositionRef.current = { x, y };
-    setColorPickerPopover(null);
-    setContextMenu({
-      x,
-      y,
-      title,
-      actions,
-    });
-  }
-
-  function openCustomColorPopover(
-    title: string,
-    initialColor: string | null | undefined,
-    onColor: (color: string) => Promise<void>,
-  ) {
-    const position = contextMenuPositionRef.current;
-    setColorPickerPopover({
-      x: position.x + 12,
-      y: position.y + 12,
-      title,
-      initialColor: normalizeTimelineColorInput(initialColor) ?? "#3CDDC7",
-      onApply: onColor,
-    });
-  }
-
-  function colorPickerActions(args: {
-    title: string;
-    currentColor?: string | null;
-    onColor: (color: string | null) => Promise<void>;
-  }): ContextMenuAction[] {
-    // Single funnel: record every applied non-null colour as "recent" so the
-    // popover's Recientes row stays in sync regardless of entry point (preset,
-    // custom popover, or recent swatch).
-    const applyColor = async (color: string | null) => {
-      recordRecentColor(color);
-      await args.onColor(color);
-    };
-    return [
-      ...TIMELINE_COLOR_PRESETS.map((preset) => ({
-        label: `${preset.label}${args.currentColor === preset.value ? " (actual)" : ""}`,
-        swatch: preset.value,
-        onSelect: () => applyColor(preset.value),
-      })),
-      {
-        label: "Personalizado...",
-        swatch: args.currentColor ?? "#3CDDC7",
-        onSelect: () =>
-          openCustomColorPopover(args.title, args.currentColor, (color) =>
-            applyColor(color),
-          ),
-      },
-      {
-        label: "Quitar color",
-        disabled: !args.currentColor,
-        onSelect: () => args.onColor(null),
-      },
-    ];
-  }
-
-  function openColorMenu(
-    title: string,
-    currentColor: string | null | undefined,
-    onColor: (color: string | null) => Promise<void>,
-  ) {
-    const position = contextMenuPositionRef.current;
-    const nextPosition = {
-      x: position.x + 12,
-      y: position.y + 12,
-    };
-    contextMenuPositionRef.current = nextPosition;
-    setContextMenu({
-      x: nextPosition.x,
-      y: nextPosition.y,
-      title,
-      actions: colorPickerActions({ title, currentColor, onColor }),
-    });
-  }
-
-  function applyMarkerKind(
-    section: SectionMarkerSummary,
-    kind: MarkerKind,
-    variant: number | null,
-  ) {
-    void runAction(async () => {
-      const nextSnapshot = await setSectionMarkerKind(section.id, kind, variant);
-      applyPlaybackSnapshot(nextSnapshot);
-      const kindLabel = markerKindLabel(kind, t);
-      setStatus(
-        t("transport.status.markerKindSet", {
-          name: section.name,
-          kind: variant ? `${kindLabel} ${variant}` : kindLabel,
-        }),
-      );
-    });
-  }
-
-  function bumpContextMenuPosition() {
-    const position = contextMenuPositionRef.current;
-    const next = { x: position.x + 12, y: position.y + 12 };
-    contextMenuPositionRef.current = next;
-    return next;
-  }
-
-  // Create a new marker already typed and named after its kind. A null kind
-  // creates an untyped (Custom) marker with the backend's generic name.
-  function createTypedMarker(
-    positionSeconds: number,
-    kind: MarkerKind | null,
-    variant: number | null,
-  ) {
-    void runAction(async () => {
-      const name =
-        kind && kind !== "custom"
-          ? variant
-            ? `${markerKindLabel(kind, t)} ${variant}`
-            : markerKindLabel(kind, t)
-          : undefined;
-      const nextSnapshot = await createSectionMarker(positionSeconds, {
-        kind: kind ?? undefined,
-        variant,
-        name,
-      });
-      applyPlaybackSnapshot(nextSnapshot);
-      clearSelection();
-      setSelectedRegionId(null);
-      setSelectedTimelineRange(null);
-      setStatus(
-        t("transport.status.markerCreatedAt", {
-          time: formatClock(positionSeconds),
-        }),
-      );
-    });
-  }
-
-  // Variant chooser used when creating a numbered section (Verse 1-6, ...).
-  function openCreateMarkerVariantMenu(
-    positionSeconds: number,
-    kind: MarkerKind,
-  ) {
-    const variants = markerKindVariants(kind);
-    const next = bumpContextMenuPosition();
-    setContextMenu({
-      x: next.x,
-      y: next.y,
-      title: markerKindLabel(kind, t),
-      actions: [
-        {
-          label: markerKindLabel(kind, t),
-          swatch: markerKindColor(kind),
-          onSelect: () => createTypedMarker(positionSeconds, kind, null),
-        },
-        ...variants.map((n) => ({
-          label: `${markerKindLabel(kind, t)} ${n}`,
-          swatch: markerKindColor(kind),
-          onSelect: () => createTypedMarker(positionSeconds, kind, n),
-        })),
-      ],
-    });
-  }
-
-  // Submenu listing section or cue kinds to create a new marker of that type.
-  function openCreateMarkerKindList(
-    positionSeconds: number,
-    kinds: readonly MarkerKind[],
-    title: string,
-  ) {
-    const next = bumpContextMenuPosition();
-    setContextMenu({
-      x: next.x,
-      y: next.y,
-      title,
-      actions: kinds.map((kind) => {
-        const hasVariants = markerKindVariants(kind).length > 0;
-        return {
-          label: `${markerKindLabel(kind, t)}${hasVariants ? " ▸" : ""}`,
-          swatch: markerKindColor(kind),
-          onSelect: () =>
-            hasVariants
-              ? openCreateMarkerVariantMenu(positionSeconds, kind)
-              : createTypedMarker(positionSeconds, kind, null),
-        };
-      }),
-    });
-  }
-
-  // Top-level chooser shown when creating a marker: Section / Cue / Custom.
-  function openCreateMarkerKindMenu(positionSeconds: number) {
-    const next = bumpContextMenuPosition();
-    setContextMenu({
-      x: next.x,
-      y: next.y,
-      title: t("transport.menu.createMarker"),
-      actions: [
-        {
-          label: `${t("transport.menu.markerKindSectionsGroup")} ▸`,
-          onSelect: () =>
-            openCreateMarkerKindList(
-              positionSeconds,
-              SECTION_KINDS.filter((kind) => kind !== "custom"),
-              t("transport.menu.markerKindSectionsGroup"),
-            ),
-        },
-        {
-          label: `${t("transport.menu.markerKindCuesGroup")} ▸`,
-          onSelect: () =>
-            openCreateMarkerKindList(
-              positionSeconds,
-              availableCueKinds(appSettings.voiceGuideLanguage),
-              t("transport.menu.markerKindCuesGroup"),
-            ),
-        },
-        {
-          label: markerKindLabel("custom", t),
-          swatch: markerKindColor("custom"),
-          onSelect: () => createTypedMarker(positionSeconds, null, null),
-        },
-      ],
-    });
-  }
-
-  // Variant chooser for kinds that ship numbered recordings (Verse 1-6, ...).
-  function openMarkerVariantMenu(section: SectionMarkerSummary, kind: MarkerKind) {
-    const variants = markerKindVariants(kind);
-    const current = section.kind === kind ? (section.variant ?? null) : null;
-    const next = bumpContextMenuPosition();
-    setContextMenu({
-      x: next.x,
-      y: next.y,
-      title: markerKindLabel(kind, t),
-      actions: [
-        {
-          label: `${markerKindLabel(kind, t)}${current == null ? " ✓" : ""}`,
-          swatch: markerKindColor(kind),
-          onSelect: () => applyMarkerKind(section, kind, null),
-        },
-        ...variants.map((n) => ({
-          label: `${markerKindLabel(kind, t)} ${n}${current === n ? " ✓" : ""}`,
-          swatch: markerKindColor(kind),
-          onSelect: () => applyMarkerKind(section, kind, n),
-        })),
-      ],
-    });
-  }
-
-  // Submenu listing a set of kinds (sections or cues). Sections may open a
-  // further variant submenu; cues apply directly (no numbered variants).
-  function openMarkerKindList(
-    section: SectionMarkerSummary,
-    kinds: readonly MarkerKind[],
-    title: string,
-  ) {
-    const currentKind = section.kind ?? "custom";
-    const next = bumpContextMenuPosition();
-    setContextMenu({
-      x: next.x,
-      y: next.y,
-      title,
-      actions: kinds.map((kind) => {
-        const hasVariants = markerKindVariants(kind).length > 0;
-        return {
-          label: `${markerKindLabel(kind, t)}${hasVariants ? " ▸" : ""}${
-            kind === currentKind ? " ✓" : ""
-          }`,
-          swatch: markerKindColor(kind),
-          onSelect: () =>
-            hasVariants
-              ? openMarkerVariantMenu(section, kind)
-              : applyMarkerKind(section, kind, null),
-        };
-      }),
-    });
-  }
-
-  function openMarkerKindMenu(section: SectionMarkerSummary) {
-    const currentKind = section.kind ?? "custom";
-    const currentIsCue = markerKindCategory(currentKind) === "cue";
-    const next = bumpContextMenuPosition();
-    // Top level splits the long vocabulary into Sections vs Cues (Playback-style
-    // "dynamic cues"), each opening its own list. A ✓ marks which group the
-    // marker currently belongs to.
-    setContextMenu({
-      x: next.x,
-      y: next.y,
-      title: t("transport.menu.markerKind"),
-      actions: [
-        {
-          label: `${t("transport.menu.markerKindSectionsGroup")} ▸${
-            currentIsCue ? "" : " ✓"
-          }`,
-          onSelect: () =>
-            openMarkerKindList(
-              section,
-              SECTION_KINDS,
-              t("transport.menu.markerKindSectionsGroup"),
-            ),
-        },
-        {
-          label: `${t("transport.menu.markerKindCuesGroup")} ▸${
-            currentIsCue ? " ✓" : ""
-          }`,
-          onSelect: () =>
-            openMarkerKindList(
-              section,
-              availableCueKinds(appSettings.voiceGuideLanguage),
-              t("transport.menu.markerKindCuesGroup"),
-            ),
-        },
-      ],
-    });
-  }
-
-  // Reduced menu for the synthetic automation lane: it has no volume/pan/color
-  // and removing it deletes every cue (no ghost jumps).
-  function automationTrackContextMenu(): ContextMenuAction[] {
-    return [
-      {
-        label: t("transport.automation.createCueHere"),
-        onSelect: () =>
-          createAutomationCueAt(displayPositionSecondsRef.current),
-      },
-      {
-        label: t("transport.automation.manageScenes"),
-        onSelect: () => setIsMixSceneModalOpen(true),
-      },
-      {
-        label: t("transport.automation.removeTrack"),
-        onSelect: async () => {
-          if (
-            !(await confirmDialog(
-              t("transport.automation.removeTrackConfirm"),
-            ))
-          ) {
-            return;
-          }
-          await runAction(async () => {
-            const nextSnapshot = await removeAutomationTrack();
-            applyPlaybackSnapshot(nextSnapshot);
-            await refreshSongView({ includeWaveforms: false, sync: true });
-            setStatus(t("transport.automation.statusTrackRemoved"));
-          });
-        },
-      },
-    ];
-  }
-
-  function trackContextMenu(track: TrackSummary) {
-    const currentSong = songRef.current;
-    if (!currentSong) {
-      return [];
-    }
-
-    const previousFolder = findPreviousFolderTrack(currentSong, track.id);
-    const parentTrack = findTrack(currentSong, track.parentTrackId ?? null);
-    const parentOfParent = parentTrack?.parentTrackId ?? null;
-
-    // Right-clicking a folder should create the new track *inside* it (as its
-    // first child); right-clicking a regular track inserts a sibling after it.
-    const isFolder = track.kind === "folder";
-    const createAnchor = isFolder ? null : track;
-    const createParentId = isFolder
-      ? track.id
-      : track.parentTrackId ?? null;
-
-    const actions: ContextMenuAction[] = [
-      {
-        label: t("transport.menu.insertTrack"),
-        onSelect: () =>
-          handleCreateTrack("audio", createAnchor, createParentId),
-      },
-      {
-        label: t("transport.menu.insertFolderTrack"),
-        onSelect: () =>
-          handleCreateTrack("folder", createAnchor, createParentId),
-      },
-      {
-        label: t("common.rename"),
-        shortcut: shortcutHint("edit.rename"),
-        onSelect: async () => {
-          const nextName = (
-            await promptDialog(t("transport.prompt.trackRename"), track.name)
-          )?.trim();
-          if (!nextName) {
-            return;
-          }
-          await runAction(async () => {
-            const nextSnapshot = await updateTrack({
-              trackId: track.id,
-              name: nextName,
-            });
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.trackRenamed", { name: nextName }));
-          });
-        },
-      },
-      {
-        label: "Seleccionar color...",
-        swatch: track.color ?? undefined,
-        onSelect: () =>
-          openColorMenu(`Color: ${track.name}`, track.color, (color) =>
-            handleSetTrackColor(track, color),
-          ),
-      },
-      {
-        label: t("common.delete"),
-        onSelect: async () => {
-          const clipCount = currentSong.clips.filter(
-            (clip) => clip.trackId === track.id,
-          ).length;
-          if (
-            track.kind === "audio" &&
-            clipCount > 0 &&
-            !(await confirmDialog(t("transport.confirm.deleteTrackWithClips")))
-          ) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot = await deleteTrack(track.id);
-            optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
-            applyPlaybackSnapshot(nextSnapshot);
-            clearLibraryDragPreview();
-            // Deleting a track removes its clips but the surviving clips
-            // still reference the same waveformKeys, and orphaned cache
-            // entries are harmless until the next full reload. Skip the
-            // ~27 MB waveform payload to keep the UI responsive.
-            await refreshSongView({ includeWaveforms: false });
-            setStatus(t("transport.status.trackDeleted", { name: track.name }));
-          });
-        },
-      },
-      {
-        label: t("transport.menu.indentIntoPreviousFolder"),
-        disabled: !previousFolder,
-        onSelect: async () => {
-          if (!previousFolder) {
-            return;
-          }
-          await runAction(async () => {
-            const nextSnapshot = await moveTrack({
-              trackId: track.id,
-              parentTrackId: previousFolder.id,
-            });
-            applyPlaybackSnapshot(nextSnapshot);
-            await refreshSongView();
-            setStatus(
-              t("transport.status.trackMovedIntoFolder", {
-                name: previousFolder.name,
-              }),
-            );
-          });
-        },
-      },
-      {
-        label: t("transport.menu.removeFromFolder"),
-        disabled: !track.parentTrackId,
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await moveTrack({
-              trackId: track.id,
-              insertAfterTrackId: track.parentTrackId ?? null,
-              parentTrackId: parentOfParent,
-            });
-            applyPlaybackSnapshot(nextSnapshot);
-            await refreshSongView();
-            setStatus(
-              t("transport.status.trackRemovedFromFolder", {
-                name: track.name,
-              }),
-            );
-          });
-        },
-      },
-    ];
-
-    // Offer the automation lane here too, anchored after this track, so the
-    // user can add it from a track's own menu (not only the empty area).
-    if (!currentSong.automationTrack) {
-      actions.push({
-        label: t("transport.automation.addTrack"),
-        onSelect: () => handleAddAutomationTrack(track.id),
-      });
-    }
-
-    return actions;
-  }
-
-  function multiTrackContextMenu(tracks: TrackSummary[]) {
-    const currentColor = resolveSharedTimelineColor(tracks);
-    return [
-      {
-        label: "Seleccionar color...",
-        swatch: currentColor ?? undefined,
-        onSelect: () =>
-          openColorMenu(
-            `Color: ${tracks.length} tracks`,
-            currentColor,
-            (color) => handleSetTrackColors(tracks, color),
-          ),
-      },
-    ];
-  }
-
-  function globalTrackListContextMenu() {
-    const actions: ContextMenuAction[] = [
-      {
-        label: t("transport.menu.addAudioTrack"),
-        onSelect: () => handleCreateTrack("audio", null, null),
-      },
-      {
-        label: t("transport.menu.addFolderTrack"),
-        onSelect: () => handleCreateTrack("folder", null, null),
-      },
-    ];
-
-    // Offer the automation lane only when it isn't already present. From the
-    // empty area below the tracks, anchor it after the last real track.
-    if (!songRef.current?.automationTrack) {
-      const realTracks = songRef.current?.tracks ?? [];
-      const lastTrackId = realTracks.at(-1)?.id ?? null;
-      actions.push({
-        label: t("transport.automation.addTrack"),
-        onSelect: () => handleAddAutomationTrack(lastTrackId),
-      });
-    }
-
-    return actions;
-  }
-
-  // Add the synthetic automation lane after `afterTrackId` (null = first row).
-  async function handleAddAutomationTrack(afterTrackId: string | null) {
-    await runAction(async () => {
-      const nextSnapshot = await addAutomationTrack(afterTrackId);
-      applyPlaybackSnapshot(nextSnapshot);
-      await refreshSongView({ includeWaveforms: false, sync: true });
-      setStatus(t("transport.automation.statusTrackAdded"));
-    });
-  }
-
   const handleTrackHeaderSelect = useCallback(
     (
       trackId: string,
@@ -7620,47 +6565,6 @@ export function TransportPanelContent() {
     },
     [selectTrack, t, visibleTracks],
   );
-
-  function handleTrackHeaderContextMenu(
-    event: ReactMouseEvent<HTMLDivElement>,
-    trackId: string,
-  ) {
-    // The synthetic automation lane is not a real song track, so it has its
-    // own reduced menu (create cue / remove track).
-    if (trackId === AUTOMATION_TRACK_ID) {
-      openMenu(
-        event,
-        t("transport.automation.menuTitle"),
-        automationTrackContextMenu(),
-      );
-      return;
-    }
-
-    const track = findTrack(songRef.current, trackId);
-    if (!track) {
-      return;
-    }
-
-    const currentSelection = useTimelineUIStore.getState().selectedTrackIds;
-    const selectedTracks = currentSelection
-      .map((selectedTrackId) => findTrack(songRef.current, selectedTrackId))
-      .filter((candidate): candidate is TrackSummary => candidate !== null);
-
-    if (
-      currentSelection.includes(track.id) &&
-      selectedTracks.length > 1
-    ) {
-      openMenu(
-        event,
-        `${selectedTracks.length} tracks`,
-        multiTrackContextMenu(selectedTracks),
-      );
-      return;
-    }
-
-    selectTrack([track.id]);
-    openMenu(event, track.name, trackContextMenu(track));
-  }
 
   const handleTrackHeaderDragStart = useCallback(
     (event: ReactMouseEvent<HTMLElement>, trackId: string) => {
@@ -7851,98 +6755,6 @@ export function TransportPanelContent() {
     },
     [applyPlaybackSnapshot, runAction, setStatus, t],
   );
-
-  function clipContextMenu(clip: ClipSummary) {
-    const currentCursorSeconds = displayPositionSecondsRef.current;
-    const clipName = clipDisplayName(clip);
-    // If the right-clicked clip is part of a multi-selection, the split
-    // is offered when *any* selected clip contains the cursor, and we
-    // batch all qualifying ones into a single command. Otherwise we
-    // fall back to the single-clip behaviour.
-    const isMultiSelection =
-      selectedClipIds.includes(clip.id) && selectedClipSummaries.length > 1;
-    const splitCandidates = isMultiSelection ? selectedClipSummaries : [clip];
-    const splittableClips = splitCandidates.filter(
-      (candidate) =>
-        currentCursorSeconds > candidate.timelineStartSeconds &&
-        currentCursorSeconds <
-          candidate.timelineStartSeconds + candidate.durationSeconds,
-    );
-    const canSplit = splittableClips.length > 0;
-
-    return [
-      {
-        label: t("transport.menu.splitClipAtCursor"),
-        shortcut: shortcutHint("edit.splitClip"),
-        disabled: !canSplit,
-        onSelect: async () => {
-          await runAction(async () => {
-            const ids = splittableClips.map((entry) => entry.id);
-            const nextSnapshot =
-              ids.length > 1
-                ? await splitClips(ids, currentCursorSeconds)
-                : await splitClip(ids[0], currentCursorSeconds);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              ids.length > 1
-                ? t("transport.status.clipsSplitAt", {
-                    count: ids.length,
-                    time: formatClock(currentCursorSeconds),
-                    defaultValue: "Split {{count}} clips at {{time}}.",
-                  })
-                : t("transport.status.clipSplitAt", {
-                    time: formatClock(currentCursorSeconds),
-                  }),
-            );
-          });
-        },
-      },
-      {
-        label: t("transport.menu.duplicateClip"),
-        shortcut: shortcutHint("edit.duplicate"),
-        onSelect: async () => {
-          await runAction(async () => {
-            const sourceClips =
-              selectedClipIds.includes(clip.id) && selectedClipSummaries.length
-                ? selectedClipSummaries
-                : [clip];
-            const sourceEndSeconds = Math.max(
-              ...sourceClips.map(
-                (sourceClip) =>
-                  sourceClip.timelineStartSeconds + sourceClip.durationSeconds,
-              ),
-            );
-            await duplicateClipGroup(sourceClips, sourceEndSeconds);
-            setStatus(
-              t("transport.status.clipDuplicated", { name: clipName }),
-            );
-          });
-        },
-      },
-      {
-        label: "Seleccionar color...",
-        swatch: clip.color ?? undefined,
-        onSelect: () =>
-          openColorMenu(`Color: ${clipName}`, clip.color, (color) =>
-            handleSetClipColor(clip, color),
-          ),
-      },
-      {
-        label: t("common.delete"),
-        shortcut: shortcutHint("edit.delete"),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await deleteClip(clip.id);
-            applyPlaybackSnapshot(nextSnapshot);
-            setSelectedClipId(null);
-            setStatus(
-              t("transport.status.clipDeleted", { name: clipName }),
-            );
-          });
-        },
-      },
-    ];
-  }
 
   function beginTimelineSeekOrPan(event: ReactMouseEvent<HTMLElement>) {
     event.preventDefault();
@@ -8255,93 +7067,6 @@ export function TransportPanelContent() {
     );
   }
 
-  function sectionContextMenu(section: SectionMarkerSummary) {
-    const canEditMarker = Boolean(section);
-
-    return [
-      {
-        label: t("transport.menu.jumpToMarker"),
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await scheduleMarkerJump(section.id);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              t("transport.status.markerCursorSent", { name: section.name }),
-            );
-          });
-        },
-      },
-      {
-        label: t("common.rename"),
-        shortcut: shortcutHint("edit.rename"),
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          const nextName = (
-            await promptDialog(t("transport.prompt.markerRename"), section.name)
-          )?.trim();
-          if (!nextName) {
-            return;
-          }
-          await runAction(async () => {
-            const nextSnapshot = await updateSectionMarker(
-              section.id,
-              nextName,
-              section.startSeconds,
-            );
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.markerRenamed", { name: nextName }));
-          });
-        },
-      },
-      {
-        label: t("transport.menu.markerKind"),
-        swatch: markerColor(section),
-        disabled: !canEditMarker,
-        onSelect: () => openMarkerKindMenu(section),
-      },
-      // Colour is only user-editable for Custom markers — typed sections/cues
-      // take their colour from the kind palette.
-      ...(markerKindCategory(section.kind) === "section" &&
-      (section.kind ?? "custom") === "custom"
-        ? [
-            {
-              label: t("transport.menu.markerColor"),
-              swatch: markerColor(section),
-              disabled: !canEditMarker,
-              onSelect: () =>
-                openColorMenu(
-                  t("transport.menu.markerColor"),
-                  section.color,
-                  (color) =>
-                    runAction(async () => {
-                      const nextSnapshot = await setSectionMarkerColor(
-                        section.id,
-                        color,
-                      );
-                      applyPlaybackSnapshot(nextSnapshot);
-                    }),
-                ),
-            },
-          ]
-        : []),
-      {
-        label: t("common.delete"),
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await deleteSectionMarker(section.id);
-            applyPlaybackSnapshot(nextSnapshot);
-            setSelectedSectionId(null);
-            setStatus(
-              t("transport.status.markerDeleted", { name: section.name }),
-            );
-          });
-        },
-      },
-    ];
-  }
-
   function handlePanelRender(
     _id: string,
     _phase: "mount" | "update" | "nested-update",
@@ -8379,44 +7104,6 @@ export function TransportPanelContent() {
   function handleRemoteButtonClick() {
     setIsSettingsModalOpen(false);
     setIsRemoteModalOpen((current) => !current);
-  }
-
-  function timeSignatureMarkerContextMenu(marker: TimeSignatureMarkerSummary) {
-    return [
-      {
-        label: "Cambiar compas",
-        onSelect: async () => {
-          const nextSignature = (
-            await promptDialog("Compas", marker.signature)
-          )?.trim();
-          if (!nextSignature) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot = await upsertSongTimeSignatureMarker(
-              marker.startSeconds,
-              nextSignature,
-            );
-            applyPlaybackSnapshot(nextSnapshot);
-            setTimeSignatureDraft(nextSignature);
-            setStatus(`Compas actualizado a ${nextSignature}`);
-          });
-        },
-      },
-      {
-        label: t("transport.menu.deleteMarker"),
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await deleteSongTimeSignatureMarker(marker.id);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              `Marca de compas eliminada en ${formatClock(marker.startSeconds)}`,
-            );
-          });
-        },
-      },
-    ];
   }
 
   function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
