@@ -20,7 +20,7 @@ import {
   clientYToLocalY,
   screenXToSeconds,
   secondsToScreenX,
-} from "./timelineMath";
+} from "./timeline/timelineMath";
 import type {
   NativeClientPointCandidate,
   NativeDropCandidateDebug,

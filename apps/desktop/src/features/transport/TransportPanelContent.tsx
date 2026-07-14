@@ -170,20 +170,20 @@ import {
   markerKindVariants,
   availableCueKinds,
 } from "./markerKinds";
-import { TimelineCanvasPane } from "./TimelineCanvasPane";
-import { HorizontalScrollbar } from "./HorizontalScrollbar";
+import { TimelineCanvasPane } from "./timeline/TimelineCanvasPane";
+import { HorizontalScrollbar } from "./timeline/HorizontalScrollbar";
 import { useRenderCounter } from "./perf/useRenderCounter";
-import { CompactView } from "./CompactView";
-import { TimelineToolbar } from "./TimelineToolbar";
-import { TimelineTopbar } from "./TimelineTopbar";
-import { PadsPopover } from "./PadsPopover";
-import { TrackHeadersPane } from "./TrackHeadersPane";
-import { buildClipSnapAnchors, findSnappedGroupDelta } from "./clipSnapping";
+import { CompactView } from "./compact/CompactView";
+import { TimelineToolbar } from "./timeline/TimelineToolbar";
+import { TimelineTopbar } from "./timeline/TimelineTopbar";
+import { PadsPopover } from "./panels/PadsPopover";
+import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
+import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
   clampGroupRowDelta,
   resolveMemberTargetTrackId,
-} from "./clipVerticalDrag";
-import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
+} from "./timeline/clipVerticalDrag";
+import { snapToTimelineGrid, useTimelineGrid } from "./timeline/useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
   clampCameraX,
@@ -200,7 +200,7 @@ import {
   secondsToScreenX,
   TIMELINE_ZOOM_MULTIPLIER,
   zoomCameraAtViewportX,
-} from "./timelineMath";
+} from "./timeline/timelineMath";
 import { useTransportStore, type OptimisticMixState } from "./store";
 import {
   createPendingAudioImports,
@@ -216,7 +216,7 @@ import {
   type PendingLibraryAssetSummary,
   type TimelineClipSummary,
   type TimelineTrackSummary,
-} from "./pendingAudioImports";
+} from "./library/pendingAudioImports";
 import { TIMELINE_DEFAULT_TRACK_HEIGHT, useTimelineUIStore } from "./uiStore";
 import { SideNav } from "./shell/SideNav";
 import { SettingsPanel } from "./panels/SettingsPanel";
@@ -231,8 +231,8 @@ import {
 } from "./panels/AutomationCueModal";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
-import { MobileLanding } from "./MobileLanding";
-import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
+import { MobileLanding } from "./compact/MobileLanding";
+import { pickFilesViaWebView, stageFileForImport } from "./library/mobileFilePicker";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
@@ -266,7 +266,7 @@ import {
   type ExternalDropKind,
   type ExternalDropPreview,
   type NativeDroppedPathClassification,
-} from "./dragDrop";
+} from "./library/dragDrop";
 import type {
   ClipDragMember,
   ClipDragState,

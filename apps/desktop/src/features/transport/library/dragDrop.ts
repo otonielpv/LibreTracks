@@ -6,7 +6,7 @@ import {
   localXToClientX,
   screenXToSeconds,
   secondsToScreenX,
-} from "./timelineMath";
+} from "../timeline/timelineMath";
 
 export const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 

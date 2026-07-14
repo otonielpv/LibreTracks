@@ -9,10 +9,10 @@ import {
 } from "@libretracks/shared/faderScale";
 
 import { AudioRouteCombobox } from "./AudioRouteCombobox";
-import { useFineDragRange } from "./useFineDragRange";
-import type { TrackKind } from "./desktopApi";
+import { useFineDragRange } from "../timeline/useFineDragRange";
+import type { TrackKind } from "../desktopApi";
 import { TrackMeter } from "./TrackMeter";
-import { useTransportStore } from "./store";
+import { useTransportStore } from "../store";
 
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;

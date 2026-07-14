@@ -4,8 +4,8 @@ import {
   buildClipSnapAnchors,
   findSnappedGroupDelta,
 } from "./clipSnapping";
-import type { SongView } from "./desktopApi";
-import type { ClipDragMember, ClipSnapAnchor } from "./types";
+import type { SongView } from "../desktopApi";
+import type { ClipDragMember, ClipSnapAnchor } from "../types";
 
 function makeSong(overrides: Partial<SongView> = {}): SongView {
   return {

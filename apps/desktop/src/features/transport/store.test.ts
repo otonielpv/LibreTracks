@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { TransportSnapshot } from "./desktopApi";
-import type { PendingAudioImport } from "./pendingAudioImports";
+import type { PendingAudioImport } from "./library/pendingAudioImports";
 import {
   meterDictionaryFromLevels,
   regionMeterDictionaryFromLevels,

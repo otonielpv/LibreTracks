@@ -14,7 +14,7 @@ import {
   stepMeterDb,
 } from "@libretracks/shared/meterBallistics";
 
-import { useTransportStore, type TrackMeterState } from "./store";
+import { useTransportStore, type TrackMeterState } from "../store";
 
 const EMPTY_METER: TrackMeterState = {
   leftPeak: 0,

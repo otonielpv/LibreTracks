@@ -1,7 +1,7 @@
 import {
   getCumulativeMusicalPosition,
   type TimelineRegion,
-} from "../features/transport/timelineMath";
+} from "../features/transport/timeline/timelineMath";
 import type {
   AppSettings,
   AutomationCueSummary,

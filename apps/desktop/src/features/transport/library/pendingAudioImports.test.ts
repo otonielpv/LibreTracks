@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { LibraryAssetSummary } from "./desktopApi";
+import type { LibraryAssetSummary } from "../desktopApi";
 import {
   createPendingAudioImportsFromPaths,
   mergeLibraryAssetsByFilePath,

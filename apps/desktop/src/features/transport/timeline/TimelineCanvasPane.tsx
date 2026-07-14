@@ -12,7 +12,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
-import type { TimelineNavigationScheme } from "./Renderer/InputManager";
+import type { TimelineNavigationScheme } from "../Renderer/InputManager";
 import type {
   ActiveVampSummary,
   AutomationCueSummary,
@@ -23,23 +23,23 @@ import type {
   SongView,
   TimeSignatureMarkerSummary,
   WaveformSummaryDto,
-} from "./desktopApi";
+} from "../desktopApi";
 import type {
   TimelineClipSummary,
   TimelineTrackSummary,
-} from "./pendingAudioImports";
-import { formatTransposeSemitones, isAndroidApp } from "./desktopApi";
+} from "../library/pendingAudioImports";
+import { formatTransposeSemitones, isAndroidApp } from "../desktopApi";
 import { buildSongTempoRegions } from "@libretracks/shared/models";
 import { formatGainDb } from "@libretracks/shared/faderScale";
-import { useRenderCounter } from "./perf/useRenderCounter";
+import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
   LANE_CUES,
   LANE_REGIONS,
   LANE_SECTIONS,
   LANE_TEMPO_METRIC,
-} from "./Renderer/drawBackground";
-import { markerKindCategory } from "./markerKinds";
+} from "../Renderer/drawBackground";
+import { markerKindCategory } from "../markerKinds";
 import {
   BASE_PIXELS_PER_SECOND,
   getElementScaleX,
@@ -56,7 +56,7 @@ import {
   type DroppedFileClassification,
   type ExternalDropKind,
   type ExternalDropPreview,
-} from "./dragDrop";
+} from "../library/dragDrop";
 
 // Must stay in sync with the lane layout in Renderer/drawBackground.ts and
 // the .lt-android ruler heights in styles.css: 94px is the mobile lanes'

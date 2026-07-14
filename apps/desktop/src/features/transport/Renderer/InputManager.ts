@@ -3,7 +3,7 @@ import {
   clientDeltaXToLocalDelta,
   clientXToLocalX,
   getElementScaleX,
-} from "../timelineMath";
+} from "../timeline/timelineMath";
 
 type NativeZoomView = {
   cameraX: number;

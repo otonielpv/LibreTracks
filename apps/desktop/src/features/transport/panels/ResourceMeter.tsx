@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useSystemResources } from "./hooks/useSystemResources";
+import { useSystemResources } from "../hooks/useSystemResources";
 
 /** Format a byte count as a human-readable size (e.g. "1.4 GB"). */
 function formatBytes(bytes: number): string {

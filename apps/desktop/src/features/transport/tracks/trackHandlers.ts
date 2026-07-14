@@ -6,7 +6,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import type { TrackDropState } from "../types";
-import { AUTOMATION_TRACK_ID } from "../pendingAudioImports";
+import { AUTOMATION_TRACK_ID } from "../library/pendingAudioImports";
 
 type MoveTrackArgs = {
   trackId: string;

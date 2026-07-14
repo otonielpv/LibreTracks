@@ -1,9 +1,9 @@
 import type { MutableRefObject } from "react";
 
 import type { SongView, WaveformSummaryDto } from "../desktopApi";
-import type { TimelineClipSummary, TimelineTrackSummary } from "../pendingAudioImports";
+import type { TimelineClipSummary, TimelineTrackSummary } from "../library/pendingAudioImports";
 import { recordCanvasRender } from "../perf/perfMetrics";
-import type { TimelineGrid } from "../timelineMath";
+import type { TimelineGrid } from "../timeline/timelineMath";
 
 export type TrackSceneSnapshot = {
   width: number;

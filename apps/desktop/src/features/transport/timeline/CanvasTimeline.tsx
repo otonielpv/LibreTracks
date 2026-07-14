@@ -17,35 +17,35 @@ import type {
   TimeSignatureMarkerSummary,
   SongView,
   WaveformSummaryDto,
-} from "./desktopApi";
+} from "../desktopApi";
 import type {
   TimelineClipSummary,
   TimelineTrackSummary,
-} from "./pendingAudioImports";
+} from "../library/pendingAudioImports";
 import {
   InputManager,
   type TimelineNavigationScheme,
-} from "./Renderer/InputManager";
+} from "../Renderer/InputManager";
 import {
   drawGridLines,
   drawRulerBackgroundLayer,
-} from "./Renderer/drawBackground";
-import { drawRulerForegroundLayer } from "./Renderer/drawForeground";
+} from "../Renderer/drawBackground";
+import { drawRulerForegroundLayer } from "../Renderer/drawForeground";
 import {
   buildTrackStructureSignature,
   drawTrackCanvasBackground,
   drawTrackClipsLayer,
-} from "./Renderer/drawTracks";
+} from "../Renderer/drawTracks";
 import {
   TimelineRenderer,
   type TimelineViewportMetrics,
   type TrackSceneSnapshot,
-} from "./Renderer/TimelineRenderer";
+} from "../Renderer/TimelineRenderer";
 import {
   TRACK_HEIGHT_MAX,
   TRACK_HEIGHT_MIN,
   TRACK_HEIGHT_STEP,
-} from "./constants";
+} from "../constants";
 import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
 

@@ -1,5 +1,5 @@
-import type { TimelineTrackSummary } from "./pendingAudioImports";
-import type { ClipDragMember } from "./types";
+import type { TimelineTrackSummary } from "../library/pendingAudioImports";
+import type { ClipDragMember } from "../types";
 
 /**
  * A track row is a valid drop target for a clip when it exists, is not a

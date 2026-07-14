@@ -1,8 +1,8 @@
-import type { SongView } from "./desktopApi";
+import type { SongView } from "../desktopApi";
 import type {
   ClipDragMember,
   ClipSnapAnchor,
-} from "./types";
+} from "../types";
 
 /**
  * Build the list of anchor points the user can magnet a dragged clip group

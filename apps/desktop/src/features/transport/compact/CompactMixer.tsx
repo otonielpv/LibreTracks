@@ -25,9 +25,9 @@ import {
 // centred). Computed once — the scale never changes.
 const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
 
-import type { TrackSummary } from "./desktopApi";
-import { TrackMeter } from "./TrackMeter";
-import { useTransportStore, type OptimisticMixState } from "./store";
+import type { TrackSummary } from "../desktopApi";
+import { TrackMeter } from "../tracks/TrackMeter";
+import { useTransportStore, type OptimisticMixState } from "../store";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip

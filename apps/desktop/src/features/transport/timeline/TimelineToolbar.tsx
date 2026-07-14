@@ -14,14 +14,14 @@ import {
   formatTransposeSemitones,
   isAndroidApp,
   type SongRegionSummary,
-} from "./desktopApi";
-import { useTransportStore } from "./store";
+} from "../desktopApi";
+import { useTransportStore } from "../store";
 import type {
   GlobalJumpMode,
   SongJumpTrigger,
   SongTransitionMode,
   VampMode,
-} from "./uiStore";
+} from "../uiStore";
 
 type RegionMasterFaderProps = {
   regionId: string;

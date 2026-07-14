@@ -2,7 +2,7 @@ import type {
   ClipSummary,
   LibraryAssetSummary,
   TrackSummary,
-} from "./desktopApi";
+} from "../desktopApi";
 
 export type PendingAudioImportStatus =
   | "queued"

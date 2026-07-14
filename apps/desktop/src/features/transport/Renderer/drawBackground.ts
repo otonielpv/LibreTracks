@@ -6,9 +6,9 @@ import {
   type SongRegionSummary,
   type TempoMarkerSummary,
 } from "../desktopApi";
-import type { TimelineGrid } from "../timelineMath";
+import type { TimelineGrid } from "../timeline/timelineMath";
 import { markerColor, markerKindCategory } from "../markerKinds";
-import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
+import { screenXToSeconds, secondsToScreenX } from "../timeline/timelineMath";
 
 /** Convert a `#rrggbb` colour to an `rgba(...)` string at the given alpha. Used
  * to derive the translucent flag fill from a marker kind's solid colour. */

@@ -4,8 +4,8 @@ import {
   clampGroupRowDelta,
   resolveMemberTargetTrackId,
 } from "./clipVerticalDrag";
-import type { TimelineTrackSummary } from "./pendingAudioImports";
-import type { ClipDragMember } from "./types";
+import type { TimelineTrackSummary } from "../library/pendingAudioImports";
+import type { ClipDragMember } from "../types";
 
 function track(
   id: string,

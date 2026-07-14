@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { RemoteServerInfo } from "@libretracks/shared/models";
-import { RemoteAccessCard } from "../RemoteAccessCard";
+import { RemoteAccessCard } from "./RemoteAccessCard";
 
 type RemotePanelProps = {
   isOpen: boolean;

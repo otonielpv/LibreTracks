@@ -1,12 +1,12 @@
 import type { SongView } from "../desktopApi";
-import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../pendingAudioImports";
+import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../library/pendingAudioImports";
 import { clipDisplayName } from "../helpers";
 // The canvas renderer is not a React component, so it reads from the i18n
 // singleton directly (whose .t always reflects the current language) rather
 // than threading `t` through every snapshot construction site.
 import i18n from "../../../shared/i18n";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
-import { clamp, secondsToScreenX } from "../timelineMath";
+import { clamp, secondsToScreenX } from "../timeline/timelineMath";
 import {
   getWaveformRenderPixelsPerSecond,
   WaveformTileCache,

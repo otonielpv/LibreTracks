@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { pickSessionFolder } from "./desktopApi";
+import { pickSessionFolder } from "../desktopApi";
 
 type MobileLandingProps = {
   /** Create the session under `parentDir` (a folder the user picked) — the

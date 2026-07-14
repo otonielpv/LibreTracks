@@ -5,9 +5,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import type { TransportClock, TransportSnapshot } from "./desktopApi";
-import { useRenderCounter } from "./perf/useRenderCounter";
-import { useTransportStore } from "./store";
+import type { TransportClock, TransportSnapshot } from "../desktopApi";
+import { useRenderCounter } from "../perf/useRenderCounter";
+import { useTransportStore } from "../store";
 import {
   clamp,
   clientXToLocalX,

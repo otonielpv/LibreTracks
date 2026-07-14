@@ -6,8 +6,8 @@ import {
   isAndroidApp,
   type PlaybackState,
   type SongView,
-} from "./desktopApi";
-import { ResourceMeter } from "./ResourceMeter";
+} from "../desktopApi";
+import { ResourceMeter } from "../panels/ResourceMeter";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;

@@ -9,7 +9,7 @@ import type {
 import type {
   PendingAudioImport,
   PendingAudioImportStatus,
-} from "./pendingAudioImports";
+} from "./library/pendingAudioImports";
 
 export type TrackMeterState = {
   leftPeak: number;

@@ -23,9 +23,9 @@ import {
   CompactMixer,
   type CompactMixerHandlers,
 } from "./CompactMixer";
-import { isAndroidApp } from "./desktopApi";
-import { LIBRARY_ASSET_DRAG_MIME } from "./dragDrop";
-import { clientToZoomedCoords } from "../../shared/uiZoom";
+import { isAndroidApp } from "../desktopApi";
+import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
+import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import {
   createEmptySong,
   regionEffectiveKey,
@@ -33,8 +33,8 @@ import {
   type SongRegionSummary,
   type TrackSummary,
   type TransportSnapshot,
-} from "./desktopApi";
-import { useTransportStore } from "./store";
+} from "../desktopApi";
+import { useTransportStore } from "../store";
 
 export type CompactClipEntry = {
   id: string;

@@ -3,7 +3,7 @@ import type {
   WaveformLodDto,
   WaveformSummaryDto,
 } from "../desktopApi";
-import { clamp } from "../timelineMath";
+import { clamp } from "../timeline/timelineMath";
 
 export const WAVEFORM_TILE_WIDTH_PX = 1024;
 const TILE_HEIGHT_PX = 256;

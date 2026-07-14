@@ -5,7 +5,7 @@ import type {
   TempoMarkerSummary,
   TimeSignatureMarkerSummary,
 } from "../desktopApi";
-import { secondsToScreenX } from "../timelineMath";
+import { secondsToScreenX } from "../timeline/timelineMath";
 
 import { drawRulerMarker, drawRulerTempoMarker } from "./drawBackground";
 

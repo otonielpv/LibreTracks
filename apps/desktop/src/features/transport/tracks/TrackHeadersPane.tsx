@@ -6,9 +6,9 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import { densityFromHeight } from "./constants";
-import type { SongView } from "./desktopApi";
-import type { TimelineTrackSummary } from "./pendingAudioImports";
+import { densityFromHeight } from "../constants";
+import type { SongView } from "../desktopApi";
+import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import { TrackHeaderItem } from "./TrackHeaderItem";
 
 type LibraryPreviewRow = {

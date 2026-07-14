@@ -10,9 +10,9 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import { isAndroidApp, type LibraryImportProgressEvent } from "./desktopApi";
+import { isAndroidApp, type LibraryImportProgressEvent } from "../desktopApi";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
-import { clientToZoomedCoords } from "../../shared/uiZoom";
+import { clientToZoomedCoords } from "../../../shared/uiZoom";
 
 type ContextMenuAction = {
   label: string;

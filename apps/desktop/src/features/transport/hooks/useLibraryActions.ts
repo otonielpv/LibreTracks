@@ -7,7 +7,7 @@ import {
   isTauriApp,
   listenToLibraryImportProgress,
 } from "../desktopApi";
-import { mergeLibraryAssetsByFilePath } from "../pendingAudioImports";
+import { mergeLibraryAssetsByFilePath } from "../library/pendingAudioImports";
 
 type UseLibraryActionsProps = {
   playbackSongDir: string | null;

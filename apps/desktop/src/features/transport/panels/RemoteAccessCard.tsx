@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
-import type { RemoteServerInfo } from "./desktopApi";
+import type { RemoteServerInfo } from "../desktopApi";
 
 type RemoteAccessCardProps = {
   remoteServerInfo: RemoteServerInfo | null;

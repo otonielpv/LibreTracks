@@ -2,8 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import type { LibraryImportProgressEvent } from "../desktopApi";
 import { libraryAssetFileName } from "../helpers";
-import { LibrarySidebarPanel } from "../LibrarySidebarPanel";
-import type { PendingLibraryAssetSummary } from "../pendingAudioImports";
+import { LibrarySidebarPanel } from "../library/LibrarySidebarPanel";
+import type { PendingLibraryAssetSummary } from "../library/pendingAudioImports";
 import type { InternalLibraryPointerDrag, SidebarTab } from "../types";
 
 type LibraryPanelProps = {

@@ -14,7 +14,7 @@ import { buildAudioRoutingOptions } from "./helpers";
 import {
   buildTimelineDropPreviewGeometry,
   resolveExternalDropGuideLeft,
-} from "./dragDrop";
+} from "./library/dragDrop";
 
 function candidate(
   label: NativeDropCoordinateMode,

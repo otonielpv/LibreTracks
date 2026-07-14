@@ -21,7 +21,7 @@ import {
   saveProjectAs,
   saveSessionAsTemplate,
 } from "../desktopApi";
-import { nextPaint } from "../pendingAudioImports";
+import { nextPaint } from "../library/pendingAudioImports";
 import type { SidebarTab } from "../types";
 
 type UseProjectActionsProps = {

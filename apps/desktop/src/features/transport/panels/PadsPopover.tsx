@@ -22,8 +22,8 @@ import {
   getPadsCatalog,
   listenToPadDownloadProgress,
   type PadDownloadProgressEvent,
-} from "./desktopApi";
-import { AudioRouteCombobox } from "./AudioRouteCombobox";
+} from "../desktopApi";
+import { AudioRouteCombobox } from "../tracks/AudioRouteCombobox";
 
 type RouteOption = { value: string; label: string };
 
