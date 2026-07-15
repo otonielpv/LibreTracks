@@ -115,6 +115,50 @@ describe("createMetronomeDeviceHandlers", () => {
     expect(setStatus).not.toHaveBeenCalled();
   });
 
+  it("enabling a selected pad decodes its clip via loadPadKey (not just realtime config)", async () => {
+    // Regression: the cheap realtime path never calls set_clip, so on the first
+    // enable the renderer stayed silent until an unrelated key change. Enabling
+    // must route through loadPadKey so the clip is actually decoded/swapped in.
+    const appSettingsRef = {
+      current: { ...DEFAULT_APP_SETTINGS, padId: "warm", padKey: 3 },
+    };
+    const { handlers, deps } = setup({ appSettingsRef });
+    handlers.handlePadEnabledChange(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    const loadArg = (deps.loadPadKey as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as AppSettings;
+    expect(loadArg.padEnabled).toBe(true);
+    expect(deps.loadPadKey).toHaveBeenCalledTimes(1);
+    expect(deps.setPadConfigRealtime).not.toHaveBeenCalled();
+  });
+
+  it("disabling the pad uses the cheap realtime path (silences immediately)", async () => {
+    const appSettingsRef = {
+      current: {
+        ...DEFAULT_APP_SETTINGS,
+        padId: "warm",
+        padKey: 3,
+        padEnabled: true,
+      },
+    };
+    const { handlers, deps } = setup({ appSettingsRef });
+    handlers.handlePadEnabledChange(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(deps.loadPadKey).not.toHaveBeenCalled();
+    expect(deps.setPadConfigRealtime).toHaveBeenCalledTimes(1);
+  });
+
+  it("enabling with no pad selected stays on the realtime path (nothing to decode)", async () => {
+    const { handlers, deps } = setup();
+    handlers.handlePadEnabledChange(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(deps.loadPadKey).not.toHaveBeenCalled();
+    expect(deps.setPadConfigRealtime).toHaveBeenCalledTimes(1);
+  });
+
   it("handleRefreshMidiInputDevices is a no-op while already refreshing", async () => {
     const getMidiInputs = vi.fn(async () => ["dev"]);
     const { handlers, deps } = setup({

@@ -126,6 +126,8 @@ struct CmdSetPadConfig {
     std::string route = "master";
     int key = 0;               // 0..11 (C..B)
     std::string pad_id;
+    float fade_in_seconds = 0.0f;   // soft entrance on enable (0 = near-instant)
+    float fade_out_seconds = 0.0f;  // soft exit on disable / key swap
 };
 
 // Decode a single pad key from disk and hand it to the renderer. Runs the

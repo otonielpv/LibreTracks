@@ -202,6 +202,10 @@ pub enum AutomationActionSummary {
         pad_key: i32,
         volume: f64,
         output: String,
+        #[serde(rename = "fadeInSeconds", skip_serializing_if = "Option::is_none")]
+        fade_in_seconds: Option<f64>,
+        #[serde(rename = "fadeOutSeconds", skip_serializing_if = "Option::is_none")]
+        fade_out_seconds: Option<f64>,
     },
     Wait {
         #[serde(rename = "durationSeconds")]
@@ -695,12 +699,16 @@ pub(crate) fn automation_action_to_summary(
             pad_key,
             volume,
             output,
+            fade_in_seconds,
+            fade_out_seconds,
         } => AutomationActionSummary::SetPad {
             enabled: *enabled,
             pad_id: pad_id.clone(),
             pad_key: *pad_key,
             volume: *volume,
             output: output.clone(),
+            fade_in_seconds: *fade_in_seconds,
+            fade_out_seconds: *fade_out_seconds,
         },
         AutomationAction::Wait { duration_seconds } => AutomationActionSummary::Wait {
             duration_seconds: *duration_seconds,

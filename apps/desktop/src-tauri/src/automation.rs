@@ -137,6 +137,14 @@ pub enum AutomationAction {
         pad_key: i32,
         volume: f64,
         output: String,
+        /// Soft-entrance duration in seconds when this cue turns the pad on.
+        /// 0 / absent = the pad enters at its normal (near-instant) speed.
+        #[serde(rename = "fadeInSeconds", default, skip_serializing_if = "Option::is_none")]
+        fade_in_seconds: Option<f64>,
+        /// Soft-exit duration in seconds when this cue turns the pad off (or
+        /// swaps its key/pack). 0 / absent = the fast performance swap.
+        #[serde(rename = "fadeOutSeconds", default, skip_serializing_if = "Option::is_none")]
+        fade_out_seconds: Option<f64>,
     },
     Wait {
         #[serde(rename = "durationSeconds")]
@@ -316,6 +324,8 @@ mod tests {
                         pad_key: 7,
                         volume: 0.7,
                         output: "master".into(),
+                        fade_in_seconds: Some(3.0),
+                        fade_out_seconds: None,
                     },
                     AutomationAction::Jump {
                         target: AutomationJumpTarget::Region {

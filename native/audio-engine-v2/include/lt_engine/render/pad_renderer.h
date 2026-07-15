@@ -46,6 +46,14 @@ struct PadConfig {
     std::string output_route = "master";
     int   key = 0;                 // 0..11 (C..B) — the currently selected key
     std::string pad_id;            // installed pad folder name (diagnostics only)
+    // Soft-entrance duration in seconds. When >0, enabling the pad (or an
+    // automation cue turning it on) ramps the level up over this time instead of
+    // the near-instant 5 ms default.
+    float fade_in_seconds = 0.0f;
+    // Soft-exit duration in seconds. When >0, disabling the pad ramps the level
+    // down over this time, and a key/pack swap crossfades over this time so the
+    // outgoing pad leaves gently instead of being replaced almost instantly.
+    float fade_out_seconds = 0.0f;
 };
 
 struct PadDiagnostics {
@@ -74,6 +82,8 @@ public:
     void set_config(const PadConfig& config);
     void set_enabled(bool enabled);
     void set_volume(float volume);
+    void set_fade_in_seconds(float seconds);
+    void set_fade_out_seconds(float seconds);
     PadConfig config() const;
 
     // Publish a freshly-decoded key clip (or nullptr to clear). The audio
@@ -94,6 +104,8 @@ private:
 
     std::atomic<bool>  enabled_{false};
     std::atomic<float> volume_{1.0f};
+    std::atomic<float> fade_in_seconds_{0.0f};
+    std::atomic<float> fade_out_seconds_{0.0f};
     std::atomic<int>   key_{0};
     std::atomic<int>   route_mode_{static_cast<int>(RouteMode::Master)};
     std::atomic<int>   route_start_{0};
@@ -122,6 +134,15 @@ private:
     int crossfade_total_ = 0;
 
     float current_output_gain_ = 0.0f;
+    // Linear per-sample step the output gain moves toward its target by. Captured
+    // when a level change begins (enable/disable/volume) from the appropriate
+    // ramp duration, then held across blocks so a multi-second musical fade is a
+    // straight, predictable ramp rather than an ever-slowing one-pole tail.
+    float gain_step_ = 0.0f;
+    // Tracks the enabled state the audio thread last saw, so render() can detect
+    // the enable→disable / disable→enable edge and pick the fade-in vs fade-out
+    // ramp for the level change (vs the fast default for volume tweaks).
+    bool was_enabled_ = false;
 
     std::array<char, 64> route_resolved_{};
     std::array<char, 64> muted_reason_{};

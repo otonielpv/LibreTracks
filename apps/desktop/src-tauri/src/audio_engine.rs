@@ -1392,6 +1392,8 @@ impl AudioController {
                 route: settings.pad_output.clone(),
                 key: settings.pad_key,
                 pad_id: settings.pad_id.clone(),
+                fade_in_seconds: settings.pad_fade_in_seconds as f32,
+                fade_out_seconds: settings.pad_fade_out_seconds as f32,
             })?;
             Ok(())
         })
@@ -1401,6 +1403,7 @@ impl AudioController {
     /// the same detached decoder as manual changes; decoding runs on a worker
     /// thread so the transport/session lock is never held while reading a long
     /// pad file. The renderer performs the normal click-free swap on completion.
+    #[allow(clippy::too_many_arguments)]
     pub fn set_pad_automation_realtime(
         &self,
         enabled: bool,
@@ -1408,6 +1411,8 @@ impl AudioController {
         pad_key: i32,
         volume: f64,
         output: &str,
+        fade_in_seconds: f64,
+        fade_out_seconds: f64,
     ) -> Result<(), DesktopError> {
         let mut settings = self.current_settings()?;
         let clip_changed = settings.pad_id != pad_id || settings.pad_key != pad_key;
@@ -1416,6 +1421,10 @@ impl AudioController {
         settings.pad_key = pad_key.clamp(0, 11);
         settings.pad_volume = volume.clamp(0.0, 10.0);
         settings.pad_output = output.to_string();
+        // The cue carries its own soft entrance / exit so a mid-song pad can
+        // swell in gently regardless of the pad's default fade settings.
+        settings.pad_fade_in_seconds = fade_in_seconds.clamp(0.0, 30.0);
+        settings.pad_fade_out_seconds = fade_out_seconds.clamp(0.0, 30.0);
         self.set_pad_config_realtime(&settings)?;
         self.replace_settings(settings.clone())?;
 
@@ -1779,6 +1788,8 @@ impl AudioController {
                 route: settings.pad_output.clone(),
                 key: settings.pad_key,
                 pad_id: settings.pad_id.clone(),
+                fade_in_seconds: settings.pad_fade_in_seconds as f32,
+                fade_out_seconds: settings.pad_fade_out_seconds as f32,
             })?;
             state.settings = settings;
             Ok(())

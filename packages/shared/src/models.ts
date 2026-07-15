@@ -279,6 +279,10 @@ export type AutomationActionSummary =
       padKey: number;
       volume: number;
       output: string;
+      /** Soft-entrance seconds when this cue turns the pad on (0/undefined = instant). */
+      fadeInSeconds?: number | null;
+      /** Soft-exit seconds when this cue turns the pad off / swaps key (0/undefined = fast). */
+      fadeOutSeconds?: number | null;
     }
   | { type: "wait"; durationSeconds: number };
 
@@ -701,6 +705,10 @@ export type AppSettings = {
   padKey: number;
   padVolume: number;
   padOutput: string;
+  /** Soft-entrance duration in seconds when the pad is enabled (0 = instant). */
+  padFadeInSeconds: number;
+  /** Soft-exit duration in seconds on disable / key swap (0 = fast swap). */
+  padFadeOutSeconds: number;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker";
@@ -751,6 +759,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   padKey: 0,
   padVolume: 1.0,
   padOutput: "master",
+  padFadeInSeconds: 0,
+  padFadeOutSeconds: 0,
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -957,6 +967,12 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.padVolume))
       : DEFAULT_APP_SETTINGS.padVolume,
     padOutput,
+    padFadeInSeconds: Number.isFinite(settings.padFadeInSeconds)
+      ? Math.min(30, Math.max(0, settings.padFadeInSeconds))
+      : DEFAULT_APP_SETTINGS.padFadeInSeconds,
+    padFadeOutSeconds: Number.isFinite(settings.padFadeOutSeconds)
+      ? Math.min(30, Math.max(0, settings.padFadeOutSeconds))
+      : DEFAULT_APP_SETTINGS.padFadeOutSeconds,
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,

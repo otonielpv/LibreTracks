@@ -238,6 +238,57 @@ TEST_CASE("failed replacement keeps the current pad audible") {
     CHECK(max_abs(out[0]) > 0.5f);
 }
 
+TEST_CASE("configured fade-in ramps the level up over its duration") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    cfg.fade_in_seconds = 1.0f;  // 1 s soft entrance at 48 kHz = 48000 frames
+    pad.set_config(cfg);
+    pad.set_clip(make_clip(4096, 1.0f, 1.0f));
+
+    // Halfway through a 1 s fade (~24000 frames) the gain should be roughly
+    // half, i.e. clearly below full but well above zero — proving the entrance
+    // is a slow ramp, not the near-instant 5 ms default.
+    auto early = render_block(pad, 2, 512);
+    CHECK(max_abs(early[0]) < 0.1f);  // still ramping up right after enable
+
+    for (int i = 0; i < 46; ++i) render_block(pad, 2, 512);  // ~24k frames total
+    auto mid = render_block(pad, 2, 512);
+    CHECK(mid[0].back() > 0.35f);
+    CHECK(mid[0].back() < 0.75f);
+
+    // After the full second it reaches (near) unity.
+    for (int i = 0; i < 60; ++i) render_block(pad, 2, 512);
+    auto late = render_block(pad, 2, 512);
+    CHECK(late[0].back() > 0.95f);
+}
+
+TEST_CASE("configured fade-out ramps the level down over its duration") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.fade_out_seconds = 1.0f;
+    pad.set_config(cfg);
+    pad.set_clip(make_clip(4096, 1.0f, 1.0f));
+
+    // Settle at full level (no fade-in configured → fast default ramp).
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 512);
+    CHECK(render_block(pad, 2, 512)[0].back() > 0.95f);
+
+    // Disable: the level must ease down over ~1 s rather than cut instantly.
+    cfg.enabled = false;
+    pad.set_config(cfg);
+    auto just_after = render_block(pad, 2, 512);
+    CHECK(just_after[0].back() > 0.85f);  // barely moved right after disable
+
+    for (int i = 0; i < 120; ++i) render_block(pad, 2, 512);  // > 1 s
+    auto out = render_block(pad, 2, 512);
+    CHECK(max_abs(out[0]) < 0.02f);  // fully faded to silence
+}
+
 TEST_CASE("empty clip yields silence and a muted reason") {
     PadRenderer pad;
     PadConfig cfg;

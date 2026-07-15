@@ -2768,6 +2768,8 @@ impl DesktopSession {
                 pad_key,
                 volume,
                 output,
+                fade_in_seconds,
+                fade_out_seconds,
             } => {
                 audio.set_pad_automation_realtime(
                     *enabled,
@@ -2775,6 +2777,8 @@ impl DesktopSession {
                     *pad_key,
                     *volume,
                     output,
+                    fade_in_seconds.unwrap_or(0.0),
+                    fade_out_seconds.unwrap_or(0.0),
                 )?;
             }
             // Jump and Wait are handled by the scheduler/executor, not here.
@@ -8592,6 +8596,8 @@ fn validate_automation_cue(
                 pad_key,
                 volume,
                 output,
+                fade_in_seconds,
+                fade_out_seconds,
                 ..
             } => {
                 if pad_id.trim().is_empty() {
@@ -8613,6 +8619,18 @@ fn validate_automation_cue(
                     return Err(DesktopError::AudioCommand(
                         "automation pad output is required".into(),
                     ));
+                }
+                for (fade, label) in [
+                    (fade_in_seconds, "fade-in"),
+                    (fade_out_seconds, "fade-out"),
+                ] {
+                    if let Some(seconds) = fade {
+                        if !seconds.is_finite() || !(0.0..=30.0).contains(seconds) {
+                            return Err(DesktopError::AudioCommand(format!(
+                                "automation pad {label} must be between 0 and 30 seconds"
+                            )));
+                        }
+                    }
                 }
             }
             AutomationAction::Wait { duration_seconds } => {

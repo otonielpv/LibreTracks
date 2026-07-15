@@ -134,6 +134,12 @@ pub enum EngineCommand {
         /// Installed pad folder name (diagnostics only).
         #[serde(default)]
         pad_id: String,
+        /// Soft-entrance duration in seconds; 0 keeps the near-instant default.
+        #[serde(default)]
+        fade_in_seconds: f32,
+        /// Soft-exit duration in seconds (disable / key swap); 0 = fast swap.
+        #[serde(default)]
+        fade_out_seconds: f32,
     },
 
     /// Decode a single ambient-pad key from disk and swap it into the renderer.

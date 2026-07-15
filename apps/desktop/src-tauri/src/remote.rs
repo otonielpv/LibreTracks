@@ -343,8 +343,17 @@ async fn run_remote_command_bridge(
                     previous.pad_id != next_settings.pad_id
                         || previous.pad_key != next_settings.pad_key
                 });
+                // Enabling the pad must also decode its clip: the realtime path
+                // only pushes atomics (never set_clip), so a fresh enable with an
+                // unchanged key would otherwise stay silent until the next key
+                // change (same bug as the desktop toggle). Treat a
+                // disabled→enabled transition as needing a decode too.
+                let just_enabled = next_settings.pad_enabled
+                    && previous_settings
+                        .as_ref()
+                        .map_or(true, |previous| !previous.pad_enabled);
 
-                if key_changed && !next_settings.pad_id.is_empty() {
+                if (key_changed || just_enabled) && !next_settings.pad_id.is_empty() {
                     if let Ok(base) = crate::commands::pads::pads_install_dir(&app) {
                         if let Some(directory) = base.to_str() {
                             let _ = state.audio.load_pad_clip(

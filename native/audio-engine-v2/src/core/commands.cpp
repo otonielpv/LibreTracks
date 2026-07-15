@@ -167,6 +167,8 @@ EngineCommand command_from_json(const std::string& raw) {
         c.route = j.value("route", std::string{"master"});
         c.key = j.value("key", 0);
         c.pad_id = j.value("pad_id", std::string{});
+        c.fade_in_seconds = j.value("fade_in_seconds", 0.0f);
+        c.fade_out_seconds = j.value("fade_out_seconds", 0.0f);
         return c;
     }
 
@@ -525,6 +527,8 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["route"] = c.route;
             j["key"] = c.key;
             j["pad_id"] = c.pad_id;
+            j["fade_in_seconds"] = c.fade_in_seconds;
+            j["fade_out_seconds"] = c.fade_out_seconds;
         }
         else if constexpr (std::is_same_v<T, CmdLoadPadClip>) {
             j["type"] = "LoadPadClip";

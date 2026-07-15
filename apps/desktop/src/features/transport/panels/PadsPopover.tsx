@@ -338,6 +338,20 @@ function PadsPopoverImpl({
             />
           </div>
 
+          <PadFadeField
+            kind="in"
+            seconds={settings.padFadeInSeconds}
+            onChange={(padFadeInSeconds) => onPadChange({ padFadeInSeconds })}
+            t={t}
+          />
+
+          <PadFadeField
+            kind="out"
+            seconds={settings.padFadeOutSeconds}
+            onChange={(padFadeOutSeconds) => onPadChange({ padFadeOutSeconds })}
+            t={t}
+          />
+
           <div className="lt-pads-field">
             <span className="lt-pads-field-label">
               {t("pads.output", { defaultValue: "Salida" })}
@@ -386,6 +400,64 @@ function PadsPopoverImpl({
   );
 
   return createPortal(body, document.body);
+}
+
+// A soft entrance/exit control: a checkbox that arms the fade plus a slider for
+// its duration. `seconds === 0` means "no fade" (the checkbox is off and the
+// slider hidden). Enabling defaults to a musical 2 s; the slider spans 0.5–8 s.
+const PAD_FADE_DEFAULT_SECONDS = 2;
+const PAD_FADE_MIN_SECONDS = 0.5;
+const PAD_FADE_MAX_SECONDS = 8;
+
+function PadFadeField({
+  kind,
+  seconds,
+  onChange,
+  t,
+}: {
+  kind: "in" | "out";
+  seconds: number;
+  onChange: (seconds: number) => void;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const enabled = seconds > 0;
+  const label =
+    kind === "in"
+      ? t("pads.fadeIn", { defaultValue: "Entrada suave" })
+      : t("pads.fadeOut", { defaultValue: "Salida suave" });
+  const sliderLabel =
+    kind === "in"
+      ? t("pads.fadeInDuration", { defaultValue: "Duración de entrada" })
+      : t("pads.fadeOutDuration", { defaultValue: "Duración de salida" });
+  return (
+    <div className="lt-pads-field lt-pads-fade-field">
+      <label className="lt-pads-toggle lt-pads-fade-toggle">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(event) =>
+            onChange(event.target.checked ? PAD_FADE_DEFAULT_SECONDS : 0)
+          }
+        />
+        <span>{label}</span>
+        {enabled && (
+          <span className="lt-pads-fade-value">{seconds.toFixed(1)} s</span>
+        )}
+      </label>
+      {enabled && (
+        <input
+          type="range"
+          className="lt-pads-fader lt-pads-fade-slider"
+          min={PAD_FADE_MIN_SECONDS}
+          max={PAD_FADE_MAX_SECONDS}
+          step={0.1}
+          value={seconds}
+          aria-label={sliderLabel}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+      )}
+    </div>
+  );
 }
 
 function PadDownloadRow({

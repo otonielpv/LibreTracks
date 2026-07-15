@@ -252,10 +252,20 @@ export function createMetronomeDeviceHandlers(
 
     handlePadEnabledChange(nextValue: boolean) {
       const nextSettings = applyLocal({ padEnabled: nextValue });
+      // Turning the pad ON must guarantee the selected key's clip is decoded
+      // into the renderer. The cheap realtime path only pushes atomics and never
+      // calls set_clip, so on the very first enable the renderer stays silent
+      // until an unrelated key change happens to trigger a decode. Route the
+      // enable through loadPadKey (which decodes off the command path and swaps
+      // the clip in) whenever a pad is selected; disabling stays on the cheap
+      // path so it silences immediately.
+      const needsClip = nextValue && nextSettings.padId !== "";
       void runAction(async () => {
         try {
           const savedSettings = normalizeAppSettings(
-            await setPadConfigRealtime(nextSettings),
+            needsClip
+              ? await loadPadKey(nextSettings)
+              : await setPadConfigRealtime(nextSettings),
           );
           appSettingsRef.current = savedSettings;
           setAppSettings(savedSettings);

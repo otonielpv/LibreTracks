@@ -133,6 +133,8 @@ std::shared_ptr<PadClip> load_pad_clip(const std::string& pads_dir,
 void PadRenderer::set_config(const PadConfig& config) {
     set_enabled(config.enabled);
     set_volume(config.volume);
+    set_fade_in_seconds(config.fade_in_seconds);
+    set_fade_out_seconds(config.fade_out_seconds);
     key_.store(std::clamp(config.key, 0, 11), std::memory_order_release);
     copy_text(pad_id_, config.pad_id);
 
@@ -177,10 +179,21 @@ void PadRenderer::set_volume(float volume) {
     volume_.store(std::clamp(volume, 0.0f, 4.0f), std::memory_order_release);
 }
 
+void PadRenderer::set_fade_in_seconds(float seconds) {
+    // Clamp to a sane musical range; 0 keeps the near-instant default.
+    fade_in_seconds_.store(std::clamp(seconds, 0.0f, 30.0f), std::memory_order_release);
+}
+
+void PadRenderer::set_fade_out_seconds(float seconds) {
+    fade_out_seconds_.store(std::clamp(seconds, 0.0f, 30.0f), std::memory_order_release);
+}
+
 PadConfig PadRenderer::config() const {
     PadConfig config;
     config.enabled = enabled_.load(std::memory_order_acquire);
     config.volume = volume_.load(std::memory_order_acquire);
+    config.fade_in_seconds = fade_in_seconds_.load(std::memory_order_acquire);
+    config.fade_out_seconds = fade_out_seconds_.load(std::memory_order_acquire);
     config.output_route = array_text(output_route_);
     config.key = key_.load(std::memory_order_acquire);
     config.pad_id = array_text(pad_id_);
@@ -206,6 +219,37 @@ void PadRenderer::render(float** output_channels,
     const bool enabled = enabled_.load(std::memory_order_acquire);
     const float volume = volume_.load(std::memory_order_acquire);
     const float target_gain = enabled ? volume : 0.0f;
+    const float fade_in_seconds = fade_in_seconds_.load(std::memory_order_acquire);
+    const float fade_out_seconds = fade_out_seconds_.load(std::memory_order_acquire);
+
+    // Pick the level-ramp duration from the enabled edge: a soft entrance on
+    // enable, a soft exit on disable, and the fast default for volume tweaks
+    // (and whenever the corresponding fade is 0). On any change to the target we
+    // (re)capture a constant linear per-sample step so the fade is a straight
+    // ramp across however many blocks it spans, not an ever-slowing tail.
+    const bool enable_edge = enabled && !was_enabled_;
+    const bool disable_edge = !enabled && was_enabled_;
+    was_enabled_ = enabled;
+
+    if (target_gain != current_output_gain_ && gain_step_ == 0.0f) {
+        // A level change is pending but no ramp is in flight — start one.
+        double ramp_seconds = kPadGainRampSeconds;
+        if (enable_edge && fade_in_seconds > 0.0f) {
+            ramp_seconds = fade_in_seconds;
+        } else if (disable_edge && fade_out_seconds > 0.0f) {
+            ramp_seconds = fade_out_seconds;
+        }
+        const double ramp_frames = std::max(1.0, sample_rate * ramp_seconds);
+        gain_step_ = static_cast<float>(
+            std::abs(target_gain - current_output_gain_) / ramp_frames);
+    } else if (enable_edge && fade_in_seconds > 0.0f) {
+        // A soft entrance always (re)arms its own slow ramp even mid-flight.
+        const double ramp_frames = std::max(1.0, sample_rate * fade_in_seconds);
+        gain_step_ = static_cast<float>(volume / ramp_frames);
+    } else if (disable_edge && fade_out_seconds > 0.0f) {
+        const double ramp_frames = std::max(1.0, sample_rate * fade_out_seconds);
+        gain_step_ = static_cast<float>(current_output_gain_ / ramp_frames);
+    }
 
     if (!enabled && current_output_gain_ <= 0.000001f) {
         copy_text(muted_reason_, "disabled");
@@ -230,8 +274,13 @@ void PadRenderer::render(float** output_channels,
             read_frame_ = pending_frames > 0
                 ? outgoing_read_frame_ % pending_frames
                 : 0;
+            // A configured soft exit stretches the swap so the outgoing pad
+            // leaves gently; otherwise keep the fast performance crossfade.
+            const double swap_seconds = fade_out_seconds > 0.0f
+                ? static_cast<double>(fade_out_seconds)
+                : kPadSwapCrossfadeSeconds;
             crossfade_total_ = std::max(
-                1, static_cast<int>(sample_rate * kPadSwapCrossfadeSeconds));
+                1, static_cast<int>(sample_rate * swap_seconds));
             crossfade_remaining_ = crossfade_total_;
         } else if (pending && !pending->empty()) {
             // First activation has no outgoing voice, so only fade it in.
@@ -303,7 +352,10 @@ void PadRenderer::render(float** output_channels,
     clip_params(outgoing_clip_, outgoing_ch, outgoing_total_frames,
                 outgoing_data, outgoing_xfade, sample_rate);
 
-    const float ramp_frames = static_cast<float>(std::max(1.0, sample_rate * kPadGainRampSeconds));
+    // Fallback per-sample step if none was armed above (e.g. gain already at
+    // target when a fresh clip arrives): the fast default keeps behaviour intact.
+    const float default_step = static_cast<float>(
+        1.0 / std::max(1.0, sample_rate * kPadGainRampSeconds));
 
     auto sample_clip = [](const float* clip_data, int clip_channels,
                           std::int64_t clip_frames, std::int64_t seam_xfade,
@@ -334,9 +386,17 @@ void PadRenderer::render(float** output_channels,
     constexpr float kHalfPi = 1.57079632679489661923f;
 
     for (int f = 0; f < num_frames; ++f) {
-        current_output_gain_ += (target_gain - current_output_gain_) / ramp_frames;
-        if (std::abs(current_output_gain_ - target_gain) < 1.0e-6f)
-            current_output_gain_ = target_gain;
+        // Linear ramp toward the target at the armed step (or the fast default).
+        if (current_output_gain_ != target_gain) {
+            const float step = gain_step_ > 0.0f ? gain_step_ : default_step;
+            if (current_output_gain_ < target_gain) {
+                current_output_gain_ = std::min(target_gain, current_output_gain_ + step);
+            } else {
+                current_output_gain_ = std::max(target_gain, current_output_gain_ - step);
+            }
+            if (current_output_gain_ == target_gain)
+                gain_step_ = 0.0f;  // ramp complete; next change re-arms
+        }
 
         // Constant-power overlap. There is no shared silent midpoint between
         // the outgoing and incoming voices.

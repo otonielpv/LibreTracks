@@ -7845,6 +7845,28 @@ textarea {
   accent-color: #57f1db;
 }
 
+.lt-pads-fade-field {
+  gap: 0.35rem;
+}
+
+.lt-pads-fade-toggle {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9fc7c0;
+  font-size: 10px;
+}
+
+.lt-pads-fade-value {
+  margin-left: auto;
+  color: #57f1db;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.lt-pads-fade-slider {
+  margin-top: 0.1rem;
+}
+
 .lt-pads-manage summary {
   cursor: pointer;
   font: 600 10px/1.2 "Space Grotesk", sans-serif;

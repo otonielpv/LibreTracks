@@ -198,6 +198,14 @@ pub struct AppSettings {
     pub pad_volume: f64,
     #[serde(default = "default_pad_route")]
     pub pad_output: String,
+    /// Soft-entrance duration in seconds when the pad is enabled. 0 keeps the
+    /// near-instant default entrance.
+    #[serde(default)]
+    pub pad_fade_in_seconds: f64,
+    /// Soft-exit duration in seconds when the pad is disabled or its key/pack
+    /// changes. 0 keeps the fast performance swap.
+    #[serde(default)]
+    pub pad_fade_out_seconds: f64,
     #[serde(default = "default_global_jump_mode")]
     pub global_jump_mode: String,
     #[serde(default = "default_global_jump_bars")]
@@ -269,6 +277,8 @@ impl Default for AppSettings {
             pad_key: 0,
             pad_volume: default_pad_volume(),
             pad_output: default_pad_route(),
+            pad_fade_in_seconds: 0.0,
+            pad_fade_out_seconds: 0.0,
             global_jump_mode: default_global_jump_mode(),
             global_jump_bars: default_global_jump_bars(),
             song_jump_trigger: default_song_jump_trigger(),

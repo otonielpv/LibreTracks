@@ -737,6 +737,26 @@ function ActionEditor({
             })}
           />
         </label>
+        {/* Ambos fades siempre: la entrada suave aplica cuando este cue activa
+            el pad; la salida suave, cuando lo desactiva o cambia de nota/pack
+            (el swap del pad saliente usa el fade-out). Mostrarlos siempre evita
+            ocultar una opción válida según el estado momentáneo del cue. */}
+        <PadCueFadeField
+          action={action}
+          field="fadeInSeconds"
+          label={t("transport.automation.padFadeIn", {
+            defaultValue: "Entrada suave (s)",
+          })}
+          onChange={onChange}
+        />
+        <PadCueFadeField
+          action={action}
+          field="fadeOutSeconds"
+          label={t("transport.automation.padFadeOut", {
+            defaultValue: "Salida suave (s)",
+          })}
+          onChange={onChange}
+        />
       </div>
     );
   }
@@ -759,6 +779,61 @@ function ActionEditor({
         />
       </label>
     </div>
+  );
+}
+
+// Per-cue soft entrance/exit control. A checkbox arms the fade (defaulting to
+// 2 s) plus a number input for its duration; unchecking clears it to 0 (= no
+// fade / instant). `field` selects fadeInSeconds (enable cues) or fadeOutSeconds
+// (disable cues) on the setPad action.
+type SetPadAction = Extract<AutomationActionSummary, { type: "setPad" }>;
+
+const PAD_CUE_FADE_DEFAULT = 2;
+
+function PadCueFadeField({
+  action,
+  field,
+  label,
+  onChange,
+}: {
+  action: SetPadAction;
+  field: "fadeInSeconds" | "fadeOutSeconds";
+  label: string;
+  onChange: (next: AutomationActionSummary) => void;
+}) {
+  const seconds = action[field] ?? 0;
+  const enabled = seconds > 0;
+  return (
+    <label className="lt-settings-field lt-automation-pad-fade">
+      <span className="lt-settings-field-label">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(event) =>
+            onChange({
+              ...action,
+              [field]: event.target.checked ? PAD_CUE_FADE_DEFAULT : 0,
+            })
+          }
+        />
+        {label}
+      </span>
+      {enabled ? (
+        <input
+          type="number"
+          min={0.1}
+          max={30}
+          step={0.1}
+          value={seconds}
+          onChange={(event) =>
+            onChange({
+              ...action,
+              [field]: Math.min(30, Math.max(0, Number(event.target.value))),
+            })
+          }
+        />
+      ) : null}
+    </label>
   );
 }
 
