@@ -4553,6 +4553,13 @@ button {
   opacity: 0.35;
 }
 
+/* A key the selected (partial user) pad doesn't include: dashed + dimmed so the
+   gap reads as "not available" rather than a transient disabled state. */
+.pads-key-grid button.is-missing {
+  border-style: dashed;
+  opacity: 0.3;
+}
+
 .pads-fade-control {
   display: flex;
   flex-direction: column;

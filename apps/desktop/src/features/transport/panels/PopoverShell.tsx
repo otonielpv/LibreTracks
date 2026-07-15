@@ -50,11 +50,15 @@ export function PopoverShell({
       // a caret button that opens/closes this popover. The caret lives outside
       // anchorRef, so without this the caret's mousedown would count as an
       // outside click and close the popover — then its own click would toggle
-      // it back open (a close→reopen flicker). Treat any click inside the whole
-      // split wrapper as "inside".
+      // it back open (a close→reopen flicker). Treat a click inside OUR OWN
+      // split wrapper as "inside" — but only ours: clicking a sibling popover's
+      // trigger (another .lt-topbar-split) must still close this one, otherwise
+      // opening the metronome popover leaves the voice-guide popover open.
       const el =
         target instanceof Element ? target : (target as Node).parentElement;
-      if (el?.closest(".lt-topbar-split")) return;
+      const ownSplit = anchorRef.current?.closest(".lt-topbar-split") ?? null;
+      const clickedSplit = el?.closest(".lt-topbar-split") ?? null;
+      if (clickedSplit && clickedSplit === ownSplit) return;
       if (
         !panelRef.current?.contains(target) &&
         !anchorRef.current?.contains(target)

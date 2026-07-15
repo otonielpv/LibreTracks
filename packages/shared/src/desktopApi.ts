@@ -12,6 +12,7 @@ import type {
   LibraryImportProgressEvent,
   MarkerKind,
   MixSceneSummary,
+  PadCatalogEntry,
   PadsCatalog,
   PadDownloadProgressEvent,
   ProjectLoadCompleteEvent,
@@ -1283,6 +1284,39 @@ export async function downloadPad(padId: string): Promise<void> {
 
 export async function deletePad(padId: string): Promise<AppSettings> {
   return invokeCommand<AppSettings>("delete_pad", { padId });
+}
+
+// ── User-created pads (pad manager) ──────────────────────────────────────────
+
+export async function createUserPad(name: string): Promise<PadCatalogEntry> {
+  return invokeCommand<PadCatalogEntry>("create_user_pad", { name });
+}
+
+export async function renameUserPad(
+  padId: string,
+  name: string,
+): Promise<PadCatalogEntry> {
+  return invokeCommand<PadCatalogEntry>("rename_user_pad", { padId, name });
+}
+
+// Assigns an audio file to one tonality (0..11) of a user pad; decodes to WAV.
+export async function assignPadKey(
+  padId: string,
+  keyIndex: number,
+  sourcePath: string,
+): Promise<PadCatalogEntry> {
+  return invokeCommand<PadCatalogEntry>("assign_pad_key", {
+    padId,
+    keyIndex,
+    sourcePath,
+  });
+}
+
+export async function clearPadKey(
+  padId: string,
+  keyIndex: number,
+): Promise<PadCatalogEntry> {
+  return invokeCommand<PadCatalogEntry>("clear_pad_key", { padId, keyIndex });
 }
 
 export async function setPadConfigRealtime(

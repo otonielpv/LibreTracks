@@ -1170,6 +1170,11 @@ export type PadCatalogEntry = {
   installed: boolean;
   /** Number of the 12 keys present (partial-install hint). */
   keysPresent: number;
+  /** Per-key presence, indexed 0..11 (C..B). Lets the UI disable the exact
+   * tonalities a pad is missing (chiefly for user-created pads). */
+  keysPresentMask: boolean[];
+  /** True when created locally by the user (editable in the pad manager). */
+  isUser: boolean;
 };
 
 export type PadsCatalog = {

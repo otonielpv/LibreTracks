@@ -3275,8 +3275,11 @@ function PadsWidget() {
   const catalog = useRemoteSyncStore((state) => state.padsCatalog);
   if (!settings) return <div className="song-widget-empty">{STRINGS.settingsLoading}</div>;
   const patch = (next: Partial<AppSettings>) => sendPadSettingsUpdate({ ...settings, ...next });
-  const installedPads = catalog?.pads.filter((pad) => pad.installed) ?? [];
+  // A pad is usable once it has at least one key; user pads may be partial, and
+  // the key grid then disables the tonalities they lack.
+  const installedPads = catalog?.pads.filter((pad) => pad.keysPresent > 0) ?? [];
   const currentPad = installedPads.find((pad) => pad.id === settings.padId);
+  const keyPresent = (index: number) => currentPad?.keysPresentMask?.[index] ?? true;
   const padOutputs = remoteOutputOptions(settings, true);
   return (
     <div className="pads-widget">
@@ -3310,7 +3313,7 @@ function PadsWidget() {
       <div className="pads-key-grid" role="group" aria-label={STRINGS.padKey}>
         {/* While following the song key the grid reflects the current tonic but
             is read-only (the desktop drives padKey from the song). */}
-        {PAD_KEY_LABELS.map((label, index) => <button key={label} type="button" className={settings.padKey === index ? "is-active" : ""} disabled={!settings.padId || settings.padFollowSongKey} aria-pressed={settings.padKey === index} onClick={() => patch({ padKey: index })}>{label}</button>)}
+        {PAD_KEY_LABELS.map((label, index) => { const present = keyPresent(index); return <button key={label} type="button" className={settings.padKey === index ? "is-active" : present ? "" : "is-missing"} disabled={!settings.padId || settings.padFollowSongKey || !present} aria-pressed={settings.padKey === index} title={present ? undefined : STRINGS.padKeyMissing} onClick={() => patch({ padKey: index })}>{label}</button>; })}
       </div>
       <SettingsRange label={STRINGS.volume} gain={settings.padVolume} onChange={(padVolume) => patch({ padVolume })} />
       <PadFadeControl label={STRINGS.padFadeIn} seconds={settings.padFadeInSeconds} onChange={(padFadeInSeconds) => patch({ padFadeInSeconds })} />

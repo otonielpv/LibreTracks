@@ -65,6 +65,20 @@ struct PadManifest {
     pads: Vec<ManifestPad>,
 }
 
+/// Metadata sidecar for a user-created pad (`pads/<id>/pad.json`). Official pads
+/// downloaded from the manifest do not carry one; their name comes from the
+/// manifest. A user pad is otherwise indistinguishable on disk from an orphan
+/// install, so this file is what marks it as user-owned and carries its
+/// editable display name.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UserPadMeta {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    is_user: bool,
+}
+
 /// A catalog entry returned to the frontend: manifest info + install state.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,6 +92,12 @@ pub struct PadCatalogEntry {
     pub installed: bool,
     /// Number of the 12 keys currently present (for a partial-install hint).
     pub keys_present: u8,
+    /// Per-key presence, indexed 0..11 (C..B). Lets the UI disable the exact
+    /// tonalities a (typically user-created) pad is missing.
+    pub keys_present_mask: [bool; 12],
+    /// True when this pad was created locally by the user (has a `pad.json`
+    /// sidecar with `isUser: true`). User pads are editable in the manager.
+    pub is_user: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -119,23 +139,51 @@ pub fn pads_install_dir(app: &AppHandle) -> Result<PathBuf, DesktopError> {
     Ok(base.join("pads"))
 }
 
-/// Count how many of the 12 keys are present for a pad on disk.
-fn keys_present_for(pad_dir: &Path) -> u8 {
-    let mut count = 0u8;
-    for stem in KEY_STEMS {
-        let present = PAD_KEY_EXTENSIONS
+/// Which of the 12 keys are present for a pad on disk, indexed 0..11 (C..B).
+fn keys_present_mask_for(pad_dir: &Path) -> [bool; 12] {
+    let mut mask = [false; 12];
+    for (i, stem) in KEY_STEMS.iter().enumerate() {
+        mask[i] = PAD_KEY_EXTENSIONS
             .iter()
             .any(|ext| pad_dir.join(format!("{stem}{ext}")).is_file());
-        if present {
-            count += 1;
-        }
     }
-    count
+    mask
 }
 
-/// List the pad ids currently installed on disk (a subdirectory of the pads
-/// base dir counts as installed if it holds at least one key file).
-fn installed_pad_states(app: &AppHandle) -> Vec<(String, u8)> {
+fn mask_count(mask: &[bool; 12]) -> u8 {
+    mask.iter().filter(|&&b| b).count() as u8
+}
+
+/// Path to a pad's user-metadata sidecar.
+fn pad_meta_path(pad_dir: &Path) -> PathBuf {
+    pad_dir.join("pad.json")
+}
+
+/// Read a pad's `pad.json` sidecar, if present.
+fn read_pad_meta(pad_dir: &Path) -> Option<UserPadMeta> {
+    let raw = fs::read_to_string(pad_meta_path(pad_dir)).ok()?;
+    serde_json::from_str::<UserPadMeta>(&raw).ok()
+}
+
+/// Write a pad's `pad.json` sidecar.
+fn write_pad_meta(pad_dir: &Path, meta: &UserPadMeta) -> Result<(), String> {
+    let raw =
+        serde_json::to_string_pretty(meta).map_err(|e| format!("serialize pad meta: {e}"))?;
+    fs::write(pad_meta_path(pad_dir), raw).map_err(|e| format!("write pad meta: {e}"))
+}
+
+/// Installed-pad state: id, per-key presence mask, and the user-metadata sidecar
+/// (present only for user-created pads).
+struct InstalledPad {
+    id: String,
+    mask: [bool; 12],
+    meta: Option<UserPadMeta>,
+}
+
+/// List the pads currently installed on disk (a subdirectory of the pads base
+/// dir counts as installed if it holds at least one key file, OR carries a
+/// user-pad sidecar — a freshly-created user pad has no keys yet).
+fn installed_pad_states(app: &AppHandle) -> Vec<InstalledPad> {
     let Ok(base) = pads_install_dir(app) else {
         return Vec::new();
     };
@@ -151,9 +199,13 @@ fn installed_pad_states(app: &AppHandle) -> Vec<(String, u8)> {
         let Some(id) = path.file_name().and_then(|n| n.to_str()).map(String::from) else {
             continue;
         };
-        let present = keys_present_for(&path);
-        if present > 0 {
-            out.push((id, present));
+        let mask = keys_present_mask_for(&path);
+        let meta = read_pad_meta(&path);
+        // Keep empty user pads (they carry a sidecar) so the manager can list
+        // and populate them; skip empty non-user dirs (stray/aborted installs).
+        let is_user = meta.as_ref().map(|m| m.is_user).unwrap_or(false);
+        if mask_count(&mask) > 0 || is_user {
+            out.push(InstalledPad { id, mask, meta });
         }
     }
     out
@@ -192,7 +244,8 @@ fn emit_pad_progress(
 #[tauri::command]
 pub async fn get_pads_catalog(app: AppHandle) -> Result<PadsCatalog, String> {
     let installed = installed_pad_states(&app);
-    let installed_ids: std::collections::HashMap<String, u8> = installed.iter().cloned().collect();
+    let installed_by_id: std::collections::HashMap<&str, &InstalledPad> =
+        installed.iter().map(|p| (p.id.as_str(), p)).collect();
 
     let user_agent = format!("LibreTracks/{}", env!("CARGO_PKG_VERSION"));
     let manifest: Option<PadManifest> = match reqwest::Client::builder()
@@ -210,10 +263,15 @@ pub async fn get_pads_catalog(app: AppHandle) -> Result<PadsCatalog, String> {
     let offline = manifest.is_none();
     let manifest = manifest.unwrap_or(PadManifest { pads: Vec::new() });
 
+    let empty_mask = [false; 12];
     let mut pads = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for m in manifest.pads {
-        let present = installed_ids.get(&m.id).copied().unwrap_or(0);
+        let mask = installed_by_id
+            .get(m.id.as_str())
+            .map(|p| p.mask)
+            .unwrap_or(empty_mask);
+        let present = mask_count(&mask);
         seen.insert(m.id.clone());
         pads.push(PadCatalogEntry {
             id: m.id,
@@ -223,25 +281,40 @@ pub async fn get_pads_catalog(app: AppHandle) -> Result<PadsCatalog, String> {
             download_url: m.download_url,
             installed: present as usize == KEY_STEMS.len(),
             keys_present: present,
+            keys_present_mask: mask,
+            is_user: false,
         });
     }
 
     // Installed pads that aren't in the manifest — still list them so the user
-    // can use/remove them (no download_url; they're already on disk).
+    // can use/remove them (no download_url; they're already on disk). These are
+    // either orphaned official pads (removed upstream) or user-created pads
+    // (marked by a `pad.json` sidecar, which also carries their editable name).
     let mut orphan_installed = Vec::new();
-    for (id, present) in installed {
-        if seen.contains(&id) {
+    for pad in &installed {
+        if seen.contains(&pad.id) {
             continue;
         }
-        orphan_installed.push(id.clone());
+        let is_user = pad.meta.as_ref().map(|m| m.is_user).unwrap_or(false);
+        let name = pad
+            .meta
+            .as_ref()
+            .map(|m| m.name.trim())
+            .filter(|n| !n.is_empty())
+            .map(String::from)
+            .unwrap_or_else(|| pad.id.clone());
+        let present = mask_count(&pad.mask);
+        orphan_installed.push(pad.id.clone());
         pads.push(PadCatalogEntry {
-            id: id.clone(),
-            name: id,
+            id: pad.id.clone(),
+            name,
             description: String::new(),
             size_bytes: 0,
             download_url: String::new(),
             installed: present as usize == KEY_STEMS.len(),
             keys_present: present,
+            keys_present_mask: pad.mask,
+            is_user,
         });
     }
 
@@ -641,6 +714,184 @@ fn resolve_pad_key_source(extract_root: &Path, pad_id: &str) -> Option<PathBuf> 
     None
 }
 
+// ── User-created pads ────────────────────────────────────────────────────────
+
+/// Turn a display name into a filesystem-safe slug for a user-pad id. The id is
+/// always prefixed `user-` so it can never collide with a manifest pad id and so
+/// the catalog can flag it as user-owned even without reading `pad.json`.
+fn slugify_user_pad(name: &str) -> String {
+    let mut slug = String::new();
+    let mut last_dash = true; // avoid a leading dash
+    for ch in name.trim().to_lowercase().chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch);
+            last_dash = false;
+        } else if !last_dash {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        slug.push_str("pad");
+    }
+    format!("user-{slug}")
+}
+
+/// Build the catalog entry for a single installed pad directory (used by the
+/// create/assign/clear commands to return the pad's fresh state without a full
+/// catalog refresh).
+fn entry_for_pad_dir(pad_dir: &Path, id: &str) -> PadCatalogEntry {
+    let mask = keys_present_mask_for(pad_dir);
+    let meta = read_pad_meta(pad_dir);
+    let is_user = meta.as_ref().map(|m| m.is_user).unwrap_or(false);
+    let name = meta
+        .as_ref()
+        .map(|m| m.name.trim())
+        .filter(|n| !n.is_empty())
+        .map(String::from)
+        .unwrap_or_else(|| id.to_string());
+    let present = mask_count(&mask);
+    PadCatalogEntry {
+        id: id.to_string(),
+        name,
+        description: String::new(),
+        size_bytes: 0,
+        download_url: String::new(),
+        installed: present as usize == KEY_STEMS.len(),
+        keys_present: present,
+        keys_present_mask: mask,
+        is_user,
+    }
+}
+
+/// Create a new, empty user pad from a display name. Returns its catalog entry
+/// (with no keys yet). The user then assigns audio to individual tonalities via
+/// `assign_pad_key`.
+#[tauri::command]
+pub fn create_user_pad(app: AppHandle, name: String) -> Result<PadCatalogEntry, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("pad name is empty".to_string());
+    }
+    let base = pads_install_dir(&app).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&base).map_err(|e| format!("create pads dir failed: {e}"))?;
+
+    // Ensure a unique id: append -2, -3, … if the slug is already taken.
+    let root = slugify_user_pad(name);
+    let mut id = root.clone();
+    let mut n = 2;
+    while base.join(&id).exists() {
+        id = format!("{root}-{n}");
+        n += 1;
+    }
+    let dir = base.join(&id);
+    fs::create_dir_all(&dir).map_err(|e| format!("create pad dir failed: {e}"))?;
+    write_pad_meta(
+        &dir,
+        &UserPadMeta {
+            name: name.to_string(),
+            is_user: true,
+        },
+    )?;
+    Ok(entry_for_pad_dir(&dir, &id))
+}
+
+/// Rename a user pad (updates its `pad.json`). Only user pads can be renamed.
+#[tauri::command]
+pub fn rename_user_pad(
+    app: AppHandle,
+    pad_id: String,
+    name: String,
+) -> Result<PadCatalogEntry, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("pad name is empty".to_string());
+    }
+    let base = pads_install_dir(&app).map_err(|e| e.to_string())?;
+    let dir = base.join(&pad_id);
+    let mut meta = read_pad_meta(&dir).ok_or_else(|| "pad is not a user pad".to_string())?;
+    if !meta.is_user {
+        return Err("pad is not a user pad".to_string());
+    }
+    meta.name = name.to_string();
+    write_pad_meta(&dir, &meta)?;
+    Ok(entry_for_pad_dir(&dir, &pad_id))
+}
+
+/// Assign an audio file to one tonality (`key_index`, 0..11) of a user pad. The
+/// source is decoded to a 16-bit WAV at `pads/<id>/<stem>.wav`, exactly like the
+/// download path — so switching to this key at play time reads ready PCM. If
+/// this key is currently selected on this pad, the caller should reload it.
+#[tauri::command]
+pub async fn assign_pad_key(
+    app: AppHandle,
+    pad_id: String,
+    key_index: u8,
+    source_path: String,
+) -> Result<PadCatalogEntry, String> {
+    let key = key_index as usize;
+    let stem = KEY_STEMS
+        .get(key)
+        .ok_or_else(|| format!("key index {key_index} out of range"))?;
+    let base = pads_install_dir(&app).map_err(|e| e.to_string())?;
+    let dir = base.join(&pad_id);
+    // Only user pads are editable.
+    let meta = read_pad_meta(&dir).filter(|m| m.is_user);
+    if meta.is_none() {
+        return Err("pad is not a user pad".to_string());
+    }
+    let src = PathBuf::from(&source_path);
+    if !src.is_file() {
+        return Err(format!("source file not found: {source_path}"));
+    }
+    let dst = dir.join(format!("{stem}.wav"));
+    let stem = (*stem).to_string();
+
+    // Decode/copy off the async runtime; it's CPU-heavy for compressed sources.
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        if src.extension().and_then(|e| e.to_str()) == Some("wav") {
+            fs::copy(&src, &dst).map_err(|e| format!("copy {stem}.wav: {e}"))?;
+            Ok(())
+        } else {
+            decode_to_wav16(&src, &dst)
+        }
+    })
+    .await
+    .map_err(|e| format!("assign task panicked: {e}"))??;
+
+    Ok(entry_for_pad_dir(&dir, &pad_id))
+}
+
+/// Remove the audio assigned to one tonality of a user pad (leaves the rest).
+#[tauri::command]
+pub fn clear_pad_key(
+    app: AppHandle,
+    pad_id: String,
+    key_index: u8,
+) -> Result<PadCatalogEntry, String> {
+    let key = key_index as usize;
+    let stem = KEY_STEMS
+        .get(key)
+        .ok_or_else(|| format!("key index {key_index} out of range"))?;
+    let base = pads_install_dir(&app).map_err(|e| e.to_string())?;
+    let dir = base.join(&pad_id);
+    let meta = read_pad_meta(&dir).filter(|m| m.is_user);
+    if meta.is_none() {
+        return Err("pad is not a user pad".to_string());
+    }
+    // Remove whichever accepted extension is present for this stem.
+    for ext in PAD_KEY_EXTENSIONS {
+        let candidate = dir.join(format!("{stem}{ext}"));
+        if candidate.is_file() {
+            fs::remove_file(&candidate).map_err(|e| format!("remove {stem}{ext}: {e}"))?;
+        }
+    }
+    Ok(entry_for_pad_dir(&dir, &pad_id))
+}
+
 /// Delete an installed pad from disk (to free space). If it is the currently
 /// selected pad, the selection is cleared and the pad disabled.
 #[tauri::command]
@@ -710,28 +961,52 @@ pub async fn load_pad_key(
     settings_store: State<'_, AppSettingsStore>,
     state: State<'_, DesktopState>,
 ) -> Result<AppSettings, String> {
+    // A pad — chiefly a user-created one — may be missing the requested key. In
+    // that case there is nothing to decode; we must instead silence the renderer
+    // (so the previously-loaded key doesn't keep droning through a region whose
+    // tonality this pad doesn't cover) WITHOUT clearing the persisted
+    // `pad_enabled`, so "follow song key" re-arms the pad automatically once the
+    // playhead reaches a region whose key IS present.
+    let mut key_present = false;
     if !settings.pad_id.is_empty() {
         if let Ok(base) = pads_install_dir(&app) {
-            if let Some(dir) = base.to_str() {
-                let dir = dir.to_string();
-                let pad_id = settings.pad_id.clone();
-                let key = settings.pad_key;
-                let audio = state.audio.clone();
-                // The engine command that carries this is itself dispatched to
-                // the engine's command thread (which owns the decode); we still
-                // hop onto a blocking task so awaiting it never parks the async
-                // runtime under the fader.
-                let _ = tokio::task::spawn_blocking(move || {
-                    audio.load_pad_clip(&dir, &pad_id, key)
-                })
-                .await;
+            let pad_dir = base.join(&settings.pad_id);
+            let key = (settings.pad_key.clamp(0, 11)) as usize;
+            if let Some(stem) = KEY_STEMS.get(key) {
+                key_present = PAD_KEY_EXTENSIONS
+                    .iter()
+                    .any(|ext| pad_dir.join(format!("{stem}{ext}")).is_file());
+            }
+            if key_present {
+                if let Some(dir) = base.to_str() {
+                    let dir = dir.to_string();
+                    let pad_id = settings.pad_id.clone();
+                    let key = settings.pad_key;
+                    let audio = state.audio.clone();
+                    // The engine command that carries this is itself dispatched
+                    // to the engine's command thread (which owns the decode); we
+                    // still hop onto a blocking task so awaiting it never parks
+                    // the async runtime under the fader.
+                    let _ = tokio::task::spawn_blocking(move || {
+                        audio.load_pad_clip(&dir, &pad_id, key)
+                    })
+                    .await;
+                }
             }
         }
     }
-    // Re-push config so the newly loaded key plays at the right level/route.
+
+    // Re-push config so the newly loaded key plays at the right level/route. When
+    // the key is absent, force the renderer's `enabled` off for this push so it
+    // falls silent; the returned/persisted settings keep the user's real
+    // `pad_enabled` value untouched.
+    let mut effective = settings.clone();
+    if !key_present {
+        effective.pad_enabled = false;
+    }
     state
         .audio
-        .set_pad_config_realtime(&settings)
+        .set_pad_config_realtime(&effective)
         .map_err(|e| e.to_string())?;
     state
         .audio
@@ -775,5 +1050,83 @@ mod tests {
         assert!(reader.len() > 0, "WAV should contain samples");
 
         let _ = fs::remove_file(&dst);
+    }
+
+    fn unique_tmp(tag: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("lt_pad_test_{tag}_{nanos}"))
+    }
+
+    #[test]
+    fn slugify_user_pad_is_safe_and_prefixed() {
+        assert_eq!(slugify_user_pad("My Pad!"), "user-my-pad");
+        assert_eq!(slugify_user_pad("  Órgano #1  "), "user-rgano-1");
+        // Non-alphanumeric-only names still yield a usable id.
+        assert_eq!(slugify_user_pad("###"), "user-pad");
+        assert_eq!(slugify_user_pad(""), "user-pad");
+        // Always user-prefixed so it can't collide with a manifest id.
+        assert!(slugify_user_pad("still").starts_with("user-"));
+    }
+
+    #[test]
+    fn keys_mask_reflects_present_stems() {
+        let dir = unique_tmp("mask");
+        fs::create_dir_all(&dir).unwrap();
+        // C (0), D (2) present; the rest absent.
+        fs::write(dir.join("C.wav"), b"x").unwrap();
+        fs::write(dir.join("D.flac"), b"x").unwrap();
+
+        let mask = keys_present_mask_for(&dir);
+        assert!(mask[0], "C present");
+        assert!(mask[2], "D present");
+        assert!(!mask[1], "Cs absent");
+        assert_eq!(mask_count(&mask), 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pad_meta_roundtrips_and_entry_reads_it() {
+        let dir = unique_tmp("meta");
+        fs::create_dir_all(&dir).unwrap();
+        write_pad_meta(
+            &dir,
+            &UserPadMeta {
+                name: "My Warm Pad".to_string(),
+                is_user: true,
+            },
+        )
+        .unwrap();
+        fs::write(dir.join("A.wav"), b"x").unwrap();
+
+        let meta = read_pad_meta(&dir).expect("meta present");
+        assert!(meta.is_user);
+        assert_eq!(meta.name, "My Warm Pad");
+
+        let entry = entry_for_pad_dir(&dir, "user-my-warm-pad");
+        assert_eq!(entry.id, "user-my-warm-pad");
+        assert_eq!(entry.name, "My Warm Pad"); // name comes from the sidecar
+        assert!(entry.is_user);
+        assert_eq!(entry.keys_present, 1);
+        assert!(entry.keys_present_mask[9], "A present");
+        assert!(!entry.installed, "1/12 keys is not a full install");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn entry_without_meta_is_not_user_and_falls_back_to_id() {
+        let dir = unique_tmp("nometa");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("C.wav"), b"x").unwrap();
+
+        let entry = entry_for_pad_dir(&dir, "orphan-pack");
+        assert!(!entry.is_user);
+        assert_eq!(entry.name, "orphan-pack");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

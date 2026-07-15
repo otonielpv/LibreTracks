@@ -7946,3 +7946,409 @@ textarea {
   color: #9fc7c0;
   margin-bottom: 0.4rem;
 }
+
+/* A key present in an official pack but absent from a (partial) user pad: shown
+   dimmed and non-interactive so the user sees the gap without it looking like a
+   normal disabled state. */
+.lt-pads-key.is-missing {
+  opacity: 0.4;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.lt-pads-key-missing-hint {
+  margin-top: 0.35rem;
+  font: 500 10px/1.3 "Space Grotesk", sans-serif;
+  color: #f1c86b;
+}
+
+.lt-pads-manage-btn {
+  margin-top: 0.4rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgb(87 241 219 / 0.32);
+  border-radius: 4px;
+  background: rgb(87 241 219 / 0.08);
+  color: #d8fff7;
+  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-pads-manage-btn:hover {
+  background: rgb(87 241 219 / 0.16);
+}
+
+.lt-pads-user-badge,
+.lt-pads-partial-badge {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  font: 600 8px/1.4 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.lt-pads-user-badge {
+  background: rgb(87 241 219 / 0.16);
+  color: #57f1db;
+}
+
+.lt-pads-partial-badge {
+  background: rgb(241 200 107 / 0.16);
+  color: #f1c86b;
+}
+
+/* ── Pad manager modal ─────────────────────────────────────────────────── */
+
+.lt-pad-manager-modal {
+  max-width: 620px;
+  width: 92vw;
+  /* Pin the height so switching tabs (or adding pads) never resizes/re-centers
+     the window; the active panel scrolls internally instead. Cap to the
+     viewport on short screens. */
+  height: min(40rem, calc(100vh - 3rem));
+  overflow: hidden;
+}
+
+.lt-pad-manager-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  /* Own the scroll here so the header stays put; individual lists below also
+     scroll, but this guards any overflow (e.g. the create row + key grid). */
+  overflow: hidden;
+}
+
+.lt-pad-manager-error {
+  color: #ff8f8f;
+  font: 500 11px/1.3 "Space Grotesk", sans-serif;
+}
+
+.lt-pad-manager-create {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lt-pad-manager-name-input {
+  flex: 1;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid rgb(87 241 219 / 0.24);
+  border-radius: 4px;
+  background: rgb(4 33 29 / 0.6);
+  color: #d8fff7;
+  font: 500 12px/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-pad-manager-create-btn,
+.lt-pad-manager-delete-btn {
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  font: 600 11px/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-pad-manager-create-btn {
+  border: 1px solid #57f1db;
+  background: #57f1db;
+  color: #04211d;
+}
+
+.lt-pad-manager-create-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lt-pad-manager-delete-btn {
+  border: 1px solid rgb(255 143 143 / 0.4);
+  background: transparent;
+  color: #ff8f8f;
+}
+
+.lt-pad-manager-empty {
+  color: #7fb0a9;
+  font: 500 12px/1.4 "Space Grotesk", sans-serif;
+}
+
+/* Tabs switch between the two flows (official packs, user pads) so the modal
+   keeps a fixed height as the official catalog grows. */
+.lt-pad-manager-tabs {
+  display: flex;
+  gap: 0.35rem;
+  border-bottom: 1px solid rgb(87 241 219 / 0.14);
+}
+
+.lt-pad-manager-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #9fc7c0;
+  font: 700 11px/1.2 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.lt-pad-manager-tab:hover {
+  color: #d8fff7;
+}
+
+.lt-pad-manager-tab.is-active {
+  color: #57f1db;
+  border-bottom-color: #57f1db;
+}
+
+.lt-pad-manager-tab-count {
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: rgb(87 241 219 / 0.14);
+  color: #9fc7c0;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.lt-pad-manager-tab.is-active .lt-pad-manager-tab-count {
+  background: rgb(87 241 219 / 0.24);
+  color: #57f1db;
+}
+
+.lt-pad-manager-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Fills the pinned panel and scrolls internally, so the modal height stays
+   stable no matter how many packs or user pads exist. */
+.lt-pad-manager-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lt-pad-manager-note {
+  margin: 0;
+  color: #f1c86b;
+  font: 500 11px/1.3 "Space Grotesk", sans-serif;
+}
+
+.lt-pad-manager-pack-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lt-pad-manager-pack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgb(87 241 219 / 0.16);
+  border-radius: 4px;
+}
+
+.lt-pad-manager-pack-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.lt-pad-manager-pack-name {
+  font: 600 12px/1.2 "Space Grotesk", sans-serif;
+  color: #d8fff7;
+}
+
+.lt-pad-manager-pack-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: 500 9px/1.2 "Space Grotesk", sans-serif;
+  color: #7fb0a9;
+}
+
+.lt-pad-manager-pack-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lt-pad-manager-download-btn {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #57f1db;
+  border-radius: 4px;
+  background: rgb(87 241 219 / 0.1);
+  color: #57f1db;
+  font: 600 11px/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-pad-manager-download-btn:hover {
+  background: rgb(87 241 219 / 0.2);
+}
+
+.lt-pad-manager-download-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lt-pad-manager-pack-error {
+  flex-basis: 100%;
+  color: #ff8f8f;
+  font: 500 10px/1.3 "Space Grotesk", sans-serif;
+}
+
+.lt-pad-manager-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(140px, 190px) 1fr;
+  gap: 0.9rem;
+}
+
+.lt-pad-manager-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  /* Scrolls within the pinned panel; the sibling detail column scrolls too. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+
+.lt-pad-manager-list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 4px;
+  background: transparent;
+  color: #d8fff7;
+  font: 600 11px/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lt-pad-manager-list-item:hover {
+  background: rgb(87 241 219 / 0.1);
+}
+
+.lt-pad-manager-list-item.is-active {
+  border-color: #57f1db;
+  background: rgb(87 241 219 / 0.16);
+}
+
+.lt-pad-manager-list-count {
+  font-size: 9px;
+  color: #7fb0a9;
+}
+
+/* The key-grid column can be taller than the panel (rename row + 12 keys), so
+   it scrolls independently rather than pushing the modal taller. */
+.lt-pad-manager-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lt-pad-manager-detail-head {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lt-pad-manager-keys {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+}
+
+.lt-pad-manager-key {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgb(87 241 219 / 0.16);
+  border-radius: 4px;
+}
+
+.lt-pad-manager-key.is-present {
+  border-color: rgb(87 241 219 / 0.4);
+  background: rgb(87 241 219 / 0.08);
+}
+
+.lt-pad-manager-key-label {
+  font: 700 12px/1 "Space Grotesk", sans-serif;
+  color: #d8fff7;
+  min-width: 1.6rem;
+}
+
+.lt-pad-manager-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lt-pad-manager-key-assign {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgb(87 241 219 / 0.32);
+  border-radius: 3px;
+  background: transparent;
+  color: #d8fff7;
+  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-pad-manager-key-assign:hover {
+  background: rgb(87 241 219 / 0.14);
+}
+
+.lt-pad-manager-key-assign:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lt-pad-manager-key-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #ff8f8f;
+  cursor: pointer;
+}
+
+.lt-pad-manager-key-clear .material-symbols-outlined {
+  font-size: 16px;
+}
+
+@media (max-width: 560px) {
+  .lt-pad-manager-layout {
+    grid-template-columns: 1fr;
+  }
+  .lt-pad-manager-keys {
+    grid-template-columns: 1fr;
+  }
+}

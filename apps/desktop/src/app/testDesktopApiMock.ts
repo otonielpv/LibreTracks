@@ -1992,6 +1992,54 @@ export const testDesktopApiMock = {
   },
   listenToPadDownloadProgress:
     async (_handler: (event: PadDownloadProgressEvent) => void) => () => {},
+  createUserPad: async (name: string) => ({
+    id: `user-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    name,
+    description: "",
+    sizeBytes: 0,
+    downloadUrl: "",
+    installed: false,
+    keysPresent: 0,
+    keysPresentMask: new Array(12).fill(false),
+    isUser: true,
+  }),
+  renameUserPad: async (padId: string, name: string) => ({
+    id: padId,
+    name,
+    description: "",
+    sizeBytes: 0,
+    downloadUrl: "",
+    installed: false,
+    keysPresent: 0,
+    keysPresentMask: new Array(12).fill(false),
+    isUser: true,
+  }),
+  assignPadKey: async (padId: string, keyIndex: number, _sourcePath: string) => {
+    const mask = new Array(12).fill(false);
+    mask[keyIndex] = true;
+    return {
+      id: padId,
+      name: padId,
+      description: "",
+      sizeBytes: 0,
+      downloadUrl: "",
+      installed: false,
+      keysPresent: 1,
+      keysPresentMask: mask,
+      isUser: true,
+    };
+  },
+  clearPadKey: async (padId: string, _keyIndex: number) => ({
+    id: padId,
+    name: padId,
+    description: "",
+    sizeBytes: 0,
+    downloadUrl: "",
+    installed: false,
+    keysPresent: 0,
+    keysPresentMask: new Array(12).fill(false),
+    isUser: true,
+  }),
   deleteTrack: async (trackId: string) => {
     const track = getTrack(trackId);
     if (!track) {

@@ -16,14 +16,9 @@ import {
   gainToPosition,
   positionToGain,
 } from "@libretracks/shared/faderScale";
-import {
-  deletePad,
-  downloadPad,
-  getPadsCatalog,
-  listenToPadDownloadProgress,
-  type PadDownloadProgressEvent,
-} from "../desktopApi";
+import { getPadsCatalog } from "../desktopApi";
 import { AudioRouteCombobox } from "../tracks/AudioRouteCombobox";
+import { PadManagerModal } from "./PadManagerModal";
 
 type RouteOption = { value: string; label: string };
 
@@ -73,20 +68,26 @@ function PadsPopoverImpl({
   const [catalog, setCatalog] = useState<PadCatalogEntry[] | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [offline, setOffline] = useState(false);
-  // Download progress keyed by pad id.
-  const [downloads, setDownloads] = useState<
-    Record<string, PadDownloadProgressEvent>
-  >({});
+  const [managerOpen, setManagerOpen] = useState(false);
 
-  const installedPads = useMemo(
-    () => (catalog ?? []).filter((p) => p.installed),
+  // A pad counts as usable in the picker/grid once it has at least one key. User
+  // pads may be partial; the key grid disables the tonalities they lack.
+  const usablePads = useMemo(
+    () => (catalog ?? []).filter((p) => p.keysPresent > 0),
     [catalog],
   );
-  const availablePads = useMemo(
-    () => (catalog ?? []).filter((p) => !p.installed),
-    [catalog],
-  );
+  const installedPads = usablePads;
   const hasInstalled = installedPads.length > 0;
+
+  // The pad currently selected in the picker, for the key grid's presence mask.
+  const activePad = useMemo(
+    () => usablePads.find((p) => p.id === settings.padId) ?? null,
+    [usablePads, settings.padId],
+  );
+  const keyPresent = useCallback(
+    (index: number) => activePad?.keysPresentMask?.[index] ?? true,
+    [activePad],
+  );
 
   const refreshCatalog = useCallback(async () => {
     setLoadingCatalog(true);
@@ -132,9 +133,13 @@ function PadsPopoverImpl({
         return;
       }
       // The trigger is a split control (main toggle + caret). The caret sits
-      // outside anchorRef, so treat the whole split wrapper as "inside" — else
-      // clicking the caret to close would close-then-reopen (a flicker).
-      if (el?.closest(".lt-topbar-split")) {
+      // outside anchorRef, so treat OUR OWN split wrapper as "inside" — else
+      // clicking the caret to close would close-then-reopen (a flicker). Only
+      // ours, though: clicking a sibling popover's trigger must still close this
+      // one (otherwise opening metronome/guide leaves pads open).
+      const ownSplit = anchorRef.current?.closest(".lt-topbar-split") ?? null;
+      const clickedSplit = el?.closest(".lt-topbar-split") ?? null;
+      if (clickedSplit && clickedSplit === ownSplit) {
         return;
       }
       if (
@@ -160,64 +165,21 @@ function PadsPopoverImpl({
     };
   }, [open, updateAnchor, refreshCatalog, anchorRef, onClose]);
 
-  // Subscribe to download progress while the popover is open. On completion,
-  // clear the entry and refresh the catalog so the pad flips to "installed".
-  useEffect(() => {
-    if (!open) return;
-    let unlisten: (() => void) | undefined;
-    let active = true;
-    void (async () => {
-      unlisten = await listenToPadDownloadProgress((event) => {
-        if (!active) return;
-        setDownloads((prev) => ({ ...prev, [event.padId]: event }));
-        if (event.done) {
-          // Give the UI a beat to show 100%, then clear + refresh.
-          window.setTimeout(() => {
-            setDownloads((prev) => {
-              const next = { ...prev };
-              delete next[event.padId];
-              return next;
-            });
-            void refreshCatalog();
-          }, 400);
-        }
-      });
-    })();
-    return () => {
-      active = false;
-      unlisten?.();
-    };
-  }, [open, refreshCatalog]);
-
-  const startDownload = useCallback((padId: string) => {
-    setDownloads((prev) => ({
-      ...prev,
-      [padId]: {
-        padId,
-        percent: 0,
-        message: "",
-        done: false,
-      },
-    }));
-    // Errors surface via the terminal progress event (done + error).
-    void downloadPad(padId).catch(() => {});
-  }, []);
-
-  const handleDelete = useCallback(
-    (padId: string) => {
-      void deletePad(padId)
-        .then(() => refreshCatalog())
-        .catch(() => {});
-    },
-    [refreshCatalog],
-  );
-
-  if (!open || !anchor) return null;
+  // Opening the manager closes the popover: the modal is a full-screen overlay,
+  // and leaving the popover (and its portalled route dropdown) mounted on top
+  // would obscure the manager and eat clicks. Downloading, deleting and creating
+  // pads all live in the manager now — the popover only picks/plays a pad.
+  const openManager = useCallback(() => {
+    setManagerOpen(true);
+    onClose();
+  }, [onClose]);
 
   const faderPosition = gainToPosition(settings.padVolume, AUX_FADER_SCALE);
   const volumeLabel = formatGainDb(settings.padVolume);
 
-  const body = (
+  // The popover panel (only rendered while open + anchored). The manager modal
+  // below renders regardless, since opening it closes the popover.
+  const body = open && anchor ? (
     <div
       ref={panelRef}
       className="lt-pads-popover"
@@ -241,34 +203,18 @@ function PadsPopoverImpl({
                 "Descarga un pack de pads para empezar. Cada pack trae las 12 tonalidades.",
             })}
           </p>
-          {loadingCatalog && !catalog ? (
+          {loadingCatalog && !catalog && (
             <p className="lt-pads-loading">
               {t("pads.loading", { defaultValue: "Cargando catálogo…" })}
             </p>
-          ) : offline ? (
-            <p className="lt-pads-offline">
-              {t("pads.offline", {
-                defaultValue:
-                  "No se pudo cargar el catálogo. Revisa tu conexión.",
-              })}
-            </p>
-          ) : availablePads.length === 0 ? (
-            <p className="lt-pads-offline">
-              {t("pads.none", { defaultValue: "No hay pads disponibles." })}
-            </p>
-          ) : (
-            <ul className="lt-pads-download-list">
-              {availablePads.map((pad) => (
-                <PadDownloadRow
-                  key={pad.id}
-                  pad={pad}
-                  progress={downloads[pad.id]}
-                  onDownload={() => startDownload(pad.id)}
-                  t={t}
-                />
-              ))}
-            </ul>
           )}
+          <button
+            type="button"
+            className="lt-pads-manage-btn"
+            onClick={openManager}
+          >
+            {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
+          </button>
         </div>
       ) : (
         <div className="lt-pads-controls">
@@ -328,25 +274,46 @@ function PadsPopoverImpl({
               )}
             </span>
             <div className="lt-pads-key-grid" role="group">
-              {KEY_LABELS.map((label, index) => (
-                <button
-                  key={label}
-                  type="button"
-                  className={
-                    settings.padKey === index
-                      ? "lt-pads-key is-active"
-                      : "lt-pads-key"
-                  }
-                  aria-pressed={settings.padKey === index}
-                  // While following the song key the grid reflects the current
-                  // tonic but is read-only; the manual override is disabled.
-                  disabled={settings.padFollowSongKey}
-                  onClick={() => onPadChange({ padKey: index })}
-                >
-                  {label}
-                </button>
-              ))}
+              {KEY_LABELS.map((label, index) => {
+                const present = keyPresent(index);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    className={
+                      settings.padKey === index
+                        ? "lt-pads-key is-active"
+                        : present
+                          ? "lt-pads-key"
+                          : "lt-pads-key is-missing"
+                    }
+                    aria-pressed={settings.padKey === index}
+                    // A key is disabled when the selected pad doesn't include it
+                    // (chiefly for partial user pads), and while following the
+                    // song key (the grid then reflects the tonic read-only).
+                    disabled={settings.padFollowSongKey || !present}
+                    title={
+                      present
+                        ? undefined
+                        : t("pads.keyMissing", {
+                            defaultValue: "Esta tonalidad no está en el pad",
+                          })
+                    }
+                    onClick={() => onPadChange({ padKey: index })}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
+            {settings.padFollowSongKey && !keyPresent(settings.padKey) && (
+              <p className="lt-pads-key-missing-hint">
+                {t("pads.followMissing", {
+                  defaultValue:
+                    "El pad no tiene esta tonalidad de la canción, así que enmudece aquí.",
+                })}
+              </p>
+            )}
           </div>
 
           <div className="lt-pads-field">
@@ -399,42 +366,31 @@ function PadsPopoverImpl({
             />
           </div>
 
-          {(availablePads.length > 0 || installedPads.length > 0) && (
-            <details className="lt-pads-manage">
-              <summary>
-                {t("pads.manage", { defaultValue: "Gestionar packs" })}
-              </summary>
-              <ul className="lt-pads-download-list">
-                {availablePads.map((pad) => (
-                  <PadDownloadRow
-                    key={pad.id}
-                    pad={pad}
-                    progress={downloads[pad.id]}
-                    onDownload={() => startDownload(pad.id)}
-                    t={t}
-                  />
-                ))}
-                {installedPads.map((pad) => (
-                  <li key={pad.id} className="lt-pads-installed-row">
-                    <span className="lt-pads-installed-name">{pad.name}</span>
-                    <button
-                      type="button"
-                      className="lt-pads-delete"
-                      onClick={() => handleDelete(pad.id)}
-                    >
-                      {t("pads.delete", { defaultValue: "Eliminar" })}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
+          <button
+            type="button"
+            className="lt-pads-manage-btn"
+            onClick={openManager}
+          >
+            {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
+          </button>
         </div>
       )}
     </div>
-  );
+  ) : null;
 
-  return createPortal(body, document.body);
+  return createPortal(
+    <>
+      {body}
+      {/* The manager modal renders independently of the popover's open state —
+          opening it closes the popover, so it can't live inside `body`. */}
+      <PadManagerModal
+        open={managerOpen}
+        onClose={() => setManagerOpen(false)}
+        onCatalogChanged={refreshCatalog}
+      />
+    </>,
+    document.body,
+  );
 }
 
 // A soft entrance/exit control: a checkbox that arms the fade plus a slider for
@@ -492,68 +448,6 @@ function PadFadeField({
         />
       )}
     </div>
-  );
-}
-
-function PadDownloadRow({
-  pad,
-  progress,
-  onDownload,
-  t,
-}: {
-  pad: PadCatalogEntry;
-  progress: PadDownloadProgressEvent | undefined;
-  onDownload: () => void;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
-  const downloading = Boolean(progress) && !progress?.done;
-  const failed = Boolean(progress?.done && progress?.error);
-  const sizeMb = pad.sizeBytes > 0 ? Math.round(pad.sizeBytes / 1_000_000) : 0;
-
-  return (
-    <li className="lt-pads-download-row">
-      <div className="lt-pads-download-info">
-        <span className="lt-pads-download-name">{pad.name}</span>
-        {sizeMb > 0 && (
-          <span className="lt-pads-download-size">{sizeMb} MB</span>
-        )}
-      </div>
-      {downloading ? (
-        <div
-          className="lt-pads-progress"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress?.percent ?? 0)}
-        >
-          <div className="lt-pads-progress-track">
-            <div
-              className="lt-pads-progress-fill"
-              style={{
-                width: `${Math.max(0, Math.min(100, progress?.percent ?? 0))}%`,
-              }}
-            />
-          </div>
-          <span className="lt-pads-progress-label">
-            {progress?.message || t("pads.downloading", { defaultValue: "Descargando…" })}{" "}
-            {Math.round(progress?.percent ?? 0)}%
-          </span>
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="lt-pads-download-btn"
-          onClick={onDownload}
-        >
-          {failed
-            ? t("pads.retry", { defaultValue: "Reintentar" })
-            : t("pads.download", { defaultValue: "Descargar" })}
-        </button>
-      )}
-      {failed && (
-        <span className="lt-pads-download-error">{progress?.error}</span>
-      )}
-    </li>
   );
 }
 
