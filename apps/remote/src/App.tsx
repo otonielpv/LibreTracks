@@ -3303,10 +3303,54 @@ function PadsWidget() {
         </select>
       </label>
       {catalog !== null && installedPads.length === 0 ? <p className="pads-empty-hint">{STRINGS.padsNoInstalled} {STRINGS.padsDesktopHint}</p> : null}
+      <label className="performance-switch pads-follow-switch">
+        <input type="checkbox" checked={settings.padFollowSongKey} disabled={!settings.padId} onChange={(event) => patch({ padFollowSongKey: event.currentTarget.checked })} />
+        <span>{STRINGS.padFollowSongKey}</span>
+      </label>
       <div className="pads-key-grid" role="group" aria-label={STRINGS.padKey}>
-        {PAD_KEY_LABELS.map((label, index) => <button key={label} type="button" className={settings.padKey === index ? "is-active" : ""} disabled={!settings.padId} aria-pressed={settings.padKey === index} onClick={() => patch({ padKey: index })}>{label}</button>)}
+        {/* While following the song key the grid reflects the current tonic but
+            is read-only (the desktop drives padKey from the song). */}
+        {PAD_KEY_LABELS.map((label, index) => <button key={label} type="button" className={settings.padKey === index ? "is-active" : ""} disabled={!settings.padId || settings.padFollowSongKey} aria-pressed={settings.padKey === index} onClick={() => patch({ padKey: index })}>{label}</button>)}
       </div>
       <SettingsRange label={STRINGS.volume} gain={settings.padVolume} onChange={(padVolume) => patch({ padVolume })} />
+      <PadFadeControl label={STRINGS.padFadeIn} seconds={settings.padFadeInSeconds} onChange={(padFadeInSeconds) => patch({ padFadeInSeconds })} />
+      <PadFadeControl label={STRINGS.padFadeOut} seconds={settings.padFadeOutSeconds} onChange={(padFadeOutSeconds) => patch({ padFadeOutSeconds })} />
+    </div>
+  );
+}
+
+// Soft entrance/exit control for the remote pad widget: a checkbox arming the
+// fade (default 2 s) plus a seconds slider. `seconds === 0` = no fade. Mirrors
+// the desktop PadFadeField; range 0.5–8 s.
+const PAD_FADE_DEFAULT_SECONDS = 2;
+
+function PadFadeControl({
+  label,
+  seconds,
+  onChange,
+}: {
+  label: string;
+  seconds: number;
+  onChange: (seconds: number) => void;
+}) {
+  const enabled = seconds > 0;
+  return (
+    <div className="pads-fade-control">
+      <label className="performance-switch">
+        <input type="checkbox" checked={enabled} onChange={(event) => onChange(event.currentTarget.checked ? PAD_FADE_DEFAULT_SECONDS : 0)} />
+        <span>{label}{enabled ? ` · ${seconds.toFixed(1)} s` : ""}</span>
+      </label>
+      {enabled ? (
+        <input
+          type="range"
+          min={0.5}
+          max={8}
+          step={0.1}
+          value={seconds}
+          aria-label={label}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
+      ) : null}
     </div>
   );
 }

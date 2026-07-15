@@ -4553,6 +4553,17 @@ button {
   opacity: 0.35;
 }
 
+.pads-fade-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pads-fade-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
 @container (max-width: 360px) {
   .performance-setting-grid {
     grid-template-columns: minmax(0, 1fr);
