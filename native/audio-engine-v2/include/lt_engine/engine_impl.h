@@ -45,7 +45,7 @@ public:
     void         service_control_thread_tasks();  // call once before command batches
     std::string  poll_event();           // returns "" when queue empty
     std::string  get_snapshot()  const;
-    std::string  list_devices()  const;
+    std::string  list_devices(bool force_rescan = false)  const;
     std::string  get_source_peaks(const std::string& source_id,
                                   int resolution_frames) const;
 

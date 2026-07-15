@@ -62,6 +62,7 @@ export function useSettingsState({
   >(null);
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
   const [isMidiInputRefreshing, setIsMidiInputRefreshing] = useState(false);
+  const [isAudioRefreshing, setIsAudioRefreshing] = useState(false);
 
   const appSettingsRef = useRef(appSettings);
   useEffect(() => {
@@ -117,6 +118,8 @@ export function useSettingsState({
     setMidiInputDevices,
     isMidiInputRefreshing,
     setIsMidiInputRefreshing,
+    isAudioRefreshing,
+    setIsAudioRefreshing,
     refreshAudioSettings,
   };
 }

@@ -1362,9 +1362,9 @@ void EngineImpl::rescale_session_for_new_sample_rate(int old_sr) {
             *next_session, *source_manager_, clock_->position().frame);
 }
 
-std::string EngineImpl::list_devices() const {
+std::string EngineImpl::list_devices(bool force_rescan) const {
     json arr = json::array();
-    for (const auto& d : device_manager_->list_devices()) {
+    for (const auto& d : device_manager_->list_devices(force_rescan)) {
         arr.push_back({
             {"device_id",   d.id},
             {"device_name", d.name},

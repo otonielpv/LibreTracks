@@ -2192,6 +2192,13 @@ textarea {
   }
 }
 
+/* Inline spinner for buttons that show a "working…" state (e.g. the Settings
+   "Refresh audio devices" button while it re-scans + reopens the device). */
+.lt-spin {
+  animation: lt-library-progress-spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
 .lt-library-panel-body {
   min-height: 0;
   flex: 1;

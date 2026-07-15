@@ -27,6 +27,7 @@ function setup(overrides: Partial<MetronomeDeviceHandlerDeps> = {}) {
     setMetronomeVolumeDraft: vi.fn(),
     setIsSettingsLoading: vi.fn(),
     setIsMidiInputRefreshing: vi.fn(),
+    setIsAudioRefreshing: vi.fn(),
     setAudioDeviceDescriptors: vi.fn(),
     setAudioOutputChannelCounts: vi.fn(),
     setDefaultAudioOutputDevice: vi.fn(),
@@ -34,6 +35,7 @@ function setup(overrides: Partial<MetronomeDeviceHandlerDeps> = {}) {
     metronomeLiveRequestIdRef,
     isTauriApp: true,
     isMidiInputRefreshing: () => false,
+    isAudioRefreshing: () => false,
     runAction,
     setStatus: vi.fn(),
     formatErrorStatus: (error: unknown) => `error:${String(error)}`,
@@ -183,5 +185,38 @@ describe("createMetronomeDeviceHandlers", () => {
     expect(deps.setAudioOutputChannelCounts).toHaveBeenCalledWith({ a: 2 });
     expect(deps.setDefaultAudioOutputDevice).toHaveBeenCalledWith("a");
     expect(deps.setIsSettingsLoading).toHaveBeenLastCalledWith(false);
+  });
+
+  it("handleRefreshAudioDevices forces a rescan and toggles the refreshing flag", async () => {
+    const getAudioOutputDevices = vi.fn(async () => ({
+      deviceDescriptors: [],
+      channelCounts: {},
+      defaultDevice: null,
+    }));
+    const { handlers, deps } = setup({ getAudioOutputDevices });
+    handlers.handleRefreshAudioDevices();
+    await Promise.resolve();
+    await Promise.resolve();
+    // The button must send force:true so the backend re-scans the active
+    // backend + reopens the device (the whole point of this fix).
+    expect(getAudioOutputDevices).toHaveBeenCalledWith({ force: true });
+    expect(deps.setIsAudioRefreshing).toHaveBeenNthCalledWith(1, true);
+    expect(deps.setIsAudioRefreshing).toHaveBeenLastCalledWith(false);
+  });
+
+  it("handleRefreshAudioDevices is a no-op while already refreshing", async () => {
+    const getAudioOutputDevices = vi.fn(async () => ({
+      deviceDescriptors: [],
+      channelCounts: {},
+      defaultDevice: null,
+    }));
+    const { handlers, deps } = setup({
+      isAudioRefreshing: () => true,
+      getAudioOutputDevices,
+    });
+    handlers.handleRefreshAudioDevices();
+    await Promise.resolve();
+    expect(getAudioOutputDevices).not.toHaveBeenCalled();
+    expect(deps.setIsAudioRefreshing).not.toHaveBeenCalled();
   });
 });

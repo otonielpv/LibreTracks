@@ -30,6 +30,7 @@ export type MetronomeDeviceHandlerDeps = {
   setMetronomeVolumeDraft: (volume: number) => void;
   setIsSettingsLoading: (loading: boolean) => void;
   setIsMidiInputRefreshing: (refreshing: boolean) => void;
+  setIsAudioRefreshing: (refreshing: boolean) => void;
   setAudioDeviceDescriptors: (descriptors: AudioDeviceDescriptor[]) => void;
   setAudioOutputChannelCounts: (counts: Record<string, number>) => void;
   setDefaultAudioOutputDevice: (device: string | null) => void;
@@ -40,6 +41,8 @@ export type MetronomeDeviceHandlerDeps = {
   isTauriApp: boolean;
   /** Current value of the isMidiInputRefreshing flag, read at call time. */
   isMidiInputRefreshing: () => boolean;
+  /** Current value of the isAudioRefreshing flag, read at call time. */
+  isAudioRefreshing: () => boolean;
   runAction: (action: () => Promise<void>) => Promise<void>;
   setStatus: (message: string) => void;
   formatErrorStatus: (error: unknown) => string;
@@ -81,6 +84,7 @@ export function createMetronomeDeviceHandlers(
     setMetronomeVolumeDraft,
     setIsSettingsLoading,
     setIsMidiInputRefreshing,
+    setIsAudioRefreshing,
     setAudioDeviceDescriptors,
     setAudioOutputChannelCounts,
     setDefaultAudioOutputDevice,
@@ -88,6 +92,7 @@ export function createMetronomeDeviceHandlers(
     metronomeLiveRequestIdRef,
     isTauriApp,
     isMidiInputRefreshing,
+    isAudioRefreshing,
     runAction,
     setStatus,
     formatErrorStatus,
@@ -116,6 +121,13 @@ export function createMetronomeDeviceHandlers(
 
   return {
     handleRefreshAudioDevices() {
+      // Re-entrancy guard: force:true re-scans the active backend and reopens
+      // the device, so a second overlapping refresh could tear down the stream
+      // the first one just revived. Bail if one is already running.
+      if (isAudioRefreshing()) {
+        return;
+      }
+      setIsAudioRefreshing(true);
       setIsSettingsLoading(true);
       void runAction(async () => {
         try {
@@ -128,8 +140,11 @@ export function createMetronomeDeviceHandlers(
               defaultValue: "Audio device list refreshed.",
             }),
           );
+        } catch (error) {
+          setStatus(formatErrorStatus(error));
         } finally {
           setIsSettingsLoading(false);
+          setIsAudioRefreshing(false);
         }
       });
     },

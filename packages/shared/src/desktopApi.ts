@@ -271,7 +271,9 @@ export async function getAudioOutputDevices(
       return audioOutputDevicesCache.value;
     }
   }
-  const request = invokeCommand<AudioOutputDevices>("get_audio_output_devices")
+  const request = invokeCommand<AudioOutputDevices>("get_audio_output_devices", {
+    force: options.force ?? false,
+  })
     .then((value) => {
       audioOutputDevicesCache = { value, at: Date.now() };
       return value;

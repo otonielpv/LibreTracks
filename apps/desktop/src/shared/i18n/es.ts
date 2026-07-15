@@ -139,6 +139,7 @@ const es = {
         "Las selecciones explicitas abren este dispositivo directamente; el predeterminado de Windows se ignora.",
       audioDeviceRefreshLabel: "Lista de dispositivos",
       audioDeviceRefresh: "Refrescar dispositivos de audio",
+      audioDeviceRefreshing: "Refrescando…",
       sampleRate: "Frecuencia de muestreo de salida",
       sampleRateAuto: "Auto - predeterminado del dispositivo",
       sampleRateAutoWithDefault:

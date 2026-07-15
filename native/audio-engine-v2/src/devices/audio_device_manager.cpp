@@ -324,7 +324,7 @@ AudioDeviceManager::~AudioDeviceManager() {
     close_device();
 }
 
-std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
+std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan) const {
     using clk = std::chrono::steady_clock;
     const auto t_start = clk::now();
     std::vector<DeviceDescriptor> result;
@@ -343,6 +343,33 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
     }
 
     auto& mgr = impl_->juce_manager;
+
+    // A forced rescan (Settings "Refresh audio devices") must re-enumerate the
+    // ACTIVE backend too, so freshly (un)plugged devices on the same driver
+    // appear. Two things stand in the way of the fast path and get handled up
+    // front here:
+    //   1. The channel-layout cache is keyed by device id and never expires, so
+    //      a changed driver layout would keep serving the stale count. Clear it.
+    //   2. scanForDevices() on the backend that owns the live stream tears that
+    //      stream down on Windows. We snapshot the current device setup now and
+    //      re-apply it after the scan loop to reopen exactly what was playing —
+    //      hence the brief, expected dropout while playing.
+    juce::AudioDeviceManager::AudioDeviceSetup saved_setup;
+    bool restore_active_device = false;
+    if (force_rescan) {
+        {
+            std::lock_guard<std::mutex> lk(impl_->cache_mtx);
+            impl_->channel_layout_cache.clear();
+        }
+        if (mgr.getCurrentAudioDevice() != nullptr) {
+            saved_setup = mgr.getAudioDeviceSetup();
+            restore_active_device = true;
+            device_debug_log(
+                "[LT_AUDIO_DEBUG] list_devices(force): will reopen active device "
+                "\"%s\" after rescan\n",
+                saved_setup.outputDeviceName.toRawUTF8());
+        }
+    }
     // getAvailableDeviceTypes() returns a const OwnedArray& — must be
     // bound by reference because OwnedArray is non-copyable. Capturing
     // by `auto` produces a copy attempt and a hard compile error.
@@ -360,9 +387,11 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
     // stream down on Windows: DirectSound's scan re-enumerates the primary
     // endpoint and leaves the open device in a dead state that only a fresh
     // open_device() (i.e. the user "changing device") can revive. Symptom:
-    // opening Settings/Remote stops playback and it won't restart. We must
-    // therefore NOT scan the active backend; its device list is already known
-    // from the open, and getDeviceNames() below returns it without a rescan.
+    // opening Settings/Remote stops playback and it won't restart. On the fast
+    // path we therefore NOT scan the active backend; its device list is already
+    // known from the open, and getDeviceNames() below returns it without a
+    // rescan. A forced rescan DOES scan it (and reopens the device afterwards,
+    // see `restore_active_device` below) precisely to pick up hot (un)plugs.
     juce::AudioIODevice* open_dev = mgr.getCurrentAudioDevice();
     const std::string active_backend =
         open_dev ? open_dev->getTypeName().toStdString() : std::string{};
@@ -372,7 +401,7 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
         const bool is_active_backend =
             !active_backend.empty() &&
             backend_name.toStdString() == active_backend;
-        if (is_active_backend) {
+        if (is_active_backend && !force_rescan) {
             device_debug_log(
                 "[LT_AUDIO_DEBUG] list_devices: skipping scanForDevices on active "
                 "backend \"%s\" to avoid disrupting the live stream\n",
@@ -441,9 +470,35 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
             result.push_back(std::move(d));
         }
     }
+    // Reopen the device the forced rescan just tore down. Re-applying the
+    // snapshotted setup revives the exact stream (same device, SR, buffer and
+    // channel mask) without us having to reconstruct a DeviceOpenRequest. JUCE
+    // reuses the still-installed callback adaptor, so audio resumes on its own.
+    if (restore_active_device) {
+        const auto t_reopen = clk::now();
+        const juce::String reopen_err =
+            mgr.setAudioDeviceSetup(saved_setup, /*treatAsChosenDevice=*/true);
+        const double reopen_ms =
+            std::chrono::duration<double, std::milli>(clk::now() - t_reopen).count();
+        if (reopen_err.isNotEmpty()) {
+            // Non-fatal: the list is still valid to return. Surface it so a
+            // rescan that dropped audio without recovering is diagnosable.
+            fprintf(stderr,
+                    "[LT_AUDIO] list_devices(force): failed to reopen active "
+                    "device \"%s\": %s\n",
+                    saved_setup.outputDeviceName.toRawUTF8(),
+                    reopen_err.toRawUTF8());
+        } else {
+            device_debug_log(
+                "[LT_AUDIO_DEBUG] list_devices(force): reopened active device "
+                "\"%s\" reopen_ms=%.1f\n",
+                saved_setup.outputDeviceName.toRawUTF8(), reopen_ms);
+        }
+    }
+
     const double total_ms = std::chrono::duration<double, std::milli>(clk::now() - t_start).count();
-    device_debug_log("[LT_AUDIO_DEBUG] list_devices total_ms=%.1f total_devices=%d\n",
-                 total_ms, static_cast<int>(result.size()));
+    device_debug_log("[LT_AUDIO_DEBUG] list_devices total_ms=%.1f total_devices=%d force=%d\n",
+                 total_ms, static_cast<int>(result.size()), force_rescan ? 1 : 0);
     return result;
 }
 
@@ -712,7 +767,7 @@ struct AudioDeviceManager::Impl {
 AudioDeviceManager::AudioDeviceManager()  : impl_(std::make_unique<Impl>()) {}
 AudioDeviceManager::~AudioDeviceManager() = default;
 
-std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
+std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool /*force_rescan*/) const {
     DeviceDescriptor descriptor;
     descriptor.id = "stub-default";
     descriptor.name = "C++ v2 stub output";

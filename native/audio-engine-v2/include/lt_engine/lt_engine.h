@@ -103,8 +103,13 @@ LT_API const char* lt_audio_engine_get_snapshot(LtEngine* engine);
 // ---------------------------------------------------------------------------
 
 /** JSON array of available output devices.
- *  Each element has: { "id": "...", "name": "...", "backend": "..." } */
-LT_API const char* lt_audio_engine_list_devices(LtEngine* engine);
+ *  Each element has: { "id": "...", "name": "...", "backend": "..." }
+ *  When `force_rescan` is non-zero, re-scans every backend (including the one
+ *  driving the live stream) and reopens the active device afterwards, so hot
+ *  (un)plugged devices appear — at the cost of a brief audio dropout while
+ *  playing. Pass 0 for the cheap, dropout-free path used on Settings open. */
+LT_API const char* lt_audio_engine_list_devices(LtEngine* engine,
+                                                int32_t force_rescan);
 
 /** JSON object with downsampled peaks for a loaded source.
  *  Returns { "ok": false, "error": "..." } when the source is not ready. */

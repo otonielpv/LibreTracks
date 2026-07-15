@@ -260,7 +260,17 @@ impl Engine {
     }
 
     pub fn list_devices(&self) -> Result<Vec<DeviceInfo>, EngineError> {
-        let ptr = unsafe { lt_audio_engine_list_devices(self.handle) };
+        self.list_devices_ext(false)
+    }
+
+    /// Enumerate devices, optionally forcing a full rescan of every backend —
+    /// including the one driving the live stream — which reopens the active
+    /// device afterwards (brief audio dropout while playing). Used by the
+    /// Settings "Refresh audio devices" button; `list_devices()` keeps the
+    /// cheap, dropout-free path.
+    pub fn list_devices_ext(&self, force_rescan: bool) -> Result<Vec<DeviceInfo>, EngineError> {
+        let ptr =
+            unsafe { lt_audio_engine_list_devices(self.handle, if force_rescan { 1 } else { 0 }) };
         if ptr.is_null() {
             return Ok(vec![]);
         }

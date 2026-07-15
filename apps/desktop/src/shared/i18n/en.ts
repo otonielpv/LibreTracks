@@ -138,6 +138,7 @@ const en = {
         "Explicit selections open this device directly; the Windows default is ignored.",
       audioDeviceRefreshLabel: "Device list",
       audioDeviceRefresh: "Refresh audio devices",
+      audioDeviceRefreshing: "Refreshing…",
       sampleRate: "Output sample rate",
       sampleRateAuto: "Auto - device default",
       sampleRateAutoWithDefault: "Auto - device default: {{sampleRate}} Hz",

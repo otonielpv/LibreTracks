@@ -47,7 +47,10 @@ extern "C" {
     pub fn lt_audio_engine_service_control_thread(engine: *mut LtEngine);
     pub fn lt_audio_engine_poll_event(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_get_snapshot(engine: *mut LtEngine) -> *const c_char;
-    pub fn lt_audio_engine_list_devices(engine: *mut LtEngine) -> *const c_char;
+    pub fn lt_audio_engine_list_devices(
+        engine: *mut LtEngine,
+        force_rescan: i32,
+    ) -> *const c_char;
     pub fn lt_audio_engine_get_source_peaks(
         engine: *mut LtEngine,
         source_id: *const c_char,
@@ -181,7 +184,7 @@ pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
     feature = "no-link",
     all(target_os = "android", not(lt_engine_android_link))
 ))]
-pub unsafe fn lt_audio_engine_list_devices(_: *mut LtEngine) -> *const c_char {
+pub unsafe fn lt_audio_engine_list_devices(_: *mut LtEngine, _force_rescan: i32) -> *const c_char {
     b"[]\0".as_ptr().cast()
 }
 #[cfg(any(

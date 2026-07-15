@@ -183,7 +183,7 @@ AudioDeviceManager::~AudioDeviceManager() {
     close_device();
 }
 
-std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
+std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool /*force_rescan*/) const {
     // The native backend only knows the AAudio *default* route. The concrete
     // hardware endpoints (speaker / wired / USB interface / Bluetooth) are
     // enumerated on the Rust side via AudioManager.getDevices() and appended to

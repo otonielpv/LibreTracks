@@ -66,7 +66,17 @@ public:
     ~AudioDeviceManager();
 
     // Enumerate available output devices.
-    std::vector<DeviceDescriptor> list_devices() const;
+    //
+    // When `force_rescan` is true the enumeration re-scans EVERY backend —
+    // including the one that currently owns the live stream — and clears the
+    // channel-layout cache, so freshly (un)plugged devices and changed driver
+    // layouts show up. This is what the Settings "Refresh audio devices" button
+    // passes. Because re-scanning the active backend tears the live stream down
+    // on Windows (DirectSound), a forced rescan closes and reopens the current
+    // device around the scan; expect a brief audio dropout while playing.
+    // With `force_rescan == false` the active backend is skipped (no dropout)
+    // and cached layouts are reused — the cheap path used on Settings open.
+    std::vector<DeviceDescriptor> list_devices(bool force_rescan = false) const;
 
     // Open (and optionally start) a device.  Installs the callback.
     // Stopping the stream first if one is already open.

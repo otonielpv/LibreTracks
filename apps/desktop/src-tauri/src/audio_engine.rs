@@ -1867,7 +1867,10 @@ impl AudioController {
     /// live playback stream). Uses try_lock with a short retry so a device-list
     /// refresh never blocks behind an in-flight command — it degrades to "state
     /// locked" exactly like engine_snapshot.
-    pub fn list_devices(&self) -> Result<AudioOutputDevicesResponse, DesktopError> {
+    pub fn list_devices(
+        &self,
+        force_rescan: bool,
+    ) -> Result<AudioOutputDevicesResponse, DesktopError> {
         const LIST_LOCK_RETRIES: u32 = 3;
         let mut state = 'acquire: loop {
             for attempt in 0..LIST_LOCK_RETRIES {
@@ -1890,7 +1893,7 @@ impl AudioController {
             ));
         };
         let devices = ensure_engine(&mut state)?
-            .list_devices()
+            .list_devices_ext(force_rescan)
             .map_err(|e| DesktopError::AudioCommand(e.to_string()))?;
         Ok(devices_response(devices))
     }
@@ -2339,6 +2342,11 @@ impl Drop for AudioController {
 #[tauri::command]
 pub fn get_audio_output_devices(
     state: State<'_, crate::state::DesktopState>,
+    // The Settings "Refresh audio devices" button sends force=true to re-scan
+    // the active backend and reopen the device (brief dropout) so hot
+    // (un)plugged devices show up. Defaults to false — the automatic fetch on
+    // Settings open takes the cheap, dropout-free path.
+    force: Option<bool>,
 ) -> Result<AudioOutputDevicesResponse, String> {
     // Enumerate through the LIVE audio engine (the one playback uses), reusing
     // it instead of spinning up a throwaway. The old code reused EngineV2State,
@@ -2349,10 +2357,13 @@ pub fn get_audio_output_devices(
     // buffer, the throwaway's scan tore down the live stream). AudioController::
     // list_devices reuses the live engine and never touches a second JUCE
     // device manager.
-    state.audio.list_devices().map_err(|error| {
-        eprintln!("[audio] get_audio_output_devices FAILED: {error}");
-        error.to_string()
-    })
+    state
+        .audio
+        .list_devices(force.unwrap_or(false))
+        .map_err(|error| {
+            eprintln!("[audio] get_audio_output_devices FAILED: {error}");
+            error.to_string()
+        })
 }
 
 pub fn audio_debug_logging_enabled() -> bool {

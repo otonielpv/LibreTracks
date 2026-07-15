@@ -59,6 +59,7 @@ type SettingsPanelProps = {
   onAudioBackendChange: (value: string) => void;
   onAudioOutputDeviceChange: (value: string) => void;
   onRefreshAudioDevices: () => void;
+  isAudioRefreshing: boolean;
   onOutputSampleRateChange: (value: string) => void;
   onOutputBufferSizeChange: (value: string) => void;
   onEnabledOutputChannelChange: (channelIndex: number, checked: boolean) => void;
@@ -127,6 +128,7 @@ export function SettingsPanel({
   onAudioBackendChange,
   onAudioOutputDeviceChange,
   onRefreshAudioDevices,
+  isAudioRefreshing,
   onOutputSampleRateChange,
   onOutputBufferSizeChange,
   onEnabledOutputChannelChange,
@@ -337,12 +339,26 @@ export function SettingsPanel({
                       <button
                         type="button"
                         className="lt-secondary-button"
-                        disabled={isSaving}
+                        disabled={isLoading || isSaving || isAudioRefreshing}
                         onClick={onRefreshAudioDevices}
                       >
-                        {t(
-                          "transport.settingsModal.audioDeviceRefresh",
-                          { defaultValue: "Refresh audio devices" },
+                        {isAudioRefreshing ? (
+                          <>
+                            <span
+                              className="material-symbols-outlined lt-spin"
+                              aria-hidden="true"
+                            >
+                              progress_activity
+                            </span>
+                            {t(
+                              "transport.settingsModal.audioDeviceRefreshing",
+                              { defaultValue: "Refreshing…" },
+                            )}
+                          </>
+                        ) : (
+                          t("transport.settingsModal.audioDeviceRefresh", {
+                            defaultValue: "Refresh audio devices",
+                          })
                         )}
                       </button>
                     </div>

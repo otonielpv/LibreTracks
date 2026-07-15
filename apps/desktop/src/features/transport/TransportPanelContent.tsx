@@ -1040,6 +1040,8 @@ export function TransportPanelContent() {
     setMidiInputDevices,
     isMidiInputRefreshing,
     setIsMidiInputRefreshing,
+    isAudioRefreshing,
+    setIsAudioRefreshing,
     refreshAudioSettings,
   } = useSettingsState({ syncSettingsLanguage });
   useEffect(() => {
@@ -1981,6 +1983,8 @@ export function TransportPanelContent() {
   // factory. See ./settings/metronomeDeviceHandlers.
   const isMidiInputRefreshingRef = useRef(isMidiInputRefreshing);
   isMidiInputRefreshingRef.current = isMidiInputRefreshing;
+  const isAudioRefreshingRef = useRef(isAudioRefreshing);
+  isAudioRefreshingRef.current = isAudioRefreshing;
   const metronomeDeviceHandlers = useMemo(
     () =>
       createMetronomeDeviceHandlers({
@@ -1990,6 +1994,7 @@ export function TransportPanelContent() {
         setMetronomeVolumeDraft,
         setIsSettingsLoading,
         setIsMidiInputRefreshing,
+        setIsAudioRefreshing,
         setAudioDeviceDescriptors,
         setAudioOutputChannelCounts,
         setDefaultAudioOutputDevice,
@@ -1997,6 +2002,7 @@ export function TransportPanelContent() {
         metronomeLiveRequestIdRef,
         isTauriApp,
         isMidiInputRefreshing: () => isMidiInputRefreshingRef.current,
+        isAudioRefreshing: () => isAudioRefreshingRef.current,
         runAction,
         setStatus,
         formatErrorStatus,
@@ -8894,6 +8900,7 @@ export function TransportPanelContent() {
               onAudioBackendChange={handleAudioBackendChange}
               onAudioOutputDeviceChange={handleAudioOutputDeviceChange}
               onRefreshAudioDevices={handleRefreshAudioDevices}
+              isAudioRefreshing={isAudioRefreshing}
               onOutputSampleRateChange={handleOutputSampleRateChange}
               onOutputBufferSizeChange={handleOutputBufferSizeChange}
               onEnabledOutputChannelChange={handleEnabledOutputChannelChange}

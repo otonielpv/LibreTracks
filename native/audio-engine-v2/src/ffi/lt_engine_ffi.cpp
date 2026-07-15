@@ -114,10 +114,11 @@ LT_API const char* lt_audio_engine_get_snapshot(LtEngine* engine) {
     return buf.c_str();
 }
 
-LT_API const char* lt_audio_engine_list_devices(LtEngine* engine) {
+LT_API const char* lt_audio_engine_list_devices(LtEngine* engine,
+                                                int32_t force_rescan) {
     if (!engine) return "[]";
     thread_local std::string buf;
-    buf = as_impl(engine)->list_devices();
+    buf = as_impl(engine)->list_devices(force_rescan != 0);
     return buf.c_str();
 }
 
