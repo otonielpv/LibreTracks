@@ -22,6 +22,7 @@ import {
   getSongBaseTimeSignature,
   getSongTempoRegionAtPosition,
   getSongRegionAtPosition,
+  regionPadKey,
   normalizeAppSettings,
   type AppSettings,
   type AudioBackendKind,
@@ -805,6 +806,12 @@ export function TransportPanelContent() {
   // displayPositionSecondsRef is updated per-frame without re-rendering, so the
   // tempo input would otherwise stay frozen at the last region's BPM.
   const [activeTempoRegionKey, setActiveTempoRegionKey] = useState<string>("");
+  // Id of the SONG region under the playhead. Distinct from the tempo region
+  // above (tempo regions subdivide on BPM changes). Bumped when the playhead
+  // crosses a song boundary so the "pad follows song key" effect re-evaluates
+  // the tonic. Updated per-frame via a ref to avoid a render on every frame.
+  const [activeSongRegionId, setActiveSongRegionId] = useState<string>("");
+  const activeSongRegionIdRef = useRef("");
   // While the user is editing the tempo input, do not stomp their in-progress
   // value with the effective BPM at the playhead. Cleared on blur.
   const tempoDraftFocusedRef = useRef(false);
@@ -4436,6 +4443,35 @@ export function TransportPanelContent() {
     setTimeSignatureDraft(getSongBaseTimeSignature(song));
   }, [song, song?.projectRevision, activeTempoRegionKey]);
 
+  // "Pad follows song key": when enabled, drive the pad's key from the tonic of
+  // the song region under the playhead, re-evaluating when the playhead crosses
+  // into another song (activeSongRegionId) or when that region's key/transpose
+  // is edited (song?.projectRevision). A pad is a tonal drone, so only the
+  // tonic matters — regionPadKey ignores major/minor. We push the change only
+  // when the tonic actually differs from the current padKey to avoid redundant
+  // decodes, and leave the manual key untouched when the song has no set key.
+  useEffect(() => {
+    if (!appSettings.padFollowSongKey || !appSettings.padEnabled) {
+      return;
+    }
+    const region = getSongRegionAtPosition(
+      songRef.current,
+      displayPositionSecondsRef.current,
+    );
+    const tonic = regionPadKey(region);
+    if (tonic === null || tonic === appSettingsRef.current.padKey) {
+      return;
+    }
+    handlePadChange({ padKey: tonic });
+  }, [
+    appSettings.padFollowSongKey,
+    appSettings.padEnabled,
+    appSettings.padKey,
+    activeSongRegionId,
+    song?.projectRevision,
+    handlePadChange,
+  ]);
+
   useEffect(() => {
     if (!song) {
       return () => {};
@@ -5451,6 +5487,16 @@ export function TransportPanelContent() {
     if (nextRegionKey !== activeTempoRegionKeyRef.current) {
       activeTempoRegionKeyRef.current = nextRegionKey;
       setActiveTempoRegionKey(nextRegionKey);
+    }
+
+    // Track the song region under the playhead so the "pad follows song key"
+    // effect can react when the playhead crosses into a song with a different
+    // tonic. Only re-renders on an actual boundary crossing.
+    const nextSongRegionId =
+      getSongRegionAtPosition(songRef.current, clampedPosition)?.id ?? "";
+    if (nextSongRegionId !== activeSongRegionIdRef.current) {
+      activeSongRegionIdRef.current = nextSongRegionId;
+      setActiveSongRegionId(nextSongRegionId);
     }
 
     if (transportReadoutTempoRef.current) {

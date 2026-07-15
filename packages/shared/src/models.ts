@@ -709,6 +709,11 @@ export type AppSettings = {
   padFadeInSeconds: number;
   /** Soft-exit duration in seconds on disable / key swap (0 = fast swap). */
   padFadeOutSeconds: number;
+  /**
+   * When true the pad's key follows the song's tonic (the region under the
+   * playhead) and its transpose, instead of the manual key selection.
+   */
+  padFollowSongKey: boolean;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker";
@@ -761,6 +766,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   padOutput: "master",
   padFadeInSeconds: 0,
   padFadeOutSeconds: 0,
+  padFollowSongKey: false,
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -973,6 +979,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     padFadeOutSeconds: Number.isFinite(settings.padFadeOutSeconds)
       ? Math.min(30, Math.max(0, settings.padFadeOutSeconds))
       : DEFAULT_APP_SETTINGS.padFadeOutSeconds,
+    padFollowSongKey: Boolean(settings.padFollowSongKey),
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,
@@ -1434,6 +1441,20 @@ export function regionEffectiveKey(
 ): string | null {
   if (!region) return null;
   return transposeKey(region.key, region.transposeSemitones);
+}
+
+/**
+ * The pad key (0..11, C..B) that matches a region's tonic, for the pad's
+ * "follow song key" mode. A pad is a tonal drone — a sustained fundamental — so
+ * only the tonic matters, not major/minor: a song in `Dm` and one in `D` both
+ * drive the pad to `D` (index 2). Returns `null` when the region has no
+ * (parseable) key, so callers leave the manual pad key untouched.
+ */
+export function regionPadKey(
+  region: Pick<SongRegionSummary, "key" | "transposeSemitones"> | null | undefined,
+): number | null {
+  const parsed = parseSongKey(regionEffectiveKey(region));
+  return parsed ? parsed.semitone : null;
 }
 
 function semitonesToPitchScale(semitones: number): number {

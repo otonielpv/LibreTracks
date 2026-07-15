@@ -747,6 +747,8 @@ const es = {
     pack: "Pack",
     choosePack: "Elegir pack…",
     key: "Tonalidad",
+    followSongKey: "Seguir tonalidad de la canción",
+    followingSong: "sigue la canción",
     volume: "Volumen",
     fadeIn: "Entrada suave",
     fadeOut: "Salida suave",

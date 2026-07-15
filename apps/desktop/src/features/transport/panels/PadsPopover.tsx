@@ -291,9 +291,29 @@ function PadsPopoverImpl({
             </select>
           </div>
 
+          <label className="lt-pads-toggle lt-pads-follow-toggle">
+            <input
+              type="checkbox"
+              checked={settings.padFollowSongKey}
+              onChange={(event) =>
+                onPadChange({ padFollowSongKey: event.target.checked })
+              }
+            />
+            <span>
+              {t("pads.followSongKey", {
+                defaultValue: "Seguir tonalidad de la canción",
+              })}
+            </span>
+          </label>
+
           <div className="lt-pads-field">
             <span className="lt-pads-field-label">
               {t("pads.key", { defaultValue: "Tonalidad" })}
+              {settings.padFollowSongKey && (
+                <span className="lt-pads-follow-hint">
+                  {t("pads.followingSong", { defaultValue: "sigue la canción" })}
+                </span>
+              )}
             </span>
             <div className="lt-pads-key-grid" role="group">
               {KEY_LABELS.map((label, index) => (
@@ -306,6 +326,9 @@ function PadsPopoverImpl({
                       : "lt-pads-key"
                   }
                   aria-pressed={settings.padKey === index}
+                  // While following the song key the grid reflects the current
+                  // tonic but is read-only; the manual override is disabled.
+                  disabled={settings.padFollowSongKey}
                   onClick={() => onPadChange({ padKey: index })}
                 >
                   {label}

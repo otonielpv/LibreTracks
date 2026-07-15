@@ -14,6 +14,7 @@ import {
   normalizeAppSettings,
   parseSongKey,
   regionEffectiveKey,
+  regionPadKey,
   transposeKey,
   type AppSettings,
   type SongRegionSummary,
@@ -138,6 +139,47 @@ describe("regionEffectiveKey", () => {
     expect(
       regionEffectiveKey(makeRegion({ key: null, transposeSemitones: 2 })),
     ).toBeNull();
+  });
+});
+
+describe("regionPadKey", () => {
+  it("returns the tonic index 0..11 from the effective key", () => {
+    // D = index 2.
+    expect(regionPadKey(makeRegion({ key: "D", transposeSemitones: 0 }))).toBe(
+      2,
+    );
+    // F# = index 6.
+    expect(
+      regionPadKey(makeRegion({ key: "Gb", transposeSemitones: 0 })),
+    ).toBe(6);
+  });
+
+  it("ignores major/minor — a drone only cares about the tonic", () => {
+    // Dm and D both map to D (index 2): the pad is a tonal drone.
+    expect(regionPadKey(makeRegion({ key: "Dm", transposeSemitones: 0 }))).toBe(
+      2,
+    );
+    expect(regionPadKey(makeRegion({ key: "D", transposeSemitones: 0 }))).toBe(
+      2,
+    );
+  });
+
+  it("follows the transpose (tonic shifts with pitch)", () => {
+    // Dm transposed +2 → Em; tonic E = index 4.
+    expect(regionPadKey(makeRegion({ key: "Dm", transposeSemitones: 2 }))).toBe(
+      4,
+    );
+    // C transposed -1 → B = index 11.
+    expect(regionPadKey(makeRegion({ key: "C", transposeSemitones: -1 }))).toBe(
+      11,
+    );
+  });
+
+  it("returns null when the region has no (parseable) key", () => {
+    expect(
+      regionPadKey(makeRegion({ key: null, transposeSemitones: 3 })),
+    ).toBeNull();
+    expect(regionPadKey(null)).toBeNull();
   });
 });
 

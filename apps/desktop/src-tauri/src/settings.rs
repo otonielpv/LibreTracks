@@ -206,6 +206,12 @@ pub struct AppSettings {
     /// changes. 0 keeps the fast performance swap.
     #[serde(default)]
     pub pad_fade_out_seconds: f64,
+    /// When true, the pad's key is driven by the song's tonic (the region under
+    /// the playhead), following transpose changes, instead of the manual key
+    /// grid. The frontend owns the mapping and pushes `pad_key`; this flag only
+    /// persists the user's choice.
+    #[serde(default)]
+    pub pad_follow_song_key: bool,
     #[serde(default = "default_global_jump_mode")]
     pub global_jump_mode: String,
     #[serde(default = "default_global_jump_bars")]
@@ -279,6 +285,7 @@ impl Default for AppSettings {
             pad_output: default_pad_route(),
             pad_fade_in_seconds: 0.0,
             pad_fade_out_seconds: 0.0,
+            pad_follow_song_key: false,
             global_jump_mode: default_global_jump_mode(),
             global_jump_bars: default_global_jump_bars(),
             song_jump_trigger: default_song_jump_trigger(),

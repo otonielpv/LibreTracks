@@ -7867,6 +7867,25 @@ textarea {
   margin-top: 0.1rem;
 }
 
+.lt-pads-follow-toggle {
+  color: #9fc7c0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lt-pads-follow-hint {
+  color: #57f1db;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.lt-pads-key:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .lt-pads-manage summary {
   cursor: pointer;
   font: 600 10px/1.2 "Space Grotesk", sans-serif;

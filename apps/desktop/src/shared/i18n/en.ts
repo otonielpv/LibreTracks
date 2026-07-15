@@ -720,6 +720,8 @@ const en = {
     pack: "Pack",
     choosePack: "Choose a pack…",
     key: "Key",
+    followSongKey: "Follow song key",
+    followingSong: "following song",
     volume: "Volume",
     fadeIn: "Fade in",
     fadeOut: "Fade out",
