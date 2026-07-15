@@ -22,10 +22,27 @@
   ; Tell the shell to drop its per-extension icon cache so the new icons show up
   ; without a logoff/reboot (SHCNE_ASSOCCHANGED).
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+
+  ; Allow LibreTracks Remote (phone control over the LAN) through Windows
+  ; Firewall so users don't have to accept a UAC/firewall prompt or run a
+  ; PowerShell command by hand. This is a per-PROGRAM inbound rule (not a raw
+  ; open port): it only permits the LibreTracks binary to accept inbound
+  ; connections, only while the app is running, and survives us changing the
+  ; remote port later. The installer already runs elevated, so netsh succeeds
+  ; without a further prompt. netsh is present on every supported Windows.
+  ;
+  ; Delete any prior rule of the same name first so upgrades/repairs don't
+  ; stack duplicate rules, then (re)create it for all profiles.
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="LibreTracks Remote"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="LibreTracks Remote" dir=in action=allow program="$INSTDIR\LibreTracks.exe" enable=yes profile=any description="Permite conectar la app LibreTracks Remote desde el movil en la red local."'
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
   ; Tauri's APP_UNASSOCIATE removes the ProgIDs; just refresh the icon cache so
   ; stale custom icons don't linger in Explorer.
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+
+  ; Remove the firewall rule we added at install time so it doesn't linger
+  ; after the app is gone.
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="LibreTracks Remote"'
 !macroend
