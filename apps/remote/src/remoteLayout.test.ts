@@ -94,7 +94,7 @@ describe("remoteLayout", () => {
     expect(phoneTools.map(({ type, y, h }) => [type, y, h])).toEqual([
       ["metronomeSettings", 0, DEFAULT_METRONOME_WIDGET_HEIGHT],
       ["voiceGuideSettings", DEFAULT_METRONOME_WIDGET_HEIGHT, 14],
-      ["pads", DEFAULT_METRONOME_WIDGET_HEIGHT + 14, 16],
+      ["pads", DEFAULT_METRONOME_WIDGET_HEIGHT + 14, 31],
     ]);
   });
 

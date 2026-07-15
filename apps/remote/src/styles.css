@@ -4533,12 +4533,12 @@ button {
 }
 
 .pads-key-grid button {
-  min-height: clamp(2.3rem, 10cqh, 4.25rem);
+  min-height: clamp(2rem, 5cqh, 2.9rem);
   border: 1px solid var(--outline);
   border-radius: 0.55rem;
   background: var(--panel-2);
   color: var(--text);
-  font-size: clamp(0.72rem, 4cqi, 1.1rem);
+  font-size: clamp(0.72rem, 3.4cqi, 1rem);
   font-weight: 800;
 }
 

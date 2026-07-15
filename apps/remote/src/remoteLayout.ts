@@ -227,12 +227,12 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
       ? [
           placement("metronomeSettings", 0, 0, LAYOUT_COLUMNS, DEFAULT_METRONOME_WIDGET_HEIGHT),
           placement("voiceGuideSettings", 0, DEFAULT_METRONOME_WIDGET_HEIGHT, LAYOUT_COLUMNS, 14),
-          placement("pads", 0, DEFAULT_METRONOME_WIDGET_HEIGHT + 14, LAYOUT_COLUMNS, 16),
+          placement("pads", 0, DEFAULT_METRONOME_WIDGET_HEIGHT + 14, LAYOUT_COLUMNS, 31),
         ]
       : [
           placement("metronomeSettings", 0, 0, 8, DEFAULT_METRONOME_WIDGET_HEIGHT),
           placement("voiceGuideSettings", 8, 0, 8, 20),
-          placement("pads", 16, 0, 8, 20),
+          placement("pads", 16, 0, 8, 31),
         ],
   };
   return {

@@ -3547,7 +3547,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   mixerFaders: { labelKey: "widgetMixerFaders", Component: MixerFadersWidget, defaultW: LAYOUT_COLUMNS, defaultH: 24 },
   songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12 },
   clipList: { labelKey: "widgetSongHeader", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12, palette: false },
-  pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: 20 },
+  pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: 31 },
   metronomeSettings: { labelKey: "widgetMetronomeSettings", Component: MetronomeSettingsWidget, defaultW: 8, defaultH: DEFAULT_METRONOME_WIDGET_HEIGHT },
   voiceGuideSettings: { labelKey: "widgetVoiceGuideSettings", Component: VoiceGuideSettingsWidget, defaultW: 8, defaultH: 20 },
   layoutTitle: { labelKey: "widgetLayoutTitle", Component: LayoutTitleWidget, defaultW: LAYOUT_COLUMNS, defaultH: 3 },
@@ -3661,7 +3661,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "mixerSongMaster": return { w: 24, h: 5 };
     case "mixerFaders": return { w: 24, h: 26 };
     case "songHeader": case "clipList": return { w: 24, h: 14 };
-    case "pads": return { w: 24, h: 18 };
+    case "pads": return { w: 24, h: 31 };
     case "metronomeSettings": return { w: 24, h: DEFAULT_METRONOME_WIDGET_HEIGHT };
     case "voiceGuideSettings": return { w: 24, h: 14 };
     case "layoutTitle": return { w: 24, h: 3 };
