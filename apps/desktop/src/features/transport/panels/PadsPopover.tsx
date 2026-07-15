@@ -103,10 +103,16 @@ function PadsPopoverImpl({
   }, []);
 
   // Anchor the portalled panel under the trigger; reposition on scroll/resize.
+  // The pads trigger sits far right in the topbar, so clamp the left edge to
+  // keep the panel within the viewport instead of clipping off the right side.
   const updateAnchor = useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setAnchor({ top: rect.bottom + 6, left: rect.left });
+    const margin = 12;
+    const width = panelRef.current?.offsetWidth ?? 300;
+    const maxLeft = window.innerWidth - width - margin;
+    const left = Math.max(margin, Math.min(rect.left, maxLeft));
+    setAnchor({ top: rect.bottom + 6, left });
   }, [anchorRef]);
 
   useEffect(() => {
@@ -123,6 +129,12 @@ function PadsPopoverImpl({
       // route dropdown as inside the popover.
       const el = target instanceof Element ? target : (target as Node).parentElement;
       if (el?.closest(".lt-audio-route-list, .lt-audio-route-combobox")) {
+        return;
+      }
+      // The trigger is a split control (main toggle + caret). The caret sits
+      // outside anchorRef, so treat the whole split wrapper as "inside" — else
+      // clicking the caret to close would close-then-reopen (a flicker).
+      if (el?.closest(".lt-topbar-split")) {
         return;
       }
       if (

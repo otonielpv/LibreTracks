@@ -386,6 +386,46 @@ textarea {
   color: #57f1db;
 }
 
+/* Split control: a main toggle (Click / Guía / Pads) with a caret button that
+   opens its settings popover. The two sit flush; the caret is slimmer and the
+   inner edges are squared so they read as one control. */
+.lt-topbar-split {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.lt-transport-buttons .lt-topbar-split button.lt-split-main {
+  min-width: 3.2rem;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.lt-transport-buttons .lt-topbar-split button.lt-split-caret {
+  width: auto;
+  min-width: 0;
+  padding: 0 0.1rem;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid rgb(87 241 219 / 0.16);
+}
+
+.lt-transport-buttons .lt-topbar-split button.lt-split-caret .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Caret reflects the popover's open state: tinted background + accent icon,
+   matching the app's active-toggle look. */
+.lt-transport-buttons .lt-topbar-split button.lt-split-caret.is-open:not(:disabled) {
+  background: rgb(87 241 219 / 0.18);
+  color: #57f1db;
+}
+
+.lt-transport-buttons
+  .lt-topbar-split
+  button.lt-split-caret.is-open:not(:disabled):hover {
+  background: rgb(87 241 219 / 0.26);
+}
+
 .lt-transport-readout {
   display: flex;
   align-items: center;
@@ -7644,6 +7684,13 @@ textarea {
   z-index: 70;
   width: 300px;
   max-width: calc(100vw - 24px);
+  /* Anchored just below the topbar (~top: 92px). Cap the height to the space
+     left down to the viewport bottom so tall popovers (e.g. the full metronome
+     panel, or any popover on a short/Android-sized window) scroll internally
+     instead of running off-screen. */
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.75rem;
   border: 1px solid rgb(87 241 219 / 0.32);
   border-radius: 6px;
@@ -7657,7 +7704,14 @@ textarea {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  margin-bottom: 0.6rem;
+  /* Stay pinned while the popover body scrolls; the negative margins let it
+     span the container padding and its background masks scrolled content. */
+  position: sticky;
+  top: -0.75rem;
+  margin: -0.75rem -0.75rem 0.6rem;
+  padding: 0.75rem 0.75rem 0.4rem;
+  background: #0a0a0a;
+  z-index: 1;
 }
 
 .lt-pads-popover-header h3 {

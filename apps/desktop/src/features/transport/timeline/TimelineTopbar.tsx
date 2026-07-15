@@ -47,11 +47,19 @@ type TimelineTopbarProps = {
   onNextSong: () => void;
   metronomeEnabled: boolean;
   onToggleMetronome: () => void;
+  metronomeButtonRef?: React.Ref<HTMLButtonElement>;
+  onOpenMetronome: () => void;
+  isMetronomePopoverOpen: boolean;
   voiceGuideEnabled: boolean;
   onToggleVoiceGuide: () => void;
+  voiceGuideButtonRef?: React.Ref<HTMLButtonElement>;
+  onOpenVoiceGuide: () => void;
+  isVoiceGuidePopoverOpen: boolean;
   padEnabled: boolean;
   padButtonRef?: React.Ref<HTMLButtonElement>;
+  onTogglePads: () => void;
   onOpenPads: () => void;
+  isPadsPopoverOpen: boolean;
   onTempoDraftChange: (nextTempoDraft: string) => void;
   onTempoDraftFocus?: () => void;
   onTapTempo: () => void;
@@ -98,11 +106,19 @@ export function TimelineTopbar({
   onNextSong,
   metronomeEnabled,
   onToggleMetronome,
+  metronomeButtonRef,
+  onOpenMetronome,
+  isMetronomePopoverOpen,
   voiceGuideEnabled,
   onToggleVoiceGuide,
+  voiceGuideButtonRef,
+  onOpenVoiceGuide,
+  isVoiceGuidePopoverOpen,
   padEnabled,
   padButtonRef,
+  onTogglePads,
   onOpenPads,
+  isPadsPopoverOpen,
   onTempoDraftChange,
   onTempoDraftFocus,
   onTapTempo,
@@ -430,58 +446,136 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">pause</span>
             </button>
-            <button
-              type="button"
-              aria-label={t("timelineTopbar.metronome")}
-              className={metronomeEnabled ? "is-active is-toggle" : "is-toggle"}
-              disabled={isProjectEmpty && !learnModeActive}
-              onClick={() => {
-                if (learnModeActive) {
-                  onMidiLearnTarget("action:toggle_metronome");
-                  return;
+            <div className="lt-topbar-split">
+              <button
+                type="button"
+                ref={metronomeButtonRef}
+                aria-label={t("timelineTopbar.metronome")}
+                className={
+                  metronomeEnabled
+                    ? "is-active is-toggle lt-split-main"
+                    : "is-toggle lt-split-main"
                 }
+                disabled={isProjectEmpty && !learnModeActive}
+                onClick={() => {
+                  if (learnModeActive) {
+                    onMidiLearnTarget("action:toggle_metronome");
+                    return;
+                  }
 
-                onToggleMetronome();
-              }}
-            >
-              <span className="material-symbols-outlined">music_note</span>
-              <span className="lt-button-label">{t("timelineTopbar.click")}</span>
-            </button>
-            <button
-              type="button"
-              aria-label={t("timelineTopbar.voiceGuide")}
-              className={voiceGuideEnabled ? "is-active is-toggle" : "is-toggle"}
-              disabled={isProjectEmpty && !learnModeActive}
-              onClick={() => {
-                if (learnModeActive) {
-                  onMidiLearnTarget("action:toggle_voice_guide");
-                  return;
+                  onToggleMetronome();
+                }}
+              >
+                <span className="material-symbols-outlined">music_note</span>
+                <span className="lt-button-label">
+                  {t("timelineTopbar.click")}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={
+                  isMetronomePopoverOpen
+                    ? "is-toggle lt-split-caret is-open"
+                    : "is-toggle lt-split-caret"
                 }
-
-                onToggleVoiceGuide();
-              }}
-            >
-              <span className="material-symbols-outlined">campaign</span>
-              <span className="lt-button-label">{t("timelineTopbar.guide")}</span>
-            </button>
-            <button
-              type="button"
-              ref={padButtonRef}
-              aria-label={t("timelineTopbar.pads")}
-              className={padEnabled ? "is-active is-toggle" : "is-toggle"}
-              disabled={isProjectEmpty && !learnModeActive}
-              onClick={() => {
-                if (learnModeActive) {
-                  onMidiLearnTarget("action:toggle_pads");
-                  return;
+                aria-label={t("timelineTopbar.metronomeSettings", {
+                  defaultValue: "Ajustes del metrónomo",
+                })}
+                aria-expanded={isMetronomePopoverOpen}
+                disabled={isProjectEmpty && !learnModeActive}
+                onClick={onOpenMetronome}
+              >
+                <span className="material-symbols-outlined">
+                  {isMetronomePopoverOpen ? "arrow_drop_up" : "arrow_drop_down"}
+                </span>
+              </button>
+            </div>
+            <div className="lt-topbar-split">
+              <button
+                type="button"
+                ref={voiceGuideButtonRef}
+                aria-label={t("timelineTopbar.voiceGuide")}
+                className={
+                  voiceGuideEnabled
+                    ? "is-active is-toggle lt-split-main"
+                    : "is-toggle lt-split-main"
                 }
+                disabled={isProjectEmpty && !learnModeActive}
+                onClick={() => {
+                  if (learnModeActive) {
+                    onMidiLearnTarget("action:toggle_voice_guide");
+                    return;
+                  }
 
-                onOpenPads();
-              }}
-            >
-              <span className="material-symbols-outlined">graphic_eq</span>
-              <span className="lt-button-label">{t("timelineTopbar.pads")}</span>
-            </button>
+                  onToggleVoiceGuide();
+                }}
+              >
+                <span className="material-symbols-outlined">campaign</span>
+                <span className="lt-button-label">
+                  {t("timelineTopbar.guide")}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={
+                  isVoiceGuidePopoverOpen
+                    ? "is-toggle lt-split-caret is-open"
+                    : "is-toggle lt-split-caret"
+                }
+                aria-label={t("timelineTopbar.voiceGuideSettings", {
+                  defaultValue: "Ajustes de la voz guía",
+                })}
+                aria-expanded={isVoiceGuidePopoverOpen}
+                disabled={isProjectEmpty && !learnModeActive}
+                onClick={onOpenVoiceGuide}
+              >
+                <span className="material-symbols-outlined">
+                  {isVoiceGuidePopoverOpen ? "arrow_drop_up" : "arrow_drop_down"}
+                </span>
+              </button>
+            </div>
+            <div className="lt-topbar-split">
+              <button
+                type="button"
+                ref={padButtonRef}
+                aria-label={t("timelineTopbar.pads")}
+                className={
+                  padEnabled
+                    ? "is-active is-toggle lt-split-main"
+                    : "is-toggle lt-split-main"
+                }
+                disabled={isProjectEmpty && !learnModeActive}
+                onClick={() => {
+                  if (learnModeActive) {
+                    onMidiLearnTarget("action:toggle_pads");
+                    return;
+                  }
+
+                  onTogglePads();
+                }}
+              >
+                <span className="material-symbols-outlined">graphic_eq</span>
+                <span className="lt-button-label">{t("timelineTopbar.pads")}</span>
+              </button>
+              <button
+                type="button"
+                className={
+                  isPadsPopoverOpen
+                    ? "is-toggle lt-split-caret is-open"
+                    : "is-toggle lt-split-caret"
+                }
+                aria-label={t("timelineTopbar.padsSettings", {
+                  defaultValue: "Ajustes de los pads",
+                })}
+                aria-expanded={isPadsPopoverOpen}
+                disabled={isProjectEmpty && !learnModeActive}
+                onClick={onOpenPads}
+              >
+                <span className="material-symbols-outlined">
+                  {isPadsPopoverOpen ? "arrow_drop_up" : "arrow_drop_down"}
+                </span>
+              </button>
+            </div>
             <button
               type="button"
               aria-label={t("timelineTopbar.next")}

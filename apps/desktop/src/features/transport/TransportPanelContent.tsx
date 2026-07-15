@@ -178,6 +178,8 @@ import { CompactView } from "./compact/CompactView";
 import { TimelineToolbar } from "./timeline/TimelineToolbar";
 import { TimelineTopbar } from "./timeline/TimelineTopbar";
 import { PadsPopover } from "./panels/PadsPopover";
+import { MetronomePopover } from "./panels/MetronomePopover";
+import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
@@ -917,6 +919,10 @@ export function TransportPanelContent() {
   const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
   const [isPadsPopoverOpen, setIsPadsPopoverOpen] = useState(false);
   const padButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isMetronomePopoverOpen, setIsMetronomePopoverOpen] = useState(false);
+  const metronomeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isVoiceGuidePopoverOpen, setIsVoiceGuidePopoverOpen] = useState(false);
+  const voiceGuideButtonRef = useRef<HTMLButtonElement | null>(null);
   const selectedRegion = useMemo(
     () =>
       song?.regions.find((region) => region.id === selectedRegionId) ?? null,
@@ -7431,18 +7437,6 @@ export function TransportPanelContent() {
       label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }),
     },
     {
-      id: "metronome",
-      label: t("transport.settingsModal.tabMetronome", {
-        defaultValue: "Metronome",
-      }),
-    },
-    {
-      id: "voiceGuide",
-      label: t("transport.settingsModal.tabVoiceGuide", {
-        defaultValue: "Voice guide",
-      }),
-    },
-    {
       id: "general",
       label: t("transport.settingsModal.tabGeneral", {
         defaultValue: "General",
@@ -7628,13 +7622,23 @@ export function TransportPanelContent() {
           onToggleMetronome={() =>
             handleMetronomeEnabledChange(!appSettings.metronomeEnabled)
           }
+          metronomeButtonRef={metronomeButtonRef}
+          onOpenMetronome={() => setIsMetronomePopoverOpen((open) => !open)}
+          isMetronomePopoverOpen={isMetronomePopoverOpen}
           voiceGuideEnabled={appSettings.voiceGuideEnabled}
           onToggleVoiceGuide={() =>
             handleVoiceGuideEnabledChange(!appSettings.voiceGuideEnabled)
           }
+          voiceGuideButtonRef={voiceGuideButtonRef}
+          onOpenVoiceGuide={() => setIsVoiceGuidePopoverOpen((open) => !open)}
+          isVoiceGuidePopoverOpen={isVoiceGuidePopoverOpen}
           padEnabled={appSettings.padEnabled}
           padButtonRef={padButtonRef}
+          onTogglePads={() =>
+            handlePadEnabledChange(!appSettings.padEnabled)
+          }
           onOpenPads={() => setIsPadsPopoverOpen((open) => !open)}
+          isPadsPopoverOpen={isPadsPopoverOpen}
           onTempoDraftChange={(next) => {
             tempoDraftDirtyRef.current = true;
             setTempoDraft(next);
@@ -7711,6 +7715,31 @@ export function TransportPanelContent() {
           }}
           midiLearnMode={midiLearnMode}
           onMidiLearnTarget={handleMidiLearnTarget}
+        />
+
+        <MetronomePopover
+          open={isMetronomePopoverOpen}
+          anchorRef={metronomeButtonRef}
+          settings={appSettings}
+          routeOptions={audioRoutingOptions}
+          volumeDraft={metronomeVolumeDraft}
+          midiLearnMode={midiLearnMode}
+          onClose={() => setIsMetronomePopoverOpen(false)}
+          onEnabledChange={handleMetronomeEnabledChange}
+          onOutputChange={handleMetronomeOutputChange}
+          onVolumeDraftChange={handleMetronomeVolumeDraftChange}
+          onCommitVolume={commitMetronomeVolumeDraft}
+          onSoundChange={handleMetronomeSoundChange}
+          onMidiLearnTarget={handleMidiLearnTarget}
+        />
+
+        <VoiceGuidePopover
+          open={isVoiceGuidePopoverOpen}
+          anchorRef={voiceGuideButtonRef}
+          settings={appSettings}
+          routeOptions={audioRoutingOptions}
+          onClose={() => setIsVoiceGuidePopoverOpen(false)}
+          onChange={handleVoiceGuideChange}
         />
 
         <PadsPopover
@@ -8878,13 +8907,6 @@ export function TransportPanelContent() {
               onClearOutputChannels={handleClearOutputChannels}
               onAudioSafeModeChange={handleAudioSafeModeChange}
               onLowLatencyOutputChange={handleLowLatencyOutputChange}
-              metronomeVolumeDraft={metronomeVolumeDraft}
-              onMetronomeEnabledChange={handleMetronomeEnabledChange}
-              onMetronomeOutputChange={handleMetronomeOutputChange}
-              onMetronomeVolumeDraftChange={handleMetronomeVolumeDraftChange}
-              onCommitMetronomeVolume={commitMetronomeVolumeDraft}
-              onMetronomeSoundChange={handleMetronomeSoundChange}
-              onVoiceGuideChange={handleVoiceGuideChange}
               midiInputDevices={midiInputDevices}
               isMidiInputRefreshing={isMidiInputRefreshing}
               selectedMidiInputDevice={selectedMidiInputDevice}
