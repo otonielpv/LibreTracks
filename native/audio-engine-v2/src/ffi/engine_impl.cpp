@@ -2284,23 +2284,42 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     for (auto& region : song.regions)
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
-                std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+                // A region transpose is a PURE PITCH change: the Bungee voice
+                // reads its Request::pitch per audio block from the live
+                // session (resolve_effective_semitones), so the swap below is
+                // all the audible path needs. We deliberately do NOT rebuild
+                // the voices via build_seek_voice_map here — that destroys the
+                // warm Bungee pipeline and restarts it from ~108ms of
+                // structural latency at the current playhead, which the
+                // metronome / voice-guide (rendered directly at timeline_frame,
+                // no such reset) do NOT share. The result was the tracks
+                // sliding out of phase with the click the instant the user
+                // changed key while warp was on. See BungeeVoiceManager's
+                // header contract: "Live pitch changes do not require
+                // rebuilding the voice; only the playhead moving does."
+                //
+                // retime_existing_for_session compares each voice's clip
+                // MAPPING (timeline start / source start / warp ratio) — pitch
+                // is not part of the mapping — so an unchanged-mapping clip
+                // keeps its warm pipeline untouched (soft retime). This mirrors
+                // the BPM-only branch of CmdSetRegionWarp, which is exactly why
+                // warping (unlike transposing) never desynced the click.
                 if (bungee_voices_ && bungee_voices_->is_available()
                     && source_manager_ && clock_) {
                     const Frame frame = clock_->position().frame;
                     request_playback_audio_window(
                         *source_manager_, *next_session, frame,
                         playback_prepare_window_frames(clock_->sample_rate()));
-                    prepared_voice_map = bungee_voices_->build_seek_voice_map(
-                        frame, *next_session, *source_manager_);
-                    if (prepared_voice_map)
-                        bungee_voices_->publish_prepared_voice_map_realtime(
-                            prepared_voice_map);
+                    bungee_voices_->retime_existing_for_session(
+                        *next_session, *source_manager_, frame,
+                        /*live=*/false);
                 }
                 std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                if (mixer_) mixer_->trigger_crossfade();
+                // No trigger_crossfade(): with the voices retimed-in-place (no
+                // FIFO clear / rebuild) there is no discontinuity to mask, and
+                // a crossfade would only add a needless dip.
                 // Prearm: region transpose changed → re-prearm all targets.
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,

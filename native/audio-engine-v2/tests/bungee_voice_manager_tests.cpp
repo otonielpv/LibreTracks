@@ -129,6 +129,45 @@ TEST_CASE("voice pointer survives a transpose change (no rebuild)") {
 #endif
 }
 
+TEST_CASE("region transpose retimes the warm voice in place, preserving phase") {
+    // Regression: changing a region's key while warp was ON used to route
+    // through build_seek_voice_map (destroy + rebuild at the current playhead),
+    // which restarts the Bungee pipeline from its ~108ms structural latency.
+    // The metronome / voice-guide render directly at the timeline frame with no
+    // such reset, so the tracks slid out of phase with the click the instant
+    // the user transposed. The fix routes a pure pitch change through
+    // retime_existing_for_session, which — because pitch is NOT part of a
+    // voice's clip mapping — leaves the warm pipeline (and its source cursor)
+    // untouched. This test locks in that the voice pointer AND its source
+    // cursor survive a transpose, unlike a genuine seek.
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+
+    auto session = make_one_transposed_clip_session(/*semitones=*/-2);
+    mgr.rebuild_for_session(session, sm, /*playhead=*/0);
+
+#if LT_ENGINE_HAVE_BUNGEE
+    BungeePitchVoice* before = mgr.voice_for("clip1");
+    REQUIRE(before != nullptr);
+    // Advance the warm voice so its source cursor is non-trivial (mimics the
+    // engine having rendered a few blocks of warped audio before the user
+    // reaches for the key control).
+    const long long cursor_before = before->source_cursor();
+
+    // Simulate CmdSetRegionTranspose's new path: mutate the region's transpose
+    // and retime the existing voices at the same playhead.
+    session.songs[0].regions[0].transpose_semitones = +5;
+    mgr.retime_existing_for_session(session, sm, /*playhead=*/0, /*live=*/false);
+
+    BungeePitchVoice* after = mgr.voice_for("clip1");
+    CHECK(after == before);                       // same warm voice, not rebuilt
+    CHECK(after->source_cursor() == cursor_before); // phase preserved (no reset)
+#endif
+}
+
 TEST_CASE("rebuild_for_seek replaces voices at the new playhead") {
     BungeeVoiceManager mgr;
     if (!mgr.prepare(kSR, kChannels, kBlock)) return;
