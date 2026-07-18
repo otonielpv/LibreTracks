@@ -8,6 +8,7 @@ import {
   type SongView,
 } from "../desktopApi";
 import { ResourceMeter } from "../panels/ResourceMeter";
+import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -611,6 +612,7 @@ export function TimelineTopbar({
               <strong ref={transportReadoutValueRef}>{readoutPositionSecondsLabel}</strong>
             </div>
             <span className={`transport-pill is-${playbackState}`}>{playbackStateLabel}</span>
+            <AudioDeviceStatusBadge />
           </div>
         </div>
       </div>

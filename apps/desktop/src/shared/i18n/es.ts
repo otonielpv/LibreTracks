@@ -740,6 +740,10 @@ const es = {
     tempoReadout: "Tempo",
     barReadout: "Bar",
     timecodeReadout: "Timecode",
+    deviceLost: "Sin salida de audio — reconectando…",
+    deviceLostTitle:
+      "El dispositivo de audio dejó de responder. La reproducción sigue en marcha y el sonido volverá automáticamente cuando el dispositivo se recupere.",
+    deviceRestored: "Salida de audio restablecida",
   },
   pads: {
     title: "Pads de ambiente",

@@ -333,6 +333,11 @@ struct CmdSetOutputDevice {
 };
 struct CmdSetSampleRate   { int sample_rate; };
 struct CmdSetBufferSize   { int buffer_size; };
+// Retry opening the last-requested output device after it died (the engine is
+// running on the internal fallback clock — see AudioDeviceManager::
+// fallback_active). No-op when a hardware stream is healthy. Sent periodically
+// by the Rust watchdog until the device comes back.
+struct CmdRecoverOutputDevice {};
 // Android only: toggle AAudio low-latency PerformanceMode. Reopens the device.
 struct CmdSetLowLatency   { bool enabled; };
 
@@ -357,7 +362,8 @@ using EngineCommand = std::variant<
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdUpsertSongTracks, CmdPrepareSources,
-    CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize, CmdSetLowLatency
+    CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize, CmdSetLowLatency,
+    CmdRecoverOutputDevice
 >;
 
 // ---------------------------------------------------------------------------

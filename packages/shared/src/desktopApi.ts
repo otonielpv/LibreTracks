@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  AudioDeviceStatusEvent,
   AudioFileImportPayload,
   AudioFilePathImportPayload,
   AudioMeterLevel,
@@ -90,6 +91,15 @@ export async function listenToAudioMeters(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<AudioMeterLevel[]>("audio:meters", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToAudioDeviceStatus(
+  handler: (status: AudioDeviceStatusEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<AudioDeviceStatusEvent>("audio:device_status", (event) => {
     handler(event.payload);
   });
 }

@@ -632,6 +632,15 @@ export type AudioMeterLevel = {
   rightPeak: number;
 };
 
+/** Output-device health, emitted as `audio:device_status`. `fallbackActive`
+ * means the device died (or never opened) and the engine keeps the transport
+ * running on its internal silent clock while it retries the device. */
+export type AudioDeviceStatusEvent = {
+  fallbackActive: boolean;
+  deviceName: string;
+  lastError: string;
+};
+
 export type RegionMeterLevel = {
   regionId: string;
   /** Linear peak amplitude (max(|L|, |R|)) of the post-region-master signal,

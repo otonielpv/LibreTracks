@@ -32,6 +32,11 @@ struct DeviceInfo {
     int         output_channel_count = 2;
     std::vector<std::string> output_channel_names;
     std::string last_error;
+    // True while audio is being driven by the internal fallback clock instead
+    // of a hardware stream (device died / never opened). The transport keeps
+    // running silently; the control layer retries the real device and the UI
+    // shows a "no audio output" badge until this drops back to false.
+    bool        fallback_active = false;
 };
 
 struct CpuDiagnostics {

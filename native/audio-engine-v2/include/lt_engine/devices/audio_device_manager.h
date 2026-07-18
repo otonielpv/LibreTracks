@@ -102,6 +102,14 @@ public:
     // Live diagnostics (updated every callback).
     DeviceInfo device_info() const;
 
+    // True while the render callback is being driven by the internal fallback
+    // pump instead of a hardware stream. Entered when a device fails to open or
+    // when the stall monitor declares the live stream dead (no callbacks for
+    // ~1.5s — the post-suspend / unplugged-endpoint case). The transport keeps
+    // advancing (silently) the whole time; the control layer polls this flag
+    // and retries open_device() until the hardware comes back.
+    bool fallback_active() const;
+
     // Read-and-reset the worst inter-callback gap and worst in-callback work
     // time since the last call (LIBRETRACKS_AUDIO_DIAG). Call from a non-audio
     // thread (e.g. the snapshot poll) — the audio thread must never log.

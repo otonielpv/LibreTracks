@@ -265,6 +265,11 @@ pub enum EngineCommand {
     SetLowLatency {
         enabled: bool,
     },
+    /// Retry opening the last-requested output device after it died and the
+    /// engine fell back to its internal silent clock (snapshot
+    /// `device.fallback_active == true`). No-op while a hardware stream is
+    /// healthy. Sent periodically by the device watchdog until audio returns.
+    RecoverOutputDevice,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

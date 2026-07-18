@@ -6,6 +6,7 @@ import type {
   AppSettings,
   AutomationCueSummary,
   MixSceneSummary,
+  AudioDeviceStatusEvent,
   AudioMeterLevel,
   AudioOutputDevices,
   CreateClipArgs,
@@ -784,6 +785,8 @@ export const testDesktopApiMock = {
     async (_handler: (levels: AudioMeterLevel[]) => void) => () => {},
   listenToRegionMeters:
     async (_handler: (levels: RegionMeterLevel[]) => void) => () => {},
+  listenToAudioDeviceStatus:
+    async (_handler: (status: AudioDeviceStatusEvent) => void) => () => {},
   listenToLibraryImportProgress:
     async (_handler: (event: LibraryImportProgressEvent) => void) => () => {},
   listenToProjectLoadProgress:

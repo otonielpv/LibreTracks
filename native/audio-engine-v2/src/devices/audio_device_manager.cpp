@@ -17,7 +17,9 @@
 #include <cstdlib>
 #include <limits>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 
 #if defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN
@@ -188,7 +190,172 @@ struct AudioDeviceManager::Impl {
     };
     mutable std::mutex                                    cache_mtx;
     mutable std::unordered_map<std::string, CachedLayout> channel_layout_cache;
+
+    // --- Device-loss resilience (fallback pump + stall monitor) ------------
+    // stream_mtx serializes every open/close/teardown of the JUCE stream and
+    // of the pump, across the command thread (open_device / close_device /
+    // list_devices) and the monitor thread. The monitor only try_locks: a
+    // busy mutex means an open or rescan is in flight, where a callback
+    // pause is expected and must not be mistaken for a dead device.
+    mutable std::mutex         stream_mtx;
+    std::atomic<bool>          fallback_active{false};
+    // Bumped on every successful open so the monitor re-baselines its stall
+    // timer instead of comparing counts across two different adaptors.
+    std::atomic<std::uint64_t> open_generation{0};
+    std::chrono::steady_clock::time_point last_open_time{};
+
+    std::thread                pump_thread;
+    std::atomic<bool>          pump_run{false};
+
+    std::thread                monitor_thread;
+    std::atomic<bool>          monitor_stop{false};
+
+    void close_stream_locked();
+    void start_pump_locked();
+    void stop_pump_locked();
+    void ensure_monitor_started_locked();
+    void monitor_main();
 };
+
+// Tear down the JUCE stream (if any). Never touches the pump: open_device
+// keeps the pump running through a reopen attempt so the engine clock stays
+// smooth while the hardware is being negotiated.
+void AudioDeviceManager::Impl::close_stream_locked() {
+    if (adaptor) {
+        juce_manager.removeAudioCallback(adaptor.get());
+        adaptor.reset();
+    }
+    juce_manager.closeAudioDevice();
+    // user_callback is deliberately kept: the monitor's takeover and
+    // open_device's teardown-before-reopen both still need it (for the pump
+    // and the fresh adaptor respectively). Only close_device() clears it.
+}
+
+// Start the internal fallback pump: a plain thread that drives the same
+// render callback at the last-known sample rate / block size and discards
+// the audio. This is what keeps the transport clock (advanced inside
+// Mixer::render) running when there is no working hardware stream — the
+// Ableton "No Device" behaviour. Renders for real (Bungee voices, caches,
+// metronome state all keep advancing), so swapping the hardware back in is
+// position-continuous.
+void AudioDeviceManager::Impl::start_pump_locked() {
+    if (pump_run.load(std::memory_order_relaxed) || user_callback == nullptr)
+        return;
+    if (pump_thread.joinable())
+        pump_thread.join();
+    const int sr = sample_rate > 0 ? sample_rate : 48000;
+    const int bs = buffer_size > 0 ? buffer_size : 512;
+    const int ch = std::clamp(output_channel_count, 2, 64);
+    AudioRenderCallback* cb = user_callback;
+    pump_run.store(true, std::memory_order_relaxed);
+    fallback_active.store(true, std::memory_order_relaxed);
+    fprintf(stderr,
+            "[LT_AUDIO] fallback clock started (sr=%d bs=%d ch=%d) — transport "
+            "keeps running silently while the output device is retried\n",
+            sr, bs, ch);
+    pump_thread = std::thread([this, cb, sr, bs, ch] {
+        std::vector<std::vector<float>> buffers(
+            static_cast<std::size_t>(ch), std::vector<float>(static_cast<std::size_t>(bs), 0.f));
+        std::vector<float*> channels(static_cast<std::size_t>(ch));
+        for (int i = 0; i < ch; ++i)
+            channels[static_cast<std::size_t>(i)] = buffers[static_cast<std::size_t>(i)].data();
+        const auto block = std::chrono::nanoseconds(
+            1'000'000'000LL * static_cast<std::int64_t>(bs) / sr);
+        auto next = std::chrono::steady_clock::now() + block;
+        while (pump_run.load(std::memory_order_relaxed)) {
+            for (auto& b : buffers)
+                std::fill(b.begin(), b.end(), 0.f);
+            cb->render(channels.data(), ch, bs, static_cast<double>(sr));
+            std::this_thread::sleep_until(next);
+            next += block;
+            // Fell behind (system suspend, debugger, load spike): resync to
+            // now instead of bursting blocks to catch up — wall alignment is
+            // meaningless for a silent clock and a burst would race the
+            // transport ahead audibly once the device returns.
+            const auto now = std::chrono::steady_clock::now();
+            if (next < now)
+                next = now + block;
+        }
+    });
+}
+
+void AudioDeviceManager::Impl::stop_pump_locked() {
+    pump_run.store(false, std::memory_order_relaxed);
+    if (pump_thread.joinable())
+        pump_thread.join();
+    fallback_active.store(false, std::memory_order_relaxed);
+}
+
+void AudioDeviceManager::Impl::ensure_monitor_started_locked() {
+    if (monitor_thread.joinable())
+        return;
+    monitor_thread = std::thread([this] { monitor_main(); });
+}
+
+// Stall monitor. A JUCE stream that is open keeps delivering callbacks
+// forever (the mixer renders silence while stopped), so "callback count
+// frozen" is a reliable death signal — the classic post-suspend /
+// endpoint-powered-down state where pressing Play does nothing because the
+// transport clock is advanced from the (now dead) audio callback. On death:
+// tear the zombie stream down and hand the render callback to the pump; the
+// control layer sees fallback_active() and retries open_device().
+void AudioDeviceManager::Impl::monitor_main() {
+    constexpr int kMonitorPeriodMs  = 500;
+    constexpr int kStallThresholdMs = 1500;
+    constexpr int kFreshOpenGraceMs = 3000;
+    std::uint64_t last_gen   = 0;
+    int           last_count = -1;
+    auto          last_change = std::chrono::steady_clock::now();
+    const auto ms_between = [](auto a, auto b) {
+        return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+    while (!monitor_stop.load(std::memory_order_relaxed)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(kMonitorPeriodMs));
+        if (monitor_stop.load(std::memory_order_relaxed))
+            break;
+        std::unique_lock<std::mutex> lk(stream_mtx, std::try_to_lock);
+        if (!lk.owns_lock()) {
+            // An open/rescan holds the stream — callbacks may pause legally.
+            last_count = -1;
+            continue;
+        }
+        if (pump_run.load(std::memory_order_relaxed) || !adaptor) {
+            last_count = -1;
+            continue;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        const std::uint64_t gen = open_generation.load(std::memory_order_relaxed);
+        const int  count     = adaptor->callback_count();
+        const bool dev_error = adaptor->has_error();
+        if (gen != last_gen || last_count < 0) {
+            last_gen = gen;
+            last_count = count;
+            last_change = now;
+            if (!dev_error) continue;
+        } else if (count != last_count) {
+            last_count = count;
+            last_change = now;
+            if (!dev_error) continue;
+        }
+        const double stalled_ms    = ms_between(last_change, now);
+        const double since_open_ms = ms_between(last_open_time, now);
+        if (!dev_error
+            && (stalled_ms < kStallThresholdMs || since_open_ms < kFreshOpenGraceMs))
+            continue;
+        const std::string reason = dev_error
+            ? adaptor->last_error()
+            : std::string("output device stopped delivering audio callbacks "
+                          "(system suspend or endpoint power-down?)");
+        fprintf(stderr,
+                "[LT_AUDIO] output device \"%s\" declared dead (%s; callbacks "
+                "frozen %.0f ms) — switching to the internal fallback clock\n",
+                device_name.c_str(), reason.c_str(), stalled_ms);
+        last_error = reason;
+        close_stream_locked();
+        start_pump_locked();
+        last_count = -1;
+    }
+}
 
 namespace {
 
@@ -321,12 +488,19 @@ AudioDeviceManager::AudioDeviceManager() : impl_(std::make_unique<Impl>()) {
 }
 
 AudioDeviceManager::~AudioDeviceManager() {
+    impl_->monitor_stop.store(true, std::memory_order_relaxed);
+    if (impl_->monitor_thread.joinable())
+        impl_->monitor_thread.join();
     close_device();
 }
 
 std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan) const {
     using clk = std::chrono::steady_clock;
     const auto t_start = clk::now();
+    // Hold the stream mutex for the whole scan: a forced rescan tears the live
+    // stream down for seconds, and the stall monitor must see the mutex busy
+    // (and skip its tick) instead of declaring the paused stream dead.
+    std::lock_guard<std::mutex> stream_lk(impl_->stream_mtx);
     std::vector<DeviceDescriptor> result;
 
     auto init = ensure_initialized(*impl_);
@@ -509,13 +683,26 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     device_debug_log("[LT_AUDIO_DEBUG] open_device begin device_id=\"%s\" sr=%d bs=%d active_channels=%zu\n",
                  request.device_id.c_str(), request.sample_rate, request.buffer_size,
                  request.active_output_channels.size());
-    close_device();
+    std::lock_guard<std::mutex> stream_lk(impl_->stream_mtx);
+    // Tear down only the hardware stream. If the fallback pump is running
+    // (previous device died / never opened) it keeps driving the engine clock
+    // through this whole attempt, so the transport never hiccups while a slow
+    // driver negotiates; it is stopped just before the new stream goes live.
+    impl_->close_stream_locked();
+    impl_->user_callback = callback;
+
+    // On any failure: never leave the engine clockless. The pump takes over
+    // the render callback so the transport keeps running (silently) and the
+    // control layer can keep retrying via fallback_active().
+    auto fail = [&](Result<void> r) {
+        impl_->start_pump_locked();
+        return r;
+    };
 
     auto init = ensure_initialized(*impl_);
     if (init.is_err())
-        return init;
+        return fail(init);
 
-    impl_->user_callback = callback;
     impl_->adaptor = std::make_unique<JuceCallbackAdaptor>(callback);
 
     if (!request.device_id.empty()) {
@@ -667,12 +854,12 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
                  setup_ms, err.isEmpty() ? "" : err.toRawUTF8());
     if (err.isNotEmpty()) {
         impl_->last_error = err.toStdString();
-        return Result<void>::err(impl_->last_error);
+        return fail(Result<void>::err(impl_->last_error));
     }
 
     auto* dev = impl_->juce_manager.getCurrentAudioDevice();
     if (!dev)
-        return Result<void>::err("No audio device opened after setup");
+        return fail(Result<void>::err("No audio device opened after setup"));
 
     impl_->device_name  = dev->getName().toStdString();
     impl_->backend      = dev->getTypeName().toStdString();
@@ -691,7 +878,15 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         impl_->output_channel_names = std::move(resolved.names);
     }
 
+    // The hardware stream is about to go live: retire the pump first so the
+    // render callback never has two drivers at once. The sub-ms gap between
+    // the two is inaudible (the engine was silent anyway if the pump ran).
+    impl_->stop_pump_locked();
+    impl_->last_error.clear();
     impl_->juce_manager.addAudioCallback(impl_->adaptor.get());
+    impl_->open_generation.fetch_add(1, std::memory_order_relaxed);
+    impl_->last_open_time = std::chrono::steady_clock::now();
+    impl_->ensure_monitor_started_locked();
     const double total_ms = std::chrono::duration<double, std::milli>(clk::now() - t_open).count();
     device_debug_log("[LT_AUDIO_DEBUG] open_device done total_ms=%.1f device=\"%s\" backend=\"%s\" sr=%d bs=%d channels=%d\n",
                  total_ms, impl_->device_name.c_str(), impl_->backend.c_str(),
@@ -700,11 +895,9 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
 }
 
 Result<void> AudioDeviceManager::close_device() {
-    if (impl_->adaptor) {
-        impl_->juce_manager.removeAudioCallback(impl_->adaptor.get());
-        impl_->adaptor.reset();
-    }
-    impl_->juce_manager.closeAudioDevice();
+    std::lock_guard<std::mutex> stream_lk(impl_->stream_mtx);
+    impl_->close_stream_locked();
+    impl_->stop_pump_locked();
     impl_->user_callback = nullptr;
     return Result<void>::ok();
 }
@@ -717,6 +910,7 @@ Result<void> AudioDeviceManager::start() {
 
 Result<void> AudioDeviceManager::stop() {
     // Stopping without closing: remove callback, keep device open.
+    std::lock_guard<std::mutex> stream_lk(impl_->stream_mtx);
     if (impl_->adaptor)
         impl_->juce_manager.removeAudioCallback(impl_->adaptor.get());
     return Result<void>::ok();
@@ -729,6 +923,9 @@ std::string AudioDeviceManager::actual_device_name() const { return impl_->devic
 std::string AudioDeviceManager::actual_backend()      const { return impl_->backend; }
 
 DeviceInfo AudioDeviceManager::device_info() const {
+    // stream_mtx: the monitor thread can reset the adaptor and rewrite
+    // last_error concurrently with this snapshot read.
+    std::lock_guard<std::mutex> stream_lk(impl_->stream_mtx);
     DeviceInfo info;
     info.device_id   = impl_->device_name.empty() ? std::string{} : make_device_id(impl_->backend, impl_->device_name);
     info.device_name = impl_->device_name;
@@ -740,14 +937,21 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.last_error  = impl_->last_error;
     if (impl_->adaptor && impl_->adaptor->has_error())
         info.last_error = impl_->adaptor->last_error();
+    info.fallback_active = impl_->fallback_active.load(std::memory_order_relaxed);
     return info;
 }
 
+bool AudioDeviceManager::fallback_active() const {
+    return impl_->fallback_active.load(std::memory_order_relaxed);
+}
+
 double AudioDeviceManager::take_callback_gap_max_ms() {
+    std::lock_guard<std::mutex> stream_lk(impl_->stream_mtx);
     return impl_->adaptor ? impl_->adaptor->take_gap_max_ms() : 0.0;
 }
 
 double AudioDeviceManager::take_callback_work_max_ms() {
+    std::lock_guard<std::mutex> stream_lk(impl_->stream_mtx);
     return impl_->adaptor ? impl_->adaptor->take_work_max_ms() : 0.0;
 }
 
@@ -809,6 +1013,7 @@ DeviceInfo AudioDeviceManager::device_info() const {
 }
 double AudioDeviceManager::take_callback_gap_max_ms()  { return 0.0; }
 double AudioDeviceManager::take_callback_work_max_ms() { return 0.0; }
+bool   AudioDeviceManager::fallback_active()     const { return false; }
 
 } // namespace lt
 

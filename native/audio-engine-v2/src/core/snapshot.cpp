@@ -47,6 +47,7 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"output_channel_count", snap.device.output_channel_count},
         {"output_channel_names", snap.device.output_channel_names},
         {"last_error",  snap.device.last_error},
+        {"fallback_active", snap.device.fallback_active},
     };
 
     j["cpu"] = {

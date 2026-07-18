@@ -713,6 +713,10 @@ const en = {
     tempoReadout: "Tempo",
     barReadout: "Bar",
     timecodeReadout: "Timecode",
+    deviceLost: "No audio output — reconnecting…",
+    deviceLostTitle:
+      "The audio device stopped responding. Playback keeps running and sound will come back automatically once the device recovers.",
+    deviceRestored: "Audio output restored",
   },
   pads: {
     title: "Ambient pads",

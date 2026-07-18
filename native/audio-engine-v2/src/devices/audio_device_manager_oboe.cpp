@@ -393,6 +393,10 @@ double AudioDeviceManager::take_callback_work_max_ms() {
     return impl_->adaptor ? impl_->adaptor->take_work_max_ms() : 0.0;
 }
 
+// Desktop-only feature for now: Oboe route changes are handled by AAudio
+// itself (TODO milestone 4 auto-reopen); no fallback pump on Android.
+bool AudioDeviceManager::fallback_active() const { return false; }
+
 } // namespace lt
 
 #endif // LT_ENGINE_USE_OBOE

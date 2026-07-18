@@ -110,6 +110,11 @@ pub struct DeviceInfo {
     #[serde(default)]
     pub output_channel_names: Vec<String>,
     pub last_error: String,
+    /// True while the engine renders through its internal fallback clock (no
+    /// working hardware stream): the transport keeps running silently and the
+    /// watchdog retries the device until this drops back to false.
+    #[serde(default)]
+    pub fallback_active: bool,
 }
 
 fn default_output_channel_count() -> i32 {

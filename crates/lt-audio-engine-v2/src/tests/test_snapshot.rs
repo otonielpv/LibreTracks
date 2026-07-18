@@ -78,12 +78,14 @@ fn device_info_round_trips() {
         output_channel_count: 2,
         output_channel_names: vec!["Out 1".into(), "Out 2".into()],
         last_error: String::new(),
+        fallback_active: true,
     };
     let rt = round_trip(&snap);
     assert_eq!(rt.device.backend, "WASAPI");
     assert_eq!(rt.device.sample_rate, 48000);
     assert_eq!(rt.device.buffer_size, 256);
     assert_eq!(rt.device.output_channel_count, 2);
+    assert!(rt.device.fallback_active);
 }
 
 #[test]

@@ -552,6 +552,12 @@ EngineImpl::EngineImpl()
 EngineImpl::~EngineImpl() {
     if (state_ == State::Initialized)
         shutdown();
+    else if (device_manager_)
+        // Not initialized (or already shut down): still make sure any stream
+        // AND the fallback pump are stopped before member destruction — the
+        // pump renders into mixer_/silent_callback_, which die before
+        // device_manager_ (reverse declaration order).
+        device_manager_->close_device();
 }
 
 Result<void> EngineImpl::initialize() {
@@ -3010,7 +3016,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // otherwise picking "Default" while a different device is open does
             // nothing (and the SR-change re-decode / voice-guide reload never
             // fires). Only skip when a concrete, non-empty id matches.
+            // The guard must also never fire while the fallback pump is
+            // driving the clock: recovery retries re-send the SAME device id
+            // that just died, and skipping them would leave the engine on the
+            // silent fallback forever.
             if (device_manager_->actual_sample_rate() > 0
+                && !device_manager_->fallback_active()
                 && !req.device_id.empty()
                 && req.device_id == current_device_request_.device_id
                 && req.active_output_channels == current_device_request_.active_output_channels) {
@@ -3191,6 +3202,27 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 }
             }
             return r;
+        }
+        else if constexpr (std::is_same_v<T, CmdRecoverOutputDevice>) {
+            // Watchdog retry while the engine runs on the internal fallback
+            // clock. Re-dispatch a full SetOutputDevice with the last request
+            // so every side effect of a real device change runs too (SR
+            // re-negotiation → session rescale + source resample, prearm
+            // reset, EvDeviceChanged). Intentionally retries ONLY the
+            // configured device: silently hopping to a different endpoint
+            // mid-set would surprise a live multi-output rig — if the device
+            // is truly gone the user picks a new one in Settings, guided by
+            // the "no audio output" badge.
+            if (!device_manager_->fallback_active())
+                return Result<void>::ok();
+            CmdSetOutputDevice retry;
+            retry.device_id = current_device_request_.device_id;
+            retry.active_channels = current_device_request_.active_output_channels;
+            fprintf(stderr,
+                    "[LT_AUDIO] RecoverOutputDevice: retrying device_id=\"%s\"\n",
+                    retry.device_id.empty() ? "<system default>"
+                                            : retry.device_id.c_str());
+            return dispatch_command(EngineCommand{std::move(retry)});
         }
         else {
             // Track gain/mute/solo, pitch, scheduler jumps — handled in later phases.

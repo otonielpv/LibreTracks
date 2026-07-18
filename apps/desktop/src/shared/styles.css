@@ -602,6 +602,44 @@ textarea {
   background: rgb(255 226 171 / 0.16);
 }
 
+/* Output-device health badge (fallback clock active / device restored). */
+.lt-device-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 2px;
+  padding: 0.25rem 0.5rem;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.lt-device-status-pill .material-symbols-outlined {
+  font-size: 13px;
+}
+
+.lt-device-status-pill.is-lost {
+  color: #ff9d9d;
+  background: rgb(255 122 122 / 0.16);
+  animation: lt-device-status-blink 1.6s ease-in-out infinite;
+}
+
+.lt-device-status-pill.is-restored {
+  color: #57f1db;
+  background: rgb(87 241 219 / 0.15);
+}
+
+@keyframes lt-device-status-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .lt-session-actions {
   display: flex;
   align-items: center;

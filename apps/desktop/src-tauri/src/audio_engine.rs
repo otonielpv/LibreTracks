@@ -119,6 +119,19 @@ pub struct AudioMeterLevel {
     pub right_peak: f32,
 }
 
+/// Emitted as `audio:device_status` whenever the output device's health
+/// changes: `fallbackActive: true` means the device died (or never opened)
+/// and the engine is running on its internal silent clock while the watchdog
+/// retries; `false` means hardware audio is (back) up. The transport bar
+/// shows/hides the "no audio output" badge from this event.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDeviceStatusEvent {
+    pub fallback_active: bool,
+    pub device_name: String,
+    pub last_error: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegionMeterLevel {
@@ -312,6 +325,11 @@ struct ControllerState {
     /// Installed-pads base directory learned from the normal/manual load path.
     /// Automation reuses it so pack/key changes follow the exact same decoder.
     pads_dir: Option<String>,
+    /// When the device watchdog last finished a RecoverOutputDevice attempt.
+    /// Rate-limits retries while the engine is on the fallback clock. Measured
+    /// from attempt COMPLETION (opens can take seconds on DirectSound), so a
+    /// slow failing open never turns into a busy retry loop on the state lock.
+    last_device_recovery_attempt: Option<Instant>,
 }
 
 impl ControllerState {
@@ -333,6 +351,7 @@ impl ControllerState {
             loaded_session_signature: None,
             current_song_source_ids: HashSet::new(),
             pads_dir: None,
+            last_device_recovery_attempt: None,
         }
     }
 }
@@ -430,6 +449,10 @@ impl AudioController {
         let stop = Arc::clone(&self.meter_thread_stop);
         let controller_addr = self as *const AudioController as usize;
         let handle = thread::spawn(move || {
+            // Device watchdog bookkeeping (~1 check per 500ms, piggybacked on
+            // this thread so no extra thread + no extra snapshot polling).
+            let mut watchdog_tick: u32 = 0;
+            let mut watchdog_fallback_state: Option<bool> = None;
             while !stop.load(Ordering::Relaxed) {
                 let controller = unsafe { &*(controller_addr as *const AudioController) };
                 if let Ok(levels) = controller.current_meter_levels() {
@@ -446,6 +469,15 @@ impl AudioController {
                 if let Ok(region_levels) = controller.current_region_meter_levels() {
                     if !region_levels.is_empty() {
                         let _ = app_handle.emit("audio:region_meters", &region_levels);
+                    }
+                }
+                watchdog_tick += 1;
+                if watchdog_tick >= 15 {
+                    watchdog_tick = 0;
+                    if let Some(event) =
+                        controller.device_watchdog_tick(&mut watchdog_fallback_state)
+                    {
+                        let _ = app_handle.emit("audio:device_status", &event);
                     }
                 }
                 thread::sleep(std::time::Duration::from_millis(33));
@@ -2135,6 +2167,78 @@ impl AudioController {
                 right_peak: meter.right_peak,
             })
             .collect())
+    }
+
+    /// Device watchdog (runs ~2×/s on the meter thread). The C++ stall monitor
+    /// detects a dead output stream (typical after system suspend / endpoint
+    /// power-down: pressing Play "does nothing" because the transport clock is
+    /// advanced from the audio callback) and switches the engine to its
+    /// internal fallback clock. This tick notices `device.fallback_active` in
+    /// the snapshot and (a) retries the configured device every couple of
+    /// seconds, (b) reports status flips so the UI can show/hide the
+    /// "no audio output" badge. The user never has to touch "Refresh devices".
+    fn device_watchdog_tick(
+        &self,
+        previously_fallback: &mut Option<bool>,
+    ) -> Option<AudioDeviceStatusEvent> {
+        const RECOVERY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            // A command is in flight; check again next tick.
+            Err(_) => return None,
+        };
+        // Never create the engine from the watchdog — before first use there
+        // is nothing to watch.
+        let engine = state.engine.take()?;
+        let snapshot = engine.get_snapshot();
+        let mut event = None;
+        if let Ok(snapshot) = snapshot {
+            let fallback = snapshot.device.fallback_active;
+            if *previously_fallback != Some(fallback) {
+                *previously_fallback = Some(fallback);
+                if fallback {
+                    eprintln!(
+                        "[libretracks-audio] output device lost ({}); engine running on \
+                         internal fallback clock, retrying every {}s",
+                        snapshot.device.last_error,
+                        RECOVERY_RETRY_INTERVAL.as_secs(),
+                    );
+                } else {
+                    eprintln!(
+                        "[libretracks-audio] output device active: \"{}\" ({})",
+                        snapshot.device.device_name, snapshot.device.backend,
+                    );
+                }
+                event = Some(AudioDeviceStatusEvent {
+                    fallback_active: fallback,
+                    device_name: snapshot.device.device_name.clone(),
+                    last_error: snapshot.device.last_error.clone(),
+                });
+            }
+            if fallback {
+                let due = state
+                    .last_device_recovery_attempt
+                    .map_or(true, |last| last.elapsed() >= RECOVERY_RETRY_INTERVAL);
+                if due {
+                    if let Err(error) = engine.send_command(&EngineCommand::RecoverOutputDevice)
+                    {
+                        if audio_debug_logging_enabled() {
+                            eprintln!(
+                                "[libretracks-audio] device recovery attempt failed: {error}"
+                            );
+                        }
+                    }
+                    // Stamp AFTER the attempt: a slow failing open (seconds on
+                    // DirectSound) must not make the next tick immediately due
+                    // and starve the state lock.
+                    state.last_device_recovery_attempt = Some(Instant::now());
+                }
+            } else {
+                state.last_device_recovery_attempt = None;
+            }
+        }
+        state.engine = Some(engine);
+        event
     }
 
     fn current_region_meter_levels(&self) -> Result<Vec<RegionMeterLevel>, DesktopError> {

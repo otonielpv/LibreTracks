@@ -464,6 +464,9 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetLowLatency")
         return CmdSetLowLatency{ j.at("enabled").get<bool>() };
 
+    if (type == "RecoverOutputDevice")
+        return CmdRecoverOutputDevice{};
+
     throw std::invalid_argument("Unknown command type: " + type);
 }
 
