@@ -66,6 +66,7 @@ pub fn enumerate_output_devices() -> Vec<DeviceInfo> {
                 output_channel_count: d.channel_count.max(1),
                 output_channel_names: Vec::new(),
                 last_error: String::new(),
+                fallback_active: false,
             })
             .collect(),
         Err(err) => {

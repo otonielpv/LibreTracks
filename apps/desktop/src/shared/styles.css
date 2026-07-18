@@ -205,6 +205,38 @@ textarea {
   background: rgb(186 202 197 / 0.12);
 }
 
+/* "Abrir reciente" flyout: the wrapper anchors a nested dropdown that opens on
+   hover (or keyboard focus) to the right of the parent item. */
+.lt-top-menu-subwrap {
+  position: relative;
+}
+
+.lt-top-menu-subwrap > button .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.lt-top-menu-submenu {
+  display: none;
+  top: -0.35rem;
+  left: 100%;
+  min-width: 16rem;
+  max-width: 24rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.lt-top-menu-subwrap:hover > .lt-top-menu-submenu,
+.lt-top-menu-subwrap:focus-within > .lt-top-menu-submenu {
+  display: block;
+}
+
+/* Session names can be long paths' stems — keep rows one line tall. */
+.lt-top-menu-submenu button > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .lt-brand-title {
   display: block;
   font: 900 1.1rem/1 Inter, sans-serif;
@@ -2593,7 +2625,7 @@ textarea {
 }
 
 .lt-empty-state-card {
-  width: min(38rem, 100%);
+  width: min(58rem, 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2658,11 +2690,42 @@ textarea {
   box-shadow: 0 14px 40px rgb(87 241 219 / 0.22);
 }
 
+/* Landing: templates and recent sessions side by side. The wrapper carries the
+   divider that used to sit on the templates block alone. */
+.lt-empty-state-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 2rem;
+  width: 100%;
+  margin-top: 1.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgb(87 241 219 / 0.12);
+}
+
+@media (max-width: 64rem) {
+  .lt-empty-state-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 .lt-empty-state-templates {
+  min-width: 0;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid rgb(87 241 219 / 0.12);
   text-align: left;
+}
+
+.lt-empty-state-columns .lt-empty-state-templates {
+  margin-top: 1rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+.lt-empty-state-template-list button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lt-empty-state-templates-header {

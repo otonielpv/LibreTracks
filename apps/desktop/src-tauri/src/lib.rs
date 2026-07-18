@@ -233,6 +233,7 @@ pub fn run() {
             commands::project::list_session_templates,
             commands::project::start_save_session_as_template,
             commands::project::start_create_song_from_template_path,
+            commands::project::start_create_song_from_template_named_at,
             commands::project::start_create_song_from_template_file,
             commands::project::start_import_library_assets_from_dialog,
             commands::project::pick_library_files,

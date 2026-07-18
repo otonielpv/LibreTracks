@@ -547,8 +547,30 @@ pub fn start_create_song_named_at(
     parent_dir: Option<String>,
 ) -> Result<bool, String> {
     let name = sanitize_session_name(&name)?;
+    let target_pick = named_session_target(&app, &name, parent_dir)?;
 
-    let target_pick = match parent_dir {
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .create_song_at_path(target_pick, &state.audio)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
+}
+
+/// Resolve the pseudo save-file path consumed by `create_song_at_path_with`
+/// for the Android name + parent-folder flow. Shared by empty sessions and
+/// sessions seeded from a template so both handle collisions identically.
+fn named_session_target(
+    app: &AppHandle,
+    name: &str,
+    parent_dir: Option<String>,
+) -> Result<std::path::PathBuf, String> {
+    match parent_dir {
         Some(parent) => {
             let parent = std::path::PathBuf::from(parent);
             if !parent.is_dir() {
@@ -581,7 +603,7 @@ pub fn start_create_song_named_at(
                 .file_name()
                 .and_then(|value| value.to_str())
                 .unwrap_or(&name);
-            song_dir.join(crate::state::default_project_file_name(dir_name))
+            Ok(song_dir.join(crate::state::default_project_file_name(dir_name)))
         }
         None => {
             let default_directory = crate::state::create_song_default_directory(&app);
@@ -589,21 +611,9 @@ pub fn start_create_song_named_at(
                 return Err(format!("Ya existe un proyecto llamado \"{name}\""));
             }
             let _ = std::fs::create_dir_all(&default_directory);
-            default_directory.join(crate::state::default_project_file_name(&name))
+            Ok(default_directory.join(crate::state::default_project_file_name(&name)))
         }
-    };
-
-    spawn_project_work(&app, move |_worker_app, state| {
-        let mut session = state
-            .session
-            .lock()
-            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-        session
-            .create_song_at_path(target_pick, &state.audio)
-            .map_err(|error| error.to_string())
-    });
-
-    Ok(true)
+    }
 }
 
 /// Let the user choose where a new session should be saved and return the
@@ -687,29 +697,97 @@ pub fn start_save_session_as_template(
             .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?
     };
 
-    let default_directory = crate::state::templates_default_directory(&app);
-    // Ensure the suggested folder exists so the dialog can open there.
-    let _ = std::fs::create_dir_all(&default_directory);
+    #[cfg(target_os = "android")]
+    {
+        let template_name = sanitize_session_name(&song_title)?;
+        let file_name = format!("{template_name}.lttemplate");
+        let Some(target) = crate::mobile_files::save_file(
+            &app,
+            "Guardar como plantilla",
+            &file_name,
+        ) else {
+            return Ok(false);
+        };
+        let temporary = crate::mobile_files::export_temp_path(&app, &file_name)?;
+        {
+            let session = state
+                .session
+                .lock()
+                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+            session
+                .save_current_as_template(temporary.clone())
+                .map_err(|error| {
+                    crate::error_log::log_command_err("start_save_session_as_template", error)
+                })?;
+        }
+        let export_result = crate::mobile_files::copy_path_to_picked_target(
+            &app,
+            &temporary,
+            &target,
+        );
+        if export_result.is_ok() {
+            let catalog_dir = crate::state::templates_default_directory(&app);
+            std::fs::create_dir_all(&catalog_dir).map_err(|error| error.to_string())?;
+            std::fs::copy(&temporary, catalog_dir.join(&file_name))
+                .map_err(|error| error.to_string())?;
+        }
+        let _ = std::fs::remove_file(&temporary);
+        export_result?;
+        return Ok(true);
+    }
 
-    let target_pick = FileDialog::new()
-        .add_filter("LibreTracks Template", &["lttemplate"])
-        .set_title("Guardar como plantilla")
-        .set_directory(&default_directory)
-        .set_file_name(&format!("{song_title}.lttemplate"))
-        .save_file();
+    #[cfg(not(target_os = "android"))]
+    {
+        let default_directory = crate::state::templates_default_directory(&app);
+        // Ensure the suggested folder exists so the dialog can open there.
+        let _ = std::fs::create_dir_all(&default_directory);
+        let target_pick = FileDialog::new()
+            .add_filter("LibreTracks Template", &["lttemplate"])
+            .set_title("Guardar como plantilla")
+            .set_directory(&default_directory)
+            .set_file_name(&format!("{song_title}.lttemplate"))
+            .save_file();
 
-    let Some(target_pick) = target_pick else {
-        return Ok(false);
-    };
+        let Some(target_pick) = target_pick else {
+            return Ok(false);
+        };
 
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    session
-        .save_current_as_template(target_pick)
-        .map(|_| true)
-        .map_err(|error| crate::error_log::log_command_err("start_save_session_as_template", error))
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .save_current_as_template(target_pick)
+            .map(|_| true)
+            .map_err(|error| {
+                crate::error_log::log_command_err("start_save_session_as_template", error)
+            })
+    }
+}
+
+/// Create a named session from a known template without a desktop save dialog.
+#[tauri::command]
+pub fn start_create_song_from_template_named_at(
+    app: AppHandle,
+    template_path: String,
+    name: String,
+    parent_dir: Option<String>,
+) -> Result<bool, String> {
+    let name = sanitize_session_name(&name)?;
+    let target_pick = named_session_target(&app, &name, parent_dir)?;
+    let template_path = std::path::PathBuf::from(template_path);
+
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .create_song_from_template_path(template_path, target_pick, &state.audio)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
 }
 
 /// Create a new session from a template file already known by path (a template

@@ -6,6 +6,7 @@ import type {
 import {
   createSong,
   createSongFromTemplateFile,
+  createSongFromTemplateNamed,
   createSongFromTemplatePath,
   createSongNamed,
   exportSessionPackage,
@@ -22,6 +23,7 @@ import {
   saveSessionAsTemplate,
 } from "../desktopApi";
 import { nextPaint } from "../library/pendingAudioImports";
+import { pushRecentSession } from "../recentSessions";
 import type { SidebarTab } from "../types";
 
 type UseProjectActionsProps = {
@@ -115,6 +117,9 @@ export function useProjectActions({
           return;
         }
 
+        if (nextSnapshot.songFilePath) {
+          pushRecentSession(nextSnapshot.songFilePath);
+        }
         applyPlaybackSnapshot(nextSnapshot);
         setActiveSidebarTab(null);
         setStatus(
@@ -159,6 +164,9 @@ export function useProjectActions({
             setProjectViewHydrating(false);
             setBusyFeedback(null);
             return;
+          }
+          if (nextSnapshot.songFilePath) {
+            pushRecentSession(nextSnapshot.songFilePath);
           }
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
@@ -207,6 +215,9 @@ export function useProjectActions({
           return;
         }
 
+        if (nextSnapshot.songFilePath) {
+          pushRecentSession(nextSnapshot.songFilePath);
+        }
         applyPlaybackSnapshot(nextSnapshot);
         setActiveSidebarTab(null);
         setStatus(
@@ -375,6 +386,9 @@ export function useProjectActions({
           });
 
           const nextSong = await refreshSongView({ sync: true });
+          if (result.snapshot.songFilePath) {
+            pushRecentSession(result.snapshot.songFilePath);
+          }
           applyPlaybackSnapshot(result.snapshot);
           await refreshLibraryState({ preserveAssets: result.libraryAssets ?? undefined });
           setActiveSidebarTab(null);
@@ -476,6 +490,9 @@ export function useProjectActions({
           return;
         }
 
+        if (nextSnapshot.songFilePath) {
+          pushRecentSession(nextSnapshot.songFilePath);
+        }
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
@@ -524,6 +541,19 @@ export function useProjectActions({
     );
   }
 
+  function handleCreateSongFromTemplateNamed(
+    templatePath: string,
+    name: string,
+    parentDir?: string,
+  ) {
+    runProjectLoadFlow(
+      () => createSongFromTemplateNamed(templatePath, name, parentDir),
+      t("transport.shell.creatingFromTemplate", {
+        defaultValue: "Creando sesión desde plantilla...",
+      }),
+    );
+  }
+
   return {
     handleCreateSongClick,
     handleCreateSongNamed,
@@ -538,5 +568,6 @@ export function useProjectActions({
     handleSaveProjectAsClick,
     handleSaveAsTemplateClick,
     handleCreateSongFromTemplate,
+    handleCreateSongFromTemplateNamed,
   };
 }

@@ -115,6 +115,9 @@ const en = {
       noTemplates:
         "You don't have any templates yet. Save one from a session with “Save as template…”.",
       templatesLoading: "Loading templates…",
+      recentsHeading: "Recent",
+      noRecents:
+        "No recent sessions yet. Sessions you open or create will show up here.",
       choosingProjectLocation: "Choose where to save the imported project...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",
@@ -686,6 +689,8 @@ const en = {
     mobileSessions: "Sessions…",
     newFromTemplate: "New from template…",
     open: "Open",
+    openRecent: "Open recent",
+    clearRecentSessions: "Clear list",
     importSong: "Import song",
     importSession: "Import session…",
     exportSession: "Export session…",

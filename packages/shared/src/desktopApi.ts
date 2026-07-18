@@ -394,6 +394,19 @@ export async function createSongFromTemplatePath(
   });
 }
 
+/** Create a named session from a known template in a caller-chosen folder. */
+export async function createSongFromTemplateNamed(
+  templatePath: string,
+  name: string,
+  parentDir?: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_create_song_from_template_named_at", {
+    templatePath,
+    name,
+    parentDir: parentDir ?? null,
+  });
+}
+
 /** Create a new session from a template chosen via an open dialog. */
 export async function createSongFromTemplateFile(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_create_song_from_template_file");

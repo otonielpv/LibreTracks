@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -7,6 +8,11 @@ import {
   type PlaybackState,
   type SongView,
 } from "../desktopApi";
+import {
+  clearRecentSessions,
+  loadRecentSessions,
+  type RecentSessionEntry,
+} from "../recentSessions";
 import { ResourceMeter } from "../panels/ResourceMeter";
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 
@@ -32,6 +38,8 @@ type TimelineTopbarProps = {
   onCreateSong: () => void;
   onCreateSongFromTemplate: () => void;
   onOpenProject: () => void;
+  /** Open a session by known `.ltsession` path (FILE > "Abrir reciente"). */
+  onOpenRecentSession: (sessionFilePath: string) => void;
   /** Android: opens the in-app sessions modal (create by name / open from
    * list) that replaces the dialog-based New/Open/Import menu entries. */
   onOpenMobileSessions: () => void;
@@ -93,6 +101,7 @@ export function TimelineTopbar({
   onCreateSong,
   onCreateSongFromTemplate,
   onOpenProject,
+  onOpenRecentSession,
   onOpenMobileSessions,
   onImportSong,
   onImportSession,
@@ -134,6 +143,14 @@ export function TimelineTopbar({
   const playbackStateLabel = t(`transport.playbackState.${playbackState}`);
   const learnModeActive = midiLearnMode !== null;
   const canOpenFileMenu = canPersistProject;
+  // Recents live in localStorage; re-read on every FILE-menu open so sessions
+  // opened during this run show up without a reload.
+  const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
+    [],
+  );
+  useEffect(() => {
+    setRecentSessions(openTopMenu === "file" ? loadRecentSessions() : []);
+  }, [openTopMenu]);
 
   const handleTempoKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") {
@@ -236,6 +253,69 @@ export function TimelineTopbar({
                 >
                   <span>{t("timelineTopbar.open")}</span>
                 </button>
+                <div className="lt-top-menu-subwrap">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-haspopup="menu"
+                    disabled={recentSessions.length === 0}
+                  >
+                    <span>
+                      {t("timelineTopbar.openRecent", {
+                        defaultValue: "Abrir reciente",
+                      })}
+                    </span>
+                    <span
+                      className="material-symbols-outlined"
+                      aria-hidden="true"
+                    >
+                      arrow_right
+                    </span>
+                  </button>
+                  {recentSessions.length > 0 ? (
+                    <div
+                      className="lt-top-menu-dropdown lt-top-menu-submenu"
+                      role="menu"
+                      aria-label={t("timelineTopbar.openRecent", {
+                        defaultValue: "Abrir reciente",
+                      })}
+                    >
+                      {recentSessions.map((entry) => (
+                        <button
+                          key={entry.path}
+                          type="button"
+                          role="menuitem"
+                          title={entry.path}
+                          onClick={() =>
+                            onTopMenuAction(() =>
+                              onOpenRecentSession(entry.path),
+                            )
+                          }
+                        >
+                          <span>{entry.name}</span>
+                        </button>
+                      ))}
+                      <div
+                        className="lt-top-menu-separator"
+                        aria-hidden="true"
+                      />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          clearRecentSessions();
+                          setRecentSessions([]);
+                        }}
+                      >
+                        <span>
+                          {t("timelineTopbar.clearRecentSessions", {
+                            defaultValue: "Limpiar lista",
+                          })}
+                        </span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   role="menuitem"

@@ -115,6 +115,9 @@ const es = {
       noTemplates:
         "Aún no tienes plantillas. Guarda una desde una sesión con “Guardar como plantilla…”.",
       templatesLoading: "Cargando plantillas…",
+      recentsHeading: "Recientes",
+      noRecents:
+        "Aún no hay sesiones recientes. Las sesiones que abras o crees aparecerán aquí.",
       choosingProjectLocation:
         "Elige donde guardar el proyecto importado...",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",
@@ -713,6 +716,8 @@ const es = {
     mobileSessions: "Sesiones…",
     newFromTemplate: "Nuevo desde plantilla…",
     open: "Abrir",
+    openRecent: "Abrir reciente",
+    clearRecentSessions: "Limpiar lista",
     importSong: "Importar cancion",
     importSession: "Importar sesión…",
     exportSession: "Exportar sesión…",

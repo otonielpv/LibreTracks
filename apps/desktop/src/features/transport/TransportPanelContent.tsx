@@ -235,6 +235,11 @@ import {
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { MobileLanding } from "./compact/MobileLanding";
+import {
+  LANDING_RECENT_SESSIONS_LIMIT,
+  loadRecentSessions,
+  type RecentSessionEntry,
+} from "./recentSessions";
 import { pickFilesViaWebView, stageFileForImport } from "./library/mobileFilePicker";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
@@ -3850,6 +3855,7 @@ export function TransportPanelContent() {
     handleCreateSongClick,
     handleCreateSongNamed,
     handleOpenProjectClick,
+    handleOpenProjectFromPath,
     handleImportSongClick,
     handleImportSessionClick,
     handleExportSessionConfirm,
@@ -3857,6 +3863,7 @@ export function TransportPanelContent() {
     handleImportExternalProjectWizardClick,
     handleSaveAsTemplateClick,
     handleCreateSongFromTemplate,
+    handleCreateSongFromTemplateNamed,
   } = useProjectActions({
     runAction,
     applyPlaybackSnapshot,
@@ -6022,10 +6029,14 @@ export function TransportPanelContent() {
   // a loading placeholder instead of flashing the "no templates" empty message
   // during the brief window before listSessionTemplates() resolves on load.
   const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
+    [],
+  );
   useEffect(() => {
     if (!shouldShowEmptyState) {
       return;
     }
+    setRecentSessions(loadRecentSessions());
     let cancelled = false;
     setTemplatesLoading(true);
     void listSessionTemplates()
@@ -7590,6 +7601,7 @@ export function TransportPanelContent() {
           onCreateSong={handleCreateSongClick}
           onCreateSongFromTemplate={() => handleCreateSongFromTemplate()}
           onOpenProject={handleOpenProjectClick}
+          onOpenRecentSession={handleOpenProjectFromPath}
           onOpenMobileSessions={() => setIsMobileSessionsModalOpen(true)}
           onImportSong={handleImportSongClick}
           onImportSession={handleImportSessionClick}
@@ -7813,6 +7825,20 @@ export function TransportPanelContent() {
                     defaultValue: "Exportar sesión…",
                   })}
                 </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!song}
+                  onClick={() => {
+                    setIsMobileFileActionsOpen(false);
+                    handleSaveAsTemplateClick();
+                  }}
+                >
+                  <span className="material-symbols-outlined">bookmark_add</span>
+                  {t("timelineTopbar.saveAsTemplate", {
+                    defaultValue: "Guardar como plantilla…",
+                  })}
+                </button>
               </div>
             </div>
           ) : null}
@@ -7859,7 +7885,11 @@ export function TransportPanelContent() {
                 isAndroidApp ? (
                   <MobileLanding
                     onCreateSession={handleCreateSongNamed}
+                    onCreateSessionFromTemplate={
+                      handleCreateSongFromTemplateNamed
+                    }
                     onOpenSessionFromPicker={handleOpenProjectClick}
+                    onOpenSessionFromPath={handleOpenProjectFromPath}
                     onImportSession={handleImportSessionClick}
                   />
                 ) : (
@@ -7893,6 +7923,7 @@ export function TransportPanelContent() {
                         {t("timelineTopbar.importExternalProject")}
                       </button>
                     </div>
+                    <div className="lt-empty-state-columns">
                     <div className="lt-empty-state-templates">
                       <div className="lt-empty-state-templates-header">
                         <span>
@@ -7968,6 +7999,42 @@ export function TransportPanelContent() {
                           })}
                         </p>
                       )}
+                    </div>
+                    <div className="lt-empty-state-templates lt-empty-state-recents">
+                      <div className="lt-empty-state-templates-header">
+                        <span>
+                          {t("transport.shell.recentsHeading", {
+                            defaultValue: "Recientes",
+                          })}
+                        </span>
+                      </div>
+                      {recentSessions.length > 0 ? (
+                        <ul className="lt-empty-state-template-list">
+                          {recentSessions
+                            .slice(0, LANDING_RECENT_SESSIONS_LIMIT)
+                            .map((entry) => (
+                              <li key={entry.path}>
+                                <button
+                                  type="button"
+                                  title={entry.path}
+                                  onClick={() =>
+                                    handleOpenProjectFromPath(entry.path)
+                                  }
+                                >
+                                  {entry.name}
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      ) : (
+                        <p className="lt-empty-state-templates-empty">
+                          {t("transport.shell.noRecents", {
+                            defaultValue:
+                              "Aún no hay sesiones recientes. Las sesiones que abras o crees aparecerán aquí.",
+                          })}
+                        </p>
+                      )}
+                    </div>
                     </div>
                   </div>
                 </div>
@@ -8986,9 +9053,25 @@ export function TransportPanelContent() {
                         setIsMobileSessionsModalOpen(false);
                         handleCreateSongNamed(name, parentDir);
                       }}
+                      onCreateSessionFromTemplate={(
+                        templatePath,
+                        name,
+                        parentDir,
+                      ) => {
+                        setIsMobileSessionsModalOpen(false);
+                        handleCreateSongFromTemplateNamed(
+                          templatePath,
+                          name,
+                          parentDir,
+                        );
+                      }}
                       onOpenSessionFromPicker={() => {
                         setIsMobileSessionsModalOpen(false);
                         handleOpenProjectClick();
+                      }}
+                      onOpenSessionFromPath={(path) => {
+                        setIsMobileSessionsModalOpen(false);
+                        handleOpenProjectFromPath(path);
                       }}
                       onImportSession={() => {
                         setIsMobileSessionsModalOpen(false);
