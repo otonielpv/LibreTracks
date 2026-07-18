@@ -5,7 +5,7 @@ description: User and technical documentation for LibreTracks.
 
 LibreTracks is a multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving or templating the session, and performing with predictable audio routing, markers, jumps, transposition controls, color-coded timelines, MIDI, customizable shortcuts, and a mobile remote.
 
-LibreTracks runs on desktop (Windows, macOS, Linux) and is now available on Android as an early beta — you can install it on a phone or tablet and open your sessions with real playback, audio import, and touch control of the timeline. The Android build is still in testing, so use it with care and don't rely on it for an important show yet.
+LibreTracks runs on desktop (Windows, macOS, Linux) and is now available on Android as an early beta — you can install it on a phone or tablet, open recent sessions, create new sessions from reusable templates, and work with real playback, audio import, and touch control of the timeline. The Android build is still in testing, so use it with care and don't rely on it for an important show yet.
 
 ![LibreTracks project timeline](/screenshots/Proyecto.png)
 
@@ -56,4 +56,4 @@ LibreTracks also notifies you in-app when a new version is published, with the c
 - `Timeline (DAW view)`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, [automation cues](/docs/automation/), and color-coded organization. The whole interface can be zoomed and fit to small displays, and the timeline can follow the playhead during playback.
 - `Compact View`: Session-style projection of the same model — one column per song with its own master fader, a shared horizontal mixer at the bottom, drag-and-drop assets / `.ltpkg` packages / `.rpp` and `.als` projects, and multi-select track reordering. Track and mixer faders use a decibel (dB) scale like Ableton and Reaper, starting at 0 dB, for precise volume control; the per-song master only affects that song's tracks and never the metronome or voice guide. See [Compact View](/docs/compact-view/).
 - `Remote`: local web surface customized with tabs and responsive widgets for transport, jumps, Vamp, markers, songs, mixing, metronome, guide, and Pads. It includes different defaults for phones, tablets, and large screens. See [Custom Remote](/docs/remote-control/).
-- `File`: create from `.lttemplate`, import songs/packages, import Reaper/Ableton projects, import or export a whole session as a portable `.ltset`, save templates, and export prepared songs. See [Integration & Ecosystem](/docs/integration-ecosystem/).
+- `File`: reopen recent sessions, create from `.lttemplate`, import songs/packages, import Reaper/Ableton projects, import or export a whole session as a portable `.ltset`, save templates, and export prepared songs. See [Integration & Ecosystem](/docs/integration-ecosystem/).
