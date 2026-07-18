@@ -439,12 +439,17 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
                 let mut zf = archive
                     .by_index(i)
                     .map_err(|e| format!("zip entry {i} failed: {e}"))?;
-                // Guard against zip-slip: only allow the safe enclosed name.
-                let Some(enclosed) = zf.enclosed_name() else {
+                // Normalize + zip-slip guard. Some zips built on Windows carry
+                // '\' as the separator inside entry names; on Unix that is a
+                // plain filename character, so `enclosed_name()` would yield a
+                // single file literally called "pad\C.mp3" and the key lookup
+                // would find nothing (the pads-v1 packs shipped like this).
+                let Some(enclosed) = sanitized_entry_path(zf.name()) else {
                     continue;
                 };
                 let out_path = extract_root.join(enclosed);
-                if zf.is_dir() {
+                let is_dir = zf.name().ends_with('/') || zf.name().ends_with('\\');
+                if is_dir {
                     fs::create_dir_all(&out_path)
                         .map_err(|e| format!("mkdir failed: {e}"))?;
                 } else {
@@ -683,6 +688,29 @@ fn decode_to_wav16(src: &Path, dst: &Path) -> Result<(), String> {
     }
     writer.finalize().map_err(|e| format!("finalize wav {dst:?}: {e}"))?;
     Ok(())
+}
+
+/// Turn a raw zip entry name into a safe path relative to the extract root, or
+/// `None` for entries that must be skipped. Treats both '/' and '\' as
+/// separators (zips built by some Windows tools use '\', which Unix would
+/// otherwise keep as part of the filename), drops empty and '.' segments, and
+/// rejects the entry outright on '..' or drive-like segments (zip-slip guard —
+/// a "C:" component would make `Path::join` jump to an absolute path).
+fn sanitized_entry_path(raw_name: &str) -> Option<PathBuf> {
+    let mut safe = PathBuf::new();
+    for segment in raw_name.split(['/', '\\']) {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." || segment.contains(':') {
+            return None;
+        }
+        safe.push(segment);
+    }
+    if safe.as_os_str().is_empty() {
+        return None;
+    }
+    Some(safe)
 }
 
 /// Find the directory inside `extract_root` that actually holds the key files.
@@ -1058,6 +1086,35 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         std::env::temp_dir().join(format!("lt_pad_test_{tag}_{nanos}"))
+    }
+
+    #[test]
+    fn sanitized_entry_path_handles_both_separators() {
+        // Forward slashes (well-formed zips).
+        assert_eq!(
+            sanitized_entry_path("foundations/A.mp3"),
+            Some(PathBuf::from("foundations").join("A.mp3"))
+        );
+        // Backslashes (pads-v1 style, built on Windows): must split, not stay a
+        // single literal filename.
+        assert_eq!(
+            sanitized_entry_path("foundations\\A.mp3"),
+            Some(PathBuf::from("foundations").join("A.mp3"))
+        );
+        // Root-level entry.
+        assert_eq!(sanitized_entry_path("C.flac"), Some(PathBuf::from("C.flac")));
+        // Redundant segments collapse; leading separator is contained.
+        assert_eq!(
+            sanitized_entry_path("/pad/./C.mp3"),
+            Some(PathBuf::from("pad").join("C.mp3"))
+        );
+        // Zip-slip attempts are rejected.
+        assert_eq!(sanitized_entry_path("../evil.mp3"), None);
+        assert_eq!(sanitized_entry_path("pad\\..\\..\\evil.mp3"), None);
+        assert_eq!(sanitized_entry_path("C:\\evil.mp3"), None);
+        // Nothing left after normalizing.
+        assert_eq!(sanitized_entry_path("/"), None);
+        assert_eq!(sanitized_entry_path(""), None);
     }
 
     #[test]
