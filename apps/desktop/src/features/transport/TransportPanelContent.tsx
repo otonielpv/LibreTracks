@@ -394,6 +394,7 @@ import {
 } from "./menus/timelineMenus";
 import { createTrackHandlers } from "./tracks/trackHandlers";
 import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
+import { createCompactSongHandlers } from "./compact/compactSongHandlers";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 
@@ -3543,78 +3544,56 @@ export function TransportPanelContent() {
     [mergeLibraryAssets, refreshLibraryState],
   );
 
-  const isLibraryFolderInBranch = useCallback(
-    (folderPath: string, branchRoot: string) =>
-      folderPath === branchRoot || folderPath.startsWith(`${branchRoot}/`),
-    [],
-  );
-
-  const resolveRenamedLibraryFolderBranch = useCallback(
-    (folderPath: string, oldFolderPath: string, newFolderPath: string) => {
-      if (folderPath === oldFolderPath) {
-        return newFolderPath;
-      }
-
-      const suffix = folderPath.slice(oldFolderPath.length).replace(/^\/+/, "");
-      return suffix ? `${newFolderPath}/${suffix}` : newFolderPath;
-    },
-    [],
-  );
-
-  const syncSongLibraryFolderAfterRename = useCallback(
-    async (oldSongName: string, newSongName: string) => {
-      const oldFolderPath = oldSongName.trim();
-      const newFolderPath = newSongName.trim();
-      if (!oldFolderPath || !newFolderPath || oldFolderPath === newFolderPath) {
-        return;
-      }
-
-      const { assets, folders } = await loadLibraryState();
-      const oldFolderExists =
-        folders.includes(oldFolderPath) ||
-        assets.some((asset) => asset.folderPath === oldFolderPath);
-      if (!oldFolderExists) {
-        return;
-      }
-
-      const newFolderExists =
-        folders.includes(newFolderPath) ||
-        assets.some((asset) => asset.folderPath === newFolderPath);
-
-      let nextAssets: LibraryAssetSummary[] = assets;
-      if (!newFolderExists) {
-        nextAssets = await renameLibraryFolder(oldFolderPath, newFolderPath);
-      } else {
-        for (const asset of assets) {
-          if (
-            !asset.folderPath ||
-            !isLibraryFolderInBranch(asset.folderPath, oldFolderPath)
-          ) {
-            continue;
-          }
-
-          nextAssets = await moveLibraryAsset(
-            asset.filePath,
-            resolveRenamedLibraryFolderBranch(
-              asset.folderPath,
-              oldFolderPath,
-              newFolderPath,
-            ),
-          );
-        }
-        nextAssets = await deleteLibraryFolder(oldFolderPath);
-      }
-
-      const { folders: nextFolders } = await loadLibraryState();
-      setLibraryAssets(nextAssets);
-      setLibraryFolders(nextFolders);
-    },
+  // Compact-view song/clip context-menu handlers + the library-folder rename
+  // sync. See ./compact/compactSongHandlers. Reactive state is read through
+  // getters so the factory stays referentially stable across renders.
+  const {
+    syncSongLibraryFolderAfterRename,
+    handleCompactMoveClipToTrack,
+    handleCompactDeleteClip,
+    handleCompactRenameSong,
+    handleCompactSetSongBpm,
+    handleCompactDeleteSong,
+    handleCompactExportSong,
+    handleCompactSetSongKey,
+    handleConfirmExportSong,
+  } = useMemo(
+    () =>
+      createCompactSongHandlers({
+        getSong: () => songRef.current,
+        runAction,
+        applyPlaybackSnapshot,
+        setStatus,
+        setSelectedRegionId,
+        setExportSongTarget,
+        setLibraryAssets,
+        setLibraryFolders,
+        loadLibraryState,
+        prompt: (message, defaultValue) => promptDialog(message, defaultValue),
+        confirm: (message) => confirmDialog(message),
+        t,
+        getEffectiveBpmAt,
+        moveClipToTrack,
+        deleteClip,
+        updateSongRegion,
+        updateSongRegionKey,
+        upsertSongTempoMarker,
+        deleteSongRegion,
+        exportRegionAsPackage,
+        renameLibraryFolder,
+        moveLibraryAsset,
+        deleteLibraryFolder,
+      }),
     [
-      isLibraryFolderInBranch,
+      applyPlaybackSnapshot,
       loadLibraryState,
-      resolveRenamedLibraryFolderBranch,
+      runAction,
+      setExportSongTarget,
       setLibraryAssets,
       setLibraryFolders,
+      setSelectedRegionId,
+      setStatus,
+      t,
     ],
   );
 
@@ -3829,27 +3808,6 @@ export function TransportPanelContent() {
     [runAction, runCompactSongPackageImport],
   );
 
-  // Per-clip context menu handlers from the compact view.
-  const handleCompactMoveClipToTrack = useCallback(
-    (clipId: string, targetTrackId: string) => {
-      void runAction(async () => {
-        const snapshot = await moveClipToTrack({ clipId, targetTrackId });
-        applyPlaybackSnapshot(snapshot);
-      });
-    },
-    [applyPlaybackSnapshot, runAction],
-  );
-
-  const handleCompactDeleteClip = useCallback(
-    (clipId: string) => {
-      void runAction(async () => {
-        const snapshot = await deleteClip(clipId);
-        applyPlaybackSnapshot(snapshot);
-      });
-    },
-    [applyPlaybackSnapshot, runAction],
-  );
-
   const {
     handleSaveProjectClick,
     handleSaveProjectAsClick,
@@ -3946,179 +3904,6 @@ export function TransportPanelContent() {
       setStatus,
       t,
     ],
-  );
-
-  // Rename song via window.prompt, the same way the DAW track header's
-  // "Renombrar" context-menu entry works. We keep the song's existing
-  // bounds + transpose; only the name changes.
-  const handleCompactRenameSong = useCallback(
-    async (regionId: string) => {
-      const currentRegion = songRef.current?.regions.find(
-        (region) => region.id === regionId,
-      );
-      if (!currentRegion) return;
-      const nextName = (
-        await promptDialog("Renombrar canción", currentRegion.name)
-      )?.trim();
-      if (!nextName || nextName === currentRegion.name) return;
-      void runAction(async () => {
-        const snapshot = await updateSongRegion(
-          regionId,
-          nextName,
-          currentRegion.startSeconds,
-          currentRegion.endSeconds,
-        );
-        applyPlaybackSnapshot(snapshot);
-        await syncSongLibraryFolderAfterRename(currentRegion.name, nextName);
-        setStatus(`Canción renombrada como "${nextName}"`);
-      });
-    },
-    [applyPlaybackSnapshot, runAction, setStatus, syncSongLibraryFolderAfterRename],
-  );
-
-  // Set BPM for a song. Always inserts (or replaces) a tempo marker at the
-  // song's start_seconds — we agreed this stays consistent whether the song
-  // is the project's first or not, so reordering songs never silently
-  // changes which tempo applies to which section. Backend's
-  // upsertSongTempoMarker semantics handle the "create-or-replace" part.
-  const handleCompactSetSongBpm = useCallback(
-    async (regionId: string) => {
-      const currentSong = songRef.current;
-      const currentRegion = currentSong?.regions.find(
-        (region) => region.id === regionId,
-      );
-      if (!currentSong || !currentRegion) return;
-      const currentBpm = getEffectiveBpmAt(
-        currentSong,
-        currentRegion.startSeconds,
-      );
-      const raw = await promptDialog(
-        `BPM de "${currentRegion.name}"`,
-        currentBpm.toFixed(2),
-      );
-      if (raw === null) return;
-      const nextBpm = Number(raw.replace(",", "."));
-      if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
-        setStatus("BPM inválido");
-        return;
-      }
-      void runAction(async () => {
-        const snapshot = await upsertSongTempoMarker(
-          currentRegion.startSeconds,
-          nextBpm,
-        );
-        applyPlaybackSnapshot(snapshot);
-        setStatus(
-          `BPM de "${currentRegion.name}" ajustado a ${nextBpm.toFixed(2)}`,
-        );
-      });
-    },
-    [applyPlaybackSnapshot, runAction, setStatus],
-  );
-
-  // Delete a song from the compact view. Confirms via window.confirm when
-  // the song still holds clips since the backend will take them with it
-  // (the new delete_song_region also evicts clips inside the region and
-  // tempo markers that lived in its range). Same pattern the DAW's
-  // songRegionContextMenu uses.
-  const handleCompactDeleteSong = useCallback(
-    async (regionId: string) => {
-      const currentSong = songRef.current;
-      const currentRegion = currentSong?.regions.find(
-        (region) => region.id === regionId,
-      );
-      if (!currentSong || !currentRegion) return;
-      const clipCount = currentSong.clips.filter(
-        (clip) =>
-          clip.timelineStartSeconds >= currentRegion.startSeconds &&
-          clip.timelineStartSeconds < currentRegion.endSeconds,
-      ).length;
-      if (clipCount > 0) {
-        const confirmed = await confirmDialog(
-          `Borrar canción "${currentRegion.name}" y sus ${clipCount} ${
-            clipCount === 1 ? "clip" : "clips"
-          }?`,
-        );
-        if (!confirmed) return;
-      }
-      void runAction(async () => {
-        const snapshot = await deleteSongRegion(regionId);
-        applyPlaybackSnapshot(snapshot);
-        setSelectedRegionId(null);
-        setStatus(`Canción "${currentRegion.name}" eliminada`);
-      });
-    },
-    [applyPlaybackSnapshot, runAction, setSelectedRegionId, setStatus],
-  );
-
-  // Export the song as a LibreTracks package (.ltpkg). Reuses the exact
-  // same backend command the DAW's "Exportar Canción" right-click action
-  // calls, so the output format and file-dialog flow are identical
-  // regardless of which view triggered the export.
-  const handleCompactExportSong = useCallback(
-    (regionId: string) => {
-      const currentRegion = songRef.current?.regions.find(
-        (region) => region.id === regionId,
-      );
-      if (!currentRegion) return;
-      // Open the Light/Full chooser; the actual export runs on confirm.
-      setExportSongTarget({ regionId, regionName: currentRegion.name });
-    },
-    [setExportSongTarget],
-  );
-
-  // Compact view "Nota de la canción" submenu → sets the region's original key.
-  // Reuses the same backend command as the DAW context menu so the effective-key
-  // badge (which recomputes with the transpose) stays consistent across views.
-  const handleCompactSetSongKey = useCallback(
-    (regionId: string, key: string | null) => {
-      const currentRegion = songRef.current?.regions.find(
-        (region) => region.id === regionId,
-      );
-      if (!currentRegion || (currentRegion.key ?? null) === key) {
-        return;
-      }
-      void runAction(async () => {
-        const nextSnapshot = await updateSongRegionKey(regionId, key);
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(
-          key
-            ? t("transport.status.songKeyUpdated", {
-                defaultValue: `Nota de «{{name}}» → {{key}}`,
-                name: currentRegion.name,
-                key,
-              })
-            : t("transport.status.songKeyCleared", {
-                defaultValue: `Nota de «{{name}}» eliminada`,
-                name: currentRegion.name,
-              }),
-        );
-      });
-    },
-    [applyPlaybackSnapshot, runAction, setStatus, t],
-  );
-
-
-  // Runs the export once the user picked a mode in the ExportSongModal.
-  const handleConfirmExportSong = useCallback(
-    (regionId: string, includeAudio: boolean) => {
-      const currentRegion = songRef.current?.regions.find(
-        (region) => region.id === regionId,
-      );
-      setExportSongTarget(null);
-      void runAction(
-        async () => {
-          const exported = await exportRegionAsPackage(regionId, includeAudio);
-          if (exported) {
-            setStatus(
-              `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
-            );
-          }
-        },
-        { busy: true },
-      );
-    },
-    [runAction, setStatus],
   );
 
   useEffect(() => {
