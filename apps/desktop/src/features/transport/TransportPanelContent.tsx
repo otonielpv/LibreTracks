@@ -399,6 +399,7 @@ import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useDragListeners } from "./hooks/useDragListeners";
+import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 
@@ -655,7 +656,13 @@ export { calculateTapTempoBpm, nextTapTempoTimes } from "./tapTempo";
 export function TransportPanelContent() {
   useRenderCounter("TransportPanelContent");
   const { t, i18n } = useTranslation();
-  const [song, setSong] = useState<SongView | null>(null);
+  // `song` now lives in useSongStore so each zone can subscribe with a
+  // selector (see ./songStore). This component still reads the whole value for
+  // now — zones migrate to selectors one at a time. `setSong` keeps the exact
+  // useState semantics (value or updater), so the handler factories that patch
+  // optimistically need no changes.
+  const song = useSongStore((state) => state.song);
+  const setSong = useSongStore((state) => state.setSong);
   const [waveformCache, setWaveformCache] = useState<
     Record<string, WaveformSummaryDto>
   >({});

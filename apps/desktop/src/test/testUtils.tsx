@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../shared/i18n";
 import enMessages from "../shared/i18n/en";
 import { useTransportStore as transportStore } from "../features/transport/store";
+import { useSongStore } from "../features/transport/songStore";
 import {
   DEFAULT_VIEW_MODE,
   TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
@@ -259,6 +260,10 @@ beforeEach(async () => {
     optimisticMix: {},
     pendingAudioImports: [],
   });
+  // `song` moved out of component state into a store, so it now survives
+  // unmount — without this reset each test would inherit the previous test's
+  // project.
+  useSongStore.setState({ song: null });
   useTimelineUIStore.setState({
     cameraX: 0,
     zoomLevel: TIMELINE_DEFAULT_ZOOM_LEVEL,
