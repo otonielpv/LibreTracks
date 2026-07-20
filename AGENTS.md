@@ -1,12 +1,4 @@
-## graphify
-
-This project has a graphify knowledge graph at graphify-out/.
-
-Rules:
-- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
-- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
-- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+# Guía para agentes en LibreTracks
 
 ## Dónde va el código nuevo (panel de transporte)
 
@@ -42,6 +34,24 @@ No toques el hot path (playhead a 60fps, listeners de drag) sin leer antes ese
 documento: se mueve mutando refs sin `setState` a propósito, y un intento previo
 de refactor se revirtió por perder esa propiedad.
 
+## Rendimiento
+
+Mide **siempre en build de release** antes de afirmar que hay un problema. El
+PerfHud (`Ctrl+Shift+F`) da en desarrollo picos de frame y de IPC que son
+artefactos de React en modo dev + Vite/HMR: el 2026-07-20 llevaron a diagnosticar
+un cuello de botella en el motor que no existía en release. Lo que sí es fiable
+en desarrollo son los `renderCounts`, porque son estructurales.
+
 ## Releases
 
-When the user asks to cut a new version, follow `docs/RELEASE_PROCESS.md` step by step. It lists every file that must be version-bumped (7 of them, easy to miss `Cargo.lock` or one of the `package.json`s), the release-notes format the in-app update modal parses, and the Facebook announcement guidelines.
+Cuando se pida cortar una versión, seguir `docs/RELEASE_PROCESS.md` paso a paso.
+Lista los 7 ficheros que hay que bumpear (es fácil olvidar `Cargo.lock` o uno de
+los `package.json`), el formato de notas que parsea el modal de actualización
+in-app y las pautas del anuncio de Facebook.
+
+## Tests
+
+- `npm test` orquesta las suites del workspace.
+- `npm run lint` es typecheck (`tsc --noEmit`) en desktop, remote y shared.
+- Los crates nativos van aparte: `npm run test:native` (el FFI no compila sin el
+  engine).
