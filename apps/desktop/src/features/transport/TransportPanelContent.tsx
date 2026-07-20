@@ -653,6 +653,29 @@ export type {
 // TransportPanelContent.test.ts imports these from this module.
 export { calculateTapTempoBpm, nextTapTempoTimes } from "./tapTempo";
 
+/**
+ * ¿Por qué este componente tiene ~8300 líneas?
+ *
+ * No es deuda por dejadez. Sus partes comparten estado mutable real: de las 102
+ * `useRef`, 15 se usan desde ≥8 sitios repartidos por el archivo (`songRef` 37,
+ * `livePixelsPerSecondRef` 21, `displayPositionSecondsRef` 19…). No son
+ * clusters separables, son un grafo denso.
+ *
+ * Todo lo que tenía frontera limpia YA se extrajo: los handlers a factories
+ * (`tracks/`, `compact/`, `colors/`, `menus/`), y los efectos autocontenidos a
+ * hooks (`hooks/useLibraryState`, `useSongWaveforms`, `useMidiRawMessages`,
+ * `useDragListeners`).
+ *
+ * Antes de intentar extraer otro bloque: cuenta cuántas de sus refs se usan
+ * FUERA del bloque. El intento de sacar un `useTimelineCamera` se descartó
+ * porque de sus 27 refs sólo 2 eran exclusivas — habría necesitado 25
+ * parámetros, que es el mismo acoplamiento con peor forma.
+ *
+ * El siguiente paso real (refs mutables → stores con suscripción) está
+ * documentado en docs/REDESIGN_transport_refs_to_stores.md, junto con la
+ * restricción de 60fps que no se puede romper y la razón por la que hoy no se
+ * hace: el PerfHud dice que React va sobrado (7 renders/s con playback).
+ */
 export function TransportPanelContent() {
   useRenderCounter("TransportPanelContent");
   const { t, i18n } = useTranslation();
