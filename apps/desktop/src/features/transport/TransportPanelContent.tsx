@@ -1235,14 +1235,19 @@ export function TransportPanelContent() {
     [formatMidiLearnCommandLabel, midiLearnMode, appSettings.midiMappings],
   );
 
+  // Mirror the persisted metronome volume into the slider draft so the
+  // settings UI reflects external changes (remote, another window).
   useEffect(() => {
     setMetronomeVolumeDraft(appSettings.metronomeVolume);
   }, [appSettings.metronomeVolume]);
 
+  // Same mirror for the output-channel checkboxes.
   useEffect(() => {
     setEnabledOutputChannelsDraft(appSettings.enabledOutputChannels);
   }, [appSettings.enabledOutputChannels]);
 
+  // Re-seed the channel draft each time Settings opens, so a cancelled
+  // edit never leaks into the next visit.
   useEffect(() => {
     if (isSettingsModalOpen) {
       setEnabledOutputChannelsDraft(
@@ -1251,6 +1256,7 @@ export function TransportPanelContent() {
     }
   }, [isSettingsModalOpen]);
 
+  // One-shot: fetch the remote-server address for the Remote panel.
   useEffect(() => {
     // No remote server on Android — the command exists but always errors, so
     // skip the call instead of logging a guaranteed failure on every boot.
@@ -1278,6 +1284,10 @@ export function TransportPanelContent() {
     ((args: { paths: string[]; position: { x: number; y: number } }) => void) | null
   >(null);
 
+  // Tauri native drag&drop bridge. Registers ONE webview-level listener and
+  // fans `enter`/`over`/`drop`/`leave` out to the handler refs above (the real
+  // handlers live further down the body). Also caches the webview position so
+  // screen coords can be translated to client coords.
   useEffect(() => {
     if (!isTauriApp) {
       return;
@@ -1369,6 +1379,7 @@ export function TransportPanelContent() {
     };
   }, []);
 
+  // Teardown: make sure a library pointer-drag never outlives the panel.
   useEffect(() => {
     return () => {
       stopInternalLibraryPointerDragListeners();
@@ -1411,6 +1422,7 @@ export function TransportPanelContent() {
   const setMidiLearnMode = useTimelineUIStore(
     (state) => state.setMidiLearnMode,
   );
+  // Clamp a persisted track height that predates the current minimum.
   useEffect(() => {
     if (trackHeight < TRACK_HEIGHT_MIN) {
       setTrackHeight(TRACK_HEIGHT_MIN);
@@ -1764,6 +1776,8 @@ export function TransportPanelContent() {
     [hydrateWaveformCacheFromSong],
   );
 
+  // Settings changed elsewhere (remote, second window) -> adopt them here.
+  // Keeps appSettingsRef in sync for the ref-reading handler factories.
   useEffect(() => {
     if (!isTauriApp) {
       return;
@@ -1785,6 +1799,9 @@ export function TransportPanelContent() {
     };
   }, [syncSettingsLanguage]);
 
+  // Raw MIDI in. Two modes: with learn armed, bind the next message to the
+  // pending target (optimistic, rolled back on error); otherwise dispatch the
+  // message through the configured mappings.
   useEffect(() => {
     if (!isTauriApp) {
       return;
@@ -1870,6 +1887,7 @@ export function TransportPanelContent() {
     };
   }, [formatMidiLearnCommandLabel, runAction, setMidiLearnMode, t]);
 
+  // Register the project load-progress listener for the unpack overlay.
   useEffect(() => {
     if (!isTauriApp) {
       return;
@@ -3060,6 +3078,9 @@ export function TransportPanelContent() {
     );
   }
 
+  // Publishes every transport snapshot: updates snapshotRef, re-anchors the
+  // visual playhead and drives syncLivePosition. Hot path - see the 60fps
+  // note on displayPositionSecondsRef.
   useEffect(() => {
     const syncPlaybackSnapshot = (nextSnapshot: TransportSnapshot | null) => {
       const previousSnapshot = snapshotRef.current;
@@ -3130,6 +3151,8 @@ export function TransportPanelContent() {
     );
   }, []);
 
+  // Boot: pull audio settings and, if the voice guide was left enabled,
+  // push its config now so it works without opening Settings.
   useEffect(() => {
     let active = true;
 
@@ -3159,6 +3182,8 @@ export function TransportPanelContent() {
     };
   }, [refreshAudioSettings]);
 
+  // Audio devices + MIDI inputs are only enumerated while Settings/Remote is
+  // open - the scan is expensive (see the open_device notes).
   useEffect(() => {
     if (!isSettingsModalOpen && !isRemoteModalOpen) {
       return () => {};
@@ -3205,6 +3230,7 @@ export function TransportPanelContent() {
   useAudioMeters();
   useRegionMeters();
 
+  // Backend waveform-ready events -> merge peaks into the waveform cache.
   useEffect(() => {
     if (!isTauriApp) {
       return () => {};
@@ -3906,6 +3932,7 @@ export function TransportPanelContent() {
     ],
   );
 
+  // Warn once when the configured MIDI device is absent at boot.
   useEffect(() => {
     const selectedMidiDevice = appSettings.selectedMidiDevice;
     if (!selectedMidiDevice) {
@@ -3936,6 +3963,9 @@ export function TransportPanelContent() {
     midiInputDevices,
   ]);
 
+  // Measure the lane viewport from the scroll viewport minus the headers
+  // column. NOT from the ruler track: its content is sized from
+  // laneViewportWidth, so measuring it would never converge.
   useEffect(() => {
     const shell = timelineShellRef.current;
     if (!shell) {
@@ -3990,6 +4020,8 @@ export function TransportPanelContent() {
     // ~1/3 of the timeline visible, big black gap to the right.
   }, [song?.tracks.length, viewMode]);
 
+  // Project revision bumped -> refetch the SongView, unless this revision
+  // came from a local optimistic mutation (then there is nothing to learn).
   useEffect(() => {
     let active = true;
 
@@ -4055,6 +4087,8 @@ export function TransportPanelContent() {
     };
   }, [hydrateWaveformCacheFromSong, playbackProjectRevision]);
 
+  // Project identity changed (different session or song) -> reset all
+  // project-scoped state so nothing leaks across projects.
   useEffect(() => {
     const nextProjectIdentity = {
       songDir: playbackSongDir,
@@ -4088,6 +4122,7 @@ export function TransportPanelContent() {
     projectIdentityRef.current = nextProjectIdentity;
   }, [playbackSongDir, song?.id, song?.waveforms]);
 
+  // Load the library assets/folders for the active session.
   useEffect(() => {
     let active = true;
 
@@ -4131,6 +4166,7 @@ export function TransportPanelContent() {
     };
   }, [loadLibraryState, playbackSongDir, song?.id]);
 
+  // Pre-warm waveforms for library assets that don't have peaks yet.
   useEffect(() => {
     let active = true;
 
@@ -4192,6 +4228,8 @@ export function TransportPanelContent() {
     };
   }, [libraryAssets, playbackSongDir, waveformCache]);
 
+  // Drop the waveform cache only when the song closes - it stays valid
+  // across revisions of the same project.
   useEffect(() => {
     if (!song) {
       setWaveformCache({});
@@ -4200,6 +4238,7 @@ export function TransportPanelContent() {
     // Solo se limpia si cerramos la canción (!song) o cambiamos de proyecto.
   }, [song?.id]);
 
+  // Retire optimistic clip operations once the server revision catches up.
   useEffect(() => {
     if (!song) {
       setOptimisticClipOperations([]);
@@ -4230,6 +4269,8 @@ export function TransportPanelContent() {
     );
   }, [song?.id, song?.projectRevision]);
 
+  // Mirror the effective BPM into the tempo input, unless the user is
+  // editing it (never yank the value out from under them).
   useEffect(() => {
     if (!song) {
       return;
@@ -4277,6 +4318,7 @@ export function TransportPanelContent() {
     handlePadChange,
   ]);
 
+  // Request the waveforms this song's clips need, batched.
   useEffect(() => {
     if (!song) {
       return () => {};
@@ -4367,6 +4409,7 @@ export function TransportPanelContent() {
     };
   }, [song]);
 
+  // Clear the meters when playback stops so they don't freeze mid-level.
   useEffect(() => {
     if (playbackState === "playing") {
       return;
@@ -4375,6 +4418,7 @@ export function TransportPanelContent() {
     useTransportStore.getState().setMeters({});
   }, [playbackState, song?.projectRevision]);
 
+  // Derive the clips-by-track and tracks-by-id lookup maps from the song.
   useEffect(() => {
     if (!song) {
       setClipsByTrack({});
@@ -4390,6 +4434,7 @@ export function TransportPanelContent() {
     setClipsByTrack((current) => buildMemoizedClipsByTrack(song, current));
   }, [song]);
 
+  // Any structural change invalidates an in-flight library drag preview.
   useEffect(() => {
     libraryDragHoverRef.current = null;
     activeLibraryDragPayloadRef.current = null;
@@ -4397,10 +4442,13 @@ export function TransportPanelContent() {
     setLibraryClipPreview([]);
   }, [song?.projectRevision, song?.tracks.length, song?.clips.length]);
 
+  // Mirror song duration into a ref for the non-React render path.
   useEffect(() => {
     songDurationSecondsRef.current = song?.durationSeconds ?? 0;
   }, [song?.durationSeconds]);
 
+  // Duration changed -> re-anchor the transport visual so the playhead
+  // keeps matching the (possibly resized) timeline.
   useEffect(() => {
     const songDurationSeconds = song?.durationSeconds ?? 0;
     songDurationSecondsRef.current = songDurationSeconds;
@@ -4412,6 +4460,7 @@ export function TransportPanelContent() {
     applyTransportVisualAnchor(snapshotRef.current);
   }, [song?.durationSeconds]);
 
+  // Retire optimistic mix values once the song reflects them.
   useEffect(() => {
     const optimisticMixEntries = Object.entries(
       useTransportStore.getState().optimisticMix,
@@ -4484,6 +4533,7 @@ export function TransportPanelContent() {
     }
   }, [song]);
 
+  // Teardown for the render-metric timer.
   useEffect(() => {
     return () => {
       if (renderMetricTimeoutRef.current !== null) {
@@ -4492,6 +4542,9 @@ export function TransportPanelContent() {
     };
   }, []);
 
+  // The 60fps playhead loop. Runs only while playing; writes through refs
+  // and does NOT setState per frame - that is what keeps the panel from
+  // re-rendering 60 times a second. Touch with care.
   useEffect(() => {
     if (playbackState !== "playing") {
       return;
@@ -4538,12 +4591,15 @@ export function TransportPanelContent() {
   // menu vanished before it could be used. Ignore dismissals in the first
   // instants after opening (touch only — desktop right-click is instant).
   const contextMenuOpenedAtRef = useRef(0);
+  // Timestamp the context menu opening (Android long-press guard below).
   useEffect(() => {
     if (contextMenu) {
       contextMenuOpenedAtRef.current = Date.now();
     }
   }, [contextMenu]);
 
+  // Close the context menu on outside click, ignoring the tap that opened
+  // it on Android.
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
       if (event.button !== 0) {
@@ -4578,6 +4634,7 @@ export function TransportPanelContent() {
     };
   }, []);
 
+  // Close the top menu bar on outside click / Escape.
   useEffect(() => {
     if (!openTopMenu) {
       return;
@@ -4840,6 +4897,10 @@ export function TransportPanelContent() {
     toggleViewMode,
   });
 
+  // Global mouse listeners for clip drag + track drag. This is the hot
+  // path: it writes destinations into clipPreviewTrackIdRef so the canvas
+  // paints the ghost WITHOUT a React re-render. Its deps must stay
+  // referentially stable or the listeners get torn down mid-drag.
   useEffect(() => {
     const onMouseMove = (event: MouseEvent) => {
       const clipDrag = clipDragRef.current;
@@ -5241,6 +5302,7 @@ export function TransportPanelContent() {
     zoomLevel,
   ]);
 
+  // Teardown: clear any leftover track-drag visuals.
   useEffect(() => {
     return () => {
       clearTrackDragVisuals();
@@ -5617,6 +5679,8 @@ export function TransportPanelContent() {
 
     return furthestContentSeconds;
   }, [pendingAudioImports, song]);
+  // Mirror follow-playhead / view mode / viewport metrics into refs for
+  // the non-React camera path.
   useEffect(() => {
     followPlayheadEnabledRef.current = followPlayheadEnabled;
     viewModeRef.current = viewMode;
@@ -5706,6 +5770,8 @@ export function TransportPanelContent() {
   // libraryDragDrop); menu builders only run from user-event handlers, well
   // after the first commit, so the deferred sync is safe. See ./menus/timelineMenus.
   const timelineMenuDepsRef = useRef<TimelineMenuDeps | null>(null);
+  // Deferred deps snapshot for the context-menu builders. Deferred on
+  // purpose: its deps include values declared lower in the body.
   useEffect(() => {
     timelineMenuDepsRef.current = {
       t,
@@ -5818,6 +5884,7 @@ export function TransportPanelContent() {
   const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
     [],
   );
+  // Empty state: load recent sessions + templates for the landing panel.
   useEffect(() => {
     if (!shouldShowEmptyState) {
       return;
@@ -5941,6 +6008,7 @@ export function TransportPanelContent() {
       }));
   }, [libraryClipPreview, t]);
 
+  // Mirror the workspace duration into a ref for the camera math.
   useEffect(() => {
     timelineDurationSecondsRef.current = workspaceDurationSeconds;
   }, [workspaceDurationSeconds]);
@@ -6040,12 +6108,14 @@ export function TransportPanelContent() {
     await scheduleMarkerJumpWithGlobalMode(section.id, section.name);
   }
 
+  // Clamp the zoom level when the minimum changes (viewport resize).
   useEffect(() => {
     setZoomLevel((current) =>
       current < effectiveZoomMin ? effectiveZoomMin : current,
     );
   }, [effectiveZoomMin]);
 
+  // Fit-to-window on first load of a song that has clips.
   useEffect(() => {
     if (!song) {
       viewportFitStateRef.current = {
@@ -6097,11 +6167,13 @@ export function TransportPanelContent() {
     timelineContentEndSeconds,
   ]);
 
+  // Mirror zoom + pixels-per-second into refs for the render path.
   useEffect(() => {
     liveZoomLevelRef.current = zoomLevel;
     livePixelsPerSecondRef.current = pixelsPerSecond;
   }, [pixelsPerSecond, zoomLevel]);
 
+  // Adopt an external cameraX unless a zoom debounce owns it right now.
   useEffect(() => {
     if (
       zoomDebounceTimerRef.current === null ||
@@ -6111,6 +6183,7 @@ export function TransportPanelContent() {
     }
   }, [cameraX]);
 
+  // Teardown for the scroll/zoom debounce timers.
   useEffect(() => {
     return () => {
       if (scrollDebounceTimerRef.current !== null) {
@@ -6122,6 +6195,7 @@ export function TransportPanelContent() {
     };
   }, []);
 
+  // Re-clamp the camera after any viewport/zoom/duration change.
   useEffect(() => {
     updateCameraX(cameraXRef.current, {
       durationSeconds: song?.durationSeconds ?? 0,
@@ -6137,6 +6211,8 @@ export function TransportPanelContent() {
     viewMode,
   ]);
 
+  // Re-sync the live playhead after anything that changes its mapping
+  // to pixels (zoom, tempo, duration).
   useEffect(() => {
     syncLivePosition(
       playheadDragRef.current?.currentSeconds ??
@@ -6332,6 +6408,8 @@ export function TransportPanelContent() {
     }
   }
 
+  // Double-click on the timeline viewport (native listener: React's
+  // synthetic dblclick doesn't reach the canvas reliably).
   useEffect(() => {
     const viewport = timelineScrollViewportRef.current;
     if (!viewport) {
