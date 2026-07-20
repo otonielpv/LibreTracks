@@ -23,6 +23,8 @@ vendor/ffmpeg-linux/
 Thumbs.db
 repomix-output.xml
 graphify-out/
+# Vídeos promocionales generados, capturas y sesiones temporales de montaje.
+marketing/video-*/
 .claude/settings.local.json
 native/audio-engine-v2/build*
 native/audio-engine-v2/vcpkg_installed/

@@ -564,7 +564,10 @@ void Mixer::render_timeline_span(float** output_channels,
     voice_guide_.render(metronome_channels, num_channels, num_frames,
                         clock_->sample_rate(), timeline_frame, session.get(),
                         announceable_jump_target(session.get()));
-    pad_.render(metronome_channels, num_channels, num_frames, clock_->sample_rate());
+    // The pad is NOT rendered here: render() drives it once per callback on the
+    // full block after this span returns. A due_jump splits the block into two
+    // render_timeline_span calls, so rendering the pad here would advance its
+    // read cursor two or three times in a single callback.
 
     const bool was_pending_start = clock_->pending_start();
     if (was_pending_start)
@@ -858,13 +861,22 @@ void Mixer::render(float** output_channels,
         voice_guide_.render(output_channels, num_channels, num_frames,
                             clock_->sample_rate(), timeline_frame, session.get(),
                             announceable_jump_target(session.get()));
-        pad_.render(output_channels, num_channels, num_frames, clock_->sample_rate());
 
         const bool was_pending_start = clock_->pending_start();
         if (was_pending_start)
             clock_->clear_pending_start();
         clock_->advance(num_frames);
     }
+
+    // Ambient pads are decoupled from the transport: they must sound whenever
+    // enabled, with or without play. The renderer keeps its own read cursor and
+    // never consults the clock, so we drive it here — once per callback, on the
+    // full block, outside the Playing branch above. It stays after the track
+    // render (so it isn't attenuated by the song master gain, matching the
+    // metronome / voice guide) and before apply_master_gain below. The Playing
+    // and due_jump branches deliberately no longer call it, so it renders
+    // exactly once per callback (no double cursor advance).
+    pad_.render(output_channels, num_channels, num_frames, clock_->sample_rate());
 
     phase_mark(phase_t, phase_tracks_us_);  // track render loop (+ jump split)
 
