@@ -395,6 +395,9 @@ import {
 import { createTrackHandlers } from "./tracks/trackHandlers";
 import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
 import { createCompactSongHandlers } from "./compact/compactSongHandlers";
+import { useLibraryState } from "./hooks/useLibraryState";
+import { useSongWaveforms } from "./hooks/useSongWaveforms";
+import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 
@@ -1799,93 +1802,33 @@ export function TransportPanelContent() {
     };
   }, [syncSettingsLanguage]);
 
-  // Raw MIDI in. Two modes: with learn armed, bind the next message to the
-  // pending target (optimistic, rolled back on error); otherwise dispatch the
-  // message through the configured mappings.
-  useEffect(() => {
-    if (!isTauriApp) {
-      return;
-    }
-
-    let unlisten: (() => void) | null = null;
-    void listenToMidiRawMessage((message) => {
-      const learnMode = useTimelineUIStore.getState().midiLearnMode;
-      if (learnMode === null) {
-        const mappedKey = findMidiMappingKeyForMessage(
-          appSettingsRef.current.midiMappings,
-          message,
-        );
-
-        if (mappedKey === "action:select_previous_region") {
-          handleSelectRegionFromMidi(-1);
-        } else if (mappedKey === "action:select_next_region") {
-          handleSelectRegionFromMidi(1);
-        } else if (
-          mappedKey === "action:region_transpose_up" ||
-          mappedKey === "action:region_transpose_down" ||
-          mappedKey === "action:region_transpose_reset"
-        ) {
-          handleRegionTransposeFromMidi(mappedKey);
-        }
-
-        return;
-      }
-
-      if (learnMode === "") {
-        return;
-      }
-
-      const nextBinding = {
-        status: message.status,
-        data1: message.data1,
-        isCc: (message.status & 0xf0) === 0xb0,
-      };
-      const nextSettings = normalizeAppSettings({
-        ...appSettingsRef.current,
-        midiMappings: {
-          ...appSettingsRef.current.midiMappings,
-          [learnMode]: nextBinding,
-        },
-      });
-      const previousSettings = appSettingsRef.current;
-      const learnedCommandLabel = formatMidiLearnCommandLabel(learnMode);
-
-      appSettingsRef.current = nextSettings;
-      setAppSettings(nextSettings);
-      setMidiLearnMode(null);
-
-      void runAction(async () => {
-        try {
-          const liveSettings = normalizeAppSettings(
-            await updateAudioSettings(nextSettings),
-          );
-          const savedSettings = normalizeAppSettings(
-            await saveSettings(liveSettings),
-          );
-          appSettingsRef.current = savedSettings;
-          setAppSettings(savedSettings);
-          setMidiLearnFeedback({ key: learnMode, binding: nextBinding });
-          setStatus(
-            t("transport.status.midiBindingLearned", {
-              key: learnedCommandLabel,
-              binding: formatMidiBinding(nextBinding),
-            }),
-          );
-        } catch (error) {
-          appSettingsRef.current = previousSettings;
-          setAppSettings(previousSettings);
-          setMidiLearnMode(learnMode);
-          throw error;
-        }
-      });
-    }).then((dispose) => {
-      unlisten = dispose;
-    });
-
-    return () => {
-      unlisten?.();
-    };
-  }, [formatMidiLearnCommandLabel, runAction, setMidiLearnMode, t]);
+  // Raw MIDI input (learn + mapped region actions).
+  // See ./hooks/useMidiRawMessages. The two region actions go through refs
+  // because their originals are function declarations further down the body.
+  const midiSelectRegionRef = useRef<((direction: -1 | 1) => void) | null>(
+    null,
+  );
+  const midiRegionTransposeRef = useRef<
+    | ((
+        mappedKey:
+          | "action:region_transpose_up"
+          | "action:region_transpose_down"
+          | "action:region_transpose_reset",
+      ) => void)
+    | null
+  >(null);
+  useMidiRawMessages({
+    appSettingsRef,
+    setAppSettings,
+    setMidiLearnMode,
+    setMidiLearnFeedback,
+    setStatus,
+    runAction,
+    formatMidiLearnCommandLabel,
+    t,
+    onSelectRegionRef: midiSelectRegionRef,
+    onRegionTransposeRef: midiRegionTransposeRef,
+  });
 
   // Register the project load-progress listener for the unpack overlay.
   useEffect(() => {
@@ -4122,111 +4065,24 @@ export function TransportPanelContent() {
     projectIdentityRef.current = nextProjectIdentity;
   }, [playbackSongDir, song?.id, song?.waveforms]);
 
-  // Load the library assets/folders for the active session.
-  useEffect(() => {
-    let active = true;
-
-    async function loadLibraryAssets() {
-      if (!playbackSongDir) {
-        libraryStateRequestIdRef.current += 1;
-        setLibraryAssets([]);
-        setLibraryFolders([]);
-        setLibraryClipPreview([]);
-        return;
-      }
-
-      const requestId = ++libraryStateRequestIdRef.current;
-      setLibraryAssets([]);
-      setLibraryFolders([]);
-      setLibraryClipPreview([]);
-      setIsLibraryLoading(true);
-      try {
-        const { assets, folders } = await loadLibraryState();
-        if (!active || requestId !== libraryStateRequestIdRef.current) {
-          return;
-        }
-
-        setLibraryAssets(assets);
-        setLibraryFolders(folders);
-      } catch (error) {
-        if (active) {
-          setStatus(formatErrorStatus(error));
-        }
-      } finally {
-        if (active) {
-          setIsLibraryLoading(false);
-        }
-      }
-    }
-
-    void loadLibraryAssets();
-
-    return () => {
-      active = false;
-    };
-  }, [loadLibraryState, playbackSongDir, song?.id]);
-
-  // Pre-warm waveforms for library assets that don't have peaks yet.
-  useEffect(() => {
-    let active = true;
-
-    async function warmLibraryWaveforms() {
-      if (!playbackSongDir || !libraryAssets.length) {
-        return;
-      }
-
-      const missingWaveformKeys = libraryAssets
-        .map((asset) => asset.filePath)
-        // Defensive: never request a waveform for a pending placeholder's temp
-        // id (not a real file). Real imported assets replace these once ready.
-        .filter((filePath) => !filePath.startsWith("pending-asset-"))
-        .filter(
-          (waveformKey, index, keys) => keys.indexOf(waveformKey) === index,
-        )
-        .filter((waveformKey) => {
-          const summary = waveformCache[waveformKey];
-          return !summary && !inFlightWaveformKeysRef.current.has(waveformKey);
-        });
-
-      if (!missingWaveformKeys.length) {
-        return;
-      }
-
-      const batchKeys = missingWaveformKeys.slice(0, WAVEFORM_REQUEST_BATCH_SIZE);
-      for (const waveformKey of batchKeys) {
-        inFlightWaveformKeysRef.current.add(waveformKey);
-      }
-
-      const summaries = await getLibraryWaveformSummaries(batchKeys);
-      if (!active) {
-        return;
-      }
-
-      // Clear in-flight for the WHOLE batch (see loadMissingWaveforms): a cache
-      // miss is generated in the background and not returned here, so leaving it
-      // in-flight would strand it until a full refresh.
-      for (const waveformKey of batchKeys) {
-        inFlightWaveformKeysRef.current.delete(waveformKey);
-      }
-
-      if (!summaries.length) {
-        return;
-      }
-
-      setWaveformCache((current) => ({
-        ...current,
-        ...Object.fromEntries(
-          summaries.map((summary) => [summary.waveformKey, summary]),
-        ),
-      }));
-    }
-
-    void warmLibraryWaveforms();
-
-    return () => {
-      active = false;
-    };
-  }, [libraryAssets, playbackSongDir, waveformCache]);
+  // Session library: asset/folder loading + waveform pre-warm.
+  // See ./hooks/useLibraryState.
+  useLibraryState({
+    playbackSongDir,
+    songId: song?.id ?? null,
+    libraryAssets,
+    waveformCache,
+    loadLibraryState,
+    setLibraryAssets,
+    setLibraryFolders,
+    setLibraryClipPreview,
+    setIsLibraryLoading,
+    setWaveformCache,
+    setStatus,
+    formatErrorStatus,
+    libraryStateRequestIdRef,
+    inFlightWaveformKeysRef,
+  });
 
   // Drop the waveform cache only when the song closes - it stays valid
   // across revisions of the same project.
@@ -4318,96 +4174,9 @@ export function TransportPanelContent() {
     handlePadChange,
   ]);
 
-  // Request the waveforms this song's clips need, batched.
-  useEffect(() => {
-    if (!song) {
-      return () => {};
-    }
-
-    let active = true;
-
-    // Distinct source keys this song needs a waveform for.
-    const clipKeys = song.clips
-      .map((clip) => clip.waveformKey)
-      .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index);
-
-    // Self-contained loop that drives ALL missing waveforms to completion. We
-    // deliberately do NOT depend on `waveformCache` here: depending on it AND
-    // calling setWaveformCache inside restarted the effect mid-flight, so two
-    // overlapping runs raced on the functional state update and whole batches
-    // were lost (e.g. the first 4 summaries never landed in the cache — that was
-    // the "only the last 3 waveforms appear" bug). Instead this single run owns
-    // the work from start to finish, requesting in batches and polling for keys
-    // still being generated in the background (the live waveform:ready event is
-    // unreliable right after an import — it can fire before the frontend knows
-    // the new session's songDir).
-    // Seed with waveforms the song already carries (embedded summaries from the
-    // snapshot) so we don't re-request those.
-    const resolved = new Set<string>(
-      (song.waveforms ?? []).map((summary) => summary.waveformKey),
-    );
-    let pollAttempts = 0;
-    // Generation after a decode is quick; cap the polling so a genuinely
-    // ungeneratable source can't spin forever (~30s of 600ms ticks).
-    const MAX_POLL_ATTEMPTS = 50;
-
-    async function drainWaveforms() {
-      while (active) {
-        const missing = clipKeys.filter((key) => !resolved.has(key));
-        if (!missing.length) {
-          return;
-        }
-
-        let progressed = false;
-        // Walk the whole missing set in batches in THIS pass.
-        for (let i = 0; i < missing.length; i += WAVEFORM_REQUEST_BATCH_SIZE) {
-          if (!active) {
-            return;
-          }
-          const batchKeys = missing.slice(i, i + WAVEFORM_REQUEST_BATCH_SIZE);
-          const summaries = await getWaveformSummaries(batchKeys);
-          if (!active) {
-            return;
-          }
-          if (summaries.length) {
-            progressed = true;
-            for (const summary of summaries) {
-              resolved.add(summary.waveformKey);
-            }
-            setWaveformCache((current) => ({
-              ...current,
-              ...Object.fromEntries(
-                summaries.map((summary) => [summary.waveformKey, summary]),
-              ),
-            }));
-          }
-        }
-
-        // Everything resolved this pass? Done.
-        if (clipKeys.every((key) => resolved.has(key))) {
-          return;
-        }
-        // Some keys are still being generated in the background. Wait, then
-        // re-request only the ones we don't have yet. If nothing progressed for
-        // too many consecutive polls, give up (likely an ungeneratable source).
-        if (!progressed) {
-          pollAttempts += 1;
-          if (pollAttempts >= MAX_POLL_ATTEMPTS) {
-            return;
-          }
-        } else {
-          pollAttempts = 0;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 600));
-      }
-    }
-
-    void drainWaveforms();
-
-    return () => {
-      active = false;
-    };
-  }, [song]);
+  // Waveforms for the song's clips (batched + polling).
+  // See ./hooks/useSongWaveforms.
+  useSongWaveforms({ song, setWaveformCache });
 
   // Clear the meters when playback stops so they don't freeze mid-level.
   useEffect(() => {
@@ -6090,6 +5859,14 @@ export function TransportPanelContent() {
 
     handleSelectedRegionTransposeChange(nextTransposeSemitones);
   }
+
+  // Point the MIDI listener's refs at the two declarations above. No dep array:
+  // both close over per-render values (selectedRegionId), so the refs must
+  // track the latest version on every render.
+  useEffect(() => {
+    midiSelectRegionRef.current = handleSelectRegionFromMidi;
+    midiRegionTransposeRef.current = handleRegionTransposeFromMidi;
+  });
 
   async function handleMarkerPrimaryAction(section: SectionMarkerSummary) {
     selectSection(section.id);
