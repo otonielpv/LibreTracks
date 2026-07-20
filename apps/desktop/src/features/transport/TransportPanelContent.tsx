@@ -393,6 +393,7 @@ import {
   type TimelineMenuDeps,
 } from "./menus/timelineMenus";
 import { createTrackHandlers } from "./tracks/trackHandlers";
+import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 
@@ -6594,245 +6595,62 @@ export function TransportPanelContent() {
     );
   }
 
-  const handleTrackHeaderSelect = useCallback(
-    (
-      trackId: string,
-      trackName: string,
-      event: ReactMouseEvent<HTMLDivElement>,
-    ) => {
-      if (suppressTrackClickRef.current) {
-        suppressTrackClickRef.current = false;
-        return;
-      }
-
-      const currentSelection = useTimelineUIStore.getState().selectedTrackIds;
-      let nextSelection = [trackId];
-
-      if (event.ctrlKey || event.metaKey) {
-        nextSelection = currentSelection.includes(trackId)
-          ? currentSelection.filter((id) => id !== trackId)
-          : [...currentSelection, trackId];
-        trackSelectionAnchorRef.current = trackId;
-      } else if (event.shiftKey) {
-        const visibleTrackIds = visibleTracks.map((track) => track.id);
-        const anchor = trackSelectionAnchorRef.current;
-        const anchorIdx = anchor ? visibleTrackIds.indexOf(anchor) : -1;
-        const currentIdx = visibleTrackIds.indexOf(trackId);
-
-        if (anchorIdx !== -1 && currentIdx !== -1) {
-          const start = Math.min(anchorIdx, currentIdx);
-          const end = Math.max(anchorIdx, currentIdx);
-          nextSelection = visibleTrackIds.slice(start, end + 1);
-          // Anchor stays put across range extensions.
-        } else {
-          // No usable anchor — fall back to single-select and seed anchor.
-          nextSelection = [trackId];
-          trackSelectionAnchorRef.current = trackId;
-        }
-      } else {
-        trackSelectionAnchorRef.current = trackId;
-      }
-
-      selectTrack(nextSelection);
-      setStatus(
-        nextSelection.length > 1
-          ? t("transport.status.tracksSelected", {
-              count: nextSelection.length,
-            })
-          : t("transport.status.trackSelected", { name: trackName }),
-      );
-    },
-    [selectTrack, t, visibleTracks],
-  );
-
-  const handleTrackHeaderDragStart = useCallback(
-    (event: ReactMouseEvent<HTMLElement>, trackId: string) => {
-      if (event.button !== 0) {
-        return;
-      }
-
-      event.stopPropagation();
-      setContextMenu(null);
-      // The track header drag can be initiated from either the DAW
-      // header (vertical layout) or the compact mixer strip
-      // (horizontal layout). We branch on which DOM ancestor we find
-      // so the visual pipeline knows whether to translate on Y or X
-      // and which selector to highlight as the drop target.
-      const headerElement = event.currentTarget.closest(
-        ".lt-track-header",
-      ) as HTMLDivElement | null;
-      const compactStrip = event.currentTarget.closest(
-        ".lt-compact-mixer-strip",
-      ) as HTMLDivElement | null;
-      const originSurface: "daw" | "compact" = compactStrip
-        ? "compact"
-        : "daw";
-      const scaleElement = compactStrip ?? headerElement ?? event.currentTarget;
-      const scaleBounds = scaleElement.getBoundingClientRect();
-      trackDragRef.current = {
-        trackId,
-        pointerId: 1,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        pointerScaleX: getElementScaleX(scaleBounds, scaleElement.offsetWidth),
-        pointerScaleY: getElementScaleY(scaleBounds, scaleElement.offsetHeight),
-        currentClientY: event.clientY,
-        currentClientX: event.clientX,
-        isDragging: false,
-        rowElement:
-          originSurface === "compact"
-            ? compactStrip
-            : (event.currentTarget.closest(
-                ".lt-track-header-row",
-              ) as HTMLDivElement | null),
-        headerElement,
-        originSurface,
-      };
-    },
-    [],
-  );
-
-  const handleTrackHeaderFolderToggle = useCallback((trackId: string) => {
-    setCollapsedFolders((current) => {
-      const next = new Set(current);
-      if (next.has(trackId)) {
-        next.delete(trackId);
-      } else {
-        next.add(trackId);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleTrackHeaderMuteToggle = useCallback(
-    (trackId: string) => {
-      const track = findTrack(songRef.current, trackId);
-      if (!track) {
-        return;
-      }
-
-      patchTrackOptimisticMix(trackId, {
-        muted: !resolveTrackMix(track, trackId).muted,
-      });
-      queueTrackMixLiveUpdate(trackId, ["muted"]);
-
-      void runAction(async () => {
-        await persistTrackMix(trackId, ["muted"]);
-      });
-    },
+  // Track-header controls (selection, drag start, folder collapse, mute/solo/
+  // volume/pan/transpose). See ./tracks/trackHeaderHandlers. Reactive state is
+  // read through getters and refs so the factory stays referentially stable.
+  const {
+    handleTrackHeaderSelect,
+    handleTrackHeaderDragStart,
+    handleTrackHeaderFolderToggle,
+    handleTrackHeaderMuteToggle,
+    handleTrackHeaderSoloToggle,
+    handleTrackHeaderVolumeChange,
+    handleTrackHeaderVolumeCommit,
+    handleTrackHeaderPanChange,
+    handleTrackHeaderPanCommit,
+    handleTrackHeaderTransposeToggle,
+  } = useMemo(
+    () =>
+      createTrackHeaderHandlers({
+        findTrack: (trackId) => findTrack(songRef.current, trackId),
+        getVisibleTrackIds: () =>
+          visibleTracksRef.current.map((track) => track.id),
+        getSelectedTrackIds: () =>
+          useTimelineUIStore.getState().selectedTrackIds,
+        selectTrack,
+        resolveTrackMix,
+        patchTrackOptimisticMix,
+        queueTrackMixLiveUpdate,
+        persistTrackMix,
+        runAction,
+        applyPlaybackSnapshot,
+        optimisticallyAppliedRevisionsRef,
+        setSong,
+        setCollapsedFolders,
+        setContextMenu,
+        setPitchPrepareUiState,
+        setStatus,
+        t,
+        updateTrackTransposeEnabled,
+        suppressTrackClickRef,
+        trackSelectionAnchorRef,
+        trackDragRef,
+        clamp,
+        getElementScaleX,
+        getElementScaleY,
+        maxTrackGain: MAX_TRACK_GAIN,
+      }),
     [
+      applyPlaybackSnapshot,
       patchTrackOptimisticMix,
       persistTrackMix,
       queueTrackMixLiveUpdate,
       resolveTrackMix,
       runAction,
+      selectTrack,
+      setStatus,
+      t,
     ],
-  );
-
-  const handleTrackHeaderSoloToggle = useCallback(
-    (trackId: string) => {
-      const track = findTrack(songRef.current, trackId);
-      if (!track) {
-        return;
-      }
-
-      patchTrackOptimisticMix(trackId, {
-        solo: !resolveTrackMix(track, trackId).solo,
-      });
-      queueTrackMixLiveUpdate(trackId, ["solo"]);
-
-      void runAction(async () => {
-        await persistTrackMix(trackId, ["solo"]);
-      });
-    },
-    [
-      patchTrackOptimisticMix,
-      persistTrackMix,
-      queueTrackMixLiveUpdate,
-      resolveTrackMix,
-      runAction,
-    ],
-  );
-
-  const handleTrackHeaderVolumeChange = useCallback(
-    (trackId: string, nextVolume: number) => {
-      patchTrackOptimisticMix(trackId, {
-        volume: clamp(nextVolume, 0, MAX_TRACK_GAIN),
-      });
-      queueTrackMixLiveUpdate(trackId, ["volume"]);
-    },
-    [patchTrackOptimisticMix, queueTrackMixLiveUpdate],
-  );
-
-  const handleTrackHeaderVolumeCommit = useCallback(
-    (trackId: string) => {
-      void runAction(async () => {
-        await persistTrackMix(trackId, ["volume"]);
-      });
-    },
-    [persistTrackMix, runAction],
-  );
-
-  const handleTrackHeaderPanChange = useCallback(
-    (trackId: string, nextPan: number) => {
-      patchTrackOptimisticMix(trackId, {
-        pan: clamp(nextPan, -1, 1),
-      });
-      queueTrackMixLiveUpdate(trackId, ["pan"]);
-    },
-    [patchTrackOptimisticMix, queueTrackMixLiveUpdate],
-  );
-
-  const handleTrackHeaderPanCommit = useCallback(
-    (trackId: string) => {
-      void runAction(async () => {
-        await persistTrackMix(trackId, ["pan"]);
-      });
-    },
-    [persistTrackMix, runAction],
-  );
-
-  const handleTrackHeaderTransposeToggle = useCallback(
-    (trackId: string) => {
-      const track = findTrack(songRef.current, trackId);
-      if (!track) {
-        return;
-      }
-
-      const nextTransposeEnabled = !track.transposeEnabled;
-      void runAction(async () => {
-        setPitchPrepareUiState({
-          active: true,
-          message: "Aplicando cambio de tono...",
-          startedAt: Date.now(),
-        });
-        const nextSnapshot = await updateTrackTransposeEnabled({
-          trackId,
-          transposeEnabled: nextTransposeEnabled,
-        });
-        // Optimistic local mutation: see handleSelectedRegionTransposeChange.
-        optimisticallyAppliedRevisionsRef.current.add(
-          nextSnapshot.projectRevision,
-        );
-        setSong((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            projectRevision: nextSnapshot.projectRevision,
-            tracks: previous.tracks.map((t) =>
-              t.id === trackId
-                ? { ...t, transposeEnabled: nextTransposeEnabled }
-                : t,
-            ),
-          };
-        });
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(
-          t("transport.status.trackTransposeUpdated", { name: track.name }),
-        );
-      });
-    },
-    [applyPlaybackSnapshot, runAction, setStatus, t],
   );
 
   function beginTimelineSeekOrPan(event: ReactMouseEvent<HTMLElement>) {
