@@ -5064,11 +5064,15 @@ export function TransportPanelContent() {
     waitForClipMoveBatchLiveIdle,
     runAction,
     selectClip,
-    selectedClipIds,
     snapEnabled,
-    toggleClipSelection,
     waitForClipMoveLiveIdle,
-    zoomLevel,
+    // NOTE: selectedClipIds / toggleClipSelection / zoomLevel are deliberately
+    // NOT deps. They were listed but never referenced in the body — the effect
+    // reads the live zoom through liveZoomLevelRef/livePixelsPerSecondRef and
+    // the selection through useTimelineUIStore.getState(), exactly so it does
+    // not have to re-subscribe. Listing them tore down and re-registered the
+    // global mousemove/mouseup listeners mid-drag every time the zoom changed
+    // or the selection moved.
   ]);
 
   // Teardown: clear any leftover track-drag visuals.
