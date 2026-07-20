@@ -7,8 +7,8 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { densityFromHeight } from "../constants";
-import type { SongView } from "../desktopApi";
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
+import { useSongStore } from "../songStore";
 import { TrackHeaderItem } from "./TrackHeaderItem";
 
 type LibraryPreviewRow = {
@@ -18,7 +18,6 @@ type LibraryPreviewRow = {
 };
 
 type TrackHeadersPaneProps = {
-  song: SongView | null;
   visibleTracks: TimelineTrackSummary[];
   selectedTrackIds: string[];
   trackHeight: number;
@@ -47,7 +46,6 @@ type TrackHeadersPaneProps = {
 };
 
 export function TrackHeadersPane({
-  song,
   visibleTracks,
   selectedTrackIds,
   trackHeight,
@@ -73,6 +71,9 @@ export function TrackHeadersPane({
   headerActions,
 }: TrackHeadersPaneProps) {
   const { t } = useTranslation();
+  // Narrow selector: this pane only needs to know whether a project is loaded,
+  // so it no longer re-renders on every unrelated mutation of `song`.
+  const hasSong = useSongStore((state) => state.song !== null);
   const headersListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -112,10 +113,10 @@ export function TrackHeadersPane({
       </div>
       <div
         className="lt-track-headers-list"
-        aria-hidden={!song}
+        aria-hidden={!hasSong}
         ref={headersListRef}
       >
-        {song?.tracks && visibleTracks.map((track) => {
+        {hasSong && visibleTracks.map((track) => {
           const isTrackSelected = selectedTrackIds.includes(track.id);
           const childCount = getTrackChildCount(track.id);
           const trackDensityClass = densityFromHeight(trackHeight);

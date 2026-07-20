@@ -6,8 +6,8 @@ import {
   getSongBaseBpm,
   isAndroidApp,
   type PlaybackState,
-  type SongView,
 } from "../desktopApi";
+import { useSongStore } from "../songStore";
 import {
   clearRecentSessions,
   loadRecentSessions,
@@ -26,7 +26,6 @@ type TimelineTopbarProps = {
   tempoSourceLabel: ReactNode;
   displayedBpm: number;
   displayedTimeSignature: string;
-  song: SongView | null;
   musicalPositionLabel: string;
   readoutPositionSecondsLabel: string;
   playbackState: PlaybackState;
@@ -89,7 +88,6 @@ export function TimelineTopbar({
   tempoSourceLabel,
   displayedBpm,
   displayedTimeSignature,
-  song,
   musicalPositionLabel,
   readoutPositionSecondsLabel,
   playbackState,
@@ -139,7 +137,10 @@ export function TimelineTopbar({
   onMidiLearnTarget,
 }: TimelineTopbarProps) {
   const { t } = useTranslation();
-  const fallbackBpm = getSongBaseBpm(song);
+  // Narrow selectors: the topbar only needs the base tempo and whether a
+  // project is loaded, so unrelated mutations of `song` no longer re-render it.
+  const fallbackBpm = useSongStore((state) => getSongBaseBpm(state.song));
+  const hasSong = useSongStore((state) => state.song !== null);
   const playbackStateLabel = t(`transport.playbackState.${playbackState}`);
   const learnModeActive = midiLearnMode !== null;
   const canOpenFileMenu = canPersistProject;
@@ -423,7 +424,7 @@ export function TimelineTopbar({
             <span>{t("timelineTopbar.bpmLabel")}</span>
             <input
               aria-label={t("timelineTopbar.songBpmAria")}
-              disabled={!song}
+              disabled={!hasSong}
               type="number"
               min={1}
               step={0.1}
@@ -449,7 +450,7 @@ export function TimelineTopbar({
             type="button"
             className="lt-tap-tempo-button"
             aria-label={t("timelineTopbar.tapTempo")}
-            disabled={!song && !learnModeActive}
+            disabled={!hasSong && !learnModeActive}
             onClick={() => {
               if (learnModeActive) {
                 onMidiLearnTarget("param:tempo");
@@ -467,7 +468,7 @@ export function TimelineTopbar({
             <span>Compas</span>
             <input
               aria-label="Compas de la cancion"
-              disabled={!song}
+              disabled={!hasSong}
               type="text"
               value={timeSignatureDraft}
               onChange={(event) => onTimeSignatureDraftChange(event.target.value)}

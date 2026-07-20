@@ -6698,7 +6698,6 @@ export function TransportPanelContent() {
           tempoSourceLabel={tempoSourceLabel}
           displayedBpm={displayedBpm}
           displayedTimeSignature={displayedTimeSignature}
-          song={song}
           musicalPositionLabel={musicalPositionLabel}
           readoutPositionSecondsLabel={formatClock(readoutPositionSeconds)}
           playbackState={playbackState}
@@ -7361,7 +7360,6 @@ export function TransportPanelContent() {
                               </>
                             ) : undefined
                           }
-                          song={song}
                           visibleTracks={visibleTracks}
                           selectedTrackIds={selectedTrackIds}
                           trackHeight={trackHeight}
