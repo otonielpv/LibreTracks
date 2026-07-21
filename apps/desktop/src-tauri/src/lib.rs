@@ -7,8 +7,7 @@
 
 #[cfg(target_os = "android")]
 mod android_audio_devices;
-mod audio_engine;
-mod automation;
+mod audio;
 mod commands;
 mod error;
 mod error_log;
@@ -142,13 +141,13 @@ pub fn run() {
             }
             // If apply_settings nulled out the saved output device (because
             // the device couldn't be opened — see apply_settings_with_stream_rebuild
-            // in audio_engine.rs), persist the cleaned-up settings to disk so
+            // in audio/engine.rs), persist the cleaned-up settings to disk so
             // the next launch doesn't hit the same failure and we don't keep
             // showing a stale device name to the user.
             if let Ok(after) = state.audio.current_settings() {
                 if initial_device.is_some() && after.selected_output_device_id.is_none() {
                     if let Err(e) = settings::save_app_settings(&app.handle(), &after) {
-                        if audio_engine::audio_debug_logging_enabled() {
+                        if audio::engine::audio_debug_logging_enabled() {
                             eprintln!(
                                 "[libretracks-settings] could not persist cleaned-up \
                                  audio settings after fallback to default device: {e}"
@@ -173,7 +172,7 @@ pub fn run() {
                         .and_then(|settings| settings.selected_midi_device),
                 )
                 .unwrap_or_else(|error| {
-                    if audio_engine::audio_debug_logging_enabled() {
+                    if audio::engine::audio_debug_logging_enabled() {
                         eprintln!("[libretracks-midi] startup warning: {error}");
                     }
                 });
@@ -213,7 +212,7 @@ pub fn run() {
             commands::library::get_library_folders,
             commands::library::get_waveform_summaries,
             commands::library::get_library_waveform_summaries,
-            audio_engine::get_audio_output_devices,
+            audio::engine::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,
             commands::system::get_desktop_performance_snapshot,
             commands::system::get_system_resource_snapshot,

@@ -12,7 +12,7 @@ use libretracks_project::{
 };
 use tempfile::tempdir;
 
-use crate::automation::AutomationDocument;
+use crate::audio::automation::AutomationDocument;
 use crate::models::view::{musical_position_summary, song_to_view};
 use crate::models::LibraryAssetSummary;
 
@@ -444,7 +444,7 @@ fn snapshot_exposes_transport_clock_summary_after_immediate_jump() {
         .load_song(demo_song_with_section())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .schedule_marker_jump(
             "section_1",
@@ -472,7 +472,7 @@ fn extending_last_region_right_grows_the_song_duration() {
     // envelop it (otherwise the engine validator rejects "Region outside
     // song"). Contents are NOT moved — only the named span grows.
     let mut session = session_with_song_dir("extend_region", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .update_song_region("region_1", "Move Demo", 0.0, 30.0, &audio)
@@ -501,7 +501,7 @@ fn snapshot_exposes_transport_clock_summary_after_seek() {
         .load_song(demo_song())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session.seek(2.75, &audio).expect("seek should succeed");
 
     assert_eq!(snapshot.position_seconds, 2.75);
@@ -533,7 +533,7 @@ fn snapshot_reports_seek_position_in_view_seconds_for_varispeed_region() {
         .load_song(song)
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session.seek(10.0, &audio).expect("seek should succeed");
 
     assert!(
@@ -578,7 +578,7 @@ fn scheduled_jump_snapshot_reports_execute_time_in_view_seconds_for_varispeed_re
         .load_song(song)
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session.seek(10.0, &audio).expect("seek should succeed");
     let snapshot = session
         .schedule_marker_jump(
@@ -649,7 +649,7 @@ fn snapshot_after_playing_seek_keeps_visual_clock_running() {
 #[test]
 fn pause_freezes_position_after_real_playback() {
     let mut session = session_with_song_dir("pause-freeze-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let playing_snapshot = session.play(&audio).expect("play should succeed");
     assert_eq!(playing_snapshot.playback_state, "playing");
@@ -696,7 +696,7 @@ fn play_does_not_synchronously_prepare_missing_audio() {
         .engine
         .load_song(song)
         .expect("song should load into engine");
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let snapshot = session
         .play(&audio)
@@ -711,7 +711,7 @@ fn play_does_not_synchronously_prepare_missing_audio() {
 #[cfg_attr(feature = "no-link", ignore = "requires real engine output")]
 fn repeated_seeks_while_playing_keep_latest_seek_anchor() {
     let mut session = session_with_song_dir("rapid-seek-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session.play(&audio).expect("play should succeed");
     thread::sleep(Duration::from_millis(15));
@@ -918,7 +918,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
 #[cfg_attr(feature = "no-link", ignore = "requires real engine output")]
 fn executing_section_jump_reanchors_transport_and_runtime() {
     let mut session = session_with_song_dir("jump-resync-demo", demo_song_with_three_sections());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session.seek(3.95, &audio).expect("seek should succeed");
     session.play(&audio).expect("play should succeed");
@@ -975,7 +975,7 @@ fn executing_section_jump_reanchors_transport_and_runtime() {
 #[test]
 fn playback_continues_after_song_end_is_reached() {
     let mut session = session_with_song_dir("song-end-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session.seek(11.98, &audio).expect("seek should succeed");
     session.play(&audio).expect("play should succeed");
@@ -1017,7 +1017,7 @@ fn moving_a_clip_stays_in_memory_until_save() {
         .load_song(demo_song())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .move_clip("clip_1", 6.5, &audio)
         .expect("clip should move");
@@ -1064,7 +1064,7 @@ fn batch_move_can_reassign_clip_to_another_track() {
         auto_created: false,
     });
     let mut session = session_with_song_dir("batch-move-track", song);
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .move_clips_batch(
@@ -1103,7 +1103,7 @@ fn batch_move_rejects_folder_as_target_track() {
         .id
         .clone();
     let mut session = session_with_song_dir("batch-move-folder", song);
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let result = session.move_clips_batch(
         &[ClipMoveRequest {
@@ -1122,7 +1122,7 @@ fn moving_a_clip_before_bar_one_clamps_to_the_timeline_start() {
     // before 0 (it would fall outside every region), so moving to a
     // negative position clamps the clip to the timeline start.
     let mut session = session_with_song_dir("negative-clip-start", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .move_clip("clip_1", -1.5, &audio)
@@ -1141,7 +1141,7 @@ fn live_track_mix_updates_skip_disk_model_and_project_revision() {
         .expect("song dir should exist for loaded session");
     save_song(&song_dir, &demo_song()).expect("seed song should save");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let initial_revision = session.snapshot().project_revision;
 
     // Category A: bridge-only, no model mutation, no undo, no revision bump.
@@ -1192,7 +1192,7 @@ fn live_track_mix_updates_skip_disk_model_and_project_revision() {
 
 #[test]
 fn realtime_slider_drag_does_not_sync_session() {
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     for i in 0..200 {
         audio
@@ -1208,7 +1208,7 @@ fn realtime_slider_drag_does_not_sync_session() {
 
 #[test]
 fn realtime_pan_drag_does_not_rebuild_session() {
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     for i in 0..200 {
         let pan = -1.0 + (i as f64 / 100.0);
@@ -1225,7 +1225,7 @@ fn realtime_pan_drag_does_not_rebuild_session() {
 
 #[test]
 fn metronome_realtime_commands_do_not_use_full_config_path() {
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     for i in 0..20 {
         audio
@@ -1246,7 +1246,7 @@ fn metronome_realtime_commands_do_not_use_full_config_path() {
 #[test]
 fn live_track_mix_commit_undoes_in_single_step() {
     let mut session = session_with_song_dir("live-mix-undo-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     // Category A bridge: realtime command only, no model mutation, no undo entry.
     audio
@@ -1293,7 +1293,7 @@ fn live_track_mix_commit_undoes_in_single_step() {
 #[test]
 fn repeated_region_transpose_changes_group_into_one_undo_entry() {
     let mut session = session_with_song_dir("transpose-undo-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .update_song_region_transpose("region_1", 1, &audio)
@@ -1320,7 +1320,7 @@ fn repeated_region_transpose_changes_group_into_one_undo_entry() {
 #[test]
 fn live_clip_move_commit_undoes_in_single_step() {
     let mut session = session_with_song_dir("live-clip-move-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let initial_revision = session.snapshot().project_revision;
 
     session
@@ -1363,7 +1363,7 @@ fn importing_wavs_into_a_loaded_song_appends_tracks_instead_of_replacing_them() 
     let imported_click = imports_root.path().join("click.wav");
     write_silent_test_wav(&imported_click, 6);
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .import_audio_files_into_current_song(&[imported_click], &audio, |_, _| {})
         .expect("import should append tracks");
@@ -1574,7 +1574,7 @@ fn import_song_package_returns_library_assets_for_missing_audio_references() {
         .engine
         .load_song(target_song)
         .expect("target song should load into engine");
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let result = session
         .import_song_package(&package_path.to_string_lossy(), 0.0, &audio)
@@ -1606,7 +1606,7 @@ fn import_song_package_returns_library_assets_for_missing_audio_references() {
 #[test]
 fn create_clip_adds_a_library_asset_to_an_existing_audio_track() {
     let mut session = session_with_song_dir("create-clip-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .create_clip("track_1", "audio/test.wav", 4.0, &audio)
@@ -1636,7 +1636,7 @@ fn create_clip_adds_a_library_asset_to_an_existing_audio_track() {
 #[test]
 fn create_clips_batch_persists_multiple_clips_with_one_song_update() {
     let mut session = session_with_song_dir("create-clips-batch-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let song_dir = session.song_dir.clone().expect("song dir should exist");
     write_silent_test_wav(&song_dir.join("audio").join("test-2.wav"), 5);
 
@@ -1681,7 +1681,7 @@ fn create_clips_batch_persists_multiple_clips_with_one_song_update() {
 #[test]
 fn create_audio_tracks_with_clips_adds_tracks_and_clips_in_one_update() {
     let mut session = session_with_song_dir("create-audio-tracks-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let song_dir = session.song_dir.clone().expect("song dir should exist");
     write_silent_test_wav(&song_dir.join("audio").join("loop-a.wav"), 3);
     write_silent_test_wav(&song_dir.join("audio").join("loop-b.wav"), 4);
@@ -1730,7 +1730,7 @@ fn create_audio_tracks_with_clips_adds_tracks_and_clips_in_one_update() {
 #[test]
 fn create_audio_tracks_with_clips_rejects_empty_track_name() {
     let mut session = session_with_song_dir("create-audio-tracks-empty", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let song_dir = session.song_dir.clone().expect("song dir should exist");
     write_silent_test_wav(&song_dir.join("audio").join("loop-a.wav"), 3);
 
@@ -1945,7 +1945,7 @@ fn create_song_from_template_path_builds_project_with_template_structure() {
 
     // Act: create a brand-new project from that template.
     let mut session = DesktopSession::default();
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let target_pick = temp.path().join("NewProject.ltsession");
     session
         .create_song_from_template_path(template_path, target_pick, &audio)
@@ -2110,7 +2110,7 @@ fn build_empty_song_starts_with_an_empty_arrangement_at_120_bpm() {
 #[test]
 fn project_revision_changes_after_mutating_the_song_structure() {
     let mut session = session_with_song_dir("project-revision-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let initial_snapshot = session.snapshot();
 
     let updated_snapshot = session
@@ -2123,7 +2123,7 @@ fn project_revision_changes_after_mutating_the_song_structure() {
 #[test]
 fn undo_and_redo_restore_song_state() {
     let mut session = session_with_song_dir("undo-redo-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let moved_snapshot = session
         .move_clip("clip_1", 4.25, &audio)
@@ -2181,7 +2181,7 @@ fn waveform_requests_reuse_the_in_memory_cache_after_song_load() {
     save_song(&song_dir, &demo_song()).expect("song should save");
 
     let mut session = DesktopSession::default();
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session
         .load_song_from_path(demo_song(), song_dir, &audio)
         .expect("song should load");
@@ -2221,7 +2221,7 @@ fn waveform_cache_miss_does_not_decode_inline() {
     save_song(&song_dir, &demo_song()).expect("song should save");
 
     let mut session = DesktopSession::default();
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session
         .load_song_from_path(demo_song(), song_dir, &audio)
         .expect("song should load");
@@ -2261,7 +2261,7 @@ fn creating_a_section_marker_stays_in_memory_until_save() {
         .load_song(demo_song())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .create_section_marker(2.0, None, None, None, &audio)
         .expect("section marker should be created");
@@ -2293,7 +2293,7 @@ fn deleting_a_clip_stays_in_memory_until_save() {
         .load_song(demo_song())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .delete_clip("clip_1", &audio)
         .expect("clip should delete");
@@ -2336,7 +2336,7 @@ fn deleting_the_last_clip_shrinks_song_duration_even_if_markers_remain() {
         .load_song(song)
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .delete_clip("clip_1", &audio)
         .expect("clip should delete");
@@ -2381,7 +2381,7 @@ fn updating_a_clip_window_stays_in_memory_until_save() {
         .load_song(demo_song())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .update_clip_window("clip_1", 2.0, 1.5, 2.25, &audio)
         .expect("clip window should update");
@@ -2420,7 +2420,7 @@ fn duplicating_a_clip_stays_in_memory_until_save() {
         .load_song(demo_song())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .duplicate_clip("clip_1", 6.0, &audio)
         .expect("clip should duplicate");
@@ -2478,7 +2478,7 @@ fn duplicating_a_clip_does_not_stretch_the_last_region() {
         .load_song(song)
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .duplicate_clip("clip_1", 6.0, &audio)
         .expect("clip should duplicate without stretching regions");
@@ -2501,7 +2501,7 @@ fn scheduling_and_cancelling_a_section_jump_updates_snapshot() {
         .load_song(demo_song_with_section())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let scheduled_snapshot = session
         .schedule_marker_jump(
             "section_1",
@@ -2532,7 +2532,7 @@ fn scheduling_after_bars_across_regions_exposes_cumulative_execute_time_in_snaps
         .load_song(demo_song_with_region_changes_and_sections())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session.seek(7.0, &audio).expect("seek should work");
 
     let snapshot = session
@@ -2567,7 +2567,7 @@ fn transport_only_updates_preserve_cross_region_after_bars_schedule() {
         .load_song(demo_song_with_region_changes_and_sections())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session.seek(7.0, &audio).expect("seek should work");
     session
         .schedule_marker_jump(
@@ -2600,7 +2600,7 @@ fn scheduling_an_immediate_section_jump_updates_position_and_current_marker() {
         .expect("song should load into engine");
     session.engine.seek(0.0).expect("seek should work");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .schedule_marker_jump(
             "section_1",
@@ -2635,7 +2635,7 @@ fn transport_only_updates_preserve_pending_jump_when_target_survives() {
         .load_song(demo_song_with_two_sections())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session
         .schedule_marker_jump(
             "section_2",
@@ -2671,7 +2671,7 @@ fn transport_only_updates_drop_pending_jump_when_target_moves_before_position() 
         .load_song(demo_song_with_two_sections())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session.seek(5.0, &audio).expect("seek should work");
     session
         .schedule_marker_jump(
@@ -2704,7 +2704,7 @@ fn deleting_target_section_clears_pending_jump() {
         .load_song(demo_song_with_two_sections())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session
         .schedule_marker_jump(
             "section_2",
@@ -2730,7 +2730,7 @@ fn seek_to_pending_jump_target_clears_pending_jump_in_snapshot() {
         .expect("song should load into engine");
     session.engine.seek(1.5).expect("seek should work");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session
         .schedule_marker_jump(
             "section_2",
@@ -2767,7 +2767,7 @@ fn updating_a_section_marker_stays_in_memory_until_save() {
         .load_song(demo_song_with_section())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .update_section_marker("section_1", "Verse", 2.5, &audio)
         .expect("section marker should update");
@@ -2803,7 +2803,7 @@ fn deleting_a_section_marker_stays_in_memory_until_save() {
         .load_song(demo_song_with_section())
         .expect("song should load into engine");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .delete_section_marker("section_1", &audio)
         .expect("section marker should delete");
@@ -2829,7 +2829,7 @@ fn creating_a_song_region_splits_the_existing_range() {
     let mut session = session_with_song_dir("region-create-demo", song);
     let song_dir = session.song_dir.clone().expect("song dir should exist");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .create_song_region(2.0, 5.0, &audio)
         .expect("song region should be created");
@@ -2857,7 +2857,7 @@ fn creating_a_song_region_beyond_song_duration_preserves_its_bounds() {
     let mut session = session_with_song_dir("region-beyond-duration-demo", demo_song());
     let song_dir = session.song_dir.clone().expect("song dir should exist");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .create_song_region(12.0, 24.0, &audio)
         .expect("song region should be created beyond song duration");
@@ -2889,7 +2889,7 @@ fn updating_a_song_region_reflows_neighbors_and_preserves_coverage() {
         demo_song_with_region_changes_and_sections(),
     );
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .update_song_region("region_2", "Song B", 6.0, 16.0, &audio)
         .expect("song region should update");
@@ -2921,7 +2921,7 @@ fn deleting_a_song_region_preserves_neighbor_region_bounds() {
         demo_song_with_region_changes_and_sections(),
     );
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .delete_song_region("region_2", &audio)
         .expect("song region should delete");
@@ -2946,7 +2946,7 @@ fn splitting_a_song_region_divides_it_in_two_at_the_cursor() {
         "region-split-demo",
         demo_song_with_region_changes_and_sections(),
     );
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     // region_1 "Intro" spans [0, 8]. Split at 4s (no warp, so view==source).
     session
@@ -3001,7 +3001,7 @@ fn splitting_a_song_region_outside_its_range_is_rejected() {
         "region-split-invalid",
         demo_song_with_region_changes_and_sections(),
     );
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     // 12s is inside region_2, not region_1 → splitting region_1 there is invalid.
     let result = session.split_song_region("region_1", 12.0, &audio);
@@ -3112,7 +3112,7 @@ fn deleting_a_song_region_evicts_section_markers_inside_its_range() {
         demo_song_with_region_changes_and_sections(),
     );
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     // section_2 lives at 15.0s, inside region_3 ([14, 18]); section_1 at
     // 1.0s is inside region_1 and must be untouched.
     session
@@ -3139,7 +3139,7 @@ fn deleting_a_song_region_evicts_section_markers_inside_its_range() {
 fn deleting_the_last_song_region_leaves_the_song_without_regions() {
     let mut session = session_with_song_dir("region-delete-last-demo", demo_song_with_section());
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
         .delete_song_region("region_1", &audio)
         .expect("last song region should delete");
@@ -3155,7 +3155,7 @@ fn deleting_the_last_song_region_leaves_the_song_without_regions() {
 #[test]
 fn updating_song_tempo_without_regions_does_not_create_one() {
     let mut session = session_with_song_dir("song-tempo-without-regions", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     {
         let song = session.engine.song_mut().expect("song should exist");
@@ -3184,7 +3184,7 @@ fn updating_song_tempo_without_regions_does_not_create_one() {
 #[test]
 fn updating_song_tempo_preserves_existing_tempo_markers_while_updating_the_base_bpm() {
     let mut session = session_with_song_dir("song-tempo-reset-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .upsert_song_tempo_marker(12.0, 91.0, &audio)
@@ -3208,7 +3208,7 @@ fn updating_song_tempo_preserves_existing_tempo_markers_while_updating_the_base_
 #[test]
 fn disabling_region_warp_restores_timeline_bpm_to_source_bpm() {
     let mut session = session_with_song_dir("region-warp-disable-bpm-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .update_song_tempo(91.0, &audio)
@@ -3352,7 +3352,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
 #[test]
 fn updating_song_time_signature_preserves_existing_time_signature_markers() {
     let mut session = session_with_song_dir("song-time-signature-reset-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .upsert_song_time_signature_marker(8.0, "3/4", &audio)
@@ -3376,7 +3376,7 @@ fn updating_song_time_signature_preserves_existing_time_signature_markers() {
 #[test]
 fn creating_a_section_marker_beyond_song_duration_preserves_its_position() {
     let mut session = session_with_song_dir("section-beyond-duration-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let snapshot = session
         .create_section_marker(24.0, None, None, None, &audio)
@@ -3395,7 +3395,7 @@ fn creating_a_section_marker_beyond_song_duration_preserves_its_position() {
 #[test]
 fn creating_a_tempo_marker_beyond_song_duration_preserves_its_position() {
     let mut session = session_with_song_dir("tempo-beyond-duration-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let snapshot = session
         .upsert_song_tempo_marker(24.0, 91.0, &audio)
@@ -3419,7 +3419,7 @@ fn section_marker_create_does_not_trigger_session_rebuild() {
     // Section markers are Rust-model-only — C++ must not receive a LoadSession.
     // Verified by checking that realtime_command_count stays at zero (no commands sent).
     let mut session = session_with_song_dir("section-create-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let initial_revision = session.snapshot().project_revision;
 
     let snapshot = session
@@ -3443,7 +3443,7 @@ fn section_marker_create_does_not_trigger_session_rebuild() {
 #[test]
 fn section_marker_update_does_not_trigger_session_rebuild() {
     let mut session = session_with_song_dir("section-update-demo", demo_song_with_section());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .update_section_marker("section_1", "Verse", 3.0, &audio)
@@ -3464,7 +3464,7 @@ fn section_marker_update_does_not_trigger_session_rebuild() {
 #[test]
 fn section_marker_delete_does_not_trigger_session_rebuild() {
     let mut session = session_with_song_dir("section-delete-demo", demo_song_with_section());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .delete_section_marker("section_1", &audio)
@@ -3484,7 +3484,7 @@ fn section_marker_delete_does_not_trigger_session_rebuild() {
 #[test]
 fn section_marker_assign_digit_does_not_trigger_session_rebuild() {
     let mut session = session_with_song_dir("section-digit-demo", demo_song_with_section());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .assign_section_marker_digit("section_1", Some(3), &audio)
@@ -3504,7 +3504,7 @@ fn section_marker_assign_digit_does_not_trigger_session_rebuild() {
 #[test]
 fn set_section_marker_kind_updates_kind_without_session_rebuild() {
     let mut session = session_with_song_dir("section-kind-demo", demo_song_with_section());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .set_section_marker_kind("section_1", MarkerKind::Chorus, Some(2), &audio)
@@ -3526,7 +3526,7 @@ fn set_section_marker_kind_updates_kind_without_session_rebuild() {
 #[test]
 fn set_section_marker_kind_rejects_unknown_section() {
     let mut session = session_with_song_dir("section-kind-missing", demo_song_with_section());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let result = session.set_section_marker_kind("nope", MarkerKind::Verse, None, &audio);
     assert!(matches!(
@@ -3540,7 +3540,7 @@ fn set_section_marker_kind_rejects_unknown_section() {
 #[test]
 fn transpose_enabled_toggle_sends_realtime_command_not_load_session() {
     let mut session = session_with_song_dir("transpose-enabled-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     let initial_revision = session.snapshot().project_revision;
 
     session
@@ -3575,7 +3575,7 @@ fn save_project_persists_pending_song_changes() {
         .expect("song dir should exist for loaded session");
     save_song(&song_dir, &demo_song()).expect("seed song should save");
 
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
     session
         .move_clip("clip_1", 6.5, &audio)
         .expect("clip should move");
@@ -3595,7 +3595,7 @@ fn save_project_persists_pending_song_changes() {
 #[test]
 fn realtime_bridge_does_not_mutate_rust_model() {
     let mut session = session_with_song_dir("realtime-bridge-model-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let before = session
         .song_view()
@@ -3630,7 +3630,7 @@ fn realtime_bridge_does_not_mutate_rust_model() {
 #[test]
 fn realtime_bridge_does_not_create_undo_entry() {
     let mut session = session_with_song_dir("realtime-bridge-undo-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let undo_before = session.undo_stack.len();
 
@@ -3651,7 +3651,7 @@ fn realtime_bridge_does_not_create_undo_entry() {
 #[test]
 fn realtime_bridge_does_not_bump_project_revision() {
     let mut session = session_with_song_dir("realtime-bridge-revision-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let revision_before = session.snapshot().project_revision;
 
@@ -3672,7 +3672,7 @@ fn realtime_bridge_does_not_bump_project_revision() {
 #[test]
 fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {
     let mut session = session_with_song_dir("commit-mix-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let revision_before = session.snapshot().project_revision;
     let diag_before = audio.realtime_control_diagnostics();
@@ -3708,7 +3708,7 @@ fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {
 #[test]
 fn commit_track_mix_creates_one_undo_entry() {
     let mut session = session_with_song_dir("commit-undo-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let undo_before = session.undo_stack.len();
 
@@ -3730,7 +3730,7 @@ fn commit_track_mix_creates_one_undo_entry() {
 #[test]
 fn update_track_name_does_not_send_audio_command() {
     let mut session = session_with_song_dir("name-change-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     let diag_before = audio.realtime_control_diagnostics();
 
@@ -3762,7 +3762,7 @@ fn update_track_name_does_not_send_audio_command() {
 /// Legacy broad sync is deleted. Realtime slider drags must never trigger a session rebuild.
 #[test]
 fn realtime_slider_drags_never_trigger_session_rebuild() {
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     // 100 realtime commands (slider drags) must NOT increment session_rebuild_count.
     for i in 0..100 {
@@ -3782,7 +3782,7 @@ fn realtime_slider_drags_never_trigger_session_rebuild() {
 /// session_rebuild_count must increment only for structural changes, not for mixer changes.
 #[test]
 fn session_rebuild_count_does_not_increment_for_mixer_changes() {
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     // Category A — no rebuild.
     audio
@@ -3808,7 +3808,7 @@ fn session_rebuild_count_does_not_increment_for_mixer_changes() {
 /// Metronome toggle must use realtime commands, not session rebuild.
 #[test]
 fn metronome_toggle_uses_realtime_command_not_session_rebuild() {
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     for i in 0..10 {
         audio
@@ -3832,7 +3832,7 @@ fn metronome_toggle_uses_realtime_command_not_session_rebuild() {
 #[test]
 fn folder_track_volume_uses_realtime_command_not_session_rebuild() {
     let mut session = session_with_song_dir("folder-track-demo", demo_song_with_folder_track());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     // Folder track volume change — Category A bridge.
     audio
@@ -3864,7 +3864,7 @@ fn folder_track_volume_uses_realtime_command_not_session_rebuild() {
 #[test]
 fn commit_mix_increments_commit_mix_command_count() {
     let mut session = session_with_song_dir("commit-mix-count-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     assert_eq!(
         audio
@@ -3895,7 +3895,7 @@ fn commit_mix_increments_commit_mix_command_count() {
 #[test]
 fn metadata_commit_increments_commit_model_only_count() {
     let mut session = session_with_song_dir("metadata-count-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     assert_eq!(
         audio.realtime_control_diagnostics().commit_model_only_count,
@@ -3925,7 +3925,7 @@ fn metadata_commit_increments_commit_model_only_count() {
 #[test]
 fn commit_mute_sends_targeted_command_not_session_reload() {
     let mut session = session_with_song_dir("commit-mute-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .commit_track_mix_model_and_command("track_1", None, None, Some(true), None, None, &audio)
@@ -3947,7 +3947,7 @@ fn commit_mute_sends_targeted_command_not_session_reload() {
 #[test]
 fn commit_solo_sends_targeted_command_not_session_reload() {
     let mut session = session_with_song_dir("commit-solo-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .commit_track_mix_model_and_command("track_1", None, None, None, Some(true), None, &audio)
@@ -3969,7 +3969,7 @@ fn commit_solo_sends_targeted_command_not_session_reload() {
 #[test]
 fn commit_pan_sends_targeted_command_not_session_reload() {
     let mut session = session_with_song_dir("commit-pan-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .commit_track_mix_model_and_command("track_1", None, Some(-0.5), None, None, None, &audio)
@@ -3991,7 +3991,7 @@ fn commit_pan_sends_targeted_command_not_session_reload() {
 #[test]
 fn commit_mix_command_count_accumulates_across_multiple_commits() {
     let mut session = session_with_song_dir("commit-count-accum-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     for i in 1..=5 {
         session
@@ -4023,7 +4023,7 @@ fn commit_mix_command_count_accumulates_across_multiple_commits() {
 #[test]
 fn mix_and_metadata_commit_counts_are_independent() {
     let mut session = session_with_song_dir("commit-independent-demo", demo_song());
-    let audio = crate::audio_engine::AudioController::default();
+    let audio = crate::audio::engine::AudioController::default();
 
     session
         .update_track_metadata("track_1", "Renamed", &audio)

@@ -8,7 +8,7 @@ use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
 use std::collections::HashSet;
 
-use crate::automation::{
+use crate::audio::automation::{
     AutomationAction, AutomationCue, AutomationDocument, AutomationJumpTarget,
     AutomationTransitionMode, MixScene,
 };

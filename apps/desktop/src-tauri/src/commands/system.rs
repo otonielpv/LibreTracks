@@ -8,7 +8,7 @@ use std::{
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::audio_engine::AudioDebugSnapshot;
+use crate::audio::engine::AudioDebugSnapshot;
 use crate::error::DesktopError;
 use crate::midi::get_midi_input_names;
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};

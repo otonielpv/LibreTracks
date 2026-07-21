@@ -13,8 +13,8 @@ use libretracks_audio::{
 use libretracks_core::{source_seconds_at_view, warp_timeline_seconds_at, Song};
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 
-use crate::audio_engine::{jump_debug_logging_enabled, AudioController};
-use crate::automation::{
+use crate::audio::engine::{jump_debug_logging_enabled, AudioController};
+use crate::audio::automation::{
     save_automation, AutomationAction, AutomationCue, AutomationJumpTarget,
     AutomationTransitionMode, MixScene,
 };

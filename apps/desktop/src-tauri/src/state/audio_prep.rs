@@ -12,8 +12,8 @@ use libretracks_project::{ImportedSong, SONG_FILE_NAME};
 
 use tauri::AppHandle;
 
-use crate::audio_engine::AudioController;
-use crate::automation::load_automation;
+use crate::audio::engine::AudioController;
+use crate::audio::automation::load_automation;
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 

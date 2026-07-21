@@ -1,6 +1,6 @@
 use tauri::{AppHandle, State};
 
-use crate::audio_engine::jump_debug_logging_enabled;
+use crate::audio::engine::jump_debug_logging_enabled;
 use crate::commands::events::emit_transport_lifecycle_event;
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;

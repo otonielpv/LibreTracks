@@ -8,7 +8,7 @@ use libretracks_core::{
     MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
 };
 
-use crate::audio_engine::{jump_debug_logging_enabled, AudioController};
+use crate::audio::engine::{jump_debug_logging_enabled, AudioController};
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 

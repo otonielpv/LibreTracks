@@ -7,7 +7,7 @@ use std::sync::mpsc::Sender;
 
 use tauri::AppHandle;
 
-use crate::audio_engine::AudioCommand;
+use crate::audio::engine::AudioCommand;
 
 #[derive(Default)]
 pub struct MidiManager;

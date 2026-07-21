@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::automation::{AutomationCue, MixScene};
+use crate::audio::automation::{AutomationCue, MixScene};
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::{ClipMoveRequest, DesktopState};

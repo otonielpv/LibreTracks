@@ -7,7 +7,7 @@
 
 use std::time::{Duration, Instant};
 
-use crate::audio_engine::AudioController;
+use crate::audio::engine::AudioController;
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 

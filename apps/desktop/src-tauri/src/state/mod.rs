@@ -25,11 +25,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::audio_engine::{
+use crate::audio::engine::{
     jump_debug_logging_enabled, AudioController, PlaybackStartReason,
     ENGINE_WAVEFORM_RESOLUTION_FRAMES,
 };
-use crate::automation::{
+use crate::audio::automation::{
     AutomationAction, AutomationCue, AutomationDocument, AutomationJumpTarget,
     AutomationTransitionMode,
 };
