@@ -7,6 +7,7 @@ use libretracks_core::{
 };
 use libretracks_project::{
     create_song_folder, export_region_as_package, generate_waveform_summary, load_song, save_song,
+    save_song_to_file,
     SONG_FILE_NAME,
 };
 use tempfile::tempdir;
@@ -1940,7 +1941,7 @@ fn create_song_from_template_path_builds_project_with_template_structure() {
     let temp = tempfile::tempdir().expect("tempdir");
     let template_path = temp.path().join("band.lttemplate");
     let template = super::strip_song_to_template(song_with_folder_hierarchy());
-    super::save_song_to_file(&template_path, &template).expect("template saves");
+    save_song_to_file(&template_path, &template).expect("template saves");
 
     // Act: create a brand-new project from that template.
     let mut session = DesktopSession::default();
