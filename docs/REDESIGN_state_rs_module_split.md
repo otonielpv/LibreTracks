@@ -6,46 +6,54 @@ submódulos por tema. Escrito en el mismo espíritu que
 [[REDESIGN_transport_refs_to_stores]]: medir antes de mover, no bajar líneas si
 empeora el diseño.
 
-## Progreso (2026-07-21)
+## Progreso (2026-07-21) — COMPLETADO
 
-`state.rs` → carpeta `state/`. `mod.rs` bajó de **14.501 a 8.723 líneas** (-40%)
-en cuatro commits, cada uno verificado con `cargo check --tests` verde (mismos 8
+`state.rs` → carpeta `state/`. `mod.rs` bajó de **14.501 a 4.612 líneas** (-68%)
+en diez commits, cada uno verificado con `cargo check --tests` verde (mismos 8
 warnings de base) antes de commitear:
 
 | Submódulo | Líneas | Contenido |
 |---|---|---|
-| `state/tests.rs` | 4.101 | `#[cfg(test)] mod tests` completo |
+| `state/mod.rs` | 4.612 | núcleo: transporte, waveforms, sync, tipos, fns libres |
+| `state/tests.rs` | 4.102 | `#[cfg(test)] mod tests` completo |
+| `state/regions.rs` | 1.308 | regiones, marcadores, tempo, warp/transpose/gain |
+| `state/arrangement.rs` | 918 | clips (move/delete/dup/split) + tracks CRUD |
 | `state/automation_runtime.rs` | 812 | cues/scenes CRUD + scheduling de jumps/ramps |
+| `state/timeline_math.rs` | 740 | fns puras: downbeats, warp/varispeed, reflow |
 | `state/external_import.rs` | 577 | import de proyectos Reaper/Ableton |
+| `state/audio_prep.rs` | 575 | carga + secuencia source-ready/prearm/prime |
+| `state/session.rs` | 552 | create/save/open proyecto, plantillas, .ltset |
 | `state/library.rs` | 301 | assets + carpetas virtuales de biblioteca |
-| `state/mod.rs` | 8.723 | núcleo: transporte, regiones, waveforms, sesión |
+| `state/history.rs` | 174 | undo/redo + agrupado de historial |
 
-**Patrón validado y repetible** (documentado abajo). Cada corte fue: promover a
-`pub(super)` los campos/tipos/helpers/métodos que el bloque cruza, mover el
-bloque a un `impl DesktopSession` hermano con sus propios `use`, borrar del
-`mod.rs`, declarar `mod X;`, limpiar imports huérfanos hasta volver a 8 warnings.
+**Patrón validado y repetible.** Cada corte fue: promover a `pub(super)` los
+campos/tipos/helpers/métodos que el bloque cruza, mover el bloque a un
+`impl DesktopSession` hermano con sus propios `use`, borrar del `mod.rs`,
+declarar `mod X;`, limpiar imports huérfanos hasta volver a 8 warnings.
 
-Gotcha recurrente: `tests.rs` es hermano de los submódulos, no hijo. Un método
-que se mueve a `library.rs` como `fn` privado deja de verse desde `tests.rs`;
-hay que dejarlo `pub(super)` (pasó con `import_audio_files_into_library`).
+Gotchas recurrentes:
+- `tests.rs` es hermano de los submódulos, no hijo. Un método que se mueve como
+  `fn` privado deja de verse desde `tests.rs`; dejarlo `pub(super)`.
+- Al promover un campo/fn a `pub(super)` cuyo TIPO sigue privado, aparece el lint
+  "type X is more private than the item". Promover también el tipo
+  (`TransportClock`, `LibraryManifest`, `TransposeHistoryGroup`, …).
+- Contar refs por nombre da falsos positivos: `Song` en un string `"Song {}"` o
+  una fn llamada como `libretracks_core::foo` (no la de `super::`). Verificar con
+  el warning del compilador, no solo con grep.
+- Ojo con los rangos de línea tras cada corte: se desplazan. Reconfirmar la
+  frontera (`sed -n`) antes de extraer, no fiarse de un grep viejo. (Una vez el
+  bloque de arrangement se tragó `import_song_package*`; se sacó de vuelta.)
 
-### Clusters que quedan por extraer (mismo patrón)
+### Lo que se quedó en `mod.rs` (a propósito)
 
-Contiguos y cohesivos, en orden sugerido:
-- **Regiones/marcadores/tempo** (`create_section_marker` … `delete_song_time_signature_marker`,
-  ~1.280 líneas) → `state/regions.rs`. El más grande que queda; ya es contiguo.
-- **Waveforms** (cola + caché + priming: `load_waveforms*`, `prime_waveform_cache`,
-  `populate_waveform_cache_readonly`, `WaveformMemoryCache` impl) → `state/waveforms.rs`.
-- **Sesión/proyecto** (create/save/open/template + package export) →
-  `state/session.rs`.
-- **Undo/redo/historial** (`undo_action`, `redo_action`, `push_history_entry`,
-  `capture_live_history_anchor`, `should_record_transpose_history`) — pequeño y
-  autocontenido.
-
-Lo que **debe quedarse** en `mod.rs`: el núcleo de transporte
-(`play`/`pause`/`seek`/`sync_position`/`snapshot*`/`runtime_transport_position`).
-Toca `engine` + `transport_clock` + `automation` a la vez: no hay frontera, y es
-el hot path. No dividir por dividir.
+El **núcleo de transporte**: `play`/`pause`/`seek`/`stop`, `sync_position`,
+`sync_native_scheduled_jump_if_needed`, `snapshot*`, `schedule_marker_jump`/
+`schedule_region_jump`, la caché de waveforms (`WaveformMemoryCache`,
+`load_waveform_summary_cached`, `reposition_audio`) y las fns libres de bajo
+nivel (track-tree, clip helpers, library manifest I/O). Todo esto toca `engine` +
+`transport_clock` a la vez o es el hot path del playhead: no hay frontera y
+dividir empeora el diseño. Un futuro `waveforms.rs` (caché + priming) es el único
+corte que aún tendría sentido; el resto es núcleo.
 
 ## Diagnóstico
 
