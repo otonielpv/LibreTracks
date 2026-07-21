@@ -8,7 +8,7 @@ use libretracks_core::{
     warp_timeline_seconds_at, Clip, Song, SongRegion, TempoMarker,
 };
 
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 
 use super::timestamp_suffix;
 

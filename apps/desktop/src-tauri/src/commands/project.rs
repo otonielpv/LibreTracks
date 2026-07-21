@@ -7,7 +7,7 @@ use crate::commands::events::{
     emit_ready_library_waveforms, emit_transport_lifecycle_event,
     LibraryImportCompleteEventPayload, ProjectLoadCompleteEventPayload,
 };
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
 use crate::state::{
     AudioFileImportPayload, AudioFilePathImportPayload, CreateAudioTrackWithClipRequest,
@@ -459,7 +459,7 @@ where
                 );
             }
             Err(error) => {
-                crate::error_log::write_error(&format!("project load/save failed: {error}"));
+                crate::infra::error_log::write_error(&format!("project load/save failed: {error}"));
                 emit_project_load_complete_event(
                     &worker_app,
                     ProjectLoadCompleteEventPayload {
@@ -717,7 +717,7 @@ pub fn start_save_session_as_template(
             session
                 .save_current_as_template(temporary.clone())
                 .map_err(|error| {
-                    crate::error_log::log_command_err("start_save_session_as_template", error)
+                    crate::infra::error_log::log_command_err("start_save_session_as_template", error)
                 })?;
         }
         let export_result = crate::platform::mobile_files::copy_path_to_picked_target(
@@ -760,7 +760,7 @@ pub fn start_save_session_as_template(
             .save_current_as_template(target_pick)
             .map(|_| true)
             .map_err(|error| {
-                crate::error_log::log_command_err("start_save_session_as_template", error)
+                crate::infra::error_log::log_command_err("start_save_session_as_template", error)
             })
     }
 }
@@ -874,7 +874,7 @@ pub fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot,
 
     session
         .save_project()
-        .map_err(|error| crate::error_log::log_command_err("save_project", error))
+        .map_err(|error| crate::infra::error_log::log_command_err("save_project", error))
 }
 
 #[tauri::command]
@@ -890,7 +890,7 @@ pub fn resolve_missing_file(
 
     session
         .resolve_missing_file(&old_path, &new_path, &state.audio)
-        .map_err(|error| crate::error_log::log_command_err("resolve_missing_file", error))
+        .map_err(|error| crate::infra::error_log::log_command_err("resolve_missing_file", error))
 }
 
 #[tauri::command]
@@ -1066,7 +1066,7 @@ fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
                 );
             }
             Err(error) => {
-                crate::error_log::write_error(&format!("project load/save failed: {error}"));
+                crate::infra::error_log::write_error(&format!("project load/save failed: {error}"));
                 emit_project_load_complete_event(
                     &worker_app,
                     ProjectLoadCompleteEventPayload {
@@ -1293,7 +1293,7 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
                 );
             }
             Err(error) => {
-                crate::error_log::write_error(&format!("library import failed: {error}"));
+                crate::infra::error_log::write_error(&format!("library import failed: {error}"));
                 emit_library_import_complete_event(
                     &worker_app,
                     LibraryImportCompleteEventPayload {
@@ -1335,8 +1335,8 @@ pub async fn import_audio_files_from_bytes(
         )
     })
     .await
-    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_bytes", error))?
-    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_bytes", error))?;
+    .map_err(|error| crate::infra::error_log::log_command_err("import_audio_files_from_bytes", error))?
+    .map_err(|error| crate::infra::error_log::log_command_err("import_audio_files_from_bytes", error))?;
 
     // Start decoding the imported library files now (see the paths variant).
     prepare_library_assets(&state, &song_dir_for_prepare, &assets);
@@ -1388,8 +1388,8 @@ pub async fn import_audio_files_from_paths(
         )
     })
     .await
-    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_paths", error))?
-    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_paths", error))?;
+    .map_err(|error| crate::infra::error_log::log_command_err("import_audio_files_from_paths", error))?
+    .map_err(|error| crate::infra::error_log::log_command_err("import_audio_files_from_paths", error))?;
 
     // Ableton-style: start decoding the imported files to cache + waveform peaks
     // NOW, while they sit in the library — so by the time they're dragged to the
@@ -1432,8 +1432,8 @@ pub async fn import_staged_audio_files(
         )
     })
     .await
-    .map_err(|error| crate::error_log::log_command_err("import_staged_audio_files", error))?
-    .map_err(|error| crate::error_log::log_command_err("import_staged_audio_files", error))?;
+    .map_err(|error| crate::infra::error_log::log_command_err("import_staged_audio_files", error))?
+    .map_err(|error| crate::infra::error_log::log_command_err("import_staged_audio_files", error))?;
 
     prepare_library_assets(&state, &song_dir_for_prepare, &assets);
 
@@ -1636,7 +1636,7 @@ pub fn import_song_package(
 
     session
         .import_song_package(&package_path, insert_at_seconds, &state.audio)
-        .map_err(|error| crate::error_log::log_command_err("import_song_package", error))
+        .map_err(|error| crate::infra::error_log::log_command_err("import_song_package", error))
 }
 
 /// Export the ENTIRE session as a single portable `.ltset` archive (every
@@ -1732,7 +1732,7 @@ pub fn export_session_package(
             ),
             Err(error) => {
                 let message = error.to_string();
-                crate::error_log::write_error(&format!("session export failed: {message}"));
+                crate::infra::error_log::write_error(&format!("session export failed: {message}"));
                 crate::state::emit_session_export_progress(
                     &worker_app,
                     100,
@@ -1898,7 +1898,7 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
                 );
             }
             Err(error) => {
-                crate::error_log::write_error(&format!("session import failed: {error}"));
+                crate::infra::error_log::write_error(&format!("session import failed: {error}"));
                 emit_project_load_complete_event(
                     &worker_app,
                     ProjectLoadCompleteEventPayload {

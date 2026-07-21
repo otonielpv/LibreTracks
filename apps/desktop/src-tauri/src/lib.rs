@@ -7,12 +7,10 @@
 
 mod audio;
 mod commands;
-mod error;
-mod error_log;
 mod external_project;
+mod infra;
 mod models;
 mod platform;
-mod settings;
 mod state;
 
 #[cfg(not(target_os = "android"))]
@@ -29,7 +27,7 @@ mod remote;
 
 use tauri::Manager;
 
-use settings::{load_app_settings, AppSettingsStore};
+use infra::settings::{load_app_settings, AppSettingsStore};
 use state::DesktopState;
 
 use commands::engine_v2::EngineV2State;
@@ -55,10 +53,10 @@ fn resolve_engine_log_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Install the error-log panic hook before anything else so panics during
-    // plugin init / setup are captured too. Until error_log::init runs (in
+    // plugin init / setup are captured too. Until infra::error_log::init runs (in
     // setup, once app_data_dir resolves) this is a no-op beyond the default
     // hook's stderr output.
-    error_log::install_panic_hook();
+    infra::error_log::install_panic_hook();
 
     // Keep the env flag visible for diagnostics; desktop audio now routes
     // through the C++ engine v2 path by default.
@@ -80,7 +78,7 @@ pub fn run() {
             // available; degrade gracefully (no logging) if it can't resolve
             // rather than aborting startup.
             if let Ok(app_data_dir) = app.handle().path().app_data_dir() {
-                error_log::init(app_data_dir);
+                infra::error_log::init(app_data_dir);
             }
 
             // Point the C++ engine's debug/diagnostic log at a KNOWN, writable
@@ -111,7 +109,7 @@ pub fn run() {
 
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
                 eprintln!("[libretracks-settings] failed to load settings: {error}");
-                settings::AppSettings::default()
+                infra::settings::AppSettings::default()
             });
 
             app.manage(AppSettingsStore::new(initial_settings.clone()));
@@ -119,7 +117,7 @@ pub fn run() {
             // Apply the decoding-cache preferences to the process env BEFORE the
             // audio engine is first used, so the configured folder / size cap
             // take effect for the very first decode.
-            settings::apply_decoding_cache_env(&app.handle(), &initial_settings);
+            infra::settings::apply_decoding_cache_env(&app.handle(), &initial_settings);
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
@@ -141,7 +139,7 @@ pub fn run() {
             // showing a stale device name to the user.
             if let Ok(after) = state.audio.current_settings() {
                 if initial_device.is_some() && after.selected_output_device_id.is_none() {
-                    if let Err(e) = settings::save_app_settings(&app.handle(), &after) {
+                    if let Err(e) = infra::settings::save_app_settings(&app.handle(), &after) {
                         if audio::engine::audio_debug_logging_enabled() {
                             eprintln!(
                                 "[libretracks-settings] could not persist cleaned-up \

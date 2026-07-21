@@ -33,7 +33,7 @@ use crate::audio::automation::{
     AutomationAction, AutomationCue, AutomationDocument, AutomationJumpTarget,
     AutomationTransitionMode,
 };
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::midi::MidiManager;
 use crate::models::view::{
     active_vamp_to_summary, active_vamp_to_warped_summary, automation_cues_to_summary,
@@ -47,7 +47,7 @@ use crate::models::{
     SourceReadinessSummary, TransportClockSummary,
     TransportDriftSummary, TransportSnapshot, WaveformSummaryDto,
 };
-use crate::settings::AppSettings;
+use crate::infra::settings::AppSettings;
 
 /// Theme-split `impl DesktopSession` blocks. Each submodule owns one coherent
 /// slice of the session's behavior and reaches the `pub(super)` fields defined

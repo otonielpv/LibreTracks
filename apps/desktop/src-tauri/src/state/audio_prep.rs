@@ -14,7 +14,7 @@ use tauri::AppHandle;
 
 use crate::audio::engine::AudioController;
 use crate::audio::automation::load_automation;
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 
 use super::{emit_project_load_progress, unique_waveform_keys, DesktopSession, DesktopState};

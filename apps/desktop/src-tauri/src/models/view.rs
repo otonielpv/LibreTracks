@@ -12,7 +12,7 @@ use crate::audio::automation::{
     AutomationAction, AutomationCue, AutomationDocument, AutomationJumpTarget,
     AutomationTransitionMode, MixScene,
 };
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::state::WaveformMemoryCache;
 
 const TIMELINE_TIMEBASE_HZ: u32 = 48_000;

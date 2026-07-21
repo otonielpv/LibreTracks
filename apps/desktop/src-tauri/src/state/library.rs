@@ -16,7 +16,7 @@ use libretracks_project::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::LibraryAssetSummary;
 
 use super::{

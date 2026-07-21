@@ -3007,7 +3007,7 @@ fn splitting_a_song_region_outside_its_range_is_rejected() {
     let result = session.split_song_region("region_1", 12.0, &audio);
     assert!(matches!(
         result,
-        Err(crate::error::DesktopError::InvalidSplitPoint)
+        Err(crate::infra::error::DesktopError::InvalidSplitPoint)
     ));
 
     // Region layout is untouched.
@@ -3531,7 +3531,7 @@ fn set_section_marker_kind_rejects_unknown_section() {
     let result = session.set_section_marker_kind("nope", MarkerKind::Verse, None, &audio);
     assert!(matches!(
         result,
-        Err(crate::error::DesktopError::SectionNotFound(_))
+        Err(crate::infra::error::DesktopError::SectionNotFound(_))
     ));
 }
 

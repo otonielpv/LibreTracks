@@ -9,7 +9,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::audio::engine::AudioDebugSnapshot;
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::midi::get_midi_input_names;
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
 #[cfg(not(target_os = "android"))]
@@ -362,7 +362,7 @@ pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
 /// exist yet (no errors have been recorded).
 #[tauri::command]
 pub fn read_error_log() -> Result<String, String> {
-    let Some(path) = crate::error_log::errors_path() else {
+    let Some(path) = crate::infra::error_log::errors_path() else {
         return Err("error logger not initialized".into());
     };
     match fs::read_to_string(&path) {
@@ -376,7 +376,7 @@ pub fn read_error_log() -> Result<String, String> {
 /// failed invoke) to the same error log as backend panics/command failures.
 #[tauri::command]
 pub fn append_frontend_error(message: String) -> Result<(), String> {
-    crate::error_log::write_error(&format!("frontend: {message}"));
+    crate::infra::error_log::write_error(&format!("frontend: {message}"));
     Ok(())
 }
 
@@ -386,7 +386,7 @@ pub fn append_frontend_error(message: String) -> Result<(), String> {
 pub fn reveal_error_log(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
 
-    let path = crate::error_log::errors_path()
+    let path = crate::infra::error_log::errors_path()
         .ok_or_else(|| "error logger not initialized".to_string())?;
     app.opener()
         .reveal_item_in_dir(&path)

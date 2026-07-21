@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
-use crate::{error::DesktopError, settings::AppSettings};
+use crate::{infra::error::DesktopError, infra::settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
 const ENGINE_V2_FALLBACK_OUTPUT_CHANNELS: usize = 2;

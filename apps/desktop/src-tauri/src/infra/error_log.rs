@@ -148,7 +148,7 @@ pub fn install_panic_hook() {
 /// message unchanged so the command's `Result<T, String>` contract is intact.
 ///
 /// ```ignore
-/// .map_err(|error| crate::error_log::log_command_err("save_project", error))
+/// .map_err(|error| crate::infra::error_log::log_command_err("save_project", error))
 /// ```
 pub fn log_command_err(command: &str, message: impl Display) -> String {
     let message = message.to_string();

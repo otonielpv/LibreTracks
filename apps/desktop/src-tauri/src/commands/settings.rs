@@ -1,8 +1,8 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::error::DesktopError;
-use crate::settings::{
+use crate::infra::error::DesktopError;
+use crate::infra::settings::{
     apply_decoding_cache_env, effective_decoding_cache_dir, save_app_settings, AppSettings,
     AppSettingsStore,
 };
@@ -51,7 +51,7 @@ pub fn update_audio_settings(
 
     let next_settings = session
         .update_audio_settings(settings, &state.audio)
-        .map_err(|error| crate::error_log::log_command_err("update_audio_settings", error))?;
+        .map_err(|error| crate::infra::error_log::log_command_err("update_audio_settings", error))?;
     drop(session);
 
     settings_store

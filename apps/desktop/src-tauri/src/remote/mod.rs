@@ -9,7 +9,7 @@ use tauri::{App, AppHandle, Emitter, Manager};
 use crate::{
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
-    settings::{save_app_settings, AppSettings, AppSettingsStore},
+    infra::settings::{save_app_settings, AppSettings, AppSettingsStore},
     state::DesktopState,
 };
 

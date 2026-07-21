@@ -21,8 +21,8 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::error::DesktopError;
-use crate::settings::{save_app_settings, AppSettings, AppSettingsStore};
+use crate::infra::error::DesktopError;
+use crate::infra::settings::{save_app_settings, AppSettings, AppSettingsStore};
 use crate::state::DesktopState;
 
 /// Where the pad catalog lives. Host-agnostic: point this at a small JSON file

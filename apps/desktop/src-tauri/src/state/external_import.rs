@@ -13,7 +13,7 @@ use libretracks_core::{
 };
 
 use crate::audio::engine::{audio_debug_logging_enabled, AudioController};
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::external_project::{
     detect_external_project_kind, parse_ableton_project, parse_reaper_project, ExternalProjectKind,
     ReaperProject,

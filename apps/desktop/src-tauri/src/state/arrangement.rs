@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use libretracks_core::{source_seconds_at_view, Clip, Track, TrackKind};
 
 use crate::audio::engine::AudioController;
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 
 use super::{

@@ -9,7 +9,7 @@ use std::path::Path;
 use libretracks_core::{Clip, Song, SongRegion, TrackKind};
 use libretracks_project::read_audio_metadata;
 
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 
 use super::{
     resolve_audio_file_path, sort_song_regions, timestamp_suffix, ClipMoveRequest,

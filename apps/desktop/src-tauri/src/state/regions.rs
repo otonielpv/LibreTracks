@@ -9,7 +9,7 @@ use libretracks_core::{
 };
 
 use crate::audio::engine::{jump_debug_logging_enabled, AudioController};
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 
 use super::{

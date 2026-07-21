@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::audio::automation::{AutomationCue, MixScene};
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::{ClipMoveRequest, DesktopState};
 use libretracks_core::{MarkerKind, TrackKind};

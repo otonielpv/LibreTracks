@@ -17,7 +17,7 @@ use tauri::AppHandle;
 
 use crate::audio::engine::AudioController;
 use crate::audio::automation::{save_automation, AutomationDocument, AUTOMATION_FILE_NAME};
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::platform::file_dialog::FileDialog;
 use crate::models::TransportSnapshot;
 

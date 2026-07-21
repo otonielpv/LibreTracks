@@ -17,7 +17,7 @@ use crate::{
     audio::engine::{jump_debug_logging_enabled, AudioCommand},
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
-    settings::{save_app_settings, AppSettings, AppSettingsStore, MidiBinding},
+    infra::settings::{save_app_settings, AppSettings, AppSettingsStore, MidiBinding},
     state::DesktopState,
 };
 

@@ -1,6 +1,6 @@
 use tauri::{AppHandle, State};
 
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::{LibraryAssetSummary, WaveformSummaryDto};
 use crate::state::DesktopState;
 

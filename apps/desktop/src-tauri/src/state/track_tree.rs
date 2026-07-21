@@ -5,7 +5,7 @@
 
 use libretracks_core::{Track, TrackKind};
 
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 
 pub(super) fn insert_track(
     tracks: &mut Vec<Track>,

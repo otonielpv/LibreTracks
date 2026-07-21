@@ -2,9 +2,9 @@ use tauri::{AppHandle, State};
 
 use crate::audio::engine::jump_debug_logging_enabled;
 use crate::commands::events::emit_transport_lifecycle_event;
-use crate::error::DesktopError;
+use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
-use crate::settings::AppSettingsStore;
+use crate::infra::settings::AppSettingsStore;
 use crate::state::DesktopState;
 use libretracks_audio::{JumpTrigger, TransitionType, VampMode};
 
