@@ -5,18 +5,13 @@
 //! server and MIDI input are excluded (see the `remote` / `midi` module
 //! splits); the C++ audio engine runs for real through the Oboe/AAudio backend.
 
-#[cfg(target_os = "android")]
-mod android_audio_devices;
 mod audio;
 mod commands;
 mod error;
 mod error_log;
 mod external_project;
-mod file_dialog;
-#[cfg(target_os = "android")]
-mod mobile_files;
 mod models;
-mod resource_monitor;
+mod platform;
 mod settings;
 mod state;
 

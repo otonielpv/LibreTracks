@@ -94,7 +94,7 @@ pub fn engine_v2_list_devices(
     // engine's entry stays first as "system default" (empty device_id).
     #[cfg(target_os = "android")]
     {
-        let enumerated = crate::android_audio_devices::enumerate_output_devices();
+        let enumerated = crate::platform::android_audio_devices::enumerate_output_devices();
         for device in enumerated {
             // Guard against the (unlikely) duplicate id, keeping the engine's
             // entry authoritative.

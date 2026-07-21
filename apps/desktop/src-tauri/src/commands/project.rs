@@ -14,7 +14,7 @@ use crate::state::{
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession, DesktopState,
     ProjectLoadProgressEvent,
 };
-use crate::file_dialog::FileDialog;
+use crate::platform::file_dialog::FileDialog;
 
 /// Where an export should be written, chosen by the platform's "save as".
 ///
@@ -48,7 +48,7 @@ impl ExportTarget {
             ExportTarget::Path(_) => Ok(()),
             #[cfg(target_os = "android")]
             ExportTarget::Saf { temp, target } => {
-                let result = crate::mobile_files::copy_path_to_picked_target(app, temp, target);
+                let result = crate::platform::mobile_files::copy_path_to_picked_target(app, temp, target);
                 let _ = std::fs::remove_file(temp);
                 result
             }
@@ -77,10 +77,10 @@ fn pick_export_target(
     #[cfg(target_os = "android")]
     {
         let _ = (filter_name, extensions);
-        let Some(target) = crate::mobile_files::save_file(app, title, suggested_name) else {
+        let Some(target) = crate::platform::mobile_files::save_file(app, title, suggested_name) else {
             return Ok(None);
         };
-        let temp = crate::mobile_files::export_temp_path(app, suggested_name)?;
+        let temp = crate::platform::mobile_files::export_temp_path(app, suggested_name)?;
         Ok(Some(ExportTarget::Saf { temp, target }))
     }
 }
@@ -107,7 +107,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
         // SAF picker → content:// URI; stage it to a private temp file on the
         // worker (a big .ltpkg copy shouldn't block the command) and feed the
         // same import path as desktop.
-        let Some(picked) = crate::mobile_files::pick_file(&app, "Selecciona un paquete .ltpkg")
+        let Some(picked) = crate::platform::mobile_files::pick_file(&app, "Selecciona un paquete .ltpkg")
         else {
             return Ok(false);
         };
@@ -115,12 +115,12 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
         // end in an opaque id ("msf:28"), not the display name. The package
         // reader validates the zip structure and reports a clear error.
         let picked_name = sanitize_saf_name_hint(
-            &crate::mobile_files::picked_file_name(&picked),
+            &crate::platform::mobile_files::picked_file_name(&picked),
             "paquete.ltpkg",
         );
         spawn_project_work(&app, move |worker_app, state| {
             let staged =
-                crate::mobile_files::stage_picked_file_to_temp(worker_app, &picked, &picked_name)?;
+                crate::platform::mobile_files::stage_picked_file_to_temp(worker_app, &picked, &picked_name)?;
             let insert_at = {
                 let session = state
                     .session
@@ -635,11 +635,11 @@ pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String
     {
         let suggested = crate::state::default_project_file_name(&name);
         let Some(picked) =
-            crate::mobile_files::save_file(&app, "Elige donde guardar la sesion", &suggested)
+            crate::platform::mobile_files::save_file(&app, "Elige donde guardar la sesion", &suggested)
         else {
             return Ok(None);
         };
-        match crate::mobile_files::resolve_picked_document_parent(&picked) {
+        match crate::platform::mobile_files::resolve_picked_document_parent(&picked) {
             Some(path) => Ok(Some(path.to_string_lossy().into_owned())),
             None => Err(
                 "No se puede crear la sesión en esa ubicación. Navega al almacenamiento \
@@ -701,14 +701,14 @@ pub fn start_save_session_as_template(
     {
         let template_name = sanitize_session_name(&song_title)?;
         let file_name = format!("{template_name}.lttemplate");
-        let Some(target) = crate::mobile_files::save_file(
+        let Some(target) = crate::platform::mobile_files::save_file(
             &app,
             "Guardar como plantilla",
             &file_name,
         ) else {
             return Ok(false);
         };
-        let temporary = crate::mobile_files::export_temp_path(&app, &file_name)?;
+        let temporary = crate::platform::mobile_files::export_temp_path(&app, &file_name)?;
         {
             let session = state
                 .session
@@ -720,7 +720,7 @@ pub fn start_save_session_as_template(
                     crate::error_log::log_command_err("start_save_session_as_template", error)
                 })?;
         }
-        let export_result = crate::mobile_files::copy_path_to_picked_target(
+        let export_result = crate::platform::mobile_files::copy_path_to_picked_target(
             &app,
             &temporary,
             &target,
@@ -972,11 +972,11 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     let song_file = {
         let Some(picked) =
-            crate::mobile_files::pick_file(&app, "Selecciona session.ltsession")
+            crate::platform::mobile_files::pick_file(&app, "Selecciona session.ltsession")
         else {
             return Ok(false);
         };
-        let Some(path) = crate::mobile_files::resolve_picked_file_to_path(&picked) else {
+        let Some(path) = crate::platform::mobile_files::resolve_picked_file_to_path(&picked) else {
             return Err(
                 "No se puede abrir una sesión desde esa ubicación. Navega al \
                  almacenamiento del dispositivo (no a accesos directos como \
@@ -1756,7 +1756,7 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
     #[cfg(target_os = "android")]
     let (package_source, target_song_dir) = {
         // SAF picker for the .ltset.
-        let Some(picked) = crate::mobile_files::pick_file(&app, "Importar sesion (.ltset)")
+        let Some(picked) = crate::platform::mobile_files::pick_file(&app, "Importar sesion (.ltset)")
         else {
             return Ok(false);
         };
@@ -1764,7 +1764,7 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
         // end in an opaque id ("msf:28"), not the display name. The package
         // reader validates the zip structure and reports a clear error.
         let picked_name = sanitize_saf_name_hint(
-            &crate::mobile_files::picked_file_name(&picked),
+            &crate::platform::mobile_files::picked_file_name(&picked),
             "sesion-importada.ltset",
         );
         let default_name = picked_name
@@ -1779,7 +1779,7 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
         // parent folder from the placement. Cancelling cancels the import — no
         // silent fallback to the private songs dir.
         let suggested = crate::state::default_project_file_name(&default_name);
-        let Some(folder_pick) = crate::mobile_files::save_file(
+        let Some(folder_pick) = crate::platform::mobile_files::save_file(
             &app,
             "Elige donde guardar la sesion importada",
             &suggested,
@@ -1787,7 +1787,7 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
             return Ok(false);
         };
         let Some(parent_dir) =
-            crate::mobile_files::resolve_picked_document_parent(&folder_pick)
+            crate::platform::mobile_files::resolve_picked_document_parent(&folder_pick)
         else {
             return Err(
                 "Esa ubicacion no se puede usar como carpeta de sesion. Elige una carpeta \
@@ -1848,7 +1848,7 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
             #[cfg(target_os = "android")]
             let (package_file, staged_cleanup) = {
                 let (picked, picked_name) = &package_source;
-                let staged = crate::mobile_files::stage_picked_file_to_temp(
+                let staged = crate::platform::mobile_files::stage_picked_file_to_temp(
                     &worker_app,
                     picked,
                     picked_name,
