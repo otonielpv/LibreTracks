@@ -8,23 +8,32 @@ empeora el diseño.
 
 ## Progreso (2026-07-21) — COMPLETADO
 
-`state.rs` → carpeta `state/`. `mod.rs` bajó de **14.501 a 4.612 líneas** (-68%)
-en diez commits, cada uno verificado con `cargo check --tests` verde (mismos 8
+`state.rs` → carpeta `state/`. `mod.rs` bajó de **14.501 a 3.285 líneas** (-77%)
+en catorce commits, cada uno verificado con `cargo check --tests` verde (mismos 8
 warnings de base) antes de commitear:
 
 | Submódulo | Líneas | Contenido |
 |---|---|---|
-| `state/mod.rs` | 4.612 | núcleo: transporte, waveforms, sync, tipos, fns libres |
 | `state/tests.rs` | 4.102 | `#[cfg(test)] mod tests` completo |
+| `state/mod.rs` | 3.285 | núcleo: transporte, sync, waveform cache, tipos, utils |
 | `state/regions.rs` | 1.308 | regiones, marcadores, tempo, warp/transpose/gain |
+| `state/library.rs` | 1.026 | assets, carpetas, manifiesto e import a biblioteca |
 | `state/arrangement.rs` | 918 | clips (move/delete/dup/split) + tracks CRUD |
 | `state/automation_runtime.rs` | 812 | cues/scenes CRUD + scheduling de jumps/ramps |
+| `state/external_import.rs` | 747 | import Reaper/Ableton + helpers de marcadores |
 | `state/timeline_math.rs` | 740 | fns puras: downbeats, warp/varispeed, reflow |
-| `state/external_import.rs` | 577 | import de proyectos Reaper/Ableton |
 | `state/audio_prep.rs` | 575 | carga + secuencia source-ready/prearm/prime |
 | `state/session.rs` | 552 | create/save/open proyecto, plantillas, .ltset |
-| `state/library.rs` | 301 | assets + carpetas virtuales de biblioteca |
+| `state/song_edit.rs` | 278 | helpers puros de clips/regiones (validate/append/prune) |
+| `state/track_tree.rs` | 206 | helpers de jerarquía de tracks (insert/reparent/subtree) |
 | `state/history.rs` | 174 | undo/redo + agrupado de historial |
+
+Los cuatro últimos cortes fueron **reagrupación de funciones libres**: los
+helpers puros que se habían quedado en `mod.rs` cuando se extrajeron los métodos
+se movieron a su módulo temático (`track_tree`, `song_edit`, los libres de
+`library`, y los `imported_*` a `external_import`). Se accede a ellos con
+`use <mod>::*` en `mod.rs`; las 4 fns de biblioteca que `commands/` consume como
+`crate::state::…` se reexportan con `pub(crate) use library::{…}`.
 
 **Patrón validado y repetible.** Cada corte fue: promover a `pub(super)` los
 campos/tipos/helpers/métodos que el bloque cruza, mover el bloque a un
