@@ -1,16 +1,16 @@
-//! Importing external DAW projects (Reaper, Ableton) into the current session.
-//! Detects the project kind, parses it into a `Song`, and splices the result in
-//! at the requested timeline position.
-//!
-//! Split out of `state/mod.rs` as a sibling `impl DesktopSession` block. The
-//! `imported_*` marker/entity helpers it relies on live in `mod.rs` as
-//! `pub(super)` free functions shared with the package-import path.
+//! Importing external DAW projects (Reaper, Ableton) into the current session:
+//! detecting the project kind, parsing it into a `Song`, splicing the result in
+//! at the requested timeline position, and the `imported_*` marker/entity
+//! normalization helpers that back the parse (used only here).
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use libretracks_core::{effective_bpm_at, Clip, SongRegion, Track, TrackKind};
+use libretracks_core::{
+    effective_bpm_at, Clip, Marker, MarkerKind, Song, SongRegion, TempoMarker, TimeSignatureMarker,
+    Track, TrackKind,
+};
 
 use crate::audio_engine::{audio_debug_logging_enabled, AudioController};
 use crate::error::DesktopError;
@@ -21,11 +21,8 @@ use crate::external_project::{
 use crate::models::SongPackageImportResponse;
 
 use super::{
-    append_imported_section_marker, ensure_unique_imported_song_entity_ids,
-    import_audio_files_from_paths_to_library, list_library_assets, normalize_external_source_key,
-    normalize_imported_section_markers, reconcile_regions_and_clips, timestamp_suffix,
-    unique_song_entity_id, upsert_imported_tempo_marker, upsert_imported_time_signature_marker,
-    AudioChangeImpact, AudioFilePathImportPayload, DesktopSession,
+    import_audio_files_from_paths_to_library, list_library_assets, reconcile_regions_and_clips,
+    slugify, timestamp_suffix, AudioChangeImpact, AudioFilePathImportPayload, DesktopSession,
 };
 
 impl DesktopSession {
@@ -573,5 +570,170 @@ impl DesktopSession {
             snapshot: self.snapshot(),
             library_assets,
         })
+    }
+}
+
+fn normalize_external_source_key(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase()
+}
+
+fn unique_song_entity_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -> String {
+    let slug_seed = slugify(seed);
+    let base = if slug_seed.is_empty() {
+        "item"
+    } else {
+        &slug_seed
+    };
+    let mut index = 0_u32;
+    loop {
+        let candidate = if index == 0 {
+            format!("{prefix}_{base}")
+        } else {
+            format!("{prefix}_{base}_{index}")
+        };
+        if used.insert(candidate.clone()) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn upsert_imported_tempo_marker(song: &mut Song, start_seconds: f64, bpm: f64) {
+    let start_seconds = start_seconds.max(0.0);
+    if let Some(existing_marker) = song
+        .tempo_markers
+        .iter_mut()
+        .find(|marker| (marker.start_seconds - start_seconds).abs() <= 0.0001)
+    {
+        existing_marker.bpm = bpm;
+        return;
+    }
+
+    song.tempo_markers.push(TempoMarker {
+        id: format!("tempo_marker_import_{}", timestamp_suffix()),
+        start_seconds,
+        bpm,
+    });
+    song.tempo_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+}
+
+fn upsert_imported_time_signature_marker(song: &mut Song, start_seconds: f64, signature: &str) {
+    let start_seconds = start_seconds.max(0.0);
+
+    if start_seconds <= 0.0001 {
+        song.time_signature = signature.to_string();
+        return;
+    }
+
+    if let Some(existing_marker) = song
+        .time_signature_markers
+        .iter_mut()
+        .find(|marker| (marker.start_seconds - start_seconds).abs() <= 0.0001)
+    {
+        existing_marker.signature = signature.to_string();
+        return;
+    }
+
+    song.time_signature_markers.push(TimeSignatureMarker {
+        id: format!("time_signature_marker_import_{}", timestamp_suffix()),
+        start_seconds,
+        signature: signature.to_string(),
+    });
+    song.time_signature_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+}
+
+fn append_imported_section_marker(song: &mut Song, start_seconds: f64, name: &str) {
+    let start_seconds = start_seconds.max(0.0);
+    if song
+        .section_markers
+        .iter()
+        .any(|marker| (marker.start_seconds - start_seconds).abs() <= 0.0001)
+    {
+        return;
+    }
+
+    song.section_markers.push(Marker {
+        id: format!("marker_import_{}", timestamp_suffix()),
+        name: name.trim().to_string(),
+        start_seconds,
+        digit: None,
+        // Imported markers carry only a freeform label from the external DAW, so
+        // they land as untyped Custom sections (kind palette / voice bank fall
+        // back to the base). The user can retag them afterwards.
+        kind: MarkerKind::Custom,
+        variant: None,
+        color: None,
+    });
+}
+
+fn normalize_imported_section_markers(markers: &mut Vec<Marker>) {
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut deduped = Vec::<Marker>::new();
+    for marker in markers.drain(..) {
+        if deduped
+            .iter()
+            .any(|existing| (existing.start_seconds - marker.start_seconds).abs() <= 0.0001)
+        {
+            continue;
+        }
+        deduped.push(marker);
+    }
+
+    *markers = deduped;
+}
+
+fn ensure_unique_imported_song_entity_ids(song: &mut Song) {
+    let mut used = HashSet::<String>::new();
+
+    used.insert(song.id.clone());
+    for track in &song.tracks {
+        used.insert(track.id.clone());
+    }
+    for clip in &song.clips {
+        used.insert(clip.id.clone());
+    }
+
+    for marker in &mut song.section_markers {
+        if marker.id.trim().is_empty() || !used.insert(marker.id.clone()) {
+            marker.id = unique_song_entity_id("marker_import", &marker.name, &mut used);
+        }
+    }
+
+    for region in &mut song.regions {
+        if region.id.trim().is_empty() || !used.insert(region.id.clone()) {
+            region.id = unique_song_entity_id("region_import", &region.name, &mut used);
+        }
+    }
+
+    for marker in &mut song.tempo_markers {
+        if marker.id.trim().is_empty() || !used.insert(marker.id.clone()) {
+            marker.id = unique_song_entity_id(
+                "tempo_marker_import",
+                &format!("{:.3}", marker.start_seconds),
+                &mut used,
+            );
+        }
+    }
+
+    for marker in &mut song.time_signature_markers {
+        if marker.id.trim().is_empty() || !used.insert(marker.id.clone()) {
+            marker.id =
+                unique_song_entity_id("time_signature_marker_import", &marker.signature, &mut used);
+        }
     }
 }
