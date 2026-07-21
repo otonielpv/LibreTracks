@@ -23,7 +23,7 @@ mod state;
 #[cfg(not(target_os = "android"))]
 mod midi;
 #[cfg(target_os = "android")]
-#[path = "midi_android.rs"]
+#[path = "midi/android.rs"]
 mod midi;
 
 #[cfg(not(target_os = "android"))]
