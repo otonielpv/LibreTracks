@@ -29,7 +29,7 @@ mod midi;
 #[cfg(not(target_os = "android"))]
 mod remote;
 #[cfg(target_os = "android")]
-#[path = "remote_android.rs"]
+#[path = "remote/android.rs"]
 mod remote;
 
 use tauri::Manager;
