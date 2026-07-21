@@ -57,6 +57,7 @@ mod arrangement;
 mod audio_prep;
 mod automation_runtime;
 mod external_import;
+mod history;
 mod library;
 mod regions;
 mod session;
@@ -75,7 +76,7 @@ const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
 /// linear gain of 10^(10/20) ≈ 3.1623. Track gain must clamp to this headroom,
 /// not to unity — clamping to 1.0 here snaps every above-0-dB fader back down.
 /// Keep in sync with `TRACK_FADER_SCALE` in packages/shared/src/faderScale.ts.
-const MAX_TRACK_GAIN: f64 = 3.162_277_66;
+pub(super) const MAX_TRACK_GAIN: f64 = 3.162_277_66;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1877,161 +1878,6 @@ impl DesktopSession {
         }
 
         Ok(())
-    }
-
-    pub(super) fn capture_live_history_anchor(&mut self) {
-        if self.live_history_anchor.is_none() {
-            self.live_history_anchor = self.engine.song().cloned();
-        }
-    }
-
-    pub(super) fn push_history_entry(&mut self) {
-        let history_entry = self
-            .live_history_anchor
-            .take()
-            .or_else(|| self.engine.song().cloned());
-
-        if let Some(song) = history_entry {
-            self.undo_stack.push(song);
-            if self.undo_stack.len() > 50 {
-                self.undo_stack.remove(0);
-            }
-        }
-    }
-
-    pub(super) fn should_record_transpose_history(
-        &mut self,
-        target: TransposeHistoryTarget,
-    ) -> bool {
-        let now = Instant::now();
-        let should_group = self.transpose_history_group.as_ref().is_some_and(|group| {
-            group.target == target
-                && now.duration_since(group.recorded_at) <= Duration::from_millis(750)
-        });
-
-        self.transpose_history_group = Some(TransposeHistoryGroup {
-            target,
-            recorded_at: now,
-        });
-
-        !should_group
-    }
-
-    pub(super) fn update_loaded_track(
-        &mut self,
-        track_id: &str,
-        name: Option<&str>,
-        volume: Option<f64>,
-        pan: Option<f64>,
-        muted: Option<bool>,
-        solo: Option<bool>,
-        audio_to: Option<&str>,
-    ) -> Result<(), DesktopError> {
-        let track = self
-            .engine
-            .song_mut()?
-            .tracks
-            .iter_mut()
-            .find(|track| track.id == track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
-
-        if let Some(name) = name {
-            let trimmed_name = name.trim();
-            if trimmed_name.is_empty() {
-                return Err(DesktopError::AudioCommand(
-                    "track name must not be empty".into(),
-                ));
-            }
-            track.name = trimmed_name.to_string();
-        }
-
-        if let Some(volume) = volume {
-            track.volume = volume.clamp(0.0, MAX_TRACK_GAIN);
-        }
-
-        if let Some(pan) = pan {
-            track.pan = pan.clamp(-1.0, 1.0);
-        }
-
-        if let Some(muted) = muted {
-            track.muted = muted;
-        }
-
-        if let Some(solo) = solo {
-            track.solo = solo;
-        }
-
-        if let Some(audio_to) = audio_to {
-            let trimmed = audio_to.trim();
-            track.audio_to = if trimmed.is_empty() {
-                "master".to_string()
-            } else {
-                trimmed.to_ascii_lowercase()
-            };
-        }
-
-        self.transpose_history_group = None;
-
-        Ok(())
-    }
-
-    pub fn undo_action(
-        &mut self,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        self.live_history_anchor = None;
-        self.transpose_history_group = None;
-        let Some(previous_song) = self.undo_stack.pop() else {
-            return Ok(self.snapshot());
-        };
-
-        let current_song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        self.redo_stack.push(current_song);
-
-        self.persist_song_update_internal(
-            previous_song,
-            audio,
-            AudioChangeImpact::StructureRebuild,
-            false,
-            true,
-        )?;
-
-        Ok(self.snapshot())
-    }
-
-    pub fn redo_action(
-        &mut self,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        self.live_history_anchor = None;
-        self.transpose_history_group = None;
-        let Some(next_song) = self.redo_stack.pop() else {
-            return Ok(self.snapshot());
-        };
-
-        let current_song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        self.undo_stack.push(current_song);
-        if self.undo_stack.len() > 50 {
-            self.undo_stack.remove(0);
-        }
-
-        self.persist_song_update_internal(
-            next_song,
-            audio,
-            AudioChangeImpact::StructureRebuild,
-            false,
-            true,
-        )?;
-
-        Ok(self.snapshot())
     }
 
     pub fn transport_position_seconds(&self) -> f64 {
