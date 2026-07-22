@@ -3182,6 +3182,17 @@ textarea {
   height: 100%;
 }
 
+/* The ruler base/overlay canvases and the track-area background canvas are
+   drawn at an integer camera offset and nudged by the sub-pixel remainder via a
+   per-frame translateX (see CanvasTimeline render loop and TimelineRenderer).
+   Promote them to their own compositor layer so that nudge is a cheap GPU
+   composite, not a repaint. */
+.lt-ruler-canvas,
+.lt-ruler-canvas-overlay,
+.lt-track-canvas-background {
+  will-change: transform;
+}
+
 .lt-ruler-overlay {
   position: absolute;
   inset: 0;

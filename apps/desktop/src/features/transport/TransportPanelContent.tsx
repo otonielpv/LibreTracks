@@ -333,6 +333,11 @@ import {
   ZOOM_MIN,
 } from "./constants";
 import {
+  CLOCK_RESYNC_MAX_SMOOTH_SECONDS,
+  resolveFollowCameraX,
+  resolveVisualCorrectionSeconds,
+} from "./playbackClock";
+import {
   buildAudioRoutingOptions,
   buildMemoizedClipsByTrack,
   buildVisibleTracks,
@@ -1474,6 +1479,14 @@ export function TransportPanelContent() {
     anchorReceivedAtMs: 0,
     durationSeconds: 0,
     running: false,
+    // Smooth drift resync. When a snapshot poll shows the extrapolated playhead
+    // has drifted from the backend clock, we DON'T snap: we re-anchor to the
+    // true position and stash the old visual offset here, then decay it to zero
+    // over CLOCK_RESYNC_EASE_MS. displayed = base extrapolation + this residual,
+    // so the correction is spread across ~20 frames and stays invisible instead
+    // of producing the periodic micro-jump that made playback feel non-fluid.
+    // Zero for hard re-anchors (seek/jump), which must land instantly.
+    correctionSeconds: 0,
   });
   // Set right before an explicit transport action (seek/play/pause/stop) so
   // the next snapshot from the store subscriber forces a re-anchor even if
@@ -1536,6 +1549,11 @@ export function TransportPanelContent() {
     hadClips: false,
   });
   const cameraXRef = useRef(cameraX);
+  // Follow-playhead glide state. The camera eases toward this target each frame
+  // instead of snapping, which removes the hard jump when "ahead" mode crosses
+  // the leading edge. Null means "no active follow target" (idle / just enabled)
+  // so the first frame snaps rather than gliding from a stale position.
+  const followCameraTargetRef = useRef<number | null>(null);
   const snapshotRef = useRef<TransportSnapshot | null>(
     useTransportStore.getState().playback,
   );
@@ -3028,6 +3046,7 @@ export function TransportPanelContent() {
       anchorReceivedAtMs: performance.now(),
       durationSeconds: timelineDurationSecondsRef.current || durationSeconds,
       running: isRunning,
+      correctionSeconds: 0,
     };
 
     syncLivePosition(
@@ -3037,8 +3056,9 @@ export function TransportPanelContent() {
 
   function resolveCurrentVisualPosition() {
     const anchor = playbackVisualAnchorRef.current;
+    const nowMs = performance.now();
     const elapsedSeconds = anchor.running
-      ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
+      ? (nowMs - anchor.anchorReceivedAtMs) / 1000
       : 0;
     const durationSeconds =
       anchor.durationSeconds ||
@@ -3046,7 +3066,9 @@ export function TransportPanelContent() {
       songDurationSecondsRef.current;
 
     return clamp(
-      anchor.anchorPositionSeconds + elapsedSeconds,
+      anchor.anchorPositionSeconds +
+        elapsedSeconds +
+        resolveVisualCorrectionSeconds(anchor, nowMs),
       0,
       durationSeconds || Number.MAX_SAFE_INTEGER,
     );
@@ -3068,6 +3090,7 @@ export function TransportPanelContent() {
             timelineDurationSecondsRef.current ||
             songDurationSecondsRef.current,
           running: false,
+          correctionSeconds: 0,
         };
         syncLivePosition(0);
         return;
@@ -3103,13 +3126,42 @@ export function TransportPanelContent() {
         const polledAnchorPosition =
           nextSnapshot.transportClock?.anchorPositionSeconds ??
           nextSnapshot.positionSeconds;
+        const visualNowSeconds = resolveCurrentVisualPosition();
         const visualDriftSeconds = Math.abs(
-          resolveCurrentVisualPosition() - polledAnchorPosition,
+          visualNowSeconds - polledAnchorPosition,
         );
 
         if (
           visualDriftSeconds <= PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS
         ) {
+          return;
+        }
+
+        // Drift beyond tolerance but still small enough to be clock skew, not a
+        // seek/jump (those change lastSeek/lastJump and never reach here). Re-
+        // anchor to the true position but carry the current visual offset as a
+        // correction that decays to zero, so the playhead keeps advancing
+        // smoothly and converges instead of snapping. This is the periodic
+        // micro-jump that made playback feel non-fluid.
+        if (visualDriftSeconds <= CLOCK_RESYNC_MAX_SMOOTH_SECONDS) {
+          const durationSeconds = songDurationSecondsRef.current;
+          const maxDuration =
+            timelineDurationSecondsRef.current > 0
+              ? timelineDurationSecondsRef.current
+              : durationSeconds > 0
+                ? durationSeconds
+                : Number.MAX_SAFE_INTEGER;
+          const clampedTarget = clamp(polledAnchorPosition, 0, maxDuration);
+          playbackVisualAnchorRef.current = {
+            anchorPositionSeconds: clampedTarget,
+            anchorReceivedAtMs: performance.now(),
+            durationSeconds:
+              timelineDurationSecondsRef.current || durationSeconds,
+            running: true,
+            // Displayed = clampedTarget + correction = visualNow at t0, then the
+            // correction eases out → converges to the true clock with no jump.
+            correctionSeconds: visualNowSeconds - clampedTarget,
+          };
           return;
         }
       }
@@ -4365,8 +4417,16 @@ export function TransportPanelContent() {
     }
 
     let animationFrameId = 0;
+    let lastFrameMs = performance.now();
 
     const tick = () => {
+      const nowMs = performance.now();
+      // Real time since the previous frame, used to keep the follow-camera
+      // glide frame-rate independent. Clamp so a tab-switch stall or GC pause
+      // can't make the camera lurch on the next frame.
+      const frameDtSeconds = Math.min(0.1, (nowMs - lastFrameMs) / 1000);
+      lastFrameMs = nowMs;
+
       if (playheadDragRef.current) {
         animationFrameId = window.requestAnimationFrame(tick);
         return;
@@ -4374,14 +4434,16 @@ export function TransportPanelContent() {
 
       const anchor = playbackVisualAnchorRef.current;
       const elapsedSeconds = anchor.running
-        ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
+        ? (nowMs - anchor.anchorReceivedAtMs) / 1000
         : 0;
       const nextPositionSeconds = resolveVisualPositionAcrossPendingJump(
-        anchor.anchorPositionSeconds + elapsedSeconds,
+        anchor.anchorPositionSeconds +
+          elapsedSeconds +
+          resolveVisualCorrectionSeconds(anchor, nowMs),
       );
 
       syncLivePosition(nextPositionSeconds);
-      maybeFollowPlayhead(nextPositionSeconds);
+      maybeFollowPlayhead(nextPositionSeconds, frameDtSeconds);
       animationFrameId = window.requestAnimationFrame(tick);
     };
 
@@ -4792,33 +4854,55 @@ export function TransportPanelContent() {
     }
   }
 
-  function maybeFollowPlayhead(positionSeconds: number) {
+  function maybeFollowPlayhead(positionSeconds: number, frameDtSeconds: number) {
     if (
       !followPlayheadEnabledRef.current ||
       viewModeRef.current !== "daw" ||
       playheadDragRef.current
     ) {
+      // Not following right now — drop the glide target so the next frame that
+      // re-enables follow snaps to the fresh goal instead of easing from here.
+      followCameraTargetRef.current = null;
       return;
     }
 
     const effectivePixelsPerSecond = livePixelsPerSecondRef.current;
     const viewportWidth = laneViewportWidthRef.current;
     const durationSeconds = songRef.current?.durationSeconds ?? 0;
-    const nextCameraX = getFollowPlayheadCameraX({
-      playheadSeconds: positionSeconds,
-      cameraX: cameraXRef.current,
-      pixelsPerSecond: effectivePixelsPerSecond,
-      viewportWidth,
-      durationSeconds,
-      contentEndSeconds: timelineContentEndSecondsRef.current,
-      followMode: appSettingsRef.current.timelinePlayheadFollowMode,
-    });
+    // The goal camera position for this frame. getFollowPlayheadCameraX returns
+    // null while the playhead sits inside the follow window ("ahead" mode dead
+    // zone); there the goal is simply to hold the current camera.
+    const goalCameraX =
+      getFollowPlayheadCameraX({
+        playheadSeconds: positionSeconds,
+        cameraX: cameraXRef.current,
+        pixelsPerSecond: effectivePixelsPerSecond,
+        viewportWidth,
+        durationSeconds,
+        contentEndSeconds: timelineContentEndSecondsRef.current,
+        followMode: appSettingsRef.current.timelinePlayheadFollowMode,
+      }) ?? followCameraTargetRef.current;
 
-    if (nextCameraX === null) {
+    if (goalCameraX === null) {
+      // No prior target and inside the dead zone: nothing to move toward.
+      return;
+    }
+    followCameraTargetRef.current = goalCameraX;
+
+    // Ease the camera toward the goal, keeping the result fractional for smooth
+    // motion (crispness is handled downstream where the canvases split cameraX
+    // into an integer draw + a sub-pixel transform). Null means the move is
+    // negligible — skip the redundant DOM/scroll write.
+    const quantizedCameraX = resolveFollowCameraX({
+      currentCameraX: cameraXRef.current,
+      goalCameraX,
+      frameDtSeconds,
+    });
+    if (quantizedCameraX === null) {
       return;
     }
 
-    updateCameraX(nextCameraX, {
+    updateCameraX(quantizedCameraX, {
       durationSeconds,
       contentEndSeconds: timelineContentEndSecondsRef.current,
       pixelsPerSecond: effectivePixelsPerSecond,
@@ -4926,6 +5010,7 @@ export function TransportPanelContent() {
       anchorReceivedAtMs: performance.now(),
       durationSeconds,
       running: false,
+      correctionSeconds: 0,
     };
     syncLivePosition(clampedPosition, { durationSeconds });
   }
@@ -4942,6 +5027,7 @@ export function TransportPanelContent() {
       durationSeconds:
         timelineDurationSecondsRef.current || songDurationSecondsRef.current,
       running: false,
+      correctionSeconds: 0,
     };
     syncLivePosition(0);
   }

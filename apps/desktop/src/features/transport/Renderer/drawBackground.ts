@@ -197,6 +197,13 @@ export function drawGridLines(
   const beatPath = grid.showBeatGridLines ? new Path2D() : null;
   const barPath = new Path2D();
 
+  // Grid lines are snapped to a whole pixel (`Math.round(x) + 0.5`) so each 1px
+  // line stays crisp. This is a deliberate crisp-vs-smooth tradeoff: a snapped
+  // line is sharp but, as the camera glides fractionally during follow, it
+  // holds a pixel then jumps 1px (visible stepping when lines are dense at low
+  // zoom). Drawing at a fractional x instead would slide smoothly but shimmer
+  // (the antialiasing split changes every frame). A 1px vertical line can't be
+  // both perfectly crisp and perfectly smooth in a raster; we keep it crisp.
   for (const seconds of grid.beats) {
     const x =
       Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;

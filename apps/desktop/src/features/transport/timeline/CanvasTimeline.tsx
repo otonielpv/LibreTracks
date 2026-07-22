@@ -414,9 +414,11 @@ export function TimelineRulerCanvas({
     let lastBaseSceneVersion = -1;
     let lastBaseCameraX = Number.NaN;
     let lastBasePixelsPerSecond = Number.NaN;
+    let lastBaseSubpixelOffsetX = Number.NaN;
     let lastOverlaySceneVersion = -1;
     let lastOverlayCameraX = Number.NaN;
     let lastOverlayPixelsPerSecond = Number.NaN;
+    let lastOverlaySubpixelOffsetX = Number.NaN;
     let lastOverlayTransformCameraX = Number.NaN;
     let lastOverlayTransformScaleX = Number.NaN;
     let lastOverlayCurrentMarkerId: string | null = null;
@@ -435,10 +437,21 @@ export function TimelineRulerCanvas({
       const cameraX = cameraXRef.current;
       const livePixelsPerSecond = livePixelsPerSecondRef.current;
 
+      // Crisp-AND-smooth grid motion. Draw the base layer with an INTEGER
+      // cameraX so every 1px grid line lands on a whole pixel (crisp, no
+      // per-line antialiasing shimmer), then shift the whole canvas by the
+      // sub-pixel remainder via a GPU-composited translateX. The compositor
+      // slides the finished bitmap smoothly — like the waveform layer, which
+      // moves cleanly — so we get neither the shimmer of a fractional draw nor
+      // the 1px stepping of rounding in place. Redraw only when the integer
+      // camera changes; between those the transform alone carries the motion.
+      const roundedCameraX = Math.round(cameraX);
+      const subpixelOffsetX = cameraX - roundedCameraX;
+
       try {
         if (
           lastBaseSceneVersion !== sceneVersionRef.current ||
-          lastBaseCameraX !== cameraX ||
+          lastBaseCameraX !== roundedCameraX ||
           lastBasePixelsPerSecond !== livePixelsPerSecond
         ) {
           const baseContext = setupCanvas(
@@ -451,7 +464,7 @@ export function TimelineRulerCanvas({
             drawRulerBackgroundLayer(baseContext, {
               width: snapshot.width,
               height: snapshot.height,
-              cameraX,
+              cameraX: roundedCameraX,
               pixelsPerSecond: livePixelsPerSecond,
               timelineGrid: snapshot.timelineGrid,
               regions: snapshot.regions,
@@ -461,8 +474,15 @@ export function TimelineRulerCanvas({
           }
 
           lastBaseSceneVersion = sceneVersionRef.current;
-          lastBaseCameraX = cameraX;
+          lastBaseCameraX = roundedCameraX;
           lastBasePixelsPerSecond = livePixelsPerSecond;
+        }
+
+        // Apply the sub-pixel remainder as a compositor transform every frame
+        // (cheap; only touches style when it actually changes).
+        if (lastBaseSubpixelOffsetX !== subpixelOffsetX) {
+          baseCanvas.style.transform = `translateX(${-subpixelOffsetX}px)`;
+          lastBaseSubpixelOffsetX = subpixelOffsetX;
         }
 
         if (overlayContentRef.current) {
@@ -475,8 +495,13 @@ export function TimelineRulerCanvas({
             lastOverlayTransformCameraX !== cameraX ||
             lastOverlayTransformScaleX !== overlayScaleX
           ) {
-            overlayContentRef.current.style.left = `${-cameraX}px`;
-            overlayContentRef.current.style.transform = `scaleX(${overlayScaleX})`;
+            // Pan via a GPU-composited transform, not `left`. A fractional
+            // `left` re-runs layout every frame and makes the ruler labels
+            // shimmer; translateX is sub-pixel-smooth on the compositor, so the
+            // camera can stay fractional (smooth motion at low zoom) without the
+            // shimmer. translateX is applied before scaleX to match the old
+            // `left` + `scaleX(origin 0 0)` composition.
+            overlayContentRef.current.style.transform = `translateX(${-cameraX}px) scaleX(${overlayScaleX})`;
             overlayContentRef.current.style.transformOrigin = "0 0";
             overlayContentRef.current.style.setProperty(
               "--lt-ruler-mark-scale-x",
@@ -506,7 +531,7 @@ export function TimelineRulerCanvas({
               .at(-1)?.id ?? null;
           const shouldRedrawOverlay =
             lastOverlaySceneVersion !== sceneVersionRef.current ||
-            lastOverlayCameraX !== cameraX ||
+            lastOverlayCameraX !== roundedCameraX ||
             lastOverlayPixelsPerSecond !== livePixelsPerSecond ||
             lastOverlayCurrentMarkerId !== currentMarkerId ||
             lastOverlayPulseFrame !== pulseFrame;
@@ -515,10 +540,13 @@ export function TimelineRulerCanvas({
             overlayContext.clearRect(0, 0, snapshot.width, snapshot.height);
 
             const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
+            // Same crisp-draw-at-integer-camera + sub-pixel transform as the
+            // base layer, so the ruler marks stay pixel-crisp AND slide in
+            // lockstep with the grid instead of stepping.
             drawRulerForegroundLayer(overlayContext, {
               width: snapshot.width,
               height: snapshot.height,
-              cameraX,
+              cameraX: roundedCameraX,
               pixelsPerSecond: livePixelsPerSecond,
               markers: snapshot.markers,
               tempoMarkers: snapshot.tempoMarkers,
@@ -531,10 +559,15 @@ export function TimelineRulerCanvas({
             });
 
             lastOverlaySceneVersion = sceneVersionRef.current;
-            lastOverlayCameraX = cameraX;
+            lastOverlayCameraX = roundedCameraX;
             lastOverlayPixelsPerSecond = livePixelsPerSecond;
             lastOverlayCurrentMarkerId = currentMarkerId;
             lastOverlayPulseFrame = pulseFrame;
+          }
+
+          if (lastOverlaySubpixelOffsetX !== subpixelOffsetX) {
+            overlayCanvas.style.transform = `translateX(${-subpixelOffsetX}px)`;
+            lastOverlaySubpixelOffsetX = subpixelOffsetX;
           }
         }
       } catch (error) {

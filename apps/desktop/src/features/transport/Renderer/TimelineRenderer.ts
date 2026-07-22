@@ -112,6 +112,13 @@ export class TimelineRenderer {
   private lastPreviewClipState: Record<string, number> | null = null;
   private lastPreviewTrackState: Record<string, string> | null = null;
 
+  // The background layer (which carries the vertical grid) is drawn at an
+  // integer cameraX and nudged by the sub-pixel remainder via a compositor
+  // transform — same crisp-AND-smooth trick as the ruler canvases. These track
+  // when a redraw vs a cheap transform-only update is needed.
+  private lastBackgroundRoundedCameraX = Number.NaN;
+  private lastBackgroundSubpixelOffsetX = Number.NaN;
+
   constructor(
     private readonly backgroundCanvas: HTMLCanvasElement,
     private readonly backgroundContext: CanvasRenderingContext2D,
@@ -156,9 +163,18 @@ export class TimelineRenderer {
     }
 
     if (cameraChanged) {
-      this.dirtyBackground = true;
+      // Tracks/foreground redraw on any fractional camera move (their content —
+      // clips, waveforms — resamples cleanly). The background grid instead only
+      // needs a redraw when the INTEGER camera changes; between those, the
+      // per-frame sub-pixel transform in render() carries its motion, keeping
+      // the 1px grid lines crisp instead of stepping.
       this.dirtyTracks = true;
       this.dirtyForeground = true;
+      if (
+        Math.round(nextSnapshot.cameraX) !== this.lastBackgroundRoundedCameraX
+      ) {
+        this.dirtyBackground = true;
+      }
     }
   }
 
@@ -235,15 +251,30 @@ export class TimelineRenderer {
           this.dirtyBackground || this.dirtyTracks || this.dirtyForeground;
         const paintStartedAt = willPaint ? performance.now() : 0;
 
+        const roundedCameraX = Math.round(snapshot.cameraX);
+        const backgroundSubpixelOffsetX = snapshot.cameraX - roundedCameraX;
+
         if (this.dirtyBackground) {
+          // Draw the grid at the integer camera so 1px lines land on whole
+          // pixels (crisp, no shimmer).
           this.renderLayer(
             this.backgroundCanvas,
             this.backgroundContext,
-            snapshot,
+            { ...snapshot, cameraX: roundedCameraX },
             this.options.renderBackground,
             viewport,
           );
           this.dirtyBackground = false;
+          this.lastBackgroundRoundedCameraX = roundedCameraX;
+        }
+
+        // Every frame: nudge the whole background canvas by the sub-pixel
+        // remainder via a GPU-composited transform, so the crisp grid slides
+        // smoothly with the fractional camera instead of stepping a pixel at a
+        // time. Cheap — only touches style when the offset actually changes.
+        if (this.lastBackgroundSubpixelOffsetX !== backgroundSubpixelOffsetX) {
+          this.backgroundCanvas.style.transform = `translateX(${-backgroundSubpixelOffsetX}px)`;
+          this.lastBackgroundSubpixelOffsetX = backgroundSubpixelOffsetX;
         }
 
         if (this.dirtyTracks) {

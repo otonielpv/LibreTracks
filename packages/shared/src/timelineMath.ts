@@ -366,7 +366,7 @@ export function getFollowPlayheadCameraX(params: {
       viewportWidth,
       params.contentEndSeconds ?? params.durationSeconds,
     );
-    return Math.abs(clampedCameraX - currentCameraX) > 0.5
+    return Math.abs(clampedCameraX - currentCameraX) > 0.01
       ? clampedCameraX
       : null;
   }
@@ -400,7 +400,11 @@ export function getFollowPlayheadCameraX(params: {
     params.contentEndSeconds ?? params.durationSeconds,
   );
 
-  return Math.abs(clampedCameraX - currentCameraX) > 0.5
+  // Suppress only a truly negligible move. A larger dead band (e.g. 0.5px)
+  // would swallow sub-pixel-per-frame advances at low zoom, stalling the follow
+  // camera every other frame and making it stutter; callers that want to batch
+  // redundant writes apply their own threshold.
+  return Math.abs(clampedCameraX - currentCameraX) > 0.01
     ? clampedCameraX
     : null;
 }
