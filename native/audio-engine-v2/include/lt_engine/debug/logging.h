@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <mutex>
 #include <string>
 
@@ -63,14 +65,58 @@ inline void lt_reset_debug_log_file() {
     if (f) std::fclose(f);
 }
 
+// Local wall-clock stamp "HH:MM:SS.mmm " for the start of a log line. The log
+// is append-only across sessions (never truncated in release), so without a
+// time on each line it is impossible to tell one playback from another or to
+// measure how fast [LT_STARVATION] frames accumulate. The date/app-version go
+// in the per-session [LT_SESSION] banner; per-line we only need the time.
+inline std::string lt_debug_timestamp() {
+    using namespace std::chrono;
+    const auto now = system_clock::now();
+    const auto secs = time_point_cast<seconds>(now);
+    const auto ms = duration_cast<milliseconds>(now - secs).count();
+    const std::time_t t = system_clock::to_time_t(now);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d ",
+                  tm.tm_hour, tm.tm_min, tm.tm_sec, static_cast<int>(ms));
+    return std::string(buf);
+}
+
+// Full local date+time "YYYY-MM-DD HH:MM:SS" for the per-session banner, so a
+// reader can pin a run to a wall-clock moment even though per-line stamps carry
+// only the time-of-day.
+inline std::string lt_debug_datetime() {
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d",
+                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                  tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return std::string(buf);
+}
+
 inline void lt_debug_vlog(const char* fmt, va_list args) {
     static std::mutex mtx;
     std::lock_guard<std::mutex> g(mtx);
+
+    const std::string stamp = lt_debug_timestamp();
 
     FILE* f = std::fopen(lt_debug_log_path(), "a");
     if (f) {
         va_list copy;
         va_copy(copy, args);
+        std::fputs(stamp.c_str(), f);
         std::vfprintf(f, fmt, copy);
         std::fflush(f);
         va_end(copy);
@@ -78,6 +124,7 @@ inline void lt_debug_vlog(const char* fmt, va_list args) {
     }
 
     if (lt_env_flag_enabled("LIBRETRACKS_DEBUG_STDOUT")) {
+        std::fputs(stamp.c_str(), stdout);
         std::vfprintf(stdout, fmt, args);
         std::fflush(stdout);
     }

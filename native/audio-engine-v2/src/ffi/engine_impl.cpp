@@ -564,6 +564,13 @@ Result<void> EngineImpl::initialize() {
     if (state_ == State::Initialized)
         return Result<void>::err("Engine already initialized");
 
+    // Session banner. The debug log is append-only across runs (never truncated
+    // in release), so this line — always written, like [LT_STARVATION] — marks
+    // where a fresh audio session begins and pins it to a wall-clock moment,
+    // making it possible to separate one session's dropouts from another's.
+    lt_debug_log("[LT_SESSION] engine initialize at %s\n",
+                 lt_debug_datetime().c_str());
+
     clock_          = std::make_unique<TransportClock>(48000);
     scheduler_      = std::make_unique<JumpScheduler>();
     source_manager_ = std::make_unique<SourceManager>();
