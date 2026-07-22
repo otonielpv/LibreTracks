@@ -66,8 +66,14 @@ struct CacheDiagnostics {
 
 class BlockCache {
 public:
+    // `protected_recent_per_source` is the number of most-recently-used blocks
+    // PER source_id that evict_lru() will never prune. It guards each active
+    // track's read-ahead window from being evicted just because another track
+    // was served more recently — the global-LRU failure that starved playback
+    // when several songs/tracks shared the cache. ~48 blocks ≈ 4 s at 48 kHz.
     explicit BlockCache(int block_frames   = kDefaultBlockFrames,
-                        size_t max_blocks  = 2048);
+                        size_t max_blocks  = 2048,
+                        size_t protected_recent_per_source = 48);
     ~BlockCache() = default;
 
     // Audio thread — returns true and fills out on cache hit.
@@ -131,6 +137,7 @@ public:
 private:
     int    block_frames_;
     size_t max_blocks_;
+    size_t protected_recent_per_source_;
 
     mutable std::mutex                                     mtx_;
     std::unordered_map<CacheKey, std::shared_ptr<CacheBlock>, CacheKeyHash> blocks_;

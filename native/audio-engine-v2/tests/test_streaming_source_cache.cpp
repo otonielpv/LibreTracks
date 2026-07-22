@@ -670,6 +670,53 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
     CHECK(requested_blocks.size() == 16);
 }
 
+TEST_CASE("BlockCache protects each source's recent window from cross-source eviction") {
+    // Regression for the reported starvation: one global LRU cache shared by
+    // several tracks evicted a track's near-playhead blocks whenever ANOTHER
+    // track was served more recently. The playhead then revisited an evicted
+    // block → miss → silence, which grew as more songs were added to a session.
+    // With a per-source protected window, source A keeps its own blocks even
+    // while source B floods the cache past capacity.
+    constexpr int kChannels = 2;
+    // Tiny cache so a second source easily pushes past capacity; protect the
+    // 4 most-recent blocks per source.
+    constexpr size_t kMaxBlocks = 8;
+    constexpr size_t kProtectedPerSource = 4;
+    BlockCache cache(kDefaultBlockFrames, kMaxBlocks, kProtectedPerSource);
+
+    const Id source_a = "song-a";
+    const Id source_b = "song-b";
+    auto block = make_reference_audio(kDefaultBlockFrames, kChannels);
+
+    // Source A fills and reads its whole (protected-sized) window, marking those
+    // blocks used. They are now A's most-recent blocks.
+    std::vector<float> left(kDefaultBlockFrames, 0.0f);
+    std::vector<float> right(kDefaultBlockFrames, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    for (int i = 0; i < static_cast<int>(kProtectedPerSource); ++i) {
+        cache.fill(source_a, i, block.data(), kChannels, kDefaultBlockFrames);
+        REQUIRE(cache.read(source_a, i, 0, kDefaultBlockFrames, out, 2));
+    }
+
+    // Source B now floods the cache with far more blocks than capacity. Each
+    // fill is more recent than any of A's, so a plain global LRU would evict
+    // A's window. The per-source guard must keep A's blocks.
+    for (int i = 0; i < 32; ++i)
+        cache.fill(source_b, i, block.data(), kChannels, kDefaultBlockFrames);
+
+    // A's entire protected window must still be present (hits, not misses).
+    for (int i = 0; i < static_cast<int>(kProtectedPerSource); ++i) {
+        CHECK_MESSAGE(cache.has_block(source_a, i),
+                      "source A block ", i, " was evicted by source B's flood");
+    }
+
+    // Sanity: the cache still evicted SOMETHING (B's own older blocks), i.e.
+    // protection didn't disable eviction wholesale and blow past capacity
+    // unbounded.
+    const auto diag = cache.diagnostics();
+    CHECK(diag.blocks_cached <= kMaxBlocks + kProtectedPerSource);
+}
+
 TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {
     // Write a 44.1k WAV and decode it to 48k both ways; the streamed cache must
     // match the whole-file cache frame-for-frame (within float tolerance), so

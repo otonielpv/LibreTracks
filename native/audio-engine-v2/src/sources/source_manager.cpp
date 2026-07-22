@@ -79,9 +79,26 @@ void yield_to_ui_scheduler() {
     decode_background_yield();
 }
 
+// Total streaming-block cache budget (MB), scaled to installed RAM. The cache
+// is GLOBAL across all sources, so a fixed 512 MB starved playback once several
+// songs/tracks shared it. Scaling gives machines with more RAM proportionally
+// more headroom. On 8 GB it stays at 512 (there is no room to grow without
+// paging — the working-set pressure thread_policy.h documents); the 8 GB case
+// is fixed by the per-source eviction guard in BlockCache, not by this budget.
+// The tiers mirror lt_recommend_worker_threads()'s RAM buckets.
+size_t source_cache_mb_for_ram() {
+    const std::uint64_t ram = lt::lt_physical_ram_bytes();
+    const double ram_gb = ram > 0 ? static_cast<double>(ram) / (1024.0 * 1024.0 * 1024.0)
+                                   : 8.0;  // assume a middling 8GB when unknown
+    if (ram_gb <= 8.5)  return 512;
+    if (ram_gb <= 16.5) return 1024;
+    if (ram_gb <= 32.5) return 2048;
+    return 3072;
+}
+
 size_t source_cache_blocks_from_env() {
-    constexpr size_t kDefaultCacheMb = 512;
-    size_t cache_mb = kDefaultCacheMb;
+    size_t cache_mb = source_cache_mb_for_ram();
+    // Explicit override always wins (A/B testing, constrained deployments).
     if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_CACHE_MB")) {
         const int parsed = std::atoi(raw);
         if (parsed >= 64 && parsed <= 4096)

@@ -29,9 +29,11 @@ bool BlockCache::diag_enabled() noexcept {
     return on;
 }
 
-BlockCache::BlockCache(int block_frames, size_t max_blocks)
+BlockCache::BlockCache(int block_frames, size_t max_blocks,
+                       size_t protected_recent_per_source)
     : block_frames_(block_frames)
     , max_blocks_(max_blocks)
+    , protected_recent_per_source_(protected_recent_per_source)
 {}
 
 BlockCache::LockStats BlockCache::take_lock_stats() noexcept {
@@ -208,27 +210,74 @@ void BlockCache::evict_lru(size_t target_blocks) {
     // Caller holds mtx_. This runs on a worker thread (fill) but shares mtx_
     // with the audio thread's read(), so it must be cheap: a full std::sort of
     // the whole cache (~16k blocks at the 512MB default) held the lock for tens
-    // of ms and stalled playback (see LT_AUDIO_DIAG fill_hold_us spikes).
+    // of ms and stalled playback (see LT_AUDIO_DIAG fill_hold_us spikes). We
+    // only need the `to_remove` oldest entries, not a total order, so
+    // nth_element partitions in O(n) instead of O(n log n).
     //
-    // We only need the `to_remove` oldest entries, not a total order, so
-    // nth_element partitions in O(n) instead of O(n log n) — and we no longer
-    // sort the kept majority at all.
+    // Crucially the candidate set EXCLUDES the `protected_recent_per_source_`
+    // most-recently-used blocks of EACH source_id. A plain global LRU evicted a
+    // track's read-ahead window whenever another track was served more
+    // recently, so the playhead revisited an evicted block → miss → silence.
+    // That is the starvation that grew as songs were added to a session. By
+    // protecting each source's recent window, an active track keeps its own
+    // near-playhead blocks regardless of how many other sources share the cache.
     if (blocks_.size() <= target_blocks) return;
 
     const size_t to_remove = blocks_.size() - target_blocks;
 
+    // Group (last_used) values by source so we can find, per source, the
+    // last_used threshold of its K-th most-recent block. Everything at or above
+    // that threshold is protected; the rest are eviction candidates. Building
+    // the per-source lists and running nth_element on each keeps this O(n).
+    std::unordered_map<Id, std::vector<uint64_t>> ages_by_source;
+    ages_by_source.reserve(blocks_.size());
+    for (const auto& [k, b] : blocks_)
+        ages_by_source[k.source_id].push_back(b ? b->last_used : 0ULL);
+
+    // Per source, the inclusive lower bound of last_used that stays protected.
+    // A source with <= K blocks protects all of them (threshold 0).
+    const size_t k = protected_recent_per_source_;
+    std::unordered_map<Id, uint64_t> protect_threshold;
+    protect_threshold.reserve(ages_by_source.size());
+    for (auto& [sid, ages] : ages_by_source) {
+        if (k == 0 || ages.size() <= k) {
+            protect_threshold[sid] = 0ULL;  // protects nothing / everything
+            continue;
+        }
+        // The K largest last_used values are protected. Partition so the
+        // element at position (n-k) is the K-th largest; it is the threshold.
+        const std::ptrdiff_t nth = static_cast<std::ptrdiff_t>(ages.size() - k);
+        std::nth_element(ages.begin(), ages.begin() + nth, ages.end());
+        protect_threshold[sid] = ages[static_cast<size_t>(nth)];
+    }
+
     std::vector<std::pair<uint64_t, CacheKey>> aged;
     aged.reserve(blocks_.size());
-    for (const auto& [k, b] : blocks_)
-        aged.emplace_back(b ? b->last_used : 0ULL, k);
+    for (const auto& [key, b] : blocks_) {
+        const uint64_t age = b ? b->last_used : 0ULL;
+        // Skip protected blocks: those in their source's K-most-recent window.
+        // ">=" (not ">") keeps the exact K when the threshold value is unique;
+        // duplicates at the boundary may over-protect slightly, which is safe.
+        if (k != 0 && age >= protect_threshold[key.source_id])
+            continue;
+        aged.emplace_back(age, key);
+    }
 
-    // Partition so the `to_remove` smallest last_used values sit at the front.
+    // We may not be able to reach target_blocks if protection left too few
+    // candidates. Prune only what we can — never a protected block. Leaving the
+    // cache transiently above target is preferable to evicting a needed block.
+    const size_t removable = std::min(to_remove, aged.size());
+    if (removable == 0) {
+        evict_count_.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+
     std::nth_element(
-        aged.begin(), aged.begin() + static_cast<std::ptrdiff_t>(to_remove),
+        aged.begin(), aged.begin() + static_cast<std::ptrdiff_t>(removable),
         aged.end(),
         [](const auto& a, const auto& b) { return a.first < b.first; });
 
-    for (size_t i = 0; i < to_remove; ++i)
+    for (size_t i = 0; i < removable; ++i)
         blocks_.erase(aged[i].second);
 
     evict_count_.fetch_add(1, std::memory_order_relaxed);
