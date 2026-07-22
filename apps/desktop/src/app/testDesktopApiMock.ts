@@ -778,6 +778,70 @@ export function emitWaveformReadyForTest(
   }
 }
 
+/**
+ * Switch the mock's active song to a DIFFERENT one within the same session
+ * (same songDir, new song id/clips/waveformKeys) and bump the project
+ * revision, mirroring what the real backend does when the user opens
+ * another song in the project. Distinct from `replaceSong`, which mutates
+ * the current song in place and keeps its id — this is for regression tests
+ * around cross-song state (e.g. the waveform-cache bug where a new song
+ * inherited the previous song's waveforms).
+ */
+export function switchToDifferentSongForTest(
+  waveformKey: string,
+  durationSeconds: number,
+) {
+  const song = nextId("song");
+  const track = {
+    id: nextId("track"),
+    name: "Track",
+    kind: "audio" as const,
+    parentTrackId: null,
+    depth: 0,
+    hasChildren: false,
+    volume: 1,
+    pan: 0,
+    muted: false,
+    solo: false,
+    audioTo: "master",
+    transposeEnabled: false,
+  };
+  const clip = {
+    id: nextId("clip"),
+    trackId: track.id,
+    trackName: track.name,
+    filePath: waveformKey,
+    waveformKey,
+    isMissing: false,
+    timelineStartSeconds: 0,
+    sourceStartSeconds: 0,
+    sourceWindowDurationSeconds: durationSeconds,
+    sourceDurationSeconds: durationSeconds,
+    durationSeconds,
+    gain: 1,
+  };
+  state.waveforms[waveformKey] = buildWaveformSummary(
+    waveformKey,
+    durationSeconds,
+  );
+  state.song = normalizeSong({
+    id: song,
+    title: "Other Song",
+    artist: null,
+    key: null,
+    bpm: 120,
+    timeSignature: "4/4",
+    durationSeconds,
+    tempoMarkers: [],
+    timeSignatureMarkers: [],
+    regions: [],
+    tracks: [track],
+    clips: [clip],
+    sectionMarkers: [],
+    projectRevision: nextRevision(),
+  });
+}
+
 export const testDesktopApiMock = {
   listenToTransportLifecycle:
     async (_handler: (event: TransportLifecycleEvent) => void) => () => {},
@@ -813,7 +877,24 @@ export const testDesktopApiMock = {
     ) =>
     () => {},
   getTransportSnapshot: async () => clone(buildSnapshot()),
-  getSongView: async () => clone(state.song),
+  getSongView: async (options?: { includeWaveforms?: boolean }) => {
+    const includeWaveforms = options?.includeWaveforms ?? true;
+    if (!includeWaveforms) {
+      // Mirror the real backend contract (get_song_view include_waveforms):
+      // omit the array entirely rather than leaving whatever the caller's
+      // song object happened to carry, so tests can tell "not requested"
+      // apart from "requested but empty".
+      const { waveforms: _omitted, ...rest } = state.song;
+      return clone(rest as SongView);
+    }
+    const clipKeys = state.song.clips
+      .map((clip) => clip.waveformKey)
+      .filter((key, index, keys) => keys.indexOf(key) === index);
+    const waveforms = clipKeys
+      .map((key) => state.waveforms[key])
+      .filter((summary): summary is WaveformSummaryDto => Boolean(summary));
+    return clone({ ...state.song, waveforms });
+  },
   getWaveformSummaries: async (waveformKeys: string[]) =>
     waveformKeys
       .map((waveformKey) => state.waveforms[waveformKey])
