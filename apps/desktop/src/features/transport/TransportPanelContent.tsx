@@ -4030,26 +4030,49 @@ export function TransportPanelContent() {
       if (needsWaveforms) {
         waveformsHydratedRef.current = true;
       }
+      const previousSongId = songRef.current?.id ?? null;
       const nextSong = await getSongView({ includeWaveforms: needsWaveforms });
       if (!active) {
         return;
       }
 
-      if (!needsWaveforms && nextSong) {
+      // A revision bump can also mean the backend switched to a DIFFERENT
+      // song within the same project session, not just an edit to the
+      // current one — only knowable once nextSong.id is in hand. Without this
+      // check every song opened after the first one in a session would skip
+      // its own waveform fetch and silently inherit (merge in) the previous
+      // song's waveforms via the branch below, which is what caused the
+      // reported cross-song waveform-cache buildup. Re-fetch with waveforms
+      // instead of trusting the waveforms-less nextSong already in hand.
+      const songChanged =
+        !needsWaveforms &&
+        nextSong !== null &&
+        previousSongId !== null &&
+        previousSongId !== nextSong.id;
+      const resolvedSong = songChanged
+        ? await getSongView({ includeWaveforms: true })
+        : nextSong;
+      if (!active) {
+        return;
+      }
+
+      if (!needsWaveforms && !songChanged && resolvedSong) {
         // Preserve previously hydrated waveforms.
         const previous = songRef.current;
-        setSong({ ...nextSong, waveforms: previous?.waveforms ?? [] });
+        setSong({ ...resolvedSong, waveforms: previous?.waveforms ?? [] });
       } else {
-        hydrateWaveformCacheFromSong(nextSong);
-        setSong(nextSong);
-        if (!nextSong) {
+        hydrateWaveformCacheFromSong(resolvedSong);
+        setSong(resolvedSong);
+        if (!resolvedSong) {
           // Fetched-with-waveforms returned null (shouldn't normally happen
           // mid-session, but be defensive): reset the flag so the next
           // load will fetch waveforms again.
           waveformsHydratedRef.current = false;
+        } else if (songChanged) {
+          waveformsHydratedRef.current = true;
         }
       }
-      if (nextSong) {
+      if (resolvedSong) {
         setIsProjectViewHydrating(false);
       }
     }
@@ -4073,12 +4096,13 @@ export function TransportPanelContent() {
     const shouldResetProjectScopedState =
       previousProjectIdentity !== null &&
       (previousProjectIdentity.songDir !== nextProjectIdentity.songDir ||
-        (previousProjectIdentity.songId !== null &&
-          nextProjectIdentity.songId !== null &&
-          previousProjectIdentity.songId !== nextProjectIdentity.songId));
+        previousProjectIdentity.songId !== nextProjectIdentity.songId);
 
     if (shouldResetProjectScopedState) {
       inFlightWaveformKeysRef.current.clear();
+      // Also covers the song-closes-without-closing-the-session case (song
+      // goes to null but songDir doesn't change): waveforms is [] then, so
+      // this clears the cache exactly like a dedicated `!song` effect would.
       setWaveformCache(
         Object.fromEntries(
           (song?.waveforms ?? []).map((summary) => [
@@ -4114,16 +4138,6 @@ export function TransportPanelContent() {
     libraryStateRequestIdRef,
     inFlightWaveformKeysRef,
   });
-
-  // Drop the waveform cache only when the song closes - it stays valid
-  // across revisions of the same project.
-  useEffect(() => {
-    if (!song) {
-      setWaveformCache({});
-    }
-    // Mantenemos la caché viva entre revisiones del mismo proyecto.
-    // Solo se limpia si cerramos la canción (!song) o cambiamos de proyecto.
-  }, [song?.id]);
 
   // Retire optimistic clip operations once the server revision catches up.
   useEffect(() => {
