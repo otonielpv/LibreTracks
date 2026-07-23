@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'test/macos-audio-dropout'
+  # Any manual/non-tag run is intentionally a private macOS test build only. It
+  # uploads an Actions artifact, but cannot create a GitHub Release, build
+  # Android, or notify the website. Official publishing remains tag-push-only.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,8 +30,7 @@ jobs:
   test:
     strategy:
       fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+      matrix: ${{ fromJSON(startsWith(github.ref, 'refs/tags/v') && '{"os":["windows-latest","macos-latest","ubuntu-latest"]}' || '{"os":["macos-latest"]}') }}
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -87,29 +92,9 @@ jobs:
     needs: test
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-            publish: true
-          - os: macos-latest
-            platform: macos
-            publish: true
-          - os: ubuntu-22.04
-            platform: linux
-            publish: true
-          # Backwards-compat validation only. macos-15-intel is GitHub's last
-          # x86_64 (Intel) runner — the macos-13 image was retired on 2025-12-04
-          # — and is supported through ~Aug 2027. It builds the Intel bundle and
-          # runs the dylib-wiring guard below, catching @rpath/load regressions
-          # that would break launch on our minimum target (macOS 10.15 Catalina).
-          # publish: false -> it never uploads artifacts, so it cannot collide
-          # with the macos-latest release bundle. continue-on-error keeps a
-          # flaky runner failure from blocking a legitimate release while still
-          # surfacing as a red check in the UI.
-          - os: macos-15-intel
-            platform: macos
-            publish: false
+      # Tags keep the full official matrix, including Intel validation. Every
+      # non-tag invocation is deliberately reduced to the universal macOS job.
+      matrix: ${{ fromJSON(startsWith(github.ref, 'refs/tags/v') && '{"include":[{"os":"windows-latest","platform":"windows","publish":true},{"os":"macos-latest","platform":"macos","publish":true},{"os":"ubuntu-22.04","platform":"linux","publish":true},{"os":"macos-15-intel","platform":"macos","publish":false}]}' || '{"include":[{"os":"macos-latest","platform":"macos","publish":true}]}') }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.publish == false }}
 
@@ -654,12 +639,13 @@ jobs:
         if: matrix.publish
         uses: actions/upload-artifact@v4
         with:
-          name: libretracks-${{ matrix.platform }}-assets
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('libretracks-{0}-assets', matrix.platform) || format('libretracks-macos-test-{0}', github.sha) }}
           path: target-desktop-native/**/bundle/**/*
           if-no-files-found: error
 
   build-android:
     name: Build Android APK
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: test
     runs-on: ubuntu-22.04
     env:
@@ -827,6 +813,7 @@ jobs:
 
   publish-release:
     name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-release-assets, build-android]
     runs-on: ubuntu-latest
     permissions:
