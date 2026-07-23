@@ -58,6 +58,12 @@ pub fn run() {
     // hook's stderr output.
     infra::error_log::install_panic_hook();
 
+    // Mitigate the WebKitGTK white-screen bug on Linux (blank window on NVIDIA /
+    // immutable distros like Bazzite) before the webview is created. No-op on
+    // other platforms. See platform::linux_webkit for the rationale and the
+    // user opt-out.
+    platform::linux_webkit::apply_webkit_workarounds();
+
     // Keep the env flag visible for diagnostics; desktop audio now routes
     // through the C++ engine v2 path by default.
     let _engine_v2_requested = std::env::var("LIBRETRACKS_AUDIO_ENGINE")

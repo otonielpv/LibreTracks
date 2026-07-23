@@ -227,3 +227,14 @@ LibreTracks desktop can publish a web remote surface for transport and mixer con
 ![Remote mixer view](../screenshots/Remote_Mixer.png)
 
 > Live workflow suggestion: keep the desktop operator focused on timeline/arrangement and assign cue or mix adjustments to a second person using the remote.
+
+## 8. Troubleshooting
+
+### Linux: blank white screen on launch
+
+On some Linux setups (NVIDIA drivers, immutable distros such as Bazzite, Fedora Silverblue or SteamOS, and certain Wayland compositors) the window may open blank without painting the interface. This is a known issue in the WebKitGTK web engine the app uses, not a LibreTracks bug.
+
+LibreTracks already applies the recommended mitigation automatically at startup, so in most cases you don't need to do anything: just update to the latest version.
+
+- If you'd rather keep accelerated rendering (because your machine paints fine without the mitigation), set the environment variable `LIBRETRACKS_KEEP_DMABUF=1` before opening the app.
+- On immutable distros, install the **AppImage** or use a `distrobox` container instead of layering the `.rpm` onto the base system.
