@@ -101,7 +101,10 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     ~440 Hz, each isolated by solo and measured by FFT. The automation lane is
     covered too: adding the automation track, creating a cue, and creating a mix
     scene, each verified against `song.automationTrack` / `automationCues` /
-    `mixScenes`. See "Session flows" below.
+    `mixScenes`. A user pad assigned the tone fixture is enabled and its
+    ~440 Hz output confirmed by FFT (pads sound without play), and the voice
+    guide toggle round-trips `settings.voiceGuideEnabled`. See "Session flows"
+    below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
