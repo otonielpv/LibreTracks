@@ -1,0 +1,19 @@
+{
+  // Standalone tsconfig for the WebdriverIO E2E harness. It is intentionally
+  // NOT extending the desktop app's tsconfig: the app builds ESM + JSX for
+  // Vite, while ts-node loads wdio.conf.ts and the specs as CommonJS in Node.
+  // Keeping them separate avoids the JSX/ESM settings leaking into the runner.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"],
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
+}

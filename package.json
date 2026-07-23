@@ -26,9 +26,20 @@
     "test:full": "node ./scripts/test-full.mjs",
     "test:native": "node ./scripts/desktop-native.mjs test",
     "test:native:nolink": "cargo test -p libretracks-desktop -p lt-audio-engine-v2 --features libretracks-desktop/no-link",
+    "test:e2e": "wdio run tests/e2e/wdio.conf.ts",
     "lint": "npm --prefix apps/desktop run lint && npm --prefix apps/remote run lint && npm --prefix packages/shared run lint"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@wdio/cli": "^9.30.0",
+    "@wdio/local-runner": "^9.30.0",
+    "@wdio/mocha-framework": "^9.30.0",
+    "@wdio/spec-reporter": "^9.29.1",
+    "@wdio/tauri-service": "^1.1.0",
+    "ts-node": "^10.9.2",
+    "webdriverio": "^9.30.0"
   }
 }
