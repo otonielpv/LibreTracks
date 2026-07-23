@@ -19,6 +19,22 @@ export type E2ESongView = {
     timelineStartSeconds: number;
     durationSeconds: number;
   }>;
+  // The backend SongView carries these; the page object exposes just the fields
+  // the region/marker flows assert on.
+  regions: Array<{
+    id: string;
+    name: string;
+    startSeconds: number;
+    endSeconds: number;
+    transposeSemitones: number;
+    key: string | null;
+  }>;
+  sectionMarkers: Array<{
+    id: string;
+    name: string;
+    startSeconds: number;
+    kind?: string;
+  }>;
 };
 
 export type E2ETransportSnapshot = {

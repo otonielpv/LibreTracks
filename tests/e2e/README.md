@@ -88,7 +88,9 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     while typing. Solo, zero/unity volume and full-left/full-right pan are
     measured on the native output bus. Transport and metronome also round-trip
     to the real backend/engine; virtual-folder and asset mutations are checked
-    against the native library manifest. See "Session flows" below.
+    against the native library manifest. Section markers and song regions are
+    created from the ruler context menu and verified against
+    `song.sectionMarkers` / `song.regions`. See "Session flows" below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
