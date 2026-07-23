@@ -94,7 +94,9 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     and cleared from its context menu (verified against `region.key`), and a
     region transpose of +12 semitones is verified by capturing the real mixed
     output and confirming an FFT of the 440 Hz tone fixture shifts up an octave.
-    See "Session flows" below.
+    Warp is verified the same way: with warp on and a 2x source-BPM stretch the
+    pitch stays ~440 Hz (time/pitch decoupled, unlike vari-speed). See
+    "Session flows" below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to

@@ -1,9 +1,10 @@
-import { browser, expect, $, $$ } from "@wdio/globals";
+import { browser, expect, $$ } from "@wdio/globals";
 import AppPage from "../../pageobjects/app.page.js";
 import {
   AUDIO_FILE_NAME,
   TONE_FREQUENCY_HZ,
-  dominantFrequency,
+  measureRenderedPitch,
+  setRegionTranspose,
 } from "./support.js";
 
 /**
@@ -83,97 +84,4 @@ async function ensureAudioTrackWithClip() {
     throw new Error("Audio track disappeared while preparing transpose flow");
   }
   return track;
-}
-
-/**
- * Set the region's transpose to an absolute semitone value by stepping the
- * toolbar's +/- buttons (more reliable in this WebView than the number input,
- * which has the same clearValue caveat as other inputs). Reads the current
- * value from the backend model and steps the difference.
- */
-async function setRegionTranspose(semitones: number) {
-  // Re-select the region: playing/seeking during a measurement can clear the
-  // selection, which collapses the stepper to a "select a region" message.
-  const hotspots = await $$(".lt-region-hotspot").getElements();
-  if (hotspots.length) {
-    await hotspots[0].click();
-  }
-
-  // Open the collapsible ControlGroup popover if it isn't open yet — its
-  // trigger is labelled "<title> settings" and reflects state via aria-expanded.
-  const trigger = await $(
-    'button[aria-label="Transposicion de Region settings"]',
-  );
-  await trigger.waitForClickable({ timeout: 15_000 });
-  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
-    await trigger.click();
-  }
-
-  const up = await $(
-    'button[aria-label="Subir un semitono la region seleccionada"]',
-  );
-  const down = await $(
-    'button[aria-label="Bajar un semitono la region seleccionada"]',
-  );
-  await up.waitForDisplayed({ timeout: 15_000 });
-
-  const current = () =>
-    AppPage.songView().then(
-      (song) => song?.regions[0]?.transposeSemitones ?? 0,
-    );
-  // Step toward the target, re-reading the model each step so we don't overshoot
-  // the [-12, 12] clamp the UI enforces.
-  for (let guard = 0; guard < 30; guard += 1) {
-    const value = await current();
-    if (value === semitones) {
-      break;
-    }
-    await (value < semitones ? up : down).click();
-    await browser.waitUntil(async () => (await current()) !== value, {
-      timeout: 10_000,
-      timeoutMsg: "Transpose step did not register in the model",
-    });
-  }
-}
-
-/**
- * Seek into the clip, play, capture the final output, and return its dominant
- * frequency. Stops the transport afterwards.
- */
-async function measureRenderedPitch(trackId: string): Promise<number> {
-  const clip = (await AppPage.songView())?.clips.find(
-    (c) => c.trackId === trackId,
-  );
-  if (!clip) {
-    throw new Error("No clip on the audio track to measure");
-  }
-
-  // Seek to the middle of the clip via the ruler (reusing the audio-flow math).
-  const timelineView = await AppPage.timelineView();
-  const ruler = await AppPage.timelineRuler;
-  const rulerSize = await ruler.getSize();
-  const pixelsPerSecond = timelineView.zoomLevel * 18;
-  const seekSeconds =
-    clip.timelineStartSeconds + Math.min(clip.durationSeconds / 2, 1);
-  const seekFromLeft = seekSeconds * pixelsPerSecond - timelineView.cameraX;
-  await ruler.click({ x: Math.round(seekFromLeft - rulerSize.width / 2), y: 0 });
-
-  await (await AppPage.playButton).click();
-  // Wait for real signal on the track so the capture ring holds tone, not silence.
-  await AppPage.waitForTrackSignal(trackId);
-  // Let the ring fill with post-transpose audio.
-  await browser.pause(400);
-
-  const capture = await AppPage.audioOutputCapture();
-  await (await AppPage.stopButton).click();
-  await browser.waitUntil(
-    async () => (await AppPage.transportSnapshot()).playbackState === "stopped",
-    { timeoutMsg: "Engine did not stop after pitch measurement" },
-  );
-
-  // Use the louder channel; the tone is mono so both carry it.
-  const channel =
-    capture.left.length >= capture.right.length ? capture.left : capture.right;
-  expect(channel.length).toBeGreaterThan(2048);
-  return dominantFrequency(channel, capture.sampleRate);
 }

@@ -12,6 +12,7 @@ export type E2ESongView = {
     pan: number;
     muted: boolean;
     solo: boolean;
+    transposeEnabled: boolean;
   }>;
   clips: Array<{
     id: string;
@@ -28,6 +29,8 @@ export type E2ESongView = {
     endSeconds: number;
     transposeSemitones: number;
     key: string | null;
+    warpEnabled: boolean;
+    warpSourceBpm: number | null;
   }>;
   sectionMarkers: Array<{
     id: string;
