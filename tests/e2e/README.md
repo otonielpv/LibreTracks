@@ -90,7 +90,9 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     to the real backend/engine; virtual-folder and asset mutations are checked
     against the native library manifest. Section markers and song regions are
     created from the ruler context menu and verified against
-    `song.sectionMarkers` / `song.regions`. See "Session flows" below.
+    `song.sectionMarkers` / `song.regions`, and a region's musical key is set
+    and cleared from its context menu, verified against `region.key`. See
+    "Session flows" below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
