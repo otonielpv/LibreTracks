@@ -80,8 +80,9 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     timeline mount, track creation, WAV import into the enabled library,
     library-to-timeline placement and clip deletion, mute verified against the
     native post-mix meter, explicit save plus switch/reopen persistence, and
-    transport/metronome round trips to the real backend/engine. See "Session
-    flows" below.
+    track rename/delete plus clip split/duplicate operations. Transport and
+    metronome also round-trip to the real backend/engine. See "Session flows"
+    below.
 
 ## Session flows (window.__ltE2E)
 
