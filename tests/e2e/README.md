@@ -79,14 +79,16 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
   - `session.e2e.ts` — creates a session and covers the with-session flows:
     timeline mount, track creation, WAV import into the enabled library,
     library-to-timeline placement and clip deletion, mute verified against the
-    native post-mix meter, explicit save plus switch/reopen persistence, and
+    native rendered-track meter, explicit save plus switch/reopen persistence,
+    and
     track rename/delete plus clip split/duplicate operations. Ruler seek,
     Ctrl+wheel zoom and horizontal-wheel pan are checked against the engine
     snapshot and committed timeline view. Space/Shift+Space shortcuts are
     checked against native playback and post-mix signal, including suppression
-    while typing. Transport and metronome also round-trip to the real
-    backend/engine; virtual-folder and asset mutations are checked against the
-    native library manifest. See "Session flows" below.
+    while typing. Solo, zero/unity volume and full-left/full-right pan are
+    measured on the native output bus. Transport and metronome also round-trip
+    to the real backend/engine; virtual-folder and asset mutations are checked
+    against the native library manifest. See "Session flows" below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
@@ -109,8 +111,11 @@ exposes:
 - `getSongView()`, `getTransportSnapshot()`, `getSettings()` and
   `getTimelineView()` — read-only backend observations used to prove commands
   completed beyond the DOM.
-- `getTrackMeters()` — the latest native post-mix peaks per track, used to
-  assert that audio-affecting actions change the rendered signal.
+- `getTrackMeters()` — the latest native per-track peaks, used to assert
+  rendered track activity and mute/solo suppression. These meters are pre-pan.
+- `getAudioOutputMeter()` — final left/right output peaks after track mix,
+  routing, pan and master gain; used when a test must measure the audible stereo
+  result rather than the pre-pan track meter.
 - `getLibraryState()` — assets and virtual folders read from the native
   library manifest after organization and deletion flows.
 

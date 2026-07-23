@@ -632,6 +632,12 @@ export type AudioMeterLevel = {
   rightPeak: number;
 };
 
+/** Final stereo peaks after track mix, routing, region/master gain and pan. */
+export type AudioOutputMeterLevel = {
+  leftPeak: number;
+  rightPeak: number;
+};
+
 /** Output-device health, emitted as `audio:device_status`. `fallbackActive`
  * means the device died (or never opened) and the engine keeps the transport
  * running on its internal silent clock while it retries the device. */

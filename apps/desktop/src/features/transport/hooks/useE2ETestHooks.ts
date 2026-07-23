@@ -2,12 +2,14 @@ import { useEffect } from "react";
 import type {
   AppSettings,
   LibraryAssetSummary,
+  AudioOutputMeterLevel,
   SongView,
   TransportSnapshot,
 } from "@libretracks/shared/models";
 import {
   getLibraryAssets,
   getLibraryFolders,
+  getAudioOutputMeter,
   getSettings,
   getSongView,
   getTransportSnapshot,
@@ -43,6 +45,7 @@ export interface E2ETestHooks {
   getSettings: () => Promise<AppSettings>;
   getTimelineView: () => { cameraX: number; zoomLevel: number };
   getTrackMeters: () => MeterDictionary;
+  getAudioOutputMeter: () => Promise<AudioOutputMeterLevel>;
   getLibraryState: () => Promise<{
     assets: LibraryAssetSummary[];
     folders: string[];
@@ -80,6 +83,7 @@ export function useE2ETestHooks(
         return { cameraX, zoomLevel };
       },
       getTrackMeters: () => useTransportStore.getState().meters,
+      getAudioOutputMeter,
       getLibraryState: async () => {
         const [assets, folders] = await Promise.all([
           getLibraryAssets(),

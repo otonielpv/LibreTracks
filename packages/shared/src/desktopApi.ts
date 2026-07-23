@@ -4,6 +4,7 @@ import type {
   AudioFileImportPayload,
   AudioFilePathImportPayload,
   AudioMeterLevel,
+  AudioOutputMeterLevel,
   AutomationCueSummary,
   AudioOutputDevices,
   CreateClipArgs,
@@ -240,6 +241,21 @@ export async function getLibraryFolders(): Promise<string[]> {
 
 export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanceSnapshot> {
   return invokeCommand<DesktopPerformanceSnapshot>("get_desktop_performance_snapshot");
+}
+
+export async function getAudioOutputMeter(): Promise<AudioOutputMeterLevel> {
+  const maxAttempts = 6;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await invokeCommand<AudioOutputMeterLevel>("get_audio_output_meter");
+    } catch (error) {
+      if (!isTransientAudioStateLockError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await waitForMs(attempt * 10);
+    }
+  }
+  return { leftPeak: 0, rightPeak: 0 };
 }
 
 export async function getSystemResourceSnapshot(): Promise<SystemResourceSnapshot> {

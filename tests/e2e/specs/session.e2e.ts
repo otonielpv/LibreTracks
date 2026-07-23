@@ -6,6 +6,7 @@ import AppPage from "../pageobjects/app.page.js";
 import { registerSessionAudioFlows } from "./session/audio.flows.js";
 import { registerSessionEditingFlows } from "./session/editing.flows.js";
 import { registerSessionLibraryFlows } from "./session/library.flows.js";
+import { registerSessionMixFlows } from "./session/mix.flows.js";
 import { registerSessionNavigationFlows } from "./session/navigation.flows.js";
 import { registerSessionPersistenceFlows } from "./session/persistence.flows.js";
 import { registerSessionSetupFlows } from "./session/setup.flows.js";
@@ -92,5 +93,6 @@ describe("Session creation", () => {
   registerSessionEditingFlows();
   registerSessionLibraryFlows();
   registerSessionNavigationFlows();
+  registerSessionMixFlows(fixture);
   registerSessionTransportFlows(fixture);
 });

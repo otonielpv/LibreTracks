@@ -111,7 +111,7 @@ export function registerSessionAudioFlows(fixture: SessionFixture) {
     );
   });
 
-  it("mutes the real post-mix track signal in the native engine", async () => {
+  it("mutes the real rendered track signal in the native engine", async () => {
     const songBefore = await AppPage.songView();
     const track = songBefore?.tracks.find(
       (candidate) => candidate.name === "E2E Audio Track",

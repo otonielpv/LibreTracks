@@ -8,6 +8,8 @@ export type E2ESongView = {
     id: string;
     name: string;
     kind: string;
+    volume: number;
+    pan: number;
     muted: boolean;
     solo: boolean;
   }>;
@@ -39,6 +41,11 @@ export type E2ETrackMeters = Record<
   string,
   { leftPeak: number; rightPeak: number }
 >;
+
+export type E2EAudioOutputMeter = {
+  leftPeak: number;
+  rightPeak: number;
+};
 
 export type E2ELibraryState = {
   assets: Array<{
@@ -405,7 +412,7 @@ class AppPage {
     );
   }
 
-  /** Read the latest per-track post-mix peaks emitted by the native engine. */
+  /** Read the latest pre-pan per-track peaks emitted by the native engine. */
   async trackMeters(): Promise<E2ETrackMeters> {
     return browser.execute(
       () =>
@@ -417,7 +424,21 @@ class AppPage {
     );
   }
 
-  /** Require measurable native post-mix signal from one track. */
+  /** Read final stereo peaks from the native output bus after mixer controls. */
+  async audioOutputMeter(): Promise<E2EAudioOutputMeter> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              getAudioOutputMeter: () => Promise<E2EAudioOutputMeter>;
+            };
+          }
+        ).__ltE2E.getAudioOutputMeter(),
+    );
+  }
+
+  /** Require measurable native rendered signal from one track. */
   async waitForTrackSignal(
     trackId: string,
     minimumPeak = 0.01,
@@ -433,7 +454,7 @@ class AppPage {
       },
       {
         timeout,
-        timeoutMsg: `Track ${trackId} never emitted native post-mix signal`,
+        timeoutMsg: `Track ${trackId} never emitted native rendered signal`,
       },
     );
   }
@@ -461,7 +482,7 @@ class AppPage {
       {
         timeout,
         interval: 100,
-        timeoutMsg: `Track ${trackId} did not reach sustained post-mix silence`,
+        timeoutMsg: `Track ${trackId} did not reach sustained rendered silence`,
       },
     );
   }

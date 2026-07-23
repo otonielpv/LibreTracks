@@ -119,6 +119,13 @@ pub struct AudioMeterLevel {
     pub right_peak: f32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOutputMeterLevel {
+    pub left_peak: f32,
+    pub right_peak: f32,
+}
+
 /// Emitted as `audio:device_status` whenever the output device's health
 /// changes: `fallbackActive: true` means the device died (or never opened)
 /// and the engine is running on its internal silent clock while the watchdog
@@ -2167,6 +2174,31 @@ impl AudioController {
                 right_peak: meter.right_peak,
             })
             .collect())
+    }
+
+    pub fn current_output_meter_level(
+        &self,
+    ) -> Result<AudioOutputMeterLevel, DesktopError> {
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                return Err(DesktopError::AudioCommand(
+                    "output meters: state locked".into(),
+                ))
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(DesktopError::AudioCommand(
+                    "audio v2 state lock poisoned".into(),
+                ))
+            }
+        };
+        let snapshot = ensure_engine(&mut state)?
+            .get_snapshot()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        Ok(AudioOutputMeterLevel {
+            left_peak: snapshot.meters.left_peak,
+            right_peak: snapshot.meters.right_peak,
+        })
     }
 
     /// Device watchdog (runs ~2×/s on the meter thread). The C++ stall monitor
