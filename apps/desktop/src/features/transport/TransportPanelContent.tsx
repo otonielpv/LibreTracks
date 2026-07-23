@@ -262,6 +262,7 @@ import {
   type SourcesPrepareUiState,
 } from "./sourcesPrepare";
 import { useProjectActions } from "./hooks/useProjectActions";
+import { useE2ETestHooks } from "./hooks/useE2ETestHooks";
 import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
 import { useTimelineActions } from "./timeline/useTimelineActions";
 import { useTimelineKeyboardShortcuts } from "./timeline/TimelineKeyboardShortcuts";
@@ -3889,6 +3890,9 @@ export function TransportPanelContent() {
     setPackageUnpackUiState,
     setSessionExportUiState,
   });
+
+  // E2E-only automation seam (window.__ltE2E under WebDriver); see useE2ETestHooks.
+  useE2ETestHooks(handleCreateSongNamed, handleOpenProjectFromPath);
 
   const {
     scheduleMarkerJumpWithGlobalMode,

@@ -76,6 +76,29 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
   - `library.e2e.ts` — the Library panel renders its header, its import and
     create-folder actions are disabled with no session (canImport is false), and
     it shows its empty-state note.
+  - `session.e2e.ts` — creates a session and asserts the with-session state:
+    the landing unmounts, the timeline shell mounts, transport controls become
+    enabled, and the session folder is written to disk. See "Session flows"
+    below.
+
+## Session flows (window.__ltE2E)
+
+Creating or opening a session normally opens a **native file dialog** (`rfd`)
+that WebDriver cannot pilot. To drive session flows without it, the app exposes
+a tiny automation seam on `window.__ltE2E` — but **only** under WebDriver
+(`navigator.webdriver === true`), so it never exists in a real user session. It
+is wired by `apps/desktop/src/features/transport/hooks/useE2ETestHooks.ts` and
+lists two calls:
+
+- `createSessionNamed(name, parentDir)` — create a session in a real folder.
+- `openSessionFromPath(songFile)` — open an existing `.ltsession`.
+
+These are the **same frontend handlers a user click invokes**, so the flow
+(invoke → `project:load-complete` event → snapshot applied to React state) runs
+exactly as in production. `session.e2e.ts` creates its session inside a temp
+folder it owns and deletes afterwards, so the app's data directory and the
+user's disk stay untouched. Because the seam lives in the frontend bundle, the
+E2E binary must be rebuilt (`npm run build:desktop:native`) after changing it.
 
   Specs run against **one long-lived app instance** with no reload between them
   (alphabetical order: `app-launch` → `landing` → `side-nav`). A panel one spec

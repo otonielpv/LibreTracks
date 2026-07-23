@@ -169,6 +169,61 @@ class AppPage {
     return $('button[aria-label="Metronomo"]');
   }
 
+  // --- Session flows -------------------------------------------------------
+  // With a session open the landing (empty-state) is gone and the timeline
+  // shell mounts. Session creation goes through window.__ltE2E (exposed only
+  // under WebDriver by useE2ETestHooks), which calls the SAME frontend handler
+  // a user click would — so the invoke → project:load-complete → snapshot flow
+  // runs exactly as in production, just without the native dialog.
+
+  /** The timeline shell — present only once a session is open. */
+  get timelineShell() {
+    return $(".lt-timeline-shell");
+  }
+
+  /** The empty-state landing card — present only when NO session is open. */
+  get emptyStateCardMaybe() {
+    return $(".lt-empty-state-card");
+  }
+
+  /**
+   * Create a session named `name` inside `parentDir` (a real filesystem path
+   * the caller controls, e.g. a temp folder) via the E2E hook, then wait for
+   * the landing to disappear and the timeline shell to mount. Throws a clear
+   * error if the hook isn't present (binary built without useE2ETestHooks, or
+   * not running under WebDriver).
+   */
+  async createSession(name: string, parentDir: string, timeout = 60_000) {
+    const hookPresent = await browser.execute(
+      () =>
+        typeof (window as unknown as { __ltE2E?: unknown }).__ltE2E ===
+        "object",
+    );
+    if (!hookPresent) {
+      throw new Error(
+        "window.__ltE2E is not available — is the binary built with useE2ETestHooks and running under WebDriver?",
+      );
+    }
+
+    await browser.execute(
+      (n: string, p: string) =>
+        (
+          window as unknown as {
+            __ltE2E: { createSessionNamed: (name: string, parent?: string) => void };
+          }
+        ).__ltE2E.createSessionNamed(n, p),
+      name,
+      parentDir,
+    );
+
+    // The landing card is unmounted and the timeline shell appears once the
+    // project:load-complete snapshot is applied to React state.
+    await (await this.timelineShell).waitForDisplayed({
+      timeout,
+      timeoutMsg: "Timeline shell never appeared after creating a session",
+    });
+  }
+
   /**
    * Resolves once React has rendered into #root — i.e. the WebView loaded the
    * bundle and the app booted, not just a blank document.
