@@ -131,6 +131,12 @@ exposes:
   result rather than the pre-pan track meter.
 - `getLibraryState()` — assets and virtual folders read from the native
   library manifest after organization and deletion flows.
+- `activatePadWithTone(path)` / `deactivatePad(id)` — create a user pad from an
+  audio file, assign it to key C, and enable it through the production
+  createUserPad → assignPadKey → loadPadKey → setPadConfigRealtime path (pads
+  normally need a downloaded pack; a user pad needs none). Pads are
+  transport-decoupled, so the pad sounds without play — the pad flow FFTs the
+  captured output to confirm it renders the ~440 Hz tone.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

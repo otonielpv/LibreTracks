@@ -60,6 +60,7 @@ export type E2ETransportSnapshot = {
 
 export type E2ESettings = {
   metronomeEnabled: boolean;
+  voiceGuideEnabled: boolean;
 };
 
 export type E2ETimelineView = {
@@ -485,6 +486,34 @@ class AppPage {
             };
           }
         ).__ltE2E.getAudioOutputCapture(),
+    );
+  }
+
+  /** Create a user pad from `sourcePath`, assign it to key C, and enable it. */
+  async activatePadWithTone(sourcePath: string): Promise<string> {
+    return browser.execute(
+      (path: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              activatePadWithTone: (sourcePath: string) => Promise<string>;
+            };
+          }
+        ).__ltE2E.activatePadWithTone(path),
+      sourcePath,
+    );
+  }
+
+  /** Disable the pad and delete the given user pad. */
+  async deactivatePad(padId: string): Promise<void> {
+    await browser.execute(
+      (id: string) =>
+        (
+          window as unknown as {
+            __ltE2E: { deactivatePad: (padId: string) => Promise<void> };
+          }
+        ).__ltE2E.deactivatePad(id),
+      padId,
     );
   }
 

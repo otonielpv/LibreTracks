@@ -10,6 +10,7 @@ import { registerSessionLibraryFlows } from "./session/library.flows.js";
 import { registerSessionMixFlows } from "./session/mix.flows.js";
 import { registerSessionNavigationFlows } from "./session/navigation.flows.js";
 import { registerSessionKeyFlows } from "./session/key.flows.js";
+import { registerSessionPadFlows } from "./session/pads.flows.js";
 import { registerSessionPersistenceFlows } from "./session/persistence.flows.js";
 import { registerSessionRegionFlows } from "./session/regions.flows.js";
 import { registerSessionSetupFlows } from "./session/setup.flows.js";
@@ -107,4 +108,5 @@ describe("Session creation", () => {
   registerSessionWarpFlows();
   registerSessionTransposePerTrackFlows();
   registerSessionAutomationFlows();
+  registerSessionPadFlows(fixture);
 });

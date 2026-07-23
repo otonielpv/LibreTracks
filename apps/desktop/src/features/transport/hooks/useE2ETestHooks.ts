@@ -15,6 +15,12 @@ import {
   getSettings,
   getSongView,
   getTransportSnapshot,
+  createUserPad,
+  assignPadKey,
+  setPadConfigRealtime,
+  loadPadKey,
+  deletePad,
+  saveSettings,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
 import { useTimelineUIStore } from "../uiStore";
@@ -54,6 +60,14 @@ export interface E2ETestHooks {
     assets: LibraryAssetSummary[];
     folders: string[];
   }>;
+  /**
+   * Create a user pad, assign `sourcePath` to key C (index 0), and enable the
+   * pad through the production realtime config + key-load path. Returns the new
+   * pad id. Pads are transport-decoupled, so it starts sounding without play.
+   */
+  activatePadWithTone: (sourcePath: string) => Promise<string>;
+  /** Disable the pad and delete the given user pad, restoring neutral state. */
+  deactivatePad: (padId: string) => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -95,6 +109,33 @@ export function useE2ETestHooks(
           getLibraryFolders(),
         ]);
         return { assets, folders };
+      },
+      activatePadWithTone: async (sourcePath: string) => {
+        const pad = await createUserPad("E2E Pad");
+        // Assign the tone to key C (index 0) and select that key.
+        await assignPadKey(pad.id, 0, sourcePath);
+        const base = await getSettings();
+        const next: AppSettings = {
+          ...base,
+          padEnabled: true,
+          padId: pad.id,
+          padKey: 0,
+          padFollowSongKey: false,
+          padVolume: 1,
+        };
+        // load_pad_key decodes + swaps the key in; set_pad_config_realtime
+        // enables it. Both mirror the production PadsPopover path.
+        await loadPadKey(next);
+        await setPadConfigRealtime(next);
+        await saveSettings(next);
+        return pad.id;
+      },
+      deactivatePad: async (padId: string) => {
+        const base = await getSettings();
+        const off: AppSettings = { ...base, padEnabled: false, padId: "" };
+        await setPadConfigRealtime(off);
+        await saveSettings(off);
+        await deletePad(padId);
       },
     };
 
