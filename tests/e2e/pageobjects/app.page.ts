@@ -1,4 +1,4 @@
-import { browser, $ } from "@wdio/globals";
+import { browser, $, $$ } from "@wdio/globals";
 
 /**
  * Page Object for the LibreTracks desktop shell. Kept deliberately thin: it
@@ -75,6 +75,50 @@ class AppPage {
   /** Side-nav "Configuracion" (settings) toggle. */
   get settingsNavButton() {
     return $('button[aria-label="Configuracion"]');
+  }
+
+  // --- Settings modal ------------------------------------------------------
+  // Opened from the side-nav; a role="tablist" with stable per-tab ids
+  // (lt-settings-tab-<id>) and matching role="tabpanel" panels
+  // (lt-settings-panel-<id>). Desktop tabs: audio, general, shortcuts,
+  // diagnostics, midi, midiLearn. Default tab on open is "audio".
+
+  /** The Settings modal's tablist container. */
+  get settingsTabList() {
+    return $('[role="tablist"].lt-settings-tablist');
+  }
+
+  /** A Settings tab button by id (e.g. "audio", "shortcuts"). */
+  settingsTab(id: string) {
+    return $(`#lt-settings-tab-${id}`);
+  }
+
+  /** A Settings tab panel by id — the visible section for the active tab. */
+  settingsPanel(id: string) {
+    return $(`#lt-settings-panel-${id}`);
+  }
+
+  /** Open the Settings modal via the side-nav and wait for it to render. */
+  async openSettings() {
+    const button = await this.settingsNavButton;
+    await button.waitForClickable({ timeout: 20_000 });
+    await button.click();
+    await (await this.settingsTabList).waitForDisplayed({ timeout: 15_000 });
+  }
+
+  /** Search box inside the "Atajos" (shortcuts) tab. */
+  get shortcutsSearch() {
+    return $(".lt-shortcuts-search");
+  }
+
+  /** "Restablecer todo" button inside the shortcuts tab. */
+  get shortcutsResetAll() {
+    return $(".lt-shortcuts-reset-all");
+  }
+
+  /** All shortcut rows currently rendered in the shortcuts tab. */
+  get shortcutRows() {
+    return $$(".lt-shortcuts-row");
   }
 
   /** Transport play button (aria-label "Reproducir"). */

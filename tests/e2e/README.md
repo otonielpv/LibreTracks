@@ -69,6 +69,10 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
   - `side-nav.e2e.ts` — the three side-nav panels (Biblioteca, Remote,
     Configuracion) exist and are enabled without a session, and each toggles its
     panel/modal open.
+  - `settings.e2e.ts` — the Settings modal's six desktop tabs render, tab
+    switching drives `aria-selected` and the visible panel, and the "Atajos"
+    (shortcuts) tab lists actions, filters live from its search box, and exposes
+    reset-all.
 
   Specs run against **one long-lived app instance** with no reload between them
   (alphabetical order: `app-launch` → `landing` → `side-nav`). A panel one spec
@@ -76,6 +80,13 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
   `AppPage.resetShell()` in `before`/`after` to stay self-contained.
 
 ## Gotchas
+
+- **Clearing a `type="search"` input** — neither `setValue("")` nor
+  `clearValue()` reliably empties one in this WebView (the value survives and
+  React's `onChange` never fires). Use select-all + Backspace via
+  `browser.keys(["Control", "a"])` then `browser.keys(["Backspace"])`, which
+  emits the input events React listens for. See the shortcuts filter test in
+  `settings.e2e.ts`.
 
 - **`__name is not defined` inside `browser.execute()`** — do not put *named*
   nested functions inside an `execute()` callback. ts-node/esbuild rewrites them
