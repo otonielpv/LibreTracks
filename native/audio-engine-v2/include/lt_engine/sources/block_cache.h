@@ -13,7 +13,7 @@
 //   - Eviction: LRU when at capacity.
 //
 // Thread model:
-//   - read():  audio thread — lock-free fast path on hit, silence on miss.
+//   - read():  audio thread — short mutex lookup, then lock-free PCM copy.
 //   - fill():  worker thread — writes a block into the cache.
 //   - evict(): worker thread — called periodically to prune old blocks.
 // ---------------------------------------------------------------------------
@@ -49,11 +49,12 @@ struct CacheKeyHash {
 };
 
 struct CacheBlock {
+    CacheKey            key;
     std::vector<float> samples;   // interleaved, block_frames * channels
     int                channel_count = 0;
     int                block_frames  = 0;
     std::atomic<bool>  ready{false};
-    uint64_t           last_used     = 0;  // monotonic counter
+    std::atomic<uint64_t> last_used{0};  // monotonic counter
 };
 
 struct CacheDiagnostics {
@@ -67,7 +68,7 @@ struct CacheDiagnostics {
 class BlockCache {
 public:
     // `protected_recent_per_source` is the number of most-recently-used blocks
-    // PER source_id that evict_lru() will never prune. It guards each active
+    // PER source_id that eviction will never prune. It guards each active
     // track's read-ahead window from being evicted just because another track
     // was served more recently — the global-LRU failure that starved playback
     // when several songs/tracks shared the cache. ~48 blocks ≈ 4 s at 48 kHz.
@@ -110,8 +111,7 @@ public:
         return static_cast<int>(frame % block_frames_);
     }
 
-    CacheDiagnostics diagnostics() const;
-    void             evict_lru(size_t target_blocks);
+    CacheDiagnostics diagnostics() const noexcept;
 
     // Drop ALL cached blocks. Used when decoded sources are invalidated
     // wholesale — e.g. a device sample-rate change re-decodes every source at
@@ -135,16 +135,24 @@ public:
     LockStats take_lock_stats() noexcept;
 
 private:
+    void evict_if_needed();
+
     int    block_frames_;
     size_t max_blocks_;
     size_t protected_recent_per_source_;
 
     mutable std::mutex                                     mtx_;
+    // Only one fill worker prepares an eviction plan at a time. Contenders use
+    // try_lock and keep publishing blocks instead of queueing behind a global
+    // prune. The audio thread never touches this mutex.
+    std::mutex                                             eviction_mtx_;
     std::unordered_map<CacheKey, std::shared_ptr<CacheBlock>, CacheKeyHash> blocks_;
     std::atomic<uint64_t> clock_{0};
 
     mutable std::atomic<size_t> hits_{0};
     mutable std::atomic<size_t> misses_{0};
+    std::atomic<size_t> blocks_cached_{0};
+    std::atomic<size_t> bytes_used_{0};
 
     mutable std::atomic<uint64_t> read_wait_max_us_{0};
     mutable std::atomic<uint64_t> fill_hold_max_us_{0};
