@@ -38,6 +38,17 @@ export type E2ESongView = {
     startSeconds: number;
     kind?: string;
   }>;
+  automationCues?: Array<{
+    id: string;
+    name: string;
+    atSeconds: number;
+    enabled: boolean;
+  }>;
+  mixScenes?: Array<{
+    id: string;
+    name: string;
+  }>;
+  automationTrack?: { id: string } | null;
 };
 
 export type E2ETransportSnapshot = {

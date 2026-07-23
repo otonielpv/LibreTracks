@@ -98,8 +98,10 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     pitch stays ~440 Hz (time/pitch decoupled, unlike vari-speed). The per-track
     transpose enable ("T") is verified under warp: with the region transposed
     +12, a track with T on renders ~880 Hz while a track with T off stays
-    ~440 Hz, each isolated by solo and measured by FFT. See "Session flows"
-    below.
+    ~440 Hz, each isolated by solo and measured by FFT. The automation lane is
+    covered too: adding the automation track, creating a cue, and creating a mix
+    scene, each verified against `song.automationTrack` / `automationCues` /
+    `mixScenes`. See "Session flows" below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to

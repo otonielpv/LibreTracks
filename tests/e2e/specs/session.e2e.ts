@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
 import { registerSessionAudioFlows } from "./session/audio.flows.js";
+import { registerSessionAutomationFlows } from "./session/automation.flows.js";
 import { registerSessionEditingFlows } from "./session/editing.flows.js";
 import { registerSessionLibraryFlows } from "./session/library.flows.js";
 import { registerSessionMixFlows } from "./session/mix.flows.js";
@@ -105,4 +106,5 @@ describe("Session creation", () => {
   registerSessionTransposeFlows();
   registerSessionWarpFlows();
   registerSessionTransposePerTrackFlows();
+  registerSessionAutomationFlows();
 });
