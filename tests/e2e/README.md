@@ -82,9 +82,11 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     native post-mix meter, explicit save plus switch/reopen persistence, and
     track rename/delete plus clip split/duplicate operations. Ruler seek,
     Ctrl+wheel zoom and horizontal-wheel pan are checked against the engine
-    snapshot and committed timeline view. Transport and metronome also
-    round-trip to the real backend/engine; virtual-folder and asset mutations
-    are checked against the native library manifest. See "Session flows" below.
+    snapshot and committed timeline view. Space/Shift+Space shortcuts are
+    checked against native playback and post-mix signal, including suppression
+    while typing. Transport and metronome also round-trip to the real
+    backend/engine; virtual-folder and asset mutations are checked against the
+    native library manifest. See "Session flows" below.
 
 ## Session flows (window.__ltE2E)
 
