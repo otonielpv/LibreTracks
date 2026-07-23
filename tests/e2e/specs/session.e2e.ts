@@ -13,6 +13,7 @@ import { registerSessionPersistenceFlows } from "./session/persistence.flows.js"
 import { registerSessionRegionFlows } from "./session/regions.flows.js";
 import { registerSessionSetupFlows } from "./session/setup.flows.js";
 import { registerSessionTransposeFlows } from "./session/transpose.flows.js";
+import { registerSessionTransposePerTrackFlows } from "./session/transposePerTrack.flows.js";
 import { registerSessionWarpFlows } from "./session/warp.flows.js";
 import {
   AUDIO_FILE_NAME,
@@ -103,4 +104,5 @@ describe("Session creation", () => {
   registerSessionKeyFlows();
   registerSessionTransposeFlows();
   registerSessionWarpFlows();
+  registerSessionTransposePerTrackFlows();
 });
