@@ -56,6 +56,9 @@ extern "C" {
         source_id: *const c_char,
         resolution_frames: i32,
     ) -> *const c_char;
+    pub fn lt_audio_engine_capture_output_samples(
+        engine: *mut LtEngine,
+    ) -> *const c_char;
     pub fn lt_audio_engine_analyze_file_peaks(
         file_path: *const c_char,
         resolution_frames: i32,
@@ -196,6 +199,13 @@ pub unsafe fn lt_audio_engine_get_source_peaks(
     _: *const c_char,
     _: i32,
 ) -> *const c_char {
+    b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_capture_output_samples(_: *mut LtEngine) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
 }
 #[cfg(any(

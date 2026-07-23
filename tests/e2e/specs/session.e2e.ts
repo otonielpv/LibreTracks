@@ -12,6 +12,7 @@ import { registerSessionKeyFlows } from "./session/key.flows.js";
 import { registerSessionPersistenceFlows } from "./session/persistence.flows.js";
 import { registerSessionRegionFlows } from "./session/regions.flows.js";
 import { registerSessionSetupFlows } from "./session/setup.flows.js";
+import { registerSessionTransposeFlows } from "./session/transpose.flows.js";
 import {
   AUDIO_FILE_NAME,
   UNUSED_AUDIO_FILE_NAME,
@@ -99,4 +100,5 @@ describe("Session creation", () => {
   registerSessionTransportFlows(fixture);
   registerSessionRegionFlows();
   registerSessionKeyFlows();
+  registerSessionTransposeFlows();
 });

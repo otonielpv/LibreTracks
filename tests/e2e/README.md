@@ -90,9 +90,11 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     to the real backend/engine; virtual-folder and asset mutations are checked
     against the native library manifest. Section markers and song regions are
     created from the ruler context menu and verified against
-    `song.sectionMarkers` / `song.regions`, and a region's musical key is set
-    and cleared from its context menu, verified against `region.key`. See
-    "Session flows" below.
+    `song.sectionMarkers` / `song.regions`, a region's musical key is set
+    and cleared from its context menu (verified against `region.key`), and a
+    region transpose of +12 semitones is verified by capturing the real mixed
+    output and confirming an FFT of the 440 Hz tone fixture shifts up an octave.
+    See "Session flows" below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
@@ -122,6 +124,12 @@ exposes:
   result rather than the pre-pan track meter.
 - `getLibraryState()` — assets and virtual folders read from the native
   library manifest after organization and deletion flows.
+- `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
+  output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
+  C++ mixer's hot path. Used to FFT the rendered signal and prove an
+  audio-affecting edit (e.g. transpose) actually changed the audio, not just a
+  label. Metadata edits are asserted against the song model; anything that
+  modifies audio is measured on the real output.
 
 The mutating calls use the **same frontend handlers a user click invokes**;
 the read-only calls only observe the resulting backend state. The flow

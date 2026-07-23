@@ -3,6 +3,7 @@ import type {
   AppSettings,
   LibraryAssetSummary,
   AudioOutputMeterLevel,
+  AudioOutputCapture,
   SongView,
   TransportSnapshot,
 } from "@libretracks/shared/models";
@@ -10,6 +11,7 @@ import {
   getLibraryAssets,
   getLibraryFolders,
   getAudioOutputMeter,
+  getAudioOutputCapture,
   getSettings,
   getSongView,
   getTransportSnapshot,
@@ -46,6 +48,8 @@ export interface E2ETestHooks {
   getTimelineView: () => { cameraX: number; zoomLevel: number };
   getTrackMeters: () => MeterDictionary;
   getAudioOutputMeter: () => Promise<AudioOutputMeterLevel>;
+  /** Capture the most recent final stereo output for spectral (FFT) analysis. */
+  getAudioOutputCapture: () => Promise<AudioOutputCapture>;
   getLibraryState: () => Promise<{
     assets: LibraryAssetSummary[];
     folders: string[];
@@ -84,6 +88,7 @@ export function useE2ETestHooks(
       },
       getTrackMeters: () => useTransportStore.getState().meters,
       getAudioOutputMeter,
+      getAudioOutputCapture,
       getLibraryState: async () => {
         const [assets, folders] = await Promise.all([
           getLibraryAssets(),

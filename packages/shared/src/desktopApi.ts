@@ -5,6 +5,7 @@ import type {
   AudioFilePathImportPayload,
   AudioMeterLevel,
   AudioOutputMeterLevel,
+  AudioOutputCapture,
   AutomationCueSummary,
   AudioOutputDevices,
   CreateClipArgs,
@@ -256,6 +257,25 @@ export async function getAudioOutputMeter(): Promise<AudioOutputMeterLevel> {
     }
   }
   return { leftPeak: 0, rightPeak: 0 };
+}
+
+/**
+ * E2E-only: capture the most recent final stereo output for spectral analysis.
+ * Retries on the same transient state-lock error as the output meter.
+ */
+export async function getAudioOutputCapture(): Promise<AudioOutputCapture> {
+  const maxAttempts = 6;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await invokeCommand<AudioOutputCapture>("get_audio_output_capture");
+    } catch (error) {
+      if (!isTransientAudioStateLockError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await waitForMs(attempt * 10);
+    }
+  }
+  return { sampleRate: 0, left: [], right: [] };
 }
 
 export async function getSystemResourceSnapshot(): Promise<SystemResourceSnapshot> {

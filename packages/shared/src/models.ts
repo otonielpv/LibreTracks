@@ -638,6 +638,13 @@ export type AudioOutputMeterLevel = {
   rightPeak: number;
 };
 
+/** E2E-only: the most recent final stereo output frames for spectral analysis. */
+export type AudioOutputCapture = {
+  sampleRate: number;
+  left: number[];
+  right: number[];
+};
+
 /** Output-device health, emitted as `audio:device_status`. `fallbackActive`
  * means the device died (or never opened) and the engine keeps the transport
  * running on its internal silent clock while it retries the device. */

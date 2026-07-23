@@ -177,6 +177,17 @@ pub fn get_audio_output_meter(
         .map_err(|error| error.to_string())
 }
 
+/// E2E-only: capture the most recent final stereo output for spectral analysis.
+#[tauri::command]
+pub fn get_audio_output_capture(
+    state: State<'_, DesktopState>,
+) -> Result<crate::audio::engine::AudioOutputCapture, String> {
+    state
+        .audio
+        .capture_output_samples()
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn get_desktop_performance_snapshot(
     state: State<'_, DesktopState>,

@@ -63,6 +63,12 @@ export type E2EAudioOutputMeter = {
   rightPeak: number;
 };
 
+export type E2EAudioOutputCapture = {
+  sampleRate: number;
+  left: number[];
+  right: number[];
+};
+
 export type E2ELibraryState = {
   assets: Array<{
     fileName: string;
@@ -451,6 +457,20 @@ class AppPage {
             };
           }
         ).__ltE2E.getAudioOutputMeter(),
+    );
+  }
+
+  /** Capture the most recent final stereo output for spectral (FFT) analysis. */
+  async audioOutputCapture(): Promise<E2EAudioOutputCapture> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              getAudioOutputCapture: () => Promise<E2EAudioOutputCapture>;
+            };
+          }
+        ).__ltE2E.getAudioOutputCapture(),
     );
   }
 

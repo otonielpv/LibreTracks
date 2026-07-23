@@ -214,6 +214,7 @@ pub fn run() {
             audio::engine::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,
             commands::system::get_audio_output_meter,
+            commands::system::get_audio_output_capture,
             commands::system::get_desktop_performance_snapshot,
             commands::system::get_system_resource_snapshot,
             commands::system::get_ownership_diagnostics,

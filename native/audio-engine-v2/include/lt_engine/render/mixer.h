@@ -89,6 +89,15 @@ public:
 
     // Meter read (from UI thread — relaxed atomic).
     MeterValues meters() const noexcept;
+
+    // E2E output capture: snapshot the most recent stereo output frames (up to
+    // the ring capacity), oldest-first. Interleaved L,R,L,R,... into `out`.
+    // Returns the number of FRAMES written and reports the sample rate. Called
+    // from the control thread only; the audio thread merely stores into the
+    // ring. Used by the E2E harness to FFT the real rendered signal (e.g. to
+    // verify a transpose actually shifts pitch), never on a user path.
+    std::size_t capture_output_samples(std::vector<float>& out,
+                                       int& sample_rate_out) const;
     std::vector<TrackMeterValues> track_meters() const;
     std::vector<RegionMeterValues> region_meters() const;
 
@@ -190,6 +199,17 @@ private:
     std::atomic<float> meter_r_{0.f};
     std::atomic<float> meter_l_rms_{0.f};
     std::atomic<float> meter_r_rms_{0.f};
+
+    // E2E output-capture ring (pre-allocated, never resized on the audio
+    // thread). Holds the last ~0.5 s of final stereo output, interleaved L,R.
+    // The audio thread stores samples with a relaxed write cursor; the control
+    // thread reads via capture_output_samples(). Sized against the max block/SR
+    // so it never allocates in render(). Inert unless a reader asks for it.
+    static constexpr std::size_t kCaptureFrames = 24000; // 0.5 s @ 48 kHz
+    static constexpr std::size_t kCaptureSlots = kCaptureFrames * 2;
+    std::array<float, kCaptureSlots> capture_ring_{};
+    std::atomic<std::uint64_t> capture_write_frames_{0};
+    std::atomic<int> capture_sample_rate_{0};
 
     struct TrackMeterSlot {
         std::atomic<float> left_peak{0.f};

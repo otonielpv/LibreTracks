@@ -117,6 +117,12 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
                                                     const char* source_id,
                                                     int32_t resolution_frames);
 
+/** E2E-only: JSON snapshot of the most recent final stereo output for spectral
+ *  analysis: { "ok": true, "sample_rate": N, "frames": M, "left": [...],
+ *  "right": [...] }. Used by the test harness to verify audio-affecting edits
+ *  (e.g. transpose) actually change the rendered signal. */
+LT_API const char* lt_audio_engine_capture_output_samples(LtEngine* engine);
+
 /** JSON object with downsampled peaks for an audio file decoded directly by
  *  the native decoder stack. Does not require a live engine handle. */
 LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
