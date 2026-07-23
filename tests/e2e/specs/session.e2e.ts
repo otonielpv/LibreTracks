@@ -17,7 +17,6 @@ import { registerSessionRegionFlows } from "./session/regions.flows.js";
 import { registerSessionSetupFlows } from "./session/setup.flows.js";
 import { registerSessionTransposeFlows } from "./session/transpose.flows.js";
 import { registerSessionTransposePerTrackFlows } from "./session/transposePerTrack.flows.js";
-import { registerSessionTimelineEditFlows } from "./session/timelineEdits.flows.js";
 import { registerSessionWarpFlows } from "./session/warp.flows.js";
 import {
   AUDIO_FILE_NAME,
@@ -112,7 +111,4 @@ describe("Session creation", () => {
   registerSessionAutomationFlows();
   registerSessionPadFlows(fixture);
   registerSessionVoiceGuideFlows();
-  // Registered last: builds and tears down its own disposable tracks/clips/
-  // regions far past the canonical content, so nothing above depends on it.
-  registerSessionTimelineEditFlows(fixture);
 });

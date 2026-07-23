@@ -103,26 +103,44 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     scene, each verified against `song.automationTrack` / `automationCues` /
     `mixScenes`. A user pad assigned the tone fixture is enabled and its
     ~440 Hz output confirmed by FFT (pads sound without play), and the voice
-    guide toggle round-trips `settings.voiceGuideEnabled`. Finally, a
-    self-contained timeline-edit block (disposable tracks/clips/regions placed
-    far past the canonical content and torn down afterwards) covers the
-    edit-operation edge cases the happy path doesn't reach: moving a single
-    clip, clamping a clip dragged before t=0, a clip dragged past its region's
-    end reshaping the region to cover it, moving multiple clips in one batch and
-    reassigning a clip to another track, extending a region's end, the backend
-    REFUSING to shrink a region so a clip would dangle outside it, the
-    "regions can't cross" invariant (a leftward move that would overlap the
-    preceding region is rejected; a rightward move cascade-pushes the following
-    region), trimming a clip window inside its source while a window past the
-    decoded source is rejected, splitting a region and deleting the tail, and a
+    guide toggle round-trips `settings.voiceGuideEnabled`. See "Session flows"
+    below.
+  - `timeline-edits.e2e.ts` — the edit-operation edge cases the happy path
+    doesn't reach, run against their **own clean session** (a separate spec file
+    relaunches the app, so the song starts pristine with a single region — see
+    "Why a separate spec" below). Covers moving a single clip, clamping a clip
+    dragged before t=0, a clip dragged past its region's end reshaping the
+    region to cover it (the backend auto-extends, it does NOT reject), moving
+    multiple clips in one batch and reassigning a clip to another track,
+    extending a region's end, the backend REFUSING to shrink a region so a clip
+    would dangle outside it, the "regions can't cross" invariant (a leftward
+    move that would overlap the preceding region is rejected; a rightward move
+    cascade-pushes the following region), trimming a clip window inside its
+    source while a window past the decoded source is rejected, splitting a
+    region and deleting the tail, moving/deleting a section marker, and a
     multi-selection clip delete. Each runs the SAME shared command a canvas
-    drag/resize gesture invokes and is asserted against the song model. See
-    "Session flows" below.
+    drag/resize gesture invokes and is asserted against the song model. Its flow
+    module lives at `session/timelineEdits.flows.ts` (parameterised by the same
+    `SessionFixture` contract) and builds/tears down its own disposable
+    tracks/clips/regions.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
     fixture lifecycle and registration order. Shared WAV/gesture helpers and
     the mutable fixture contract live in `session/support.ts`.
+
+### Why a separate spec for timeline edits
+
+The edit cases assert against an exact region/clip topology they build
+themselves. Running them inside `session.e2e.ts` made them brittle: the ~25
+flows before them leave the shared project with an unpredictable multi-region
+layout (a single region can end up spanning tens of seconds), so a fixed clip
+placement could land inside a pre-existing region and a move could straddle a
+boundary that wasn't there on a previous run. A separate spec file gets a fresh
+WebDriver session and native window, so the project starts with a pristine,
+single-region song the flow fully controls. The flow still anchors its clip
+placement to `max(regionEnd, clipEnd) + margin` read live, never a hardcoded
+position.
 
 ## Session flows (window.__ltE2E)
 

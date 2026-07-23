@@ -16,12 +16,14 @@ import type { SessionFixture } from "./support.js";
  * model (getSongView), the same "prove it reached the backend" discipline the
  * other flows use.
  *
- * The flow is fully self-contained: it stands up its own disposable tracks,
- * clips and regions FAR PAST the canonical content (>= 100 s, one bar of gap
- * between the two regions) so it never overlaps or fragments regions[0], which
- * the transpose/warp/pad flows depend on. Everything it creates is torn down in
- * `after`, restoring the exact clip/region set the suite started this block
- * with.
+ * Registered by `specs/timeline-edits.e2e.ts` against its OWN clean session
+ * (not the shared session.e2e.ts project) — see that spec's header for why. The
+ * flow is fully self-contained regardless: it stands up its own disposable
+ * tracks, clips and regions PAST the true end of all existing content (anchored
+ * to max(regionEnd, clipEnd) read live, with a wide gap between the two regions)
+ * and tears them down in `after`. Because it runs in a pristine single-region
+ * session, that anchor lands in genuinely empty space, so its two clips each get
+ * their own fresh region with no merge into a pre-existing one.
  *
  * Key backend behaviours these assert (verified in state/regions.rs +
  * state/arrangement.rs), so the tests match reality rather than an assumed spec:
@@ -36,13 +38,20 @@ import type { SessionFixture } from "./support.js";
  *     runs past the decoded source audio is REJECTED.
  */
 export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
-  // Two disposable tracks, each with one 5 s clip, placed far past the
-  // canonical content with a one-bar-ish gap between them.
+  // Two disposable tracks, each with one 5 s clip, placed strictly PAST the
+  // true end of all existing regions with a wide gap between them, so each
+  // clip lands in its OWN freshly auto-created region — never merged into a
+  // pre-existing region the earlier flows left behind. The exact start
+  // positions are computed at runtime from the current max region end (the
+  // canonical topology is not knowable ahead of time), not hardcoded.
   const TRACK_A_NAME = "E2E Edit Track A";
   const TRACK_B_NAME = "E2E Edit Track B";
-  const CLIP_A_START = 100;
-  const CLIP_B_START = 130;
   const CLIP_DURATION = 5; // the tone fixture is 5 s
+  const CLIP_GAP = 30; // wide gap so A's and B's regions never touch
+  // Filled in before() from the live song; A sits well past all content, B a
+  // full CLIP_GAP past A.
+  let clipAStart = 0;
+  let clipBStart = 0;
 
   let clipAId = "";
   let clipBId = "";
@@ -111,18 +120,36 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
       });
     }
 
-    // One track + clip per request; the backend auto-creates a region around
-    // each far-apart clip.
+    // Place our clips STRICTLY past the true end of everything already in the
+    // song. Earlier flows leave regions ("Song 2", "Song 4", …) at positions we
+    // can't predict; dropping at a fixed 100 s risked landing inside one of
+    // them. Anchor off the max region end (and clip end, belt-and-suspenders).
+    const maxRegionEnd = canonicalRegions.reduce(
+      (max, region) => Math.max(max, region.endSeconds),
+      0,
+    );
+    const maxClipEnd = (
+      (await songView())?.clips ?? []
+    ).reduce(
+      (max, clip) => Math.max(max, clip.timelineStartSeconds + clip.durationSeconds),
+      0,
+    );
+    const anchor = Math.max(maxRegionEnd, maxClipEnd) + 20;
+    clipAStart = anchor;
+    clipBStart = anchor + CLIP_GAP;
+
+    // One track + clip per request; the backend auto-creates a fresh region
+    // around each (they're past all existing content, so no merge).
     const created = await AppPage.createAudioTracksWithClips([
       {
         trackName: TRACK_A_NAME,
         filePath: fixture.audioFilePath,
-        timelineStartSeconds: CLIP_A_START,
+        timelineStartSeconds: clipAStart,
       },
       {
         trackName: TRACK_B_NAME,
         filePath: fixture.audioFilePath,
-        timelineStartSeconds: CLIP_B_START,
+        timelineStartSeconds: clipBStart,
       },
     ]);
     if (created.length !== 2) {
@@ -138,9 +165,12 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
     clipBId = clipB?.id ?? "";
     trackAId = clipA?.trackId ?? "";
     trackBId = clipB?.trackId ?? "";
+    // Use the clips' ACTUAL landed positions (normalize/reshape may nudge them).
+    clipAStart = clipA?.timelineStartSeconds ?? clipAStart;
+    clipBStart = clipB?.timelineStartSeconds ?? clipBStart;
 
-    regionAId = (await regionCovering(CLIP_A_START))?.id ?? "";
-    regionBId = (await regionCovering(CLIP_B_START))?.id ?? "";
+    regionAId = (await regionCovering(clipAStart))?.id ?? "";
+    regionBId = (await regionCovering(clipBStart))?.id ?? "";
     for (const region of song?.regions ?? []) {
       if (!canonicalRegionIds.has(region.id)) {
         disposableRegionIds.add(region.id);
@@ -150,8 +180,9 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
     if (!clipAId || !clipBId || !regionAId || !regionBId) {
       throw new Error("Disposable edit fixture was not fully created");
     }
-    // The two disposable regions must be distinct and ordered, or the
-    // no-cross assertions below are meaningless.
+    // The two clips must live in DISTINCT regions (they're gap-separated), or
+    // the no-cross assertions below are meaningless. If the backend merged them
+    // into one region, the gap wasn't wide enough / anchor wasn't past content.
     expect(regionAId).not.toBe(regionBId);
   });
 
@@ -210,7 +241,7 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
   });
 
   it("moves a single clip to a new timeline position", async () => {
-    const target = CLIP_A_START + 3;
+    const target = clipAStart + 3;
     await AppPage.moveClip(clipAId, target);
     await browser.waitUntil(
       async () =>
@@ -222,11 +253,11 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
       },
     );
     // Move it back so later cases start from the known layout.
-    await AppPage.moveClip(clipAId, CLIP_A_START);
+    await AppPage.moveClip(clipAId, clipAStart);
     await browser.waitUntil(
       async () =>
         Math.abs(
-          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - CLIP_A_START,
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - clipAStart,
         ) < 0.05,
       { timeout: 30_000, timeoutMsg: "Clip did not return to its start" },
     );
@@ -292,7 +323,7 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
   });
 
   it("grows the region to cover a clip dragged past the region's end (reshape)", async () => {
-    const regionBefore = await regionCovering(CLIP_A_START);
+    const regionBefore = await regionCovering(clipAStart);
     if (!regionBefore) {
       throw new Error("Region A missing before the reshape case");
     }
@@ -323,11 +354,11 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
       (clip?.timelineStartSeconds ?? 0) + CLIP_DURATION - 0.1,
     );
     // Restore clip A to its start (region shrinks back on prune/reshape).
-    await AppPage.moveClip(clipAId, CLIP_A_START);
+    await AppPage.moveClip(clipAId, clipAStart);
     await browser.waitUntil(
       async () =>
         Math.abs(
-          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - CLIP_A_START,
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - clipAStart,
         ) < 0.05,
       { timeout: 30_000, timeoutMsg: "Clip A did not return to its start" },
     );
@@ -493,16 +524,52 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
   });
 
   it("cascade-pushes the following region when a region is moved right into it", async () => {
-    const song = await songView();
-    const regionA = song?.regions.find((r) => r.id === regionAId);
-    const regionB = song?.regions.find((r) => r.id === regionBId);
+    let song = await songView();
+    let regionA = song?.regions.find((r) => r.id === regionAId);
+    let regionB = song?.regions.find((r) => r.id === regionBId);
     if (!regionA || !regionB) {
       throw new Error("Both disposable regions must exist for the cascade case");
     }
+    const clip = await clipById(clipAId);
+    if (!clip) {
+      throw new Error("Clip A missing before the cascade case");
+    }
+
+    // A region filled edge-to-edge by its clip can't move at all without the
+    // clip crossing the neighbour (the validator rejects that). Real DAW
+    // regions have empty tail room. Give region A trailing headroom so its END
+    // (not its clip) is what pushes into B: extend A's end to just before B's
+    // start, keeping the clip parked at region A's start.
+    const headroomEnd = regionB.startSeconds - 1;
+    if (headroomEnd > regionA.endSeconds) {
+      await AppPage.updateSongRegion(
+        regionAId,
+        regionA.name,
+        regionA.startSeconds,
+        headroomEnd,
+      );
+      await browser.waitUntil(
+        async () => {
+          const a = (await songView())?.regions.find((r) => r.id === regionAId);
+          return Math.abs((a?.endSeconds ?? 0) - headroomEnd) < 0.2;
+        },
+        { timeout: 30_000, timeoutMsg: "Region A headroom extend did not apply" },
+      );
+      song = await songView();
+      regionA = song?.regions.find((r) => r.id === regionAId);
+      regionB = song?.regions.find((r) => r.id === regionBId);
+    }
+    if (!regionA || !regionB) {
+      throw new Error("Regions vanished after headroom extend");
+    }
+
     const bStartBefore = regionB.startSeconds;
-    // Move A right so its new end pushes into B's start; B should be shoved
-    // rightward instead of overlapping.
-    const delta = regionB.startSeconds - regionA.startSeconds + 2;
+    const clipStartBefore =
+      (await clipById(clipAId))?.timelineStartSeconds ?? regionA.startSeconds;
+    // Move A right by a small amount so its END pushes ~2 s past B's start; the
+    // clip (parked near A's start with lots of tail room) stays clear of the
+    // boundary, and B cascade-pushes rightward instead of overlapping.
+    const delta = regionB.startSeconds - regionA.endSeconds + 2;
     await AppPage.moveSongRegion(regionAId, delta);
     await browser.waitUntil(
       async () => {
@@ -510,8 +577,8 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
         const a = s?.regions.find((r) => r.id === regionAId);
         const b = s?.regions.find((r) => r.id === regionBId);
         if (!a || !b) return false;
-        // No overlap, and B has been pushed to at least A's new end.
-        return b.startSeconds >= a.endSeconds - 1e-3 && b.startSeconds > bStartBefore;
+        // No overlap, and B has been pushed rightward off its old start.
+        return b.startSeconds >= a.endSeconds - 0.2 && b.startSeconds > bStartBefore + 0.5;
       },
       {
         timeout: 30_000,
@@ -523,7 +590,13 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
     const a = s?.regions.find((r) => r.id === regionAId);
     const b = s?.regions.find((r) => r.id === regionBId);
     // The two regions never overlap after the cascade.
-    expect(b?.startSeconds ?? 0).toBeGreaterThanOrEqual((a?.endSeconds ?? 0) - 1e-3);
+    expect(b?.startSeconds ?? 0).toBeGreaterThanOrEqual((a?.endSeconds ?? 0) - 0.2);
+    // The clip moved with its region by the same delta (sanity).
+    const clipAfter = await clipById(clipAId);
+    expect(clipAfter?.timelineStartSeconds ?? 0).toBeCloseTo(
+      clipStartBefore + delta,
+      1,
+    );
   });
 
   it("trims a clip window inside its source but refuses a window past the source", async () => {
@@ -585,7 +658,7 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
     // Create a custom marker inside region A's span (well past canonical
     // content), drag it (updateSectionMarker), then delete it.
     const clip = await clipById(clipAId);
-    const anchor = (clip?.timelineStartSeconds ?? CLIP_A_START) + 1;
+    const anchor = (clip?.timelineStartSeconds ?? clipAStart) + 1;
     const markerId = await AppPage.createSectionMarker(anchor);
     if (!markerId) {
       throw new Error("The section marker was not created");
