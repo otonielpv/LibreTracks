@@ -411,6 +411,282 @@ class AppPage {
     );
   }
 
+  // --- Timeline fixture builders (self-contained edit flows) --------------
+
+  /** Create one audio track + clip per request; resolves to the new clip ids. */
+  async createAudioTracksWithClips(
+    requests: Array<{
+      trackName: string;
+      filePath: string;
+      timelineStartSeconds: number;
+    }>,
+  ): Promise<string[]> {
+    return browser.execute(
+      (reqs: unknown) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              createAudioTracksWithClips: (
+                requests: unknown,
+              ) => Promise<string[]>;
+            };
+          }
+        ).__ltE2E.createAudioTracksWithClips(reqs),
+      requests,
+    );
+  }
+
+  /** Create an empty song region spanning [startSeconds, endSeconds). */
+  async createSongRegion(
+    startSeconds: number,
+    endSeconds: number,
+  ): Promise<void> {
+    await browser.execute(
+      (start: number, end: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              createSongRegion: (start: number, end: number) => Promise<void>;
+            };
+          }
+        ).__ltE2E.createSongRegion(start, end),
+      startSeconds,
+      endSeconds,
+    );
+  }
+
+  /** Create a custom section marker at `startSeconds`; resolves to its id. */
+  async createSectionMarker(startSeconds: number): Promise<string> {
+    return browser.execute(
+      (at: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              createSectionMarker: (startSeconds: number) => Promise<string>;
+            };
+          }
+        ).__ltE2E.createSectionMarker(at),
+      startSeconds,
+    );
+  }
+
+  /** Delete tracks (and their clips) in one transaction. */
+  async deleteTracks(trackIds: string[]): Promise<void> {
+    await browser.execute(
+      (ids: string[]) =>
+        (
+          window as unknown as {
+            __ltE2E: { deleteTracks: (trackIds: string[]) => Promise<void> };
+          }
+        ).__ltE2E.deleteTracks(ids),
+      trackIds,
+    );
+  }
+
+  // --- Timeline edits (drag/resize equivalents via the __ltE2E seam) -------
+  // Each drives the SAME shared command a canvas gesture would; assert the
+  // result via songView(). The mutating ones resolve to void; a rejected
+  // backend promise (e.g. a region collision or an out-of-source clip window)
+  // surfaces here so a spec can assert the negative case with expect().reject.
+
+  /** Move one clip to an absolute timeline position. */
+  async moveClip(clipId: string, timelineStartSeconds: number): Promise<void> {
+    await browser.execute(
+      (id: string, at: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              moveClip: (clipId: string, seconds: number) => Promise<void>;
+            };
+          }
+        ).__ltE2E.moveClip(id, at),
+      clipId,
+      timelineStartSeconds,
+    );
+  }
+
+  /** Move several clips at once (optionally reassigning `targetTrackId`). */
+  async moveClipsBatch(
+    moves: Array<{
+      clipId: string;
+      timelineStartSeconds: number;
+      targetTrackId?: string;
+    }>,
+  ): Promise<void> {
+    await browser.execute(
+      (batch: unknown) =>
+        (
+          window as unknown as {
+            __ltE2E: { moveClipsBatch: (moves: unknown) => Promise<void> };
+          }
+        ).__ltE2E.moveClipsBatch(batch),
+      moves,
+    );
+  }
+
+  /** Resize/trim a clip window; rejects if it falls outside the source audio. */
+  async updateClipWindow(
+    clipId: string,
+    timelineStartSeconds: number,
+    sourceStartSeconds: number,
+    durationSeconds: number,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, tl: number, src: number, dur: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateClipWindow: (
+                clipId: string,
+                timelineStartSeconds: number,
+                sourceStartSeconds: number,
+                durationSeconds: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateClipWindow(id, tl, src, dur),
+      clipId,
+      timelineStartSeconds,
+      sourceStartSeconds,
+      durationSeconds,
+    );
+  }
+
+  /** Delete a multi-selection of clips in one backend transaction. */
+  async deleteClips(clipIds: string[]): Promise<void> {
+    await browser.execute(
+      (ids: string[]) =>
+        (
+          window as unknown as {
+            __ltE2E: { deleteClips: (clipIds: string[]) => Promise<void> };
+          }
+        ).__ltE2E.deleteClips(ids),
+      clipIds,
+    );
+  }
+
+  /** Translate a region by `deltaSeconds`; rejects a leftward overlap. */
+  async moveSongRegion(regionId: string, deltaSeconds: number): Promise<void> {
+    await browser.execute(
+      (id: string, delta: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              moveSongRegion: (
+                regionId: string,
+                deltaSeconds: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.moveSongRegion(id, delta),
+      regionId,
+      deltaSeconds,
+    );
+  }
+
+  /** Resize a region to new absolute bounds. */
+  async updateSongRegion(
+    regionId: string,
+    name: string,
+    startSeconds: number,
+    endSeconds: number,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, nm: string, start: number, end: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateSongRegion: (
+                regionId: string,
+                name: string,
+                startSeconds: number,
+                endSeconds: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateSongRegion(id, nm, start, end),
+      regionId,
+      name,
+      startSeconds,
+      endSeconds,
+    );
+  }
+
+  /** Delete a region. */
+  async deleteSongRegion(regionId: string): Promise<void> {
+    await browser.execute(
+      (id: string) =>
+        (
+          window as unknown as {
+            __ltE2E: { deleteSongRegion: (regionId: string) => Promise<void> };
+          }
+        ).__ltE2E.deleteSongRegion(id),
+      regionId,
+    );
+  }
+
+  /** Split a region at an absolute timeline position. */
+  async splitSongRegion(
+    regionId: string,
+    splitSeconds: number,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, at: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              splitSongRegion: (
+                regionId: string,
+                splitSeconds: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.splitSongRegion(id, at),
+      regionId,
+      splitSeconds,
+    );
+  }
+
+  /** Move / rename a section marker. */
+  async updateSectionMarker(
+    sectionId: string,
+    name: string,
+    startSeconds: number,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, nm: string, at: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateSectionMarker: (
+                sectionId: string,
+                name: string,
+                startSeconds: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateSectionMarker(id, nm, at),
+      sectionId,
+      name,
+      startSeconds,
+    );
+  }
+
+  /** Delete a section marker. */
+  async deleteSectionMarker(sectionId: string): Promise<void> {
+    await browser.execute(
+      (id: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              deleteSectionMarker: (sectionId: string) => Promise<void>;
+            };
+          }
+        ).__ltE2E.deleteSectionMarker(id),
+      sectionId,
+    );
+  }
+
   /** Read the canonical transport snapshot returned by the engine bridge. */
   async transportSnapshot(): Promise<E2ETransportSnapshot> {
     return browser.execute(

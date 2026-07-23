@@ -21,6 +21,21 @@ import {
   loadPadKey,
   deletePad,
   saveSettings,
+  createAudioTracksWithClips,
+  createSongRegion,
+  createSectionMarker,
+  deleteTracks,
+  moveClip,
+  moveClipsBatch,
+  updateClipWindow,
+  deleteClips,
+  moveSongRegion,
+  updateSongRegion,
+  deleteSongRegion,
+  splitSongRegion,
+  updateSectionMarker,
+  deleteSectionMarker,
+  type ClipMoveRequest,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
 import { useTimelineUIStore } from "../uiStore";
@@ -68,6 +83,78 @@ export interface E2ETestHooks {
   activatePadWithTone: (sourcePath: string) => Promise<string>;
   /** Disable the pad and delete the given user pad, restoring neutral state. */
   deactivatePad: (padId: string) => Promise<void>;
+
+  // --- Timeline fixture builders (self-contained edit flows) --------------
+  // Let an edit flow build its own disposable tracks/clips/region and tear
+  // them down, so it never mutates the canonical song other flows rely on.
+
+  /** Create one audio track + clip per request; returns the new clip ids. */
+  createAudioTracksWithClips: (
+    requests: Array<{
+      trackName: string;
+      filePath: string;
+      timelineStartSeconds: number;
+    }>,
+  ) => Promise<string[]>;
+  /** Create an empty song region spanning [startSeconds, endSeconds). */
+  createSongRegion: (startSeconds: number, endSeconds: number) => Promise<void>;
+  /** Create a custom section marker at `startSeconds`; returns its id. */
+  createSectionMarker: (startSeconds: number) => Promise<string>;
+  /** Delete tracks (and their clips) in one transaction — flow teardown. */
+  deleteTracks: (trackIds: string[]) => Promise<void>;
+
+  // --- Timeline edits (drag/resize equivalents) --------------------------
+  // These call the SAME shared commands a canvas drag or resize gesture
+  // invokes; the canvas hit-testing is not itself driven (WebDriver cannot
+  // pilot a <canvas>), but the backend edit + its invariants are exercised
+  // identically. Tests assert against getSongView(). A rejected promise
+  // surfaces the backend's rejection for the negative cases (region
+  // collision, out-of-source clip window).
+
+  /** Move one clip to an absolute timeline position (drag a single clip). */
+  moveClip: (clipId: string, timelineStartSeconds: number) => Promise<void>;
+  /**
+   * Move several clips at once, optionally reassigning a clip's track
+   * (multi-selection drag; `targetTrackId` = vertical drag onto a lane).
+   */
+  moveClipsBatch: (moves: ClipMoveRequest[]) => Promise<void>;
+  /**
+   * Resize/trim a clip's window (timeline start, source start, duration).
+   * Rejects if the window falls outside the decoded source audio.
+   */
+  updateClipWindow: (
+    clipId: string,
+    timelineStartSeconds: number,
+    sourceStartSeconds: number,
+    durationSeconds: number,
+  ) => Promise<void>;
+  /** Delete a multi-selection of clips in one backend transaction. */
+  deleteClips: (clipIds: string[]) => Promise<void>;
+  /**
+   * Translate a whole region by `deltaSeconds` (drag a region). Rejects a
+   * leftward move that would overlap the preceding region; a rightward move
+   * cascade-pushes the following regions instead.
+   */
+  moveSongRegion: (regionId: string, deltaSeconds: number) => Promise<void>;
+  /** Resize a region by setting new absolute bounds (drag a region edge). */
+  updateSongRegion: (
+    regionId: string,
+    name: string,
+    startSeconds: number,
+    endSeconds: number,
+  ) => Promise<void>;
+  /** Delete a region. */
+  deleteSongRegion: (regionId: string) => Promise<void>;
+  /** Split a region at an absolute timeline position. */
+  splitSongRegion: (regionId: string, splitSeconds: number) => Promise<void>;
+  /** Move a section marker (drag it along the ruler) / rename it. */
+  updateSectionMarker: (
+    sectionId: string,
+    name: string,
+    startSeconds: number,
+  ) => Promise<void>;
+  /** Delete a section marker. */
+  deleteSectionMarker: (sectionId: string) => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -136,6 +223,86 @@ export function useE2ETestHooks(
         await setPadConfigRealtime(off);
         await saveSettings(off);
         await deletePad(padId);
+      },
+
+      // Fixture builders — let an edit flow stand up its own disposable
+      // tracks/clips/region and tear them down without touching the canonical
+      // song. Returns the created clip ids so the flow can address them.
+      createAudioTracksWithClips: async (requests) => {
+        const before = new Set(
+          ((await getSongView({ includeWaveforms: false }))?.clips ?? []).map(
+            (clip) => clip.id,
+          ),
+        );
+        await createAudioTracksWithClips(requests);
+        const after =
+          (await getSongView({ includeWaveforms: false }))?.clips ?? [];
+        return after
+          .filter((clip) => !before.has(clip.id))
+          .map((clip) => clip.id);
+      },
+      createSongRegion: async (startSeconds, endSeconds) => {
+        await createSongRegion(startSeconds, endSeconds);
+      },
+      createSectionMarker: async (startSeconds) => {
+        const before = new Set(
+          (
+            (await getSongView({ includeWaveforms: false }))?.sectionMarkers ??
+            []
+          ).map((marker) => marker.id),
+        );
+        await createSectionMarker(startSeconds);
+        const after =
+          (await getSongView({ includeWaveforms: false }))?.sectionMarkers ??
+          [];
+        return after.find((marker) => !before.has(marker.id))?.id ?? "";
+      },
+      deleteTracks: async (trackIds) => {
+        await deleteTracks(trackIds);
+      },
+
+      // Timeline edits — thin wrappers over the shared commands. They return
+      // void (tests observe the result via getSongView), but any backend
+      // rejection propagates so a test can assert the negative case.
+      moveClip: async (clipId, timelineStartSeconds) => {
+        await moveClip(clipId, timelineStartSeconds);
+      },
+      moveClipsBatch: async (moves) => {
+        await moveClipsBatch(moves);
+      },
+      updateClipWindow: async (
+        clipId,
+        timelineStartSeconds,
+        sourceStartSeconds,
+        durationSeconds,
+      ) => {
+        await updateClipWindow(
+          clipId,
+          timelineStartSeconds,
+          sourceStartSeconds,
+          durationSeconds,
+        );
+      },
+      deleteClips: async (clipIds) => {
+        await deleteClips(clipIds);
+      },
+      moveSongRegion: async (regionId, deltaSeconds) => {
+        await moveSongRegion(regionId, deltaSeconds);
+      },
+      updateSongRegion: async (regionId, name, startSeconds, endSeconds) => {
+        await updateSongRegion(regionId, name, startSeconds, endSeconds);
+      },
+      deleteSongRegion: async (regionId) => {
+        await deleteSongRegion(regionId);
+      },
+      splitSongRegion: async (regionId, splitSeconds) => {
+        await splitSongRegion(regionId, splitSeconds);
+      },
+      updateSectionMarker: async (sectionId, name, startSeconds) => {
+        await updateSectionMarker(sectionId, name, startSeconds);
+      },
+      deleteSectionMarker: async (sectionId) => {
+        await deleteSectionMarker(sectionId);
       },
     };
 

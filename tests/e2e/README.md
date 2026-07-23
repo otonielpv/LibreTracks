@@ -103,8 +103,21 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     scene, each verified against `song.automationTrack` / `automationCues` /
     `mixScenes`. A user pad assigned the tone fixture is enabled and its
     ~440 Hz output confirmed by FFT (pads sound without play), and the voice
-    guide toggle round-trips `settings.voiceGuideEnabled`. See "Session flows"
-    below.
+    guide toggle round-trips `settings.voiceGuideEnabled`. Finally, a
+    self-contained timeline-edit block (disposable tracks/clips/regions placed
+    far past the canonical content and torn down afterwards) covers the
+    edit-operation edge cases the happy path doesn't reach: moving a single
+    clip, clamping a clip dragged before t=0, a clip dragged past its region's
+    end reshaping the region to cover it, moving multiple clips in one batch and
+    reassigning a clip to another track, extending a region's end, the backend
+    REFUSING to shrink a region so a clip would dangle outside it, the
+    "regions can't cross" invariant (a leftward move that would overlap the
+    preceding region is rejected; a rightward move cascade-pushes the following
+    region), trimming a clip window inside its source while a window past the
+    decoded source is rejected, splitting a region and deleting the tail, and a
+    multi-selection clip delete. Each runs the SAME shared command a canvas
+    drag/resize gesture invokes and is asserted against the song model. See
+    "Session flows" below.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
@@ -140,6 +153,21 @@ exposes:
   normally need a downloaded pack; a user pad needs none). Pads are
   transport-decoupled, so the pad sounds without play — the pad flow FFTs the
   captured output to confirm it renders the ~440 Hz tone.
+- `createAudioTracksWithClips(requests)` / `createSongRegion(start, end)` /
+  `createSectionMarker(at)` / `deleteTracks(ids)` — fixture builders so an edit
+  flow can stand up its own disposable tracks/clips/regions/markers and tear
+  them down without touching the canonical song. `createAudioTracksWithClips`
+  returns the new clip ids and `createSectionMarker` the new marker id.
+- `moveClip(id, seconds)` / `moveClipsBatch(moves)` /
+  `updateClipWindow(id, tl, src, dur)` / `deleteClips(ids)` /
+  `moveSongRegion(id, delta)` / `updateSongRegion(id, name, start, end)` /
+  `deleteSongRegion(id)` / `splitSongRegion(id, at)` /
+  `updateSectionMarker(id, name, at)` / `deleteSectionMarker(id)` — the SAME
+  shared commands a canvas drag or resize handle invokes. The canvas
+  hit-testing isn't piloted (WebDriver can't drive a `<canvas>`), but the
+  backend edit and its invariants are. Each resolves to void; a backend
+  rejection (a region collision, an out-of-source clip window) propagates so a
+  spec can assert the negative case with `expect(...).rejects`.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

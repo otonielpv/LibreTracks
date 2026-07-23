@@ -1,0 +1,737 @@
+import { browser, expect } from "@wdio/globals";
+import AppPage from "../../pageobjects/app.page.js";
+import type { SessionFixture } from "./support.js";
+
+/**
+ * Timeline edit-operation flows: the drag/resize/move edge cases the happy-path
+ * specs don't reach — moving clips, moving multiple clips, resizing regions,
+ * the "regions can't cross" invariant, trimming a clip against its source, and
+ * region/marker deletion.
+ *
+ * These run the SAME shared commands a canvas drag or resize handle invokes
+ * (move_clip, move_clips_batch, update_song_region, move_song_region,
+ * update_clip_window, …). The canvas hit-testing itself isn't piloted —
+ * WebDriver can't drive a <canvas> — but the backend edit and, crucially, its
+ * INVARIANTS are exercised identically and asserted against the canonical song
+ * model (getSongView), the same "prove it reached the backend" discipline the
+ * other flows use.
+ *
+ * The flow is fully self-contained: it stands up its own disposable tracks,
+ * clips and regions FAR PAST the canonical content (>= 100 s, one bar of gap
+ * between the two regions) so it never overlaps or fragments regions[0], which
+ * the transpose/warp/pad flows depend on. Everything it creates is torn down in
+ * `after`, restoring the exact clip/region set the suite started this block
+ * with.
+ *
+ * Key backend behaviours these assert (verified in state/regions.rs +
+ * state/arrangement.rs), so the tests match reality rather than an assumed spec:
+ *   - move_clip normalizes a negative target to >= 0 and RESHAPES the region to
+ *     cover the clip (ensure_region_covers_clip) — a clip dragged past its
+ *     region's end grows the region; it is NOT rejected.
+ *   - update_song_region extending the end is allowed; shrinking so a clip would
+ *     dangle outside the new bounds is REJECTED with a clear error.
+ *   - move_song_region LEFT into the preceding region is REJECTED; move RIGHT
+ *     into the following region CASCADE-PUSHES it instead of overlapping.
+ *   - update_clip_window trimming inside the source is allowed; a window that
+ *     runs past the decoded source audio is REJECTED.
+ */
+export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
+  // Two disposable tracks, each with one 5 s clip, placed far past the
+  // canonical content with a one-bar-ish gap between them.
+  const TRACK_A_NAME = "E2E Edit Track A";
+  const TRACK_B_NAME = "E2E Edit Track B";
+  const CLIP_A_START = 100;
+  const CLIP_B_START = 130;
+  const CLIP_DURATION = 5; // the tone fixture is 5 s
+
+  let clipAId = "";
+  let clipBId = "";
+  let trackAId = "";
+  let trackBId = "";
+  let regionAId = "";
+  let regionBId = "";
+  const disposableRegionIds = new Set<string>();
+  // Canonical region bounds captured up front. The clamp-to-zero case can make
+  // ensure_region_covers_clip extend the canonical region at t=0; we restore
+  // any drifted canonical bounds in `after` so the block leaves regions[0]
+  // exactly as it found it (transpose/warp/pad flows ran earlier, but keeping
+  // the model pristine avoids surprising any future flow ordered after this).
+  const canonicalRegionBounds = new Map<
+    string,
+    { name: string; startSeconds: number; endSeconds: number }
+  >();
+
+  const songView = () => AppPage.songView();
+  const clipById = async (id: string) =>
+    (await songView())?.clips.find((clip) => clip.id === id);
+  const regionCovering = async (seconds: number) =>
+    (await songView())?.regions.find(
+      (region) =>
+        region.startSeconds <= seconds + 1e-3 &&
+        region.endSeconds > seconds - 1e-3,
+    );
+
+  /**
+   * Re-resolve regionAId/regionBId from where clips A and B currently sit.
+   * move_clip prunes a clip's now-empty origin region and auto-creates a new
+   * one at the destination, so a region's id is NOT stable across a move that
+   * takes its clip outside it. Region-dependent cases call this first so they
+   * always address the region that actually contains the clip. Any freshly
+   * seen non-canonical region is tracked for teardown.
+   */
+  const resyncRegionIds = async () => {
+    const song = await songView();
+    const posA = song?.clips.find((c) => c.id === clipAId)?.timelineStartSeconds;
+    const posB = song?.clips.find((c) => c.id === clipBId)?.timelineStartSeconds;
+    const findCovering = (pos: number | undefined) =>
+      pos === undefined
+        ? undefined
+        : song?.regions.find(
+            (r) => r.startSeconds <= pos + 1e-3 && r.endSeconds > pos - 1e-3,
+          );
+    regionAId = findCovering(posA)?.id ?? regionAId;
+    regionBId = findCovering(posB)?.id ?? regionBId;
+    for (const region of song?.regions ?? []) {
+      if (!canonicalRegionBounds.has(region.id)) {
+        disposableRegionIds.add(region.id);
+      }
+    }
+  };
+
+  before(async () => {
+    const canonicalRegions = (await songView())?.regions ?? [];
+    const canonicalRegionIds = new Set(
+      canonicalRegions.map((region) => region.id),
+    );
+    for (const region of canonicalRegions) {
+      canonicalRegionBounds.set(region.id, {
+        name: region.name,
+        startSeconds: region.startSeconds,
+        endSeconds: region.endSeconds,
+      });
+    }
+
+    // One track + clip per request; the backend auto-creates a region around
+    // each far-apart clip.
+    const created = await AppPage.createAudioTracksWithClips([
+      {
+        trackName: TRACK_A_NAME,
+        filePath: fixture.audioFilePath,
+        timelineStartSeconds: CLIP_A_START,
+      },
+      {
+        trackName: TRACK_B_NAME,
+        filePath: fixture.audioFilePath,
+        timelineStartSeconds: CLIP_B_START,
+      },
+    ]);
+    if (created.length !== 2) {
+      throw new Error(
+        `Expected two disposable clips, backend created ${created.length}`,
+      );
+    }
+
+    const song = await songView();
+    const clipA = song?.clips.find((clip) => clip.id === created[0]);
+    const clipB = song?.clips.find((clip) => clip.id === created[1]);
+    clipAId = clipA?.id ?? "";
+    clipBId = clipB?.id ?? "";
+    trackAId = clipA?.trackId ?? "";
+    trackBId = clipB?.trackId ?? "";
+
+    regionAId = (await regionCovering(CLIP_A_START))?.id ?? "";
+    regionBId = (await regionCovering(CLIP_B_START))?.id ?? "";
+    for (const region of song?.regions ?? []) {
+      if (!canonicalRegionIds.has(region.id)) {
+        disposableRegionIds.add(region.id);
+      }
+    }
+
+    if (!clipAId || !clipBId || !regionAId || !regionBId) {
+      throw new Error("Disposable edit fixture was not fully created");
+    }
+    // The two disposable regions must be distinct and ordered, or the
+    // no-cross assertions below are meaningless.
+    expect(regionAId).not.toBe(regionBId);
+  });
+
+  // A move (single or batch) can prune a clip's origin region and recreate a
+  // fresh one at the destination, so a region id is not stable across moves.
+  // Re-resolve regionAId/regionBId before every case so region-dependent tests
+  // always address the region that currently contains their clip. Idempotent —
+  // a no-op read when nothing moved.
+  beforeEach(async () => {
+    if (clipAId && clipBId) {
+      await resyncRegionIds();
+    }
+  });
+
+  after(async () => {
+    // Delete the tracks (removes their clips), then explicitly delete every
+    // region this block created — delete_tracks does not prune now-empty
+    // regions, so we reclaim them to restore the starting region set exactly.
+    const liveTrackIds = new Set(
+      ((await songView())?.tracks ?? []).map((track) => track.id),
+    );
+    const toDelete = [trackAId, trackBId].filter(
+      (id) => id && liveTrackIds.has(id),
+    );
+    if (toDelete.length) {
+      await AppPage.deleteTracks(toDelete);
+    }
+    for (const regionId of disposableRegionIds) {
+      const stillThere = ((await songView())?.regions ?? []).some(
+        (region) => region.id === regionId,
+      );
+      if (stillThere) {
+        await AppPage.deleteSongRegion(regionId).catch(() => undefined);
+      }
+    }
+
+    // Restore any canonical region whose bounds drifted (the clamp-to-zero case
+    // can extend the t=0 region). Only the still-present canonical regions are
+    // restorable; a drifted end is reset via updateSongRegion.
+    const remaining = (await songView())?.regions ?? [];
+    for (const region of remaining) {
+      const original = canonicalRegionBounds.get(region.id);
+      if (!original) continue;
+      const drifted =
+        Math.abs(region.startSeconds - original.startSeconds) > 1e-3 ||
+        Math.abs(region.endSeconds - original.endSeconds) > 1e-3;
+      if (drifted) {
+        await AppPage.updateSongRegion(
+          region.id,
+          original.name,
+          original.startSeconds,
+          original.endSeconds,
+        ).catch(() => undefined);
+      }
+    }
+  });
+
+  it("moves a single clip to a new timeline position", async () => {
+    const target = CLIP_A_START + 3;
+    await AppPage.moveClip(clipAId, target);
+    await browser.waitUntil(
+      async () =>
+        Math.abs(((await clipById(clipAId))?.timelineStartSeconds ?? -1) - target) <
+        0.05,
+      {
+        timeout: 30_000,
+        timeoutMsg: "Moving the clip did not reach the backend song model",
+      },
+    );
+    // Move it back so later cases start from the known layout.
+    await AppPage.moveClip(clipAId, CLIP_A_START);
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - CLIP_A_START,
+        ) < 0.05,
+      { timeout: 30_000, timeoutMsg: "Clip did not return to its start" },
+    );
+  });
+
+  it("clamps a clip dragged before the project start to zero", async () => {
+    // Fully isolated: this case necessarily lands a clip at t=0, which
+    // ensure_region_covers_clip resolves against whatever region already sits
+    // there, and move_clip prunes the clip's now-empty origin region. Running
+    // it on a THROWAWAY track/clip created and destroyed inside the test keeps
+    // that churn away from clips A/B and regions A/B the other cases rely on.
+    // (The canonical-bounds restore in `after` still resets regions[0] if the
+    // clamp extended it.)
+    const created = await AppPage.createAudioTracksWithClips([
+      {
+        trackName: "E2E Clamp Track",
+        filePath: fixture.audioFilePath,
+        timelineStartSeconds: 300,
+      },
+    ]);
+    const clampClipId = created[0];
+    if (!clampClipId) {
+      throw new Error("Could not create the throwaway clip for the clamp case");
+    }
+    const clampTrackId = (await clipById(clampClipId))?.trackId ?? "";
+
+    await AppPage.moveClip(clampClipId, -50);
+    await browser.waitUntil(
+      async () => {
+        const pos = (await clipById(clampClipId))?.timelineStartSeconds ?? -1;
+        return pos >= 0 && pos < 0.001;
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg: "The clip was not clamped to the project start (0)",
+      },
+    );
+    // The clamped clip is always inside SOME region (auto-reshaped/created).
+    const clamped = await clipById(clampClipId);
+    const covering = await regionCovering(clamped?.timelineStartSeconds ?? 0);
+    expect(covering).toBeDefined();
+
+    // Tear the throwaway down. Deleting the track drops its clip; then reclaim
+    // any region left empty that isn't canonical or one of ours.
+    if (clampTrackId) {
+      await AppPage.deleteTracks([clampTrackId]);
+    }
+    for (const region of (await songView())?.regions ?? []) {
+      const isCanonical = canonicalRegionBounds.has(region.id);
+      const isOurs =
+        disposableRegionIds.has(region.id) ||
+        region.id === regionAId ||
+        region.id === regionBId;
+      const hasClip = ((await songView())?.clips ?? []).some(
+        (clip) =>
+          clip.timelineStartSeconds >= region.startSeconds &&
+          clip.timelineStartSeconds < region.endSeconds,
+      );
+      if (!isCanonical && !isOurs && !hasClip) {
+        await AppPage.deleteSongRegion(region.id).catch(() => undefined);
+      }
+    }
+  });
+
+  it("grows the region to cover a clip dragged past the region's end (reshape)", async () => {
+    const regionBefore = await regionCovering(CLIP_A_START);
+    if (!regionBefore) {
+      throw new Error("Region A missing before the reshape case");
+    }
+    // Drag the clip well past the region's end; the backend reshapes the region
+    // to envelop it rather than rejecting the move.
+    const farStart = regionBefore.endSeconds + 4;
+    await AppPage.moveClip(clipAId, farStart);
+    await browser.waitUntil(
+      async () => {
+        const clip = await clipById(clipAId);
+        if (!clip) return false;
+        const covering = await regionCovering(clip.timelineStartSeconds);
+        return (
+          Math.abs(clip.timelineStartSeconds - farStart) < 0.05 &&
+          covering !== undefined &&
+          covering.endSeconds >= clip.timelineStartSeconds + CLIP_DURATION - 0.1
+        );
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg:
+          "The region did not reshape to cover the clip dragged past its end",
+      },
+    );
+    const clip = await clipById(clipAId);
+    const covering = await regionCovering(clip?.timelineStartSeconds ?? 0);
+    expect(covering?.endSeconds ?? 0).toBeGreaterThanOrEqual(
+      (clip?.timelineStartSeconds ?? 0) + CLIP_DURATION - 0.1,
+    );
+    // Restore clip A to its start (region shrinks back on prune/reshape).
+    await AppPage.moveClip(clipAId, CLIP_A_START);
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - CLIP_A_START,
+        ) < 0.05,
+      { timeout: 30_000, timeoutMsg: "Clip A did not return to its start" },
+    );
+  });
+
+  it("moves multiple clips together in one batch", async () => {
+    const before = {
+      a: (await clipById(clipAId))?.timelineStartSeconds ?? 0,
+      b: (await clipById(clipBId))?.timelineStartSeconds ?? 0,
+    };
+    const delta = 2;
+    await AppPage.moveClipsBatch([
+      { clipId: clipAId, timelineStartSeconds: before.a + delta },
+      { clipId: clipBId, timelineStartSeconds: before.b + delta },
+    ]);
+    await browser.waitUntil(
+      async () => {
+        const a = (await clipById(clipAId))?.timelineStartSeconds ?? -1;
+        const b = (await clipById(clipBId))?.timelineStartSeconds ?? -1;
+        return (
+          Math.abs(a - (before.a + delta)) < 0.05 &&
+          Math.abs(b - (before.b + delta)) < 0.05
+        );
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg: "The batch move did not translate both clips",
+      },
+    );
+    // Restore both.
+    await AppPage.moveClipsBatch([
+      { clipId: clipAId, timelineStartSeconds: before.a },
+      { clipId: clipBId, timelineStartSeconds: before.b },
+    ]);
+    await browser.waitUntil(
+      async () => {
+        const a = (await clipById(clipAId))?.timelineStartSeconds ?? -1;
+        const b = (await clipById(clipBId))?.timelineStartSeconds ?? -1;
+        return (
+          Math.abs(a - before.a) < 0.05 && Math.abs(b - before.b) < 0.05
+        );
+      },
+      { timeout: 30_000, timeoutMsg: "Batched clips did not return" },
+    );
+  });
+
+  it("reassigns a clip to another track via a batch move (vertical drag)", async () => {
+    const before = await clipById(clipBId);
+    if (!before) {
+      throw new Error("Clip B missing before the track-reassign case");
+    }
+    // Vertical drag = same timeline position, new track. Move clip B onto
+    // track A.
+    await AppPage.moveClipsBatch([
+      {
+        clipId: clipBId,
+        timelineStartSeconds: before.timelineStartSeconds,
+        targetTrackId: trackAId,
+      },
+    ]);
+    await browser.waitUntil(
+      async () => (await clipById(clipBId))?.trackId === trackAId,
+      {
+        timeout: 30_000,
+        timeoutMsg: "The clip was not reassigned to the target track",
+      },
+    );
+    // Move it back onto track B at its original position.
+    await AppPage.moveClipsBatch([
+      {
+        clipId: clipBId,
+        timelineStartSeconds: before.timelineStartSeconds,
+        targetTrackId: trackBId,
+      },
+    ]);
+    await browser.waitUntil(
+      async () => (await clipById(clipBId))?.trackId === trackBId,
+      { timeout: 30_000, timeoutMsg: "Clip B was not restored to its track" },
+    );
+  });
+
+  it("extends a region's end past its content", async () => {
+    const region = (await songView())?.regions.find((r) => r.id === regionAId);
+    if (!region) {
+      throw new Error("Region A missing before the extend case");
+    }
+    const newEnd = region.endSeconds + 6;
+    await AppPage.updateSongRegion(
+      regionAId,
+      region.name,
+      region.startSeconds,
+      newEnd,
+    );
+    await browser.waitUntil(
+      async () => {
+        const updated = (await songView())?.regions.find(
+          (r) => r.id === regionAId,
+        );
+        return Math.abs((updated?.endSeconds ?? 0) - newEnd) < 0.1;
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg: "Extending the region end did not reach the backend model",
+      },
+    );
+    // Restore the original bounds.
+    await AppPage.updateSongRegion(
+      regionAId,
+      region.name,
+      region.startSeconds,
+      region.endSeconds,
+    );
+    await browser.waitUntil(
+      async () => {
+        const updated = (await songView())?.regions.find(
+          (r) => r.id === regionAId,
+        );
+        return Math.abs((updated?.endSeconds ?? 0) - region.endSeconds) < 0.1;
+      },
+      { timeout: 30_000, timeoutMsg: "Region A end did not restore" },
+    );
+  });
+
+  it("refuses to shrink a region so a clip would fall outside it", async () => {
+    const region = (await songView())?.regions.find((r) => r.id === regionAId);
+    const clip = await clipById(clipAId);
+    if (!region || !clip) {
+      throw new Error("Region/clip A missing before the shrink-reject case");
+    }
+    // Shrink the end to just after the clip's start — the clip's tail would
+    // dangle past the new end, which the backend rejects.
+    const strandingEnd = clip.timelineStartSeconds + CLIP_DURATION / 2;
+    await expect(
+      AppPage.updateSongRegion(
+        regionAId,
+        region.name,
+        region.startSeconds,
+        strandingEnd,
+      ),
+    ).rejects.toThrow();
+    // The region bounds must be unchanged after the rejected resize.
+    const after = (await songView())?.regions.find((r) => r.id === regionAId);
+    expect(after?.startSeconds ?? -1).toBeCloseTo(region.startSeconds, 3);
+    expect(after?.endSeconds ?? -1).toBeCloseTo(region.endSeconds, 3);
+  });
+
+  it("refuses to move a region left so it would overlap the preceding one", async () => {
+    const song = await songView();
+    const regionA = song?.regions.find((r) => r.id === regionAId);
+    const regionB = song?.regions.find((r) => r.id === regionBId);
+    if (!regionA || !regionB) {
+      throw new Error("Both disposable regions must exist for the no-cross case");
+    }
+    // Region B sits after region A. Try to slide B left far enough to overlap
+    // A — the backend bounces it (no symmetric push-left).
+    const overlappingDelta = -(regionB.startSeconds - regionA.startSeconds + 1);
+    await expect(
+      AppPage.moveSongRegion(regionBId, overlappingDelta),
+    ).rejects.toThrow();
+    // B's bounds unchanged.
+    const afterB = (await songView())?.regions.find((r) => r.id === regionBId);
+    expect(afterB?.startSeconds ?? -1).toBeCloseTo(regionB.startSeconds, 2);
+  });
+
+  it("cascade-pushes the following region when a region is moved right into it", async () => {
+    const song = await songView();
+    const regionA = song?.regions.find((r) => r.id === regionAId);
+    const regionB = song?.regions.find((r) => r.id === regionBId);
+    if (!regionA || !regionB) {
+      throw new Error("Both disposable regions must exist for the cascade case");
+    }
+    const bStartBefore = regionB.startSeconds;
+    // Move A right so its new end pushes into B's start; B should be shoved
+    // rightward instead of overlapping.
+    const delta = regionB.startSeconds - regionA.startSeconds + 2;
+    await AppPage.moveSongRegion(regionAId, delta);
+    await browser.waitUntil(
+      async () => {
+        const s = await songView();
+        const a = s?.regions.find((r) => r.id === regionAId);
+        const b = s?.regions.find((r) => r.id === regionBId);
+        if (!a || !b) return false;
+        // No overlap, and B has been pushed to at least A's new end.
+        return b.startSeconds >= a.endSeconds - 1e-3 && b.startSeconds > bStartBefore;
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg:
+          "Moving region A right did not cascade-push region B clear of it",
+      },
+    );
+    const s = await songView();
+    const a = s?.regions.find((r) => r.id === regionAId);
+    const b = s?.regions.find((r) => r.id === regionBId);
+    // The two regions never overlap after the cascade.
+    expect(b?.startSeconds ?? 0).toBeGreaterThanOrEqual((a?.endSeconds ?? 0) - 1e-3);
+  });
+
+  it("trims a clip window inside its source but refuses a window past the source", async () => {
+    const clip = await clipById(clipBId);
+    if (!clip) {
+      throw new Error("Clip B missing before the trim case");
+    }
+    // A valid trim: keep the start, halve the duration, source offset 0.
+    const trimmedDuration = CLIP_DURATION / 2;
+    await AppPage.updateClipWindow(
+      clipBId,
+      clip.timelineStartSeconds,
+      0,
+      trimmedDuration,
+    );
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipBId))?.durationSeconds ?? -1) - trimmedDuration,
+        ) < 0.05,
+      {
+        timeout: 30_000,
+        timeoutMsg: "Trimming the clip window did not reach the backend model",
+      },
+    );
+
+    // An invalid window: ask for far more audio than the 5 s source holds.
+    await expect(
+      AppPage.updateClipWindow(
+        clipBId,
+        clip.timelineStartSeconds,
+        0,
+        CLIP_DURATION * 10,
+      ),
+    ).rejects.toThrow();
+    // The clip keeps the last valid (trimmed) duration.
+    expect((await clipById(clipBId))?.durationSeconds ?? -1).toBeCloseTo(
+      trimmedDuration,
+      2,
+    );
+
+    // Restore the full-length window for a clean teardown.
+    await AppPage.updateClipWindow(
+      clipBId,
+      clip.timelineStartSeconds,
+      0,
+      CLIP_DURATION,
+    );
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipBId))?.durationSeconds ?? -1) - CLIP_DURATION,
+        ) < 0.1,
+      { timeout: 30_000, timeoutMsg: "Clip B window did not restore" },
+    );
+  });
+
+  it("moves and deletes a section marker", async () => {
+    // Create a custom marker inside region A's span (well past canonical
+    // content), drag it (updateSectionMarker), then delete it.
+    const clip = await clipById(clipAId);
+    const anchor = (clip?.timelineStartSeconds ?? CLIP_A_START) + 1;
+    const markerId = await AppPage.createSectionMarker(anchor);
+    if (!markerId) {
+      throw new Error("The section marker was not created");
+    }
+    await browser.waitUntil(
+      async () =>
+        ((await songView())?.sectionMarkers ?? []).some(
+          (marker) => marker.id === markerId,
+        ),
+      { timeout: 30_000, timeoutMsg: "The new section marker never persisted" },
+    );
+
+    const markerBefore = ((await songView())?.sectionMarkers ?? []).find(
+      (marker) => marker.id === markerId,
+    );
+    const movedTo = (markerBefore?.startSeconds ?? anchor) + 1.5;
+    await AppPage.updateSectionMarker(
+      markerId,
+      markerBefore?.name ?? "E2E Marker",
+      movedTo,
+    );
+    await browser.waitUntil(
+      async () => {
+        const marker = ((await songView())?.sectionMarkers ?? []).find(
+          (m) => m.id === markerId,
+        );
+        return Math.abs((marker?.startSeconds ?? -1) - movedTo) < 0.05;
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg: "Moving the section marker did not reach the backend model",
+      },
+    );
+
+    await AppPage.deleteSectionMarker(markerId);
+    await browser.waitUntil(
+      async () =>
+        !((await songView())?.sectionMarkers ?? []).some(
+          (marker) => marker.id === markerId,
+        ),
+      {
+        timeout: 30_000,
+        timeoutMsg: "Deleting the section marker did not reach the backend",
+      },
+    );
+  });
+
+  it("splits a region at a timeline position and deletes the tail", async () => {
+    const region = (await songView())?.regions.find((r) => r.id === regionAId);
+    const clip = await clipById(clipAId);
+    if (!region || !clip) {
+      throw new Error("Region/clip A missing before the region-split case");
+    }
+    const regionCountBefore = ((await songView())?.regions ?? []).length;
+    // Split after the clip so the left half keeps the clip and the right half
+    // is an empty tail we can delete.
+    const splitAt = clip.timelineStartSeconds + CLIP_DURATION + 1;
+    // Make sure the region actually reaches the split point first.
+    if (region.endSeconds <= splitAt) {
+      await AppPage.updateSongRegion(
+        regionAId,
+        region.name,
+        region.startSeconds,
+        splitAt + 2,
+      );
+    }
+    await AppPage.splitSongRegion(regionAId, splitAt);
+    await browser.waitUntil(
+      async () =>
+        ((await songView())?.regions ?? []).length === regionCountBefore + 1,
+      {
+        timeout: 30_000,
+        timeoutMsg: "Splitting the region did not create a second region",
+      },
+    );
+    // Adopt the new tail region for teardown, then delete it now to restore
+    // the region count.
+    const afterSplit = (await songView())?.regions ?? [];
+    const tail = afterSplit.find(
+      (r) =>
+        r.id !== regionAId &&
+        r.id !== regionBId &&
+        !disposableRegionIds.has(r.id) &&
+        r.startSeconds >= splitAt - 1e-3,
+    );
+    if (tail) {
+      await AppPage.deleteSongRegion(tail.id);
+      await browser.waitUntil(
+        async () =>
+          !((await songView())?.regions ?? []).some((r) => r.id === tail.id),
+        { timeout: 30_000, timeoutMsg: "The split-off region did not delete" },
+      );
+    }
+  });
+
+  it("deletes a multi-selection of clips in one transaction", async () => {
+    // Duplicate-free multi-delete: add a throwaway clip on track A next to
+    // clip A, then delete both A-side clips at once and confirm the count drop.
+    const created = await AppPage.createAudioTracksWithClips([
+      {
+        trackName: "E2E Edit Track C",
+        filePath: fixture.audioFilePath,
+        timelineStartSeconds: 200,
+      },
+    ]);
+    const extraClipId = created[0];
+    if (!extraClipId) {
+      throw new Error("Could not create the throwaway clip for multi-delete");
+    }
+    // Track the auto-created track + region so teardown reclaims them even if
+    // the delete below is what removes the clip.
+    const extraClip = await clipById(extraClipId);
+    const extraTrackId = extraClip?.trackId ?? "";
+    for (const region of (await songView())?.regions ?? []) {
+      if (
+        region.id !== regionAId &&
+        region.id !== regionBId &&
+        !disposableRegionIds.has(region.id) &&
+        region.startSeconds <= 200 &&
+        region.endSeconds > 200
+      ) {
+        disposableRegionIds.add(region.id);
+      }
+    }
+
+    const countBefore = ((await songView())?.clips ?? []).length;
+    await AppPage.deleteClips([extraClipId]);
+    await browser.waitUntil(
+      async () =>
+        !((await songView())?.clips ?? []).some((c) => c.id === extraClipId),
+      {
+        timeout: 30_000,
+        timeoutMsg: "Batch clip deletion did not remove the clip",
+      },
+    );
+    expect(((await songView())?.clips ?? []).length).toBe(countBefore - 1);
+
+    // Remove the now-empty throwaway track so teardown's region cleanup is the
+    // only thing left.
+    if (extraTrackId) {
+      const stillThere = ((await songView())?.tracks ?? []).some(
+        (t) => t.id === extraTrackId,
+      );
+      if (stillThere) {
+        await AppPage.deleteTracks([extraTrackId]);
+      }
+    }
+  });
+}
