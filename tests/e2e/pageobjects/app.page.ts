@@ -1,8 +1,16 @@
 import { browser, $, $$ } from "@wdio/globals";
 
 export type E2ESongView = {
+  id: string;
+  title: string;
   durationSeconds: number;
-  tracks: Array<{ id: string; name: string; kind: string }>;
+  tracks: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    muted: boolean;
+    solo: boolean;
+  }>;
   clips: Array<{
     id: string;
     trackId: string;
@@ -13,7 +21,9 @@ export type E2ESongView = {
 
 export type E2ETransportSnapshot = {
   playbackState: string;
+  positionSeconds: number;
   projectRevision: number;
+  songFilePath: string | null;
 };
 
 export type E2ESettings = {
@@ -24,6 +34,11 @@ export type E2ETimelineView = {
   cameraX: number;
   zoomLevel: number;
 };
+
+export type E2ETrackMeters = Record<
+  string,
+  { leftPeak: number; rightPeak: number }
+>;
 
 /**
  * Page Object for the LibreTracks desktop shell. Kept deliberately thin: it
@@ -280,6 +295,39 @@ class AppPage {
   }
 
   /**
+   * Open a known `.ltsession` through the production project-load flow and
+   * wait for the expected persisted song identity to reach the backend.
+   */
+  async openSession(
+    songFile: string,
+    expectedSongId: string,
+    timeout = 60_000,
+  ) {
+    await browser.execute(
+      (path: string) =>
+        (
+          window as unknown as {
+            __ltE2E: { openSessionFromPath: (songFile: string) => void };
+          }
+        ).__ltE2E.openSessionFromPath(path),
+      songFile,
+    );
+
+    await browser.waitUntil(
+      async () => (await this.songView())?.id === expectedSongId,
+      {
+        timeout,
+        timeoutMsg: `Session ${expectedSongId} never finished reopening`,
+      },
+    );
+    await (await $(".busy-overlay")).waitForExist({
+      reverse: true,
+      timeout,
+      timeoutMsg: "Project load overlay remained visible after reopening",
+    });
+  }
+
+  /**
    * Import audio through the same library-only pipeline as the visible button,
    * supplying paths directly because WebDriver cannot operate rfd's native
    * file picker.
@@ -345,6 +393,67 @@ class AppPage {
             __ltE2E: { getTimelineView: () => E2ETimelineView };
           }
         ).__ltE2E.getTimelineView(),
+    );
+  }
+
+  /** Read the latest per-track post-mix peaks emitted by the native engine. */
+  async trackMeters(): Promise<E2ETrackMeters> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: { getTrackMeters: () => E2ETrackMeters };
+          }
+        ).__ltE2E.getTrackMeters(),
+    );
+  }
+
+  /** Require measurable native post-mix signal from one track. */
+  async waitForTrackSignal(
+    trackId: string,
+    minimumPeak = 0.01,
+    timeout = 30_000,
+  ) {
+    await browser.waitUntil(
+      async () => {
+        const meter = (await this.trackMeters())[trackId];
+        return (
+          meter !== undefined &&
+          Math.max(meter.leftPeak, meter.rightPeak) > minimumPeak
+        );
+      },
+      {
+        timeout,
+        timeoutMsg: `Track ${trackId} never emitted native post-mix signal`,
+      },
+    );
+  }
+
+  /** Require several native meter samples at zero to reject transient silence. */
+  async waitForTrackSilence(
+    trackId: string,
+    consecutiveSamples = 3,
+    timeout = 30_000,
+  ) {
+    let silentSamples = 0;
+    await browser.waitUntil(
+      async () => {
+        const meter = (await this.trackMeters())[trackId];
+        if (
+          meter !== undefined &&
+          Math.max(meter.leftPeak, meter.rightPeak) <= 0.000_001
+        ) {
+          silentSamples += 1;
+        } else {
+          silentSamples = 0;
+        }
+        return silentSamples >= consecutiveSamples;
+      },
+      {
+        timeout,
+        interval: 100,
+        timeoutMsg: `Track ${trackId} did not reach sustained post-mix silence`,
+      },
     );
   }
 

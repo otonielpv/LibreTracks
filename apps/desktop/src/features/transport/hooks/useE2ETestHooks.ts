@@ -9,6 +9,7 @@ import {
   getSongView,
   getTransportSnapshot,
 } from "../desktopApi";
+import { useTransportStore, type MeterDictionary } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 
 /**
@@ -38,6 +39,7 @@ export interface E2ETestHooks {
   getTransportSnapshot: () => Promise<TransportSnapshot>;
   getSettings: () => Promise<AppSettings>;
   getTimelineView: () => { cameraX: number; zoomLevel: number };
+  getTrackMeters: () => MeterDictionary;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -70,6 +72,7 @@ export function useE2ETestHooks(
         const { cameraX, zoomLevel } = useTimelineUIStore.getState();
         return { cameraX, zoomLevel };
       },
+      getTrackMeters: () => useTransportStore.getState().meters,
     };
 
     return () => {

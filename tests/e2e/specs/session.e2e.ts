@@ -3,6 +3,7 @@ import {
   mkdtempSync,
   rmSync,
   existsSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -54,6 +55,7 @@ function writeToneWav(filePath: string, durationSeconds = 5) {
 describe("Session creation", () => {
   let sessionParentDir: string;
   let audioFilePath: string;
+  let sessionFilePath: string;
   let initialMetronomeEnabled: boolean | null = null;
 
   before(async () => {
@@ -65,6 +67,11 @@ describe("Session creation", () => {
     audioFilePath = path.join(sessionParentDir, AUDIO_FILE_NAME);
     writeToneWav(audioFilePath);
     await AppPage.createSession("E2E Session", sessionParentDir);
+    const createdSessionPath = (await AppPage.transportSnapshot()).songFilePath;
+    if (!createdSessionPath) {
+      throw new Error("The engine did not report the created session path");
+    }
+    sessionFilePath = createdSessionPath;
     initialMetronomeEnabled = (await AppPage.settings()).metronomeEnabled;
   });
 
@@ -225,6 +232,145 @@ describe("Session creation", () => {
       timeout: 30_000,
       timeoutMsg: "Deleting the clip did not update the backend song model",
     });
+  });
+
+  it("mutes the real post-mix track signal in the native engine", async () => {
+    const songBefore = await AppPage.songView();
+    const track = songBefore?.tracks.find(
+      (candidate) => candidate.name === "E2E Audio Track",
+    );
+    if (!track) {
+      throw new Error("E2E Audio Track is missing before the audio-meter flow");
+    }
+
+    const asset = await AppPage.libraryAsset(AUDIO_FILE_NAME);
+    const lane = await AppPage.trackLane(track.id);
+    await asset.dragAndDrop(lane);
+    await browser.waitUntil(
+      async () => (await AppPage.songView())?.clips.length === 1,
+      {
+        timeout: 60_000,
+        timeoutMsg: "The persisted clip was never created",
+      },
+    );
+
+    const songWithClip = await AppPage.songView();
+    const clip = songWithClip?.clips[0];
+    if (!clip) {
+      throw new Error("The audio clip disappeared before playback");
+    }
+
+    const timelineView = await AppPage.timelineView();
+    const ruler = await AppPage.timelineRuler;
+    const rulerSize = await ruler.getSize();
+    const pixelsPerSecond = timelineView.zoomLevel * 18;
+    const seekSeconds =
+      clip.timelineStartSeconds + Math.min(clip.durationSeconds / 2, 0.5);
+    const seekFromLeft =
+      seekSeconds * pixelsPerSecond - timelineView.cameraX;
+    await ruler.click({
+      x: Math.round(seekFromLeft - rulerSize.width / 2),
+      y: 0,
+    });
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          (await AppPage.transportSnapshot()).positionSeconds - seekSeconds,
+        ) < 0.2,
+      {
+        timeout: 30_000,
+        timeoutMsg: "Timeline seek did not reach the imported audio clip",
+      },
+    );
+
+    await (await AppPage.playButton).click();
+    await AppPage.waitForTrackSignal(track.id);
+
+    const trackHeader = await $(
+      `.lt-track-header-row[data-track-id="${track.id}"]`,
+    );
+    const muteButton = await trackHeader.$("button=M");
+    await muteButton.waitForClickable();
+    await muteButton.click();
+    await browser.waitUntil(
+      async () =>
+        (await AppPage.songView())?.tracks.find(
+          (candidate) => candidate.id === track.id,
+        )?.muted === true,
+      {
+        timeout: 30_000,
+        timeoutMsg: "The mute edit never reached the backend song model",
+      },
+    );
+
+    await AppPage.waitForTrackSilence(track.id);
+
+    await (await AppPage.stopButton).click();
+    await browser.waitUntil(
+      async () =>
+        (await AppPage.transportSnapshot()).playbackState === "stopped",
+      { timeoutMsg: "The engine did not stop after the audio-meter flow" },
+    );
+  });
+
+  it("persists track and clip edits when switching away and reopening", async () => {
+    const originalSong = await AppPage.songView();
+    const track = originalSong?.tracks.find(
+      (candidate) => candidate.name === "E2E Audio Track",
+    );
+    if (!originalSong || !track) {
+      throw new Error("Original E2E session is missing its audio track");
+    }
+    expect(track.muted).toBe(true);
+    expect(originalSong.clips).toHaveLength(1);
+
+    await browser.keys(["Control", "s"]);
+    await browser.waitUntil(
+      async () => {
+        if (!existsSync(sessionFilePath)) {
+          return false;
+        }
+        const persisted = JSON.parse(readFileSync(sessionFilePath, "utf8")) as {
+          tracks?: Array<{ id: string; muted: boolean }>;
+          clips?: Array<{ trackId: string }>;
+        };
+        return (
+          persisted.tracks?.some(
+            (candidate) => candidate.id === track.id && candidate.muted,
+          ) === true &&
+          persisted.clips?.some(
+            (candidate) => candidate.trackId === track.id,
+          ) === true
+        );
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg: "Ctrl+S did not persist the track and clip edits",
+      },
+    );
+
+    await AppPage.createSession("E2E Scratch", sessionParentDir);
+    await browser.waitUntil(
+      async () => {
+        const song = await AppPage.songView();
+        return song !== null && song.id !== originalSong.id;
+      },
+      {
+        timeout: 60_000,
+        timeoutMsg: "The scratch session never replaced the original session",
+      },
+    );
+    expect((await AppPage.songView())?.tracks.length).toBe(0);
+
+    await AppPage.openSession(sessionFilePath, originalSong.id);
+    const reopenedSong = await AppPage.songView();
+    const reopenedTrack = reopenedSong?.tracks.find(
+      (candidate) => candidate.id === track.id,
+    );
+    expect(reopenedTrack?.name).toBe("E2E Audio Track");
+    expect(reopenedTrack?.muted).toBe(true);
+    expect(reopenedSong?.clips).toHaveLength(1);
+    expect(reopenedSong?.clips[0]?.trackId).toBe(track.id);
   });
 
   it("round-trips transport controls and the metronome toggle to the engine", async () => {

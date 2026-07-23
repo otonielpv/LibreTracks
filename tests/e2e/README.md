@@ -78,8 +78,10 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     it shows its empty-state note.
   - `session.e2e.ts` — creates a session and covers the with-session flows:
     timeline mount, track creation, WAV import into the enabled library,
-    library-to-timeline placement and clip deletion, plus transport and
-    metronome round trips to the real backend/engine. See "Session flows" below.
+    library-to-timeline placement and clip deletion, mute verified against the
+    native post-mix meter, explicit save plus switch/reopen persistence, and
+    transport/metronome round trips to the real backend/engine. See "Session
+    flows" below.
 
 ## Session flows (window.__ltE2E)
 
@@ -97,6 +99,8 @@ exposes:
 - `getSongView()`, `getTransportSnapshot()`, `getSettings()` and
   `getTimelineView()` — read-only backend observations used to prove commands
   completed beyond the DOM.
+- `getTrackMeters()` — the latest native post-mix peaks per track, used to
+  assert that audio-affecting actions change the rendered signal.
 
 The mutating calls use the **same frontend handlers a user click invokes**;
 the read-only calls only observe the resulting backend state. The flow
