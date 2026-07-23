@@ -3891,9 +3891,6 @@ export function TransportPanelContent() {
     setSessionExportUiState,
   });
 
-  // E2E-only automation seam (window.__ltE2E under WebDriver); see useE2ETestHooks.
-  useE2ETestHooks(handleCreateSongNamed, handleOpenProjectFromPath);
-
   const {
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
@@ -6540,12 +6537,16 @@ export function TransportPanelContent() {
     stopInternalLibraryPointerDragListeners,
     startInternalLibraryPointerDrag,
     handleDroppedSongPackagePath,
+    handleImportLibraryFromPaths,
     handleImportLibraryFromDialog,
     handleExternalTimelineDrop,
     handleNativeFileDragOver,
     handleNativeFileDrop,
     handleDomExternalDropPreviewChange,
   } = libraryDragDrop;
+
+  // E2E-only seam under WebDriver; explicit paths skip only the native picker.
+  useE2ETestHooks(handleCreateSongNamed, handleOpenProjectFromPath, handleImportLibraryFromPaths);
 
   // Keep the native-drop listener's handler refs pointed at the latest
   // destructured handlers (they're created just above; the refs were seeded

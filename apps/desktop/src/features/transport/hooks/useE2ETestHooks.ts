@@ -1,4 +1,15 @@
 import { useEffect } from "react";
+import type {
+  AppSettings,
+  SongView,
+  TransportSnapshot,
+} from "@libretracks/shared/models";
+import {
+  getSettings,
+  getSongView,
+  getTransportSnapshot,
+} from "../desktopApi";
+import { useTimelineUIStore } from "../uiStore";
 
 /**
  * Exposes a tiny, stable automation surface on `window.__ltE2E` — but ONLY when
@@ -20,6 +31,13 @@ export interface E2ETestHooks {
   createSessionNamed: (name: string, parentDir?: string) => void;
   /** Open an existing session from its `.ltsession` file path. */
   openSessionFromPath: (songFile: string) => void;
+  /** Import native audio paths through the production library-only pipeline. */
+  importLibraryAudioFromPaths: (paths: string[]) => Promise<void>;
+  /** Read-only backend observations used to assert completed E2E round trips. */
+  getSongView: () => Promise<SongView | null>;
+  getTransportSnapshot: () => Promise<TransportSnapshot>;
+  getSettings: () => Promise<AppSettings>;
+  getTimelineView: () => { cameraX: number; zoomLevel: number };
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -27,10 +45,12 @@ type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
 /**
  * @param createSessionNamed create a session named `name` inside `parentDir`.
  * @param openSessionFromPath open an existing session from its `.ltsession` path.
+ * @param importLibraryAudioFromPaths import explicit paths without a native picker.
  */
 export function useE2ETestHooks(
   createSessionNamed: E2ETestHooks["createSessionNamed"],
   openSessionFromPath: E2ETestHooks["openSessionFromPath"],
+  importLibraryAudioFromPaths: E2ETestHooks["importLibraryAudioFromPaths"],
 ): void {
   useEffect(() => {
     // Gate on WebDriver so the seam never exists in a real user session.
@@ -39,10 +59,25 @@ export function useE2ETestHooks(
     }
 
     const target = window as E2EWindow;
-    target.__ltE2E = { createSessionNamed, openSessionFromPath };
+    target.__ltE2E = {
+      createSessionNamed,
+      openSessionFromPath,
+      importLibraryAudioFromPaths,
+      getSongView: () => getSongView({ includeWaveforms: false }),
+      getTransportSnapshot,
+      getSettings,
+      getTimelineView: () => {
+        const { cameraX, zoomLevel } = useTimelineUIStore.getState();
+        return { cameraX, zoomLevel };
+      },
+    };
 
     return () => {
       delete target.__ltE2E;
     };
-  }, [createSessionNamed, openSessionFromPath]);
+  }, [
+    createSessionNamed,
+    importLibraryAudioFromPaths,
+    openSessionFromPath,
+  ]);
 }

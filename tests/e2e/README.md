@@ -76,10 +76,10 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
   - `library.e2e.ts` — the Library panel renders its header, its import and
     create-folder actions are disabled with no session (canImport is false), and
     it shows its empty-state note.
-  - `session.e2e.ts` — creates a session and asserts the with-session state:
-    the landing unmounts, the timeline shell mounts, transport controls become
-    enabled, and the session folder is written to disk. See "Session flows"
-    below.
+  - `session.e2e.ts` — creates a session and covers the with-session flows:
+    timeline mount, track creation, WAV import into the enabled library,
+    library-to-timeline placement and clip deletion, plus transport and
+    metronome round trips to the real backend/engine. See "Session flows" below.
 
 ## Session flows (window.__ltE2E)
 
@@ -88,12 +88,18 @@ that WebDriver cannot pilot. To drive session flows without it, the app exposes
 a tiny automation seam on `window.__ltE2E` — but **only** under WebDriver
 (`navigator.webdriver === true`), so it never exists in a real user session. It
 is wired by `apps/desktop/src/features/transport/hooks/useE2ETestHooks.ts` and
-lists two calls:
+exposes:
 
 - `createSessionNamed(name, parentDir)` — create a session in a real folder.
 - `openSessionFromPath(songFile)` — open an existing `.ltsession`.
+- `importLibraryAudioFromPaths(paths)` — bypass only the native audio picker,
+  then run the same placeholder/import/refresh pipeline as "Importar audio".
+- `getSongView()`, `getTransportSnapshot()`, `getSettings()` and
+  `getTimelineView()` — read-only backend observations used to prove commands
+  completed beyond the DOM.
 
-These are the **same frontend handlers a user click invokes**, so the flow
+The mutating calls use the **same frontend handlers a user click invokes**;
+the read-only calls only observe the resulting backend state. The flow
 (invoke → `project:load-complete` event → snapshot applied to React state) runs
 exactly as in production. `session.e2e.ts` creates its session inside a temp
 folder it owns and deletes afterwards, so the app's data directory and the

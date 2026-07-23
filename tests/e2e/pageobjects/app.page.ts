@@ -1,5 +1,30 @@
 import { browser, $, $$ } from "@wdio/globals";
 
+export type E2ESongView = {
+  durationSeconds: number;
+  tracks: Array<{ id: string; name: string; kind: string }>;
+  clips: Array<{
+    id: string;
+    trackId: string;
+    timelineStartSeconds: number;
+    durationSeconds: number;
+  }>;
+};
+
+export type E2ETransportSnapshot = {
+  playbackState: string;
+  projectRevision: number;
+};
+
+export type E2ESettings = {
+  metronomeEnabled: boolean;
+};
+
+export type E2ETimelineView = {
+  cameraX: number;
+  zoomLevel: number;
+};
+
 /**
  * Page Object for the LibreTracks desktop shell. Kept deliberately thin: it
  * exposes structural anchors that are stable regardless of session state (the
@@ -164,6 +189,11 @@ class AppPage {
     return $('button[aria-label="Detener"]');
   }
 
+  /** Transport pause button (aria-label "Pausar"). */
+  get pauseButton() {
+    return $('button[aria-label="Pausar"]');
+  }
+
   /** Metronome toggle (aria-label "Metronomo"). Round-trips to the engine. */
   get metronomeButton() {
     return $('button[aria-label="Metronomo"]');
@@ -179,6 +209,31 @@ class AppPage {
   /** The timeline shell — present only once a session is open. */
   get timelineShell() {
     return $(".lt-timeline-shell");
+  }
+
+  /** Empty area in the track-header pane; its context menu creates tracks. */
+  get trackHeadersList() {
+    return $(".lt-track-headers-list");
+  }
+
+  /** Track-header pane, including the empty area below the final track. */
+  get trackHeadersPane() {
+    return $(".lt-track-headers-pane");
+  }
+
+  /** Timeline ruler; a click performs a real backend seek. */
+  get timelineRuler() {
+    return $(".lt-ruler-track");
+  }
+
+  /** A rendered audio-track lane by the backend track id. */
+  trackLane(trackId: string) {
+    return $(`.lt-track-lane-row[data-track-id="${trackId}"] .lt-track-lane`);
+  }
+
+  /** A library asset row by its stable accessible filename. */
+  libraryAsset(fileName: string) {
+    return $(`.lt-library-asset[aria-label="${fileName}"]`);
   }
 
   /** The empty-state landing card — present only when NO session is open. */
@@ -222,6 +277,75 @@ class AppPage {
       timeout,
       timeoutMsg: "Timeline shell never appeared after creating a session",
     });
+  }
+
+  /**
+   * Import audio through the same library-only pipeline as the visible button,
+   * supplying paths directly because WebDriver cannot operate rfd's native
+   * file picker.
+   */
+  async importLibraryAudio(paths: string[]) {
+    await browser.execute(
+      async (sourcePaths: string[]) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              importLibraryAudioFromPaths: (paths: string[]) => Promise<void>;
+            };
+          }
+        ).__ltE2E.importLibraryAudioFromPaths(sourcePaths),
+      paths,
+    );
+  }
+
+  /** Read the canonical song model from the backend (no waveform payload). */
+  async songView(): Promise<E2ESongView | null> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: { getSongView: () => Promise<E2ESongView | null> };
+          }
+        ).__ltE2E.getSongView(),
+    );
+  }
+
+  /** Read the canonical transport snapshot returned by the engine bridge. */
+  async transportSnapshot(): Promise<E2ETransportSnapshot> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              getTransportSnapshot: () => Promise<E2ETransportSnapshot>;
+            };
+          }
+        ).__ltE2E.getTransportSnapshot(),
+    );
+  }
+
+  /** Read persisted backend settings after a realtime engine toggle. */
+  async settings(): Promise<E2ESettings> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: { getSettings: () => Promise<E2ESettings> };
+          }
+        ).__ltE2E.getSettings(),
+    );
+  }
+
+  /** Read-only camera/zoom values used by the timeline's own hit testing. */
+  async timelineView(): Promise<E2ETimelineView> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: { getTimelineView: () => E2ETimelineView };
+          }
+        ).__ltE2E.getTimelineView(),
+    );
   }
 
   /**
