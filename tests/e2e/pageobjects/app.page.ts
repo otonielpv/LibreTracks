@@ -121,6 +121,39 @@ class AppPage {
     return $$(".lt-shortcuts-row");
   }
 
+  // --- Library panel -------------------------------------------------------
+  // Toggled from the side-nav's Biblioteca button. Without a session
+  // (canImport = false) its import/folder actions are disabled and the meta row
+  // shows the "open or create a session" hint.
+
+  /** The Library panel container (aria-label "Library panel"). */
+  get libraryPanel() {
+    return $('aside[aria-label="Library panel"]');
+  }
+
+  /** "Importar audio" button inside the Library panel. */
+  get libraryImportButton() {
+    return $(".lt-library-import-button");
+  }
+
+  /** "Carpeta" (create folder) button inside the Library panel. */
+  get libraryFolderButton() {
+    return $(".lt-library-folder-button");
+  }
+
+  /** The Library panel's empty-state note (shown with no assets/folders). */
+  get libraryEmpty() {
+    return $(".lt-library-panel-empty");
+  }
+
+  /** Open the Library panel via the side-nav and wait for it to render. */
+  async openLibrary() {
+    const button = await this.libraryNavButton;
+    await button.waitForClickable({ timeout: 20_000 });
+    await button.click();
+    await (await this.libraryPanel).waitForDisplayed({ timeout: 15_000 });
+  }
+
   /** Transport play button (aria-label "Reproducir"). */
   get playButton() {
     return $('button[aria-label="Reproducir"]');

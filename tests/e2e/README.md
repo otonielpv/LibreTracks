@@ -73,6 +73,9 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     switching drives `aria-selected` and the visible panel, and the "Atajos"
     (shortcuts) tab lists actions, filters live from its search box, and exposes
     reset-all.
+  - `library.e2e.ts` — the Library panel renders its header, its import and
+    create-folder actions are disabled with no session (canImport is false), and
+    it shows its empty-state note.
 
   Specs run against **one long-lived app instance** with no reload between them
   (alphabetical order: `app-launch` → `landing` → `side-nav`). A panel one spec
