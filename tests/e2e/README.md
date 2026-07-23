@@ -63,8 +63,17 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
   "Detener", "Metronomo", ...).
 - `specs/` — `*.e2e.ts` test files:
   - `app-launch.e2e.ts` — smoke: the WebView boots and React renders.
-  - `landing.e2e.ts` — the create/open-session landing renders, transport is
+  - `landing.e2e.ts` — the create/open-session landing renders, offers its four
+    entry-point actions, shows the templates/recents columns, transport is
     disabled with no session, and the Settings panel opens.
+  - `side-nav.e2e.ts` — the three side-nav panels (Biblioteca, Remote,
+    Configuracion) exist and are enabled without a session, and each toggles its
+    panel/modal open.
+
+  Specs run against **one long-lived app instance** with no reload between them
+  (alphabetical order: `app-launch` → `landing` → `side-nav`). A panel one spec
+  opens is still open when the next starts, so specs that open panels call
+  `AppPage.resetShell()` in `before`/`after` to stay self-contained.
 
 ## Gotchas
 

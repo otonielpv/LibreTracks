@@ -15,6 +15,12 @@ describe("Landing screen", () => {
     await AppPage.waitUntilBooted();
   });
 
+  after(async () => {
+    // The last test opens the Settings panel; leave the shell neutral so the
+    // next spec (specs run against one long-lived app instance) starts clean.
+    await AppPage.resetShell();
+  });
+
   it("shows the create-or-open-session landing", async () => {
     const heading = await AppPage.landingHeading;
     await heading.waitForDisplayed({ timeout: 20_000 });
@@ -23,6 +29,32 @@ describe("Landing screen", () => {
 
     await expect(await AppPage.createSessionButton).toBeDisplayed();
     await expect(await AppPage.openSessionButton).toBeDisplayed();
+  });
+
+  it("offers all four entry-point actions on the empty state", async () => {
+    // The landing card is the empty-state marker: present only when no session
+    // is open. Its four buttons are the real ways into the app — create, open,
+    // import a whole session, and import an external (Reaper/Ableton) project.
+    await expect(await AppPage.emptyStateCard).toBeDisplayed();
+
+    await expect(await AppPage.createSessionButton).toBeDisplayed();
+    await expect(await AppPage.openSessionButton).toBeDisplayed();
+    await expect(await AppPage.importSessionButton).toBeDisplayed();
+    await expect(await AppPage.importExternalProjectButton).toBeDisplayed();
+
+    // These are entry points, not disabled placeholders — each is clickable.
+    // We assert clickability rather than clicking, since every one opens a
+    // native file dialog WebDriver cannot pilot.
+    await expect(await AppPage.createSessionButton).toBeClickable();
+    await expect(await AppPage.openSessionButton).toBeClickable();
+  });
+
+  it("renders the templates and recents columns", async () => {
+    // The landing shows two columns even with nothing saved yet: an empty note
+    // stands in for the list. Their mere presence proves the empty-state layout
+    // mounted fully, not a truncated fallback.
+    await expect(await AppPage.templatesColumn).toBeDisplayed();
+    await expect(await AppPage.recentsColumn).toBeDisplayed();
   });
 
   it("disables transport controls when no session is open", async () => {

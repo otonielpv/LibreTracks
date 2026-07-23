@@ -32,6 +32,51 @@ class AppPage {
     return $("button=Abrir");
   }
 
+  /** "Importar sesión" button on the landing (imports a whole .ltset). */
+  get importSessionButton() {
+    return $("button=Importar sesión");
+  }
+
+  /** "Importar Reaper/Ableton" button on the landing (external-project wizard). */
+  get importExternalProjectButton() {
+    return $("button=Importar Reaper/Ableton");
+  }
+
+  /** The landing's card wrapper — present only on the empty (no-session) state. */
+  get emptyStateCard() {
+    return $(".lt-empty-state-card");
+  }
+
+  /** Templates column on the landing (shows saved .lttemplate files or an empty note). */
+  get templatesColumn() {
+    return $(".lt-empty-state-templates:not(.lt-empty-state-recents)");
+  }
+
+  /** Recents column on the landing (recently opened/created sessions). */
+  get recentsColumn() {
+    return $(".lt-empty-state-recents");
+  }
+
+  // --- Side-nav (present on the landing too) -------------------------------
+  // The desktop side-nav exposes three panels regardless of session state.
+  // Labels come from the resolved Spanish locale (unaccented in the source):
+  // "Biblioteca", "Remote", "Configuracion".
+
+  /** Side-nav "Biblioteca" (library) toggle. */
+  get libraryNavButton() {
+    return $('button[aria-label="Biblioteca"]');
+  }
+
+  /** Side-nav "Remote" toggle. */
+  get remoteNavButton() {
+    return $('button[aria-label="Remote"]');
+  }
+
+  /** Side-nav "Configuracion" (settings) toggle. */
+  get settingsNavButton() {
+    return $('button[aria-label="Configuracion"]');
+  }
+
   /** Transport play button (aria-label "Reproducir"). */
   get playButton() {
     return $('button[aria-label="Reproducir"]');
@@ -68,6 +113,25 @@ class AppPage {
   /** The document <title> the WebView reports for the loaded page. */
   async title() {
     return browser.getTitle();
+  }
+
+  /**
+   * Return the shell to a neutral state: close any open Settings/Remote modal
+   * (both dismiss on Escape) and collapse an open Biblioteca side panel. Specs
+   * run against one long-lived app instance with no reload between them, so a
+   * panel one spec opens is still open when the next starts. Call this from a
+   * spec's `before`/`after` to keep it self-contained. Idempotent — safe to run
+   * when nothing is open.
+   */
+  async resetShell() {
+    await browser.keys(["Escape"]);
+    const library = await this.libraryNavButton;
+    if (
+      (await library.isExisting()) &&
+      (await library.getAttribute("class"))?.includes("is-active")
+    ) {
+      await library.click();
+    }
   }
 }
 
