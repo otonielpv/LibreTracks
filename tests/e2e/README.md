@@ -87,6 +87,11 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     while typing. Transport and metronome also round-trip to the real
     backend/engine; virtual-folder and asset mutations are checked against the
     native library manifest. See "Session flows" below.
+  - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
+    against the same native session. Add new open-session cases to the closest
+    flow module (or create another one); keep `session.e2e.ts` limited to
+    fixture lifecycle and registration order. Shared WAV/gesture helpers and
+    the mutable fixture contract live in `session/support.ts`.
 
 ## Session flows (window.__ltE2E)
 
@@ -114,8 +119,14 @@ the read-only calls only observe the resulting backend state. The flow
 (invoke → `project:load-complete` event → snapshot applied to React state) runs
 exactly as in production. `session.e2e.ts` creates its session inside a temp
 folder it owns and deletes afterwards, so the app's data directory and the
-user's disk stay untouched. Because the seam lives in the frontend bundle, the
+user’s disk stay untouched. Because the seam lives in the frontend bundle, the
 E2E binary must be rebuilt (`npm run build:desktop:native`) after changing it.
+
+The open-session flow modules intentionally are not separate `*.e2e.ts` specs:
+they build on one canonical project in a declared order. WDIO only collects the
+top-level `session.e2e.ts`; its imported `registerSession*Flows` functions keep
+domain code separate without repeating fixture setup or hiding cross-flow state
+transitions.
 
   Specs run against **one long-lived app instance** with no reload between them
   (alphabetical order: `app-launch` → `landing` → `side-nav`). A panel one spec
