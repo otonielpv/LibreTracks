@@ -81,8 +81,9 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     library-to-timeline placement and clip deletion, mute verified against the
     native post-mix meter, explicit save plus switch/reopen persistence, and
     track rename/delete plus clip split/duplicate operations. Transport and
-    metronome also round-trip to the real backend/engine. See "Session flows"
-    below.
+    metronome also round-trip to the real backend/engine; virtual-folder and
+    asset mutations are checked against the native library manifest. See
+    "Session flows" below.
 
 ## Session flows (window.__ltE2E)
 
@@ -102,6 +103,8 @@ exposes:
   completed beyond the DOM.
 - `getTrackMeters()` — the latest native post-mix peaks per track, used to
   assert that audio-affecting actions change the rendered signal.
+- `getLibraryState()` — assets and virtual folders read from the native
+  library manifest after organization and deletion flows.
 
 The mutating calls use the **same frontend handlers a user click invokes**;
 the read-only calls only observe the resulting backend state. The flow

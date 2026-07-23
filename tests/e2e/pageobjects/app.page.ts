@@ -40,6 +40,15 @@ export type E2ETrackMeters = Record<
   { leftPeak: number; rightPeak: number }
 >;
 
+export type E2ELibraryState = {
+  assets: Array<{
+    fileName: string;
+    filePath: string;
+    folderPath?: string | null;
+  }>;
+  folders: string[];
+};
+
 /**
  * Page Object for the LibreTracks desktop shell. Kept deliberately thin: it
  * exposes structural anchors that are stable regardless of session state (the
@@ -454,6 +463,18 @@ class AppPage {
         interval: 100,
         timeoutMsg: `Track ${trackId} did not reach sustained post-mix silence`,
       },
+    );
+  }
+
+  /** Read the library manifest and virtual folders from the native backend. */
+  async libraryState(): Promise<E2ELibraryState> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: { getLibraryState: () => Promise<E2ELibraryState> };
+          }
+        ).__ltE2E.getLibraryState(),
     );
   }
 

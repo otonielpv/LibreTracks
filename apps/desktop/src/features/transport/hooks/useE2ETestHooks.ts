@@ -1,10 +1,13 @@
 import { useEffect } from "react";
 import type {
   AppSettings,
+  LibraryAssetSummary,
   SongView,
   TransportSnapshot,
 } from "@libretracks/shared/models";
 import {
+  getLibraryAssets,
+  getLibraryFolders,
   getSettings,
   getSongView,
   getTransportSnapshot,
@@ -40,6 +43,10 @@ export interface E2ETestHooks {
   getSettings: () => Promise<AppSettings>;
   getTimelineView: () => { cameraX: number; zoomLevel: number };
   getTrackMeters: () => MeterDictionary;
+  getLibraryState: () => Promise<{
+    assets: LibraryAssetSummary[];
+    folders: string[];
+  }>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -73,6 +80,13 @@ export function useE2ETestHooks(
         return { cameraX, zoomLevel };
       },
       getTrackMeters: () => useTransportStore.getState().meters,
+      getLibraryState: async () => {
+        const [assets, folders] = await Promise.all([
+          getLibraryAssets(),
+          getLibraryFolders(),
+        ]);
+        return { assets, folders };
+      },
     };
 
     return () => {
