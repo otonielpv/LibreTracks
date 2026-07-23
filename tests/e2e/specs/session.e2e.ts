@@ -1,4 +1,5 @@
 import { browser, expect, $ } from "@wdio/globals";
+import { Key } from "webdriverio";
 import {
   mkdtempSync,
   rmSync,
@@ -69,6 +70,24 @@ async function openClipContextMenu(
   const menu = await $(".lt-context-menu");
   await menu.waitForDisplayed();
   return menu;
+}
+
+/** Send a real W3C Ctrl+wheel gesture while keeping both input sources aligned. */
+async function zoomTimelineWithWheel(
+  origin: ReturnType<typeof $>,
+  deltaY: number,
+) {
+  const keyboard = browser
+    .action("key")
+    .down(Key.Ctrl)
+    .pause(100)
+    .up(Key.Ctrl);
+  const wheel = browser
+    .action("wheel")
+    .pause(20)
+    .scroll({ origin, deltaX: 0, deltaY, duration: 50 })
+    .pause(30);
+  await browser.actions([keyboard, wheel]);
 }
 
 /**
@@ -675,6 +694,59 @@ describe("Session creation", () => {
     await expect(
       await AppPage.libraryAsset(UNUSED_AUDIO_FILE_NAME),
     ).not.toBeExisting();
+  });
+
+  it("seeks the engine and persists wheel zoom and horizontal pan", async () => {
+    const ruler = await AppPage.timelineRuler;
+    const rulerSize = await ruler.getSize();
+    const viewBeforeSeek = await AppPage.timelineView();
+    const song = await AppPage.songView();
+    const seekSeconds = Math.min(1, (song?.durationSeconds ?? 1) / 2);
+    const seekFromLeft =
+      seekSeconds * viewBeforeSeek.zoomLevel * 18 - viewBeforeSeek.cameraX;
+
+    await ruler.click({
+      x: Math.round(seekFromLeft - rulerSize.width / 2),
+      y: 0,
+    });
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          (await AppPage.transportSnapshot()).positionSeconds - seekSeconds,
+        ) < 0.05,
+      {
+        timeout: 30_000,
+        timeoutMsg: "Ruler seek never reached the native transport snapshot",
+      },
+    );
+
+    const viewBeforeZoom = await AppPage.timelineView();
+    await zoomTimelineWithWheel(ruler, -200);
+    await browser.waitUntil(
+      async () => (await AppPage.timelineView()).zoomLevel > viewBeforeZoom.zoomLevel,
+      {
+        timeout: 10_000,
+        timeoutMsg: "Ctrl+wheel did not commit a larger timeline zoom",
+      },
+    );
+
+    const viewBeforePan = await AppPage.timelineView();
+    await browser
+      .action("wheel")
+      .scroll({
+        origin: ruler,
+        deltaX: 240,
+        deltaY: 0,
+        duration: 100,
+      })
+      .perform();
+    await browser.waitUntil(
+      async () => (await AppPage.timelineView()).cameraX > viewBeforePan.cameraX,
+      {
+        timeout: 10_000,
+        timeoutMsg: "Horizontal wheel did not commit the timeline camera pan",
+      },
+    );
   });
 
   it("round-trips transport controls and the metronome toggle to the engine", async () => {
