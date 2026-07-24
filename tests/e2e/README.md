@@ -143,6 +143,13 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     uses the production `start_create_song_from_template_named_at`, which already
     accepts an explicit folder — note that folder must exist first (the backend
     does not mkdir the destination).
+  - `track-structure.e2e.ts` — track structure edits, in their own clean
+    session: reordering tracks (`move_track` with insertBefore), nesting an
+    audio track inside a folder track (reparent via `parentTrackId`, asserted on
+    `parentTrackId` + `depth`), and setting/clearing a track's and a clip's
+    colour. All pure song-model edits asserted on `song.tracks` / `song.clips`
+    (order = array position; `parentTrackId` / `depth` / `color` now exposed on
+    the E2E song view). Note the backend upper-cases hex colours (`#RRGGBB`).
   - `section-markers.e2e.ts` — section-marker attribute edits, in their own
     clean session: setting a marker's kind + numbered variant, setting and
     clearing a colour override, and the EXCLUSIVE quick-jump digit assignment
@@ -271,6 +278,12 @@ exposes:
   `export_session_package_at` / `import_session_package_at`). The import opens a
   new session via the production `project:load-complete` flow; its
   `targetSongDir` must NOT already exist (the import creates it).
+- `createTrack(args)` / `moveTrack(args)` / `updateTrackColor(id, color)` /
+  `updateClipColor(id, color)` — track structure commands (all pre-existing).
+  `createTrack` makes an audio or folder track (with optional parent/after);
+  `moveTrack` reorders/reparents; the colour setters take a `#RRGGBB` hex (the
+  backend upper-cases it) or null to clear. Asserted against `song.tracks` /
+  `song.clips`.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

@@ -20,11 +20,14 @@ export type E2ESongView = {
     id: string;
     name: string;
     kind: string;
+    parentTrackId?: string | null;
+    depth: number;
     volume: number;
     pan: number;
     muted: boolean;
     solo: boolean;
     transposeEnabled: boolean;
+    color?: string | null;
   }>;
   clips: Array<{
     id: string;
@@ -32,6 +35,7 @@ export type E2ESongView = {
     timelineStartSeconds: number;
     durationSeconds: number;
     filePath: string;
+    color?: string | null;
     isMissing: boolean;
   }>;
   // The backend SongView carries these; the page object exposes just the fields
@@ -1000,6 +1004,80 @@ class AppPage {
         ).__ltE2E.assignSectionMarkerDigit(id, d),
       sectionId,
       digit,
+    );
+  }
+
+  /** Create a track (audio or folder), optionally under a parent / after one. */
+  async createTrack(args: {
+    name: string;
+    kind: "audio" | "folder";
+    insertAfterTrackId?: string | null;
+    parentTrackId?: string | null;
+  }): Promise<void> {
+    await browser.execute(
+      (a: unknown) =>
+        (
+          window as unknown as {
+            __ltE2E: { createTrack: (args: unknown) => Promise<void> };
+          }
+        ).__ltE2E.createTrack(a),
+      args,
+    );
+  }
+
+  /** Reorder / reparent a track. */
+  async moveTrack(args: {
+    trackId: string;
+    insertAfterTrackId?: string | null;
+    insertBeforeTrackId?: string | null;
+    parentTrackId?: string | null;
+  }): Promise<void> {
+    await browser.execute(
+      (a: unknown) =>
+        (
+          window as unknown as {
+            __ltE2E: { moveTrack: (args: unknown) => Promise<void> };
+          }
+        ).__ltE2E.moveTrack(a),
+      args,
+    );
+  }
+
+  /** Set (or clear, with null) a track's colour. */
+  async updateTrackColor(trackId: string, color: string | null): Promise<void> {
+    await browser.execute(
+      (id: string, c: string | null) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateTrackColor: (
+                trackId: string,
+                color: string | null,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateTrackColor(id, c),
+      trackId,
+      color,
+    );
+  }
+
+  /** Set (or clear, with null) a clip's colour. */
+  async updateClipColor(clipId: string, color: string | null): Promise<void> {
+    await browser.execute(
+      (id: string, c: string | null) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateClipColor: (
+                clipId: string,
+                color: string | null,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateClipColor(id, c),
+      clipId,
+      color,
     );
   }
 

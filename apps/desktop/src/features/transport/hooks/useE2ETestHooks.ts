@@ -53,8 +53,13 @@ import {
   assignSectionMarkerDigit,
   exportSessionPackageAt,
   importSessionPackageAt,
+  createTrack,
+  moveTrack,
+  updateTrackColor,
+  updateClipColor,
   type ClipMoveRequest,
   type MarkerKind,
+  type TrackKind,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
 import { useTimelineUIStore } from "../uiStore";
@@ -265,6 +270,24 @@ export interface E2ETestHooks {
     packagePath: string,
     targetSongDir: string,
   ) => void;
+  /** Create a track (audio or folder), optionally under a parent / after one. */
+  createTrack: (args: {
+    name: string;
+    kind: TrackKind;
+    insertAfterTrackId?: string | null;
+    parentTrackId?: string | null;
+  }) => Promise<void>;
+  /** Reorder / reparent a track (insertAfter / insertBefore / parentTrackId). */
+  moveTrack: (args: {
+    trackId: string;
+    insertAfterTrackId?: string | null;
+    insertBeforeTrackId?: string | null;
+    parentTrackId?: string | null;
+  }) => Promise<void>;
+  /** Set (or clear, with null) a track's colour. */
+  updateTrackColor: (trackId: string, color: string | null) => Promise<void>;
+  /** Set (or clear, with null) a clip's colour. */
+  updateClipColor: (clipId: string, color: string | null) => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -464,6 +487,18 @@ export function useE2ETestHooks(
         exportSessionPackageAt(writePath, includeAudio),
       importSessionPackageAt: (packagePath, targetSongDir) => {
         void importSessionPackageAt(packagePath, targetSongDir);
+      },
+      createTrack: async (args) => {
+        await createTrack(args);
+      },
+      moveTrack: async (args) => {
+        await moveTrack(args);
+      },
+      updateTrackColor: async (trackId, color) => {
+        await updateTrackColor({ trackId, color });
+      },
+      updateClipColor: async (clipId, color) => {
+        await updateClipColor(clipId, color);
       },
     };
 
