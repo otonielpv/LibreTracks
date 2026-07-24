@@ -35,6 +35,8 @@ import {
   splitSongRegion,
   updateSectionMarker,
   deleteSectionMarker,
+  undoAction,
+  redoAction,
   type ClipMoveRequest,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
@@ -155,6 +157,13 @@ export interface E2ETestHooks {
   ) => Promise<void>;
   /** Delete a section marker. */
   deleteSectionMarker: (sectionId: string) => Promise<void>;
+  /**
+   * Undo the last structural edit (backend history stack). A no-op when the
+   * undo stack is empty (resolves without changing the model).
+   */
+  undoAction: () => Promise<void>;
+  /** Redo the last undone edit. A no-op when the redo stack is empty. */
+  redoAction: () => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -303,6 +312,12 @@ export function useE2ETestHooks(
       },
       deleteSectionMarker: async (sectionId) => {
         await deleteSectionMarker(sectionId);
+      },
+      undoAction: async () => {
+        await undoAction();
+      },
+      redoAction: async () => {
+        await redoAction();
       },
     };
 

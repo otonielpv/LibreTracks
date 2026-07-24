@@ -807,4 +807,170 @@ export function registerSessionTimelineEditFlows(fixture: SessionFixture) {
       }
     }
   });
+
+  // --- Undo / redo -----------------------------------------------------------
+  // The backend keeps a per-session undo/redo stack of whole-song snapshots
+  // (state/history.rs): every structural edit pushes the pre-edit song and
+  // clears the redo stack; undo pops it (pushing the current onto redo), redo
+  // reverses that. An empty stack is a no-op, not an error. These run against
+  // getSongView() — the same "prove it reached the backend" discipline — using
+  // a known edit each captures before/after, so they never depend on what the
+  // earlier flows happen to have left on the stack.
+
+  it("undoes and redoes a clip move", async () => {
+    const clip = await clipById(clipAId);
+    if (!clip) {
+      throw new Error("Clip A missing before the undo/redo case");
+    }
+    const before = clip.timelineStartSeconds;
+    const moved = before + 3;
+
+    await AppPage.moveClip(clipAId, moved);
+    await browser.waitUntil(
+      async () =>
+        Math.abs(((await clipById(clipAId))?.timelineStartSeconds ?? -1) - moved) <
+        0.05,
+      { timeout: 30_000, timeoutMsg: "The clip move did not apply before undo" },
+    );
+
+    await AppPage.undoAction();
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - before,
+        ) < 0.05,
+      {
+        timeout: 30_000,
+        timeoutMsg: "Undo did not restore the clip's previous position",
+      },
+    );
+
+    await AppPage.redoAction();
+    await browser.waitUntil(
+      async () =>
+        Math.abs(((await clipById(clipAId))?.timelineStartSeconds ?? -1) - moved) <
+        0.05,
+      { timeout: 30_000, timeoutMsg: "Redo did not re-apply the clip move" },
+    );
+
+    // Leave clip A where it started (undo the redo) for a clean teardown.
+    await AppPage.undoAction();
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - before,
+        ) < 0.05,
+      { timeout: 30_000, timeoutMsg: "Final undo did not restore clip A" },
+    );
+  });
+
+  it("undoes a region creation and redoes it", async () => {
+    // Create a region in the empty space just past clip B's region, then undo
+    // (it disappears) and redo (it comes back). Region creation is a structural
+    // edit, so it lands on the undo stack.
+    const song = await songView();
+    const maxEnd = (song?.regions ?? []).reduce(
+      (max, r) => Math.max(max, r.endSeconds),
+      0,
+    );
+    const newStart = maxEnd + 10;
+    const newEnd = newStart + 8;
+    const idsBefore = new Set((song?.regions ?? []).map((r) => r.id));
+
+    await AppPage.createSongRegion(newStart, newEnd);
+    let createdId = "";
+    await browser.waitUntil(
+      async () => {
+        const created = ((await songView())?.regions ?? []).find(
+          (r) => !idsBefore.has(r.id),
+        );
+        createdId = created?.id ?? "";
+        return createdId !== "";
+      },
+      { timeout: 30_000, timeoutMsg: "The new region was never created" },
+    );
+    // Track it for teardown in case a later assertion throws.
+    disposableRegionIds.add(createdId);
+
+    await AppPage.undoAction();
+    await browser.waitUntil(
+      async () =>
+        !((await songView())?.regions ?? []).some((r) => r.id === createdId),
+      {
+        timeout: 30_000,
+        timeoutMsg: "Undo did not remove the just-created region",
+      },
+    );
+
+    await AppPage.redoAction();
+    await browser.waitUntil(
+      async () =>
+        ((await songView())?.regions ?? []).some((r) => r.id === createdId),
+      { timeout: 30_000, timeoutMsg: "Redo did not restore the created region" },
+    );
+
+    // Clean up: delete the region we brought back.
+    await AppPage.deleteSongRegion(createdId);
+    await browser.waitUntil(
+      async () =>
+        !((await songView())?.regions ?? []).some((r) => r.id === createdId),
+      { timeout: 30_000, timeoutMsg: "The redone region did not delete" },
+    );
+    disposableRegionIds.delete(createdId);
+  });
+
+  it("clears the redo branch when a new edit follows an undo", async () => {
+    const clip = await clipById(clipAId);
+    if (!clip) {
+      throw new Error("Clip A missing before the redo-branch case");
+    }
+    const home = clip.timelineStartSeconds;
+    const firstTarget = home + 4;
+    const secondTarget = home + 8;
+
+    // Edit 1, then undo it — now a redo of edit 1 is available.
+    await AppPage.moveClip(clipAId, firstTarget);
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - firstTarget,
+        ) < 0.05,
+      { timeout: 30_000, timeoutMsg: "Edit 1 did not apply" },
+    );
+    await AppPage.undoAction();
+    await browser.waitUntil(
+      async () =>
+        Math.abs(((await clipById(clipAId))?.timelineStartSeconds ?? -1) - home) <
+        0.05,
+      { timeout: 30_000, timeoutMsg: "Undo of edit 1 did not restore home" },
+    );
+
+    // Edit 2 — a fresh structural edit. This must CLEAR the redo stack, so the
+    // redo of edit 1 is gone.
+    await AppPage.moveClip(clipAId, secondTarget);
+    await browser.waitUntil(
+      async () =>
+        Math.abs(
+          ((await clipById(clipAId))?.timelineStartSeconds ?? -1) - secondTarget,
+        ) < 0.05,
+      { timeout: 30_000, timeoutMsg: "Edit 2 did not apply" },
+    );
+
+    // Redo is now a no-op (branch cut): the clip must NOT jump to firstTarget.
+    await AppPage.redoAction();
+    // Give any (erroneous) redo a moment to land, then assert it did nothing.
+    await browser.pause(300);
+    const after = (await clipById(clipAId))?.timelineStartSeconds ?? -1;
+    expect(Math.abs(after - secondTarget)).toBeLessThan(0.05);
+    expect(Math.abs(after - firstTarget)).toBeGreaterThan(0.05);
+
+    // Restore clip A to home (undo edit 2) for a clean teardown.
+    await AppPage.undoAction();
+    await browser.waitUntil(
+      async () =>
+        Math.abs(((await clipById(clipAId))?.timelineStartSeconds ?? -1) - home) <
+        0.05,
+      { timeout: 30_000, timeoutMsg: "Final undo did not restore clip A" },
+    );
+  });
 }

@@ -687,6 +687,26 @@ class AppPage {
     );
   }
 
+  /** Undo the last structural edit (backend history). No-op if nothing to undo. */
+  async undoAction(): Promise<void> {
+    await browser.execute(
+      () =>
+        (
+          window as unknown as { __ltE2E: { undoAction: () => Promise<void> } }
+        ).__ltE2E.undoAction(),
+    );
+  }
+
+  /** Redo the last undone edit. No-op if nothing to redo. */
+  async redoAction(): Promise<void> {
+    await browser.execute(
+      () =>
+        (
+          window as unknown as { __ltE2E: { redoAction: () => Promise<void> } }
+        ).__ltE2E.redoAction(),
+    );
+  }
+
   /** Read the canonical transport snapshot returned by the engine bridge. */
   async transportSnapshot(): Promise<E2ETransportSnapshot> {
     return browser.execute(

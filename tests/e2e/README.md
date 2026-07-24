@@ -118,11 +118,15 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     cascade-pushes the following region), trimming a clip window inside its
     source while a window past the decoded source is rejected, splitting a
     region and deleting the tail, moving/deleting a section marker, and a
-    multi-selection clip delete. Each runs the SAME shared command a canvas
-    drag/resize gesture invokes and is asserted against the song model. Its flow
-    module lives at `session/timelineEdits.flows.ts` (parameterised by the same
-    `SessionFixture` contract) and builds/tears down its own disposable
-    tracks/clips/regions.
+    multi-selection clip delete. It also covers **undo/redo** against the
+    backend history stack: a clip move undone then redone, a region creation
+    undone (it disappears) then redone (it comes back), and the redo branch
+    being cleared when a fresh edit follows an undo (a subsequent redo is a
+    no-op). Each runs the SAME shared command a canvas drag/resize gesture (or
+    the Ctrl+Z / Ctrl+Y shortcut) invokes and is asserted against the song
+    model. Its flow module lives at `session/timelineEdits.flows.ts`
+    (parameterised by the same `SessionFixture` contract) and builds/tears down
+    its own disposable tracks/clips/regions.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
@@ -186,6 +190,10 @@ exposes:
   backend edit and its invariants are. Each resolves to void; a backend
   rejection (a region collision, an out-of-source clip window) propagates so a
   spec can assert the negative case with `expect(...).rejects`.
+- `undoAction()` / `redoAction()` — drive the backend undo/redo history stack
+  (the same commands Ctrl+Z / Ctrl+Y invoke). Each resolves to void and is a
+  no-op on an empty stack; the edit flow asserts the reverted/re-applied song
+  model via `getSongView()`.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an
