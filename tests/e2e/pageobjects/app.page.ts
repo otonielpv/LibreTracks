@@ -1081,6 +1081,31 @@ class AppPage {
     );
   }
 
+  /**
+   * Import a `.ltpkg` song package into the OPEN session at `insertAtSeconds`
+   * (adds a new region). Fire-and-forget; the caller waits on the model.
+   */
+  async importSongPackageFromPath(
+    packagePath: string,
+    insertAtSeconds: number,
+  ): Promise<void> {
+    await browser.execute(
+      (pkg: string, at: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              importSongPackageFromPath: (
+                packagePath: string,
+                insertAtSeconds: number,
+              ) => void;
+            };
+          }
+        ).__ltE2E.importSongPackageFromPath(pkg, at),
+      packagePath,
+      insertAtSeconds,
+    );
+  }
+
   /** Export the whole session as a `.ltset` to an explicit path; resolves true. */
   async exportSessionPackageAt(
     writePath: string,

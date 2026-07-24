@@ -157,13 +157,15 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     Section markers are pure Rust-model metadata, so these assert against
     `song.sectionMarkers` (kind/variant/color/digit now exposed on the E2E song
     view).
-  - `export.e2e.ts` — region (song) export to a `.ltpkg`, in its own clean
-    session. A clip auto-creates a region; the flow exports it both
-    metadata-only and with bundled audio, asserting a non-empty package is
-    written each time and that the audio-bundled one is at least as large. Uses
-    the test-only `export_region_as_package_at` command (explicit path, no
-    dialog); the same `libretracks_project::export_region_as_package` code runs
-    underneath.
+  - `export.e2e.ts` — region (song) `.ltpkg` export → re-import round trip, in
+    its own clean session. A clip auto-creates a region; the flow exports it
+    both metadata-only and with bundled audio (asserting a non-empty package
+    each time, the audio-bundled one at least as large), then re-imports the
+    audio-bundled `.ltpkg` back into the SAME session as a new song and asserts
+    a new region + clip appear with the clip's audio resolving (not missing).
+    Export uses the test-only `export_region_as_package_at` command (explicit
+    path, no dialog); the re-import uses the production
+    `start_import_song_package_from_path` (already path-based, no dialog).
   - `session-package.e2e.ts` — the whole-session `.ltset` export → import round
     trip ("build it at home, open it at the venue"), in its own clean session.
     Builds a one-track/one-clip/one-region session, exports it as a `.ltset`
@@ -284,6 +286,11 @@ exposes:
   `moveTrack` reorders/reparents; the colour setters take a `#RRGGBB` hex (the
   backend upper-cases it) or null to clear. Asserted against `song.tracks` /
   `song.clips`.
+- `importSongPackageFromPath(packagePath, insertAtSeconds)` — import a `.ltpkg`
+  song package into the OPEN session at a timeline position (adds a new song),
+  via the production progress-worker flow (`start_import_song_package_from_path`,
+  path-based, no dialog). Fire-and-forget; the flow ends on
+  `project:load-complete`, so the caller waits on the model.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

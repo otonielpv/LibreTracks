@@ -92,4 +92,44 @@ describe("Region package export (isolated session)", () => {
     expect(existsSync(audioPath)).toBe(true);
     expect(statSync(audioPath).size).toBeGreaterThanOrEqual(metaSize);
   });
+
+  it("re-imports an exported .ltpkg as a new song in the open session", async () => {
+    // The previous case wrote song-audio.ltpkg (bundled audio). Import it back
+    // into THIS session as a new song, closing the export -> import round trip.
+    const audioPath = path.join(workDir, "song-audio.ltpkg");
+    if (!existsSync(audioPath)) {
+      throw new Error("The exported .ltpkg is missing before re-import");
+    }
+
+    const before = await AppPage.songView();
+    const regionsBefore = before?.regions.length ?? 0;
+    const clipsBefore = before?.clips.length ?? 0;
+
+    // Import as a new song well past the existing content.
+    await AppPage.importSongPackageFromPath(audioPath.replace(/\\/g, "/"), 100);
+
+    // A new region (and its clip) must appear.
+    await browser.waitUntil(
+      async () => {
+        const song = await AppPage.songView();
+        return (
+          (song?.regions.length ?? 0) > regionsBefore &&
+          (song?.clips.length ?? 0) > clipsBefore
+        );
+      },
+      {
+        timeout: 60_000,
+        timeoutMsg: "Re-importing the .ltpkg did not add a new song to the session",
+      },
+    );
+
+    // The imported clip's audio travelled inside the package, so it resolves
+    // (not missing) in the open session.
+    const after = await AppPage.songView();
+    const newClip = after?.clips.find(
+      (clip) => clip.timelineStartSeconds >= 90,
+    );
+    expect(newClip).toBeDefined();
+    expect(newClip?.isMissing).toBe(false);
+  });
 });

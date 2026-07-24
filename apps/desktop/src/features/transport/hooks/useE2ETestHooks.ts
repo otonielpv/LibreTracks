@@ -57,6 +57,7 @@ import {
   moveTrack,
   updateTrackColor,
   updateClipColor,
+  importSongPackageFromPathWithProgress,
   type ClipMoveRequest,
   type MarkerKind,
   type TrackKind,
@@ -288,6 +289,15 @@ export interface E2ETestHooks {
   updateTrackColor: (trackId: string, color: string | null) => Promise<void>;
   /** Set (or clear, with null) a clip's colour. */
   updateClipColor: (clipId: string, color: string | null) => Promise<void>;
+  /**
+   * Import a `.ltpkg` song package into the OPEN session at `insertAtSeconds`
+   * (adds a new region/song), through the production progress-worker flow (no
+   * dialog). Fire-and-forget: the flow ends on `project:load-complete`.
+   */
+  importSongPackageFromPath: (
+    packagePath: string,
+    insertAtSeconds: number,
+  ) => void;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -499,6 +509,9 @@ export function useE2ETestHooks(
       },
       updateClipColor: async (clipId, color) => {
         await updateClipColor(clipId, color);
+      },
+      importSongPackageFromPath: (packagePath, insertAtSeconds) => {
+        void importSongPackageFromPathWithProgress(packagePath, insertAtSeconds);
       },
     };
 
