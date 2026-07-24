@@ -37,6 +37,12 @@ import {
   deleteSectionMarker,
   undoAction,
   redoAction,
+  updateSongTempo,
+  updateSongTimeSignature,
+  upsertSongTempoMarker,
+  deleteSongTempoMarker,
+  upsertSongTimeSignatureMarker,
+  deleteSongTimeSignatureMarker,
   type ClipMoveRequest,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
@@ -164,6 +170,24 @@ export interface E2ETestHooks {
   undoAction: () => Promise<void>;
   /** Redo the last undone edit. A no-op when the redo stack is empty. */
   redoAction: () => Promise<void>;
+  /** Set the song's base tempo (BPM). Rejects outside 20..300. */
+  updateSongTempo: (bpm: number) => Promise<void>;
+  /** Set the song's base time signature ("N/D"). Rejects an invalid string. */
+  updateSongTimeSignature: (signature: string) => Promise<void>;
+  /**
+   * Upsert a tempo marker. At startSeconds ~= 0 this sets the base tempo
+   * instead of creating a marker; at startSeconds > 0 it creates/updates one.
+   */
+  upsertSongTempoMarker: (startSeconds: number, bpm: number) => Promise<void>;
+  /** Delete a tempo marker by id. */
+  deleteSongTempoMarker: (markerId: string) => Promise<void>;
+  /** Upsert a time-signature marker (base at ~0, marker at > 0). */
+  upsertSongTimeSignatureMarker: (
+    startSeconds: number,
+    signature: string,
+  ) => Promise<void>;
+  /** Delete a time-signature marker by id. */
+  deleteSongTimeSignatureMarker: (markerId: string) => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -318,6 +342,24 @@ export function useE2ETestHooks(
       },
       redoAction: async () => {
         await redoAction();
+      },
+      updateSongTempo: async (bpm) => {
+        await updateSongTempo(bpm);
+      },
+      updateSongTimeSignature: async (signature) => {
+        await updateSongTimeSignature(signature);
+      },
+      upsertSongTempoMarker: async (startSeconds, bpm) => {
+        await upsertSongTempoMarker(startSeconds, bpm);
+      },
+      deleteSongTempoMarker: async (markerId) => {
+        await deleteSongTempoMarker(markerId);
+      },
+      upsertSongTimeSignatureMarker: async (startSeconds, signature) => {
+        await upsertSongTimeSignatureMarker(startSeconds, signature);
+      },
+      deleteSongTimeSignatureMarker: async (markerId) => {
+        await deleteSongTimeSignatureMarker(markerId);
       },
     };
 

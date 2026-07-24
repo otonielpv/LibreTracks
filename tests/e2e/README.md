@@ -127,6 +127,13 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     model. Its flow module lives at `session/timelineEdits.flows.ts`
     (parameterised by the same `SessionFixture` contract) and builds/tears down
     its own disposable tracks/clips/regions.
+  - `tempo.e2e.ts` — song tempo + time-signature edge cases, also in their own
+    clean session (default 120 BPM / 4/4, no warp, no audio needed). Sets the
+    base tempo and rejects a BPM outside 20..300, sets the base time signature
+    and rejects an invalid string, and creates/deletes positional tempo and
+    time-signature markers (asserting the backend rule that an upsert at
+    startSeconds ~= 0 changes the BASE value rather than adding a marker). Flow
+    module: `session/tempo.flows.ts`.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
@@ -194,6 +201,14 @@ exposes:
   (the same commands Ctrl+Z / Ctrl+Y invoke). Each resolves to void and is a
   no-op on an empty stack; the edit flow asserts the reverted/re-applied song
   model via `getSongView()`.
+- `updateSongTempo(bpm)` / `updateSongTimeSignature(sig)` /
+  `upsertSongTempoMarker(at, bpm)` / `deleteSongTempoMarker(id)` /
+  `upsertSongTimeSignatureMarker(at, sig)` /
+  `deleteSongTimeSignatureMarker(id)` — song tempo/time-signature commands. The
+  base setters reject an out-of-range BPM (20..300) or an invalid signature
+  ("N/D", both > 0); an upsert at `startSeconds ~= 0` sets the base value
+  instead of creating a marker. Asserted against `song.bpm` /
+  `song.timeSignature` / `song.tempoMarkers` / `song.timeSignatureMarkers`.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

@@ -4,6 +4,18 @@ export type E2ESongView = {
   id: string;
   title: string;
   durationSeconds: number;
+  bpm: number;
+  timeSignature: string;
+  tempoMarkers: Array<{
+    id: string;
+    startSeconds: number;
+    bpm: number;
+  }>;
+  timeSignatureMarkers: Array<{
+    id: string;
+    startSeconds: number;
+    signature: string;
+  }>;
   tracks: Array<{
     id: string;
     name: string;
@@ -704,6 +716,108 @@ class AppPage {
         (
           window as unknown as { __ltE2E: { redoAction: () => Promise<void> } }
         ).__ltE2E.redoAction(),
+    );
+  }
+
+  /** Set the song's base tempo (BPM); rejects outside 20..300. */
+  async updateSongTempo(bpm: number): Promise<void> {
+    await browser.execute(
+      (value: number) =>
+        (
+          window as unknown as {
+            __ltE2E: { updateSongTempo: (bpm: number) => Promise<void> };
+          }
+        ).__ltE2E.updateSongTempo(value),
+      bpm,
+    );
+  }
+
+  /** Set the song's base time signature ("N/D"); rejects an invalid string. */
+  async updateSongTimeSignature(signature: string): Promise<void> {
+    await browser.execute(
+      (value: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateSongTimeSignature: (signature: string) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateSongTimeSignature(value),
+      signature,
+    );
+  }
+
+  /** Upsert a tempo marker (sets base tempo at ~0, a marker at > 0). */
+  async upsertSongTempoMarker(
+    startSeconds: number,
+    bpm: number,
+  ): Promise<void> {
+    await browser.execute(
+      (at: number, value: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              upsertSongTempoMarker: (
+                startSeconds: number,
+                bpm: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.upsertSongTempoMarker(at, value),
+      startSeconds,
+      bpm,
+    );
+  }
+
+  /** Delete a tempo marker by id. */
+  async deleteSongTempoMarker(markerId: string): Promise<void> {
+    await browser.execute(
+      (id: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              deleteSongTempoMarker: (markerId: string) => Promise<void>;
+            };
+          }
+        ).__ltE2E.deleteSongTempoMarker(id),
+      markerId,
+    );
+  }
+
+  /** Upsert a time-signature marker (base at ~0, a marker at > 0). */
+  async upsertSongTimeSignatureMarker(
+    startSeconds: number,
+    signature: string,
+  ): Promise<void> {
+    await browser.execute(
+      (at: number, value: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              upsertSongTimeSignatureMarker: (
+                startSeconds: number,
+                signature: string,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.upsertSongTimeSignatureMarker(at, value),
+      startSeconds,
+      signature,
+    );
+  }
+
+  /** Delete a time-signature marker by id. */
+  async deleteSongTimeSignatureMarker(markerId: string): Promise<void> {
+    await browser.execute(
+      (id: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              deleteSongTimeSignatureMarker: (markerId: string) => Promise<void>;
+            };
+          }
+        ).__ltE2E.deleteSongTimeSignatureMarker(id),
+      markerId,
     );
   }
 
