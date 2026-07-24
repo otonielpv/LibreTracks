@@ -1031,6 +1031,13 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
         song_file
     };
 
+    // The native panel just granted access to the picked `.ltsession`; capture
+    // a security-scoped bookmark of its containing folder now, while the grant
+    // is fresh, so future reopens (and the audio reads inside) don't prompt.
+    if let Some(folder) = song_file.parent() {
+        crate::platform::macos_bookmarks::remember_folder(&app, folder);
+    }
+
     spawn_open_project_worker(&app, song_file);
     Ok(true)
 }
@@ -1056,6 +1063,16 @@ fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
     let worker_app = app.clone();
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
+
+        // Re-acquire folder access from the stored bookmark before touching any
+        // file. This is the reopen-a-saved-session path: without a fresh open
+        // panel, macOS would otherwise prompt once per audio file. Held for the
+        // whole load (including background audio decode) via `_scoped`; a
+        // missing bookmark yields None and we proceed as before.
+        let _scoped = song_file
+            .parent()
+            .and_then(|folder| crate::platform::macos_bookmarks::acquire_folder(&worker_app, folder));
+
         let result = (|| -> Result<TransportSnapshot, String> {
             {
                 let mut session = state

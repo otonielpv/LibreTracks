@@ -717,6 +717,38 @@ TEST_CASE("BlockCache protects each source's recent window from cross-source evi
     CHECK(diag.blocks_cached <= kMaxBlocks + kProtectedPerSource);
 }
 
+TEST_CASE("BlockCache diagnostics stay exact across replace eviction and clear") {
+    constexpr int kChannels = 2;
+    constexpr int kFrames = 64;
+    constexpr size_t kMaxBlocks = 4;
+    constexpr size_t kBytesPerBlock =
+        kFrames * kChannels * sizeof(float);
+    BlockCache cache(kDefaultBlockFrames, kMaxBlocks, 1);
+    auto block = make_reference_audio(kFrames, kChannels);
+
+    for (int i = 0; i < 6; ++i)
+        cache.fill("counter-source", i, block.data(), kChannels, kFrames);
+
+    auto diag = cache.diagnostics();
+    CHECK(diag.blocks_cached <= kMaxBlocks);
+    CHECK(diag.bytes_used == diag.blocks_cached * kBytesPerBlock);
+
+    // Replacing an existing key must update bytes without changing block count.
+    const size_t before_count = diag.blocks_cached;
+    constexpr int kShortFrames = kFrames / 2;
+    cache.fill("counter-source", 5, block.data(), kChannels, kShortFrames);
+    diag = cache.diagnostics();
+    CHECK(diag.blocks_cached == before_count);
+    CHECK(diag.bytes_used
+          == (before_count - 1) * kBytesPerBlock
+           + kShortFrames * kChannels * sizeof(float));
+
+    cache.clear();
+    diag = cache.diagnostics();
+    CHECK(diag.blocks_cached == 0);
+    CHECK(diag.bytes_used == 0);
+}
+
 TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {
     // Write a 44.1k WAV and decode it to 48k both ways; the streamed cache must
     // match the whole-file cache frame-for-frame (within float tolerance), so

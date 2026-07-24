@@ -2413,7 +2413,7 @@ dependencies = [
 
 [[package]]
 name = "libretracks-desktop"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "base64 0.22.1",
  "flate2",
@@ -2427,6 +2427,8 @@ dependencies = [
  "lt-audio-engine-v2",
  "midir",
  "ndk-context",
+ "objc2",
+ "objc2-foundation",
  "quick-xml 0.37.5",
  "rayon",
  "reqwest 0.12.28",

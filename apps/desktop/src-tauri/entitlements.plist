@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  LibreTracks is distributed outside the App Store (dmg / direct download),
+	  so it is NOT App-Sandboxed. Security-scoped bookmarks still work for a
+	  non-sandboxed, hardened-runtime app: they persist the folder access the
+	  user grants via the open panel so reopening a saved session reads all the
+	  audio in its folder without per-file TCC prompts, and the grant survives
+	  app updates when signed with a stable Developer ID identity.
+
+	  These entitlements declare the user-selected file access the app relies
+	  on. They are harmless (and future-proofing) for the non-sandboxed case
+	  and required if the app is ever moved into the App Sandbox.
+	-->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+</dict>
+</plist>

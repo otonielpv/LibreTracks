@@ -1,6 +1,6 @@
 [package]
 name = "libretracks-desktop"
-version = "1.8.1"
+version = "1.8.2"
 edition = "2021"
 default-run = "libretracks-desktop"
 autobins = false
@@ -54,6 +54,14 @@ path = "../../../crates/libretracks-core"
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
 rfd = "0.15"
+
+# macOS-only. Security-scoped bookmarks let us persist folder access granted
+# by a native open panel, so reopening a saved session (and reading all the
+# audio inside its folder) never triggers per-file TCC prompts and survives
+# app updates. objc2 gives us the NSURL bookmark APIs without a C shim.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSURL", "NSData", "NSError", "NSString", "NSArray"] }
 
 # Android-only. Enumerating real output devices (speaker / headphones / USB
 # interface / Bluetooth) is a Java-only API (AudioManager.getDevices): the NDK
