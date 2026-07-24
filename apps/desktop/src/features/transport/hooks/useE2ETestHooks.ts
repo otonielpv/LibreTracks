@@ -58,6 +58,10 @@ import {
   updateTrackColor,
   updateClipColor,
   importSongPackageFromPathWithProgress,
+  updateSongRegionTranspose,
+  updateSongRegionKey,
+  updateSongRegionWarp,
+  updateSongRegionMasterGain,
   type ClipMoveRequest,
   type MarkerKind,
   type TrackKind,
@@ -298,6 +302,27 @@ export interface E2ETestHooks {
     packagePath: string,
     insertAtSeconds: number,
   ) => void;
+  /** Set a region's transpose in semitones. */
+  updateSongRegionTranspose: (
+    regionId: string,
+    transposeSemitones: number,
+  ) => Promise<void>;
+  /** Set (or clear, with null) a region's musical key. */
+  updateSongRegionKey: (
+    regionId: string,
+    key: string | null,
+  ) => Promise<void>;
+  /** Toggle warp on a region and/or set its source BPM. */
+  updateSongRegionWarp: (
+    regionId: string,
+    warpEnabled: boolean,
+    warpSourceBpm: number | null,
+  ) => Promise<void>;
+  /** Commit a region's master gain (linear multiplier). */
+  updateSongRegionMasterGain: (
+    regionId: string,
+    masterGain: number,
+  ) => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -512,6 +537,18 @@ export function useE2ETestHooks(
       },
       importSongPackageFromPath: (packagePath, insertAtSeconds) => {
         void importSongPackageFromPathWithProgress(packagePath, insertAtSeconds);
+      },
+      updateSongRegionTranspose: async (regionId, transposeSemitones) => {
+        await updateSongRegionTranspose(regionId, transposeSemitones);
+      },
+      updateSongRegionKey: async (regionId, key) => {
+        await updateSongRegionKey(regionId, key);
+      },
+      updateSongRegionWarp: async (regionId, warpEnabled, warpSourceBpm) => {
+        await updateSongRegionWarp(regionId, warpEnabled, warpSourceBpm);
+      },
+      updateSongRegionMasterGain: async (regionId, masterGain) => {
+        await updateSongRegionMasterGain(regionId, masterGain);
       },
     };
 

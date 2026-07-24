@@ -49,6 +49,7 @@ export type E2ESongView = {
     key: string | null;
     warpEnabled: boolean;
     warpSourceBpm: number | null;
+    master?: { gain: number };
   }>;
   sectionMarkers: Array<{
     id: string;
@@ -372,6 +373,39 @@ class AppPage {
    * Open a known `.ltsession` through the production project-load flow and
    * wait for the expected persisted song identity to reach the backend.
    */
+  /**
+   * Reopen a `.ltsession` and wait until `predicate` holds on the reloaded song
+   * model (plus the load overlay clears). Use when the reopened song id isn't
+   * known ahead of time; assert on stable content (e.g. a track by name).
+   */
+  async reopenSessionUntil(
+    songFile: string,
+    predicate: (song: E2ESongView) => boolean,
+    timeout = 60_000,
+  ) {
+    await browser.execute(
+      (path: string) =>
+        (
+          window as unknown as {
+            __ltE2E: { openSessionFromPath: (songFile: string) => void };
+          }
+        ).__ltE2E.openSessionFromPath(path),
+      songFile,
+    );
+    await browser.waitUntil(
+      async () => {
+        const song = await this.songView();
+        return song !== null && predicate(song);
+      },
+      { timeout, timeoutMsg: "The reopened session never matched the predicate" },
+    );
+    await (await $(".busy-overlay")).waitForExist({
+      reverse: true,
+      timeout,
+      timeoutMsg: "Project load overlay remained visible after reopening",
+    });
+  }
+
   async openSession(
     songFile: string,
     expectedSongId: string,
@@ -1103,6 +1137,97 @@ class AppPage {
         ).__ltE2E.importSongPackageFromPath(pkg, at),
       packagePath,
       insertAtSeconds,
+    );
+  }
+
+  /** Set a region's transpose in semitones. */
+  async updateSongRegionTranspose(
+    regionId: string,
+    transposeSemitones: number,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, semis: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateSongRegionTranspose: (
+                regionId: string,
+                transposeSemitones: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateSongRegionTranspose(id, semis),
+      regionId,
+      transposeSemitones,
+    );
+  }
+
+  /** Set (or clear, with null) a region's musical key. */
+  async updateSongRegionKey(
+    regionId: string,
+    key: string | null,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, k: string | null) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateSongRegionKey: (
+                regionId: string,
+                key: string | null,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateSongRegionKey(id, k),
+      regionId,
+      key,
+    );
+  }
+
+  /** Toggle warp on a region and/or set its source BPM. */
+  async updateSongRegionWarp(
+    regionId: string,
+    warpEnabled: boolean,
+    warpSourceBpm: number | null,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, on: boolean, bpm: number | null) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateSongRegionWarp: (
+                regionId: string,
+                warpEnabled: boolean,
+                warpSourceBpm: number | null,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateSongRegionWarp(id, on, bpm),
+      regionId,
+      warpEnabled,
+      warpSourceBpm,
+    );
+  }
+
+  /** Commit a region's master gain (linear multiplier). */
+  async updateSongRegionMasterGain(
+    regionId: string,
+    masterGain: number,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, gain: number) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              updateSongRegionMasterGain: (
+                regionId: string,
+                masterGain: number,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.updateSongRegionMasterGain(id, gain),
+      regionId,
+      masterGain,
     );
   }
 

@@ -166,6 +166,17 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     Export uses the test-only `export_region_as_package_at` command (explicit
     path, no dialog); the re-import uses the production
     `start_import_song_package_from_path` (already path-based, no dialog).
+  - `persistence-full.e2e.ts` — full-model persistence, in its own clean
+    session. Widens the shared `session.e2e.ts` track+mute+clip reopen check to
+    the parts most at risk of a silent serialization bug: a region's transpose /
+    key / warp / master gain, base tempo + a tempo marker, base time signature,
+    a section marker's kind/variant/colour/digit, a track colour, a clip colour,
+    and a folder-track hierarchy (parent + depth). Builds the rich state through
+    the seam, saves with Ctrl+S, replaces it with a scratch session, reopens,
+    and re-reads every field from the reloaded model. Note markers must be
+    placed INSIDE a region or the strict `LoadSession` validator rejects the
+    reopen ("Marker is outside its song"); the reopen matches on stable content
+    (the track by name), not the song id (which a reopen may regenerate).
   - `session-package.e2e.ts` — the whole-session `.ltset` export → import round
     trip ("build it at home, open it at the venue"), in its own clean session.
     Builds a one-track/one-clip/one-region session, exports it as a `.ltset`
@@ -319,6 +330,17 @@ transitions.
 
 ## Gotchas
 
+- **The update-available popup is suppressed under WebDriver** — the app's
+  startup update check (`useUpdateCheck` in `app/App.tsx`) is disabled when
+  `navigator.webdriver === true`, mirroring the `__ltE2E` seam. A freshly built
+  E2E binary can outrank the last known release (or a newer one may exist), and
+  the modal would otherwise fire on startup and intercept flows like reopening a
+  session. Do not re-enable it for E2E.
+- **Markers must sit inside a region to survive a reopen** — `create_section_
+  marker` / `upsert_song_tempo_marker` are tolerant, but `LoadSession` is strict
+  and rejects a marker outside every region ("Marker is outside its song"), so
+  the whole reopen fails. Place markers within a region's live bounds. See
+  `persistence-full.e2e.ts`.
 - **Clearing a `type="search"` input** — neither `setValue("")` nor
   `clearValue()` reliably empties one in this WebView (the value survives and
   React's `onChange` never fires). Use select-all + Backspace via
