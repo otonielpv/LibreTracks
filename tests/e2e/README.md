@@ -143,6 +143,13 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     uses the production `start_create_song_from_template_named_at`, which already
     accepts an explicit folder — note that folder must exist first (the backend
     does not mkdir the destination).
+  - `section-markers.e2e.ts` — section-marker attribute edits, in their own
+    clean session: setting a marker's kind + numbered variant, setting and
+    clearing a colour override, and the EXCLUSIVE quick-jump digit assignment
+    (giving a digit already held by another marker steals it from that marker).
+    Section markers are pure Rust-model metadata, so these assert against
+    `song.sectionMarkers` (kind/variant/color/digit now exposed on the E2E song
+    view).
   - `export.e2e.ts` — region (song) export to a `.ltpkg`, in its own clean
     session. A clip auto-creates a region; the flow exports it both
     metadata-only and with bundled audio, asserting a non-empty package is
@@ -244,6 +251,10 @@ exposes:
   region (song) as a `.ltpkg` to an explicit path (test-only
   `export_region_as_package_at`, mirroring the dialog export). Resolves true on
   success.
+- `setSectionMarkerKind(id, kind, variant)` / `setSectionMarkerColor(id, color)`
+  / `assignSectionMarkerDigit(id, digit)` — section-marker attribute commands.
+  Digit assignment is exclusive (steals the digit from any prior holder); a null
+  colour/digit clears it. Asserted against `song.sectionMarkers`.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

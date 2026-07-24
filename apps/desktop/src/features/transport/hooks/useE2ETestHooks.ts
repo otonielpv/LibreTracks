@@ -48,7 +48,11 @@ import {
   createSongFromTemplateNamed,
   listSessionTemplates,
   exportRegionAsPackageAt,
+  setSectionMarkerKind,
+  setSectionMarkerColor,
+  assignSectionMarkerDigit,
   type ClipMoveRequest,
+  type MarkerKind,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
 import { useTimelineUIStore } from "../uiStore";
@@ -224,6 +228,25 @@ export interface E2ETestHooks {
     writePath: string,
     includeAudio: boolean,
   ) => Promise<boolean>;
+  /** Set a section marker's kind (and optional numbered variant). */
+  setSectionMarkerKind: (
+    sectionId: string,
+    kind: MarkerKind,
+    variant: number | null,
+  ) => Promise<void>;
+  /** Set (or clear, with null) a section marker's colour override. */
+  setSectionMarkerColor: (
+    sectionId: string,
+    color: string | null,
+  ) => Promise<void>;
+  /**
+   * Assign a quick-jump digit to a marker (or clear it with null). Assigning a
+   * digit already held by another marker steals it from that marker.
+   */
+  assignSectionMarkerDigit: (
+    sectionId: string,
+    digit: number | null,
+  ) => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -410,6 +433,15 @@ export function useE2ETestHooks(
       },
       exportRegionAsPackageAt: (regionId, writePath, includeAudio) =>
         exportRegionAsPackageAt(regionId, writePath, includeAudio),
+      setSectionMarkerKind: async (sectionId, kind, variant) => {
+        await setSectionMarkerKind(sectionId, kind, variant);
+      },
+      setSectionMarkerColor: async (sectionId, color) => {
+        await setSectionMarkerColor(sectionId, color);
+      },
+      assignSectionMarkerDigit: async (sectionId, digit) => {
+        await assignSectionMarkerDigit(sectionId, digit);
+      },
     };
 
     return () => {

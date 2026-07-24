@@ -51,6 +51,9 @@ export type E2ESongView = {
     name: string;
     startSeconds: number;
     kind?: string;
+    variant?: number | null;
+    digit?: number | null;
+    color?: string | null;
   }>;
   automationCues?: Array<{
     id: string;
@@ -928,6 +931,75 @@ class AppPage {
       regionId,
       writePath,
       includeAudio,
+    );
+  }
+
+  /** Set a section marker's kind (and optional numbered variant). */
+  async setSectionMarkerKind(
+    sectionId: string,
+    kind: string,
+    variant: number | null,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, k: string, v: number | null) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              setSectionMarkerKind: (
+                sectionId: string,
+                kind: string,
+                variant: number | null,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.setSectionMarkerKind(id, k, v),
+      sectionId,
+      kind,
+      variant,
+    );
+  }
+
+  /** Set (or clear, with null) a section marker's colour override. */
+  async setSectionMarkerColor(
+    sectionId: string,
+    color: string | null,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, c: string | null) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              setSectionMarkerColor: (
+                sectionId: string,
+                color: string | null,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.setSectionMarkerColor(id, c),
+      sectionId,
+      color,
+    );
+  }
+
+  /** Assign (or clear, with null) a section marker's quick-jump digit. */
+  async assignSectionMarkerDigit(
+    sectionId: string,
+    digit: number | null,
+  ): Promise<void> {
+    await browser.execute(
+      (id: string, d: number | null) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              assignSectionMarkerDigit: (
+                sectionId: string,
+                digit: number | null,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.assignSectionMarkerDigit(id, d),
+      sectionId,
+      digit,
     );
   }
 
