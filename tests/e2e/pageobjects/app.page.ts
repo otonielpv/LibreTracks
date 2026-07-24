@@ -31,6 +31,8 @@ export type E2ESongView = {
     trackId: string;
     timelineStartSeconds: number;
     durationSeconds: number;
+    filePath: string;
+    isMissing: boolean;
   }>;
   // The backend SongView carries these; the page object exposes just the fields
   // the region/marker flows assert on.
@@ -818,6 +820,25 @@ class AppPage {
           }
         ).__ltE2E.deleteSongTimeSignatureMarker(id),
       markerId,
+    );
+  }
+
+  /** Repoint clips from a missing `oldPath` to an existing `newPath`. */
+  async resolveMissingFile(oldPath: string, newPath: string): Promise<void> {
+    await browser.execute(
+      (from: string, to: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              resolveMissingFile: (
+                oldPath: string,
+                newPath: string,
+              ) => Promise<void>;
+            };
+          }
+        ).__ltE2E.resolveMissingFile(from, to),
+      oldPath,
+      newPath,
     );
   }
 

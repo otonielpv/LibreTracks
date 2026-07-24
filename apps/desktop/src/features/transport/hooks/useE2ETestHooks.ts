@@ -43,6 +43,7 @@ import {
   deleteSongTempoMarker,
   upsertSongTimeSignatureMarker,
   deleteSongTimeSignatureMarker,
+  resolveMissingFile,
   type ClipMoveRequest,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
@@ -188,6 +189,12 @@ export interface E2ETestHooks {
   ) => Promise<void>;
   /** Delete a time-signature marker by id. */
   deleteSongTimeSignatureMarker: (markerId: string) => Promise<void>;
+  /**
+   * Repoint every clip (and library manifest entry) whose file path is
+   * `oldPath` to `newPath` — the "locate a missing audio file" flow. Clears the
+   * clip's `isMissing` flag once the new path exists on disk.
+   */
+  resolveMissingFile: (oldPath: string, newPath: string) => Promise<void>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -360,6 +367,9 @@ export function useE2ETestHooks(
       },
       deleteSongTimeSignatureMarker: async (markerId) => {
         await deleteSongTimeSignatureMarker(markerId);
+      },
+      resolveMissingFile: async (oldPath, newPath) => {
+        await resolveMissingFile(oldPath, newPath);
       },
     };
 

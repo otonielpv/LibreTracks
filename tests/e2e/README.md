@@ -134,6 +134,11 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     time-signature markers (asserting the backend rule that an upsert at
     startSeconds ~= 0 changes the BASE value rather than adding a marker). Flow
     module: `session/tempo.flows.ts`.
+  - `missing-file.e2e.ts` — the "locate a missing audio file" flow, in its own
+    clean session. Creates a clip pointing at a real WAV, deletes that WAV from
+    disk (so `getSongView` recomputes `isMissing = true` on the clip), writes a
+    replacement WAV elsewhere, and calls `resolveMissingFile(old, new)` — then
+    asserts the clip repoints to the new path and its `isMissing` flag clears.
   - `session/*.flows.ts` — domain modules registered by `session.e2e.ts`
     against the same native session. Add new open-session cases to the closest
     flow module (or create another one); keep `session.e2e.ts` limited to
@@ -209,6 +214,10 @@ exposes:
   ("N/D", both > 0); an upsert at `startSeconds ~= 0` sets the base value
   instead of creating a marker. Asserted against `song.bpm` /
   `song.timeSignature` / `song.tempoMarkers` / `song.timeSignatureMarkers`.
+- `resolveMissingFile(oldPath, newPath)` — the "locate a missing audio file"
+  command: repoint every clip (and library manifest entry) whose path is
+  `oldPath` to `newPath`. Asserted against `clip.filePath` / `clip.isMissing`
+  (both now exposed on the E2E song view).
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an
