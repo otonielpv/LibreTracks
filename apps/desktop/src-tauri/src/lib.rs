@@ -243,6 +243,7 @@ pub fn run() {
             commands::project::stage_imported_audio_chunk,
             commands::project::import_staged_audio_files,
             commands::project::export_region_as_package,
+            commands::project::export_region_as_package_at,
             commands::project::export_region_rendered_audio,
             commands::project::import_song_package,
             commands::project::export_session_package,

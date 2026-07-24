@@ -143,6 +143,13 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     uses the production `start_create_song_from_template_named_at`, which already
     accepts an explicit folder — note that folder must exist first (the backend
     does not mkdir the destination).
+  - `export.e2e.ts` — region (song) export to a `.ltpkg`, in its own clean
+    session. A clip auto-creates a region; the flow exports it both
+    metadata-only and with bundled audio, asserting a non-empty package is
+    written each time and that the audio-bundled one is at least as large. Uses
+    the test-only `export_region_as_package_at` command (explicit path, no
+    dialog); the same `libretracks_project::export_region_as_package` code runs
+    underneath.
   - `missing-file.e2e.ts` — the "locate a missing audio file" flow, in its own
     clean session. Creates a clip pointing at a real WAV, deletes that WAV from
     disk (so `getSongView` recomputes `isMissing = true` on the clip), writes a
@@ -233,6 +240,10 @@ exposes:
   test-only backend command (`save_session_as_template_at`) mirroring the
   dialog save; the create side is the production
   `start_create_song_from_template_named_at`.
+- `exportRegionAsPackageAt(regionId, writePath, includeAudio)` — export a
+  region (song) as a `.ltpkg` to an explicit path (test-only
+  `export_region_as_package_at`, mirroring the dialog export). Resolves true on
+  success.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

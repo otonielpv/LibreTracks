@@ -742,6 +742,23 @@ export async function exportRegionAsPackage(
   return invokeCommand<boolean>("export_region_as_package", { regionId, includeAudio });
 }
 
+/**
+ * Export a region (song) as a `.ltpkg` to an explicit path, bypassing the
+ * native save dialog. Used by the E2E automation seam (which cannot pilot the
+ * dialog); not called from production UI.
+ */
+export async function exportRegionAsPackageAt(
+  regionId: string,
+  writePath: string,
+  includeAudio = false,
+): Promise<boolean> {
+  return invokeCommand<boolean>("export_region_as_package_at", {
+    regionId,
+    writePath,
+    includeAudio,
+  });
+}
+
 // Returns false if the user cancelled the save dialog (nothing was written).
 export async function exportRegionRenderedAudio(regionId: string): Promise<boolean> {
   return invokeCommand<boolean>("export_region_rendered_audio", { regionId });

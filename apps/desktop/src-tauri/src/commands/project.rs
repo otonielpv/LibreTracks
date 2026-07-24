@@ -1595,6 +1595,53 @@ pub async fn export_region_as_package(
     Ok(true)
 }
 
+/// Export a region (song) as a `.ltpkg` to an explicit path, bypassing the
+/// native save dialog. Mirrors `export_region_as_package` but writes straight
+/// to `write_path` — used by the E2E automation seam, which cannot pilot the
+/// dialog. Not wired into any production UI.
+#[tauri::command]
+pub async fn export_region_as_package_at(
+    region_id: String,
+    write_path: String,
+    include_audio: bool,
+    state: State<'_, DesktopState>,
+) -> Result<bool, String> {
+    let (song_dir, song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| "No song loaded".to_string())?;
+        let song = session
+            .engine
+            .song()
+            .cloned()
+            .ok_or_else(|| "No song loaded".to_string())?;
+        (song_dir, song)
+    };
+
+    let cache_root = crate::state::decoding_cache_root();
+    let write_path = std::path::PathBuf::from(write_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        libretracks_project::export_region_as_package(
+            &cache_root,
+            &song_dir,
+            &song,
+            &region_id,
+            &write_path,
+            include_audio,
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+
+    Ok(true)
+}
+
 #[tauri::command]
 pub fn export_region_rendered_audio(
     app: AppHandle,

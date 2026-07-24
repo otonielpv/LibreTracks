@@ -47,6 +47,7 @@ import {
   saveSessionAsTemplateAt,
   createSongFromTemplateNamed,
   listSessionTemplates,
+  exportRegionAsPackageAt,
   type ClipMoveRequest,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
@@ -214,6 +215,15 @@ export interface E2ETestHooks {
     name: string,
     parentDir: string,
   ) => void;
+  /**
+   * Export a region (song) as a `.ltpkg` to an explicit path (no dialog).
+   * Resolves true on success. `includeAudio` bundles the clip audio.
+   */
+  exportRegionAsPackageAt: (
+    regionId: string,
+    writePath: string,
+    includeAudio: boolean,
+  ) => Promise<boolean>;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -398,6 +408,8 @@ export function useE2ETestHooks(
       createSessionFromTemplate: (templatePath, name, parentDir) => {
         void createSongFromTemplateNamed(templatePath, name, parentDir);
       },
+      exportRegionAsPackageAt: (regionId, writePath, includeAudio) =>
+        exportRegionAsPackageAt(regionId, writePath, includeAudio),
     };
 
     return () => {

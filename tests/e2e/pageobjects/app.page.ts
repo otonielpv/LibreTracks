@@ -906,6 +906,31 @@ class AppPage {
     });
   }
 
+  /** Export a region (song) as a `.ltpkg` to an explicit path; resolves true. */
+  async exportRegionAsPackageAt(
+    regionId: string,
+    writePath: string,
+    includeAudio: boolean,
+  ): Promise<boolean> {
+    return browser.execute(
+      (id: string, p: string, audio: boolean) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              exportRegionAsPackageAt: (
+                regionId: string,
+                writePath: string,
+                includeAudio: boolean,
+              ) => Promise<boolean>;
+            };
+          }
+        ).__ltE2E.exportRegionAsPackageAt(id, p, audio),
+      regionId,
+      writePath,
+      includeAudio,
+    );
+  }
+
   /** Read the canonical transport snapshot returned by the engine bridge. */
   async transportSnapshot(): Promise<E2ETransportSnapshot> {
     return browser.execute(
