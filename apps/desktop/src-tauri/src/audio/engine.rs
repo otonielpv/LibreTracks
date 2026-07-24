@@ -119,6 +119,22 @@ pub struct AudioMeterLevel {
     pub right_peak: f32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOutputMeterLevel {
+    pub left_peak: f32,
+    pub right_peak: f32,
+}
+
+/// E2E-only: the most recent final stereo output frames for spectral analysis.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOutputCapture {
+    pub sample_rate: u32,
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+}
+
 /// Emitted as `audio:device_status` whenever the output device's health
 /// changes: `fallbackActive: true` means the device died (or never opened)
 /// and the engine is running on its internal silent clock while the watchdog
@@ -2167,6 +2183,60 @@ impl AudioController {
                 right_peak: meter.right_peak,
             })
             .collect())
+    }
+
+    pub fn current_output_meter_level(
+        &self,
+    ) -> Result<AudioOutputMeterLevel, DesktopError> {
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                return Err(DesktopError::AudioCommand(
+                    "output meters: state locked".into(),
+                ))
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(DesktopError::AudioCommand(
+                    "audio v2 state lock poisoned".into(),
+                ))
+            }
+        };
+        let snapshot = ensure_engine(&mut state)?
+            .get_snapshot()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        Ok(AudioOutputMeterLevel {
+            left_peak: snapshot.meters.left_peak,
+            right_peak: snapshot.meters.right_peak,
+        })
+    }
+
+    /// E2E-only: capture the most recent final stereo output for spectral
+    /// analysis. Mirrors `current_output_meter_level`'s non-blocking `try_lock`
+    /// contract so it never contends the audio path.
+    pub fn capture_output_samples(
+        &self,
+    ) -> Result<AudioOutputCapture, DesktopError> {
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                return Err(DesktopError::AudioCommand(
+                    "output capture: state locked".into(),
+                ))
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(DesktopError::AudioCommand(
+                    "audio v2 state lock poisoned".into(),
+                ))
+            }
+        };
+        let capture = ensure_engine(&mut state)?
+            .capture_output_samples()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        Ok(AudioOutputCapture {
+            sample_rate: capture.sample_rate,
+            left: capture.left,
+            right: capture.right,
+        })
     }
 
     /// Device watchdog (runs ~2×/s on the meter thread). The C++ stall monitor

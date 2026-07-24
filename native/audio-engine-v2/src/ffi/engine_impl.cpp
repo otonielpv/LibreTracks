@@ -1422,6 +1422,34 @@ std::string EngineImpl::get_source_peaks(const std::string& source_id,
     return out.dump();
 }
 
+std::string EngineImpl::capture_output_samples() const {
+    json out;
+    out["ok"] = false;
+    if (!mixer_) {
+        out["error"] = "mixer is not available";
+        return out.dump();
+    }
+
+    std::vector<float> interleaved;
+    int sample_rate = 0;
+    const std::size_t frames =
+        mixer_->capture_output_samples(interleaved, sample_rate);
+
+    std::vector<float> left(frames);
+    std::vector<float> right(frames);
+    for (std::size_t i = 0; i < frames; ++i) {
+        left[i] = interleaved[i * 2];
+        right[i] = interleaved[i * 2 + 1];
+    }
+
+    out["ok"] = true;
+    out["sample_rate"] = sample_rate;
+    out["frames"] = static_cast<std::uint64_t>(frames);
+    out["left"] = std::move(left);
+    out["right"] = std::move(right);
+    return out.dump();
+}
+
 // ---------------------------------------------------------------------------
 // Command dispatch
 // ---------------------------------------------------------------------------

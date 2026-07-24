@@ -114,9 +114,16 @@ export function App() {
   // now bundles the signed APK alongside the desktop installers under the same
   // version tag, and the download page lists the .apk asset, so the modal's
   // "Download" button lands the phone on a page where the APK is available.
+  // Suppress the update-available popup under WebDriver: it would otherwise
+  // fire on startup (the freshly built E2E binary can outrank the last known
+  // release, or a newer release may exist) and intercept flows like reopening a
+  // session. Gated on navigator.webdriver, mirroring the __ltE2E test seam, so a
+  // real user session is unaffected.
+  const isWebDriver =
+    typeof navigator !== "undefined" && navigator.webdriver === true;
   const { release, isModalOpen, dismiss } = useUpdateCheck({
     currentVersion,
-    enabled: isTauriApp && !import.meta.env.DEV,
+    enabled: isTauriApp && !import.meta.env.DEV && !isWebDriver,
   });
 
   return (

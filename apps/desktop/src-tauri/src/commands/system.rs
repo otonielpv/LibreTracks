@@ -8,7 +8,7 @@ use std::{
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::audio::engine::AudioDebugSnapshot;
+use crate::audio::engine::{AudioDebugSnapshot, AudioOutputMeterLevel};
 use crate::infra::error::DesktopError;
 use crate::midi::get_midi_input_names;
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
@@ -164,6 +164,27 @@ pub fn get_audio_debug_snapshot(
     state
         .audio
         .debug_snapshot()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_audio_output_meter(
+    state: State<'_, DesktopState>,
+) -> Result<AudioOutputMeterLevel, String> {
+    state
+        .audio
+        .current_output_meter_level()
+        .map_err(|error| error.to_string())
+}
+
+/// E2E-only: capture the most recent final stereo output for spectral analysis.
+#[tauri::command]
+pub fn get_audio_output_capture(
+    state: State<'_, DesktopState>,
+) -> Result<crate::audio::engine::AudioOutputCapture, String> {
+    state
+        .audio
+        .capture_output_samples()
         .map_err(|error| error.to_string())
 }
 

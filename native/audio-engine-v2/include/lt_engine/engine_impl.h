@@ -48,6 +48,9 @@ public:
     std::string  list_devices(bool force_rescan = false)  const;
     std::string  get_source_peaks(const std::string& source_id,
                                   int resolution_frames) const;
+    // E2E: JSON snapshot of the most recent final stereo output for spectral
+    // analysis ({ ok, sample_rate, frames, left[], right[] }).
+    std::string  capture_output_samples() const;
 
     // Decode a pad key from disk and swap it into the renderer, RIGHT NOW, on
     // the calling thread. Bypasses the command queue so the (multi-second) MP3

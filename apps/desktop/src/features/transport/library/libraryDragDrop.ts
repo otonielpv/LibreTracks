@@ -1648,6 +1648,47 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     });
   }
 
+  /**
+   * Import explicit native paths into the library without creating timeline
+   * clips. Kept separate from the picker so platform-specific chooser seams
+   * can share the production placeholder/import/refresh pipeline.
+   */
+  async function handleImportLibraryFromPaths(paths: string[]) {
+    if (!deps().playbackSongDirRef.current) {
+      deps().setStatus(deps().t("transport.status.importRequiresSession"));
+      return;
+    }
+
+    if (!paths.length) {
+      return;
+    }
+
+    // showInTimeline = false: this is a library-only import. The placeholder
+    // shows in the library list (analyzing feedback) but must NOT render a
+    // track/clip in the timeline, or clips flash in at position 0 and vanish.
+    const pendingImports = createPendingAudioImportsFromPaths(paths, 0, false);
+    useTransportStore.getState().addPendingAudioImports(pendingImports);
+    deps().setStatus(deps().t("transport.status.libraryImportStarting"));
+    await nextPaint();
+
+    await runAudioImportPipeline({
+      pendingIds: pendingImports.map((item) => item.id),
+      importFn: () =>
+        importAudioFilesFromPaths(
+          paths.map((path) => ({
+            fileName: libraryAssetFileName(path),
+            sourcePath: path,
+          })),
+        ),
+      // No onImported tail: library import does not create timeline clips.
+      mergeLibraryAssets: deps().mergeLibraryAssets,
+      refreshLibraryState: deps().refreshLibraryState,
+      setStatus: deps().setStatus,
+      successMessage: (importedAssets) =>
+        deps().t("transport.status.libraryUpdated", { count: importedAssets.length }),
+    });
+  }
+
   // Library "import audio" button. Unified with drag-and-drop: pick paths, show
   // the same per-file "analyzing" placeholders, and run the shared pipeline —
   // but WITHOUT the timeline tail (library-only, no tracks/clips created).
@@ -1733,30 +1774,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       return; // user cancelled
     }
 
-    // showInTimeline = false: this is a library-only import. The placeholder
-    // shows in the library list (analyzing feedback) but must NOT render a
-    // track/clip in the timeline, or clips flash in at position 0 and vanish.
-    const pendingImports = createPendingAudioImportsFromPaths(paths, 0, false);
-    useTransportStore.getState().addPendingAudioImports(pendingImports);
-    deps().setStatus(deps().t("transport.status.libraryImportStarting"));
-    await nextPaint();
-
-    await runAudioImportPipeline({
-      pendingIds: pendingImports.map((item) => item.id),
-      importFn: () =>
-        importAudioFilesFromPaths(
-          paths.map((path) => ({
-            fileName: libraryAssetFileName(path),
-            sourcePath: path,
-          })),
-        ),
-      // No onImported tail: library import does not create timeline clips.
-      mergeLibraryAssets: deps().mergeLibraryAssets,
-      refreshLibraryState: deps().refreshLibraryState,
-      setStatus: deps().setStatus,
-      successMessage: (importedAssets) =>
-        deps().t("transport.status.libraryUpdated", { count: importedAssets.length }),
-    });
+    await handleImportLibraryFromPaths(paths);
   }
 
   function rejectExternalDrop(kind: DroppedFileClassification["kind"]) {
@@ -2180,6 +2198,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     handleDroppedExternalProjectPath,
     handleDroppedAudioFiles,
     handleDroppedAudioPaths,
+    handleImportLibraryFromPaths,
     handleImportLibraryFromDialog,
     handleExternalTimelineDrop,
     handleNativeExternalTimelineDrop,

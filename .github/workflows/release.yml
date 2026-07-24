@@ -88,6 +88,42 @@ jobs:
       - name: Run native engine tests
         run: ctest --test-dir build/engine-ci-tests -C Debug --output-on-failure
 
+      # End-to-end tests drive the real compiled desktop app through Tauri's
+      # WebDriver bridge. Windows-only: tauri-driver has no macOS WKWebView
+      # support, and Linux would need a headed X server + WebKitGTK, so this
+      # step is gated to the Windows runner. It builds the native binary (the
+      # E2E seam lives in the frontend bundle) then runs the deterministic,
+      # isolated specs — session.e2e.ts is intentionally excluded here because
+      # its drag-and-drop / native-signal timing is flaky under load.
+      #
+      # continue-on-error keeps a first-time environment issue (headless
+      # WebView2 / audio device availability on the runner) from blocking
+      # releases. Once it's proven green on CI hardware, drop this line to make
+      # E2E failures gate the release.
+      - name: Build desktop app for E2E
+        if: runner.os == 'Windows'
+        run: npm run build:desktop:native
+
+      - name: Run E2E tests (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: >
+          npx wdio run tests/e2e/wdio.conf.ts
+          --spec tests/e2e/specs/app-launch.e2e.ts
+          --spec tests/e2e/specs/landing.e2e.ts
+          --spec tests/e2e/specs/side-nav.e2e.ts
+          --spec tests/e2e/specs/settings.e2e.ts
+          --spec tests/e2e/specs/library.e2e.ts
+          --spec tests/e2e/specs/timeline-edits.e2e.ts
+          --spec tests/e2e/specs/tempo.e2e.ts
+          --spec tests/e2e/specs/missing-file.e2e.ts
+          --spec tests/e2e/specs/templates.e2e.ts
+          --spec tests/e2e/specs/export.e2e.ts
+          --spec tests/e2e/specs/section-markers.e2e.ts
+          --spec tests/e2e/specs/session-package.e2e.ts
+          --spec tests/e2e/specs/track-structure.e2e.ts
+          --spec tests/e2e/specs/persistence-full.e2e.ts
+
   build-release-assets:
     needs: test
     strategy:

@@ -140,6 +140,21 @@ impl ResourceMonitor {
         }
         let process_cpu_percent = process_cpu_raw / core_count;
 
+        // Guard against over-counting the family's memory. `Process::memory()`
+        // reports each process's RSS, and on Linux the WebKitGTK process model
+        // (WebProcess + NetworkProcess + GPU child) shares large mapped regions
+        // — shared libraries and shared-memory buffers between the processes.
+        // Summing raw RSS counts those shared pages once per process, which on
+        // real user machines inflated the meter to absurd values (e.g. "91.2 GB"
+        // on a 15.5 GB box). sysinfo exposes no portable shared/PSS figure to
+        // subtract, so clamp the aggregate to the RAM the whole system is
+        // actually using: our process family physically cannot hold more
+        // resident memory than that. This keeps the meter truthful as a
+        // "is it us or the machine?" diagnostic on every platform.
+        if system_memory_used_bytes > 0 {
+            process_memory_bytes = process_memory_bytes.min(system_memory_used_bytes);
+        }
+
         // Disk: difference the family's cumulative counters against the
         // previous sample.
         let now = Instant::now();

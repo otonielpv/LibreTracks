@@ -889,18 +889,32 @@ void Mixer::render(float** output_channels,
     update_region_meters(output_channels, num_channels, num_frames,
                          session.get(), timeline_frame);
 
-    // Peak meters.
+    // Peak meters (+ E2E output capture, fused into the same final-output walk).
+    // The capture write is a relaxed store into the pre-allocated ring: no lock,
+    // no allocation. `write` advances monotonically; the reader recovers the
+    // last kCaptureFrames from it modulo the ring size.
     float peak_l = 0.f, peak_r = 0.f;
     double sum_l = 0.0, sum_r = 0.0;
+    std::uint64_t cap_write = capture_write_frames_.load(std::memory_order_relaxed);
     for (int f = 0; f < num_frames; ++f) {
-        peak_l = std::max(peak_l, std::abs(output_channels[0][f]));
-        sum_l += static_cast<double>(output_channels[0][f]) * output_channels[0][f];
+        const float l = output_channels[0][f];
+        const float r = num_channels >= 2 ? output_channels[1][f] : l;
+        peak_l = std::max(peak_l, std::abs(l));
+        sum_l += static_cast<double>(l) * l;
         if (num_channels >= 2)
         {
-            peak_r = std::max(peak_r, std::abs(output_channels[1][f]));
-            sum_r += static_cast<double>(output_channels[1][f]) * output_channels[1][f];
+            peak_r = std::max(peak_r, std::abs(r));
+            sum_r += static_cast<double>(r) * r;
         }
+        const std::size_t slot =
+            static_cast<std::size_t>((cap_write + static_cast<std::uint64_t>(f)) % kCaptureFrames) * 2;
+        capture_ring_[slot] = l;
+        capture_ring_[slot + 1] = r;
     }
+    capture_write_frames_.store(cap_write + static_cast<std::uint64_t>(num_frames),
+                                std::memory_order_release);
+    capture_sample_rate_.store(static_cast<int>(clock_->sample_rate()),
+                               std::memory_order_relaxed);
     meter_l_.store(peak_l, std::memory_order_relaxed);
     meter_r_.store(peak_r, std::memory_order_relaxed);
     meter_l_rms_.store(static_cast<float>(std::sqrt(sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
@@ -1257,6 +1271,31 @@ MeterValues Mixer::meters() const noexcept {
     m.left_rms   = meter_l_rms_.load(std::memory_order_relaxed);
     m.right_rms  = meter_r_rms_.load(std::memory_order_relaxed);
     return m;
+}
+
+std::size_t Mixer::capture_output_samples(std::vector<float>& out,
+                                          int& sample_rate_out) const {
+    // Acquire pairs with the audio thread's release store of the write cursor,
+    // so the ring samples we read below are visible. The audio thread never
+    // blocks on us; a store racing with this read at worst yields a sample from
+    // an adjacent block, harmless for spectral analysis.
+    const std::uint64_t write =
+        capture_write_frames_.load(std::memory_order_acquire);
+    sample_rate_out = capture_sample_rate_.load(std::memory_order_relaxed);
+
+    const std::size_t available =
+        static_cast<std::size_t>(std::min<std::uint64_t>(write, kCaptureFrames));
+    out.clear();
+    out.resize(available * 2);
+    // Oldest-first: the earliest retained frame is `write - available`.
+    const std::uint64_t start = write - available;
+    for (std::size_t i = 0; i < available; ++i) {
+        const std::size_t slot =
+            static_cast<std::size_t>((start + i) % kCaptureFrames) * 2;
+        out[i * 2] = capture_ring_[slot];
+        out[i * 2 + 1] = capture_ring_[slot + 1];
+    }
+    return available;
 }
 
 std::vector<TrackMeterValues> Mixer::track_meters() const {

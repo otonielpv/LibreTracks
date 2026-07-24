@@ -131,6 +131,13 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
     return buf.c_str();
 }
 
+LT_API const char* lt_audio_engine_capture_output_samples(LtEngine* engine) {
+    if (!engine) return "{\"ok\":false,\"error\":\"invalid handle\"}";
+    thread_local std::string buf;
+    buf = as_impl(engine)->capture_output_samples();
+    return buf.c_str();
+}
+
 LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
                                                       int32_t resolution_frames) {
     if (!file_path) return "{\"ok\":false,\"error\":\"invalid file path\"}";

@@ -4,6 +4,8 @@ import type {
   AudioFileImportPayload,
   AudioFilePathImportPayload,
   AudioMeterLevel,
+  AudioOutputMeterLevel,
+  AudioOutputCapture,
   AutomationCueSummary,
   AudioOutputDevices,
   CreateClipArgs,
@@ -242,6 +244,40 @@ export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanc
   return invokeCommand<DesktopPerformanceSnapshot>("get_desktop_performance_snapshot");
 }
 
+export async function getAudioOutputMeter(): Promise<AudioOutputMeterLevel> {
+  const maxAttempts = 6;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await invokeCommand<AudioOutputMeterLevel>("get_audio_output_meter");
+    } catch (error) {
+      if (!isTransientAudioStateLockError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await waitForMs(attempt * 10);
+    }
+  }
+  return { leftPeak: 0, rightPeak: 0 };
+}
+
+/**
+ * E2E-only: capture the most recent final stereo output for spectral analysis.
+ * Retries on the same transient state-lock error as the output meter.
+ */
+export async function getAudioOutputCapture(): Promise<AudioOutputCapture> {
+  const maxAttempts = 6;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await invokeCommand<AudioOutputCapture>("get_audio_output_capture");
+    } catch (error) {
+      if (!isTransientAudioStateLockError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await waitForMs(attempt * 10);
+    }
+  }
+  return { sampleRate: 0, left: [], right: [] };
+}
+
 export async function getSystemResourceSnapshot(): Promise<SystemResourceSnapshot> {
   return invokeCommand<SystemResourceSnapshot>("get_system_resource_snapshot");
 }
@@ -383,6 +419,17 @@ export async function listSessionTemplates(): Promise<SessionTemplateSummary[]> 
  */
 export async function saveSessionAsTemplate(): Promise<boolean> {
   return invokeCommand<boolean>("start_save_session_as_template");
+}
+
+/**
+ * Save the current session as a `.lttemplate` at an explicit path, bypassing
+ * the native save dialog. Used by the E2E automation seam (which cannot pilot
+ * the dialog); not called from production UI.
+ */
+export async function saveSessionAsTemplateAt(
+  templatePath: string,
+): Promise<boolean> {
+  return invokeCommand<boolean>("save_session_as_template_at", { templatePath });
 }
 
 /** Create a new session from a template listed on the landing (known by path). */
@@ -695,6 +742,23 @@ export async function exportRegionAsPackage(
   return invokeCommand<boolean>("export_region_as_package", { regionId, includeAudio });
 }
 
+/**
+ * Export a region (song) as a `.ltpkg` to an explicit path, bypassing the
+ * native save dialog. Used by the E2E automation seam (which cannot pilot the
+ * dialog); not called from production UI.
+ */
+export async function exportRegionAsPackageAt(
+  regionId: string,
+  writePath: string,
+  includeAudio = false,
+): Promise<boolean> {
+  return invokeCommand<boolean>("export_region_as_package_at", {
+    regionId,
+    writePath,
+    includeAudio,
+  });
+}
+
 // Returns false if the user cancelled the save dialog (nothing was written).
 export async function exportRegionRenderedAudio(regionId: string): Promise<boolean> {
   return invokeCommand<boolean>("export_region_rendered_audio", { regionId });
@@ -712,6 +776,37 @@ export async function exportSessionPackage(
   includeAudio: boolean,
 ): Promise<boolean> {
   return invokeCommand<boolean>("export_session_package", { includeAudio });
+}
+
+/**
+ * Export the whole session as a `.ltset` to an explicit path, bypassing the
+ * native dialog and progress-event choreography. Used by the E2E automation
+ * seam (which cannot pilot the dialog); not called from production UI.
+ */
+export async function exportSessionPackageAt(
+  writePath: string,
+  includeAudio: boolean,
+): Promise<boolean> {
+  return invokeCommand<boolean>("export_session_package_at", {
+    writePath,
+    includeAudio,
+  });
+}
+
+/**
+ * Import a `.ltset` as a new session under an explicit target folder, bypassing
+ * both native dialogs. Like the production import, it ends with a
+ * `project:load-complete` event, so drive it through `runProjectLoadCommand`.
+ * Used by the E2E automation seam; not called from production UI.
+ */
+export async function importSessionPackageAt(
+  packagePath: string,
+  targetSongDir: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("import_session_package_at", {
+    packagePath,
+    targetSongDir,
+  });
 }
 
 // Import a .ltset as a brand-new session. The backend opens two dialogs (pick

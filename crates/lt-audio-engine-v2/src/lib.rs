@@ -65,6 +65,27 @@ struct SourcePeaksResponse {
     max_peaks_right: Vec<f32>,
 }
 
+/// E2E: the most recent final stereo output frames captured by the mixer.
+#[derive(Debug, Clone)]
+pub struct OutputCapture {
+    pub sample_rate: u32,
+    pub left: Vec<f32>,
+    pub right: Vec<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OutputCaptureResponse {
+    ok: bool,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    sample_rate: u32,
+    #[serde(default)]
+    left: Vec<f32>,
+    #[serde(default)]
+    right: Vec<f32>,
+}
+
 // SAFETY: EngineImpl internally synchronises its state.  The Rust wrapper
 // does not expose &-sharing across threads.
 unsafe impl Send for Engine {}
@@ -313,6 +334,31 @@ impl Engine {
             max_peaks: response.max_peaks,
             min_peaks_right: response.min_peaks_right,
             max_peaks_right: response.max_peaks_right,
+        })
+    }
+
+    /// E2E: snapshot the most recent final stereo output for spectral analysis.
+    pub fn capture_output_samples(&self) -> Result<OutputCapture, EngineError> {
+        let ptr = unsafe { lt_audio_engine_capture_output_samples(self.handle) };
+        if ptr.is_null() {
+            return Err(EngineError::Internal(
+                "output capture returned null".into(),
+            ));
+        }
+        let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
+        let response: OutputCaptureResponse =
+            serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))?;
+        if !response.ok {
+            return Err(EngineError::Internal(
+                response
+                    .error
+                    .unwrap_or_else(|| "output capture unavailable".into()),
+            ));
+        }
+        Ok(OutputCapture {
+            sample_rate: response.sample_rate,
+            left: response.left,
+            right: response.right,
         })
     }
 }

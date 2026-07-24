@@ -62,3 +62,9 @@ apps/desktop/src-tauri/gen/android/keystore.properties
 *.jks
 *.keystore
 __pycache__/
+# WebdriverIO / Tauri E2E artefacts. The @wdio/tauri-service writes a logs/
+# dir at the repo root and downloads its own msedgedriver to a temp dir; the
+# vendored driver folder (if you ever pin one locally) must never be committed.
+/logs/
+tests/e2e/drivers/
+tests/e2e/.wdio-*/
