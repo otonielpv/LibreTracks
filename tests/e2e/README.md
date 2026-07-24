@@ -134,6 +134,15 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     time-signature markers (asserting the backend rule that an upsert at
     startSeconds ~= 0 changes the BASE value rather than adding a marker). Flow
     module: `session/tempo.flows.ts`.
+  - `templates.e2e.ts` — session template round-trip, in its own clean session.
+    Builds a session with two named tracks, saves it as a `.lttemplate` at an
+    explicit path (via the test-only `save_session_as_template_at` command,
+    which bypasses the native save dialog), then creates a NEW session from that
+    template and asserts the tracks survive by name while all clips are dropped
+    (`strip_song_to_template` keeps structure/routing only). The create side
+    uses the production `start_create_song_from_template_named_at`, which already
+    accepts an explicit folder — note that folder must exist first (the backend
+    does not mkdir the destination).
   - `missing-file.e2e.ts` — the "locate a missing audio file" flow, in its own
     clean session. Creates a clip pointing at a real WAV, deletes that WAV from
     disk (so `getSongView` recomputes `isMissing = true` on the clip), writes a
@@ -218,6 +227,12 @@ exposes:
   command: repoint every clip (and library manifest entry) whose path is
   `oldPath` to `newPath`. Asserted against `clip.filePath` / `clip.isMissing`
   (both now exposed on the E2E song view).
+- `saveSessionAsTemplateAt(path)` / `listSessionTemplates()` /
+  `createSessionFromTemplate(templatePath, name, parentDir)` — the session
+  template round trip without native dialogs. `saveSessionAsTemplateAt` is a
+  test-only backend command (`save_session_as_template_at`) mirroring the
+  dialog save; the create side is the production
+  `start_create_song_from_template_named_at`.
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an

@@ -421,6 +421,17 @@ export async function saveSessionAsTemplate(): Promise<boolean> {
   return invokeCommand<boolean>("start_save_session_as_template");
 }
 
+/**
+ * Save the current session as a `.lttemplate` at an explicit path, bypassing
+ * the native save dialog. Used by the E2E automation seam (which cannot pilot
+ * the dialog); not called from production UI.
+ */
+export async function saveSessionAsTemplateAt(
+  templatePath: string,
+): Promise<boolean> {
+  return invokeCommand<boolean>("save_session_as_template_at", { templatePath });
+}
+
 /** Create a new session from a template listed on the landing (known by path). */
 export async function createSongFromTemplatePath(
   templatePath: string,

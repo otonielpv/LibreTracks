@@ -842,6 +842,70 @@ class AppPage {
     );
   }
 
+  /** Save the current session as a `.lttemplate` at an explicit path. */
+  async saveSessionAsTemplateAt(templatePath: string): Promise<void> {
+    await browser.execute(
+      (p: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              saveSessionAsTemplateAt: (path: string) => Promise<string>;
+            };
+          }
+        ).__ltE2E.saveSessionAsTemplateAt(p),
+      templatePath,
+    );
+  }
+
+  /** List the `.lttemplate` files in the default templates folder. */
+  async listSessionTemplates(): Promise<Array<{ name: string; path: string }>> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              listSessionTemplates: () => Promise<
+                Array<{ name: string; path: string }>
+              >;
+            };
+          }
+        ).__ltE2E.listSessionTemplates(),
+    );
+  }
+
+  /**
+   * Create a new session from a template (no dialog) and wait for the timeline
+   * shell to mount — the project-load flow unmounts the landing on completion.
+   */
+  async createSessionFromTemplate(
+    templatePath: string,
+    name: string,
+    parentDir: string,
+    timeout = 60_000,
+  ): Promise<void> {
+    await browser.execute(
+      (tpl: string, n: string, dir: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              createSessionFromTemplate: (
+                templatePath: string,
+                name: string,
+                parentDir: string,
+              ) => void;
+            };
+          }
+        ).__ltE2E.createSessionFromTemplate(tpl, n, dir),
+      templatePath,
+      name,
+      parentDir,
+    );
+    await (await this.timelineShell).waitForDisplayed({
+      timeout,
+      timeoutMsg: "Timeline shell never appeared after creating from template",
+    });
+  }
+
   /** Read the canonical transport snapshot returned by the engine bridge. */
   async transportSnapshot(): Promise<E2ETransportSnapshot> {
     return browser.execute(

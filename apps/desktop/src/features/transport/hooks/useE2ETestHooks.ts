@@ -44,6 +44,9 @@ import {
   upsertSongTimeSignatureMarker,
   deleteSongTimeSignatureMarker,
   resolveMissingFile,
+  saveSessionAsTemplateAt,
+  createSongFromTemplateNamed,
+  listSessionTemplates,
   type ClipMoveRequest,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
@@ -195,6 +198,22 @@ export interface E2ETestHooks {
    * clip's `isMissing` flag once the new path exists on disk.
    */
   resolveMissingFile: (oldPath: string, newPath: string) => Promise<void>;
+  /**
+   * Save the current session as a `.lttemplate` at an explicit path (no native
+   * dialog). Returns the path back for convenience.
+   */
+  saveSessionAsTemplateAt: (templatePath: string) => Promise<string>;
+  /** List the `.lttemplate` files in the default templates folder. */
+  listSessionTemplates: () => Promise<Array<{ name: string; path: string }>>;
+  /**
+   * Create a new session named `name` in `parentDir` from the template at
+   * `templatePath`, through the production project-load flow (no dialog).
+   */
+  createSessionFromTemplate: (
+    templatePath: string,
+    name: string,
+    parentDir: string,
+  ) => void;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -370,6 +389,14 @@ export function useE2ETestHooks(
       },
       resolveMissingFile: async (oldPath, newPath) => {
         await resolveMissingFile(oldPath, newPath);
+      },
+      saveSessionAsTemplateAt: async (templatePath) => {
+        await saveSessionAsTemplateAt(templatePath);
+        return templatePath;
+      },
+      listSessionTemplates: () => listSessionTemplates(),
+      createSessionFromTemplate: (templatePath, name, parentDir) => {
+        void createSongFromTemplateNamed(templatePath, name, parentDir);
       },
     };
 
