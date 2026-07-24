@@ -778,6 +778,37 @@ export async function exportSessionPackage(
   return invokeCommand<boolean>("export_session_package", { includeAudio });
 }
 
+/**
+ * Export the whole session as a `.ltset` to an explicit path, bypassing the
+ * native dialog and progress-event choreography. Used by the E2E automation
+ * seam (which cannot pilot the dialog); not called from production UI.
+ */
+export async function exportSessionPackageAt(
+  writePath: string,
+  includeAudio: boolean,
+): Promise<boolean> {
+  return invokeCommand<boolean>("export_session_package_at", {
+    writePath,
+    includeAudio,
+  });
+}
+
+/**
+ * Import a `.ltset` as a new session under an explicit target folder, bypassing
+ * both native dialogs. Like the production import, it ends with a
+ * `project:load-complete` event, so drive it through `runProjectLoadCommand`.
+ * Used by the E2E automation seam; not called from production UI.
+ */
+export async function importSessionPackageAt(
+  packagePath: string,
+  targetSongDir: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("import_session_package_at", {
+    packagePath,
+    targetSongDir,
+  });
+}
+
 // Import a .ltset as a brand-new session. The backend opens two dialogs (pick
 // the .ltset, then choose where to save the new project folder), inflates it,
 // and opens it — replacing whatever is loaded. Routes through the same

@@ -1003,6 +1003,66 @@ class AppPage {
     );
   }
 
+  /** Export the whole session as a `.ltset` to an explicit path; resolves true. */
+  async exportSessionPackageAt(
+    writePath: string,
+    includeAudio: boolean,
+  ): Promise<boolean> {
+    return browser.execute(
+      (p: string, audio: boolean) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              exportSessionPackageAt: (
+                writePath: string,
+                includeAudio: boolean,
+              ) => Promise<boolean>;
+            };
+          }
+        ).__ltE2E.exportSessionPackageAt(p, audio),
+      writePath,
+      includeAudio,
+    );
+  }
+
+  /**
+   * Import a `.ltset` as a new session under `targetSongDir` and wait for the
+   * new project to open (the import replaces the current session on
+   * project:load-complete).
+   */
+  async importSessionPackageAt(
+    packagePath: string,
+    targetSongDir: string,
+    expectedSongFileHint: string,
+    timeout = 60_000,
+  ): Promise<void> {
+    await browser.execute(
+      (pkg: string, dir: string) =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              importSessionPackageAt: (
+                packagePath: string,
+                targetSongDir: string,
+              ) => void;
+            };
+          }
+        ).__ltE2E.importSessionPackageAt(pkg, dir),
+      packagePath,
+      targetSongDir,
+    );
+    await browser.waitUntil(
+      async () =>
+        ((await this.transportSnapshot()).songFilePath ?? "").includes(
+          expectedSongFileHint,
+        ),
+      {
+        timeout,
+        timeoutMsg: "The imported session never opened as a new project",
+      },
+    );
+  }
+
   /** Read the canonical transport snapshot returned by the engine bridge. */
   async transportSnapshot(): Promise<E2ETransportSnapshot> {
     return browser.execute(

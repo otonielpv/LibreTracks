@@ -247,6 +247,8 @@ pub fn run() {
             commands::project::export_region_rendered_audio,
             commands::project::import_song_package,
             commands::project::export_session_package,
+            commands::project::export_session_package_at,
+            commands::project::import_session_package_at,
             commands::project::start_import_session_package_from_dialog,
             commands::project::import_external_project,
             commands::project::resolve_missing_file,

@@ -1815,6 +1815,114 @@ pub fn export_session_package(
     Ok(true)
 }
 
+/// Export the whole session as a `.ltset` to an explicit path, bypassing the
+/// native save dialog and the progress-event choreography. Mirrors
+/// `export_session_package` but writes straight to `write_path` — used by the
+/// E2E automation seam, which cannot pilot the dialog. Not wired into any UI.
+#[tauri::command]
+pub async fn export_session_package_at(
+    write_path: String,
+    include_audio: bool,
+    state: State<'_, DesktopState>,
+) -> Result<bool, String> {
+    let (song_dir, song, sidecars) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .prepare_session_package_export()
+            .map_err(|error| error.to_string())?
+    };
+
+    let cache_root = crate::state::decoding_cache_root();
+    let path = std::path::PathBuf::from(write_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        libretracks_project::export_session_as_package(
+            &cache_root,
+            &song_dir,
+            &song,
+            &sidecars,
+            &path,
+            include_audio,
+            |_done, _total| {},
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+
+    Ok(true)
+}
+
+/// Import a `.ltset` as a new session under an explicit target folder,
+/// bypassing both native dialogs. Mirrors the desktop branch of
+/// `start_import_session_package_from_dialog`: it runs the same
+/// `import_session_package_as_new` on a worker thread and ends with the same
+/// `project:load-complete` event, so the frontend load flow runs identically.
+/// Used by the E2E automation seam. Not wired into any UI.
+#[tauri::command]
+pub fn import_session_package_at(
+    app: AppHandle,
+    package_path: String,
+    target_song_dir: String,
+) -> Result<bool, String> {
+    let package_file = std::path::PathBuf::from(package_path);
+    let target_song_dir = std::path::PathBuf::from(target_song_dir);
+
+    let worker_app = app.clone();
+    thread::spawn(move || {
+        let state = worker_app.state::<DesktopState>();
+        let result = (|| -> Result<TransportSnapshot, String> {
+            {
+                let mut session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+                session
+                    .import_session_package_as_new(
+                        &worker_app,
+                        &state.audio,
+                        &package_file,
+                        &target_song_dir,
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            DesktopSession::wait_for_project_audio_preparation_unlocked(
+                &worker_app,
+                &state,
+                &state.audio,
+            )
+            .map_err(|error| error.to_string())
+        })();
+
+        match result {
+            Ok(snapshot) => {
+                emit_transport_lifecycle_event(&worker_app, "sync", &snapshot);
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: Some(snapshot),
+                        error: None,
+                    },
+                );
+            }
+            Err(error) => {
+                crate::infra::error_log::write_error(&format!("session import failed: {error}"));
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: None,
+                        error: Some(error),
+                    },
+                );
+            }
+        }
+    });
+
+    Ok(true)
+}
+
 /// Pick a `.ltset`, choose where to save the new project folder, then inflate
 /// and open it as a fresh session — no session needs to be open first, so this
 /// is wired to the empty-state landing screen as well as the menu. Replaces

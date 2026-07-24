@@ -51,6 +51,8 @@ import {
   setSectionMarkerKind,
   setSectionMarkerColor,
   assignSectionMarkerDigit,
+  exportSessionPackageAt,
+  importSessionPackageAt,
   type ClipMoveRequest,
   type MarkerKind,
 } from "../desktopApi";
@@ -247,6 +249,22 @@ export interface E2ETestHooks {
     sectionId: string,
     digit: number | null,
   ) => Promise<void>;
+  /**
+   * Export the whole session as a `.ltset` to an explicit path (no dialog).
+   * Resolves true on success. `includeAudio` bundles the clip audio.
+   */
+  exportSessionPackageAt: (
+    writePath: string,
+    includeAudio: boolean,
+  ) => Promise<boolean>;
+  /**
+   * Import a `.ltset` as a new session under `targetSongDir` (no dialogs),
+   * through the production project-load flow (project:load-complete event).
+   */
+  importSessionPackageAt: (
+    packagePath: string,
+    targetSongDir: string,
+  ) => void;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -441,6 +459,11 @@ export function useE2ETestHooks(
       },
       assignSectionMarkerDigit: async (sectionId, digit) => {
         await assignSectionMarkerDigit(sectionId, digit);
+      },
+      exportSessionPackageAt: (writePath, includeAudio) =>
+        exportSessionPackageAt(writePath, includeAudio),
+      importSessionPackageAt: (packagePath, targetSongDir) => {
+        void importSessionPackageAt(packagePath, targetSongDir);
       },
     };
 

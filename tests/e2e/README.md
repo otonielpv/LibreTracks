@@ -157,6 +157,16 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     the test-only `export_region_as_package_at` command (explicit path, no
     dialog); the same `libretracks_project::export_region_as_package` code runs
     underneath.
+  - `session-package.e2e.ts` — the whole-session `.ltset` export → import round
+    trip ("build it at home, open it at the venue"), in its own clean session.
+    Builds a one-track/one-clip/one-region session, exports it as a `.ltset`
+    with bundled audio, then imports it into a brand-new folder and asserts the
+    imported session is a genuinely new project carrying the track (by name),
+    the clip and the region — with the clip's audio resolving (not missing),
+    since it travelled inside the package. Uses the test-only
+    `export_session_package_at` / `import_session_package_at` commands (explicit
+    paths, no dialogs); the import ends with the same `project:load-complete`
+    event as a real import.
   - `missing-file.e2e.ts` — the "locate a missing audio file" flow, in its own
     clean session. Creates a clip pointing at a real WAV, deletes that WAV from
     disk (so `getSongView` recomputes `isMissing = true` on the clip), writes a
@@ -255,6 +265,12 @@ exposes:
   / `assignSectionMarkerDigit(id, digit)` — section-marker attribute commands.
   Digit assignment is exclusive (steals the digit from any prior holder); a null
   colour/digit clears it. Asserted against `song.sectionMarkers`.
+- `exportSessionPackageAt(writePath, includeAudio)` /
+  `importSessionPackageAt(packagePath, targetSongDir)` — the whole-session
+  `.ltset` export/import round trip without dialogs (test-only
+  `export_session_package_at` / `import_session_package_at`). The import opens a
+  new session via the production `project:load-complete` flow; its
+  `targetSongDir` must NOT already exist (the import creates it).
 - `getAudioOutputCapture()` — the most recent ~0.5 s of final mixed stereo
   output (sample rate + L/R arrays), captured by a lock-free ring buffer in the
   C++ mixer's hot path. Used to FFT the rendered signal and prove an
