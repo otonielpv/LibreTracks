@@ -349,6 +349,105 @@ TEST_CASE("try_install_native_file rejects missing files") {
         "non-existent-native-wav-for-test-3f8c1.wav");
     CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
 }
+
+// ---------------------------------------------------------------------------
+// Route selection for real-world multitrack stems.
+//
+// Field report: a 25-stem 44.1kHz/24-bit multitrack (~200MB per stem) made the
+// app unusable. Measured with bench_multitrack_load over the real folder, 6
+// stems: at engine SR 44100 all 6 took the stream-in-place route (0 ms, 7 MB
+// peak WS, 0 bytes written); at 48000 all 6 took decode+resample (3.1 s, 65 MB
+// peak WS, 15104 page faults, 865 MB written). Extrapolated to 25 stems that is
+// ~13 s of CPU and ~3.6 GB of disk writes — the "everything slows down".
+//
+// These cases pin WHICH file properties decide the route, so a future change to
+// the eligibility rule has to update them deliberately.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("native-file eligibility ignores bit depth (24-bit stems stream in place)") {
+    // The multitrack stems that triggered the report are 24-bit. Bit depth must
+    // NOT push a file onto the decode path: libsndfile converts to float on
+    // read, so a 24-bit WAV at the engine rate is as streamable as a float one.
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2 + 61;
+    const auto wav_path = make_temp_wav_path("native_pcm24");
+
+    SF_INFO info{};
+    info.channels = kChannels;
+    info.samplerate = kSampleRate;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
+    SNDFILE* sf = sf_open(wav_path.c_str(), SFM_WRITE, &info);
+    REQUIRE(sf != nullptr);
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    const sf_count_t written = sf_writef_float(sf, samples.data(), kFrames);
+    sf_close(sf);
+    REQUIRE(written == static_cast<sf_count_t>(kFrames));
+
+    SourceManager manager;
+    const Id source_id = "native-pcm24-source";
+    manager.register_source(source_id, wav_path);
+    CHECK(manager.try_install_native_file(source_id, kSampleRate));
+
+    const auto diags = manager.diagnostics();
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].disk_cache_bytes == 0);
+
+    std::remove(wav_path.c_str());
+}
+
+TEST_CASE("sample rate alone decides the route for an otherwise identical stem") {
+    // Same file content, same channels, same bit depth — only the engine rate
+    // differs. This is the whole reason the reported multitrack was slow: the
+    // stems are 44.1kHz and the engine commonly runs at 48kHz.
+    constexpr int kChannels = 2;
+    constexpr int kFileRate = 44100;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2 + 13;
+    const auto wav_path = make_temp_wav_path("native_route_by_sr");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kFileRate));
+
+    {
+        SourceManager manager;
+        const Id source_id = "route-matching-sr";
+        manager.register_source(source_id, wav_path);
+        CHECK(manager.try_install_native_file(source_id, kFileRate));
+    }
+    {
+        SourceManager manager;
+        const Id source_id = "route-mismatched-sr";
+        manager.register_source(source_id, wav_path);
+        CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
+    }
+
+    std::remove(wav_path.c_str());
+}
+
+TEST_CASE("mono and stereo stems both stream in place at the engine rate") {
+    // A multitrack mixes mono stems (click, guide, bass) with stereo ones. Both
+    // must take the fast route; anything beyond 2 channels goes to the decode
+    // path so the worker's downmix logic handles it.
+    constexpr int kSampleRate = 44100;
+    constexpr Frame kFrames = kDefaultBlockFrames + 97;
+
+    for (int channels : {1, 2}) {
+        const auto tag = "native_channels_" + std::to_string(channels);
+        const auto wav_path = make_temp_wav_path(tag.c_str());
+        const auto samples = make_reference_audio(kFrames, channels);
+        REQUIRE(write_wav_pcm_float(wav_path, samples, channels, kSampleRate));
+
+        SourceManager manager;
+        const Id source_id = "native-channels-" + std::to_string(channels);
+        manager.register_source(source_id, wav_path);
+        CHECK(manager.try_install_native_file(source_id, kSampleRate));
+
+        const auto streaming = manager.get_shared(source_id);
+        REQUIRE(static_cast<bool>(streaming));
+        CHECK(streaming->channel_count() == channels);
+
+        std::remove(wav_path.c_str());
+    }
+}
 #endif
 
 namespace {
