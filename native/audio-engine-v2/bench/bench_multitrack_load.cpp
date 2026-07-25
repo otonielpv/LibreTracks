@@ -190,6 +190,33 @@ int main() {
 
     std::atomic<bool> done{false};
     std::atomic<unsigned long long> peak_ws{0};
+
+    // Responsiveness probe: a thread that WANTS to wake every 16 ms, like a UI
+    // repainting at 60 fps. What the user calls "everything slows down" is this
+    // thread missing its deadline while decode saturates CPU, RAM and disk, so
+    // measure the lateness directly instead of inferring it from throughput.
+    std::atomic<long long> ui_worst_late_ms{0};
+    std::atomic<long long> ui_late_over_100ms{0};
+    std::atomic<long long> ui_ticks{0};
+    std::thread ui_probe([&] {
+        constexpr auto kPeriod = std::chrono::milliseconds(16);
+        auto next = Clock::now() + kPeriod;
+        while (!done.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_until(next);
+            const auto now = Clock::now();
+            const auto late = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - next).count();
+            ui_ticks.fetch_add(1, std::memory_order_relaxed);
+            if (late > 100) ui_late_over_100ms.fetch_add(1, std::memory_order_relaxed);
+            long long prev = ui_worst_late_ms.load(std::memory_order_relaxed);
+            while (late > prev &&
+                   !ui_worst_late_ms.compare_exchange_weak(prev, late,
+                                                           std::memory_order_relaxed)) {}
+            next += kPeriod;
+            if (next < now) next = now + kPeriod;   // don't spin after a long stall
+        }
+    });
+
     std::thread sampler([&] {
         while (!done.load(std::memory_order_relaxed)) {
             const unsigned long long ws = working_set_mb();
@@ -257,6 +284,7 @@ int main() {
         Clock::now() - t0).count();
     done.store(true, std::memory_order_relaxed);
     sampler.join();
+    ui_probe.join();
 
     const unsigned long long pf_delta = page_fault_count() - pf_start;
     const unsigned long long cache_written = dir_bytes(cache_dir);
@@ -287,6 +315,9 @@ int main() {
     std::printf("page faults        : %llu\n", pf_delta);
     std::printf("cache written      : %.1f MB\n",
                 cache_written / (1024.0 * 1024.0));
+    std::printf("UI worst stall     : %lld ms  (%lld of %lld ticks over 100ms)\n",
+                ui_worst_late_ms.load(), ui_late_over_100ms.load(),
+                ui_ticks.load());
 
     if (stalled)
         std::printf("\nRUN STALLED — figures above are partial.\n");
