@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <lt_engine/core/fs_path.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/sources/audio_decoder.h>
@@ -421,6 +422,71 @@ TEST_CASE("sample rate alone decides the route for an otherwise identical stem")
     }
 
     std::remove(wav_path.c_str());
+}
+
+TEST_CASE("stems with accented names load through the native route") {
+    // Real multitracks ship stems like "Guía.wav" — the reported folder has
+    // exactly that one. On Windows the narrow file APIs read a const char* as
+    // the active ANSI codepage, not UTF-8, so an accented path silently fails
+    // to open and that ONE stem stays silent while the other 24 play. The
+    // engine handles this via to_wide()/sf_wchar_open (fs_path.h); this pins
+    // it, because the failure mode is a single quiet track that is easy to
+    // miss in a 25-track session.
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 44100;
+    constexpr Frame kFrames = kDefaultBlockFrames + 41;
+
+    // UTF-8 bytes for "Guía" — built byte by byte so neither this file's
+    // encoding nor MSVC's escape folding can change what we actually test.
+    std::string accented = "Gu";
+    accented.push_back(static_cast<char>(0xC3));
+    accented.push_back(static_cast<char>(0xAD));   // U+00ED  í
+    accented += "a_ac";
+    accented.push_back(static_cast<char>(0xC3));
+    accented.push_back(static_cast<char>(0xA9));   // U+00E9  é
+    accented += "nt";
+    const auto wav_path = make_temp_wav_path(accented.c_str());
+    const auto samples = make_reference_audio(kFrames, kChannels);
+
+    // Write via the wide API so the file really lands at the UTF-8 path (the
+    // narrow sf_open used by the other helpers would mangle it here).
+    SF_INFO info{};
+    info.channels = kChannels;
+    info.samplerate = kSampleRate;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
+#if defined(_WIN32)
+    SNDFILE* sf = sf_wchar_open(to_wide(wav_path).c_str(), SFM_WRITE, &info);
+#else
+    SNDFILE* sf = sf_open(wav_path.c_str(), SFM_WRITE, &info);
+#endif
+    REQUIRE(sf != nullptr);
+    const sf_count_t written = sf_writef_float(sf, samples.data(), kFrames);
+    sf_close(sf);
+    REQUIRE(written == static_cast<sf_count_t>(kFrames));
+
+    SourceManager manager;
+    const Id source_id = "accented-stem";
+    manager.register_source(source_id, wav_path);
+
+    // The whole point: an accented stem must take the same route as any other.
+    CHECK(manager.try_install_native_file(source_id, kSampleRate));
+
+    const auto streaming = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(streaming));
+    CHECK(streaming->duration_frames() == kFrames);
+
+    // And it must actually produce audio, not silence.
+    require_ready_range(manager, source_id, 0, 256);
+    const auto got = read_planar(*streaming, 0, 256);
+    double energy = 0.0;
+    for (float v : got) energy += static_cast<double>(v) * v;
+    CHECK(energy > 0.0);
+
+#if defined(_WIN32)
+    _wremove(to_wide(wav_path).c_str());
+#else
+    std::remove(wav_path.c_str());
+#endif
 }
 
 TEST_CASE("mono and stereo stems both stream in place at the engine rate") {

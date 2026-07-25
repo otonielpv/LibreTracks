@@ -169,12 +169,22 @@ int main() {
         },
         engine_sr);
 
+    // The engine carries paths as UTF-8 (they come from the Rust/Tauri layer).
+    // std::filesystem::path::string() on Windows converts to the ACTIVE ANSI
+    // codepage, which mangles accented stem names ("Guía.wav") so the decoder
+    // never opens them — one of the reported stems is exactly that. Convert
+    // through u8string() so the bench feeds the engine what the app would.
+    auto to_utf8 = [](const fs::path& p) {
+        const auto u8 = p.u8string();
+        return std::string(reinterpret_cast<const char*>(u8.data()), u8.size());
+    };
+
     std::vector<Source> session_sources;
     session_sources.reserve(files.size());
     for (const auto& f : files) {
         Source s;
-        s.id = f.string();
-        s.file_path = f.string();
+        s.id = to_utf8(f);
+        s.file_path = to_utf8(f);
         session_sources.push_back(std::move(s));
     }
 
@@ -198,16 +208,48 @@ int main() {
     // Wait for every source to reach a terminal state. enqueue_session returns
     // immediately for the fast route and asynchronously for the decode pool, so
     // poll the SourceManager rather than trusting event counts alone.
+    //
+    // Also track PROGRESSIVE availability: preparation publishes each source as
+    // playable when it finishes, so what matters to the user is not only the
+    // total but when the first stem becomes audible and how the rest follow.
+    // Stall detection rather than a flat long timeout: if nothing progresses for
+    // a while the run is stuck, and waiting the full deadline just hides it.
     const auto deadline = t0 + std::chrono::minutes(15);
+    constexpr auto kStallLimit = std::chrono::seconds(90);
     std::size_t ready = 0;
+    long long first_ready_ms = -1;
+    std::vector<long long> ready_at_ms;   // ms at which the Nth stem became ready
+    std::size_t last_progress = 0;
+    auto last_change = Clock::now();
+    bool stalled = false;
     while (Clock::now() < deadline) {
         ready = 0;
         std::size_t errored = 0;
+        std::size_t streaming = 0;
         for (const auto& d : sources.diagnostics()) {
             if (d.status == "ready" || d.status == "cache_ready") ++ready;
+            else if (d.status == "streaming") ++streaming;
             else if (d.status == "failed") ++errored;
         }
+        const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            Clock::now() - t0).count();
+        while (ready_at_ms.size() < ready)
+            ready_at_ms.push_back(now_ms);
+        if (first_ready_ms < 0 && (ready > 0 || streaming > 0))
+            first_ready_ms = now_ms;
         if (ready + errored >= expected) break;
+
+        const std::size_t progress = ready + errored + streaming;
+        if (progress != last_progress) {
+            last_progress = progress;
+            last_change = Clock::now();
+        } else if (Clock::now() - last_change > kStallLimit) {
+            std::printf("!! stalled: no progress for %llds at %zu/%zu ready\n",
+                        (long long)std::chrono::duration_cast<std::chrono::seconds>(
+                            kStallLimit).count(), ready, expected);
+            stalled = true;
+            break;
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
 
@@ -235,11 +277,20 @@ int main() {
     std::printf("route: decode+resample (slow) : %zu\n", decoded_route);
     std::printf("wall time          : %lld ms (%.1f s)\n",
                 static_cast<long long>(elapsed), elapsed / 1000.0);
+    std::printf("first stem playable: %lld ms\n", first_ready_ms);
+    if (!ready_at_ms.empty()) {
+        std::printf("stems ready over time:\n");
+        for (std::size_t i = 0; i < ready_at_ms.size(); ++i)
+            std::printf("    #%-3zu at %6lld ms\n", i + 1, ready_at_ms[i]);
+    }
     std::printf("peak working set   : %llu MB\n", peak_ws.load());
     std::printf("page faults        : %llu\n", pf_delta);
     std::printf("cache written      : %.1f MB\n",
                 cache_written / (1024.0 * 1024.0));
 
+    if (stalled)
+        std::printf("\nRUN STALLED — figures above are partial.\n");
+
     pool.shutdown();
-    return ready == expected ? 0 : 1;
+    return (ready == expected && !stalled) ? 0 : 1;
 }
