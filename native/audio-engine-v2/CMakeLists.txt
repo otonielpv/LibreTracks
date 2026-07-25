@@ -284,6 +284,14 @@ if(LT_ENGINE_BUILD_BENCHES)
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
     endif()
 
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_waveform_peaks.cpp")
+        add_executable(bench_waveform_peaks bench/bench_waveform_peaks.cpp)
+        target_compile_features(bench_waveform_peaks PRIVATE cxx_std_20)
+        target_link_libraries(bench_waveform_peaks PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_waveform_peaks PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    endif()
+
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_multitrack_load.cpp")
         add_executable(bench_multitrack_load bench/bench_multitrack_load.cpp)
         target_compile_features(bench_multitrack_load PRIVATE cxx_std_20)
