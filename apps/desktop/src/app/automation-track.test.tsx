@@ -9,6 +9,7 @@ import {
   mockRulerBounds,
   mockLaneBounds,
 } from "../test/testUtils";
+import { useEmptySongForTest } from "./testDesktopApiMock";
 
 // Open the global track-list menu by right-clicking the empty area of the
 // track-headers pane (below the last header), then add the automation track.
@@ -314,6 +315,51 @@ describe("App / automation-track", () => {
         ".lt-track-lane.is-automation .lt-automation-hotspot",
       ) as HTMLElement | null;
       expect(hotspot?.getAttribute("title") ?? "").toMatch(/Wait|Mute/i);
+    });
+  });
+
+  // Regression: "create automation cue" used to be disabled whenever the song
+  // had neither regions nor section markers, on the assumption that a cue is
+  // always a jump. It isn't — a cue can wait, change the pad, mute a track or
+  // jump to an exact position, none of which need a region to exist.
+  it("creates a cue on a song with no regions and no markers", async () => {
+    useEmptySongForTest();
+    await renderApp();
+    await addAutomationTrackViaMenu();
+    const lane = await waitFor(() => {
+      const element = document.querySelector(".lt-track-lane.is-automation");
+      expect(element).toBeTruthy();
+      return element as HTMLElement;
+    });
+
+    await act(async () => {
+      fireEvent.contextMenu(lane, { clientX: 300, clientY: 130 });
+    });
+    const createButton = await screen.findByRole("button", {
+      name: /create automation/i,
+    });
+    expect((createButton as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(createButton);
+    });
+
+    // With nothing to jump to, the editor opens empty; a wait action is enough
+    // to make the cue valid.
+    const dialog = await screen.findByRole("dialog", {
+      name: /new automation/i,
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /^wait$/i }));
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /create/i }));
+    });
+
+    await waitFor(() => {
+      const hotspots = document.querySelectorAll(
+        ".lt-track-lane.is-automation .lt-automation-hotspot",
+      );
+      expect(hotspots.length).toBeGreaterThan(0);
     });
   });
 

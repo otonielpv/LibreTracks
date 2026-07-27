@@ -345,7 +345,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     }
 
     // A new cue starts with a single jump action seeded to the next destination
-    // (if any). The user can then add/remove/reorder actions in the modal.
+    // (if any). The user can then add/remove/reorder actions in the modal. With
+    // no regions and no markers there is nothing sensible to jump to, so the
+    // cue opens empty and the user picks the action (pad, mute, exact
+    // position…) — the editor requires at least one before confirming.
     const defaultTarget = defaultAutomationTarget(currentSong, positionSeconds);
     const seedActions: AutomationActionSummary[] = defaultTarget
       ? [{ type: "jump", target: defaultTarget, transition: { mode: "instant" } }]
@@ -554,10 +557,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       },
       {
         label: t("transport.automation.createCue"),
-        disabled:
-          !song ||
-          ((song?.regions.length ?? 0) === 0 &&
-            (song?.sectionMarkers.length ?? 0) === 0),
+        // Only a loaded song is required: a cue whose job is a pad change, a
+        // mute or a jump to an exact position needs neither regions nor
+        // markers (the editor falls back to a frame target).
+        disabled: !song,
         onSelect: () => createAutomationCueAt(positionSeconds),
       },
       {

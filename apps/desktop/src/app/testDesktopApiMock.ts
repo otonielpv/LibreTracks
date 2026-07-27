@@ -762,6 +762,20 @@ export function resetTestDesktopApiMock() {
   waveformReadyListeners = [];
 }
 
+/**
+ * Leave the mock on a brand-new song: no regions, no section markers, no
+ * tracks — the state the app is in right after "New song". Used by regression
+ * tests for features that must stay reachable before the user has laid down
+ * any material.
+ */
+export function useEmptySongForTest() {
+  replaceSong(buildEmptySong());
+  state.libraryAssets = [];
+  state.libraryFolders = [];
+  state.playbackPositionSeconds = 0;
+  state.playbackState = "stopped";
+}
+
 export function emitWaveformReadyForTest(
   filePath: string,
   durationSeconds: number,
