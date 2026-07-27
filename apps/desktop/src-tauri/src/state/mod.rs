@@ -186,6 +186,11 @@ pub enum WaveformTask {
 pub struct WaveformGenerationQueue {
     sender: mpsc::Sender<WaveformTask>,
     in_flight: Arc<Mutex<HashSet<String>>>,
+    /// Song dirs whose prime pass has already completed. Without this the
+    /// frontend's ~600 ms poll would re-clone the Song and re-run a full
+    /// 25-source prime for the rest of the session, all under the session lock.
+    /// Cleared when the song reloads (a new song dir gets its own key).
+    primed: Arc<Mutex<HashSet<String>>>,
     // The engine, so the worker can reuse the peaks the streaming decode ALREADY
     // computed (source_peaks) instead of re-decoding the whole file. None in
     // tests / before the controller exists.
@@ -383,6 +388,31 @@ impl WaveformGenerationQueue {
         Ok(())
     }
 
+    /// Whether a prime pass for `song_dir` is worth building. Lets the caller
+    /// skip cloning the whole Song (not free for a 25-stem session, and done
+    /// under the session lock) when priming is already queued, running, or
+    /// finished for this song.
+    ///
+    /// Cheap: one mutex over two small sets, no I/O.
+    pub fn needs_prime(&self, song_dir: Option<&Path>) -> bool {
+        let Some(song_dir) = song_dir else {
+            return false;
+        };
+        let key = prime_job_key(song_dir);
+        let queued = self
+            .in_flight
+            .lock()
+            .map(|set| set.contains(&key))
+            .unwrap_or(true);
+        if queued {
+            return false;
+        }
+        self.primed
+            .lock()
+            .map(|set| !set.contains(&key))
+            .unwrap_or(true)
+    }
+
     /// Queue a "prime the cache from the engine's same-pass peaks" pass for the
     /// whole song. Deduplicated per song dir: the frontend polls every ~600 ms
     /// while waveforms are missing, and without this every poll would queue
@@ -429,6 +459,8 @@ impl Default for WaveformGenerationQueue {
         let (sender, receiver) = mpsc::channel::<WaveformTask>();
         let in_flight = Arc::new(Mutex::new(HashSet::new()));
         let worker_in_flight = Arc::clone(&in_flight);
+        let primed = Arc::new(Mutex::new(HashSet::new()));
+        let worker_primed = Arc::clone(&primed);
         let audio: Arc<Mutex<Option<Arc<AudioController>>>> = Arc::new(Mutex::new(None));
         let worker_audio = Arc::clone(&audio);
 
@@ -451,8 +483,16 @@ impl Default for WaveformGenerationQueue {
                         if let Some(audio) = audio.as_deref() {
                             prime_waveforms_from_engine_peaks(&song_dir, &song, audio);
                         }
+                        let key = prime_job_key(&song_dir);
+                        // Mark done BEFORE clearing in_flight: needs_prime()
+                        // checks in_flight first, so this ordering leaves no
+                        // window where the pass looks neither queued nor done
+                        // and a redundant one slips through.
+                        if let Ok(mut primed) = worker_primed.lock() {
+                            primed.insert(key.clone());
+                        }
                         if let Ok(mut in_flight) = worker_in_flight.lock() {
-                            in_flight.remove(&prime_job_key(&song_dir));
+                            in_flight.remove(&key);
                         }
                         // Tell the frontend to re-request: its poll would get
                         // there eventually, but the waveforms are ready now.
@@ -465,6 +505,7 @@ impl Default for WaveformGenerationQueue {
         Self {
             sender,
             in_flight,
+            primed,
             audio,
         }
     }
@@ -493,6 +534,7 @@ impl WaveformGenerationQueue {
         Self {
             sender,
             in_flight: Arc::new(Mutex::new(HashSet::new())),
+            primed: Arc::new(Mutex::new(HashSet::new())),
             audio: Arc::new(Mutex::new(None)),
         }
     }
@@ -714,7 +756,12 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
         // Falling through to generate_native_waveform costs ~260 ms per stem
         // (bench_waveform_peaks), so waiting longer than that is never a win:
         // cap the wait and let the fallback do the work.
-        const MAX_WAIT_MS: u64 = 1_500;
+        //
+        // Measured at 1500: every source waited ~300 ms before giving up, which
+        // across 25 stems is ~7.5 s of pure sleeping added to the total. Since
+        // the fallback costs about the same as the wait, the cap only needs to
+        // cover sources whose peaks are genuinely moments away.
+        const MAX_WAIT_MS: u64 = 400;
         while got.is_none() && waited_ms < MAX_WAIT_MS {
             // Stop early if the source vanished (session changed / removed).
             let still_known = audio
@@ -1158,9 +1205,16 @@ impl DesktopSession {
         // The work still has to happen, so it moves to the background queue: the
         // lookup below misses, the frontend re-requests (it already polls), and
         // by then the primed cache hits. Requests stay in the tens of ms.
-        if let Some(song) = self.engine.song().cloned() {
-            if let Some(song_dir) = self.song_dir.clone() {
-                waveform_jobs.enqueue_prime(app.clone(), song_dir, song);
+        // Cloning the Song to hand it to the worker is not free for a 25-stem
+        // session, and this runs under the session lock on EVERY request — the
+        // frontend polls every ~600 ms. Skip it once priming is already queued
+        // or done: enqueue_prime would drop the clone on the floor anyway.
+        if waveform_jobs.needs_prime(self.song_dir.as_deref()) {
+            let _span = crate::infra::waveform_diag::Span::slow_only("    clone song for prime", 20);
+            if let Some(song) = self.engine.song().cloned() {
+                if let Some(song_dir) = self.song_dir.clone() {
+                    waveform_jobs.enqueue_prime(app.clone(), song_dir, song);
+                }
             }
         }
         self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)), Some(audio))
@@ -1190,6 +1244,13 @@ impl DesktopSession {
 
             // Read-only cache lookup ONLY. On a cache miss we NEVER decode here
             // (that held the session lock for seconds and froze the UI).
+            // Timed because ~245 ms still shows up under the lock after moving
+            // the prime pass off it, and a "read-only cache lookup" should not
+            // cost that: reading a .ltpeaks is tens of KB of disk plus a parse.
+            let _lookup = crate::infra::waveform_diag::Span::slow_only(
+                format!("      cache lookup({waveform_key})"),
+                20,
+            );
             match self.load_waveform_summary_cached(&song_dir, waveform_key, false) {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))

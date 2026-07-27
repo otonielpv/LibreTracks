@@ -2272,6 +2272,36 @@ fn prime_job_key_cannot_collide_with_a_waveform_key() {
 }
 
 #[test]
+fn needs_prime_stops_asking_once_the_pass_is_queued_or_done() {
+    // needs_prime gates cloning the whole Song under the session lock. The
+    // frontend polls every ~600 ms for the life of the session, so answering
+    // "yes" after the pass is queued (or finished) would re-clone a 25-stem
+    // song on every poll and re-run a full prime for nothing.
+    let queue = super::WaveformGenerationQueue::new_for_test();
+    let song_dir = std::path::PathBuf::from("/songs/demo");
+    let key = super::prime_job_key(&song_dir);
+
+    // Nothing known yet: the pass is worth building.
+    assert!(queue.needs_prime(Some(&song_dir)));
+
+    // Queued / running: skip.
+    queue.in_flight.lock().expect("lock").insert(key.clone());
+    assert!(!queue.needs_prime(Some(&song_dir)));
+
+    // Finished: still skip, for the rest of the session.
+    queue.in_flight.lock().expect("lock").remove(&key);
+    queue.primed.lock().expect("lock").insert(key);
+    assert!(!queue.needs_prime(Some(&song_dir)));
+
+    // A different song is unaffected.
+    let other = std::path::PathBuf::from("/songs/other");
+    assert!(queue.needs_prime(Some(&other)));
+
+    // No song dir: nothing to prime.
+    assert!(!queue.needs_prime(None));
+}
+
+#[test]
 fn priming_is_deduplicated_per_song_dir() {
     // The frontend re-requests waveforms every ~600 ms while any are missing.
     // Priming a 25-stem song costs seconds, so without dedup every poll would
