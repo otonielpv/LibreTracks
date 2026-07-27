@@ -401,10 +401,12 @@ import {
 import { createTrackHandlers } from "./tracks/trackHandlers";
 import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
 import { createCompactSongHandlers } from "./compact/compactSongHandlers";
+import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useDragListeners } from "./hooks/useDragListeners";
+import { useSongViewLoader } from "./hooks/useSongViewLoader";
 import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
@@ -4049,93 +4051,17 @@ export function TransportPanelContent() {
 
   // Project revision bumped -> refetch the SongView, unless this revision
   // came from a local optimistic mutation (then there is nothing to learn).
-  useEffect(() => {
-    let active = true;
-
-    // If this revision was produced by a local optimistic mutation, the
-    // frontend already applied the change and there is nothing new to learn
-    // from the server. Skip the refetch entirely.
-    if (
-      optimisticallyAppliedRevisionsRef.current.has(playbackProjectRevision)
-    ) {
-      optimisticallyAppliedRevisionsRef.current.delete(playbackProjectRevision);
-      return;
-    }
-
-    async function loadSong() {
-      if (playbackProjectRevision === 0) {
-        setSong(null);
-        setIsProjectViewHydrating(false);
-        waveformsHydratedRef.current = false;
-        inFlightWaveformKeysRef.current.clear();
-        return;
-      }
-
-      // First load needs the full SongView with waveforms; subsequent
-      // revision bumps (transpose, gain, mute, region edit, …) only need
-      // the structural mutations — the waveform cache is still valid.
-      // Use a ref (not songRef which lags by one render) so that overlapping
-      // effect runs during the initial load don't all race to fetch
-      // waveforms before the first setSong has committed.
-      const needsWaveforms = !waveformsHydratedRef.current;
-      // Reserve the slot *before* awaiting so a concurrent revision bump
-      // sees needsWaveforms=false and skips the redundant 27 MB fetch.
-      if (needsWaveforms) {
-        waveformsHydratedRef.current = true;
-      }
-      const previousSongId = songRef.current?.id ?? null;
-      const nextSong = await getSongView({ includeWaveforms: needsWaveforms });
-      if (!active) {
-        return;
-      }
-
-      // A revision bump can also mean the backend switched to a DIFFERENT
-      // song within the same project session, not just an edit to the
-      // current one — only knowable once nextSong.id is in hand. Without this
-      // check every song opened after the first one in a session would skip
-      // its own waveform fetch and silently inherit (merge in) the previous
-      // song's waveforms via the branch below, which is what caused the
-      // reported cross-song waveform-cache buildup. Re-fetch with waveforms
-      // instead of trusting the waveforms-less nextSong already in hand.
-      const songChanged =
-        !needsWaveforms &&
-        nextSong !== null &&
-        previousSongId !== null &&
-        previousSongId !== nextSong.id;
-      const resolvedSong = songChanged
-        ? await getSongView({ includeWaveforms: true })
-        : nextSong;
-      if (!active) {
-        return;
-      }
-
-      if (!needsWaveforms && !songChanged && resolvedSong) {
-        // Preserve previously hydrated waveforms.
-        const previous = songRef.current;
-        setSong({ ...resolvedSong, waveforms: previous?.waveforms ?? [] });
-      } else {
-        hydrateWaveformCacheFromSong(resolvedSong);
-        setSong(resolvedSong);
-        if (!resolvedSong) {
-          // Fetched-with-waveforms returned null (shouldn't normally happen
-          // mid-session, but be defensive): reset the flag so the next
-          // load will fetch waveforms again.
-          waveformsHydratedRef.current = false;
-        } else if (songChanged) {
-          waveformsHydratedRef.current = true;
-        }
-      }
-      if (resolvedSong) {
-        setIsProjectViewHydrating(false);
-      }
-    }
-
-    void loadSong();
-
-    return () => {
-      active = false;
-    };
-  }, [hydrateWaveformCacheFromSong, playbackProjectRevision]);
+  useSongViewLoader({
+    playbackProjectRevision,
+    getSongView,
+    setSong,
+    songRef,
+    optimisticallyAppliedRevisionsRef,
+    waveformsHydratedRef,
+    inFlightWaveformKeysRef,
+    setIsProjectViewHydrating,
+    hydrateWaveformCacheFromSong,
+  });
 
   // Project identity changed (different session or song) -> reset all
   // project-scoped state so nothing leaks across projects.
@@ -5368,6 +5294,29 @@ export function TransportPanelContent() {
         now: () => performance.now(),
       }),
     [setStatus, runAction, refreshSongView, applyPlaybackSnapshot, t],
+  );
+
+  // Ruler/lane drag commits + cue editing. `song` and editAutomationCue (which
+  // the menu factory rebuilds each render) are read through getters, so this
+  // factory stays referentially stable across snapshots.
+  const editAutomationCueRef = useRef(editAutomationCue);
+  editAutomationCueRef.current = editAutomationCue;
+  const {
+    handleMarkerMoveCommit,
+    handleAutomationCueMoveCommit,
+    handleAutomationCueEdit,
+  } = useMemo(
+    () =>
+      createMarkerMoveHandlers({
+        getSong: () => songRef.current,
+        runAction,
+        applyPlaybackSnapshot,
+        refreshSongView,
+        updateSectionMarker,
+        upsertAutomationCue,
+        getEditAutomationCue: () => editAutomationCueRef.current,
+      }),
+    [applyPlaybackSnapshot, refreshSongView, runAction],
   );
 
   const canPersistProject = Boolean(song);
@@ -7930,14 +7879,7 @@ export function TransportPanelContent() {
                               automationCueContextMenu(cue),
                             );
                           }}
-                          onAutomationCueEdit={(cueId) => {
-                            const cue = song?.automationCues?.find(
-                              (candidate) => candidate.id === cueId,
-                            );
-                            if (cue) {
-                              editAutomationCue(cue);
-                            }
-                          }}
+                          onAutomationCueEdit={handleAutomationCueEdit}
                           onAutomationLaneContextMenu={(event) => {
                             if (!song) {
                               return;
@@ -7978,9 +7920,6 @@ export function TransportPanelContent() {
                             openMenu(event, t("transport.automation.menuTitle"), [
                               {
                                 label: t("transport.automation.createCue"),
-                                disabled:
-                                  (song?.regions.length ?? 0) === 0 &&
-                                  (song?.sectionMarkers.length ?? 0) === 0,
                                 onSelect: () =>
                                   createAutomationCueAt(positionSeconds),
                               },
@@ -8023,22 +7962,10 @@ export function TransportPanelContent() {
                               applyPlaybackSnapshot(nextSnapshot);
                             });
                           }}
-                          onMarkerMoveCommit={(markerId, startSeconds) => {
-                            const section = song?.sectionMarkers.find(
-                              (candidate) => candidate.id === markerId,
-                            );
-                            if (!section) {
-                              return;
-                            }
-                            void runAction(async () => {
-                              const nextSnapshot = await updateSectionMarker(
-                                section.id,
-                                section.name,
-                                startSeconds,
-                              );
-                              applyPlaybackSnapshot(nextSnapshot);
-                            });
-                          }}
+                          onMarkerMoveCommit={handleMarkerMoveCommit}
+                          onAutomationCueMoveCommit={
+                            handleAutomationCueMoveCommit
+                          }
                           snapEnabled={snapEnabled}
                           canNativeZoom={Boolean(song)}
                           navigationScheme={appSettings.timelineNavigationScheme}

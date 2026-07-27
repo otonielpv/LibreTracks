@@ -282,6 +282,12 @@ type TimelineCanvasPaneProps = {
    */
   onMarkerMoveCommit?: (markerId: string, startSeconds: number) => void;
   /**
+   * Commit an automation-cue drag: the cue's new position in timeline seconds
+   * (already snapped + clamped). Same optimistic-preview contract as
+   * `onMarkerMoveCommit`; only fires on release, after a real move.
+   */
+  onAutomationCueMoveCommit?: (cueId: string, atSeconds: number) => void;
+  /**
    * Snap state used during resize drag (matches the snap behaviour of
    * clip drag). Holding Alt during the drag temporarily disables snap.
    */
@@ -391,6 +397,7 @@ export function TimelineCanvasPane({
   onRegionResizeCommit,
   onRegionMoveCommit,
   onMarkerMoveCommit,
+  onAutomationCueMoveCommit,
   snapEnabled,
   midiLearnMode,
   onMidiLearnTarget,
@@ -865,6 +872,9 @@ export function TimelineCanvasPane({
   // (primary action / select), so tapping a marker still works.
   type MarkerMoveDrag = {
     markerId: string;
+    // Section flags and automation-cue diamonds share this drag machinery;
+    // only the commit target differs (onMarkerMoveCommit vs onAutomationCueMoveCommit).
+    kind: "marker" | "cue";
     pointerId: number;
     pointerStartClientX: number;
     pointerScaleX: number;
@@ -887,11 +897,13 @@ export function TimelineCanvasPane({
     event: ReactPointerEvent<HTMLButtonElement>,
     markerId: string,
     startSeconds: number,
+    kind: "marker" | "cue" = "marker",
   ) {
     if (event.button !== 0) return;
     markerDidDragRef.current = false;
     markerMoveDragRef.current = {
       markerId,
+      kind,
       pointerId: event.pointerId,
       pointerStartClientX: event.clientX,
       pointerScaleX: getElementScaleX(
@@ -974,8 +986,13 @@ export function TimelineCanvasPane({
     markerMoveDragRef.current = null;
     setMarkerMovePreview(null);
 
-    if (moved && onMarkerMoveCommit) {
-      onMarkerMoveCommit(drag.markerId, finalStart);
+    if (!moved) {
+      return;
+    }
+    if (drag.kind === "cue") {
+      onAutomationCueMoveCommit?.(drag.markerId, finalStart);
+    } else {
+      onMarkerMoveCommit?.(drag.markerId, finalStart);
     }
   }
 
@@ -1773,18 +1790,25 @@ export function TimelineCanvasPane({
                           song,
                           t,
                         );
+                        // Optimistic drag preview: the diamond follows the
+                        // pointer while dragging (same contract as section flags).
+                        const isDraggingCue =
+                          markerMovePreview?.markerId === cue.id;
+                        const renderAtSeconds = isDraggingCue
+                          ? markerMovePreview.startSeconds
+                          : cue.atSeconds;
                         return (
                           <button
                             key={cue.id}
                             type="button"
-                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}`}
+                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}${isDraggingCue ? " is-dragging" : ""}`}
                             aria-label={cueDescription}
                             title={cueDescription}
                             style={{
                               // Centre a tight hit target on the diamond. The
                               // lane's own onMouseDown handles seek everywhere
                               // else, so the hotspot must not cover the row.
-                              left: cue.atSeconds * pixelsPerSecond,
+                              left: renderAtSeconds * pixelsPerSecond,
                               top: trackHeight / 2,
                             }}
                             onMouseDown={(event) => {
@@ -1801,9 +1825,34 @@ export function TimelineCanvasPane({
                                 event.stopPropagation();
                               }
                             }}
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                              if (
+                                event.altKey ||
+                                event.ctrlKey ||
+                                event.metaKey
+                              )
+                                return;
+                              beginMarkerMove(
+                                event,
+                                cue.id,
+                                cue.atSeconds,
+                                "cue",
+                              );
+                            }}
+                            onPointerMove={updateMarkerMove}
+                            onPointerUp={endMarkerMove}
+                            onPointerCancel={endMarkerMove}
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
+                              // A drag just finished — swallow the synthetic
+                              // click so releasing the diamond doesn't also
+                              // open the editor.
+                              if (markerDidDragRef.current) {
+                                markerDidDragRef.current = false;
+                                return;
+                              }
                               // Left-click the diamond opens the editor directly
                               // (right-click still opens the full context menu).
                               onAutomationCueEdit(cue.id);
