@@ -71,13 +71,24 @@ Frame timing_segment_start(const Song* song, Frame frame) noexcept {
     return start;
 }
 
+// The song whose timing map drives the click. Like the ambient pad, the
+// metronome must sound whether or not there is audio under the playhead: an
+// empty song (no clips) collapses to end_frame == start_frame and would cover
+// no frame at all, and the playhead can also sit past the last song's end.
+// Timing (bpm / signature / tempo map) exists independently of audio content,
+// so when no song covers the frame we fall back to the nearest one — the last
+// song starting at or before the playhead, else the first song. Only a session
+// with no songs at all leaves the click without a timing map.
 const Song* active_song(const Session* session, Frame frame) noexcept {
-    if (!session) return nullptr;
+    if (!session || session->songs.empty()) return nullptr;
+    const Song* fallback = &session->songs.front();
     for (const auto& song : session->songs) {
         if (frame >= song.start_frame && frame < song.end_frame)
             return &song;
+        if (song.start_frame <= frame && song.start_frame >= fallback->start_frame)
+            fallback = &song;
     }
-    return nullptr;
+    return fallback;
 }
 
 Frame rounded_beat_frame(Frame segment_start, double beat_frames, int64_t beat_index) noexcept {

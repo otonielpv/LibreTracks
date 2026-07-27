@@ -572,3 +572,38 @@ TEST_CASE("master fade ramps output gain in the audio callback") {
     CHECK(rms(left_head) > rms(left_tail));
     CHECK(rms(right_head) > rms(right_tail));
 }
+
+// Repro: a song with one empty track (no clips) collapses to
+// end_frame == start_frame. The per-song loop in render() skips it via
+// `continue`, and the metronome render call lives inside that loop — so
+// pressing play produced no click at all. The click must sound whenever the
+// transport rolls, like the ambient pad, since its timing comes from the
+// song's bpm/signature rather than from any audio content.
+TEST_CASE("metronome clicks while playing an empty song") {
+    SourceManager sources;
+    auto session = std::make_shared<Session>();
+    session->id = "session";
+    session->sample_rate = test::kFixtureSampleRate;
+    Song song;
+    song.id = "song";
+    song.start_frame = 0;
+    song.end_frame = 0;      // empty song: a track with no clips
+    song.bpm = 120.0;
+    song.beats_per_bar = 4;
+    song.beat_unit = 4;
+    Track track;
+    track.id = "empty-track";
+    song.tracks.push_back(track);
+    session->songs.push_back(song);
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.set_metronome_config(MetronomeConfig{true, 1.0f, "master", true});
+    clock.play();
+
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 200, left, right);   // ~2.1s at 48k/512
+
+    CHECK(mixer.metronome_diagnostics().rendered_clicks_count > 0);
+}

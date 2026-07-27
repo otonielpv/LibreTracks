@@ -366,3 +366,29 @@ TEST_CASE("metronome toggle is declicked") {
     CHECK(max_jump < 0.75f);
     CHECK(renderer.diagnostics().toggle_count == 2);
 }
+
+// Repro: an empty song (no clips) collapses to end_frame == start_frame, so
+// active_song() finds nothing under the playhead and the click goes silent.
+// The metronome must keep ticking like the ambient pad does — its timing comes
+// from the song's bpm/signature, which exist regardless of audio content.
+TEST_CASE("metronome ticks with an empty song (no clips)") {
+    Session session;
+    session.sample_rate = 48000;
+    Song song;
+    song.id = "song";
+    song.start_frame = 0;
+    song.end_frame = 0;   // empty song: no clips => zero-length window
+    song.bpm = 120.0;
+    song.beats_per_bar = 4;
+    song.beat_unit = 4;
+    session.songs.push_back(song);
+
+    MetronomeRenderer renderer;
+    renderer.set_config({true, 1.0f, "master", true});
+    std::vector<float> left(48000, 0.0f), right(48000, 0.0f);
+    float* out[] = { left.data(), right.data() };
+    renderer.render(out, 2, 48000, 48000.0, 0, &session);
+
+    CHECK(count_clicks(left) == 2);   // 120bpm over 1s => 2 beats
+    CHECK(peak(left) > 0.01f);
+}
