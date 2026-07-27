@@ -309,15 +309,17 @@ fn waveform_cache_size_bytes() -> u64 {
         .sum()
 }
 
-/// Delete every file in the waveform cache directory. Returns bytes freed.
-fn purge_waveform_cache() -> u64 {
+/// Delete every file in the waveform cache directory.
+/// Returns `(bytes_freed, files_that_could_not_be_deleted)`.
+fn purge_waveform_cache() -> (u64, u32) {
     let Some(dir) = waveform_cache_dir() else {
-        return 0;
+        return (0, 0);
     };
     let Ok(entries) = std::fs::read_dir(&dir) else {
-        return 0;
+        return (0, 0);
     };
     let mut freed = 0u64;
+    let mut failed = 0u32;
     for entry in entries.flatten() {
         let Ok(meta) = entry.metadata() else { continue };
         if !meta.is_file() {
@@ -325,15 +327,39 @@ fn purge_waveform_cache() -> u64 {
         }
         if std::fs::remove_file(entry.path()).is_ok() {
             freed += meta.len();
+        } else {
+            failed += 1;
         }
     }
-    freed
+    (freed, failed)
+}
+
+/// Outcome of a cache purge. `files_in_use` is what makes a blocked purge
+/// distinguishable from an already-empty cache.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurgeCacheResult {
+    /// Bytes actually reclaimed.
+    pub freed_bytes: u64,
+    /// Files that could not be deleted because something holds them open.
+    pub files_in_use: u32,
 }
 
 /// Delete all on-disk caches the decoding-cache setting governs: the engine's
-/// PCM `.rf64` files plus the per-file waveform `.ltpeaks`. Returns bytes freed.
+/// PCM cache files plus the per-file waveform `.ltpeaks`.
+///
+/// Reports `files_in_use` rather than silently returning 0: while a session is
+/// loaded the engine streams audio straight out of the PCM cache files, and on
+/// Windows an open file cannot be deleted. Every file then fails to unlink and
+/// the old signature reported "0 bytes freed", which reads as "nothing to
+/// clean" — the user clicks Clear cache, sees no change, and concludes the
+/// button is broken. It isn't; the files are in use.
 #[tauri::command]
-pub fn purge_decoding_cache() -> Result<u64, String> {
-    let pcm_freed = lt_audio_engine_v2::purge_decoding_cache();
-    Ok(pcm_freed + purge_waveform_cache())
+pub fn purge_decoding_cache() -> Result<PurgeCacheResult, String> {
+    let (pcm_freed, pcm_failed) = lt_audio_engine_v2::purge_decoding_cache_detailed();
+    let (wave_freed, wave_failed) = purge_waveform_cache();
+    Ok(PurgeCacheResult {
+        freed_bytes: pcm_freed + wave_freed,
+        files_in_use: pcm_failed + wave_failed,
+    })
 }

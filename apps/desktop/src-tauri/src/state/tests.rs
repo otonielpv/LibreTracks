@@ -2248,6 +2248,83 @@ fn waveform_queue_test_helper_tracks_pending() {
 }
 
 #[test]
+fn prime_job_key_cannot_collide_with_a_waveform_key() {
+    // Priming is deduplicated in the same in_flight set as per-file generation.
+    // If the two key spaces could collide, a queued prime would swallow a real
+    // waveform job for that file (or vice versa) and the waveform would never
+    // be generated.
+    let song_dir = std::path::Path::new("/songs/demo");
+    let prime = super::prime_job_key(song_dir);
+
+    for key in [
+        "audio/test.wav",
+        "prime",
+        "",
+        // The literal suffix, in case someone reuses the naming scheme.
+        "\u{0}prime",
+    ] {
+        assert_ne!(
+            prime,
+            super::waveform_job_key(song_dir, key),
+            "prime key must not collide with waveform key {key:?}"
+        );
+    }
+}
+
+#[test]
+fn needs_prime_stops_asking_once_the_pass_is_queued_or_done() {
+    // needs_prime gates cloning the whole Song under the session lock. The
+    // frontend polls every ~600 ms for the life of the session, so answering
+    // "yes" after the pass is queued (or finished) would re-clone a 25-stem
+    // song on every poll and re-run a full prime for nothing.
+    let queue = super::WaveformGenerationQueue::new_for_test();
+    let song_dir = std::path::PathBuf::from("/songs/demo");
+    let key = super::prime_job_key(&song_dir);
+
+    // Nothing known yet: the pass is worth building.
+    assert!(queue.needs_prime(Some(&song_dir)));
+
+    // Queued / running: skip.
+    queue.in_flight.lock().expect("lock").insert(key.clone());
+    assert!(!queue.needs_prime(Some(&song_dir)));
+
+    // Finished: still skip, for the rest of the session.
+    queue.in_flight.lock().expect("lock").remove(&key);
+    queue.primed.lock().expect("lock").insert(key);
+    assert!(!queue.needs_prime(Some(&song_dir)));
+
+    // A different song is unaffected.
+    let other = std::path::PathBuf::from("/songs/other");
+    assert!(queue.needs_prime(Some(&other)));
+
+    // No song dir: nothing to prime.
+    assert!(!queue.needs_prime(None));
+}
+
+#[test]
+fn priming_is_deduplicated_per_song_dir() {
+    // The frontend re-requests waveforms every ~600 ms while any are missing.
+    // Priming a 25-stem song costs seconds, so without dedup every poll would
+    // queue another full pass behind the one already running and the backlog
+    // would grow faster than the worker drains it.
+    let queue = super::WaveformGenerationQueue::new_for_test();
+    let song_dir = std::path::PathBuf::from("/songs/demo");
+
+    assert_eq!(queue.pending_count(), 0);
+
+    // Two different songs each get a slot; repeats of either do not.
+    let other_dir = std::path::PathBuf::from("/songs/other");
+    {
+        let mut in_flight = queue.in_flight.lock().expect("lock");
+        assert!(in_flight.insert(super::prime_job_key(&song_dir)));
+        assert!(!in_flight.insert(super::prime_job_key(&song_dir)));
+        assert!(in_flight.insert(super::prime_job_key(&other_dir)));
+    }
+
+    assert_eq!(queue.pending_count(), 2);
+}
+
+#[test]
 fn creating_a_section_marker_stays_in_memory_until_save() {
     let root = tempdir().expect("temp dir should exist");
     let song_dir = create_song_folder(root.path(), "section-demo").expect("song dir should exist");

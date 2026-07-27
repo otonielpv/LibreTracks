@@ -284,6 +284,33 @@ if(LT_ENGINE_BUILD_BENCHES)
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
     endif()
 
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_purge_cache.cpp")
+        add_executable(bench_purge_cache bench/bench_purge_cache.cpp)
+        target_compile_features(bench_purge_cache PRIVATE cxx_std_20)
+        target_link_libraries(bench_purge_cache PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_purge_cache PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_waveform_peaks.cpp")
+        add_executable(bench_waveform_peaks bench/bench_waveform_peaks.cpp)
+        target_compile_features(bench_waveform_peaks PRIVATE cxx_std_20)
+        target_link_libraries(bench_waveform_peaks PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_waveform_peaks PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_multitrack_load.cpp")
+        add_executable(bench_multitrack_load bench/bench_multitrack_load.cpp)
+        target_compile_features(bench_multitrack_load PRIVATE cxx_std_20)
+        target_link_libraries(bench_multitrack_load PRIVATE lt_audio_engine_v2)
+        if(WIN32)
+            target_link_libraries(bench_multitrack_load PRIVATE psapi)
+        endif()
+        target_include_directories(bench_multitrack_load PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    endif()
+
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_jump_paths.cpp")
         add_executable(bench_jump_paths bench/bench_jump_paths.cpp)
         target_compile_features(bench_jump_paths PRIVATE cxx_std_20)

@@ -19,6 +19,7 @@ add_executable(lt_engine_tests
     test_audio_dump.cpp
     test_audio_decoder.cpp
     test_streaming_source_cache.cpp
+    test_resampler_seek_continuity.cpp
     test_audio_fixtures.cpp
     test_fade_processor.cpp
     test_metronome_renderer.cpp

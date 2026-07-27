@@ -392,9 +392,22 @@ export async function setDecodingCacheMaxGb(
   return invokeCommand<AppSettings>("set_decoding_cache_max_gb", { maxGb });
 }
 
-/** Delete all on-disk decoded-PCM cache files. Returns bytes freed. */
-export async function purgeDecodingCache(): Promise<number> {
-  return invokeCommand<number>("purge_decoding_cache");
+/** Outcome of a cache purge. */
+export interface PurgeCacheResult {
+  /** Bytes actually reclaimed. */
+  freedBytes: number;
+  /**
+   * Files that could not be deleted because something holds them open. While a
+   * session is loaded the engine streams audio straight out of the PCM cache,
+   * and on Windows an open file cannot be deleted — so this is nonzero and the
+   * purge frees nothing. Surface it instead of reporting a successful purge.
+   */
+  filesInUse: number;
+}
+
+/** Delete all on-disk decoded-PCM and waveform cache files. */
+export async function purgeDecodingCache(): Promise<PurgeCacheResult> {
+  return invokeCommand<PurgeCacheResult>("purge_decoding_cache");
 }
 
 export async function createSong(): Promise<TransportSnapshot | null> {

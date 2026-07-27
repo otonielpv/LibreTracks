@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <lt_engine/core/fs_path.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/sources/audio_decoder.h>
@@ -349,6 +350,170 @@ TEST_CASE("try_install_native_file rejects missing files") {
         "non-existent-native-wav-for-test-3f8c1.wav");
     CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
 }
+
+// ---------------------------------------------------------------------------
+// Route selection for real-world multitrack stems.
+//
+// Field report: a 25-stem 44.1kHz/24-bit multitrack (~200MB per stem) made the
+// app unusable. Measured with bench_multitrack_load over the real folder, 6
+// stems: at engine SR 44100 all 6 took the stream-in-place route (0 ms, 7 MB
+// peak WS, 0 bytes written); at 48000 all 6 took decode+resample (3.1 s, 65 MB
+// peak WS, 15104 page faults, 865 MB written). Extrapolated to 25 stems that is
+// ~13 s of CPU and ~3.6 GB of disk writes — the "everything slows down".
+//
+// These cases pin WHICH file properties decide the route, so a future change to
+// the eligibility rule has to update them deliberately.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("native-file eligibility ignores bit depth (24-bit stems stream in place)") {
+    // The multitrack stems that triggered the report are 24-bit. Bit depth must
+    // NOT push a file onto the decode path: libsndfile converts to float on
+    // read, so a 24-bit WAV at the engine rate is as streamable as a float one.
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2 + 61;
+    const auto wav_path = make_temp_wav_path("native_pcm24");
+
+    SF_INFO info{};
+    info.channels = kChannels;
+    info.samplerate = kSampleRate;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
+    SNDFILE* sf = sf_open(wav_path.c_str(), SFM_WRITE, &info);
+    REQUIRE(sf != nullptr);
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    const sf_count_t written = sf_writef_float(sf, samples.data(), kFrames);
+    sf_close(sf);
+    REQUIRE(written == static_cast<sf_count_t>(kFrames));
+
+    SourceManager manager;
+    const Id source_id = "native-pcm24-source";
+    manager.register_source(source_id, wav_path);
+    CHECK(manager.try_install_native_file(source_id, kSampleRate));
+
+    const auto diags = manager.diagnostics();
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].disk_cache_bytes == 0);
+
+    std::remove(wav_path.c_str());
+}
+
+TEST_CASE("sample rate alone decides the route for an otherwise identical stem") {
+    // Same file content, same channels, same bit depth — only the engine rate
+    // differs. This is the whole reason the reported multitrack was slow: the
+    // stems are 44.1kHz and the engine commonly runs at 48kHz.
+    constexpr int kChannels = 2;
+    constexpr int kFileRate = 44100;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2 + 13;
+    const auto wav_path = make_temp_wav_path("native_route_by_sr");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kFileRate));
+
+    {
+        SourceManager manager;
+        const Id source_id = "route-matching-sr";
+        manager.register_source(source_id, wav_path);
+        CHECK(manager.try_install_native_file(source_id, kFileRate));
+    }
+    {
+        SourceManager manager;
+        const Id source_id = "route-mismatched-sr";
+        manager.register_source(source_id, wav_path);
+        CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
+    }
+
+    std::remove(wav_path.c_str());
+}
+
+TEST_CASE("stems with accented names load through the native route") {
+    // Real multitracks ship stems like "Guía.wav" — the reported folder has
+    // exactly that one. On Windows the narrow file APIs read a const char* as
+    // the active ANSI codepage, not UTF-8, so an accented path silently fails
+    // to open and that ONE stem stays silent while the other 24 play. The
+    // engine handles this via to_wide()/sf_wchar_open (fs_path.h); this pins
+    // it, because the failure mode is a single quiet track that is easy to
+    // miss in a 25-track session.
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 44100;
+    constexpr Frame kFrames = kDefaultBlockFrames + 41;
+
+    // UTF-8 bytes for "Guía" — built byte by byte so neither this file's
+    // encoding nor MSVC's escape folding can change what we actually test.
+    std::string accented = "Gu";
+    accented.push_back(static_cast<char>(0xC3));
+    accented.push_back(static_cast<char>(0xAD));   // U+00ED  í
+    accented += "a_ac";
+    accented.push_back(static_cast<char>(0xC3));
+    accented.push_back(static_cast<char>(0xA9));   // U+00E9  é
+    accented += "nt";
+    const auto wav_path = make_temp_wav_path(accented.c_str());
+    const auto samples = make_reference_audio(kFrames, kChannels);
+
+    // Write via the wide API so the file really lands at the UTF-8 path (the
+    // narrow sf_open used by the other helpers would mangle it here).
+    SF_INFO info{};
+    info.channels = kChannels;
+    info.samplerate = kSampleRate;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
+#if defined(_WIN32)
+    SNDFILE* sf = sf_wchar_open(to_wide(wav_path).c_str(), SFM_WRITE, &info);
+#else
+    SNDFILE* sf = sf_open(wav_path.c_str(), SFM_WRITE, &info);
+#endif
+    REQUIRE(sf != nullptr);
+    const sf_count_t written = sf_writef_float(sf, samples.data(), kFrames);
+    sf_close(sf);
+    REQUIRE(written == static_cast<sf_count_t>(kFrames));
+
+    SourceManager manager;
+    const Id source_id = "accented-stem";
+    manager.register_source(source_id, wav_path);
+
+    // The whole point: an accented stem must take the same route as any other.
+    CHECK(manager.try_install_native_file(source_id, kSampleRate));
+
+    const auto streaming = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(streaming));
+    CHECK(streaming->duration_frames() == kFrames);
+
+    // And it must actually produce audio, not silence.
+    require_ready_range(manager, source_id, 0, 256);
+    const auto got = read_planar(*streaming, 0, 256);
+    double energy = 0.0;
+    for (float v : got) energy += static_cast<double>(v) * v;
+    CHECK(energy > 0.0);
+
+#if defined(_WIN32)
+    _wremove(to_wide(wav_path).c_str());
+#else
+    std::remove(wav_path.c_str());
+#endif
+}
+
+TEST_CASE("mono and stereo stems both stream in place at the engine rate") {
+    // A multitrack mixes mono stems (click, guide, bass) with stereo ones. Both
+    // must take the fast route; anything beyond 2 channels goes to the decode
+    // path so the worker's downmix logic handles it.
+    constexpr int kSampleRate = 44100;
+    constexpr Frame kFrames = kDefaultBlockFrames + 97;
+
+    for (int channels : {1, 2}) {
+        const auto tag = "native_channels_" + std::to_string(channels);
+        const auto wav_path = make_temp_wav_path(tag.c_str());
+        const auto samples = make_reference_audio(kFrames, channels);
+        REQUIRE(write_wav_pcm_float(wav_path, samples, channels, kSampleRate));
+
+        SourceManager manager;
+        const Id source_id = "native-channels-" + std::to_string(channels);
+        manager.register_source(source_id, wav_path);
+        CHECK(manager.try_install_native_file(source_id, kSampleRate));
+
+        const auto streaming = manager.get_shared(source_id);
+        REQUIRE(static_cast<bool>(streaming));
+        CHECK(streaming->channel_count() == channels);
+
+        std::remove(wav_path.c_str());
+    }
+}
 #endif
 
 namespace {
@@ -541,6 +706,75 @@ TEST_CASE("source_cache_dir_size_bytes and purge_source_cache operate on the con
     CHECK(freed == reported);
     CHECK(source_cache_dir_size_bytes() == 0);
     CHECK(stat_cache_dir(cache_sub).file_count == 0);
+}
+
+TEST_CASE("purge_source_cache reports files it could not delete") {
+    // A user reported "Clear cache" in Settings freeing nothing. Cause: while a
+    // session is loaded the engine streams audio straight out of these cache
+    // files, and on Windows an open file cannot be unlinked. Every remove()
+    // failed and the purge returned 0 bytes freed — indistinguishable from an
+    // already-empty cache, so the UI reported success and the user saw the
+    // cache untouched.
+    //
+    // The failure count is what lets the host say "close the session first".
+    ScopedCacheDir scope("purge_reports_failures");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2;
+
+    for (const char* id : {"purge-fail-a", "purge-fail-b"}) {
+        SourceManager manager;
+        manager.register_source(id, std::string(id) + ".wav");
+        REQUIRE(manager.store_decoded_source(
+            id, make_reference_audio(kFrames, kChannels),
+            kChannels, kSampleRate, kFrames).is_ok());
+    }
+
+    const std::string cache_sub =
+        scope.path() + std::string(1, kTestPathSep) + "source-cache";
+    REQUIRE(stat_cache_dir(cache_sub).file_count == 2);
+
+    SUBCASE("nothing held open: no failures reported") {
+        unsigned int failed = 0xFFFFFFFFu;  // must be overwritten
+        const unsigned long long freed = purge_source_cache(&failed);
+        CHECK(freed > 0);
+        CHECK(failed == 0);
+        CHECK(stat_cache_dir(cache_sub).file_count == 0);
+    }
+
+#if defined(_WIN32)
+    SUBCASE("a file held open is reported, not silently skipped") {
+        // Find one cache file and hold it open the way a reader would, i.e.
+        // WITHOUT FILE_SHARE_DELETE — exactly what the streaming source does.
+        WIN32_FIND_DATAA fd{};
+        const std::string pattern = cache_sub + "\\*";
+        HANDLE find = FindFirstFileA(pattern.c_str(), &fd);
+        REQUIRE(find != INVALID_HANDLE_VALUE);
+        std::string victim;
+        do {
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+                victim = cache_sub + "\\" + fd.cFileName;
+                break;
+            }
+        } while (FindNextFileA(find, &fd));
+        FindClose(find);
+        REQUIRE_FALSE(victim.empty());
+
+        HANDLE held = CreateFileA(victim.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                   nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                                   nullptr);
+        REQUIRE(held != INVALID_HANDLE_VALUE);
+
+        unsigned int failed = 0;
+        purge_source_cache(&failed);
+
+        // The open file survives AND is counted.
+        CHECK(failed == 1);
+        CHECK(stat_cache_dir(cache_sub).file_count == 1);
+
+        CloseHandle(held);
+    }
+#endif
 }
 
 TEST_CASE("LRU eviction removes oldest .rf64 files when the budget is exceeded") {

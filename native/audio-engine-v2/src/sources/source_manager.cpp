@@ -494,15 +494,29 @@ unsigned long long source_cache_dir_size_bytes() {
 }
 
 // Delete every .rf64 PCM cache file. Returns the number of bytes freed (only
-// files actually removed are counted). Best-effort: a file that fails to delete
-// (e.g. still mapped/open) is skipped and simply remains.
-unsigned long long purge_source_cache() {
+// files actually removed are counted) and, via `out_failed`, how many files
+// could not be deleted.
+//
+// Reporting the failures matters: on Windows a file that is open without
+// FILE_SHARE_DELETE cannot be unlinked, and the engine holds every streaming
+// source's cache file open while a session is loaded. So "Clear cache" with a
+// session open deletes NOTHING and used to report 0 bytes freed, which reads as
+// "the cache was already empty" instead of "the files are in use". Callers use
+// the failure count to tell the user to close the session.
+unsigned long long purge_source_cache(unsigned int* out_failed) {
     const std::string dir = source_cache_dir();
     unsigned long long freed = 0;
+    unsigned int failed = 0;
     for (const auto& e : list_cache_entries(dir)) {
-        if (std::remove(e.path.c_str()) == 0 && e.size_bytes > 0)
-            freed += static_cast<unsigned long long>(e.size_bytes);
+        if (std::remove(e.path.c_str()) == 0) {
+            if (e.size_bytes > 0)
+                freed += static_cast<unsigned long long>(e.size_bytes);
+        } else {
+            ++failed;
+        }
     }
+    if (out_failed)
+        *out_failed = failed;
     return freed;
 }
 
