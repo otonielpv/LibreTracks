@@ -483,18 +483,42 @@ fn generate_native_waveform(
 /// background waveform job to generate it. This is what removes the second
 /// full decode that was contending with playback during import.
 fn prime_waveforms_from_engine_peaks(song_dir: &Path, song: &Song, audio: &AudioController) {
+    use crate::infra::waveform_diag as diag;
+
     let cache_root = decoding_cache_root();
-    for key in unique_waveform_keys(song) {
+    let keys = unique_waveform_keys(song);
+    // This runs UNDER the session lock (see get_waveform_summaries), so its
+    // total is what the UI is blocked on. Per-key timing separates a cheap
+    // cache hit from a source_peaks() call that falls through to reading and
+    // analysing the whole file (~260 ms per 200 MB stem, measured).
+    let _span = diag::Span::new(format!(
+        "    prime_waveforms_from_engine_peaks(sources={})",
+        keys.len()
+    ));
+    let mut cache_hits = 0usize;
+    let mut no_peaks = 0usize;
+    let mut primed = 0usize;
+
+    for key in keys {
         // The source id the engine knows is the resolved audio file path.
         let source_path = resolve_audio_file_path(song_dir, &key);
         let source_id = source_path.to_string_lossy().to_string();
         // Skip if a cache already exists (cheap check).
         if load_global_waveform(&cache_root, song_dir, Path::new(&key)).is_ok() {
+            cache_hits += 1;
             continue;
         }
-        let Some(peaks) = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES) else {
+        // Anything over ~50 ms here means the engine had no same-pass peaks and
+        // source_peaks() read the file instead — the native-WAV route never
+        // populates cached_peaks, so this is where the freeze accumulates.
+        let peaks_span = diag::Span::slow_only(format!("      source_peaks({key})"), 50);
+        let peaks = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES);
+        drop(peaks_span);
+        let Some(peaks) = peaks else {
+            no_peaks += 1;
             continue; // not loaded yet / no same-pass peaks → retry will hit
         };
+        primed += 1;
         let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
         if duration_frames == 0 {
             continue;
@@ -512,6 +536,13 @@ fn prime_waveforms_from_engine_peaks(song_dir: &Path, song: &Song, audio: &Audio
             continue;
         };
         let _ = write_global_waveform(&cache_root, &source_path, &summary);
+    }
+
+    if diag::is_enabled() {
+        diag::log(format!(
+            "    prime summary: {cache_hits} cache hits, {primed} primed from engine, \
+             {no_peaks} without peaks"
+        ));
     }
 }
 
@@ -560,6 +591,12 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
         waveform_key,
     } = job;
 
+    // There is ONE worker thread draining this queue, so jobs are strictly
+    // sequential: a slow job delays every one behind it. Timing each job shows
+    // whether the backlog is a few slow ones or uniformly slow work.
+    let _job_span =
+        crate::infra::waveform_diag::Span::new(format!("worker job({waveform_key})"));
+
     // 1) Disk cache. 2) Same-pass peaks from the engine (NO re-decode — the
     // streaming decode already computed them). 3) Full re-decode (file_peaks),
     // the expensive fallback only for sources the engine doesn't have (e.g. a
@@ -584,6 +621,15 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
     // forever. The streaming decode finishes within seconds; cap the wait so a
     // stuck/failed source eventually falls through to the file_peaks path.
     let engine_peaks = if engine_has_source {
+        // Suspected trap for native WAVs: try_install_native_file never fills
+        // cached_peaks (it does not decode), so waveform_from_engine_peaks can
+        // return None forever and this loop polls for up to 120s waiting for
+        // peaks that will never arrive. The log tells us how long it actually
+        // spun and whether it eventually gave up.
+        let poll_span = crate::infra::waveform_diag::Span::slow_only(
+            format!("  worker poll for engine peaks({waveform_key})"),
+            200,
+        );
         let mut got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
         let mut waited_ms = 0u64;
         const POLL_MS: u64 = 100;
@@ -605,6 +651,13 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
             waited_ms += POLL_MS;
             got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
         }
+        drop(poll_span);
+        if crate::infra::waveform_diag::is_enabled() && got.is_none() && waited_ms > 0 {
+            crate::infra::waveform_diag::log(format!(
+                "  !! gave up after {waited_ms}ms polling for engine peaks({waveform_key}) \
+                 — engine knows the source but never produced peaks"
+            ));
+        }
         got
     } else {
         waveform_from_engine_peaks(&song_dir, &waveform_key, audio)
@@ -613,7 +666,14 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
     let summary = match load_global_waveform(&cache_root, &song_dir, Path::new(&waveform_key)) {
         Ok(summary) => Some(summary),
         Err(_) if engine_peaks.is_some() => engine_peaks,
-        Err(cache_error) => match generate_native_waveform(&song_dir, &waveform_key) {
+        Err(cache_error) => match {
+            // The expensive fallback: a full decode of the file just to draw
+            // its waveform (~260 ms per 200 MB stem, measured).
+            let _span = crate::infra::waveform_diag::Span::new(format!(
+                "  generate_native_waveform({waveform_key}) FULL DECODE"
+            ));
+            generate_native_waveform(&song_dir, &waveform_key)
+        } {
             Ok(summary) => Some(summary),
             Err(native_error) => {
                 match load_or_generate_global_waveform(
