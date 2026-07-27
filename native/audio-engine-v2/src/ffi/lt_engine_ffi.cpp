@@ -200,4 +200,21 @@ LT_API uint64_t lt_audio_engine_purge_source_cache(void) {
     }
 }
 
+// Same purge, but reports how many files could not be deleted. `out_failed` may
+// be null. A nonzero count means the files are held open (a loaded session
+// streams from them), which the host surfaces instead of claiming success.
+LT_API uint64_t lt_audio_engine_purge_source_cache_ex(uint32_t* out_failed) {
+    try {
+        unsigned int failed = 0;
+        const uint64_t freed = static_cast<uint64_t>(lt::purge_source_cache(&failed));
+        if (out_failed)
+            *out_failed = static_cast<uint32_t>(failed);
+        return freed;
+    } catch (...) {
+        if (out_failed)
+            *out_failed = 0;
+        return 0;
+    }
+}
+
 } // extern "C"

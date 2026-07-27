@@ -413,6 +413,19 @@ pub fn purge_decoding_cache() -> u64 {
     unsafe { lt_audio_engine_purge_source_cache() }
 }
 
+/// Delete all on-disk decoded-PCM cache files, reporting how many could not be
+/// removed. Returns `(bytes_freed, files_failed)`.
+///
+/// A nonzero failure count means the files are still open. That is the normal
+/// state while a session is loaded — the engine streams audio straight out of
+/// these files — and on Windows an open file cannot be unlinked. Callers should
+/// tell the user to close the session rather than report a successful purge.
+pub fn purge_decoding_cache_detailed() -> (u64, u32) {
+    let mut failed: u32 = 0;
+    let freed = unsafe { lt_audio_engine_purge_source_cache_ex(&mut failed as *mut u32) };
+    (freed, failed)
+}
+
 // ---------------------------------------------------------------------------
 // Internal helper
 // ---------------------------------------------------------------------------

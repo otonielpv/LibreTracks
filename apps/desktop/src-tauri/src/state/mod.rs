@@ -168,9 +168,23 @@ pub struct WaveformJob {
     pub waveform_key: String,
 }
 
+/// Work the waveform thread can be given. `Prime` exists because building the
+/// global cache from the engine's same-pass peaks is too slow to run under the
+/// session lock (see `load_waveforms`); it is the same work, just off the
+/// command thread.
+#[derive(Clone)]
+pub enum WaveformTask {
+    Generate(WaveformJob),
+    Prime {
+        app: tauri::AppHandle,
+        song_dir: PathBuf,
+        song: Box<Song>,
+    },
+}
+
 #[derive(Clone)]
 pub struct WaveformGenerationQueue {
-    sender: mpsc::Sender<WaveformJob>,
+    sender: mpsc::Sender<WaveformTask>,
     in_flight: Arc<Mutex<HashSet<String>>>,
     // The engine, so the worker can reuse the peaks the streaming decode ALREADY
     // computed (source_peaks) instead of re-decoding the whole file. None in
@@ -351,11 +365,11 @@ impl WaveformGenerationQueue {
 
         if self
             .sender
-            .send(WaveformJob {
+            .send(WaveformTask::Generate(WaveformJob {
                 app,
                 song_dir,
                 waveform_key,
-            })
+            }))
             .is_err()
         {
             if let Ok(mut in_flight) = self.in_flight.lock() {
@@ -369,6 +383,39 @@ impl WaveformGenerationQueue {
         Ok(())
     }
 
+    /// Queue a "prime the cache from the engine's same-pass peaks" pass for the
+    /// whole song. Deduplicated per song dir: the frontend polls every ~600 ms
+    /// while waveforms are missing, and without this every poll would queue
+    /// another full pass behind the one already running.
+    ///
+    /// Errors are swallowed: priming is an optimisation, and its failure just
+    /// means the normal per-key generation path does the work instead.
+    pub fn enqueue_prime(&self, app: AppHandle, song_dir: PathBuf, song: Song) {
+        let job_key = prime_job_key(&song_dir);
+        {
+            let Ok(mut in_flight) = self.in_flight.lock() else {
+                return;
+            };
+            if !in_flight.insert(job_key.clone()) {
+                return;
+            }
+        }
+
+        if self
+            .sender
+            .send(WaveformTask::Prime {
+                app,
+                song_dir,
+                song: Box::new(song),
+            })
+            .is_err()
+        {
+            if let Ok(mut in_flight) = self.in_flight.lock() {
+                in_flight.remove(&job_key);
+            }
+        }
+    }
+
     /// Number of jobs currently enqueued / in flight. Test-only: lets tests
     /// assert that a cache miss enqueued background work instead of decoding.
     #[cfg(test)]
@@ -379,19 +426,38 @@ impl WaveformGenerationQueue {
 
 impl Default for WaveformGenerationQueue {
     fn default() -> Self {
-        let (sender, receiver) = mpsc::channel::<WaveformJob>();
+        let (sender, receiver) = mpsc::channel::<WaveformTask>();
         let in_flight = Arc::new(Mutex::new(HashSet::new()));
         let worker_in_flight = Arc::clone(&in_flight);
         let audio: Arc<Mutex<Option<Arc<AudioController>>>> = Arc::new(Mutex::new(None));
         let worker_audio = Arc::clone(&audio);
 
         thread::spawn(move || {
-            while let Ok(job) = receiver.recv() {
-                let job_key = waveform_job_key(&job.song_dir, &job.waveform_key);
+            while let Ok(task) = receiver.recv() {
                 let audio = worker_audio.lock().ok().and_then(|g| g.clone());
-                process_waveform_job(job, audio.as_deref());
-                if let Ok(mut in_flight) = worker_in_flight.lock() {
-                    in_flight.remove(&job_key);
+                match task {
+                    WaveformTask::Generate(job) => {
+                        let job_key = waveform_job_key(&job.song_dir, &job.waveform_key);
+                        process_waveform_job(job, audio.as_deref());
+                        if let Ok(mut in_flight) = worker_in_flight.lock() {
+                            in_flight.remove(&job_key);
+                        }
+                    }
+                    WaveformTask::Prime {
+                        app,
+                        song_dir,
+                        song,
+                    } => {
+                        if let Some(audio) = audio.as_deref() {
+                            prime_waveforms_from_engine_peaks(&song_dir, &song, audio);
+                        }
+                        if let Ok(mut in_flight) = worker_in_flight.lock() {
+                            in_flight.remove(&prime_job_key(&song_dir));
+                        }
+                        // Tell the frontend to re-request: its poll would get
+                        // there eventually, but the waveforms are ready now.
+                        let _ = app.emit("waveform:ready", ());
+                    }
                 }
             }
         });
@@ -422,7 +488,7 @@ impl WaveformGenerationQueue {
     /// key as soon as it runs, racing the assertion). The receiver is leaked to
     /// keep the channel open.
     pub(crate) fn new_for_test() -> Self {
-        let (sender, receiver) = mpsc::channel::<WaveformJob>();
+        let (sender, receiver) = mpsc::channel::<WaveformTask>();
         std::mem::forget(receiver);
         Self {
             sender,
@@ -434,6 +500,12 @@ impl WaveformGenerationQueue {
 
 fn waveform_job_key(song_dir: &Path, waveform_key: &str) -> String {
     format!("{}\n{waveform_key}", song_dir.to_string_lossy())
+}
+
+/// Dedup key for a whole-song prime pass. The `\u{0}prime` suffix cannot
+/// collide with a waveform key (those are file paths).
+fn prime_job_key(song_dir: &Path) -> String {
+    format!("{}\u{0}prime", song_dir.to_string_lossy())
 }
 
 pub(super) fn unique_waveform_keys(song: &Song) -> Vec<String> {
@@ -633,7 +705,16 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
         let mut got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
         let mut waited_ms = 0u64;
         const POLL_MS: u64 = 100;
-        const MAX_WAIT_MS: u64 = 120_000;
+        // Was 120_000. That ceiling assumed a streaming decode was in flight and
+        // would publish its same-pass peaks "within seconds". A native WAV takes
+        // try_install_native_file, which registers the source WITHOUT decoding,
+        // so its peaks arrive only when something else computes them — measured
+        // waits of 9.2 s and 9.3 s, and in the worst case the full two minutes.
+        //
+        // Falling through to generate_native_waveform costs ~260 ms per stem
+        // (bench_waveform_peaks), so waiting longer than that is never a win:
+        // cap the wait and let the fallback do the work.
+        const MAX_WAIT_MS: u64 = 1_500;
         while got.is_none() && waited_ms < MAX_WAIT_MS {
             // Stop early if the source vanished (session changed / removed).
             let still_known = audio
@@ -1065,12 +1146,21 @@ impl DesktopSession {
         app: &AppHandle,
         audio: &AudioController,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
-        // Before serving, prime the global cache from the engine's same-pass
-        // peaks (no re-decode) so the cache lookup below hits and we never
-        // enqueue the heavy file_peaks re-decode that contended with playback.
+        // Priming the global cache from the engine's same-pass peaks used to run
+        // HERE, inline. It is not free: on a cold cache source_peaks() reads and
+        // analyses each source (~640 ms per 200 MB stem, measured), and this runs
+        // under the session lock held by get_waveform_summaries. With a 25-stem
+        // multitrack that froze the UI for 10.9 s on the first request
+        // (LIBRETRACKS_WAVEFORM_DIAG log: prime_waveforms_from_engine_peaks took
+        // 10879ms, session lock HELD 10893ms) — exactly what the comment in
+        // load_waveforms_internal warns against two lines below.
+        //
+        // The work still has to happen, so it moves to the background queue: the
+        // lookup below misses, the frontend re-requests (it already polls), and
+        // by then the primed cache hits. Requests stay in the tens of ms.
         if let Some(song) = self.engine.song().cloned() {
             if let Some(song_dir) = self.song_dir.clone() {
-                prime_waveforms_from_engine_peaks(&song_dir, &song, audio);
+                waveform_jobs.enqueue_prime(app.clone(), song_dir, song);
             }
         }
         self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)), Some(audio))

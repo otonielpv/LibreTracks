@@ -47,7 +47,11 @@ std::string source_cache_directory();
 unsigned long long source_cache_dir_size_bytes();
 
 // Delete all .rf64 PCM cache files; returns bytes freed. Best-effort.
-unsigned long long purge_source_cache();
+// `out_failed` (optional) receives the number of files that could NOT be
+// deleted — on Windows that is what happens to every cache file of a loaded
+// session, because the engine holds them open for streaming. Without it a
+// fully-blocked purge is indistinguishable from an already-empty cache.
+unsigned long long purge_source_cache(unsigned int* out_failed = nullptr);
 
 // Decode an audio file directly and build peak buckets. This is used by the
 // host UI for waveform generation so it follows the same native decoder stack

@@ -1153,7 +1153,22 @@ function DecodingCacheField() {
       return setDecodingCacheMaxGb(Math.floor(parsed));
     });
 
-  const handlePurge = () => void run(() => purgeDecodingCache());
+  // A purge that frees nothing because the files are open must not look like a
+  // successful one. The engine streams audio straight out of the PCM cache, so
+  // with a session loaded every file is held open and (on Windows) undeletable.
+  const handlePurge = () =>
+    void run(async () => {
+      const result = await purgeDecodingCache();
+      if (result.filesInUse > 0) {
+        throw new Error(
+          t("transport.settingsModal.decodingCacheInUse", {
+            count: result.filesInUse,
+            defaultValue:
+              "{{count}} cache file(s) are in use by the open session and could not be deleted. Close the session (or the app) and clear the cache again.",
+          }),
+        );
+      }
+    });
 
   return (
     <div className="lt-settings-field">

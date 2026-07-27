@@ -708,6 +708,75 @@ TEST_CASE("source_cache_dir_size_bytes and purge_source_cache operate on the con
     CHECK(stat_cache_dir(cache_sub).file_count == 0);
 }
 
+TEST_CASE("purge_source_cache reports files it could not delete") {
+    // A user reported "Clear cache" in Settings freeing nothing. Cause: while a
+    // session is loaded the engine streams audio straight out of these cache
+    // files, and on Windows an open file cannot be unlinked. Every remove()
+    // failed and the purge returned 0 bytes freed — indistinguishable from an
+    // already-empty cache, so the UI reported success and the user saw the
+    // cache untouched.
+    //
+    // The failure count is what lets the host say "close the session first".
+    ScopedCacheDir scope("purge_reports_failures");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2;
+
+    for (const char* id : {"purge-fail-a", "purge-fail-b"}) {
+        SourceManager manager;
+        manager.register_source(id, std::string(id) + ".wav");
+        REQUIRE(manager.store_decoded_source(
+            id, make_reference_audio(kFrames, kChannels),
+            kChannels, kSampleRate, kFrames).is_ok());
+    }
+
+    const std::string cache_sub =
+        scope.path() + std::string(1, kTestPathSep) + "source-cache";
+    REQUIRE(stat_cache_dir(cache_sub).file_count == 2);
+
+    SUBCASE("nothing held open: no failures reported") {
+        unsigned int failed = 0xFFFFFFFFu;  // must be overwritten
+        const unsigned long long freed = purge_source_cache(&failed);
+        CHECK(freed > 0);
+        CHECK(failed == 0);
+        CHECK(stat_cache_dir(cache_sub).file_count == 0);
+    }
+
+#if defined(_WIN32)
+    SUBCASE("a file held open is reported, not silently skipped") {
+        // Find one cache file and hold it open the way a reader would, i.e.
+        // WITHOUT FILE_SHARE_DELETE — exactly what the streaming source does.
+        WIN32_FIND_DATAA fd{};
+        const std::string pattern = cache_sub + "\\*";
+        HANDLE find = FindFirstFileA(pattern.c_str(), &fd);
+        REQUIRE(find != INVALID_HANDLE_VALUE);
+        std::string victim;
+        do {
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+                victim = cache_sub + "\\" + fd.cFileName;
+                break;
+            }
+        } while (FindNextFileA(find, &fd));
+        FindClose(find);
+        REQUIRE_FALSE(victim.empty());
+
+        HANDLE held = CreateFileA(victim.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                   nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                                   nullptr);
+        REQUIRE(held != INVALID_HANDLE_VALUE);
+
+        unsigned int failed = 0;
+        purge_source_cache(&failed);
+
+        // The open file survives AND is counted.
+        CHECK(failed == 1);
+        CHECK(stat_cache_dir(cache_sub).file_count == 1);
+
+        CloseHandle(held);
+    }
+#endif
+}
+
 TEST_CASE("LRU eviction removes oldest .rf64 files when the budget is exceeded") {
     ScopedCacheDir scope("lru_eviction");
     // 1 MiB budget: each ~1 MiB source forces eviction of older ones.
