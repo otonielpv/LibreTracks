@@ -289,6 +289,72 @@ TEST_CASE("configured fade-out ramps the level down over its duration") {
     CHECK(max_abs(out[0]) < 0.02f);  // fully faded to silence
 }
 
+TEST_CASE("transport gate silences the pad without clearing enabled") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    cfg.stop_with_transport = true;
+    pad.set_config(cfg);
+    pad.set_clip(make_clip(64, 1.0f, 1.0f));
+
+    // Playing: the gate is open and the pad is audible.
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+    CHECK(max_abs(render_block(pad, 2, 256)[0]) > 0.3f);
+
+    // Transport stops → the gate closes and the pad fades to silence, but the
+    // user's switch (what the UI shows) must stay on.
+    pad.set_transport_gate(false);
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+    CHECK(max_abs(render_block(pad, 2, 256)[0]) < 0.02f);
+    CHECK(pad.config().enabled == true);
+    CHECK(pad.stop_with_transport() == true);
+
+    // Play again → it comes back on its own, no re-enable needed.
+    pad.set_transport_gate(true);
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+    CHECK(max_abs(render_block(pad, 2, 256)[0]) > 0.3f);
+}
+
+TEST_CASE("pad ignores the transport gate unless stop_with_transport is set") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    pad.set_config(cfg);  // stop_with_transport defaults to false
+    pad.set_clip(make_clip(64, 1.0f, 1.0f));
+
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+    // The Mixer keeps the gate open in this mode, so the pad plays through a
+    // stopped transport — the default decoupled behaviour.
+    CHECK(pad.stop_with_transport() == false);
+    CHECK(max_abs(render_block(pad, 2, 256)[0]) > 0.3f);
+}
+
+TEST_CASE("turning stop_with_transport off reopens a closed gate") {
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    cfg.stop_with_transport = true;
+    pad.set_config(cfg);
+    pad.set_clip(make_clip(64, 1.0f, 1.0f));
+
+    // Silenced by a stopped transport…
+    pad.set_transport_gate(false);
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+    CHECK(max_abs(render_block(pad, 2, 256)[0]) < 0.02f);
+
+    // …then the user unticks the option: the pad must not stay stuck silent.
+    cfg.stop_with_transport = false;
+    pad.set_config(cfg);
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 256);
+    CHECK(max_abs(render_block(pad, 2, 256)[0]) > 0.3f);
+}
+
 TEST_CASE("empty clip yields silence and a muted reason") {
     PadRenderer pad;
     PadConfig cfg;

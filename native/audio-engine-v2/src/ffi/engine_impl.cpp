@@ -1768,6 +1768,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             pad_config_.pad_id = c.pad_id;
             pad_config_.fade_in_seconds = std::clamp(c.fade_in_seconds, 0.0f, 30.0f);
             pad_config_.fade_out_seconds = std::clamp(c.fade_out_seconds, 0.0f, 30.0f);
+            pad_config_.stop_with_transport = c.stop_with_transport;
             if (mixer_) mixer_->set_pad_config(pad_config_);
             return Result<void>::ok();
         }

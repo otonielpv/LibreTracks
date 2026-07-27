@@ -128,6 +128,7 @@ struct CmdSetPadConfig {
     std::string pad_id;
     float fade_in_seconds = 0.0f;   // soft entrance on enable (0 = near-instant)
     float fade_out_seconds = 0.0f;  // soft exit on disable / key swap
+    bool stop_with_transport = false;  // pad follows play/stop (switch stays on)
 };
 
 // Decode a single pad key from disk and hand it to the renderer. Runs the

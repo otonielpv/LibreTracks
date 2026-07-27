@@ -132,6 +132,12 @@ std::shared_ptr<PadClip> load_pad_clip(const std::string& pads_dir,
 
 void PadRenderer::set_config(const PadConfig& config) {
     set_enabled(config.enabled);
+    stop_with_transport_.store(config.stop_with_transport, std::memory_order_release);
+    // Turning the option off must not leave a closed gate behind (the pad would
+    // stay silent forever with the switch on). The Mixer reopens it every block
+    // anyway, but be explicit so a stopped transport recovers immediately.
+    if (!config.stop_with_transport)
+        set_transport_gate(true);
     set_volume(config.volume);
     set_fade_in_seconds(config.fade_in_seconds);
     set_fade_out_seconds(config.fade_out_seconds);
@@ -175,6 +181,10 @@ void PadRenderer::set_enabled(bool enabled) {
     enabled_.store(enabled, std::memory_order_release);
 }
 
+void PadRenderer::set_transport_gate(bool open) {
+    transport_gate_.store(open, std::memory_order_release);
+}
+
 void PadRenderer::set_volume(float volume) {
     volume_.store(std::clamp(volume, 0.0f, 4.0f), std::memory_order_release);
 }
@@ -216,7 +226,13 @@ void PadRenderer::render(float** output_channels,
                          double sample_rate) noexcept {
     if (num_channels <= 0 || num_frames <= 0 || sample_rate <= 0.0) return;
 
-    const bool enabled = enabled_.load(std::memory_order_acquire);
+    // The user's switch AND the transport gate. The gate is open unless the
+    // user asked the pad to follow the transport, so it normally reduces to
+    // `enabled`. Folding them together here means a transport stop reuses the
+    // exact same edge detection, fade-out and mute path as a manual disable —
+    // while `enabled_` (what the UI shows) is left untouched.
+    const bool enabled = enabled_.load(std::memory_order_acquire) &&
+                         transport_gate_.load(std::memory_order_acquire);
     const float volume = volume_.load(std::memory_order_acquire);
     const float target_gain = enabled ? volume : 0.0f;
     const float fade_in_seconds = fade_in_seconds_.load(std::memory_order_acquire);

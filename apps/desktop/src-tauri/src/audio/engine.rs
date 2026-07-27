@@ -377,6 +377,10 @@ pub struct AudioController {
     sender: mpsc::Sender<AudioCommand>,
     #[cfg(not(target_os = "android"))]
     remote_handle: Mutex<Option<RemoteServerHandle>>,
+    /// Kept so realtime paths that mutate the cached settings behind the UI's
+    /// back (automation cues) can emit `settings:updated` and keep the
+    /// frontend's controls in sync with what the engine is actually doing.
+    app_handle: Mutex<Option<AppHandle>>,
     meter_thread_started: AtomicBool,
     meter_thread_stop: Arc<AtomicBool>,
     meter_thread: Mutex<Option<JoinHandle<()>>>,
@@ -429,6 +433,7 @@ impl AudioController {
             sender,
             #[cfg(not(target_os = "android"))]
             remote_handle: Mutex::new(None),
+            app_handle: Mutex::new(None),
             meter_thread_started: AtomicBool::new(false),
             meter_thread_stop: Arc::new(AtomicBool::new(false)),
             meter_thread: Mutex::new(None),
@@ -454,6 +459,9 @@ impl AudioController {
             .map(|base| base.join("pads").to_string_lossy().to_string());
         if let Ok(mut state) = self.state.lock() {
             state.pads_dir = pads_dir;
+        }
+        if let Ok(mut slot) = self.app_handle.lock() {
+            *slot = Some(app_handle.clone());
         }
         if self
             .meter_thread_started
@@ -1442,6 +1450,7 @@ impl AudioController {
                 pad_id: settings.pad_id.clone(),
                 fade_in_seconds: settings.pad_fade_in_seconds as f32,
                 fade_out_seconds: settings.pad_fade_out_seconds as f32,
+                stop_with_transport: settings.pad_stop_with_transport,
             })?;
             Ok(())
         })
@@ -1475,6 +1484,9 @@ impl AudioController {
         settings.pad_fade_out_seconds = fade_out_seconds.clamp(0.0, 30.0);
         self.set_pad_config_realtime(&settings)?;
         self.replace_settings(settings.clone())?;
+        // The cue changed the pad behind the UI's back: without this the pad
+        // sounds but the Pads button/popover still show the previous state.
+        self.emit_settings_updated(&settings);
 
         if clip_changed && !settings.pad_id.is_empty() {
             let (loader, pads_dir) = {
@@ -1586,6 +1598,23 @@ impl AudioController {
             .lock()
             .map(|mut state| state.settings = settings)
             .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))
+    }
+
+    /// Broadcast a settings change made by a realtime path to every UI that
+    /// mirrors it (main window + remote). Best-effort: a missing app handle
+    /// (headless tests) or a failed emit must never break the audio path.
+    pub fn emit_settings_updated(&self, settings: &AppSettings) {
+        if let Ok(slot) = self.app_handle.lock() {
+            if let Some(app_handle) = slot.as_ref() {
+                let _ = app_handle.emit("settings:updated", settings.clone());
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        if let Ok(remote_handle) = self.remote_handle.lock() {
+            if let Some(remote_handle) = remote_handle.as_ref() {
+                remote_handle.publish_settings(settings);
+            }
+        }
     }
 
     pub fn apply_settings(&self, settings: AppSettings) -> Result<(), DesktopError> {
@@ -1838,6 +1867,7 @@ impl AudioController {
                 pad_id: settings.pad_id.clone(),
                 fade_in_seconds: settings.pad_fade_in_seconds as f32,
                 fade_out_seconds: settings.pad_fade_out_seconds as f32,
+                stop_with_transport: settings.pad_stop_with_transport,
             })?;
             state.settings = settings;
             Ok(())

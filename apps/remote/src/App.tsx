@@ -72,6 +72,7 @@ import {
 } from "./liveWidgets";
 import {
   DEFAULT_METRONOME_WIDGET_HEIGHT,
+  DEFAULT_PADS_WIDGET_HEIGHT,
   LAYOUT_COLUMNS,
   LAYOUT_MAX_ROWS,
   clearStoredLayout,
@@ -3318,6 +3319,13 @@ function PadsWidget() {
       <SettingsRange label={STRINGS.volume} gain={settings.padVolume} onChange={(padVolume) => patch({ padVolume })} />
       <PadFadeControl label={STRINGS.padFadeIn} seconds={settings.padFadeInSeconds} onChange={(padFadeInSeconds) => patch({ padFadeInSeconds })} />
       <PadFadeControl label={STRINGS.padFadeOut} seconds={settings.padFadeOutSeconds} onChange={(padFadeOutSeconds) => patch({ padFadeOutSeconds })} />
+      {/* Off by default: pads are deliberately decoupled from the transport
+          and keep sounding between songs. When on, the pad goes quiet on
+          stop/pause and returns on play — the switch above stays on. */}
+      <label className="performance-switch pads-follow-switch">
+        <input type="checkbox" checked={settings.padStopWithTransport} disabled={!settings.padId} onChange={(event) => patch({ padStopWithTransport: event.currentTarget.checked })} />
+        <span>{STRINGS.padStopWithTransport}</span>
+      </label>
     </div>
   );
 }
@@ -3550,7 +3558,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   mixerFaders: { labelKey: "widgetMixerFaders", Component: MixerFadersWidget, defaultW: LAYOUT_COLUMNS, defaultH: 24 },
   songHeader: { labelKey: "widgetSongHeader", Component: SongHeaderWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12 },
   clipList: { labelKey: "widgetSongHeader", Component: ClipListWidget, defaultW: LAYOUT_COLUMNS, defaultH: 12, palette: false },
-  pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: 31 },
+  pads: { labelKey: "widgetPads", Component: PadsWidget, defaultW: 12, defaultH: DEFAULT_PADS_WIDGET_HEIGHT },
   metronomeSettings: { labelKey: "widgetMetronomeSettings", Component: MetronomeSettingsWidget, defaultW: 8, defaultH: DEFAULT_METRONOME_WIDGET_HEIGHT },
   voiceGuideSettings: { labelKey: "widgetVoiceGuideSettings", Component: VoiceGuideSettingsWidget, defaultW: 8, defaultH: 20 },
   layoutTitle: { labelKey: "widgetLayoutTitle", Component: LayoutTitleWidget, defaultW: LAYOUT_COLUMNS, defaultH: 3 },
@@ -3664,7 +3672,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "mixerSongMaster": return { w: 24, h: 5 };
     case "mixerFaders": return { w: 24, h: 26 };
     case "songHeader": case "clipList": return { w: 24, h: 14 };
-    case "pads": return { w: 24, h: 31 };
+    case "pads": return { w: 24, h: DEFAULT_PADS_WIDGET_HEIGHT };
     case "metronomeSettings": return { w: 24, h: DEFAULT_METRONOME_WIDGET_HEIGHT };
     case "voiceGuideSettings": return { w: 24, h: 14 };
     case "layoutTitle": return { w: 24, h: 3 };
@@ -4429,11 +4437,17 @@ export function App() {
     const storedMetronome = stored.tabs
       .flatMap((tab) => tab.widgets)
       .find((widget) => widget.type === "metronomeSettings");
+    const storedPads = stored.tabs
+      .flatMap((tab) => tab.widgets)
+      .find((widget) => widget.type === "pads");
+    // The height checks make an untouched preset that predates a widget
+    // growing (new control added) regenerate instead of clipping its content.
     const hasToolsPreset =
       presetWidgetTypes.has("pads") &&
       presetWidgetTypes.has("metronomeSettings") &&
       presetWidgetTypes.has("voiceGuideSettings") &&
-      storedMetronome?.h === DEFAULT_METRONOME_WIDGET_HEIGHT;
+      storedMetronome?.h === DEFAULT_METRONOME_WIDGET_HEIGHT &&
+      storedPads?.h === DEFAULT_PADS_WIDGET_HEIGHT;
     if (isUntouchedControlsPreset && (stored.presetProfile !== presetProfile || !hasToolsPreset)) {
       return defaultLayout(presetProfile);
     }

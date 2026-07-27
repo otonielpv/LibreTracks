@@ -6,6 +6,7 @@ import {
   LAYOUT_MAX_ROWS,
   LAYOUT_VERSION,
   DEFAULT_METRONOME_WIDGET_HEIGHT,
+  DEFAULT_PADS_WIDGET_HEIGHT,
   clearStoredLayout,
   containingGroupId,
   defaultLayout,
@@ -94,7 +95,7 @@ describe("remoteLayout", () => {
     expect(phoneTools.map(({ type, y, h }) => [type, y, h])).toEqual([
       ["metronomeSettings", 0, DEFAULT_METRONOME_WIDGET_HEIGHT],
       ["voiceGuideSettings", DEFAULT_METRONOME_WIDGET_HEIGHT, 14],
-      ["pads", DEFAULT_METRONOME_WIDGET_HEIGHT + 14, 31],
+      ["pads", DEFAULT_METRONOME_WIDGET_HEIGHT + 14, DEFAULT_PADS_WIDGET_HEIGHT],
     ]);
   });
 

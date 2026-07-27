@@ -736,6 +736,13 @@ export type AppSettings = {
    * playhead) and its transpose, instead of the manual key selection.
    */
   padFollowSongKey: boolean;
+  /**
+   * When true the pad follows the transport: it fades out (using
+   * padFadeOutSeconds) when playback stops/pauses and returns on play, without
+   * clearing padEnabled — the switch stays on. Default false: the pad otherwise
+   * keeps sounding between songs, which is the point of an ambient pad.
+   */
+  padStopWithTransport: boolean;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker";
@@ -789,6 +796,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   padFadeInSeconds: 0,
   padFadeOutSeconds: 0,
   padFollowSongKey: false,
+  padStopWithTransport: false,
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -1002,6 +1010,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       ? Math.min(30, Math.max(0, settings.padFadeOutSeconds))
       : DEFAULT_APP_SETTINGS.padFadeOutSeconds,
     padFollowSongKey: Boolean(settings.padFollowSongKey),
+    padStopWithTransport: Boolean(settings.padStopWithTransport),
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,

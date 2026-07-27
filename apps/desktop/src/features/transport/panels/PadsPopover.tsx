@@ -354,6 +354,21 @@ function PadsPopoverImpl({
             t={t}
           />
 
+          <label className="lt-pads-toggle">
+            <input
+              type="checkbox"
+              checked={settings.padStopWithTransport}
+              onChange={(event) =>
+                onPadChange({ padStopWithTransport: event.target.checked })
+              }
+            />
+            <span>
+              {t("pads.stopWithTransport", {
+                defaultValue: "Detener con la reproducción",
+              })}
+            </span>
+          </label>
+
           <div className="lt-pads-field">
             <span className="lt-pads-field-label">
               {t("pads.output", { defaultValue: "Salida" })}

@@ -54,6 +54,11 @@ struct PadConfig {
     // down over this time, and a key/pack swap crossfades over this time so the
     // outgoing pad leaves gently instead of being replaced almost instantly.
     float fade_out_seconds = 0.0f;
+    // When true the pad follows the transport: it goes quiet (via the fade-out)
+    // while playback is stopped/paused and comes back (via the fade-in) on play,
+    // WITHOUT clearing `enabled` — the user's switch stays on. Default false:
+    // pads are otherwise decoupled from the transport.
+    bool stop_with_transport = false;
 };
 
 struct PadDiagnostics {
@@ -81,6 +86,15 @@ class PadRenderer {
 public:
     void set_config(const PadConfig& config);
     void set_enabled(bool enabled);
+    /// Gate the pad on the transport without touching the user's enabled
+    /// switch: false silences it (using the fade-out) while the transport is
+    /// stopped/paused, true lets it sound again (using the fade-in). Always
+    /// true unless the user opted into "stop with playback".
+    void set_transport_gate(bool open);
+    /// Whether the user asked the pad to follow the transport.
+    bool stop_with_transport() const noexcept {
+        return stop_with_transport_.load(std::memory_order_acquire);
+    }
     void set_volume(float volume);
     void set_fade_in_seconds(float seconds);
     void set_fade_out_seconds(float seconds);
@@ -103,6 +117,10 @@ private:
     enum class RouteMode : int { Master = 0, Monitor = 1, Ext = 2 };
 
     std::atomic<bool>  enabled_{false};
+    /// Transport gate, ANDed with enabled_ to decide whether the pad sounds.
+    /// Open by default so pads stay decoupled from the transport.
+    std::atomic<bool>  transport_gate_{true};
+    std::atomic<bool>  stop_with_transport_{false};
     std::atomic<float> volume_{1.0f};
     std::atomic<float> fade_in_seconds_{0.0f};
     std::atomic<float> fade_out_seconds_{0.0f};

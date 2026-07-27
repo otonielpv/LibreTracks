@@ -79,6 +79,7 @@ public:
 
     void set_pad_config(const PadConfig& config);
     void set_pad_enabled(bool enabled);
+    void set_pad_transport_gate(bool open);
     void set_pad_volume(float volume);
     void set_pad_clip(std::shared_ptr<const PadClip> clip) noexcept;
     PadDiagnostics pad_diagnostics() const;

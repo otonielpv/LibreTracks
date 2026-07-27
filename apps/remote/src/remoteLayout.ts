@@ -111,6 +111,11 @@ export const LAYOUT_MAX_ROWS = 60;
 /** Enough room for every metronome field at the default interface scale
  * without forcing the tool widget to start with its own scrollbar. */
 export const DEFAULT_METRONOME_WIDGET_HEIGHT = 26;
+/** Same idea for the pads widget: pack, routing, key grid, volume, both fades
+ * and the "stop with playback" switch without an inner scrollbar. Bumping this
+ * re-generates the Tools preset for users who never customised their layout
+ * (see the hasToolsPreset check in App.tsx). */
+export const DEFAULT_PADS_WIDGET_HEIGHT = 30;
 
 export type WidgetTextAlign = "left" | "center" | "right";
 export type SeparatorStyle = "line" | "dashed" | "space";
@@ -227,12 +232,12 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
       ? [
           placement("metronomeSettings", 0, 0, LAYOUT_COLUMNS, DEFAULT_METRONOME_WIDGET_HEIGHT),
           placement("voiceGuideSettings", 0, DEFAULT_METRONOME_WIDGET_HEIGHT, LAYOUT_COLUMNS, 14),
-          placement("pads", 0, DEFAULT_METRONOME_WIDGET_HEIGHT + 14, LAYOUT_COLUMNS, 31),
+          placement("pads", 0, DEFAULT_METRONOME_WIDGET_HEIGHT + 14, LAYOUT_COLUMNS, DEFAULT_PADS_WIDGET_HEIGHT),
         ]
       : [
           placement("metronomeSettings", 0, 0, 8, DEFAULT_METRONOME_WIDGET_HEIGHT),
           placement("voiceGuideSettings", 8, 0, 8, 20),
-          placement("pads", 16, 0, 8, 31),
+          placement("pads", 16, 0, 8, DEFAULT_PADS_WIDGET_HEIGHT),
         ],
   };
   return {

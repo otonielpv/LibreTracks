@@ -430,6 +430,7 @@ function buildInitialState(): DesktopApiMockState {
       padFadeInSeconds: 0,
       padFadeOutSeconds: 0,
       padFollowSongKey: false,
+      padStopWithTransport: false,
       globalJumpMode: "immediate",
       globalJumpBars: 4,
       songJumpTrigger: "immediate",

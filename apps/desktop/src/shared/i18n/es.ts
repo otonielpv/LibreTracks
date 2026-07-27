@@ -768,6 +768,7 @@ const es = {
     fadeOut: "Salida suave",
     fadeInDuration: "Duración de entrada",
     fadeOutDuration: "Duración de salida",
+    stopWithTransport: "Detener con la reproducción",
     output: "Salida",
     manage: "Gestionar packs",
     download: "Descargar",

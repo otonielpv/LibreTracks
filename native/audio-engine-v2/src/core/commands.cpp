@@ -169,6 +169,7 @@ EngineCommand command_from_json(const std::string& raw) {
         c.pad_id = j.value("pad_id", std::string{});
         c.fade_in_seconds = j.value("fade_in_seconds", 0.0f);
         c.fade_out_seconds = j.value("fade_out_seconds", 0.0f);
+        c.stop_with_transport = j.value("stop_with_transport", false);
         return c;
     }
 
@@ -532,6 +533,7 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["pad_id"] = c.pad_id;
             j["fade_in_seconds"] = c.fade_in_seconds;
             j["fade_out_seconds"] = c.fade_out_seconds;
+            j["stop_with_transport"] = c.stop_with_transport;
         }
         else if constexpr (std::is_same_v<T, CmdLoadPadClip>) {
             j["type"] = "LoadPadClip";

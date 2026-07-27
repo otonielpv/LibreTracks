@@ -741,6 +741,7 @@ const en = {
     fadeOut: "Fade out",
     fadeInDuration: "Fade-in duration",
     fadeOutDuration: "Fade-out duration",
+    stopWithTransport: "Stop with playback",
     output: "Output",
     manage: "Manage packs",
     download: "Download",

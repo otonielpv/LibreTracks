@@ -212,6 +212,13 @@ pub struct AppSettings {
     /// persists the user's choice.
     #[serde(default)]
     pub pad_follow_song_key: bool,
+    /// When true the pad follows the transport: it fades out (using
+    /// `pad_fade_out_seconds`) when playback stops/pauses and comes back on
+    /// play, WITHOUT clearing `pad_enabled` — the switch stays on. Default
+    /// false: pads are otherwise decoupled from the transport and keep sounding
+    /// between songs, which is the point of an ambient pad.
+    #[serde(default)]
+    pub pad_stop_with_transport: bool,
     #[serde(default = "default_global_jump_mode")]
     pub global_jump_mode: String,
     #[serde(default = "default_global_jump_bars")]
@@ -286,6 +293,7 @@ impl Default for AppSettings {
             pad_fade_in_seconds: 0.0,
             pad_fade_out_seconds: 0.0,
             pad_follow_song_key: false,
+            pad_stop_with_transport: false,
             global_jump_mode: default_global_jump_mode(),
             global_jump_bars: default_global_jump_bars(),
             song_jump_trigger: default_song_jump_trigger(),

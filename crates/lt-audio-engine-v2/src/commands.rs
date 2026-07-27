@@ -140,6 +140,10 @@ pub enum EngineCommand {
         /// Soft-exit duration in seconds (disable / key swap); 0 = fast swap.
         #[serde(default)]
         fade_out_seconds: f32,
+        /// When true the pad follows the transport: silent while stopped/paused,
+        /// audible again on play, without clearing `enabled`.
+        #[serde(default)]
+        stop_with_transport: bool,
     },
 
     /// Decode a single ambient-pad key from disk and swap it into the renderer.

@@ -876,6 +876,11 @@ void Mixer::render(float** output_channels,
     // metronome / voice guide) and before apply_master_gain below. The Playing
     // and due_jump branches deliberately no longer call it, so it renders
     // exactly once per callback (no double cursor advance).
+    // …unless the user opted into "stop with playback", in which case the pad
+    // follows the transport through a gate instead of its enabled switch, so it
+    // fades out on stop/pause and returns on play with the switch still on.
+    pad_.set_transport_gate(!pad_.stop_with_transport() ||
+                            clock_->position().state == TransportState::Playing);
     pad_.render(output_channels, num_channels, num_frames, clock_->sample_rate());
 
     phase_mark(phase_t, phase_tracks_us_);  // track render loop (+ jump split)
@@ -1231,6 +1236,10 @@ void Mixer::set_pad_config(const PadConfig& config) {
 
 void Mixer::set_pad_enabled(bool enabled) {
     pad_.set_enabled(enabled);
+}
+
+void Mixer::set_pad_transport_gate(bool open) {
+    pad_.set_transport_gate(open);
 }
 
 void Mixer::set_pad_volume(float volume) {
