@@ -2424,6 +2424,33 @@ impl AudioController {
         }
     }
 
+    /// Whether the engine will ever hand us same-pass waveform peaks for this
+    /// source. False for a source streamed in place (a WAV already at the
+    /// device rate), which never decodes and so never produces peaks — waiting
+    /// on those is pure delay before the inevitable full decode.
+    ///
+    /// Returns false when the source is unknown, which is also the safe answer:
+    /// the caller falls through to generating the waveform itself.
+    pub fn source_will_publish_peaks(&self, source_id: &str) -> bool {
+        let needle = normalize_engine_audio_path(source_id);
+        let mut state = match self.state.lock() {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let Some(engine) = state.engine.as_mut() else {
+            return false;
+        };
+        match engine.get_snapshot() {
+            Ok(snap) => snap
+                .source_states
+                .iter()
+                .find(|s| normalize_engine_audio_path(&s.source_id) == needle)
+                .map(|s| s.will_publish_peaks)
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
     /// Waveform peaks for an already-loaded source, computed in the same pass
     /// as the streaming decode (no re-decode). Returns None if the source isn't
     /// loaded yet. Lets the import flow write the waveform cache from the audio

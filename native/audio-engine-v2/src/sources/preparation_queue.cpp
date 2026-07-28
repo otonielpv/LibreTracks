@@ -69,12 +69,18 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     Id          source_id = source.id;
     int         sr        = impl_->engine_sample_rate;
 
-    auto mark_ready = [&] {
+    // `publishes_peaks` says whether this source will ever hand the host
+    // same-pass waveform peaks. Only the decode paths compute them; a source
+    // streamed in place never decodes, so the host must not wait for peaks it
+    // will never get (it burned the full poll budget on every stem, then
+    // decoded anyway).
+    auto mark_ready = [&](bool publishes_peaks) {
         {
             std::lock_guard lock(impl_->mtx);
             auto& info = impl_->states[source_id];
             info.status           = "ready";
             info.progress_percent = 100;
+            info.will_publish_peaks = publishes_peaks;
         }
         impl_->push_event(EvSourcePrepared{ source_id });
     };
@@ -83,7 +89,9 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     // this file (matching mtime + size), reuse it and skip the decode worker
     // entirely.
     if (impl_->source_manager->try_install_from_cache_file(source_id, sr)) {
-        mark_ready();
+        // Installed from an existing cache file: no decode ran in THIS session,
+        // so there are no same-pass peaks to hand over.
+        mark_ready(/*publishes_peaks=*/false);
         return;
     }
 
@@ -91,7 +99,7 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     // container at the engine sample rate, stream it in place — no decode,
     // no cache write. This is the common case for native WAV stems.
     if (impl_->source_manager->try_install_native_file(source_id, sr)) {
-        mark_ready();
+        mark_ready(/*publishes_peaks=*/false);
         return;
     }
 
@@ -153,6 +161,9 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                     if (stored.is_ok()) {
                         info.status           = "ready";
                         info.progress_percent = 100;
+                        // This path DID decode, so the same-pass peaks exist and
+                        // the host can reuse them instead of decoding again.
+                        info.will_publish_peaks = true;
                     } else {
                         info.status = "failed";
                         info.error_message = stored.error();

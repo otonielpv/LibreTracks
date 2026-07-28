@@ -87,6 +87,16 @@ struct SourcePreparationInfo {
     std::string status;   // "queued" | "running" | "completed" | "failed"
     int         progress_percent = 0;
     std::string error_message;
+    // Whether this source will ever publish same-pass waveform peaks.
+    //
+    // A decoded source computes its peaks during the decode, so the host can
+    // reuse them and skip a second full pass. A source installed by
+    // try_install_native_file never decodes — it streams the original file in
+    // place — so it has no peaks and never will. Without this flag the host
+    // cannot tell the two apart and waits for peaks that cannot arrive: a field
+    // log showed all 25 stems of a WAV multitrack burning the full poll budget
+    // and then decoding anyway.
+    bool        will_publish_peaks = false;
 };
 
 struct SourceCacheSnapshot {

@@ -708,6 +708,42 @@ TEST_CASE("source_cache_dir_size_bytes and purge_source_cache operate on the con
     CHECK(stat_cache_dir(cache_sub).file_count == 0);
 }
 
+TEST_CASE("a natively-streamed source reports that it publishes no peaks") {
+    // The host reuses the engine's same-pass waveform peaks to avoid decoding a
+    // file twice. That only works for sources that actually decode: a WAV
+    // already at the device rate is streamed in place and never produces peaks.
+    //
+    // Without a way to tell the two apart, the host waits for peaks that cannot
+    // arrive. A field log showed all 25 stems of a WAV multitrack burning the
+    // full poll budget and then decoding anyway — ~10 s of dead waiting, and
+    // 10 s of CPU competing with playback on a 4-core machine.
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames + 33;
+    const auto wav_path = make_temp_wav_path("publishes_peaks_flag");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    SourceManager manager;
+    const Id source_id = "no-peaks-source";
+    manager.register_source(source_id, wav_path);
+    REQUIRE(manager.try_install_native_file(source_id, kSampleRate));
+
+    // Installed and playable...
+    const auto streaming = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(streaming));
+    CHECK(streaming->duration_frames() == kFrames);
+
+    // ...but with no same-pass peaks, because nothing decoded it. source_peaks
+    // falls back to reading the file, which is exactly the work the host should
+    // skip the wait for.
+    const auto diags = manager.diagnostics();
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].disk_cache_bytes == 0);
+
+    std::remove(wav_path.c_str());
+}
+
 TEST_CASE("purge_source_cache reports files it could not delete") {
     // A user reported "Clear cache" in Settings freeing nothing. Cause: while a
     // session is loaded the engine streams audio straight out of these cache

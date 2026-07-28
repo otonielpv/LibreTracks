@@ -182,6 +182,14 @@ pub struct SourcePreparationInfo {
     pub progress_percent: i32,
     #[serde(default)]
     pub error_message: String,
+    /// Whether this source will ever publish same-pass waveform peaks.
+    ///
+    /// Only the decode path computes peaks. A source streamed in place
+    /// (`try_install_native_file` — a WAV already at the device rate) never
+    /// decodes, so it has none and never will. Callers must not wait for peaks
+    /// from those: they should go straight to generating the waveform.
+    #[serde(default)]
+    pub will_publish_peaks: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

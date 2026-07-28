@@ -735,12 +735,28 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
     // frontend's one-shot "analyzing" request never gets a waveform and spins
     // forever. The streaming decode finishes within seconds; cap the wait so a
     // stuck/failed source eventually falls through to the file_peaks path.
-    let engine_peaks = if engine_has_source {
-        // Suspected trap for native WAVs: try_install_native_file never fills
-        // cached_peaks (it does not decode), so waveform_from_engine_peaks can
-        // return None forever and this loop polls for up to 120s waiting for
-        // peaks that will never arrive. The log tells us how long it actually
-        // spun and whether it eventually gave up.
+    // Only wait for peaks the engine will actually produce. A source streamed in
+    // place (a WAV already at the device rate) never decodes, so it has no
+    // same-pass peaks and never will — polling for them is pure delay before the
+    // full decode below runs anyway. A field log showed all 25 stems of a WAV
+    // multitrack burning the whole poll budget and then decoding regardless:
+    // ~10 s of dead waiting, and 10 s of CPU contending with playback.
+    //
+    // The waveform still gets generated either way; only the wait disappears.
+    let engine_will_publish = engine_has_source
+        && audio
+            .map(|a| {
+                let id = resolve_audio_file_path(&song_dir, &waveform_key)
+                    .to_string_lossy()
+                    .to_string();
+                a.source_will_publish_peaks(&id)
+            })
+            .unwrap_or(false);
+
+    let engine_peaks = if engine_will_publish {
+        // A decoding source publishes its peaks at the end of the decode, so
+        // waiting briefly here is worth it: it saves a second full pass over
+        // the file. The cap keeps a stuck decode from stalling the queue.
         let poll_span = crate::infra::waveform_diag::Span::slow_only(
             format!("  worker poll for engine peaks({waveform_key})"),
             200,

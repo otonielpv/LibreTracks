@@ -98,10 +98,11 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
     json sources = json::array();
     for (const auto& s : snap.source_states) {
         sources.push_back({
-            {"source_id",        s.source_id},
-            {"status",           s.status},
-            {"progress_percent", s.progress_percent},
-            {"error_message",     s.error_message},
+            {"source_id",          s.source_id},
+            {"status",             s.status},
+            {"progress_percent",   s.progress_percent},
+            {"error_message",      s.error_message},
+            {"will_publish_peaks", s.will_publish_peaks},
         });
     }
     j["source_states"] = sources;
