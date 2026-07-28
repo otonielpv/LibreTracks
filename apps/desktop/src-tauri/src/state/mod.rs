@@ -746,7 +746,6 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
             200,
         );
         let mut got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
-        let mut waited_ms = 0u64;
         const POLL_MS: u64 = 100;
         // Was 120_000. That ceiling assumed a streaming decode was in flight and
         // would publish its same-pass peaks "within seconds". A native WAV takes
@@ -757,13 +756,15 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
         // Falling through to generate_native_waveform costs ~260 ms per stem
         // (bench_waveform_peaks), so waiting longer than that is never a win:
         // cap the wait and let the fallback do the work.
-        //
-        // Measured at 1500: every source waited ~300 ms before giving up, which
-        // across 25 stems is ~7.5 s of pure sleeping added to the total. Since
-        // the fallback costs about the same as the wait, the cap only needs to
-        // cover sources whose peaks are genuinely moments away.
         const MAX_WAIT_MS: u64 = 400;
-        while got.is_none() && waited_ms < MAX_WAIT_MS {
+        // Measure ELAPSED time, not the sum of the sleeps. Each iteration also
+        // calls waveform_from_engine_peaks, which takes the engine state lock —
+        // cheap when idle, but contended on a busy machine. Counting only sleeps
+        // made the cap meaningless there: a field log from a 4-core PC showed
+        // polls of 887-1218 ms against a nominal 400 ms budget, because the four
+        // lock acquisitions cost more than the four sleeps.
+        let poll_started = Instant::now();
+        while got.is_none() && (poll_started.elapsed().as_millis() as u64) < MAX_WAIT_MS {
             // Stop early if the source vanished (session changed / removed).
             let still_known = audio
                 .map(|a| {
@@ -777,9 +778,9 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
-            waited_ms += POLL_MS;
             got = waveform_from_engine_peaks(&song_dir, &waveform_key, audio);
         }
+        let waited_ms = poll_started.elapsed().as_millis() as u64;
         drop(poll_span);
         if crate::infra::waveform_diag::is_enabled() && got.is_none() && waited_ms > 0 {
             crate::infra::waveform_diag::log(format!(

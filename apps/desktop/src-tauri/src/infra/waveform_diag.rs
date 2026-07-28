@@ -137,7 +137,6 @@ where
     if !enabled() {
         return;
     }
-    static LOGGED: AtomicBool = AtomicBool::new(false);
     if LOGGED.swap(true, Ordering::Relaxed) {
         return;
     }
@@ -154,7 +153,15 @@ where
                 }
             ));
         }
-        None => log("device: unavailable (engine snapshot failed)"),
+        None => {
+            // Do not give up on the FIRST call: engine_snapshot uses try_lock
+            // with a ~30 ms budget, and on a busy machine the engine lock is
+            // held for longer than that — exactly when this line matters most.
+            // A field log from a 4-core PC lost the sample-rate context this
+            // way. Re-arm so a later request retries.
+            LOGGED.store(false, Ordering::Relaxed);
+            log("device: unavailable this call (engine lock busy) — will retry");
+        }
     }
 }
 
@@ -162,6 +169,11 @@ where
 /// queued behind it. The worker is sequential, so on a slow machine the queue
 /// depth is what turns "each job is a bit slow" into "waveforms took minutes".
 static JOBS_STARTED: AtomicU64 = AtomicU64::new(0);
+
+/// Whether the one-off device/sample-rate line has been written. Module scope so
+/// `log_sample_rates_once` can re-arm it when the engine lock was too busy to
+/// answer — that line is the context every other timing is read against.
+static LOGGED: AtomicBool = AtomicBool::new(false);
 
 pub fn note_job_started() {
     if !enabled() {

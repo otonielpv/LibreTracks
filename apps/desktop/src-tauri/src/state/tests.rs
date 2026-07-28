@@ -2272,6 +2272,56 @@ fn prime_job_key_cannot_collide_with_a_waveform_key() {
 }
 
 #[test]
+fn a_poll_budget_must_measure_elapsed_time_not_the_sum_of_sleeps() {
+    // Regression guard for a real field bug. The waveform worker's poll loop
+    // capped itself with `waited_ms += POLL_MS` on each iteration — counting
+    // only the sleeps. Each iteration ALSO calls into the engine (taking its
+    // state lock), which is nearly free on an idle machine and expensive on a
+    // busy one. A log from a 4-core PC showed polls of 887-1218 ms against a
+    // nominal 400 ms budget.
+    //
+    // This models both accounting styles against a loop whose non-sleep work is
+    // as costly as the sleep, and pins that only the elapsed-time one honours
+    // the budget.
+    const BUDGET_MS: u64 = 400;
+    const POLL_MS: u64 = 100;
+    const WORK_MS: u64 = 100; // the contended lock acquisition
+
+    // Buggy accounting: sum of sleeps only.
+    let started = std::time::Instant::now();
+    let mut counted_ms = 0u64;
+    while counted_ms < BUDGET_MS {
+        std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
+        std::thread::sleep(std::time::Duration::from_millis(WORK_MS)); // "work"
+        counted_ms += POLL_MS;
+    }
+    let buggy_elapsed = started.elapsed().as_millis() as u64;
+
+    // Fixed accounting: real elapsed time.
+    let started = std::time::Instant::now();
+    while (started.elapsed().as_millis() as u64) < BUDGET_MS {
+        std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
+        std::thread::sleep(std::time::Duration::from_millis(WORK_MS));
+    }
+    let fixed_elapsed = started.elapsed().as_millis() as u64;
+
+    // The buggy form overshoots by roughly the work time per iteration.
+    assert!(
+        buggy_elapsed >= BUDGET_MS * 2 - 100,
+        "sum-of-sleeps accounting should overshoot badly, took {buggy_elapsed}ms"
+    );
+    // The fixed form stays within one iteration of the budget.
+    assert!(
+        fixed_elapsed < BUDGET_MS + POLL_MS + WORK_MS + 150,
+        "elapsed-time accounting should honour the budget, took {fixed_elapsed}ms"
+    );
+    assert!(
+        fixed_elapsed < buggy_elapsed,
+        "fixed={fixed_elapsed}ms should beat buggy={buggy_elapsed}ms"
+    );
+}
+
+#[test]
 fn needs_prime_stops_asking_once_the_pass_is_queued_or_done() {
     // needs_prime gates cloning the whole Song under the session lock. The
     // frontend polls every ~600 ms for the life of the session, so answering
