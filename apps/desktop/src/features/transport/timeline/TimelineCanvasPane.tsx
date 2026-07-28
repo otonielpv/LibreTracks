@@ -59,9 +59,13 @@ import {
 } from "../library/dragDrop";
 
 // Must stay in sync with the lane layout in Renderer/drawBackground.ts and
-// the .lt-android ruler heights in styles.css: 94px is the mobile lanes'
-// bottom edge (87) plus breathing room.
-const RULER_HEIGHT = isAndroidApp ? 94 : 122;
+// the ruler heights in styles.css: 94px is the mobile lanes' bottom edge (87)
+// plus breathing room; 134px is the desktop lanes' bottom edge (126, the tempo
+// lane's 92 + 34) plus the same. The desktop value grew from 122 so the cue
+// lane could move below the two-line bar/timecode labels instead of sharing
+// their band. Changing it here alone misaligns the ruler with the track
+// headers — the CSS row heights below must move with it.
+const RULER_HEIGHT = isAndroidApp ? 94 : 134;
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */

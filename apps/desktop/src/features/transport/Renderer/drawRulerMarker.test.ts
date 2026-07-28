@@ -80,7 +80,7 @@ const OPTS = {
 };
 
 const WIDTH = 800;
-const HEIGHT = 122;
+const HEIGHT = 134;
 const PPS = 100;
 const CAMERA_X = 0;
 

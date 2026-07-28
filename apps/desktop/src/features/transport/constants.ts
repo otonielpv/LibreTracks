@@ -22,7 +22,12 @@ export function densityFromHeight(trackHeight: number): TrackHeaderDensity {
   if (trackHeight <= 96) return "is-condensed";
   return "";
 }
-export const RULER_HEIGHT = 132;
+/**
+ * The ruler's real height lives in TimelineCanvasPane.tsx (it varies by
+ * platform) and is mirrored by the .lt-ruler CSS heights. This constant was a
+ * stale, unused duplicate that disagreed with both — deliberately not
+ * reintroduced here so there is a single source of truth.
+ */
 export const ZOOM_MIN = 0.0625;
 export const ZOOM_MAX = 64;
 export const DRAG_THRESHOLD_PX = 6;

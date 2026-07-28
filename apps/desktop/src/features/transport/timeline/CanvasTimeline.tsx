@@ -445,8 +445,20 @@ export function TimelineRulerCanvas({
       // moves cleanly — so we get neither the shimmer of a fractional draw nor
       // the 1px stepping of rounding in place. Redraw only when the integer
       // camera changes; between those the transform alone carries the motion.
+      //
+      // The nudge is quantised to whole DEVICE pixels. Translating a rasterised
+      // canvas by a fraction of a device pixel makes the compositor resample
+      // the whole bitmap — which softened the entire ruler, text included, and
+      // read as "the header goes blurry at some zoom levels" (worst near a
+      // half-pixel remainder). Snapping to the device grid keeps the composite
+      // a pure copy, so the ruler stays sharp at every zoom; the residual error
+      // is at most half a device pixel, well under the 1px stepping this trick
+      // exists to avoid.
       const roundedCameraX = Math.round(cameraX);
-      const subpixelOffsetX = cameraX - roundedCameraX;
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      const subpixelOffsetX =
+        Math.round((cameraX - roundedCameraX) * devicePixelRatio) /
+        devicePixelRatio;
 
       try {
         if (

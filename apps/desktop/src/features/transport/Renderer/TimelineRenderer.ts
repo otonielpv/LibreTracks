@@ -251,8 +251,15 @@ export class TimelineRenderer {
           this.dirtyBackground || this.dirtyTracks || this.dirtyForeground;
         const paintStartedAt = willPaint ? performance.now() : 0;
 
+        // Quantised to whole device pixels for the same reason as the ruler
+        // (see CanvasTimeline): a fractional-device-pixel translate makes the
+        // compositor resample the bitmap and softens the grid. Both layers use
+        // the same quantisation so their grids stay aligned with each other.
         const roundedCameraX = Math.round(snapshot.cameraX);
-        const backgroundSubpixelOffsetX = snapshot.cameraX - roundedCameraX;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        const backgroundSubpixelOffsetX =
+          Math.round((snapshot.cameraX - roundedCameraX) * devicePixelRatio) /
+          devicePixelRatio;
 
         if (this.dirtyBackground) {
           // Draw the grid at the integer camera so 1px lines land on whole

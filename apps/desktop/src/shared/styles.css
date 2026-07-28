@@ -2981,7 +2981,10 @@ textarea {
   min-height: 100%;
   min-width: 0;
   display: grid;
-  grid-template-rows: 122px minmax(0, 1fr);
+  /* Mirrors RULER_HEIGHT in TimelineCanvasPane.tsx. The ruler row, the TRACKS
+     header cell and .lt-ruler-track must all share this height or the timeline
+     and the track-header column stop lining up. */
+  grid-template-rows: 134px minmax(0, 1fr);
   align-content: start;
   overflow: visible;
 }
@@ -3135,7 +3138,9 @@ textarea {
   display: flex;
   align-items: flex-end;
   padding: 0 1rem 0.8rem;
-  height: 122px;
+  /* Keep in sync with RULER_HEIGHT / .lt-ruler-track: this is the TRACKS cell
+     that must sit exactly as tall as the ruler beside it. */
+  height: 134px;
   background: #2a2a2a;
   border-bottom: 1px solid rgb(19 19 19 / 0.55);
   box-shadow: 1px 0 0 rgb(19 19 19 / 0.55), 10px 0 18px rgb(0 0 0 / 0.12);
@@ -3149,7 +3154,7 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 10;
-  height: 122px;
+  height: 134px;
   box-sizing: border-box;
   background: #2a2a2a;
   border-bottom: 1px solid rgb(19 19 19 / 0.55);
@@ -3159,7 +3164,7 @@ textarea {
 .lt-ruler-content {
   position: relative;
   height: 100%;
-  min-height: 122px;
+  min-height: 134px;
   background: transparent;
   overflow: visible;
 }
@@ -3168,7 +3173,7 @@ textarea {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 122px;
+  min-height: 134px;
 }
 
 .lt-ruler-canvas,
@@ -7530,7 +7535,7 @@ textarea {
   min-height: 94px;
 }
 
-/* The pane grid reserves the ruler row; leaving it at the desktop 122px
+/* The pane grid reserves the ruler row; leaving it at the desktop 134px
    opens a dead black band between the ruler and the first track. */
 .lt-android .lt-timeline-canvas-pane {
   grid-template-rows: 94px minmax(0, 1fr);

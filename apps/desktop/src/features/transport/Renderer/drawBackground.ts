@@ -20,6 +20,27 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Blend a `#rrggbb` marker colour onto the ruler backdrop at `alpha` and
+ * return an OPAQUE colour. Marker flags used to fill with a translucent tint,
+ * which let the (full-height) grid lines show straight through the label — with
+ * many markers on screen the text became hard to pick out. Pre-blending against
+ * the known ruler background keeps the exact same tint while making the flag
+ * body solid, so it masks the grid behind it. */
+function blendOnRulerBackdrop(hex: string, alpha: number): string {
+  const value = hex.replace("#", "");
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  const mix = (channel: number, backdrop: number) =>
+    Math.round(channel * alpha + backdrop * (1 - alpha));
+  return `rgb(${mix(r, RULER_BACKDROP_RGB[0])}, ${mix(g, RULER_BACKDROP_RGB[1])}, ${mix(b, RULER_BACKDROP_RGB[2])})`;
+}
+
+/** The flat colour `drawRulerBackgroundLayer` paints the ruler with. Flags
+ * pre-blend against it to stay opaque without changing their apparent tint. */
+const RULER_BACKDROP_RGB = [42, 42, 42] as const;
+const RULER_BACKDROP = `rgb(${RULER_BACKDROP_RGB[0]}, ${RULER_BACKDROP_RGB[1]}, ${RULER_BACKDROP_RGB[2]})`;
+
 const MIN_LABEL_WIDTH_PX = 112;
 
 // Ruler lane layout. The Android build compacts every lane (~2/3 height,
@@ -38,24 +59,29 @@ export const LANE_REGIONS: RulerLane = MOBILE_RULER
   : { top: 0, height: 22 };
 
 // Dynamic-cue markers (Build, All In, ...) get their own lane just above the
-// section lane, in the previously-empty gap between regions and sections.
-// This keeps a cue and a section that share a timeline position vertically
-// separated so both stay visible and clickable instead of stacking on the
-// same pixel.
+// section lane. On desktop it starts BELOW the two-line bar/timecode label
+// block (which runs 22→42): the cue lane used to begin at 24 and overlap that
+// text, squashing the flags against it. The desktop ruler grew by 12px to make
+// room — keep RULER_HEIGHT (TimelineCanvasPane), the .lt-ruler CSS heights and
+// the pane's grid-template-rows in sync with the bottom edge below.
 export const LANE_CUES: RulerLane = MOBILE_RULER
   ? { top: 19, height: 18 }
-  : { top: 24, height: 22 };
+  : { top: 44, height: 22 };
 
 export const LANE_SECTIONS: RulerLane = MOBILE_RULER
   ? { top: 38, height: 22 }
-  : { top: 48, height: 26 };
+  : { top: 68, height: 26 };
 
 export const LANE_TEMPO_METRIC: RulerLane = MOBILE_RULER
   ? { top: 61, height: 26 }
-  : { top: 72, height: 34 };
+  : { top: 94, height: 34 };
 
-const GRID_LABEL_TOP = MOBILE_RULER ? 20 : 24;
-const GRID_LABEL_SECOND_LINE_TOP = MOBILE_RULER ? 30 : 36;
+// Bar number (line 1) and timecode (line 2) stack in the strip above the cue
+// lane. The desktop ruler is sized so this two-line block and the cue flags
+// each get their own vertical room instead of overlapping — see LANE_CUES and
+// RULER_HEIGHT in TimelineCanvasPane.
+const GRID_LABEL_TOP = MOBILE_RULER ? 20 : 22;
+const GRID_LABEL_SECOND_LINE_TOP = MOBILE_RULER ? 30 : 33;
 const TEMPO_LABEL_TOP = 2;
 const METRIC_LABEL_TOP = MOBILE_RULER ? 13 : 20;
 const TIME_SIGNATURE_VERTICAL_OFFSET = 8;
@@ -177,6 +203,13 @@ function drawActiveVampRange(
   context.restore();
 }
 
+/** Multiplier applied to the grid-line opacity inside the ruler. The ruler
+ * stacks four lanes of labels and flags into 122px, so at a dense zoom the
+ * full-strength grid competes with the text; dimming it there (and only there)
+ * keeps the beat/bar reference without fighting the marker names. The track
+ * area keeps the grid at full strength. */
+const RULER_GRID_OPACITY_SCALE = 0.45;
+
 export function drawGridLines(
   context: CanvasRenderingContext2D,
   grid: TimelineGrid,
@@ -184,6 +217,7 @@ export function drawGridLines(
   height: number,
   cameraX: number,
   pixelsPerSecond: number,
+  opacityScale = 1,
 ) {
   if (grid.bars.length === 0 && grid.beats.length === 0) {
     return;
@@ -239,12 +273,12 @@ export function drawGridLines(
   }
 
   if (beatPath) {
-    context.strokeStyle = "rgba(186, 202, 197, 0.14)";
+    context.strokeStyle = `rgba(186, 202, 197, ${0.14 * opacityScale})`;
     context.lineWidth = 1;
     context.stroke(beatPath);
   }
 
-  context.strokeStyle = "rgba(186, 202, 197, 0.32)";
+  context.strokeStyle = `rgba(186, 202, 197, ${0.32 * opacityScale})`;
   context.lineWidth = 1;
   context.stroke(barPath);
 }
@@ -411,6 +445,8 @@ export function drawRulerMarker(
   const labelHeight = 16;
   const snappedX = Math.round(x) + 0.5;
   // Cues draw in their own lane above the section lane; sections keep theirs.
+  // Both sit flush with the top of their lane — the cue lane itself now starts
+  // below the grid labels, so no per-flag inset is needed to clear them.
   const lane =
     markerKindCategory(marker.kind) === "cue" ? LANE_CUES : LANE_SECTIONS;
   const stemTop = lane.top + 2;
@@ -434,14 +470,17 @@ export function drawRulerMarker(
       ? "rgba(255, 226, 171, 0.9)"
       : options.isCurrent
         ? "rgba(229, 226, 225, 0.88)"
-        : hexToRgba(kindColor, 0.62);
+        : hexToRgba(kindColor, 0.72);
+  // Opaque flag bodies. The tint matches what the old translucent fills looked
+  // like over the ruler, but pre-blended, so the grid lines stop reading
+  // through the label. Armed keeps a live alpha because it pulses.
   const fillStyle = options.isArmed
     ? `rgba(87, 241, 219, ${0.22 + options.pulseAlpha * 0.22})`
     : options.isSelected
-      ? "rgba(255, 226, 171, 0.18)"
+      ? blendOnRulerBackdrop("#ffe2ab", 0.26)
       : options.isCurrent
-        ? "rgba(229, 226, 225, 0.16)"
-        : hexToRgba(kindColor, 0.16);
+        ? blendOnRulerBackdrop("#e5e2e1", 0.24)
+        : blendOnRulerBackdrop(kindColor, 0.24);
   const textStyle = options.isArmed
     ? "#57f1db"
     : options.isSelected
@@ -464,23 +503,43 @@ export function drawRulerMarker(
   context.lineTo(snappedX, stemBottom);
   context.stroke();
 
-  context.beginPath();
-  if (alignRight) {
-    // Mirror of the right-pointing flag: the body grows leftwards from the stem
-    // with the chevron notch on the left, so it never overflows the right edge.
-    context.moveTo(snappedX, flagTop + 1);
-    context.lineTo(flagLeft + 7, flagTop + 1);
-    context.lineTo(flagLeft, flagTop + labelHeight * 0.5);
-    context.lineTo(flagLeft + 7, flagBottom - 1);
-    context.lineTo(snappedX, flagBottom - 1);
-  } else {
-    context.moveTo(snappedX, flagTop + 1);
-    context.lineTo(flagRight - 7, flagTop + 1);
-    context.lineTo(flagRight, flagTop + labelHeight * 0.5);
-    context.lineTo(flagRight - 7, flagBottom - 1);
-    context.lineTo(snappedX, flagBottom - 1);
-  }
-  context.closePath();
+  const traceFlagBody = () => {
+    context.beginPath();
+    if (alignRight) {
+      // Mirror of the right-pointing flag: the body grows leftwards from the
+      // stem with the chevron notch on the left, so it never overflows the
+      // right edge.
+      context.moveTo(snappedX, flagTop + 1);
+      context.lineTo(flagLeft + 7, flagTop + 1);
+      context.lineTo(flagLeft, flagTop + labelHeight * 0.5);
+      context.lineTo(flagLeft + 7, flagBottom - 1);
+      context.lineTo(snappedX, flagBottom - 1);
+    } else {
+      context.moveTo(snappedX, flagTop + 1);
+      context.lineTo(flagRight - 7, flagTop + 1);
+      context.lineTo(flagRight, flagTop + labelHeight * 0.5);
+      context.lineTo(flagRight - 7, flagBottom - 1);
+      context.lineTo(snappedX, flagBottom - 1);
+    }
+    context.closePath();
+  };
+
+  // Mask the grid first: the armed fill stays translucent so it can pulse, and
+  // without this backdrop the bar/beat lines would read through the flag the
+  // performer most needs to see. The shadow is suppressed here so the glow is
+  // cast once, by the tinted fill.
+  const shadowBlurForFill = context.shadowBlur;
+  const shadowColorForFill = context.shadowColor;
+  context.shadowBlur = 0;
+  const previousFillStyle = context.fillStyle;
+  context.fillStyle = RULER_BACKDROP;
+  traceFlagBody();
+  context.fill();
+  context.fillStyle = previousFillStyle;
+  context.shadowBlur = shadowBlurForFill;
+  context.shadowColor = shadowColorForFill;
+
+  traceFlagBody();
   context.fill();
   context.stroke();
 
@@ -540,11 +599,13 @@ export function drawRulerTempoMarker(
 
   context.save();
   context.strokeStyle = overrideLabel
-    ? "rgba(255, 184, 107, 0.78)"
-    : "rgba(87, 241, 219, 0.78)";
+    ? "rgba(255, 184, 107, 0.85)"
+    : "rgba(87, 241, 219, 0.85)";
+  // Opaque, for the same reason as the section flags: a translucent body let
+  // the grid lines show through the number.
   context.fillStyle = overrideLabel
-    ? "rgba(255, 184, 107, 0.16)"
-    : "rgba(87, 241, 219, 0.16)";
+    ? blendOnRulerBackdrop("#ffb86b", 0.24)
+    : blendOnRulerBackdrop("#57f1db", 0.24);
   context.lineWidth = 1.2;
   context.beginPath();
   context.moveTo(snappedX, flagTop + 2);
@@ -632,6 +693,7 @@ export function drawRulerBackgroundLayer(
     args.height,
     args.cameraX,
     args.pixelsPerSecond,
+    RULER_GRID_OPACITY_SCALE,
   );
 
   drawRulerGridLabels(
