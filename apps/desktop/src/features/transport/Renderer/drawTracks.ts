@@ -268,7 +268,7 @@ export function drawTrackClipsLayer(
       context.font = '600 10px "Space Grotesk", sans-serif';
       context.textBaseline = "middle";
       context.fillText(
-        childCount ? `${childCount} tracks dentro del folder` : "Folder track",
+        childCount ? `${childCount} tracks dentro de la carpeta` : "Carpeta",
         20,
         trackTop + snapshot.trackHeight / 2,
       );

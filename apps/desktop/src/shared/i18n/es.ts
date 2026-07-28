@@ -80,7 +80,7 @@ const es = {
     },
     defaults: {
       audioTrackName: "Audio track",
-      folderTrackName: "Folder track",
+      folderTrackName: "Carpeta",
       virtualFolderName: "Set A",
       unnamedFolder: "(sin nombre)",
     },
@@ -353,11 +353,11 @@ const es = {
       deleteSong: "Borrar Cancion",
       deleteMarker: "Borrar marca",
       insertTrack: "Insertar track",
-      insertFolderTrack: "Insertar folder track",
-      indentIntoPreviousFolder: "Indentar dentro del folder anterior",
-      removeFromFolder: "Sacar del folder",
+      insertFolderTrack: "Insertar carpeta",
+      indentIntoPreviousFolder: "Meter en la carpeta anterior",
+      removeFromFolder: "Sacar de la carpeta",
       addAudioTrack: "Añadir track de audio",
-      addFolderTrack: "Añadir folder track",
+      addFolderTrack: "Añadir carpeta",
       splitClipAtCursor: "Cortar en cursor",
       splitSongAtCursor: "Partir canción en el cursor",
       duplicateClip: "Duplicar",
@@ -430,9 +430,9 @@ const es = {
       deleteLibraryAssets:
         "Borrar {{count}} assets seleccionados de la biblioteca de esta sesion?",
       deleteLibraryFolder:
-        "Delete virtual folder {{name}}? Assets inside it will move back to the library root.",
+        "¿Borrar la carpeta virtual {{name}}? Los assets que contiene volveran a la raiz de la biblioteca.",
       adjustProjectTempo:
-        "Detected BPM: {{bpm}}. Do you want to adjust the project tempo?",
+        "BPM detectado: {{bpm}}. ¿Quieres ajustar el tempo del proyecto?",
     },
     status: {
       loadingSession: "Cargando sesion...",
@@ -496,7 +496,7 @@ const es = {
       trackTransposeUpdated:
         "Preferencia de transposicion del track actualizada para {{name}}.",
       trackMovedIntoFolder: "Track movido dentro de {{name}}",
-      trackRemovedFromFolder: "Track sacado del folder: {{name}}",
+      trackRemovedFromFolder: "Track sacado de la carpeta: {{name}}",
       trackSelected: "Track seleccionado: {{name}}",
       tracksSelected: "{{count}} tracks seleccionados",
       regionSelected: "Region seleccionada: {{name}}.",
@@ -596,9 +596,9 @@ const es = {
       dontShowAgain: "No mostrar mas",
     },
     preview: {
-      newTrack: "New track",
-      dropToCreateTrack: "Drop to create track",
-      clipsOnNewTrack: "{{count}} clips on new track",
+      newTrack: "Track nuevo",
+      dropToCreateTrack: "Suelta para crear un track",
+      clipsOnNewTrack: "{{count}} clips en un track nuevo",
       newTracksDropzone: "Dropzone para nuevas pistas",
     },
     automation: {
@@ -881,24 +881,24 @@ const es = {
     markersCount: "{{count}} marcas",
   },
   library: {
-    assetListAria: "Library assets",
+    assetListAria: "Assets de la biblioteca",
     emptyFolder:
       "Suelta assets aqui para dejar esta carpeta lista para la siguiente cancion.",
-    panelAria: "Library panel",
+    panelAria: "Panel de biblioteca",
     eyebrow: "Assets de la Sesion",
     title: "Biblioteca",
     folderButton: "Carpeta",
     importAudio: "Importar audio",
     importing: "Importando...",
     assetsCount: "{{count}} assets",
-    foldersCount: "{{count}} folders",
-    selectedCount: "{{count}} selected",
+    foldersCount: "{{count}} carpetas",
+    selectedCount: "{{count}} seleccionados",
     addToTimeline: "Añadir al timeline ({{count}})",
     addedToTimeline: "{{count}} audios añadidos al timeline",
     addImportedToTimelinePrompt:
       "¿Añadir los {{count}} audios importados al timeline? Cada uno creará su propia pista en la posición actual.",
     clearSelection: "Quitar selección",
-    deleteHint: "Delete removes selection",
+    deleteHint: "Supr borra la selección",
     openSessionHint: "Abre o crea una sesion",
     loading: "Cargando assets de la biblioteca...",
     empty:
@@ -937,7 +937,7 @@ const es = {
     audioToAria: "Audio To {{name}}",
     transposeEnableAria: "Activar la transposicion de tono en {{name}}",
     transposeDisableAria: "Desactivar la transposicion de tono en {{name}}",
-    inherited: "Heredado (Folder)",
+    inherited: "Heredado (Carpeta)",
     master: "Master",
     monitor: "Monitor",
     extOutMono: "Out {{channel}}",
