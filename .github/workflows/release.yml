@@ -189,7 +189,13 @@ jobs:
           # at, so the configure-time libav* come from our prefix — not the
           # distro. patchelf is required by scripts/linux-bundle-ffmpeg.sh to set
           # the $ORIGIN rpath that makes the bundle self-contained.
-          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libsndfile1-dev rpm
+          # libjack-jackd2-dev provides jack/jack.h, which cmake/dependencies.cmake
+          # requires to compile JUCE's JACK device type (JUCE_JACK defaults to 0).
+          # Without it the Linux build ships ALSA-only and multichannel USB
+          # interfaces (Behringer X32 and friends) never appear in the device list.
+          # It is a build-time header dependency only — JUCE dlopen()s libjack at
+          # runtime, so the bundle still runs on machines with no JACK installed.
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libsndfile1-dev rpm
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
 
       - name: Configure Windows vcpkg

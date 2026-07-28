@@ -103,6 +103,9 @@
           "librsvg2-2",
           "libasound2t64 | libasound2",
           "xdg-utils"
+        ],
+        "recommends": [
+          "libjack-jackd2-0 | libjack-0.125 | pipewire-jack"
         ]
       },
       "rpm": {
@@ -112,6 +115,9 @@
           "libappindicator-gtk3",
           "librsvg2",
           "alsa-lib"
+        ],
+        "recommends": [
+          "jack-audio-connection-kit"
         ]
       }
     },

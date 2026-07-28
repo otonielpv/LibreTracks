@@ -102,6 +102,36 @@ if(LT_ENGINE_USE_JUCE)
         target_compile_definitions(lt_deps_juce INTERFACE JUCE_ASIO=1)
         target_include_directories(lt_deps_juce INTERFACE "${LT_ASIO_SDK_DIR}/common")
     endif()
+
+    # Enable JACK on Linux. JUCE defaults JUCE_ALSA=1 but JUCE_JACK=0
+    # (juce_audio_devices.h), so without this the Linux builds ship with ALSA as
+    # their ONLY backend. That is fine for a laptop's built-in card, but it locks
+    # out the multichannel USB interfaces this app exists to drive: a Behringer
+    # X32 (32in/32out) is only reachable through JACK/PipeWire-JACK, so users
+    # simply never saw their mixer in the device list.
+    #
+    # AudioDeviceManager already prefers JACK over ALSA (preferred_type_score in
+    # devices/audio_device_manager.cpp) — that ranking was dead code until now
+    # because the JACK device type was never registered.
+    #
+    # Linking is soft: JUCE dlopen()s libjack at runtime and its device type
+    # reports zero devices when the library is absent, so a build made against
+    # the JACK headers still runs on a machine without JACK — it just falls back
+    # to ALSA. Only the headers are needed at compile time.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_path(LT_JACK_INCLUDE_DIR jack/jack.h)
+        if(LT_JACK_INCLUDE_DIR)
+            target_compile_definitions(lt_deps_juce INTERFACE JUCE_JACK=1)
+            target_include_directories(lt_deps_juce INTERFACE "${LT_JACK_INCLUDE_DIR}")
+            message(STATUS "JUCE JACK module: ENABLED (headers at ${LT_JACK_INCLUDE_DIR})")
+        else()
+            message(WARNING
+                "JUCE JACK module: disabled — jack/jack.h not found. This build "
+                "will only expose ALSA devices; multichannel USB interfaces "
+                "(e.g. Behringer X32) will be missing from the device list. "
+                "Install libjack-jackd2-dev (or pipewire-jack-audio-connection-kit-dev).")
+        endif()
+    endif()
 endif()
 
 # ── OBOE (Android device backend) ─────────────────────────────────────────
