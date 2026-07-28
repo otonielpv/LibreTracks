@@ -36,6 +36,7 @@ export const MARKER_KINDS: readonly MarkerKind[] = [
   "exhortation",
   "rap",
   "turnaround",
+  "next_song",
   "custom",
 ] as const;
 
@@ -85,6 +86,9 @@ const MARKER_KIND_LABELS: Record<MarkerKind, string> = {
   keys: "Keys",
   ad_lib: "Ad Lib",
   worship_freely: "Worship Freely",
+  get_ready: "Get Ready",
+  ease_down: "Ease Down",
+  next_song: "Next Song",
 };
 
 
@@ -124,11 +128,19 @@ export function markerKindVariants(kind: MarkerKind | undefined): number[] {
  * in every language; hide those from the create/change menus for that language.
  * Keyed by the voice-guide language code (see resources/voices/<lang>/cues). */
 const CUE_KINDS_WITHOUT_RECORDING: Record<string, readonly MarkerKind[]> = {
-  // Spanish pack has Guitar (Guitara) but not these three.
-  es: ["ad_lib", "slowly_build", "worship_freely"],
-  // English pack ships everything except Guitar.
-  en: ["guitar"],
+  // Both bundled languages now cover every cue.
+  es: [],
+  en: [],
 };
+
+/** Section kinds with no recording, in every language: the pack has never
+ * shipped a clip for these, so they would announce as silence. Unlike the cue
+ * list this is not per-language — add a language key here only if a section
+ * exists in one language but not another. */
+const SECTION_KINDS_WITHOUT_RECORDING: readonly MarkerKind[] = [
+  // "Drop" is EDM vocabulary; the pack is worship/band and never recorded it.
+  "drop",
+];
 
 /** Cue kinds that actually have a recording in the active voice-guide language,
  * in menu order. Falls back to the full list for unknown languages (better to
@@ -137,4 +149,19 @@ export function availableCueKinds(language: string): readonly MarkerKind[] {
   const missing = CUE_KINDS_WITHOUT_RECORDING[language];
   if (!missing || missing.length === 0) return CUE_KINDS;
   return CUE_KINDS.filter((kind) => !missing.includes(kind));
+}
+
+/** Section kinds that have a recording, in menu order. Mirrors
+ * {@link availableCueKinds} for sections: without it the menu offers kinds the
+ * pack never recorded, and the marker announces as silence. Custom is always
+ * kept — it is an untyped marker with no clip by design.
+ *
+ * Takes no language: the uncovered sections are missing from every bundled
+ * language. Give it a `language` parameter (like `availableCueKinds`) the day a
+ * section ships in one language but not another. */
+export function availableSectionKinds(): readonly MarkerKind[] {
+  if (SECTION_KINDS_WITHOUT_RECORDING.length === 0) return MARKER_KINDS;
+  return MARKER_KINDS.filter(
+    (kind) => kind === "custom" || !SECTION_KINDS_WITHOUT_RECORDING.includes(kind),
+  );
 }

@@ -38,7 +38,7 @@ struct VoiceGuideSection {
 };
 
 struct VoiceGuideClipBank {
-    static constexpr int kKindCount = 40;   // MarkerKind values incl. cues + Custom
+    static constexpr int kKindCount = 43;   // MarkerKind values incl. cues + Custom
     static constexpr int kMaxCount  = 17;   // supports up to 16-beat bars + slack
 
     double sample_rate = 0.0;               // sample rate the clips were decoded at

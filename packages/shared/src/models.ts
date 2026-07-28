@@ -63,6 +63,9 @@ export type MarkerKind =
   | "softly"
   | "swell"
   | "worship_freely"
+  | "ease_down"
+  | "get_ready"
+  | "next_song"
   | "custom";
 
 /** Whether a {@link MarkerKind} is a song section (Verse, Chorus — name +
@@ -74,8 +77,10 @@ export type MarkerCategory = "section" | "cue";
  * (desktop editor, voice-guide labels, and the remote, which must NOT offer
  * cues as jump targets). Mirrors the cue half of the Rust `MarkerKind` enum. */
 export const CUE_KINDS: readonly MarkerKind[] = [
+  "get_ready",
   "build",
   "slowly_build",
+  "ease_down",
   "all_in",
   "drums_in",
   "break",
@@ -149,6 +154,11 @@ const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
   keys: "#b89a72",
   ad_lib: "#c79a8a",
   worship_freely: "#b89ad0",
+  // Warm oranges mirror the intensity cues (build/all_in); next_song borrows the
+  // structural blue of the section palette since it is announced like one.
+  get_ready: "#d9a05c",
+  ease_down: "#8fb0a8",
+  next_song: "#7f9fd0",
 };
 
 /** Resting-state colour for a kind. Falls back to the custom grey for unknown

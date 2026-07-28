@@ -163,7 +163,6 @@ import {
 import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import {
-  MARKER_KINDS as SECTION_KINDS,
   markerColor,
   markerKindCategory,
   markerKindColor,

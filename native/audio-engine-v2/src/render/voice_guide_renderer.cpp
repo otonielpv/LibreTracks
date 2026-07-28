@@ -242,6 +242,7 @@ const char* section_filename(int kind_index) noexcept {
         case MarkerKind::Exhortation: return "exhortation";
         case MarkerKind::Rap: return "rap";
         case MarkerKind::Turnaround: return "turnaround";
+        case MarkerKind::NextSong: return "next_song";
         // Cue kinds and Custom have no entry in the sections tree.
         default: return nullptr;
     }
@@ -270,6 +271,8 @@ const char* cue_filename(int kind_index) noexcept {
         case MarkerKind::Softly: return "softly";
         case MarkerKind::Swell: return "swell";
         case MarkerKind::WorshipFreely: return "worship_freely";
+        case MarkerKind::EaseDown: return "ease_down";
+        case MarkerKind::GetReady: return "get_ready";
         default: return nullptr;
     }
 }

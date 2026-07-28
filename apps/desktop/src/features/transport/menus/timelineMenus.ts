@@ -52,8 +52,8 @@ import {
   SONG_KEY_OPTIONS,
 } from "../desktopApi";
 import {
-  MARKER_KINDS as SECTION_KINDS,
   availableCueKinds,
+  availableSectionKinds,
   markerColor,
   markerKindCategory,
   markerKindColor,
@@ -964,7 +964,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           onSelect: () =>
             openCreateMarkerKindList(
               positionSeconds,
-              SECTION_KINDS.filter((kind) => kind !== "custom"),
+              availableSectionKinds().filter((kind) => kind !== "custom"),
               t("transport.menu.markerKindSectionsGroup"),
             ),
         },
@@ -1065,7 +1065,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           onSelect: () =>
             openMarkerKindList(
               section,
-              SECTION_KINDS,
+              availableSectionKinds(),
               t("transport.menu.markerKindSectionsGroup"),
             ),
         },

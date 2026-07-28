@@ -45,6 +45,13 @@ target_include_directories(lt_engine_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
 
+# Lets the voice-guide test load the real shipped pack instead of a synthetic
+# bank, so a kind wired up without a recording fails the build rather than going
+# silent at runtime.
+target_compile_definitions(lt_engine_tests PRIVATE
+    LT_VOICES_DIR="${CMAKE_SOURCE_DIR}/../../apps/desktop/src-tauri/resources/voices"
+)
+
 if(LT_ENGINE_ENABLE_ASAN)
     if(MSVC)
         target_compile_options(lt_engine_tests PRIVATE /fsanitize=address)

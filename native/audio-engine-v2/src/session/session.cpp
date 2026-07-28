@@ -47,12 +47,20 @@ MarkerKind marker_kind_from_string(const std::string& token) noexcept {
     if (token == "softly") return MarkerKind::Softly;
     if (token == "swell") return MarkerKind::Swell;
     if (token == "worship_freely") return MarkerKind::WorshipFreely;
+    if (token == "ease_down") return MarkerKind::EaseDown;
+    if (token == "get_ready") return MarkerKind::GetReady;
+    if (token == "next_song") return MarkerKind::NextSong;
     return MarkerKind::Custom;
 }
 
 bool marker_kind_is_cue(MarkerKind kind) noexcept {
-    return static_cast<int>(kind) >= static_cast<int>(MarkerKind::AdLib)
-        && static_cast<int>(kind) <= static_cast<int>(MarkerKind::WorshipFreely);
+    // The original cue block is contiguous, but the kinds appended after it are
+    // a mix: EaseDown and GetReady are cues while NextSong (right behind them)
+    // is a section, so the tail cannot be folded into the range check.
+    if (static_cast<int>(kind) >= static_cast<int>(MarkerKind::AdLib)
+        && static_cast<int>(kind) <= static_cast<int>(MarkerKind::WorshipFreely))
+        return true;
+    return kind == MarkerKind::EaseDown || kind == MarkerKind::GetReady;
 }
 
 // ---------------------------------------------------------------------------

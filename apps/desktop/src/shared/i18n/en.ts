@@ -390,6 +390,9 @@ const en = {
       keys: "Keys",
       ad_lib: "Ad Lib",
       worship_freely: "Worship Freely",
+      get_ready: "Get Ready",
+      ease_down: "Ease Down",
+      next_song: "Next Song",
     },
     prompt: {
       timelineBpm: "New timeline BPM",

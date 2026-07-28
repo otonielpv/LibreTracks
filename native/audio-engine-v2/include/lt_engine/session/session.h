@@ -142,7 +142,12 @@ enum class MarkerKind : int {
     Softly = 36,
     Swell = 37,
     WorshipFreely = 38,
-    Custom = 39,
+    // Appended after the first cue block per the ABI rule above. NextSong is a
+    // *section* despite sitting among cues — see marker_kind_is_cue.
+    EaseDown = 39,
+    GetReady = 40,
+    NextSong = 41,
+    Custom = 42,
 };
 
 // Map a serialized snake_case kind token (as sent by Rust/TS) to the enum.

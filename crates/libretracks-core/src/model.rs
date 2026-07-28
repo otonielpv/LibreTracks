@@ -203,6 +203,12 @@ pub enum MarkerKind {
     Softly,
     Swell,
     WorshipFreely,
+    // Appended after the first cue block — the ABI rule above still applies, so
+    // these sit here rather than in alphabetical or category order. `NextSong`
+    // is a *section* despite its position among cues; see `category`.
+    EaseDown,
+    GetReady,
+    NextSong,
     /// User-defined section with no pre-recorded voice clip; the announcement
     /// falls back to silence (or TTS, if added later).
     #[default]
@@ -265,6 +271,9 @@ impl MarkerKind {
             MarkerKind::Softly => "softly",
             MarkerKind::Swell => "swell",
             MarkerKind::WorshipFreely => "worship_freely",
+            MarkerKind::EaseDown => "ease_down",
+            MarkerKind::GetReady => "get_ready",
+            MarkerKind::NextSong => "next_song",
             MarkerKind::Custom => "custom",
         }
     }
@@ -292,7 +301,11 @@ impl MarkerKind {
             | MarkerKind::SlowlyBuild
             | MarkerKind::Softly
             | MarkerKind::Swell
-            | MarkerKind::WorshipFreely => MarkerCategory::Cue,
+            | MarkerKind::WorshipFreely
+            | MarkerKind::EaseDown
+            | MarkerKind::GetReady => MarkerCategory::Cue,
+            // NextSong falls through: it is announced with a count-in like a
+            // section, not fired as a one-shot.
             _ => MarkerCategory::Section,
         }
     }

@@ -1,9 +1,11 @@
 #include <doctest/doctest.h>
 #include <lt_engine/render/voice_guide_renderer.h>
+#include <lt_engine/session/session.h>
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <string>
 #include <vector>
 
 using namespace lt;
@@ -705,4 +707,59 @@ TEST_CASE("swapping the clip bank mid-clip does not use freed samples") {
 
     CHECK(swapped);                 // the scenario actually exercised the swap
     CHECK(peak(ch[2]) > 0.0f);      // audio kept flowing (no crash, valid reads)
+}
+
+// Every test above builds a synthetic bank, so none of them notices a kind that
+// is wired up in code but has no recording on disk (or a file whose name does
+// not match the kind's token). This one loads the *shipped* pack and checks the
+// kinds are actually playable, which is the failure a user would hear as a
+// silent marker.
+TEST_CASE("shipped voice pack covers every announced kind") {
+    const std::string dir = std::string(LT_VOICES_DIR);
+
+    struct Expect { MarkerKind kind; const char* label; bool cue; };
+    // Kinds expected in BOTH bundled languages. ad_lib and slowly_build are
+    // deliberately absent from the Spanish pack (see CUE_KINDS_WITHOUT_RECORDING
+    // on the frontend), so they are not listed here.
+    const std::vector<Expect> expects = {
+        {MarkerKind::Intro,         "intro",          false},
+        {MarkerKind::Verse,         "verse",          false},
+        {MarkerKind::Chorus,        "chorus",         false},
+        {MarkerKind::Turnaround,    "turnaround",     false},
+        {MarkerKind::NextSong,      "next_song",      false},
+        {MarkerKind::Build,         "build",          true},
+        {MarkerKind::EaseDown,      "ease_down",      true},
+        {MarkerKind::GetReady,      "get_ready",      true},
+        {MarkerKind::WorshipFreely, "worship_freely", true},
+    };
+
+    for (const char* lang_cstr : {"es", "en"}) {
+        const std::string lang = lang_cstr;
+        CAPTURE(lang);
+        auto bank = load_voice_guide_bank(dir, lang, kSampleRate);
+        // Compare as bool: doctest would otherwise try to stream the shared_ptr.
+        REQUIRE(static_cast<bool>(bank));
+        for (const auto& e : expects) {
+            const std::string label = e.label;
+            CAPTURE(label);
+            const VoiceGuideClip* clip =
+                e.cue ? bank->cue_for(e.kind) : bank->section_for(e.kind, 0);
+            REQUIRE(static_cast<bool>(clip));
+            CHECK(!clip->samples.empty());
+        }
+    }
+}
+
+// A cue announced with a count-in (or a section fired as a one-shot) is a wiring
+// mistake that the clip bank cannot catch, since both resolve to real audio.
+TEST_CASE("new marker kinds report the right category") {
+    CHECK(marker_kind_is_cue(MarkerKind::EaseDown));
+    CHECK(marker_kind_is_cue(MarkerKind::GetReady));
+    CHECK_FALSE(marker_kind_is_cue(MarkerKind::NextSong));
+
+    // Tokens arrive as strings from Rust/TS; an unmapped one silently degrades
+    // to Custom, which renders as silence.
+    CHECK(marker_kind_from_string("ease_down") == MarkerKind::EaseDown);
+    CHECK(marker_kind_from_string("get_ready") == MarkerKind::GetReady);
+    CHECK(marker_kind_from_string("next_song") == MarkerKind::NextSong);
 }
