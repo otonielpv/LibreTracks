@@ -100,8 +100,19 @@ jobs:
       # WebView2 / audio device availability on the runner) from blocking
       # releases. Once it's proven green on CI hardware, drop this line to make
       # E2E failures gate the release.
+      #
+      # The build carries the same continue-on-error for the same reason: this
+      # job has no vcpkg (that setup lives in build-release-assets), so
+      # build:desktop:native configures with LT_ENGINE_USE_FFMPEG=ON and no
+      # toolchain file, and CMake fails looking for PkgConfig — which does not
+      # exist on the Windows runner. Everything this job actually gates on (the
+      # unit suites and the native engine tests, which build with FFmpeg OFF)
+      # has already run by this point, so a failure here must not sink the
+      # release. Wiring vcpkg into this job to get real E2E coverage is tracked
+      # separately; if that lands, drop both of these lines together.
       - name: Build desktop app for E2E
         if: runner.os == 'Windows'
+        continue-on-error: true
         run: npm run build:desktop:native
 
       - name: Run E2E tests (Windows)
