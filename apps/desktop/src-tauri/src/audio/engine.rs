@@ -1473,6 +1473,14 @@ impl AudioController {
     ) -> Result<(), DesktopError> {
         let mut settings = self.current_settings()?;
         let clip_changed = settings.pad_id != pad_id || settings.pad_key != pad_key;
+        // Enabling the pad must also decode its clip. set_pad_config_realtime
+        // only pushes atomics — it never calls set_clip — so a cue that turns a
+        // pad on without changing pad_id/pad_key installs no clip and the pad
+        // stays silent ("it is on, you hit play and nothing sounds"), until some
+        // later key change happens to decode one. The desktop toggle and the
+        // remote already treat a disabled->enabled transition as needing a
+        // decode; this path was the one that did not.
+        let just_enabled = enabled && !settings.pad_enabled;
         settings.pad_enabled = enabled;
         settings.pad_id = pad_id.to_string();
         settings.pad_key = pad_key.clamp(0, 11);
@@ -1488,7 +1496,7 @@ impl AudioController {
         // sounds but the Pads button/popover still show the previous state.
         self.emit_settings_updated(&settings);
 
-        if clip_changed && !settings.pad_id.is_empty() {
+        if (clip_changed || just_enabled) && !settings.pad_id.is_empty() {
             let (loader, pads_dir) = {
                 let mut state = self.state.lock().map_err(|_| {
                     DesktopError::AudioCommand("audio v2 state lock poisoned".into())

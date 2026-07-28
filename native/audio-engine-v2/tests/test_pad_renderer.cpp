@@ -355,6 +355,34 @@ TEST_CASE("turning stop_with_transport off reopens a closed gate") {
     CHECK(max_abs(render_block(pad, 2, 256)[0]) > 0.3f);
 }
 
+TEST_CASE("a pad enabled without a decoded clip stays silent") {
+    // Pins the renderer half of the "pad is on, you hit play and nothing
+    // sounds" report. set_config only publishes atomics — it never decodes.
+    // With no clip installed the pad is correctly silent and says why, so the
+    // caller MUST decode on a disabled->enabled transition. The desktop toggle
+    // and the remote both do; the automation-cue path did not (it only decoded
+    // when pad_id/pad_key changed), which is the actual defect.
+    PadRenderer pad;
+    PadConfig cfg;
+    cfg.enabled = true;
+    cfg.volume = 1.0f;
+    cfg.output_route = "master";
+    pad.set_config(cfg);
+    // No set_clip() — exactly the state a cue left behind when it enabled a pad
+    // whose key had not changed.
+
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 512);
+    CHECK(max_abs(render_block(pad, 2, 512)[0]) == doctest::Approx(0.0f));
+    CHECK(pad.diagnostics().enabled == true);      // the switch reads "on"...
+    CHECK(pad.diagnostics().clip_loaded == false); // ...but there is nothing to play
+    CHECK(std::string(pad.diagnostics().muted_reason) == "no_clip");
+
+    // Once the clip finally arrives the pad sounds, with no further config push.
+    pad.set_clip(make_clip(64, 1.0f, 1.0f));
+    for (int i = 0; i < 8; ++i) render_block(pad, 2, 512);
+    CHECK(max_abs(render_block(pad, 2, 512)[0]) > 0.9f);
+}
+
 TEST_CASE("empty clip yields silence and a muted reason") {
     PadRenderer pad;
     PadConfig cfg;
