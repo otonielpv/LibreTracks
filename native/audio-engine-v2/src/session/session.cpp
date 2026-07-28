@@ -116,8 +116,18 @@ Result<void> validate_session(const Session& session) {
                 return Result<void>::err("Marker has empty id in song " + song.id);
             if (!all_ids.insert(marker.id).second)
                 return Result<void>::err("Duplicate id: " + marker.id);
-            if (marker.frame < song.start_frame || marker.frame >= song.end_frame)
-                return Result<void>::err("Marker '" + marker.id + "' is outside its song");
+            // Only a negative position is invalid. A marker PAST the song end is
+            // deliberate and must not make the session unloadable: a "Next Song"
+            // marker announces the transition between songs, so it belongs after
+            // the last region — and the song's end_frame is derived from clips
+            // and regions only, so such a marker always falls outside it.
+            // Rejecting it took the whole session down ("Marker '...' is outside
+            // its song" on play). A marker is just a named position: it decodes
+            // nothing and reserves nothing, so it can never corrupt playback.
+            // The Rust model has allowed this since c93d828; renderers clamp or
+            // ignore out-of-range markers on their own.
+            if (marker.frame < 0)
+                return Result<void>::err("Marker '" + marker.id + "' has a negative position");
         }
 
         for (const auto& region : song.regions) {

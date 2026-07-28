@@ -13,6 +13,7 @@ import type {
   JumpTriggerLabel,
   LibraryAssetSummary,
   LibraryImportProgressEvent,
+  MarkerKind,
   PadDownloadProgressEvent,
   PendingJumpSummary,
   ProjectLoadProgressEvent,
@@ -1720,17 +1721,30 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
-  createSectionMarker: async (startSeconds: number) => {
+  createSectionMarker: async (
+    startSeconds: number,
+    options?: {
+      kind?: MarkerKind;
+      variant?: number | null;
+      name?: string;
+    },
+  ) => {
     const markerNumber = state.song.sectionMarkers.length + 1;
+    // Mirror the backend: a typed marker keeps its kind/variant and the
+    // caller-supplied localized name; an untyped one falls back to "custom"
+    // and a generated name. Markers are song-level and never require a region
+    // to contain them.
     replaceSong({
       ...state.song,
       sectionMarkers: [
         ...state.song.sectionMarkers,
         {
           id: nextId("section"),
-          name: `Marker ${markerNumber}`,
+          name: options?.name?.trim() || `Marker ${markerNumber}`,
           startSeconds: Math.max(0, startSeconds),
           digit: null,
+          kind: options?.kind ?? "custom",
+          variant: options?.variant ?? null,
         },
       ],
     });

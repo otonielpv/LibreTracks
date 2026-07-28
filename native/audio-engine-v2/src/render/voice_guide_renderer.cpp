@@ -83,13 +83,27 @@ Frame timing_segment_start(const Song* song, Frame frame) noexcept {
     return start;
 }
 
+// The song whose marker map drives the guide. A song's end_frame comes from its
+// audio content (clips/regions), but markers are free to sit past it — a "Next
+// Song" marker announces the transition BETWEEN songs, so it lands after the
+// last region by definition. Matching only a song strictly covering the playhead
+// returned nullptr there, and the guide never even looked at the markers, so the
+// announcement silently never fired.
+//
+// Fall back to the nearest song (the last one starting at or before the
+// playhead, else the first). Mirrors the identical fix made for the metronome in
+// 6f23974: the timing/marker map exists independently of whether there is audio
+// under the playhead. Only a session with no songs at all leaves us without one.
 const Song* active_song(const Session* session, Frame frame) noexcept {
-    if (!session) return nullptr;
+    if (!session || session->songs.empty()) return nullptr;
+    const Song* fallback = &session->songs.front();
     for (const auto& song : session->songs) {
         if (frame >= song.start_frame && frame < song.end_frame)
             return &song;
+        if (song.start_frame <= frame && song.start_frame >= fallback->start_frame)
+            fallback = &song;
     }
-    return nullptr;
+    return fallback;
 }
 
 std::string kind_token(MarkerKind kind) noexcept {

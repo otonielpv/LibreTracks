@@ -109,9 +109,28 @@ TEST_CASE("duplicate IDs fail") {
     CHECK(validate_session(sess).is_err());
 }
 
-TEST_CASE("marker outside song bounds fails") {
+TEST_CASE("a marker past the song end does not reject the session") {
+    // Field report: a "Next Song" marker — which by nature announces the
+    // transition BETWEEN songs, so it sits after the last region — made play
+    // fail outright with:
+    //   LoadSession: Session validation failed: Marker '...' is outside its song
+    //
+    // The song's end_frame comes from its duration, which the host derives from
+    // clips and regions only, so any marker placed past the last region falls
+    // outside and took the WHOLE session down with it. A marker is just a named
+    // position: it decodes nothing and reserves nothing, so it must never be
+    // able to make a session unloadable. The Rust model has allowed markers
+    // beyond the song duration since c93d828; this is the engine catching up.
     auto sess = make_valid_session();
-    sess.songs[0].markers[0].frame = 999999;   // beyond song end
+    sess.songs[0].markers[0].frame = 999999;   // well past song end (480000)
+    CHECK(validate_session(sess).is_ok());
+}
+
+TEST_CASE("a marker at a negative frame still fails") {
+    // Relaxing the upper bound must not turn the validator into a no-op: a
+    // negative position is a corrupt marker, not a deliberate placement.
+    auto sess = make_valid_session();
+    sess.songs[0].markers[0].frame = -1;
     CHECK(validate_session(sess).is_err());
 }
 

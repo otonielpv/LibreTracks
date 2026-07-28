@@ -157,6 +157,31 @@ TEST_CASE("voice guide fires section announcement + full count in a 4/4 lead bar
     CHECK(diag.counts_fired == 4); // full count includes beat 1
 }
 
+TEST_CASE("a marker past the song end is still announced") {
+    // Companion to the validator fix: a "Next Song" marker sits AFTER the last
+    // region, i.e. past the song's end_frame (which the host derives from clips
+    // and regions only). Letting the session load is not enough — the guide
+    // must actually announce it, or the marker is accepted and then silently
+    // ignored.
+    //
+    // active_song() only matched a song strictly covering the playhead, so past
+    // end_frame it returned nullptr and the renderer never even looked at the
+    // markers. Same shape as the empty-song bug already fixed for the metronome
+    // in 6f23974: the marker map exists independently of whether there is audio
+    // under the playhead.
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, true});
+
+    // Song ends at 8 s; the marker sits at 12 s, four seconds past the end.
+    auto session = make_session(MarkerKind::NextSong, 12.0);
+    session.songs[0].end_frame = static_cast<Frame>(kSampleRate) * 8;
+
+    render_all(r, session, static_cast<Frame>(kSampleRate) * 14);
+
+    CHECK(r.diagnostics().announcements_fired == 1);
+}
+
 TEST_CASE("diagnostics report the upcoming marker kind while it is still ahead") {
     VoiceGuideRenderer r;
     r.set_clip_bank(make_marked_bank());
