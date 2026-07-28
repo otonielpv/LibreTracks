@@ -23,6 +23,7 @@ El apartado **Gestionar packs** permite descargar otros sonidos o eliminar los q
 - **Tonalidad**: selecciona cualquiera de los 12 tonos cromáticos.
 - **Volumen**: usa la misma escala musical en dB que el resto de faders de directo.
 - **Salida**: envía el Pad a Master, Monitor o una salida física habilitada.
+- **Detener con la reproducción**: si está activada, el Pad sigue al transporte: se apaga suavemente al parar o pausar y vuelve al dar al play. El Pad permanece activado, así que se reanuda solo. Desactivada por defecto, para que la cama ambiental suene de forma continua entre canciones.
 
 El Pad se mezcla aparte del master de canción. Esto permite bajar o cambiar de canción sin perder la cama ambiental, y enviarla a un bus diferente del playback si el montaje lo necesita.
 

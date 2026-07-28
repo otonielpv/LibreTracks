@@ -23,6 +23,7 @@ Use **Manage packs** to download other sounds or delete packs you no longer need
 - **Key**: selects any of the 12 chromatic keys.
 - **Volume**: uses the same musical dB scale as the other live faders.
 - **Output**: routes the Pad to Master, Monitor, or an enabled physical output.
+- **Stop with playback**: when enabled, the Pad follows the transport — it fades out when you stop or pause and returns on play. The Pad stays enabled, so it resumes on its own. Off by default, which keeps the Pad sounding continuously between songs.
 
 The Pad is mixed independently from the song master. This lets it remain underneath a song fade or transition, and allows routing it separately from playback when the rig requires it.
 
