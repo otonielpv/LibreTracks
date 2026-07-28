@@ -710,6 +710,7 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
     // whether the backlog is a few slow ones or uniformly slow work.
     let _job_span =
         crate::infra::waveform_diag::Span::new(format!("worker job({waveform_key})"));
+    crate::infra::waveform_diag::note_job_started();
 
     // 1) Disk cache. 2) Same-pass peaks from the engine (NO re-decode — the
     // streaming decode already computed them). 3) Full re-decode (file_peaks),

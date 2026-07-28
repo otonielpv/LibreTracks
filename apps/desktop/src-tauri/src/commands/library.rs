@@ -49,6 +49,21 @@ pub fn get_waveform_summaries(
             "get_waveform_summaries keys={}",
             waveform_keys.len()
         ));
+        // Once per process: the device rate and how much the engine has written
+        // to its PCM cache. Sources matching the device rate stream in place and
+        // write nothing; a mismatch means decode+resample+cache-write (measured:
+        // 13.9 s and 3.6 GB for a 25-stem 44.1 kHz set on a 48 kHz device). The
+        // per-source rates are not exposed to Rust, but nonzero disk usage is
+        // the same signal: it only grows when conversion actually happened.
+        diag::log_sample_rates_once(|| {
+            state.audio.engine_snapshot().ok().map(|snapshot| {
+                (
+                    snapshot.device.sample_rate,
+                    snapshot.source_states.len(),
+                    snapshot.source_cache.disk_bytes_used,
+                )
+            })
+        });
     }
     let _total = diag::Span::new(format!(
         "get_waveform_summaries(keys={})",
@@ -69,9 +84,20 @@ pub fn get_waveform_summaries(
     }
 
     let _held = diag::Span::new("  session lock HELD");
-    session
+    let result = session
         .load_waveforms(&waveform_keys, &state.waveform_jobs, &app, &state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string());
+
+    // How much the caller got vs how much it asked for: a persistent shortfall
+    // means the single-threaded waveform worker is the bottleneck, not this
+    // command. Pairs with the per-job timings to tell "slow machine" apart from
+    // "pipeline stalled".
+    if diag::is_enabled() {
+        let served = result.as_ref().map(|s| s.len()).unwrap_or(0);
+        diag::log_queue_state(waveform_keys.len(), waveform_keys.len() - served.min(waveform_keys.len()));
+    }
+
+    result
 }
 
 #[tauri::command]

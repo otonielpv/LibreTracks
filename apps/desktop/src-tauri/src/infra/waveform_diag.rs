@@ -94,8 +94,95 @@ pub fn mark_run_start(context: &str) {
     static ANNOUNCED: AtomicBool = AtomicBool::new(false);
     if !ANNOUNCED.swap(true, Ordering::Relaxed) {
         log("=== waveform diagnostics enabled (LIBRETRACKS_WAVEFORM_DIAG) ===");
+        log_machine_context();
     }
     log(format!("--- run: {context} ---"));
+}
+
+/// One-off line describing the machine. A report from a slow PC is only
+/// interpretable next to what it was running on: 25 waveform jobs on 4 cores
+/// with a spinning disk is a very different picture from the same number on 20
+/// cores with an NVMe, and the timings alone do not say which one produced them.
+fn log_machine_context() {
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(0);
+    log(format!(
+        "machine: logical_cores={cores} waveform_workers=1 (the queue is single-threaded)"
+    ));
+}
+
+/// Device sample rate vs the rates of the session's sources.
+///
+/// This decides whether loading does real work at all. A stem whose rate equals
+/// the device's is streamed in place — 2 ms, nothing written. A mismatch sends
+/// it through decode+resample+cache-write: measured at 13.9 s and 3.6 GB for a
+/// 25-stem 44.1 kHz set on a 48 kHz device. Same files, same UI, 7000x the
+/// work, so a report without this line cannot be interpreted.
+/// Log the device rate and cache state once per process. Takes a closure so the
+/// (locking) engine snapshot is only taken when diagnostics are on AND this is
+/// the first call — the caller must not pay for it on every waveform request.
+///
+/// Why it matters: a source whose rate matches the device is streamed in place
+/// (2 ms, nothing written). A mismatch goes through decode+resample+cache-write
+/// — measured at 13.9 s and 3.6 GB for a 25-stem 44.1 kHz set on a 48 kHz
+/// device. Same files, same UI, vastly different work, so timings elsewhere in
+/// this log cannot be read without knowing which case happened. Per-source
+/// rates are not exposed to Rust; cache bytes written are the same signal,
+/// since they only grow when a conversion actually ran.
+pub fn log_sample_rates_once<F>(fetch: F)
+where
+    F: FnOnce() -> Option<(i32, usize, u64)>,
+{
+    if !enabled() {
+        return;
+    }
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if LOGGED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    match fetch() {
+        Some((device_rate, sources, disk_bytes)) => {
+            let disk_mb = disk_bytes / (1024 * 1024);
+            log(format!(
+                "device: sample_rate={device_rate} Hz, sources={sources}, \
+                 pcm_cache_written={disk_mb} MB{}",
+                if disk_mb > 0 {
+                    "  <-- nonzero means sources were decoded+resampled, not streamed in place"
+                } else {
+                    "  (nothing written: sources stream in place)"
+                }
+            ));
+        }
+        None => log("device: unavailable (engine snapshot failed)"),
+    }
+}
+
+/// Count of waveform jobs the single worker has started, and how many are still
+/// queued behind it. The worker is sequential, so on a slow machine the queue
+/// depth is what turns "each job is a bit slow" into "waveforms took minutes".
+static JOBS_STARTED: AtomicU64 = AtomicU64::new(0);
+
+pub fn note_job_started() {
+    if !enabled() {
+        return;
+    }
+    let n = JOBS_STARTED.fetch_add(1, Ordering::Relaxed) + 1;
+    log(format!("  [queue] starting waveform job #{n}"));
+}
+
+/// Snapshot of how far behind the waveform pipeline is. Call when the frontend
+/// asks for waveforms: pairs "the user is waiting for N keys" with "the worker
+/// has finished M jobs so far", which is what separates a slow machine from a
+/// stuck pipeline.
+pub fn log_queue_state(requested: usize, in_flight: usize) {
+    if !enabled() {
+        return;
+    }
+    log(format!(
+        "  [queue] requested={requested} in_flight={in_flight} jobs_started_total={}",
+        JOBS_STARTED.load(Ordering::Relaxed)
+    ));
 }
 
 /// Times a scope and logs its duration on drop. Logs regardless of how the
