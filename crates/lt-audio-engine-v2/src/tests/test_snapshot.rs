@@ -136,18 +136,22 @@ fn source_states_round_trip() {
             status: "ready".into(),
             progress_percent: 100,
             error_message: String::new(),
+            will_publish_peaks: true,
         },
         SourcePreparationInfo {
             source_id: "s2".into(),
             status: "queued".into(),
             progress_percent: 0,
             error_message: String::new(),
+            will_publish_peaks: false,
         },
     ];
     let rt = round_trip(&snap);
     assert_eq!(rt.source_states.len(), 2);
     assert_eq!(rt.source_states[0].status, "ready");
     assert_eq!(rt.source_states[1].status, "queued");
+    assert!(rt.source_states[0].will_publish_peaks);
+    assert!(!rt.source_states[1].will_publish_peaks);
 }
 
 #[test]
