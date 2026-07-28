@@ -3795,6 +3795,137 @@ fn realtime_bridge_does_not_bump_project_revision() {
     );
 }
 
+/// Field report: a track muted by an automation cue could not be un-muted from
+/// the UI — the button did nothing and only an app restart brought the audio
+/// back. The mute reached the engine but never the Rust model, so the header
+/// toggle (which sends `!model.muted`) kept computing `!false` and re-sent
+/// "mute" forever. Automation mix actions must leave the model and the engine
+/// agreeing, exactly as the UI commit path does.
+#[test]
+fn automation_track_mute_is_reflected_in_the_model() {
+    let mut session = session_with_song_dir("automation-mute-model-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    session
+        .apply_automation_action(
+            &crate::audio::automation::AutomationAction::SetTrackMute {
+                track_id: "track_1".into(),
+                muted: true,
+            },
+            &audio,
+        )
+        .expect("automation mute should succeed");
+
+    let track = session
+        .song_view()
+        .expect("song view should build")
+        .expect("song view should exist")
+        .tracks
+        .into_iter()
+        .find(|track| track.id == "track_1")
+        .expect("track should exist");
+
+    assert!(
+        track.muted,
+        "automation mute must be visible in the model, or the UI toggle re-sends mute instead of un-muting"
+    );
+
+    // And the inverse: automation un-mute must clear it, so a cue that restores
+    // a track leaves the header showing an audible track.
+    session
+        .apply_automation_action(
+            &crate::audio::automation::AutomationAction::SetTrackMute {
+                track_id: "track_1".into(),
+                muted: false,
+            },
+            &audio,
+        )
+        .expect("automation un-mute should succeed");
+
+    let track = session
+        .song_view()
+        .expect("song view should build")
+        .expect("song view should exist")
+        .tracks
+        .into_iter()
+        .find(|track| track.id == "track_1")
+        .expect("track should exist");
+
+    assert!(!track.muted, "automation un-mute must clear the model flag");
+}
+
+/// Same desync class as the mute bug, for the sibling discrete action: a solo
+/// applied by automation must land in the model too.
+#[test]
+fn automation_track_solo_is_reflected_in_the_model() {
+    let mut session = session_with_song_dir("automation-solo-model-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    session
+        .apply_automation_action(
+            &crate::audio::automation::AutomationAction::SetTrackSolo {
+                track_id: "track_1".into(),
+                solo: true,
+            },
+            &audio,
+        )
+        .expect("automation solo should succeed");
+
+    let track = session
+        .song_view()
+        .expect("song view should build")
+        .expect("song view should exist")
+        .tracks
+        .into_iter()
+        .find(|track| track.id == "track_1")
+        .expect("track should exist");
+
+    assert!(
+        track.solo,
+        "automation solo must be visible in the model, or the UI toggle re-sends solo instead of clearing it"
+    );
+}
+
+/// Volume/pan set by automation must also be readable from the model, so the
+/// fader shows where the cue left it instead of snapping back on the next drag.
+#[test]
+fn automation_track_mix_is_reflected_in_the_model() {
+    let mut session = session_with_song_dir("automation-mix-model-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    session
+        .apply_automation_action(
+            &crate::audio::automation::AutomationAction::SetTrackMix {
+                track_id: "track_1".into(),
+                volume: Some(0.25),
+                pan: Some(-0.5),
+                ramp_seconds: None,
+            },
+            &audio,
+        )
+        .expect("automation mix should succeed");
+
+    let track = session
+        .song_view()
+        .expect("song view should build")
+        .expect("song view should exist")
+        .tracks
+        .into_iter()
+        .find(|track| track.id == "track_1")
+        .expect("track should exist");
+
+    assert!(
+        (track.volume - 0.25).abs() < 1e-9,
+        "automation volume must be visible in the model, got {}",
+        track.volume
+    );
+    assert!(
+        (track.pan - (-0.5)).abs() < 1e-9,
+        "automation pan must be visible in the model, got {}",
+        track.pan
+    );
+}
+
 /// Commit path (pointer-up): must bump revision and send exactly one realtime command.
 #[test]
 fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {

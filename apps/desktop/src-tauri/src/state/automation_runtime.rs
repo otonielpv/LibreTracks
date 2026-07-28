@@ -413,8 +413,49 @@ impl DesktopSession {
         Ok(())
     }
 
+    /// Mirror a mix field an automation action just sent to the engine into the
+    /// Rust model, so both halves agree.
+    ///
+    /// Without this the two drift apart and the UI cannot recover: the track
+    /// header toggles send `!model.muted`, so a track the engine has muted but
+    /// the model still calls unmuted computes `!false` and re-sends "mute"
+    /// forever — the button looks dead and only a restart (which reloads the
+    /// model from disk) brings the audio back. Field-reported for mute; solo
+    /// and volume/pan share the same shape.
+    ///
+    /// This deliberately does NOT push an undo entry or bump the project
+    /// revision: automation is playback state, not a user edit, and
+    /// `commit_track_mix_model_and_command` (the UI path) owns that behaviour.
+    fn mirror_track_mix_into_model(
+        &mut self,
+        track_id: &str,
+        volume: Option<f64>,
+        pan: Option<f64>,
+        muted: Option<bool>,
+        solo: Option<bool>,
+    ) {
+        let Ok(song) = self.engine.song_mut() else {
+            return;
+        };
+        let Some(track) = song.tracks.iter_mut().find(|track| track.id == track_id) else {
+            return;
+        };
+        if let Some(volume) = volume {
+            track.volume = volume.clamp(0.0, 1.0);
+        }
+        if let Some(pan) = pan {
+            track.pan = pan.clamp(-1.0, 1.0);
+        }
+        if let Some(muted) = muted {
+            track.muted = muted;
+        }
+        if let Some(solo) = solo {
+            track.solo = solo;
+        }
+    }
+
     /// Apply a single non-jump job action immediately (mute/solo/mix/scene).
-    fn apply_automation_action(
+    pub(super) fn apply_automation_action(
         &mut self,
         action: &AutomationAction,
         audio: &AudioController,
@@ -422,9 +463,11 @@ impl DesktopSession {
         match action {
             AutomationAction::SetTrackMute { track_id, muted } => {
                 audio.update_live_track_mix(track_id, None, None, Some(*muted), None, None)?;
+                self.mirror_track_mix_into_model(track_id, None, None, Some(*muted), None);
             }
             AutomationAction::SetTrackSolo { track_id, solo } => {
                 audio.update_live_track_mix(track_id, None, None, None, Some(*solo), None)?;
+                self.mirror_track_mix_into_model(track_id, None, None, None, Some(*solo));
             }
             AutomationAction::SetTrackMix {
                 track_id,
@@ -452,6 +495,7 @@ impl DesktopSession {
                     });
                 } else {
                     audio.update_live_track_mix(track_id, *volume, *pan, None, None, None)?;
+                    self.mirror_track_mix_into_model(track_id, *volume, *pan, None, None);
                 }
             }
             AutomationAction::ApplyScene {
@@ -521,6 +565,9 @@ impl DesktopSession {
         }
         for (track_id, volume, pan) in updates {
             audio.update_live_track_mix(&track_id, volume, pan, None, None, None)?;
+            // Keep the model in step with the engine as the ramp advances, so a
+            // fader the ramp moved reads correctly the moment the user grabs it.
+            self.mirror_track_mix_into_model(&track_id, volume, pan, None, None);
         }
         // Drop ramps that have reached their end.
         self.active_mix_ramps
