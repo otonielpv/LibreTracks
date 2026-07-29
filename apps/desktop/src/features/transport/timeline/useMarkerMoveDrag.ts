@@ -5,7 +5,12 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { buildSongTempoRegions } from "@libretracks/shared/models";
+import {
+  buildSongTempoRegions,
+  markerCategory,
+  type MarkerCategory,
+} from "@libretracks/shared/models";
+import { LANE_CUES, LANE_SECTIONS } from "../Renderer/drawBackground";
 import {
   getElementScaleX,
   screenXToSeconds,
@@ -16,6 +21,19 @@ import type { SongView } from "../desktopApi";
 
 const MARKER_DRAG_THRESHOLD_PX = 4;
 
+/**
+ * Which ruler lane a pointer at `offsetY` (relative to the ruler top) is over.
+ *
+ * The boundary is the midpoint between the two lanes rather than either lane's
+ * own edge, so the whole ruler maps to a lane and there is no dead band where a
+ * drag would silently keep the old category. Above the midpoint is the cue lane
+ * (it is drawn above the section lane); below it, sections.
+ */
+export function laneCategoryAtY(offsetY: number): MarkerCategory {
+  const boundary = (LANE_CUES.top + LANE_CUES.height + LANE_SECTIONS.top) / 2;
+  return offsetY < boundary ? "cue" : "section";
+}
+
 export type MarkerMoveKind = "marker" | "cue";
 
 type MarkerMoveDrag = {
@@ -25,6 +43,7 @@ type MarkerMoveDrag = {
   kind: MarkerMoveKind;
   pointerId: number;
   pointerStartClientX: number;
+  pointerStartClientY: number;
   /**
    * Where the marker sat, in absolute lane screen space, when the drag began.
    * Only used for cues: they are positioned in raw screen coordinates rather
@@ -35,12 +54,23 @@ type MarkerMoveDrag = {
   pointerScaleX: number;
   initialStartSeconds: number;
   previewStartSeconds: number;
+  /**
+   * Ruler-relative Y of the pointer when the drag began, so vertical travel can
+   * be resolved against the lane bands. Ruler flags only; cue diamonds live in
+   * the track area and have no lanes to cross.
+   */
+  pointerStartOffsetY: number;
+  /** Category the marker had at grab time, and the one under the pointer now. */
+  initialCategory: MarkerCategory;
+  previewCategory: MarkerCategory;
   moved: boolean;
 };
 
 export type MarkerMovePreview = {
   markerId: string;
   startSeconds: number;
+  /** Lane the flag should preview in — it follows the pointer across lanes. */
+  category: MarkerCategory;
 } | null;
 
 export type MarkerMoveDragDeps = {
@@ -49,7 +79,13 @@ export type MarkerMoveDragDeps = {
   cameraXRef: MutableRefObject<number>;
   livePixelsPerSecondRef: MutableRefObject<number>;
   pixelsPerSecond: number;
-  onMarkerMoveCommit?: (markerId: string, startSeconds: number) => void;
+  /** `category` is passed only when the drag actually changed lanes, so a plain
+   * horizontal nudge never writes a category override the user didn't ask for. */
+  onMarkerMoveCommit?: (
+    markerId: string,
+    startSeconds: number,
+    category?: MarkerCategory,
+  ) => void;
   onAutomationCueMoveCommit?: (cueId: string, atSeconds: number) => void;
 };
 
@@ -97,6 +133,21 @@ export function useMarkerMoveDrag({
   ) {
     if (event.button !== 0) return;
     didDragRef.current = false;
+    // The hotspot is positioned at its lane's top, so the pointer's Y within the
+    // ruler is the hotspot's own top plus the offset inside it. Reading it this
+    // way (rather than from the ruler's rect) keeps the drag working regardless
+    // of where the ruler sits on screen.
+    const marker = song?.sectionMarkers.find(
+      (candidate) => candidate.id === markerId,
+    );
+    const initialCategory: MarkerCategory = marker
+      ? markerCategory(marker)
+      : "section";
+    const laneTop =
+      initialCategory === "cue" ? LANE_CUES.top : LANE_SECTIONS.top;
+    const pointerStartOffsetY =
+      laneTop +
+      (event.clientY - event.currentTarget.getBoundingClientRect().top);
     // Derive the grab anchor from the marker's own position rather than the
     // cursor's, so the pointer may land anywhere inside the hotspot without
     // shifting the marker on the first move.
@@ -110,6 +161,7 @@ export function useMarkerMoveDrag({
       kind,
       pointerId: event.pointerId,
       pointerStartClientX: event.clientX,
+      pointerStartClientY: event.clientY,
       pointerStartLocalX,
       pointerScaleX: getElementScaleX(
         event.currentTarget.getBoundingClientRect(),
@@ -117,6 +169,9 @@ export function useMarkerMoveDrag({
       ),
       initialStartSeconds: startSeconds,
       previewStartSeconds: startSeconds,
+      pointerStartOffsetY,
+      initialCategory,
+      previewCategory: initialCategory,
       moved: false,
     };
     try {
@@ -148,12 +203,23 @@ export function useMarkerMoveDrag({
           ) - drag.initialStartSeconds
         : pointerDeltaPx / effectivePixelsPerSecond;
 
+    // Ruler flags can also be dragged across lanes to change category; the
+    // pointer's ruler-relative Y is the grab offset plus how far it has moved.
+    const pointerDeltaY = event.clientY - drag.pointerStartClientY;
+    const nextCategory: MarkerCategory =
+      drag.kind === "cue"
+        ? drag.initialCategory
+        : laneCategoryAtY(drag.pointerStartOffsetY + pointerDeltaY);
+
     // Only start treating this as a drag once the pointer clears the threshold,
-    // so a stationary tap/click still fires the primary action.
+    // so a stationary tap/click still fires the primary action. Vertical travel
+    // counts too, or dragging straight down to the other lane would never arm
+    // the drag.
     if (
       !drag.moved &&
       Math.abs(event.clientX - drag.pointerStartClientX) <
-        MARKER_DRAG_THRESHOLD_PX
+        MARKER_DRAG_THRESHOLD_PX &&
+      Math.abs(pointerDeltaY) < MARKER_DRAG_THRESHOLD_PX
     ) {
       return;
     }
@@ -179,7 +245,12 @@ export function useMarkerMoveDrag({
     nextStart = Math.max(0, nextStart);
 
     drag.previewStartSeconds = nextStart;
-    setPreview({ markerId: drag.markerId, startSeconds: nextStart });
+    drag.previewCategory = nextCategory;
+    setPreview({
+      markerId: drag.markerId,
+      startSeconds: nextStart,
+      category: nextCategory,
+    });
   }
 
   function end(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -193,8 +264,13 @@ export function useMarkerMoveDrag({
     }
 
     const finalStart = drag.previewStartSeconds;
+    const laneChanged =
+      drag.kind !== "cue" && drag.previewCategory !== drag.initialCategory;
+    // A lane change alone is worth committing even if the flag didn't move in
+    // time — dropping a Chorus straight down into the cue lane is a real edit.
     const moved =
-      drag.moved && Math.abs(finalStart - drag.initialStartSeconds) > 1e-6;
+      drag.moved &&
+      (Math.abs(finalStart - drag.initialStartSeconds) > 1e-6 || laneChanged);
 
     dragRef.current = null;
     setPreview(null);
@@ -205,7 +281,11 @@ export function useMarkerMoveDrag({
     if (drag.kind === "cue") {
       onAutomationCueMoveCommit?.(drag.markerId, finalStart);
     } else {
-      onMarkerMoveCommit?.(drag.markerId, finalStart);
+      onMarkerMoveCommit?.(
+        drag.markerId,
+        finalStart,
+        laneChanged ? drag.previewCategory : undefined,
+      );
     }
   }
 

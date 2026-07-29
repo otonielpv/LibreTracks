@@ -29,7 +29,10 @@ import type {
   TimelineTrackSummary,
 } from "../library/pendingAudioImports";
 import { formatTransposeSemitones, isAndroidApp } from "../desktopApi";
-import { buildSongTempoRegions } from "@libretracks/shared/models";
+import {
+  buildSongTempoRegions,
+  type MarkerCategory,
+} from "@libretracks/shared/models";
 import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
@@ -41,7 +44,7 @@ import {
   LANE_SECTIONS,
   LANE_TEMPO_METRIC,
 } from "../Renderer/drawBackground";
-import { markerKindCategory } from "../markerKinds";
+import { markerCategory } from "../markerKinds";
 import {
   BASE_PIXELS_PER_SECOND,
   getElementScaleX,
@@ -287,8 +290,19 @@ type TimelineCanvasPaneProps = {
    * along the ruler. Delivers the marker id and its new absolute start in
    * seconds (already snapped + clamped). The component drives the optimistic
    * preview during the drag and only fires this on release.
+   *
+   * `category` is passed ONLY when the drag also crossed into the other ruler
+   * row, which changes how the marker is announced (count-in vs one-shot);
+   * omitted on a plain horizontal move so the backend keeps what it had.
+   * Keep this signature in sync with `useMarkerMoveDrag` — dropping the third
+   * parameter here silently discards the lane change (TypeScript accepts a
+   * narrower callback), and the marker moves on screen but not in the engine.
    */
-  onMarkerMoveCommit?: (markerId: string, startSeconds: number) => void;
+  onMarkerMoveCommit?: (
+    markerId: string,
+    startSeconds: number,
+    category?: MarkerCategory,
+  ) => void;
   /**
    * Commit an automation-cue drag: the cue's new position in timeline seconds
    * (already snapped + clamped). Same optimistic-preview contract as
@@ -891,6 +905,26 @@ export function TimelineCanvasPane({
     onAutomationCueMoveCommit,
   });
 
+  // The canvas paints the flags, so a marker being dragged across lanes has to
+  // reach it with the previewed category — otherwise the drag looks inert: the
+  // flag stays in its old row until the drop lands. Only the dragged marker is
+  // rewritten, and with no drag in flight the original array passes through
+  // untouched, so the common case allocates nothing and keeps its identity.
+  const markersWithLanePreview = useMemo(() => {
+    const markers = song?.sectionMarkers ?? [];
+    const previewId = markerMovePreview?.markerId;
+    if (!previewId) return markers;
+    const previewCategory = markerMovePreview.category;
+    const dragged = markers.find((marker) => marker.id === previewId);
+    // Nothing to show if the marker is already resting in that lane.
+    if (!dragged || markerCategory(dragged) === previewCategory) return markers;
+    return markers.map((marker) =>
+      marker.id === previewId
+        ? { ...marker, categoryOverride: previewCategory }
+        : marker,
+    );
+  }, [song?.sectionMarkers, markerMovePreview]);
+
   // Keeps the cue hit targets glued to the diamonds the canvas paints.
   const { registerHotspot: registerAutomationHotspot } =
     useAutomationCueHotspots({
@@ -1073,7 +1107,7 @@ export function TimelineCanvasPane({
             livePixelsPerSecondRef={livePixelsPerSecondRef}
             timelineGrid={timelineGrid}
             regions={(song?.regions ?? []) as SongRegionSummary[]}
-            markers={song?.sectionMarkers ?? []}
+            markers={markersWithLanePreview}
             tempoMarkers={song?.tempoMarkers ?? []}
             timeSignatureMarkers={song?.timeSignatureMarkers ?? []}
             selectedRegionId={selectedRegionId}
@@ -1288,12 +1322,6 @@ export function TimelineCanvasPane({
             ) : null}
 
             {song?.sectionMarkers.map((section) => {
-              // Cue markers live in their own lane above the section lane so a
-              // cue and a section sharing a position don't stack on one pixel.
-              const lane =
-                markerKindCategory(section.kind) === "cue"
-                  ? LANE_CUES
-                  : LANE_SECTIONS;
               // Android: the fixed 68px desktop hotspot swallows neighbouring
               // taps (tapping the next bar still selected this marker). Size
               // the touch zone to the drawn flag instead: digit prefix + name
@@ -1310,6 +1338,14 @@ export function TimelineCanvasPane({
               const renderStartSeconds = isDraggingMarker
                 ? markerMovePreview.startSeconds
                 : section.startSeconds;
+              // Cue markers live in their own lane above the section lane so a
+              // cue and a section sharing a position don't stack on one pixel.
+              // Mid-drag the hotspot follows the pointer across lanes, so the
+              // flag previews the category the drop would apply.
+              const renderCategory = isDraggingMarker
+                ? markerMovePreview.category
+                : markerCategory(section);
+              const lane = renderCategory === "cue" ? LANE_CUES : LANE_SECTIONS;
               return (
               <button
                 key={section.id}
@@ -1355,8 +1391,7 @@ export function TimelineCanvasPane({
                       ...(song?.sectionMarkers ?? []),
                     ]
                       .filter(
-                        (candidate) =>
-                          markerKindCategory(candidate.kind) === "section",
+                        (candidate) => markerCategory(candidate) === "section",
                       )
                       .sort(
                         (left, right) =>
@@ -1455,7 +1490,60 @@ export function TimelineCanvasPane({
                 }}
               />
             ) : null}
+
           </TimelineRulerCanvas>
+
+          {/* Names both ruler rows and highlights the one the drop would land
+              in, so a vertical drag shows what releasing here does to the
+              marker's category (the flag hotspot itself is transparent).
+
+              Sits OUTSIDE TimelineRulerCanvas on purpose: that wrapper is
+              transformed by `translateX(-cameraX)` and is as wide as the whole
+              timeline, so a full-width band inside it would start at the
+              scrolled content's origin and slide off screen. This band is
+              viewport-space — it spans the visible ruler at a fixed Y — so it
+              belongs to .lt-ruler-content, which is the viewport-sized
+              positioned ancestor. (The vertical drop guide above is the
+              opposite case: it IS content-space, hence its `left` in seconds.)
+              See docs/REDESIGN_transport_refs_to_stores.md on the two spaces. */}
+          {markerMovePreview !== null
+            ? (
+                [
+                  {
+                    category: "cue" as const,
+                    lane: LANE_CUES,
+                    label: t("transport.menu.markerKindCuesGroup"),
+                  },
+                  {
+                    category: "section" as const,
+                    lane: LANE_SECTIONS,
+                    label: t("transport.menu.markerKindSectionsGroup"),
+                  },
+                ] satisfies {
+                  category: MarkerCategory;
+                  lane: { top: number; height: number };
+                  label: string;
+                }[]
+              ).map(({ category, lane, label }) => {
+                const isTarget = markerMovePreview.category === category;
+                return (
+                  <div
+                    key={category}
+                    aria-hidden="true"
+                    className={`lt-marker-lane-drop-target${isTarget ? " is-target" : ""}`}
+                    style={{ top: lane.top, height: lane.height }}
+                  >
+                    {/* Naming both rows (not just the target) is what makes the
+                        drag self-explanatory: the user sees which row means
+                        "count-in" and which means "one-shot" while choosing,
+                        rather than having to drop and find out. */}
+                    <span className="lt-marker-lane-drop-target-label">
+                      {label}
+                    </span>
+                  </div>
+                );
+              })
+            : null}
 
           <PlayheadOverlay
             className="lt-playhead is-handle"

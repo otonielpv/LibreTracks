@@ -1,5 +1,6 @@
 import type {
   AutomationCueSummary,
+  MarkerCategory,
   SongView,
   TransportSnapshot,
 } from "@libretracks/shared/models";
@@ -26,6 +27,7 @@ export type MarkerMoveHandlerDeps = {
     markerId: string,
     name: string,
     startSeconds: number,
+    categoryOverride?: MarkerCategory,
   ) => Promise<TransportSnapshot>;
   upsertAutomationCue: (
     cue: AutomationCueSummary,
@@ -45,8 +47,18 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
     getEditAutomationCue,
   } = deps;
 
-  /** Persist a section/cue flag dragged along the ruler to its new position. */
-  const handleMarkerMoveCommit = (markerId: string, startSeconds: number) => {
+  /**
+   * Persist a section/cue flag dragged along the ruler to its new position.
+   *
+   * `category` is passed only when the drag also crossed into the other lane,
+   * which changes how the marker is announced (count-in vs one-shot); a plain
+   * horizontal move leaves it undefined so the backend keeps what it had.
+   */
+  const handleMarkerMoveCommit = (
+    markerId: string,
+    startSeconds: number,
+    category?: MarkerCategory,
+  ) => {
     const section = getSong()?.sectionMarkers.find(
       (candidate) => candidate.id === markerId,
     );
@@ -58,8 +70,14 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
         section.id,
         section.name,
         startSeconds,
+        category,
       );
       applyPlaybackSnapshot(nextSnapshot);
+      // A lane change alters what the voice guide does with this marker, so the
+      // view has to be re-read for the flag to settle in its new row.
+      if (category) {
+        await refreshSongView({ includeWaveforms: false, sync: true });
+      }
     });
   };
 

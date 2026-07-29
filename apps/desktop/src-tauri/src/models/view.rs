@@ -1,8 +1,8 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
 use libretracks_core::{
-    audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, MarkerKind, Song,
-    SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
+    audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, MarkerCategory,
+    MarkerKind, Song, SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -357,6 +357,10 @@ pub struct MarkerSummary {
     /// User-chosen colour override (Custom markers). `None` → kind palette.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Ruler lane the user dragged this marker into. `None` → the lane its kind
+    /// implies, which is how every untouched marker behaves.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_override: Option<MarkerCategory>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -910,6 +914,7 @@ pub(crate) fn marker_to_warped_summary(song: &Song, marker: &Marker) -> MarkerSu
         kind: marker.kind,
         variant: marker.variant,
         color: marker.color.clone(),
+        category_override: marker.category_override,
     }
 }
 
@@ -1252,6 +1257,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             }],
         }
     }

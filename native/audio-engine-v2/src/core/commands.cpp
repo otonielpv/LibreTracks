@@ -251,6 +251,7 @@ EngineCommand command_from_json(const std::string& raw) {
             marker.frame = item.at("frame").get<Frame>();
             marker.kind = item.value("kind", std::string{});
             marker.variant = item.value("variant", 0);
+            marker.category_override = item.value("category_override", std::string{});
             cmd.markers.push_back(std::move(marker));
         }
         return cmd;
@@ -321,6 +322,7 @@ EngineCommand command_from_json(const std::string& raw) {
             marker.frame = item.at("frame").get<Frame>();
             marker.kind = item.value("kind", std::string{});
             marker.variant = item.value("variant", 0);
+            marker.category_override = item.value("category_override", std::string{});
             cmd.markers.push_back(std::move(marker));
         }
         for (const auto& item : j.at("tempo_markers")) {

@@ -7,7 +7,7 @@ import {
   type TempoMarkerSummary,
 } from "../desktopApi";
 import type { TimelineGrid } from "../timeline/timelineMath";
-import { markerColor, markerKindCategory } from "../markerKinds";
+import { markerCategory, markerColor } from "../markerKinds";
 import { screenXToSeconds, secondsToScreenX } from "../timeline/timelineMath";
 
 /** Convert a `#rrggbb` colour to an `rgba(...)` string at the given alpha. Used
@@ -453,8 +453,7 @@ export function drawRulerMarker(
   // Cues draw in their own lane above the section lane; sections keep theirs.
   // Both sit flush with the top of their lane — the cue lane itself now starts
   // below the grid labels, so no per-flag inset is needed to clear them.
-  const lane =
-    markerKindCategory(marker.kind) === "cue" ? LANE_CUES : LANE_SECTIONS;
+  const lane = markerCategory(marker) === "cue" ? LANE_CUES : LANE_SECTIONS;
   const stemTop = lane.top + 2;
   const stemBottom = lane.top + lane.height - 2;
   const alignRight = snappedX > width - labelWidth - 12;

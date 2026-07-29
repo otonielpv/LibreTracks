@@ -31,6 +31,7 @@ import {
   drawRulerBackgroundLayer,
 } from "../Renderer/drawBackground";
 import { drawRulerForegroundLayer } from "../Renderer/drawForeground";
+import { markerCategory } from "../markerKinds";
 import {
   buildTrackStructureSignature,
   drawTrackCanvasBackground,
@@ -312,8 +313,15 @@ export function TimelineRulerCanvas({
     [regions],
   );
 
+  // Category is part of the signature because it picks the lane the flag is
+  // painted in: dragging a marker between rows moves it without changing its
+  // position, so keying on id+startSeconds alone left the canvas convinced
+  // nothing had changed and the flag never repainted.
   const markersSignature = useMemo(
-    () => markers.map((m) => `${m.id}:${m.startSeconds}`).join("|"),
+    () =>
+      markers
+        .map((m) => `${m.id}:${m.startSeconds}:${markerCategory(m)}`)
+        .join("|"),
     [markers],
   );
 

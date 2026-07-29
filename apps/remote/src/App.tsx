@@ -23,7 +23,7 @@ import {
   formatTransposeSemitones,
   METRONOME_SOUND_PRESETS,
   markerColor,
-  markerKindCategory,
+  markerCategory,
   regionEffectiveKey,
   type AppSettings,
   type AudioMeterLevel,
@@ -1133,7 +1133,7 @@ const SharedTimeline = memo(function SharedTimeline({
         (marker) =>
           // Dynamic cues (Build, All In, ...) are not navigation targets; the
           // remote only shows sections, so the cinta stays uncluttered on stage.
-          markerKindCategory(marker.kind) === "section" &&
+          markerCategory(marker) === "section" &&
           marker.startSeconds >= renderWindowStartSeconds - viewportDurationSeconds * 0.25 &&
           marker.startSeconds <= renderWindowEndSeconds + viewportDurationSeconds * 0.25,
       ),
@@ -1571,11 +1571,13 @@ function GuideButtonWidget() {
 /**
  * Section markers navigable from the remote — dynamic cues (Build, All In, ...)
  * are spoken by the voice guide, not jump destinations, so they're excluded.
+ * Keyed on the effective category, so a marker dragged into the other ruler row
+ * on the desktop changes its jump-target status here too.
  */
 function useSectionMarkers() {
   const songView = useRemoteSyncStore((state) => state.songView);
   return (songView?.sectionMarkers ?? []).filter(
-    (marker) => markerKindCategory(marker.kind) === "section",
+    (marker) => markerCategory(marker) === "section",
   );
 }
 

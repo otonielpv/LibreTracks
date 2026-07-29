@@ -11,8 +11,8 @@ use std::{
 };
 
 use libretracks_core::{
-    audible_clip_duration_seconds, effective_bpm_at, warp_timeline_seconds_at, Song, TempoMarker,
-    TrackKind,
+    audible_clip_duration_seconds, effective_bpm_at, warp_timeline_seconds_at, MarkerCategory, Song,
+    TempoMarker, TrackKind,
 };
 #[cfg(not(target_os = "android"))]
 use libretracks_remote::RemoteServerHandle;
@@ -924,6 +924,7 @@ impl AudioController {
                     frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
                     variant: marker.0.variant.unwrap_or(0) as i32,
+                    category_override: marker.0.category_override.map(marker_category_token),
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongMarkers {
@@ -1004,6 +1005,7 @@ impl AudioController {
                     frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
                     variant: marker.0.variant.unwrap_or(0) as i32,
+                    category_override: marker.0.category_override.map(marker_category_token),
                 })
                 .collect();
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
@@ -1171,6 +1173,7 @@ impl AudioController {
                     frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
                     variant: marker.0.variant.unwrap_or(0) as i32,
+                    category_override: marker.0.category_override.map(marker_category_token),
                 })
                 .collect();
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
@@ -2933,6 +2936,16 @@ fn session_signature(song: &Song) -> String {
         marker.start_seconds.to_bits().hash(&mut hasher);
     }
     format!("{:016x}", hasher.finish())
+}
+
+/// Serialized token for a dragged marker's lane, as the C++ engine parses it.
+/// Only sent when the user actually overrode the lane; otherwise the engine
+/// keeps deriving the category from the kind.
+fn marker_category_token(category: MarkerCategory) -> String {
+    match category {
+        MarkerCategory::Section => "section".to_string(),
+        MarkerCategory::Cue => "cue".to_string(),
+    }
 }
 
 fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {

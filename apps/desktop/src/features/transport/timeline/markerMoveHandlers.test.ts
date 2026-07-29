@@ -62,6 +62,53 @@ function setup(initialCues: AutomationCueSummary[]) {
   return { handlers, upsertAutomationCue, getSong: () => song };
 }
 
+describe("handleMarkerMoveCommit", () => {
+  function setupMarkers() {
+    const song = {
+      sectionMarkers: [
+        { id: "m1", name: "Chorus", startSeconds: 4, kind: "chorus" },
+      ],
+      automationCues: [],
+    } as unknown as SongView;
+    const updateSectionMarker = vi.fn(async () => ({}) as TransportSnapshot);
+    const handlers = createMarkerMoveHandlers({
+      getSong: () => song,
+      runAction: (action) => action(),
+      applyPlaybackSnapshot: vi.fn(),
+      refreshSongView: vi.fn(async () => song),
+      updateSectionMarker,
+      upsertAutomationCue: vi.fn(async () => ({}) as TransportSnapshot),
+      getEditAutomationCue: () => vi.fn(),
+    });
+    return { handlers, updateSectionMarker };
+  }
+
+  it("leaves the category alone on a plain horizontal move", async () => {
+    // No lane change → no override written, so the marker keeps following its
+    // kind. Passing a category here would silently pin every dragged marker.
+    const { handlers, updateSectionMarker } = setupMarkers();
+
+    handlers.handleMarkerMoveCommit("m1", 9);
+    await vi.waitFor(() => expect(updateSectionMarker).toHaveBeenCalled());
+
+    expect(updateSectionMarker).toHaveBeenCalledWith(
+      "m1",
+      "Chorus",
+      9,
+      undefined,
+    );
+  });
+
+  it("persists the new lane when the drag crossed into it", async () => {
+    const { handlers, updateSectionMarker } = setupMarkers();
+
+    handlers.handleMarkerMoveCommit("m1", 9, "cue");
+    await vi.waitFor(() => expect(updateSectionMarker).toHaveBeenCalled());
+
+    expect(updateSectionMarker).toHaveBeenCalledWith("m1", "Chorus", 9, "cue");
+  });
+});
+
 describe("handleAutomationCueMoveCommit", () => {
   it("persists a cue move", async () => {
     const { handlers, upsertAutomationCue, getSong } = setup([cue("a", 1)]);

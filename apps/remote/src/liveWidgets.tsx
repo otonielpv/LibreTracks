@@ -5,7 +5,7 @@ import {
   getSongBaseBpm,
   getSongBaseTimeSignature,
   markerColor,
-  markerKindCategory,
+  markerCategory,
   regionEffectiveKey,
   type SongRegionSummary,
   type SongView,
@@ -24,10 +24,12 @@ const STRINGS = getRemoteStrings();
 // bar). This keeps a stack of countdowns/progress bars cheap on stage tablets.
 const WIDGET_MIN_UPDATE_INTERVAL_MS = 1000 / 15;
 
-/** Section markers only — dynamic cues are spoken, not navigation targets. */
+/** Section markers only — dynamic cues are spoken, not navigation targets.
+ * Uses the marker's effective category, so one dragged to the other ruler row
+ * on the desktop appears/disappears here to match. */
 function sectionMarkersOf(songView: SongView | null) {
   return (songView?.sectionMarkers ?? []).filter(
-    (marker) => markerKindCategory(marker.kind) === "section",
+    (marker) => markerCategory(marker) === "section",
   );
 }
 

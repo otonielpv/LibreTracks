@@ -4,8 +4,8 @@
 //! loaded `Song` and persists it; the pure geometry lives in `timeline_math`.
 
 use libretracks_core::{
-    source_seconds_at_view, Marker, MarkerKind, SongRegion, TempoMarker, TimeSignatureMarker,
-    MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    source_seconds_at_view, Marker, MarkerCategory, MarkerKind, SongRegion, TempoMarker,
+    TimeSignatureMarker, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
 };
 
 use crate::audio::engine::{jump_debug_logging_enabled, AudioController};
@@ -57,6 +57,9 @@ impl DesktopSession {
             kind,
             variant,
             color: None,
+            // New markers start in the lane their kind implies; the user can
+            // drag them to the other row afterwards.
+            category_override: None,
         });
         song.section_markers.sort_by(|left, right| {
             left.start_seconds
@@ -70,11 +73,16 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Move and/or rename a marker. `category_override` is `None` for an edit
+    /// that doesn't touch the lane (the common case: a horizontal drag or a
+    /// rename), and `Some(..)` when the user dragged the flag into the other
+    /// ruler row — which flips whether it is announced with a count-in.
     pub fn update_section_marker(
         &mut self,
         section_id: &str,
         name: &str,
         start_seconds: f64,
+        category_override: Option<MarkerCategory>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -100,6 +108,18 @@ impl DesktopSession {
 
         section.name = trimmed_name.to_string();
         section.start_seconds = start_seconds;
+        // Only overwrite the lane when the caller actually decided one, so a
+        // plain move keeps whatever override the marker already had.
+        if let Some(category) = category_override {
+            // Dropping a marker back into its kind's natural lane clears the
+            // override rather than pinning it, so a later kind change follows
+            // the kind again instead of being stuck in the old row.
+            section.category_override = if category == section.kind.category() {
+                None
+            } else {
+                Some(category)
+            };
+        }
         song.section_markers.sort_by(|left, right| {
             left.start_seconds
                 .partial_cmp(&right.start_seconds)
@@ -1042,6 +1062,13 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
         marker.kind = kind;
         marker.variant = variant;
+        // A lane override is only meaningful while it disagrees with the kind.
+        // Retyping a marker to a kind that natively belongs in the row it was
+        // dragged to makes the override redundant, so drop it — otherwise the
+        // marker stays pinned to a row the user never chose for this kind.
+        if marker.category_override == Some(kind.category()) {
+            marker.category_override = None;
+        }
 
         // Section markers ARE read by the engine voice guide (kind+variant pick
         // the announcement clip), so push them live as well as persisting.

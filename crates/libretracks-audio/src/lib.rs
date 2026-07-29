@@ -1184,6 +1184,7 @@ mod tests {
                     kind: MarkerKind::Custom,
                     variant: None,
                     color: None,
+                    category_override: None,
                 },
                 Marker {
                     id: "section_break".into(),
@@ -1193,6 +1194,7 @@ mod tests {
                     kind: MarkerKind::Custom,
                     variant: None,
                     color: None,
+                    category_override: None,
                 },
                 Marker {
                     id: "section_outro".into(),
@@ -1202,6 +1204,7 @@ mod tests {
                     kind: MarkerKind::Custom,
                     variant: None,
                     color: None,
+                    category_override: None,
                 },
             ],
         }
@@ -1328,6 +1331,7 @@ mod tests {
                     kind: MarkerKind::Custom,
                     variant: None,
                     color: None,
+                    category_override: None,
                 },
                 Marker {
                     id: "section_outro".into(),
@@ -1337,6 +1341,7 @@ mod tests {
                     kind: MarkerKind::Custom,
                     variant: None,
                     color: None,
+                    category_override: None,
                 },
             ],
         }
@@ -1643,6 +1648,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         }];
 
         let mut engine = AudioEngine::new();
@@ -1681,6 +1687,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         }];
 
         let mut engine = AudioEngine::new();
@@ -1875,6 +1882,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         }];
 
         let mut engine = AudioEngine::new();

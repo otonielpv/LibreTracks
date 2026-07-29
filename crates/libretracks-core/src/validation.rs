@@ -281,7 +281,9 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             });
         }
 
-        let (previous_id, previous_start_seconds) = match marker.kind.category() {
+        // Effective category, not the kind's: a marker dragged to the other lane
+        // is ordered against that lane's neighbours, matching where it renders.
+        let (previous_id, previous_start_seconds) = match marker.category() {
             crate::model::MarkerCategory::Cue => {
                 (&mut previous_cue_id, &mut previous_cue_start_seconds)
             }
@@ -593,6 +595,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         }];
         assert!(matches!(
             validate_song(&song),
@@ -612,6 +615,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             },
             Marker {
                 id: "m2".into(),
@@ -621,6 +625,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             },
         ];
         assert!(matches!(
@@ -643,6 +648,7 @@ mod tests {
                 kind: MarkerKind::Chorus,
                 variant: None,
                 color: None,
+                category_override: None,
             },
             Marker {
                 id: "cue".into(),
@@ -652,6 +658,7 @@ mod tests {
                 kind: MarkerKind::Build,
                 variant: None,
                 color: None,
+                category_override: None,
             },
         ];
         assert!(validate_song(&song).is_ok());
@@ -670,6 +677,7 @@ mod tests {
                 kind: MarkerKind::Verse,
                 variant: None,
                 color: None,
+                category_override: None,
             },
             Marker {
                 id: "s2".into(),
@@ -679,6 +687,7 @@ mod tests {
                 kind: MarkerKind::Chorus,
                 variant: None,
                 color: None,
+                category_override: None,
             },
         ];
         assert!(matches!(
@@ -698,6 +707,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         }];
         assert!(matches!(
             validate_song(&song),

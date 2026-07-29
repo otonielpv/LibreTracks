@@ -1,6 +1,7 @@
 import type { MarkerKind } from "@libretracks/shared/models";
 import {
   CUE_KINDS,
+  markerCategory,
   markerColor,
   markerKindCategory,
   markerKindColor,
@@ -9,7 +10,13 @@ import {
 // Re-export the shared cue vocabulary + colour helpers so existing desktop call
 // sites keep importing these from "./markerKinds". The single source of truth
 // lives in the shared package (the remote consumes it too).
-export { CUE_KINDS, markerColor, markerKindCategory, markerKindColor };
+export {
+  CUE_KINDS,
+  markerCategory,
+  markerColor,
+  markerKindCategory,
+  markerKindColor,
+};
 
 /** Ordered list of section kinds as shown in the marker "Type" submenu. The
  * order follows a typical song's arc (intro → outro) with Custom last. This is

@@ -10,6 +10,7 @@ import {
   getSongBaseBpm,
   getSongBaseTimeSignature,
   getSongRegionAtPosition,
+  markerCategory,
   getSongTempoRegionAtPosition,
   normalizeAppSettings,
   parseSongKey,
@@ -561,5 +562,32 @@ describe("buildSongTempoRegions / getSongTempoRegionAtPosition", () => {
     });
     expect(getSongTempoRegionAtPosition(song, 5)?.bpm).toBeCloseTo(120, 4);
     expect(getSongTempoRegionAtPosition(song, 50)?.bpm).toBeCloseTo(140, 4);
+  });
+});
+
+describe("markerCategory", () => {
+  it("falls back to the kind when the marker was never dragged", () => {
+    expect(markerCategory({ kind: "chorus" })).toBe("section");
+    expect(markerCategory({ kind: "build" })).toBe("cue");
+    // Unknown/absent kinds count as sections, matching markerKindCategory.
+    expect(markerCategory({})).toBe("section");
+  });
+
+  it("lets a stored override win over the kind", () => {
+    // The whole point of draggable lanes: a Chorus parked in the cue row is
+    // announced as a one-shot, and a Build in the section row gets a count-in.
+    expect(markerCategory({ kind: "chorus", categoryOverride: "cue" })).toBe(
+      "cue",
+    );
+    expect(markerCategory({ kind: "build", categoryOverride: "section" })).toBe(
+      "section",
+    );
+  });
+
+  it("treats a null override as absent", () => {
+    // The backend serializes "no override" as null over the wire.
+    expect(markerCategory({ kind: "build", categoryOverride: null })).toBe(
+      "cue",
+    );
   });
 });

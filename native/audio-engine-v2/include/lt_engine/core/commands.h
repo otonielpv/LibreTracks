@@ -204,6 +204,9 @@ struct CmdSetSongMarkers {
         // the Marker::kind enum when applied to the session. Empty == custom.
         std::string kind;
         int variant = 0;   // numbered section variant; 0 = base
+        // Lane the user dragged the marker into: "section", "cue", or empty to
+        // derive the category from `kind` (the default for every older caller).
+        std::string category_override;
     };
     Id song_id;
     std::vector<MarkerUpdate> markers;

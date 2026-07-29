@@ -4,7 +4,7 @@ use crate::audio::automation::{AutomationCue, MixScene};
 use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::{ClipMoveRequest, DesktopState};
-use libretracks_core::{MarkerKind, TrackKind};
+use libretracks_core::{MarkerCategory, MarkerKind, TrackKind};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -279,6 +279,9 @@ pub fn update_section_marker(
     section_id: String,
     name: String,
     start_seconds: f64,
+    // Set only when the drag crossed into the other ruler lane; `None` leaves
+    // the marker's existing category untouched.
+    category_override: Option<MarkerCategory>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -287,7 +290,13 @@ pub fn update_section_marker(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .update_section_marker(&section_id, &name, start_seconds, &state.audio)
+        .update_section_marker(
+            &section_id,
+            &name,
+            start_seconds,
+            category_override,
+            &state.audio,
+        )
         .map_err(|error| error.to_string())
 }
 

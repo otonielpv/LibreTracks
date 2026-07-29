@@ -10,6 +10,7 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/core/result.h>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -158,6 +159,19 @@ MarkerKind marker_kind_from_string(const std::string& token) noexcept;
 // section. Cues are announced as one-shots without a count-in.
 bool marker_kind_is_cue(MarkerKind kind) noexcept;
 
+// Category a marker was explicitly dragged into, or Inherit when the user never
+// moved it and the kind decides. Stored (unlike the kind-derived category) so a
+// Chorus can fire as a one-shot, or a Build get a count-in.
+enum class MarkerCategoryOverride : std::uint8_t {
+    Inherit = 0,
+    Section = 1,
+    Cue     = 2,
+};
+
+// Map the serialized token ("section"/"cue") to the enum; anything else,
+// including the empty string older callers send, means Inherit.
+MarkerCategoryOverride marker_category_override_from_string(const std::string& token) noexcept;
+
 struct Marker {
     Id          id;
     std::string name;
@@ -165,6 +179,19 @@ struct Marker {
     MarkerKind  kind = MarkerKind::Custom;
     // Numbered section variant (Verse 2, Chorus 3); 0 = unnumbered base.
     int         variant = 0;
+    MarkerCategoryOverride category_override = MarkerCategoryOverride::Inherit;
+
+    // Whether this marker behaves as a dynamic cue: the lane the user dragged it
+    // into wins, falling back to what its kind implies. Every count-in /
+    // one-shot decision must ask the marker, not marker_kind_is_cue(kind).
+    bool is_cue() const noexcept {
+        switch (category_override) {
+            case MarkerCategoryOverride::Cue:     return true;
+            case MarkerCategoryOverride::Section: return false;
+            case MarkerCategoryOverride::Inherit: break;
+        }
+        return marker_kind_is_cue(kind);
+    }
 };
 
 struct TempoMarker {

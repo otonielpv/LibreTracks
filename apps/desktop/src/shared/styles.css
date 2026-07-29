@@ -4315,6 +4315,48 @@ textarea {
   z-index: 5;
 }
 
+/* Lane bands shown while dragging a marker vertically. BOTH rows are drawn and
+   named (Secciones / Avisos) so the user can see what each row means while
+   choosing; `.is-target` marks the one the drop would land in — and therefore
+   whether the marker keeps its count-in. Spans the full ruler width; the
+   vertical guide marks the position within it. */
+.lt-marker-lane-drop-target {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  /* Non-target row: present enough to read as "the other option", faint enough
+     not to compete with the highlighted one. */
+  background: rgb(255 210 130 / 0.04);
+  border-top: 1px solid rgb(255 210 130 / 0.16);
+  border-bottom: 1px solid rgb(255 210 130 / 0.16);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.lt-marker-lane-drop-target.is-target {
+  background: rgb(255 210 130 / 0.14);
+  border-top-color: rgb(255 210 130 / 0.6);
+  border-bottom-color: rgb(255 210 130 / 0.6);
+}
+
+/* Sits at the right edge, away from the flags, which grow rightwards from the
+   playhead-side stem and cluster at the left of the ruler. */
+.lt-marker-lane-drop-target-label {
+  margin-left: auto;
+  padding: 0 8px;
+  color: rgb(255 226 171 / 0.5);
+  font: 600 9px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.lt-marker-lane-drop-target.is-target .lt-marker-lane-drop-target-label {
+  color: rgb(255 226 171 / 0.95);
+}
+
 .lt-marker-drop-guide.is-over-tracks {
   top: 0;
   bottom: 0;

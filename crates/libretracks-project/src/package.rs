@@ -755,6 +755,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             }],
         }
     }

@@ -233,6 +233,7 @@ fn set_song_markers_round_trip() {
             frame: 2025472,
             kind: "verse".into(),
             variant: 0,
+            category_override: None,
         }],
     };
     let json = serde_json::to_string(&cmd).unwrap();
@@ -354,6 +355,7 @@ fn set_song_timeline_window_round_trip() {
             frame: 1024,
             kind: "verse".into(),
             variant: 0,
+            category_override: None,
         }],
         bpm: 111.0,
         beats_per_bar: 4,

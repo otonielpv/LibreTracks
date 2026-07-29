@@ -63,6 +63,14 @@ bool marker_kind_is_cue(MarkerKind kind) noexcept {
     return kind == MarkerKind::EaseDown || kind == MarkerKind::GetReady;
 }
 
+MarkerCategoryOverride marker_category_override_from_string(const std::string& token) noexcept {
+    if (token == "section") return MarkerCategoryOverride::Section;
+    if (token == "cue")     return MarkerCategoryOverride::Cue;
+    // Empty (older callers) or unrecognised: let the kind decide, which is the
+    // behaviour that predates draggable lanes.
+    return MarkerCategoryOverride::Inherit;
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------

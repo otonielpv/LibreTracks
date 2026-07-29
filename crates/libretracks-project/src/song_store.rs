@@ -226,6 +226,9 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            // Legacy sessions predate draggable lanes too: no marker was ever
+            // moved out of its kind's lane.
+            category_override: None,
         })
         .collect::<Vec<_>>();
     section_markers.sort_by(|left, right| {

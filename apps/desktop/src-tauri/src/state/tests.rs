@@ -87,6 +87,7 @@ fn demo_song_with_section() -> Song {
         kind: MarkerKind::Custom,
         variant: None,
         color: None,
+        category_override: None,
     });
     song
 }
@@ -166,6 +167,7 @@ fn demo_song_with_two_sections() -> Song {
         kind: MarkerKind::Custom,
         variant: None,
         color: None,
+        category_override: None,
     });
     song
 }
@@ -180,6 +182,7 @@ fn demo_song_with_three_sections() -> Song {
         kind: MarkerKind::Custom,
         variant: None,
         color: None,
+        category_override: None,
     });
     song
 }
@@ -237,6 +240,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         },
         Marker {
             id: "section_2".into(),
@@ -246,6 +250,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         },
     ];
     song
@@ -570,6 +575,7 @@ fn scheduled_jump_snapshot_reports_execute_time_in_view_seconds_for_varispeed_re
         kind: MarkerKind::Custom,
         variant: None,
         color: None,
+        category_override: None,
     });
     let expected_execute_seconds = warp_timeline_seconds_at(&song, 18.0);
     let mut session = DesktopSession::default();
@@ -2453,6 +2459,7 @@ fn deleting_the_last_clip_shrinks_song_duration_even_if_markers_remain() {
         kind: MarkerKind::Custom,
         variant: None,
         color: None,
+        category_override: None,
     });
     save_song(&song_dir, &song).expect("song should save");
 
@@ -2706,7 +2713,7 @@ fn transport_only_updates_preserve_cross_region_after_bars_schedule() {
         .expect("jump should schedule");
 
     let snapshot = session
-        .update_section_marker("section_1", "Intro B", 1.0, &audio)
+        .update_section_marker("section_1", "Intro B", 1.0, None, &audio)
         .expect("section marker update should succeed");
 
     let pending_jump = snapshot
@@ -2716,6 +2723,70 @@ fn transport_only_updates_preserve_cross_region_after_bars_schedule() {
     assert_eq!(pending_jump.target_marker_name, "Outro");
     assert_eq!(pending_jump.trigger, "after_bars:2");
     assert!((pending_jump.execute_at_seconds - 10.0).abs() < 0.0001);
+}
+
+#[test]
+fn dragging_a_marker_to_the_other_lane_stores_a_category_override() {
+    let mut session = DesktopSession::default();
+    session
+        .engine
+        .load_song(demo_song_with_section())
+        .expect("song should load into engine");
+    let audio = crate::audio::engine::AudioController::default();
+
+    // A move with no lane change must not invent an override.
+    session
+        .update_section_marker("section_1", "Intro", 1.0, None, &audio)
+        .expect("plain move should succeed");
+    let marker = session
+        .engine
+        .song()
+        .and_then(|song| song.section_markers.first())
+        .cloned()
+        .expect("marker should exist");
+    assert_eq!(marker.category_override, None);
+    assert_eq!(marker.category(), libretracks_core::MarkerCategory::Section);
+
+    // Dropped into the cue row: stored, and it now governs the category.
+    session
+        .update_section_marker(
+            "section_1",
+            "Intro",
+            1.0,
+            Some(libretracks_core::MarkerCategory::Cue),
+            &audio,
+        )
+        .expect("lane change should succeed");
+    let marker = session
+        .engine
+        .song()
+        .and_then(|song| song.section_markers.first())
+        .cloned()
+        .expect("marker should exist");
+    assert_eq!(
+        marker.category_override,
+        Some(libretracks_core::MarkerCategory::Cue)
+    );
+    assert_eq!(marker.category(), libretracks_core::MarkerCategory::Cue);
+
+    // Dropped back where its kind belongs: the override is cleared rather than
+    // pinned, so the marker follows its kind again.
+    session
+        .update_section_marker(
+            "section_1",
+            "Intro",
+            1.0,
+            Some(libretracks_core::MarkerCategory::Section),
+            &audio,
+        )
+        .expect("lane change back should succeed");
+    let marker = session
+        .engine
+        .song()
+        .and_then(|song| song.section_markers.first())
+        .cloned()
+        .expect("marker should exist");
+    assert_eq!(marker.category_override, None);
 }
 
 #[test]
@@ -2773,7 +2844,7 @@ fn transport_only_updates_preserve_pending_jump_when_target_survives() {
         .expect("jump should schedule");
 
     let snapshot = session
-        .update_section_marker("section_1", "Intro B", 1.0, &audio)
+        .update_section_marker("section_1", "Intro B", 1.0, None, &audio)
         .expect("section marker update should succeed");
 
     let pending_jump = snapshot
@@ -2810,7 +2881,7 @@ fn transport_only_updates_drop_pending_jump_when_target_moves_before_position() 
         .expect("jump should schedule");
 
     let snapshot = session
-        .update_section_marker("section_2", "Verse", 3.0, &audio)
+        .update_section_marker("section_2", "Verse", 3.0, None, &audio)
         .expect("section marker update should succeed");
 
     assert_eq!(snapshot.position_seconds, 5.0);
@@ -2896,7 +2967,7 @@ fn updating_a_section_marker_stays_in_memory_until_save() {
 
     let audio = crate::audio::engine::AudioController::default();
     let snapshot = session
-        .update_section_marker("section_1", "Verse", 2.5, &audio)
+        .update_section_marker("section_1", "Verse", 2.5, None, &audio)
         .expect("section marker should update");
     let updated_section = session
         .song_view()
@@ -3573,7 +3644,7 @@ fn section_marker_update_does_not_trigger_session_rebuild() {
     let audio = crate::audio::engine::AudioController::default();
 
     session
-        .update_section_marker("section_1", "Verse", 3.0, &audio)
+        .update_section_marker("section_1", "Verse", 3.0, None, &audio)
         .expect("section marker update should succeed");
 
     let diagnostics = audio.realtime_control_diagnostics();

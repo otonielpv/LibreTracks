@@ -2606,6 +2606,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         marker.frame = update.frame;
                         marker.kind = marker_kind_from_string(update.kind);
                         marker.variant = update.variant;
+                        marker.category_override = marker_category_override_from_string(update.category_override);
                         song.markers.push_back(std::move(marker));
                     }
                     changed = true;
@@ -2770,6 +2771,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         marker.frame = update.frame;
                         marker.kind = marker_kind_from_string(update.kind);
                         marker.variant = update.variant;
+                        marker.category_override = marker_category_override_from_string(update.category_override);
                         song.markers.push_back(std::move(marker));
                     }
 
@@ -2928,6 +2930,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     marker.frame = update.frame;
                     marker.kind = marker_kind_from_string(update.kind);
                     marker.variant = update.variant;
+                    marker.category_override = marker_category_override_from_string(update.category_override);
                     song.markers.push_back(std::move(marker));
                 }
 

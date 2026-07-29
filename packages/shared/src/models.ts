@@ -68,9 +68,10 @@ export type MarkerKind =
   | "next_song"
   | "custom";
 
-/** Whether a {@link MarkerKind} is a song section (Verse, Chorus — name +
- * count-in) or a dynamic cue (Build, All In — one-shot, no count-in). Derived
- * from the kind, never stored. */
+/** Whether a marker behaves as a song section (Verse, Chorus — name + count-in)
+ * or a dynamic cue (Build, All In — one-shot, no count-in). Normally derived
+ * from the kind; a marker dragged to the other ruler lane stores an override
+ * (see `categoryOverride` on {@link SectionMarkerSummary}). */
 export type MarkerCategory = "section" | "cue";
 
 /** The dynamic-cue kinds. Single source of truth shared by every surface
@@ -108,6 +109,21 @@ export function markerKindCategory(
   kind: MarkerKind | undefined,
 ): MarkerCategory {
   return kind && CUE_KIND_SET.has(kind) ? "cue" : "section";
+}
+
+/** The category that actually governs a marker: the lane the user dragged it
+ * into, else the one its kind implies. Mirrors Rust `Marker::category`.
+ *
+ * Anything that branches on section-vs-cue — which ruler lane it draws in,
+ * whether it is a jump target, whether it gets a count-in — must call this
+ * rather than {@link markerKindCategory}, or a dragged marker keeps behaving
+ * like its old category. Use `markerKindCategory` only when asking about a bare
+ * kind with no marker in hand (e.g. building the "Type" menu). */
+export function markerCategory(marker: {
+  kind?: MarkerKind;
+  categoryOverride?: MarkerCategory | null;
+}): MarkerCategory {
+  return marker.categoryOverride ?? markerKindCategory(marker.kind);
 }
 
 /** Resting-state colour per marker kind. Sections read as distinct hues;
@@ -190,6 +206,10 @@ export type SectionMarkerSummary = {
   /** User-chosen colour override (Custom markers). Absent = use the kind
    * palette. */
   color?: string | null;
+  /** Lane the user dragged this marker into, overriding what its kind implies.
+   * Absent — the default, and what every marker created before this feature has
+   * — means "wherever my kind belongs". Read it via {@link markerCategory}. */
+  categoryOverride?: MarkerCategory | null;
 };
 
 export type SongMasterSummary = {

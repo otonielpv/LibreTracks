@@ -305,7 +305,7 @@ fn dispatch_midi_action(
         let mut markers = song
             .section_markers
             .iter()
-            .filter(|marker| marker.kind.category() == libretracks_core::MarkerCategory::Section)
+            .filter(|marker| marker.category() == libretracks_core::MarkerCategory::Section)
             .collect::<Vec<_>>();
         markers.sort_by(|left, right| {
             left.start_seconds

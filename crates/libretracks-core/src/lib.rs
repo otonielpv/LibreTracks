@@ -96,6 +96,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             }],
         }
     }
@@ -368,6 +369,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         });
 
         let error = validate_song(&song).expect_err("song should be invalid");
@@ -385,6 +387,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         });
 
         assert!(validate_song(&song).is_ok());
@@ -402,6 +405,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             },
             Marker {
                 id: "section_outro".into(),
@@ -411,6 +415,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             },
         ];
 
@@ -435,6 +440,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             },
             Marker {
                 id: "section_outro".into(),
@@ -444,6 +450,7 @@ mod tests {
                 kind: MarkerKind::Custom,
                 variant: None,
                 color: None,
+                category_override: None,
             },
         ];
 
@@ -466,6 +473,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         });
 
         assert_eq!(song.next_marker_name(), "Marker 2");

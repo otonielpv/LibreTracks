@@ -164,7 +164,16 @@ const VoiceGuideClip* VoiceGuideClipBank::section_for(MarkerKind kind, int varia
         if (!v.samples.empty()) return &v;   // numbered variant present
         // else fall through to base
     }
-    return section.base.samples.empty() ? nullptr : &section.base;
+    if (!section.base.samples.empty()) return &section.base;
+    // Mirror of the fallback in cue_for: a *cue* kind reaching this lookup was
+    // dragged into the section row and has nothing under sections/, so speak
+    // its cue recording and let the count-in wrap around it. A section kind
+    // with no recording (Custom, or an uncovered one) stays silent.
+    if (marker_kind_is_cue(kind)) {
+        const VoiceGuideClip& cue = cues[static_cast<std::size_t>(idx)];
+        if (!cue.samples.empty()) return &cue;
+    }
+    return nullptr;
 }
 
 const VoiceGuideClip* VoiceGuideClipBank::count_for(int beat_number) const noexcept {
@@ -177,7 +186,16 @@ const VoiceGuideClip* VoiceGuideClipBank::cue_for(MarkerKind kind) const noexcep
     const int idx = static_cast<int>(kind);
     if (idx < 0 || idx >= kKindCount) return nullptr;
     const VoiceGuideClip& clip = cues[static_cast<std::size_t>(idx)];
-    return clip.samples.empty() ? nullptr : &clip;
+    if (!clip.samples.empty()) return &clip;
+    // A *section* kind reaching this lookup can only be one dragged into the
+    // cue row; the pack ships no cues/ recording for it, so speak its section
+    // clip. The lane chose the delivery (one-shot, no count-in), the kind still
+    // chooses the words — otherwise a dragged Chorus would announce as silence.
+    //
+    // Deliberately NOT a blanket fallback: a genuine cue kind with no recording
+    // in the active language must stay silent rather than borrow a section clip.
+    if (!marker_kind_is_cue(kind)) return section_for(kind, 0);
+    return nullptr;
 }
 
 // ── Bank loading (off the audio thread) ──────────────────────────────────────
@@ -455,7 +473,7 @@ const Marker* VoiceGuideRenderer::upcoming_marker(const Song* song, Frame frame)
     const Marker* best = nullptr;
     for (const auto& marker : song->markers) {
         if (marker.kind == MarkerKind::Custom) continue;       // no recording
-        if (marker_kind_is_cue(marker.kind)) continue;         // cues aren't downbeat targets
+        if (marker.is_cue()) continue;                         // cues aren't downbeat targets
         if (marker.frame < frame) continue;
         if (!best || marker.frame < best->frame) best = &marker;
     }
@@ -466,7 +484,7 @@ const Marker* VoiceGuideRenderer::upcoming_cue(const Song* song, Frame frame) no
     if (!song) return nullptr;
     const Marker* best = nullptr;
     for (const auto& marker : song->markers) {
-        if (!marker_kind_is_cue(marker.kind)) continue;
+        if (!marker.is_cue()) continue;
         if (marker.frame < frame) continue;
         if (!best || marker.frame < best->frame) best = &marker;
     }
@@ -610,7 +628,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                         Frame chained_marker_frame[kMaxChainedCues] = {};
                         int chained_count = 0;
                         for (const auto& cue : song->markers) {
-                            if (!marker_kind_is_cue(cue.kind)) continue;
+                            if (!cue.is_cue()) continue;
                             if (cue.frame < cue_window_start || cue.frame > cue_anchor_frame)
                                 continue;
                             const VoiceGuideClip* clip = bank->cue_for(cue.kind);

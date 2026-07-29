@@ -54,6 +54,7 @@ import {
 import {
   availableCueKinds,
   availableSectionKinds,
+  markerCategory,
   markerColor,
   markerKindCategory,
   markerKindColor,
@@ -134,7 +135,7 @@ export function defaultAutomationTarget(
   }
 
   const nextMarker = [...currentSong.sectionMarkers]
-    .filter((marker) => markerKindCategory(marker.kind) === "section")
+    .filter((marker) => markerCategory(marker) === "section")
     .sort((left, right) => left.startSeconds - right.startSeconds)
     .find((marker) => marker.startSeconds > positionSeconds + 0.01);
   if (nextMarker) {
@@ -147,7 +148,7 @@ export function defaultAutomationTarget(
   }
 
   const firstMarker = currentSong.sectionMarkers.find(
-    (marker) => markerKindCategory(marker.kind) === "section",
+    (marker) => markerCategory(marker) === "section",
   );
   if (firstMarker) {
     return { kind: "marker", markerId: firstMarker.id };

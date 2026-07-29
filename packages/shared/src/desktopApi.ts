@@ -13,6 +13,7 @@ import type {
   LibraryAssetSummary,
   LibraryImportCompleteEvent,
   LibraryImportProgressEvent,
+  MarkerCategory,
   MarkerKind,
   MixSceneSummary,
   PadCatalogEntry,
@@ -1209,15 +1210,20 @@ export async function createSectionMarker(
   });
 }
 
+/** Move and/or rename a marker. Pass `categoryOverride` only when the edit
+ * changed which ruler lane the marker sits in (a vertical drag); omitting it
+ * leaves the marker's current category alone. */
 export async function updateSectionMarker(
   sectionId: string,
   name: string,
   startSeconds: number,
+  categoryOverride?: MarkerCategory,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("update_section_marker", {
     sectionId,
     name,
     startSeconds,
+    categoryOverride: categoryOverride ?? null,
   });
 }
 

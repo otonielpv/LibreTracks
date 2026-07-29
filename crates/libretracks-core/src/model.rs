@@ -330,6 +330,29 @@ pub struct Marker {
     /// allowed on any marker. `None` falls back to the kind palette.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Lane the user dragged this marker into, overriding the category its
+    /// [`MarkerKind`] implies. `None` — the default, and what every session
+    /// saved before this feature deserializes to — means "wherever my kind
+    /// belongs", so markers still land in their natural lane out of the box.
+    ///
+    /// This is the one place category is *stored* rather than derived: it lets a
+    /// Chorus be announced as a one-shot cue, or a Build get a count-in, without
+    /// changing its kind (and therefore its name, colour and voice clip). Read
+    /// it through [`Marker::category`], never directly, so the fallback to the
+    /// kind stays in one place.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category_override: Option<MarkerCategory>,
+}
+
+impl Marker {
+    /// The category that actually governs this marker: the lane the user dragged
+    /// it into, or the one its kind implies. Everything that branches on
+    /// section-vs-cue (voice-guide count-in, jump targets, ruler lane, ordering)
+    /// must go through here rather than calling `kind.category()`, or a dragged
+    /// marker behaves like its old category.
+    pub fn category(&self) -> MarkerCategory {
+        self.category_override.unwrap_or_else(|| self.kind.category())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -504,6 +527,7 @@ mod tests {
             kind: MarkerKind::Custom,
             variant: None,
             color: None,
+            category_override: None,
         }
     }
 
@@ -640,6 +664,7 @@ mod tests {
             kind: MarkerKind::Chorus,
             variant: None,
             color: None,
+            category_override: None,
         };
         let json = serde_json::to_string(&marker).expect("serialize");
         // Enum serializes snake_case to match the camelCase session schema style.
@@ -658,9 +683,62 @@ mod tests {
             kind: MarkerKind::PreChorus,
             variant: None,
             color: None,
+            category_override: None,
         };
         let json = serde_json::to_string(&marker).expect("serialize");
         assert!(json.contains("\"kind\":\"pre_chorus\""), "got: {json}");
+    }
+
+    #[test]
+    fn marker_category_falls_back_to_the_kind() {
+        let mut marker = marker("m", 0.0, None);
+        marker.kind = MarkerKind::Chorus;
+        assert_eq!(marker.category(), MarkerCategory::Section);
+
+        marker.kind = MarkerKind::Build;
+        assert_eq!(marker.category(), MarkerCategory::Cue);
+    }
+
+    #[test]
+    fn stored_category_override_wins_over_the_kind() {
+        // Dragging a marker to the other ruler row is what writes this: the
+        // kind (and so the spoken word) stays, the announcement style flips.
+        let mut marker = marker("m", 0.0, None);
+        marker.kind = MarkerKind::Chorus;
+        marker.category_override = Some(MarkerCategory::Cue);
+        assert_eq!(marker.category(), MarkerCategory::Cue);
+
+        marker.kind = MarkerKind::Build;
+        marker.category_override = Some(MarkerCategory::Section);
+        assert_eq!(marker.category(), MarkerCategory::Section);
+    }
+
+    #[test]
+    fn sessions_without_a_category_override_still_load() {
+        // Every session saved before draggable lanes lacks the field; it must
+        // deserialize to "no override" rather than failing the whole load.
+        let legacy = r#"{
+            "id": "m1",
+            "name": "Coro",
+            "startSeconds": 4.0,
+            "digit": null,
+            "kind": "chorus"
+        }"#;
+        let marker: Marker = serde_json::from_str(legacy).expect("legacy load");
+        assert_eq!(marker.category_override, None);
+        assert_eq!(marker.category(), MarkerCategory::Section);
+    }
+
+    #[test]
+    fn category_override_round_trips_through_json() {
+        let mut marker = marker("m", 0.0, None);
+        marker.kind = MarkerKind::Chorus;
+        marker.category_override = Some(MarkerCategory::Cue);
+
+        let json = serde_json::to_string(&marker).expect("serialize");
+        assert!(json.contains("\"categoryOverride\":\"cue\""), "got: {json}");
+        let back: Marker = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, marker);
     }
 }
 

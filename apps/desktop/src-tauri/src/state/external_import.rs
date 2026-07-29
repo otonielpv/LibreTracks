@@ -673,6 +673,7 @@ fn append_imported_section_marker(song: &mut Song, start_seconds: f64, name: &st
         kind: MarkerKind::Custom,
         variant: None,
         color: None,
+        category_override: None,
     });
 }
 

@@ -395,6 +395,13 @@ pub struct MarkerUpdate {
     /// with fallback to the base clip.
     #[serde(default)]
     pub variant: i32,
+    /// Lane the user dragged this marker into: `"section"` or `"cue"`. Absent
+    /// (the default, and what older callers send) means the engine derives the
+    /// category from `kind`, as it always did. When present it flips the
+    /// announcement style — a section becomes a one-shot, a cue gets a count-in
+    /// — without changing which clip plays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category_override: Option<String>,
 }
 
 fn default_marker_kind() -> String {

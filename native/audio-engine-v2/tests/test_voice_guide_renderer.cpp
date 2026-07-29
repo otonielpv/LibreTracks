@@ -788,3 +788,59 @@ TEST_CASE("new marker kinds report the right category") {
     CHECK(marker_kind_from_string("get_ready") == MarkerKind::GetReady);
     CHECK(marker_kind_from_string("next_song") == MarkerKind::NextSong);
 }
+
+// Dragging a marker between the two ruler rows stores a category override. The
+// kind (and so the word spoken) is untouched; only the delivery flips, so a
+// Chorus parked in the cue row must stop being a count-in target.
+TEST_CASE("a category override decides whether a marker is a cue") {
+    Marker marker;
+    marker.kind = MarkerKind::Chorus;
+
+    // Untouched markers follow their kind, exactly as before the feature.
+    CHECK_FALSE(marker.is_cue());
+
+    marker.category_override = MarkerCategoryOverride::Cue;
+    CHECK(marker.is_cue());
+
+    // ...and the mirror case: a cue kind announced as a section.
+    Marker build;
+    build.kind = MarkerKind::Build;
+    CHECK(build.is_cue());
+    build.category_override = MarkerCategoryOverride::Section;
+    CHECK_FALSE(build.is_cue());
+
+    // Inherit is the wire default, so older callers keep the old behaviour.
+    build.category_override = MarkerCategoryOverride::Inherit;
+    CHECK(build.is_cue());
+}
+
+TEST_CASE("category override tokens map from the wire format") {
+    CHECK(marker_category_override_from_string("section")
+          == MarkerCategoryOverride::Section);
+    CHECK(marker_category_override_from_string("cue")
+          == MarkerCategoryOverride::Cue);
+    // Absent (older callers) and unknown tokens both defer to the kind rather
+    // than silently picking a lane.
+    CHECK(marker_category_override_from_string("") == MarkerCategoryOverride::Inherit);
+    CHECK(marker_category_override_from_string("bogus") == MarkerCategoryOverride::Inherit);
+}
+
+// A section kind has no recording under cues/ and vice versa. Without the
+// cross-fallback in the clip bank a dragged marker would announce as silence,
+// which reads as the drag having broken the marker.
+TEST_CASE("dragged markers still resolve a voice clip") {
+    VoiceGuideClipBank bank;
+    add_cue_clips(bank);
+    bank.sections[static_cast<std::size_t>(MarkerKind::Chorus)]
+        .base.samples.assign(240, 0.5f);
+
+    // Chorus dragged into the cue row: cue_for must fall back to its section clip.
+    const VoiceGuideClip* chorus_as_cue = bank.cue_for(MarkerKind::Chorus);
+    REQUIRE(static_cast<bool>(chorus_as_cue));
+    CHECK(!chorus_as_cue->samples.empty());
+
+    // Build dragged into the section row: section_for falls back to its cue clip.
+    const VoiceGuideClip* build_as_section = bank.section_for(MarkerKind::Build, 0);
+    REQUIRE(static_cast<bool>(build_as_section));
+    CHECK(!build_as_section->samples.empty());
+}
