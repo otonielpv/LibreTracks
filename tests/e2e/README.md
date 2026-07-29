@@ -26,7 +26,8 @@ a clear error on non-Windows platforms via the service's own guards.
 3. **A built app binary** at
    `target-desktop-native/release/libretracks-desktop.exe`. Build it with:
 
-   ```bash
+   ```powershell
+   $env:LIBRETRACKS_ENGINE_E2E_CAPTURE = "1"
    npm run build:desktop:native
    ```
 

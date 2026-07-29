@@ -123,14 +123,16 @@ const ensureEngineV2 = (normalizedEnv) => {
   const useLibSndFile = "ON";
   const useR8Brain = "ON";
   const useFFmpeg = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_FFMPEG) ? "ON" : "OFF";
+  const useE2ECapture = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_E2E_CAPTURE) ? "ON" : "OFF";
   const bungeeDir = detectBungeeDir(normalizedEnv);
   const useBungee = useBungeeRequested === "ON" && bungeeDir ? "ON" : "OFF";
   const asioSdkDir = detectAsioSdkDir(normalizedEnv);
   const buildName = useBungeeRequested === "ON"
     ? (useFFmpeg === "ON" ? "build-bungee-on-ffmpeg" : "build-bungee-on")
     : (useFFmpeg === "ON" ? "build-bungee-off-ffmpeg" : "build-bungee-off");
-  const buildDir = path.join(repoRoot, "native", "audio-engine-v2", buildName);
-  const buildArg = `native/audio-engine-v2/${buildName}`;
+  const resolvedBuildName = useE2ECapture === "ON" ? `${buildName}-e2e` : buildName;
+  const buildDir = path.join(repoRoot, "native", "audio-engine-v2", resolvedBuildName);
+  const buildArg = `native/audio-engine-v2/${resolvedBuildName}`;
   const buildConfig = mode === "build" || mode === "test" ? "Release" : "Debug";
   const libDir = process.platform === "win32" ? path.join(buildDir, buildConfig) : buildDir;
 
@@ -153,6 +155,7 @@ const ensureEngineV2 = (normalizedEnv) => {
   console.log(`LT_ENGINE_USE_LIBSNDFILE: ${useLibSndFile}`);
   console.log(`LT_ENGINE_USE_R8BRAIN: ${useR8Brain}`);
   console.log(`LT_ENGINE_USE_FFMPEG: ${useFFmpeg}`);
+  console.log(`LT_ENGINE_ENABLE_E2E_CAPTURE: ${useE2ECapture}`);
 
   if (isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_CLEAN) && existsSync(buildDir)) {
     rmSync(buildDir, { recursive: true, force: true });
@@ -170,6 +173,7 @@ const ensureEngineV2 = (normalizedEnv) => {
     `-DLT_ENGINE_USE_FFMPEG=${useFFmpeg}`,
     `-DLT_ENGINE_USE_LIBSNDFILE=${useLibSndFile}`,
     `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
+    `-DLT_ENGINE_ENABLE_E2E_CAPTURE=${useE2ECapture}`,
   ];
   if (useBungee === "ON") {
     configureArgs.push(`-DLT_BUNGEE_DIR=${bungeeDir}`);

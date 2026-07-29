@@ -113,6 +113,8 @@ jobs:
       - name: Build desktop app for E2E
         if: runner.os == 'Windows'
         continue-on-error: true
+        env:
+          LIBRETRACKS_ENGINE_E2E_CAPTURE: "1"
         run: npm run build:desktop:native
 
       - name: Run E2E tests (Windows)

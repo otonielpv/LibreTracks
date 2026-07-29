@@ -18,6 +18,10 @@ option(LT_ENGINE_ENABLE_ASAN
     "Enable AddressSanitizer for supported debug/development builds"
     OFF)
 
+option(LT_ENGINE_ENABLE_E2E_CAPTURE
+    "Enable the final-output capture ring used only by WebDriver E2E tests"
+    OFF)
+
 # Decoder backends. libsndfile can stay enabled for WAV/FLAC while FFmpeg/libav
 # handles MP3/M4A/OGG/Opus/etc.
 option(LT_ENGINE_USE_FFMPEG

@@ -76,6 +76,7 @@ add_subdirectory(src/ffi)
 
 target_compile_definitions(lt_audio_engine_v2 PUBLIC
     LT_ENGINE_V2_BUILD=1
+    LT_ENGINE_ENABLE_E2E_CAPTURE=$<BOOL:${LT_ENGINE_ENABLE_E2E_CAPTURE}>
     _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING
 )
 

@@ -37,6 +37,7 @@ if (-not $env:CMAKE_TOOLCHAIN_FILE) {
 }
 $useBungeeRequested = if ($env:LIBRETRACKS_ENGINE_V2_BUNGEE -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $useFFmpeg = if ($env:LIBRETRACKS_ENGINE_V2_FFMPEG -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+$useE2ECapture = if ($env:LIBRETRACKS_ENGINE_E2E_CAPTURE -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 
 function Test-CandidateChildPath {
   param(
@@ -82,6 +83,9 @@ $engineV2BuildName = if ($useBungeeRequested -eq "ON") {
   if ($useFFmpeg -eq "ON") { "build-bungee-on-ffmpeg" } else { "build-bungee-on" }
 } else {
   if ($useFFmpeg -eq "ON") { "build-bungee-off-ffmpeg" } else { "build-bungee-off" }
+}
+if ($useE2ECapture -eq "ON") {
+  $engineV2BuildName = "$engineV2BuildName-e2e"
 }
 $engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\$engineV2BuildName"
 $engineV2Config = if ($Mode -eq "build" -or $Mode -eq "test") { "Release" } else { "Debug" }
@@ -348,6 +352,7 @@ Write-Host "Audio Engine v2 lib dir: $engineV2LibDir"
 Write-Host "LT_ENGINE_USE_LIBSNDFILE: $useLibSndFile"
 Write-Host "LT_ENGINE_USE_R8BRAIN: $useR8Brain"
 Write-Host "LT_ENGINE_USE_FFMPEG: $useFFmpeg"
+Write-Host "LT_ENGINE_ENABLE_E2E_CAPTURE: $useE2ECapture"
 if ($env:LIBRETRACKS_AUDIO_DEBUG -or $env:LIBRETRACKS_JUMP_DEBUG) {
   Write-Host "LIBRETRACKS_AUDIO_DEBUG_LOG: $env:LIBRETRACKS_AUDIO_DEBUG_LOG"
 }
@@ -367,7 +372,8 @@ $cmakeConfigureArgs = @(
   "-DLT_ENGINE_USE_BUNGEE=$useBungee",
   "-DLT_ENGINE_USE_FFMPEG=$useFFmpeg",
   "-DLT_ENGINE_USE_LIBSNDFILE=$useLibSndFile",
-  "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain"
+  "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain",
+  "-DLT_ENGINE_ENABLE_E2E_CAPTURE=$useE2ECapture"
 )
 if ($useBungee -eq "ON") {
   $cmakeConfigureArgs += "-DLT_BUNGEE_DIR=$bungeeDir"

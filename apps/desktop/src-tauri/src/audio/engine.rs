@@ -2252,8 +2252,7 @@ impl AudioController {
     }
 
     /// E2E-only: capture the most recent final stereo output for spectral
-    /// analysis. Mirrors `current_output_meter_level`'s non-blocking `try_lock`
-    /// contract so it never contends the audio path.
+    /// analysis. Release builds without the E2E capture flag return an error.
     pub fn capture_output_samples(
         &self,
     ) -> Result<AudioOutputCapture, DesktopError> {

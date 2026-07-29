@@ -177,7 +177,7 @@ pub fn get_audio_output_meter(
         .map_err(|error| error.to_string())
 }
 
-/// E2E-only: capture the most recent final stereo output for spectral analysis.
+/// E2E-only: available only when the native engine was built with capture.
 #[tauri::command]
 pub fn get_audio_output_capture(
     state: State<'_, DesktopState>,

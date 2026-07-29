@@ -1425,6 +1425,7 @@ std::string EngineImpl::get_source_peaks(const std::string& source_id,
 std::string EngineImpl::capture_output_samples() const {
     json out;
     out["ok"] = false;
+#if LT_ENGINE_ENABLE_E2E_CAPTURE
     if (!mixer_) {
         out["error"] = "mixer is not available";
         return out.dump();
@@ -1447,6 +1448,9 @@ std::string EngineImpl::capture_output_samples() const {
     out["frames"] = static_cast<std::uint64_t>(frames);
     out["left"] = std::move(left);
     out["right"] = std::move(right);
+#else
+    out["error"] = "output capture disabled in this build";
+#endif
     return out.dump();
 }
 

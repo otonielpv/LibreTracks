@@ -262,7 +262,7 @@ export async function getAudioOutputMeter(): Promise<AudioOutputMeterLevel> {
 
 /**
  * E2E-only: capture the most recent final stereo output for spectral analysis.
- * Retries on the same transient state-lock error as the output meter.
+ * The native command returns an error unless its build flag is enabled.
  */
 export async function getAudioOutputCapture(): Promise<AudioOutputCapture> {
   const maxAttempts = 6;
