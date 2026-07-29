@@ -5433,8 +5433,33 @@ textarea {
   box-shadow: inset 0 -2px 0 #57f1db;
 }
 
+/* Drop-into-folder. A left-edge inset line is not usable here: a coloured
+   folder already paints its own 2px accent bar on that exact edge via
+   .lt-track-header::before (z-index 1), which sits above the box-shadow and
+   hides the indicator entirely. So this mirrors the compact mixer instead —
+   light up the whole header with a full teal ring and a wash, which no track
+   colour can obscure. */
 .lt-track-header-row.is-drop-inside-folder .lt-track-header {
-  box-shadow: inset 2px 0 0 #57f1db;
+  box-shadow:
+    inset 0 0 0 2px #57f1db,
+    inset 0 0 12px rgb(87 241 219 / 0.25);
+}
+
+/* Teal wash over the whole header. Repurposes the header's own ::after — the
+   element that normally paints the per-track colour tint — so the folder
+   colour is replaced by the wash rather than layered under it. That also
+   keeps it edge-to-edge (the body carries padding, so anchoring to the body
+   would leave the outer strip untinted) and above the ::before accent bar. */
+.lt-track-header-row.is-drop-inside-folder .lt-track-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Above the ::before accent bar (1), below .lt-track-header-body (2) so the
+     folder name and buttons stay at full contrast. */
+  z-index: 1;
+  background: rgb(87 241 219 / 0.16);
+  opacity: 1;
 }
 
 .busy-overlay {
