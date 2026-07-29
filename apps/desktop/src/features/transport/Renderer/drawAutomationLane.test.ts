@@ -146,4 +146,60 @@ describe("drawAutomationLane", () => {
     drawAutomationLane(ctx, buildSnapshot([]), 0);
     expect(calls.length).toBe(0);
   });
+
+  it("fills the diamond and pill opaquely so the grid cannot show through", () => {
+    // The cue chips sit over the full-strength timeline grid; a translucent
+    // body let those lines read straight through the label text.
+    const fills: string[] = [];
+    let fillStyle = "";
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(() => fills.push(fillStyle)),
+      stroke: vi.fn(),
+      roundRect: vi.fn(),
+      fillText: vi.fn(),
+      measureText: (text: string) => ({ width: text.length * 7 }),
+      set fillStyle(value: string) {
+        fillStyle = value;
+      },
+      get fillStyle() {
+        return fillStyle;
+      },
+      set font(_v: string) {},
+      set strokeStyle(_v: string) {},
+      set lineWidth(_v: number) {},
+      set textBaseline(_v: string) {},
+    } as unknown as CanvasRenderingContext2D;
+
+    for (const enabled of [true, false]) {
+      fills.length = 0;
+      drawAutomationLane(
+        ctx,
+        buildSnapshot([
+          {
+            id: `cue-${enabled}`,
+            name: "Salto a Outro",
+            atSeconds: 4,
+            enabled,
+            actions: [
+              {
+                type: "jump",
+                target: { kind: "region", regionId: "r1" },
+                transition: { mode: "instant", durationSeconds: null },
+              },
+            ],
+          },
+        ]),
+        0,
+      );
+
+      expect(fills.length).toBeGreaterThan(0);
+      expect(fills.every((style) => style.startsWith("rgb("))).toBe(true);
+    }
+  });
 });

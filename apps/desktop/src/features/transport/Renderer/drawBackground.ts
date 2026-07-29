@@ -356,12 +356,16 @@ export function drawRulerRegion(
   const blockHeight = LANE_REGIONS.height - 6;
 
   context.save();
-  context.fillStyle = isSelected
-    ? "rgba(255, 226, 171, 0.28)"
-    : "rgba(255, 226, 171, 0.14)";
+  // Opaque block, same reasoning as the marker flags: a translucent fill let
+  // the ruler's grid show through the song name. Pre-blending against the
+  // backdrop keeps the familiar warm tint while masking whatever is behind.
+  context.fillStyle = blendOnRulerBackdrop(
+    "#ffe2ab",
+    isSelected ? 0.34 : 0.2,
+  );
   context.strokeStyle = isSelected
-    ? "rgba(255, 226, 171, 0.72)"
-    : "rgba(255, 226, 171, 0.32)";
+    ? "rgba(255, 226, 171, 0.85)"
+    : "rgba(255, 226, 171, 0.45)";
   context.lineWidth = 1;
   context.beginPath();
   context.roundRect(blockLeft, blockTop, blockWidth, blockHeight, 6);
@@ -376,7 +380,9 @@ export function drawRulerRegion(
     blockHeight,
   );
   context.clip();
-  context.fillStyle = isSelected ? "#fff4d6" : "rgba(255, 244, 214, 0.92)";
+  // Fully opaque in both states — the resting name used to sit at 92% alpha on
+  // top of a translucent block, which is where it lost its edge.
+  context.fillStyle = isSelected ? "#fff4d6" : "#ffefc9";
   context.font = '700 10px "Space Grotesk", sans-serif';
   context.textBaseline = "middle";
   const textLeft = blockLeft + 7;
@@ -409,8 +415,8 @@ export function drawRulerRegion(
     const badgeWidth = Math.ceil(badgeTextWidth + badgePaddingX * 2);
     const badgeTop = Math.round(textCenterY - badgeHeight / 2);
 
-    context.fillStyle = "rgba(12, 12, 18, 0.82)";
-    context.strokeStyle = "rgba(255, 226, 171, 0.24)";
+    context.fillStyle = "rgb(16, 16, 22)";
+    context.strokeStyle = "rgba(255, 226, 171, 0.38)";
     context.lineWidth = 1;
     context.beginPath();
     context.roundRect(badgeLeft, badgeTop, badgeWidth, badgeHeight, 999);
@@ -664,16 +670,18 @@ export function drawRulerBackgroundLayer(
   context.fillStyle = "#2a2a2a";
   context.fillRect(0, 0, args.width, args.height);
 
-  if (args.activeVamp) {
-    drawActiveVampRange(
-      context,
-      args.activeVamp,
-      args.width,
-      args.height,
-      args.cameraX,
-      args.pixelsPerSecond,
-    );
-  }
+  // Grid first, region blocks on top. The regions used to be painted first, so
+  // the grid lines were drawn straight across them and read through the song
+  // name; an opaque block alone would not have fixed that.
+  drawGridLines(
+    context,
+    args.timelineGrid,
+    args.width,
+    args.height,
+    args.cameraX,
+    args.pixelsPerSecond,
+    RULER_GRID_OPACITY_SCALE,
+  );
 
   for (const region of args.regions) {
     drawRulerRegion(
@@ -686,15 +694,18 @@ export function drawRulerBackgroundLayer(
     );
   }
 
-  drawGridLines(
-    context,
-    args.timelineGrid,
-    args.width,
-    args.height,
-    args.cameraX,
-    args.pixelsPerSecond,
-    RULER_GRID_OPACITY_SCALE,
-  );
+  // Last, so the live vamp range still tints the region blocks it spans — now
+  // that those are opaque, painting it underneath would hide it.
+  if (args.activeVamp) {
+    drawActiveVampRange(
+      context,
+      args.activeVamp,
+      args.width,
+      args.height,
+      args.cameraX,
+      args.pixelsPerSecond,
+    );
+  }
 
   drawRulerGridLabels(
     context,

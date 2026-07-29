@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  drawRulerBackgroundLayer,
   drawRulerGridLabels,
   drawRulerMarker,
+  drawRulerRegion,
   drawRulerTempoMarker,
   LANE_CUES,
   LANE_SECTIONS,
@@ -12,6 +14,7 @@ import type { TimelineGrid } from "../timeline/timelineMath";
 import type { MarkerKind } from "@libretracks/shared/models";
 import type {
   SectionMarkerSummary,
+  SongRegionSummary,
   TempoMarkerSummary,
 } from "../desktopApi";
 
@@ -253,6 +256,102 @@ describe("ruler flags mask the grid behind them", () => {
     expect(LANE_SECTIONS.top + LANE_SECTIONS.height).toBeLessThanOrEqual(
       LANE_TEMPO_METRIC.top,
     );
+  });
+
+  it("paints the song region block and its name opaque", () => {
+    const { ctx, fills } = createFillSpy();
+    const region = {
+      id: "r1",
+      name: "Dios es Real",
+      startSeconds: 0,
+      endSeconds: 8,
+      key: "C",
+      transposeSemitones: 0,
+      warpEnabled: false,
+      warpSourceBpm: 0,
+    } as unknown as SongRegionSummary;
+
+    drawRulerRegion(ctx, region, WIDTH, CAMERA_X, PPS, false);
+
+    // Block body, name and the key badge are all painted without alpha, so the
+    // ruler grid cannot read through the song title.
+    expect(fills.length).toBeGreaterThan(0);
+    expect(fills.every((f) => isOpaque(f.style))).toBe(true);
+  });
+
+  it("draws the grid before the region blocks so lines cannot cross the name", () => {
+    // Order matters as much as opacity here: the grid used to be stroked after
+    // the regions, straight over the song title.
+    // drawGridLines batches its lines into Path2D, which this environment does
+    // not provide.
+    const originalPath2D = (globalThis as Record<string, unknown>).Path2D;
+    (globalThis as Record<string, unknown>).Path2D = class {
+      moveTo() {}
+      lineTo() {}
+    };
+
+    const events: string[] = [];
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+      fillRect: vi.fn(),
+      rect: vi.fn(),
+      roundRect: vi.fn(() => events.push("region")),
+      clip: vi.fn(),
+      stroke: vi.fn((path?: Path2D) => {
+        if (path) events.push("grid");
+      }),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      fillText: vi.fn(),
+      measureText: vi.fn((t: string) => ({ width: t.length * 6 })),
+      set fillStyle(_v: string) {},
+      set strokeStyle(_v: string) {},
+      set lineWidth(_v: number) {},
+      set font(_v: string) {},
+      set textAlign(_v: string) {},
+      set textBaseline(_v: string) {},
+      set shadowColor(_v: string) {},
+      set shadowBlur(_v: number) {},
+    } as unknown as CanvasRenderingContext2D;
+
+    drawRulerBackgroundLayer(ctx, {
+      width: WIDTH,
+      height: HEIGHT,
+      cameraX: CAMERA_X,
+      pixelsPerSecond: PPS,
+      timelineGrid: {
+        bars: [0, 2],
+        beats: [0, 1, 2],
+        markers: [],
+        showBeatLabels: false,
+        showBeatGridLines: true,
+        barLabelStep: 1,
+        beatsPerBar: 4,
+      } as unknown as TimelineGrid,
+      regions: [
+        {
+          id: "r1",
+          name: "Dios es Real",
+          startSeconds: 0,
+          endSeconds: 8,
+          key: "C",
+          transposeSemitones: 0,
+          warpEnabled: false,
+          warpSourceBpm: 0,
+        } as unknown as SongRegionSummary,
+      ],
+      selectedRegionId: null,
+      activeVamp: null,
+    });
+
+    (globalThis as Record<string, unknown>).Path2D = originalPath2D;
+
+    expect(events.indexOf("grid")).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf("region")).toBeGreaterThan(events.indexOf("grid"));
   });
 
   it("paints an opaque body for tempo and time-signature flags", () => {

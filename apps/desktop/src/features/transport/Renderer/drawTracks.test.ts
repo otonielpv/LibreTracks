@@ -244,4 +244,101 @@ describe("drawTrackClipsLayer", () => {
       ),
     ).toBe(false);
   });
+
+  it("paints the folder row opaque and full-bleed", () => {
+    // The folder band used to be a `${color}33` tint (20% alpha) inset by 8px
+    // on each side, so the timeline grid ran through the row and the band
+    // stopped short of the timeline edges.
+    const fills: string[] = [];
+    const fillRects: number[][] = [];
+    let fillStyle = "";
+    const context = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      clearRect: vi.fn(),
+      fillRect: vi.fn((...args: number[]) => {
+        fills.push(fillStyle);
+        fillRects.push(args);
+      }),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      clip: vi.fn(),
+      fillText: vi.fn(),
+      stroke: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      drawImage: vi.fn(),
+      rect: vi.fn(),
+      fill: vi.fn(() => fills.push(fillStyle)),
+      measureText: (text: string) => ({ width: text.length * 6 }),
+      set fillStyle(value: string) {
+        fillStyle = value;
+      },
+      get fillStyle() {
+        return fillStyle;
+      },
+      set strokeStyle(_value: string) {},
+      set lineWidth(_value: number) {},
+      set font(_value: string) {},
+      set textAlign(_value: string) {},
+      set textBaseline(_value: string) {},
+    } as unknown as CanvasRenderingContext2D;
+
+    const snapshot = createSnapshot(false);
+    const folder = {
+      id: "folder-1",
+      name: "Banda",
+      kind: "folder" as const,
+      parentTrackId: null,
+      depth: 0,
+      hasChildren: true,
+      volume: 1,
+      pan: 0,
+      muted: false,
+      solo: false,
+      audioTo: "master",
+      transposeEnabled: false,
+      color: "#ff5555",
+    };
+    snapshot.visibleTracks = [folder];
+    snapshot.song.tracks = [
+      folder,
+      { ...snapshot.song.tracks[0], parentTrackId: "folder-1" },
+    ];
+    snapshot.clipsByTrack = {};
+    // Bars present so the faint grid hint drawn over the band is exercised.
+    snapshot.timelineGrid.bars = [0, 2, 4];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    // Every fill is opaque — an `rgb(...)` blend or a plain 6-digit hex, but
+    // never an `rgba(...)` or an 8-digit `#rrggbbaa` that the grid shows through.
+    expect(fills.length).toBeGreaterThan(0);
+    expect(
+      fills.every(
+        (style) =>
+          style.startsWith("rgb(") || /^#[0-9a-f]{6}$/i.test(style),
+      ),
+    ).toBe(true);
+
+    // ...and spanning the full canvas width, not inset from the edges.
+    const band = fillRects.find(
+      ([rectX, , rectWidth]) => rectX === 0 && rectWidth === snapshot.width,
+    );
+    expect(band).toBeDefined();
+
+    // A solid accent ribbon in the raw folder colour anchors the row to the
+    // header's swatch; a pre-blended tint alone does not read as that colour.
+    expect(fills).toContain(folder.color);
+    const ribbon = fillRects.find(([, , rectWidth]) => rectWidth === 3);
+    expect(ribbon).toBeDefined();
+    expect(ribbon?.[0]).toBe(0);
+
+    // The child count still reaches the caption.
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => typeof text === "string" && text.includes("1 tracks"),
+      ),
+    ).toBe(true);
+  });
 });

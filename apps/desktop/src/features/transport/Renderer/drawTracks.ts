@@ -15,12 +15,103 @@ import {
 
 const waveformTileCache = new WaveformTileCache();
 
+/** The flat colour the track area is painted with, and the backdrop that
+ * anything wanting to mask the grid must blend against. */
+const TRACK_BACKDROP_RGB = [14, 14, 14] as const;
+const TRACK_BACKDROP = `rgb(${TRACK_BACKDROP_RGB[0]}, ${TRACK_BACKDROP_RGB[1]}, ${TRACK_BACKDROP_RGB[2]})`;
+
+/** How much of its own colour the folder band keeps. The band is the track
+ * colour darkened towards black — NOT mixed with grey. Mixing a hue with grey
+ * washes out its saturation (a red folder came out pink), whereas scaling the
+ * channels keeps the hue and only drops the brightness, which is what makes the
+ * row read as the same red as the track below it. */
+const FOLDER_BAND_DARKEN = 0.62;
+
+/** Parse `#rgb`, `#rrggbb` or `#rrggbbaa` into RGB channels; null if unparsable. */
+function parseHexRgb(hex: string): [number, number, number] | null {
+  const value = hex.replace("#", "");
+  const expanded =
+    value.length === 3
+      ? value
+          .split("")
+          .map((char) => char + char)
+          .join("")
+      : value;
+  if (expanded.length < 6) {
+    return null;
+  }
+  const r = parseInt(expanded.slice(0, 2), 16);
+  const g = parseInt(expanded.slice(2, 4), 16);
+  const b = parseInt(expanded.slice(4, 6), 16);
+  return Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)
+    ? [r, g, b]
+    : null;
+}
+
+/** Blend `hex` onto the track backdrop at `alpha` and return an OPAQUE colour.
+ * Chips drawn over the timeline sit on top of a full-strength grid; a
+ * translucent body lets those lines read through the text, so they pre-blend. */
+function blendOnTrackBackdrop(hex: string, alpha: number): string {
+  const top = parseHexRgb(hex);
+  if (!top) {
+    return TRACK_BACKDROP;
+  }
+  const mix = (channel: number, under: number) =>
+    Math.round(channel * alpha + under * (1 - alpha));
+  return `rgb(${mix(top[0], TRACK_BACKDROP_RGB[0])}, ${mix(top[1], TRACK_BACKDROP_RGB[1])}, ${mix(top[2], TRACK_BACKDROP_RGB[2])})`;
+}
+
+/** Scale `hex` towards black by `factor`, returning an OPAQUE colour. Unlike
+ * blending with a grey, this preserves the hue's saturation — only the
+ * brightness drops — so the result still reads as the original colour. */
+function darken(hex: string, factor: number): string {
+  const rgb = parseHexRgb(hex);
+  if (!rgb) {
+    return TRACK_BACKDROP;
+  }
+  const scale = (channel: number) =>
+    Math.max(0, Math.min(255, Math.round(channel * factor)));
+  return `rgb(${scale(rgb[0])}, ${scale(rgb[1])}, ${scale(rgb[2])})`;
+}
+
 export function drawTrackCanvasBackground(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
 ) {
-  context.fillStyle = "#0e0e0e";
+  context.fillStyle = TRACK_BACKDROP;
   context.fillRect(0, 0, snapshot.width, snapshot.height);
+}
+
+/** Re-state the bar lines faintly across an opaque folder band, so the row does
+ * not read as a flat slab cutting the timeline in two. Bars only (never the
+ * denser beat lines) and at a low alpha, so the caption stays legible — the
+ * band exists precisely to stop the full-strength grid crossing the text. */
+function drawFolderBandGridHint(
+  context: CanvasRenderingContext2D,
+  snapshot: TrackSceneSnapshot,
+  trackTop: number,
+) {
+  const bars = snapshot.timelineGrid?.bars;
+  if (!bars || bars.length === 0) {
+    return;
+  }
+
+  context.save();
+  context.strokeStyle = "rgba(255, 255, 255, 0.07)";
+  context.lineWidth = 1;
+  context.beginPath();
+  for (const seconds of bars) {
+    const x =
+      Math.round(secondsToScreenX(seconds, snapshot.cameraX, snapshot.zoomLevel)) +
+      0.5;
+    if (x < 0 || x > snapshot.width) {
+      continue;
+    }
+    context.moveTo(x, trackTop);
+    context.lineTo(x, trackTop + snapshot.trackHeight);
+  }
+  context.stroke();
+  context.restore();
 }
 
 function clipScreenBounds(
@@ -150,12 +241,15 @@ export function drawAutomationLane(
     }
 
     const strokeStyle = cue.enabled
-      ? "rgba(255, 122, 182, 0.85)"
-      : "rgba(186, 202, 197, 0.34)";
+      ? "rgba(255, 122, 182, 0.95)"
+      : "rgba(186, 202, 197, 0.45)";
+    // Opaque fills: the diamond and the label pill sit over the full-strength
+    // timeline grid, and a translucent body let those lines read straight
+    // through the cue text.
     const fillStyle = cue.enabled
-      ? "rgba(255, 122, 182, 0.16)"
-      : "rgba(186, 202, 197, 0.08)";
-    const textStyle = cue.enabled ? "#ff9bcc" : "rgba(186, 202, 197, 0.62)";
+      ? blendOnTrackBackdrop("#ff7ab6", 0.22)
+      : blendOnTrackBackdrop("#bacac5", 0.12);
+    const textStyle = cue.enabled ? "#ffb3d8" : "rgba(186, 202, 197, 0.75)";
 
     context.save();
     context.strokeStyle = strokeStyle;
@@ -257,21 +351,51 @@ export function drawTrackClipsLayer(
     }
 
     if (track.kind === "folder") {
-      context.fillStyle = track.color ? `${track.color}33` : "rgba(32, 31, 31, 0.78)";
-      context.fillRect(
-        8,
-        trackTop,
-        Math.max(0, snapshot.width - 16),
-        snapshot.trackHeight,
-      );
-      context.fillStyle = track.color ?? "#bacac5";
+      // Full-bleed, like every other lane. The row used to be inset by 8px on
+      // each side, which read as the folder not reaching the timeline edges.
+      //
+      // The band is opaque so the grid cannot run through it, but stays a tint
+      // rather than a solid slab: a folder is a container, not content, and
+      // should not compete with the clips below it.
+      //
+      // The band is the folder's own colour darkened, not that colour mixed
+      // into the backdrop. Mixing towards near black turns a saturated red into
+      // brown, and mixing towards grey turns it pink; both stopped the row
+      // looking like the same colour as the track. Scaling the channels keeps
+      // the hue and only drops the brightness.
+      context.fillStyle = track.color
+        ? darken(track.color, FOLDER_BAND_DARKEN)
+        : blendOnTrackBackdrop("#201f1f", 0.5);
+      context.fillRect(0, trackTop, snapshot.width, snapshot.trackHeight);
+
+      // Faint bar lines back on top. The band masks the full-strength grid
+      // underneath (that is what made the caption hard to read), then this
+      // re-states it at a fraction of the strength: the row keeps a sense of
+      // the timeline running through it instead of looking like a flat slab.
+      drawFolderBandGridHint(context, snapshot, trackTop);
+
+      // Solid accent ribbon on the left edge, mirroring the track header's
+      // border/ribbon. A tint alone never reads as the picked colour — the
+      // header looks like its swatch because it also shows the colour
+      // undiluted somewhere, and the row needs the same anchor to match.
+      if (track.color) {
+        context.fillStyle = track.color;
+        context.fillRect(0, trackTop, 3, snapshot.trackHeight);
+      }
+
+      const folderLabel = childCount
+        ? `${childCount} tracks dentro de la carpeta`
+        : "Carpeta";
       context.font = '600 10px "Space Grotesk", sans-serif';
       context.textBaseline = "middle";
-      context.fillText(
-        childCount ? `${childCount} tracks dentro de la carpeta` : "Carpeta",
-        20,
-        trackTop + snapshot.trackHeight / 2,
-      );
+      const labelCenterY = trackTop + snapshot.trackHeight / 2;
+
+      // No chip behind the caption: the band already masks the grid, so the
+      // text only needs to out-contrast the band itself. The band now carries
+      // the folder's colour, so the caption is near white — tinting it with the
+      // colour too left it barely readable against its own background.
+      context.fillStyle = track.color ? "rgba(255, 255, 255, 0.92)" : "#bacac5";
+      context.fillText(folderLabel, 13, labelCenterY);
       continue;
     }
 
