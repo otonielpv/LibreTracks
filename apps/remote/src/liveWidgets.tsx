@@ -72,7 +72,8 @@ export type LiveMusicalContext = {
   currentRegion: SongRegionSummary | null;
   /** The next region that starts after the playhead, or null if last. */
   nextRegion: SongRegionSummary | null;
-  /** Name of the next section marker ahead of the playhead. */
+  /** Identity and display data of the next section marker ahead of the playhead. */
+  nextMarkerId: string | null;
   nextMarkerName: string | null;
   nextMarkerColor: string | null;
   /** Seconds remaining until the next section marker (null if none ahead). */
@@ -89,6 +90,7 @@ export type LiveMusicalContext = {
 const EMPTY_CONTEXT: LiveMusicalContext = {
   currentRegion: null,
   nextRegion: null,
+  nextMarkerId: null,
   nextMarkerName: null,
   nextMarkerColor: null,
   secondsToMarker: null,
@@ -171,6 +173,7 @@ export function deriveLiveMusicalContext(
   return {
     currentRegion,
     nextRegion,
+    nextMarkerId: nextMarker?.id ?? null,
     nextMarkerName: nextMarker?.name ?? null,
     nextMarkerColor: nextMarker ? markerColor(nextMarker) : null,
     secondsToMarker,
@@ -213,6 +216,7 @@ export function useLiveMusicalContext(
         const changed =
           current.currentRegion?.id !== next.currentRegion?.id ||
           current.nextRegion?.id !== next.nextRegion?.id ||
+          current.nextMarkerId !== next.nextMarkerId ||
           current.nextMarkerName !== next.nextMarkerName ||
           current.currentKey !== next.currentKey ||
           roundedSecond(current.secondsToMarker) !== roundedSecond(next.secondsToMarker) ||

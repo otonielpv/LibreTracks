@@ -75,6 +75,7 @@ describe("deriveLiveMusicalContext", () => {
     const song = makeSong();
     // At 4s the next section marker is the chorus at 8s — NOT a cue in between.
     const context = deriveLiveMusicalContext(song, 4);
+    expect(context.nextMarkerId).toBe("chorus-a");
     expect(context.nextMarkerName).toBe("Chorus");
     expect(context.secondsToMarker).toBeCloseTo(4, 5);
   });
@@ -84,6 +85,7 @@ describe("deriveLiveMusicalContext", () => {
     // At 10s the only markers ahead are the cue (12s) and verse-b (24s); the
     // cue must be ignored, so the next section is the verse in song B.
     const context = deriveLiveMusicalContext(song, 10);
+    expect(context.nextMarkerId).toBe("verse-b");
     expect(context.nextMarkerName).toBe("Verse");
   });
 
@@ -106,6 +108,7 @@ describe("deriveLiveMusicalContext", () => {
   it("returns nulls past the last marker and last region", () => {
     const song = makeSong();
     const context = deriveLiveMusicalContext(song, 30);
+    expect(context.nextMarkerId).toBeNull();
     expect(context.nextMarkerName).toBeNull();
     expect(context.secondsToMarker).toBeNull();
     expect(context.nextRegion).toBeNull();

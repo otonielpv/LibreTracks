@@ -2303,6 +2303,7 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
  * unchanged from the former inline TransportView block.
  */
 function MarkerGrid() {
+  const liveContext = useSharedLiveContext();
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
   const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
@@ -2374,10 +2375,11 @@ function MarkerGrid() {
       <div className="marker-grid">
         {shownMarkers.map((marker) => {
           const isHidden = hiddenMarkerIds.has(marker.id);
+          const isNext = liveContext.nextMarkerId === marker.id;
           return (
             <div
               key={marker.id}
-              className={`marker-card ${pendingJumpTargetId === marker.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""}`}
+              className={`marker-card ${isNext ? "is-next" : ""} ${pendingJumpTargetId === marker.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""}`}
               style={{ "--marker-color": markerColor(marker) } as CSSProperties}
             >
               <button
@@ -2392,6 +2394,9 @@ function MarkerGrid() {
                   scheduleJump(marker.id);
                 }}
               >
+                {isNext ? (
+                  <small className="marker-card-next">{STRINGS.next}</small>
+                ) : null}
                 <strong>{marker.name}</strong>
                 <span>{formatTimecode(marker.startSeconds)}</span>
                 <em>{formatJumpModeLabel(jumpMode, jumpBars)}</em>

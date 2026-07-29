@@ -1272,6 +1272,12 @@ button {
   opacity: 0.42;
 }
 
+.marker-card.is-next {
+  box-shadow:
+    0 0 0 1px var(--marker-color, #bacac5),
+    0 0 13px rgb(255 255 255 / 0.14);
+}
+
 .marker-card-jump {
   display: flex;
   flex-direction: column;
@@ -1298,6 +1304,19 @@ button {
 .marker-card-jump small {
   color: var(--muted);
   font-size: 0.62rem;
+}
+
+.marker-card-jump .marker-card-next {
+  align-self: flex-start;
+  border: 1px solid var(--marker-color, #bacac5);
+  border-radius: 999px;
+  padding: 0.08rem 0.38rem;
+  color: var(--marker-color, var(--text));
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .marker-card-jump em {
