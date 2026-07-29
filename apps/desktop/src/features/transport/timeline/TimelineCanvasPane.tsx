@@ -33,6 +33,8 @@ import { buildSongTempoRegions } from "@libretracks/shared/models";
 import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
+import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
+import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
 import {
   LANE_CUES,
   LANE_REGIONS,
@@ -44,6 +46,8 @@ import {
   BASE_PIXELS_PER_SECOND,
   getElementScaleX,
   getTimelineWorkspaceEndSeconds,
+  screenXToSeconds,
+  secondsToScreenX,
   snapToTimelineBar,
   snapToTimelineGrid,
   type TimelineGrid,
@@ -867,138 +871,35 @@ export function TimelineCanvasPane({
     }
   }
 
-  // ── Section-marker move drag ────────────────────────────────────────────
-  // Drag a section/cue flag along the ruler to reposition it. Optimistic:
-  // the flag's hotspot `left` follows the pointer during the drag and the
-  // backend is touched once on release via onMarkerMoveCommit. Pointer
-  // events cover both mouse (desktop) and touch (Android). A press that
-  // doesn't move past DRAG_THRESHOLD_PX is treated as a plain click
-  // (primary action / select), so tapping a marker still works.
-  type MarkerMoveDrag = {
-    markerId: string;
-    // Section flags and automation-cue diamonds share this drag machinery;
-    // only the commit target differs (onMarkerMoveCommit vs onAutomationCueMoveCommit).
-    kind: "marker" | "cue";
-    pointerId: number;
-    pointerStartClientX: number;
-    pointerScaleX: number;
-    initialStartSeconds: number;
-    previewStartSeconds: number;
-    moved: boolean;
-  };
-  const markerMoveDragRef = useRef<MarkerMoveDrag | null>(null);
-  // Set true the instant a marker drag actually moves; consumed by the
-  // marker's onClick to swallow the synthetic click that follows pointer-up
-  // (the drag ref is already nulled by then). Reset on the next pointerdown.
-  const markerDidDragRef = useRef(false);
-  const [markerMovePreview, setMarkerMovePreview] = useState<{
-    markerId: string;
-    startSeconds: number;
-  } | null>(null);
-  const MARKER_DRAG_THRESHOLD_PX = 4;
+  // ── Section-marker / automation-cue move drag ───────────────────────────
+  // See ./useMarkerMoveDrag for why the two marker kinds resolve the pointer
+  // in different coordinate spaces.
+  const {
+    markerMovePreview,
+    markerMovePreviewRef,
+    markerDidDragRef,
+    beginMarkerMove,
+    updateMarkerMove,
+    endMarkerMove,
+  } = useMarkerMoveDrag({
+    song,
+    snapEnabled,
+    cameraXRef,
+    livePixelsPerSecondRef,
+    pixelsPerSecond,
+    onMarkerMoveCommit,
+    onAutomationCueMoveCommit,
+  });
 
-  function beginMarkerMove(
-    event: ReactPointerEvent<HTMLButtonElement>,
-    markerId: string,
-    startSeconds: number,
-    kind: "marker" | "cue" = "marker",
-  ) {
-    if (event.button !== 0) return;
-    markerDidDragRef.current = false;
-    markerMoveDragRef.current = {
-      markerId,
-      kind,
-      pointerId: event.pointerId,
-      pointerStartClientX: event.clientX,
-      pointerScaleX: getElementScaleX(
-        event.currentTarget.getBoundingClientRect(),
-        event.currentTarget.offsetWidth,
-      ),
-      initialStartSeconds: startSeconds,
-      previewStartSeconds: startSeconds,
-      moved: false,
-    };
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Some engines refuse capture on a not-yet-hovered element; ignore.
-    }
-  }
-
-  function updateMarkerMove(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = markerMoveDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId || !song) return;
-
-    const effectivePixelsPerSecond =
-      livePixelsPerSecondRef.current ?? pixelsPerSecond;
-    if (effectivePixelsPerSecond <= 0) return;
-
-    const rawDelta =
-      (event.clientX - drag.pointerStartClientX) /
-      drag.pointerScaleX /
-      effectivePixelsPerSecond;
-
-    // Only start treating this as a drag once the pointer clears the
-    // threshold, so a stationary tap/click still fires the primary action.
-    if (
-      !drag.moved &&
-      Math.abs(event.clientX - drag.pointerStartClientX) <
-        MARKER_DRAG_THRESHOLD_PX
-    ) {
-      return;
-    }
-    drag.moved = true;
-    markerDidDragRef.current = true;
-
-    let nextStart = drag.initialStartSeconds + rawDelta;
-
-    // Snap to the song grid (same grid the user sees). Holding Shift bypasses.
-    const shouldSnap = Boolean(snapEnabled) && !event.shiftKey;
-    if (shouldSnap) {
-      nextStart = snapToTimelineGrid(
-        nextStart,
-        song.bpm,
-        song.timeSignature,
-        1,
-        effectivePixelsPerSecond,
-        buildSongTempoRegions(song),
-      );
-    }
-
-    // A marker can't sit before the timeline start.
-    nextStart = Math.max(0, nextStart);
-
-    drag.previewStartSeconds = nextStart;
-    setMarkerMovePreview({ markerId: drag.markerId, startSeconds: nextStart });
-  }
-
-  function endMarkerMove(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = markerMoveDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // Already released — ignore.
-    }
-
-    const finalStart = drag.previewStartSeconds;
-    const moved =
-      drag.moved &&
-      Math.abs(finalStart - drag.initialStartSeconds) > 1e-6;
-
-    markerMoveDragRef.current = null;
-    setMarkerMovePreview(null);
-
-    if (!moved) {
-      return;
-    }
-    if (drag.kind === "cue") {
-      onAutomationCueMoveCommit?.(drag.markerId, finalStart);
-    } else {
-      onMarkerMoveCommit?.(drag.markerId, finalStart);
-    }
-  }
+  // Keeps the cue hit targets glued to the diamonds the canvas paints.
+  const { registerHotspot: registerAutomationHotspot } =
+    useAutomationCueHotspots({
+      cues: song?.automationCues,
+      cameraXRef,
+      livePixelsPerSecondRef,
+      pixelsPerSecond,
+      markerMovePreviewRef,
+    });
 
   const handleTimelineDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -1804,6 +1705,9 @@ export function TimelineCanvasPane({
                         return (
                           <button
                             key={cue.id}
+                            ref={(element) =>
+                              registerAutomationHotspot(cue.id, element)
+                            }
                             type="button"
                             className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}${isDraggingCue ? " is-dragging" : ""}`}
                             aria-label={cueDescription}
@@ -1812,7 +1716,16 @@ export function TimelineCanvasPane({
                               // Centre a tight hit target on the diamond. The
                               // lane's own onMouseDown handles seek everywhere
                               // else, so the hotspot must not cover the row.
-                              left: renderAtSeconds * pixelsPerSecond,
+                              // `left` is owned by the rAF loop above (it must
+                              // track cameraX/live zoom the same way the canvas
+                              // paints the diamond); seed it here so the button
+                              // is positioned on its very first frame.
+                              left: secondsToScreenX(
+                                renderAtSeconds,
+                                cameraXRef.current,
+                                livePixelsPerSecondRef.current ??
+                                  pixelsPerSecond,
+                              ),
                               top: trackHeight / 2,
                             }}
                             onMouseDown={(event) => {
