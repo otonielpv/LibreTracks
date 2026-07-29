@@ -231,3 +231,40 @@ TEST_CASE("session adapter maps LibreTracks camelCase song JSON") {
     CHECK(session.songs[0].time_signature_markers[0].beats_per_bar == 3);
     CHECK(session.songs[0].time_signature_markers[0].beat_unit == 4);
 }
+
+// Opening a session goes through session_from_project_json, a marker parser
+// separate from the three realtime commands. It missed categoryOverride, so a
+// marker dragged to the other ruler row came back as its kind's category every
+// time the session was reopened — saved correctly, then announced wrongly.
+TEST_CASE("loading a session keeps a marker's category override") {
+    // Shaped like a real .ltsession: camelCase, startSeconds rather than frame.
+    const std::string project = R"({
+        "id":"s1","title":"Song","sampleRate":48000,
+        "songs":[{
+            "id":"song1","title":"Song","durationSeconds":10.0,
+            "tracks":[],"clips":[],
+            "sectionMarkers":[
+                {"id":"m1","name":"Repeticion","startSeconds":1.0,"kind":"tag",
+                 "categoryOverride":"cue"},
+                {"id":"m2","name":"Coro","startSeconds":2.0,"kind":"chorus"}
+            ]
+        }]
+    })";
+
+    auto result = session_from_project_json(project, 48000);
+    REQUIRE(result.is_ok());
+    auto session = result.take();
+    REQUIRE(session.songs.size() == 1);
+    REQUIRE(session.songs[0].markers.size() == 2);
+
+    // A Tag is a section by kind; the stored override makes it behave as a cue,
+    // which is what keeps the count-in from firing.
+    const Marker& dragged = session.songs[0].markers[0];
+    CHECK(dragged.category_override == MarkerCategoryOverride::Cue);
+    CHECK(dragged.is_cue());
+
+    // An untouched marker still follows its kind.
+    const Marker& plain = session.songs[0].markers[1];
+    CHECK(plain.category_override == MarkerCategoryOverride::Inherit);
+    CHECK_FALSE(plain.is_cue());
+}

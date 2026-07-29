@@ -220,6 +220,22 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     marker.name = jm.value("name", "");
                     marker.kind = marker_kind_from_string(jm.value("kind", ""));
                     marker.variant = jm.value("variant", 0);
+                    // Lane the user dragged the marker into. This path loads a
+                    // whole session (LoadSession), so the JSON is the session
+                    // document's camelCase — not the snake_case the realtime
+                    // commands use. Missing it here meant a dragged marker came
+                    // back as its kind's category every time the session was
+                    // opened, however well it had been saved.
+                    marker.category_override = marker_category_override_from_string(
+                        value_any<std::string>(jm, "category_override", "categoryOverride",
+                                               std::string{}));
+                    // Lane the user dragged the marker into. This path loads a
+                    // whole session (LoadSession), so the JSON is the session
+                    // document's camelCase — not the snake_case the realtime
+                    // commands use. Missing it here meant a dragged marker came
+                    // back as its kind's category every time the session was
+                    // opened, however well it had been saved.
+
                     marker.frame = value_any<Frame>(jm, "frame", "frame", 0LL);
                     if (marker.frame == 0) {
                         marker.frame = seconds_to_frames(
