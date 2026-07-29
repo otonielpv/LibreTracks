@@ -509,6 +509,48 @@ button {
   display: none;
 }
 
+/* Tap-to-seek toggle, parked in the top-right corner of the cinta so it never
+   overlaps the time/bar labels that start at the left edge. */
+.timeline-click-seek-toggle {
+  position: absolute;
+  top: 0.28rem;
+  right: 0.3rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(20 20 20 / 0.82);
+  color: rgb(255 255 255 / 0.5);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  /* Keep the toggle's own taps out of the shell's drag/scrub gesture. */
+  touch-action: manipulation;
+}
+
+.timeline-click-seek-toggle.is-active {
+  border-color: rgb(87 241 219 / 0.55);
+  background: rgb(87 241 219 / 0.16);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgb(87 241 219 / 0.25);
+}
+
+/* Signal that a tap will move the playhead. */
+.timeline-shell-shared.is-click-seek {
+  cursor: pointer;
+}
+
+.remote-shell.is-large-controls .timeline-click-seek-toggle {
+  width: 1.85rem;
+  height: 1.85rem;
+  font-size: 1rem;
+}
+
 .fixed-playhead {
   position: absolute;
   top: 0;

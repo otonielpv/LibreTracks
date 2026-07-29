@@ -102,6 +102,13 @@ import {
   keyForRegion,
   type SongClipEntry,
 } from "./songWidgets";
+import {
+  TIMELINE_PENDING_SEEK_TIMEOUT_MS,
+  isTimelineTap,
+  resolvePendingSeek,
+  timelineTapPositionSeconds,
+  type PendingSeek,
+} from "./timelineSeek";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 type JumpMode = "immediate" | "next_marker" | "after_bars";
@@ -218,6 +225,29 @@ const useMixerUiStore = create<{
   },
 }));
 const HIDDEN_MARKERS_STORAGE_KEY = "libretracks.remote.hiddenMarkerIds";
+const TIMELINE_CLICK_SEEK_STORAGE_KEY = "libretracks.remote.timelineClickSeek";
+
+/**
+ * Tap-to-seek on the cinta. Off by default: on stage an accidental tap on the
+ * timeline must never jump playback, so the user opts in from the toggle in the
+ * corner of the ruler. Persisted per-device like the other remote preferences.
+ */
+const useTimelineUiStore = create<{
+  clickToSeek: boolean;
+  setClickToSeek: (value: boolean) => void;
+}>((set) => ({
+  clickToSeek:
+    typeof window !== "undefined" &&
+    window.localStorage.getItem(TIMELINE_CLICK_SEEK_STORAGE_KEY) === "1",
+  setClickToSeek: (value) => {
+    try {
+      window.localStorage.setItem(TIMELINE_CLICK_SEEK_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // Storage can be unavailable; the in-memory preference still works.
+    }
+    set({ clickToSeek: value });
+  },
+}));
 const MAX_REMOTE_SIZE_LEVEL = 3;
 const TIMELINE_JITTER_RESET_THRESHOLD_SECONDS = 0.18;
 // Lower snap threshold so the playhead re-aligns with the real position sooner
@@ -1058,6 +1088,25 @@ const SharedTimeline = memo(function SharedTimeline({
   const lastManualInteractionAtRef = useRef(0);
   const dragPointerIdRef = useRef<number | null>(null);
   const dragLastClientXRef = useRef(0);
+  // Tap-to-seek bookkeeping: a pointer only counts as a tap if it never moved
+  // beyond `TIMELINE_TAP_SLOP_PX` and was released quickly, so scrubbing the
+  // cinta never fires an accidental seek on release.
+  const dragStartClientXRef = useRef(0);
+  const dragStartAtMsRef = useRef(0);
+  const dragMovedRef = useRef(false);
+  // The rAF loop owns the ruler transform, so React never sees it. Mirror it in
+  // a ref so a tap can convert its screen X back into a timeline position.
+  const translateXRef = useRef(0);
+  // Optimistic tap-to-seek. The desktop snapshot round-trips over the WebSocket,
+  // so between the tap and its confirmation the rAF loop would keep animating
+  // from the OLD position (and, when stopped, overwrite the playhead with it
+  // every frame). Hold the requested position until a snapshot confirms the
+  // reposition, or the deadline lapses if the command was dropped.
+  const pendingSeekRef = useRef<PendingSeek | null>(null);
+  const clickToSeek = useTimelineUiStore((state) => state.clickToSeek);
+  const setClickToSeek = useTimelineUiStore((state) => state.setClickToSeek);
+  const clickToSeekRef = useRef(clickToSeek);
+  clickToSeekRef.current = clickToSeek;
   // While the cinta is manually scrolled, the render window must follow what the
   // user is LOOKING at (the dragged centre), not the playhead — otherwise the
   // grid/markers of a far-away region aren't rendered. Published from the rAF
@@ -1213,38 +1262,54 @@ const SharedTimeline = memo(function SharedTimeline({
         lastTransportRepositionTokenRef.current = repositionToken;
       }
 
-      if (!isPlaying) {
-        visualPositionRef.current = rawPositionSeconds;
-      } else if (explicitTransportReposition) {
-        visualPositionRef.current = rawPositionSeconds;
-      } else if (lastFrameAtMs !== null) {
-        visualPositionRef.current += deltaSeconds;
-      } else if (!lastTimelinePlaybackRef.current.playing) {
-        visualPositionRef.current = rawPositionSeconds;
+      // A tap-to-seek is confirmed once the transport reports a reposition (the
+      // token carries lastSeekPositionSeconds) — or abandoned once it times out.
+      pendingSeekRef.current = resolvePendingSeek(pendingSeekRef.current, {
+        transportRepositioned: explicitTransportReposition,
+        frameAtMs,
+      });
+      if (pendingSeekRef.current) {
+        // Hold the requested position: pin the playhead there and skip the
+        // follow/correction maths entirely, which would otherwise drag the
+        // cinta back to the pre-seek position for the length of the round-trip.
+        visualPositionRef.current = pendingSeekRef.current.positionSeconds;
       }
-
-      if (isPlaying && !lastTimelinePlaybackRef.current.playing) {
-        visualPositionRef.current = rawPositionSeconds;
-      } else if (isPlaying) {
-        const correctionSeconds = rawPositionSeconds - visualPositionRef.current;
-        if (correctionSeconds > TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS) {
+      // While a seek is pending the position above is authoritative, so both the
+      // follow and the correction passes are skipped for the round-trip.
+      if (!pendingSeekRef.current) {
+        if (!isPlaying) {
           visualPositionRef.current = rawPositionSeconds;
-        } else if (
-          correctionSeconds < -TIMELINE_JITTER_RESET_THRESHOLD_SECONDS &&
-          explicitTransportReposition
-        ) {
+        } else if (explicitTransportReposition) {
           visualPositionRef.current = rawPositionSeconds;
-        } else if (correctionSeconds > 0) {
-          visualPositionRef.current +=
-            correctionSeconds * Math.min(1, deltaSeconds * TIMELINE_FORWARD_CORRECTION_PER_SECOND);
+        } else if (lastFrameAtMs !== null) {
+          visualPositionRef.current += deltaSeconds;
+        } else if (!lastTimelinePlaybackRef.current.playing) {
+          visualPositionRef.current = rawPositionSeconds;
         }
 
-        if (timelineDebugEnabled) {
-          debugStatsRef.current.accumulatedCorrectionSeconds += Math.abs(correctionSeconds);
-          debugStatsRef.current.maxCorrectionSeconds = Math.max(
-            debugStatsRef.current.maxCorrectionSeconds,
-            Math.abs(correctionSeconds),
-          );
+        if (isPlaying && !lastTimelinePlaybackRef.current.playing) {
+          visualPositionRef.current = rawPositionSeconds;
+        } else if (isPlaying) {
+          const correctionSeconds = rawPositionSeconds - visualPositionRef.current;
+          if (correctionSeconds > TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS) {
+            visualPositionRef.current = rawPositionSeconds;
+          } else if (
+            correctionSeconds < -TIMELINE_JITTER_RESET_THRESHOLD_SECONDS &&
+            explicitTransportReposition
+          ) {
+            visualPositionRef.current = rawPositionSeconds;
+          } else if (correctionSeconds > 0) {
+            visualPositionRef.current +=
+              correctionSeconds * Math.min(1, deltaSeconds * TIMELINE_FORWARD_CORRECTION_PER_SECOND);
+          }
+
+          if (timelineDebugEnabled) {
+            debugStatsRef.current.accumulatedCorrectionSeconds += Math.abs(correctionSeconds);
+            debugStatsRef.current.maxCorrectionSeconds = Math.max(
+              debugStatsRef.current.maxCorrectionSeconds,
+              Math.abs(correctionSeconds),
+            );
+          }
         }
       }
 
@@ -1305,6 +1370,8 @@ const SharedTimeline = memo(function SharedTimeline({
         Math.min(maxTranslate, autoTranslate + manualOffsetRef.current),
       );
 
+      translateXRef.current = translateX;
+
       if (rulerRef.current) {
         rulerRef.current.style.transform = `translate3d(${translateX}px, 0, 0)`;
       }
@@ -1353,6 +1420,9 @@ const SharedTimeline = memo(function SharedTimeline({
     }
     dragPointerIdRef.current = event.pointerId;
     dragLastClientXRef.current = event.clientX;
+    dragStartClientXRef.current = event.clientX;
+    dragStartAtMsRef.current = performance.now();
+    dragMovedRef.current = false;
     lastManualInteractionAtRef.current = performance.now();
     event.currentTarget.setPointerCapture(event.pointerId);
   }, []);
@@ -1363,33 +1433,120 @@ const SharedTimeline = memo(function SharedTimeline({
     }
     const deltaX = event.clientX - dragLastClientXRef.current;
     dragLastClientXRef.current = event.clientX;
+    // Track the furthest excursion, not just the final delta, so a gesture that
+    // wanders out and comes back still counts as a scrub.
+    if (
+      !isTimelineTap({
+        startClientX: dragStartClientXRef.current,
+        endClientX: event.clientX,
+        durationMs: 0,
+      })
+    ) {
+      dragMovedRef.current = true;
+    }
+    // A fresh scrub overrides a seek still waiting for its confirmation, so the
+    // cinta follows the finger instead of staying pinned to the tapped position.
+    pendingSeekRef.current = null;
     // Dragging right reveals earlier content (offset grows), left reveals the
     // future. The rAF loop clamps the final translate to the content bounds.
     manualOffsetRef.current += deltaX;
     lastManualInteractionAtRef.current = performance.now();
   }, []);
 
-  const endDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+  const endDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>, allowSeek: boolean) => {
     if (dragPointerIdRef.current !== event.pointerId) {
       return;
     }
     dragPointerIdRef.current = null;
+    const releasedAtMs = performance.now();
+    const wasTap =
+      !dragMovedRef.current &&
+      isTimelineTap({
+        startClientX: dragStartClientXRef.current,
+        endClientX: event.clientX,
+        durationMs: releasedAtMs - dragStartAtMsRef.current,
+      });
     // Start the hold countdown from release so the peeked view lingers.
-    lastManualInteractionAtRef.current = performance.now();
+    lastManualInteractionAtRef.current = releasedAtMs;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+
+    if (!allowSeek || !wasTap || !clickToSeekRef.current) {
+      return;
+    }
+
+    const positionSeconds = timelineTapPositionSeconds({
+      clientX: event.clientX,
+      shellLeft: event.currentTarget.getBoundingClientRect().left,
+      translateX: translateXRef.current,
+      pixelsPerSecond: CHROME_TIMELINE_PIXELS_PER_SECOND,
+    });
+    if (positionSeconds === null) {
+      return;
+    }
+
+    // Land the cinta on the target instead of leaving it parked on whatever the
+    // user had scrubbed to. Three things have to happen together:
+    //  1. Drop the manual scrub offset (and its hold window) so the rAF loop
+    //     goes straight back to auto-follow — otherwise the old peeked view
+    //     lingers for TIMELINE_MANUAL_HOLD_MS and the jump looks like nothing
+    //     happened.
+    //  2. Clear the published manual centre so the grid/markers render window
+    //     re-centres on the playhead.
+    //  3. Move the visual playhead now rather than waiting for the desktop
+    //     snapshot to round-trip over the WebSocket.
+    manualOffsetRef.current = 0;
+    lastManualInteractionAtRef.current = 0;
+    if (publishedManualCenterRef.current !== null) {
+      publishedManualCenterRef.current = null;
+      setManualCenterSeconds(null);
+    }
+    visualPositionRef.current = positionSeconds;
+    pendingSeekRef.current = {
+      positionSeconds,
+      expiresAtMs: releasedAtMs + TIMELINE_PENDING_SEEK_TIMEOUT_MS,
+    };
+
+    sendCommand({ cmd: "seek", positionSeconds });
   }, []);
+
+  const handlePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => endDrag(event, true),
+    [endDrag],
+  );
+
+  const handlePointerCancel = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => endDrag(event, false),
+    [endDrag],
+  );
 
   return (
     <div
       ref={shellRef}
-      className="timeline-shell timeline-shell-shared"
+      className={`timeline-shell timeline-shell-shared ${clickToSeek ? "is-click-seek" : ""}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
     >
+      <button
+        type="button"
+        className={`timeline-click-seek-toggle ${clickToSeek ? "is-active" : ""}`}
+        aria-pressed={clickToSeek}
+        title={clickToSeek ? STRINGS.clickToSeekOn : STRINGS.clickToSeekOff}
+        aria-label={clickToSeek ? STRINGS.clickToSeekOn : STRINGS.clickToSeekOff}
+        // The shell owns a pointer-drag scrub; stop the toggle's own pointer
+        // from starting one (and from being swallowed as a tap-to-seek).
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          setClickToSeek(!clickToSeek);
+        }}
+      >
+        ⇥
+      </button>
       <div ref={playheadRef} className="fixed-playhead" aria-hidden="true" />
       <div ref={rulerRef} className="timeline-ruler" style={{ width: contentWidth }}>
         <div className="timeline-header-row timeline-time-row">
