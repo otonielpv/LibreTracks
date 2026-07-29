@@ -1005,14 +1005,12 @@ export function TransportPanelContent() {
   const toggleCompactMixerFilterActiveSong = useCallback(() => {
     setCompactMixerFilterActiveSong((current) => !current);
   }, []);
-  // "Available" — coarse proxy: the toggle has potential effect as
-  // soon as the project has at least one song region. The exact
-  // "playhead is inside a region right now" check would require
-  // subscribing to a reactive playhead state we don't have here;
-  // the project-has-regions test is enough to gate the disabled
-  // appearance, and toggling with the playhead between regions is
-  // a harmless no-op (the mixer falls back to showing every track).
-  const compactMixerFilterAvailable = (song?.regions.length ?? 0) > 0;
+  // "Available" — true when the playhead is actually inside a song, which
+  // is exactly when the filter has something to hide. Reads the reactive
+  // `activeSongRegionId` (published by syncLivePosition only on a song
+  // boundary crossing, not per frame), so the disabled state and its
+  // tooltip now match what the mixer really does.
+  const compactMixerFilterAvailable = activeSongRegionId !== "";
   const [selectedTimelineRange, setSelectedTimelineRange] =
     useState<TimelineRangeSelection | null>(null);
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<
@@ -8050,9 +8048,7 @@ export function TransportPanelContent() {
                     <CompactView
                       regions={song.regions}
                       tracks={song.tracks}
-                      playheadSeconds={
-                        snapshotRef.current?.positionSeconds ?? 0
-                      }
+                      activeRegionId={activeSongRegionId || null}
                       clipsByRegion={clipsByRegion}
                       audioRoutingOptions={audioRoutingOptions}
                       mixerHandlers={{

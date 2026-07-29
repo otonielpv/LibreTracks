@@ -83,6 +83,34 @@ type CompactMixerProps = {
 const DEFAULT_TRACK_ACCENT = "rgba(186, 202, 197, 0.35)";
 const DEFAULT_FOLDER_ACCENT = "rgba(87, 241, 219, 0.55)";
 
+/**
+ * Strips the mixer should render. With the filter off — or with no active
+ * song under the playhead — every track shows, exactly as before. With it
+ * on, keep the active song's tracks PLUS every ancestor folder of those
+ * tracks, so a visible child never appears orphaned under a hidden parent.
+ * Track order is always the project's own.
+ */
+export function resolveVisibleTracks(
+  tracks: TrackSummary[],
+  activeSongTrackIds: Set<string> | null,
+  filterActiveSong: boolean,
+): TrackSummary[] {
+  if (!filterActiveSong || !activeSongTrackIds) return tracks;
+
+  const byId = new Map(tracks.map((track) => [track.id, track]));
+  const visibleIds = new Set<string>(activeSongTrackIds);
+  for (const id of activeSongTrackIds) {
+    let current = byId.get(id);
+    while (current?.parentTrackId) {
+      if (visibleIds.has(current.parentTrackId)) break;
+      visibleIds.add(current.parentTrackId);
+      current = byId.get(current.parentTrackId);
+    }
+  }
+
+  return tracks.filter((track) => visibleIds.has(track.id));
+}
+
 function CompactMixerComponent({
   tracks,
   audioRoutingOptions,
@@ -118,21 +146,10 @@ function CompactMixerComponent({
   // PLUS every ancestor folder of those tracks (so the parent hierarchy
   // remains visible and a child doesn't appear orphaned). When the
   // filter is off, or no song is active, show everything as before.
-  const visibleTracks = useMemo(() => {
-    if (!filterActiveSong || !activeSongTrackIds) return tracks;
-    const visibleIds = new Set<string>(activeSongTrackIds);
-    // Walk each visible track upwards through parentTrackId and add
-    // ancestors so folder strips don't disappear when their child does.
-    for (const id of activeSongTrackIds) {
-      let current = trackById.get(id);
-      while (current?.parentTrackId) {
-        if (visibleIds.has(current.parentTrackId)) break;
-        visibleIds.add(current.parentTrackId);
-        current = trackById.get(current.parentTrackId);
-      }
-    }
-    return tracks.filter((track) => visibleIds.has(track.id));
-  }, [filterActiveSong, activeSongTrackIds, tracks, trackById]);
+  const visibleTracks = useMemo(
+    () => resolveVisibleTracks(tracks, activeSongTrackIds, filterActiveSong),
+    [filterActiveSong, activeSongTrackIds, tracks],
+  );
 
   return (
     <div className="lt-compact-mixer">

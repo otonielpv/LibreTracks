@@ -49,11 +49,39 @@ export type CompactClipEntry = {
   trackColor?: string | null;
 };
 
+/**
+ * Track ids that have at least one clip inside the given song region —
+ * the target set for the CompactMixer's "solo cancion activa" filter.
+ * `null` (no active region) means the playhead sits between songs, and
+ * the caller falls back to showing every track.
+ *
+ * Deliberately keyed on the region id, NOT on the playhead position: the
+ * panel keeps the 60fps position in a ref on purpose, so a seconds-based
+ * derivation silently freezes at whatever value the last unrelated render
+ * happened to see. See CompactViewProps.activeRegionId.
+ */
+export function computeActiveSongTrackIds(
+  activeRegionId: string | null,
+  clipsByRegion: Record<string, CompactClipEntry[]>,
+): Set<string> | null {
+  if (!activeRegionId) return null;
+  const ids = new Set<string>();
+  for (const entry of clipsByRegion[activeRegionId] ?? []) {
+    ids.add(entry.trackId);
+  }
+  return ids;
+}
+
 type CompactViewProps = {
   regions: SongRegionSummary[];
   tracks: TrackSummary[];
-  /** Linear timeline position so we can highlight the active song. */
-  playheadSeconds: number;
+  /** Id of the song region the playhead is currently inside, or null when
+   * it sits between songs. The parent resolves this (in syncLivePosition)
+   * and re-renders only when the playhead crosses a song boundary — the
+   * raw position is intentionally kept out of React state so the 60fps
+   * playhead never re-renders this view. Drives both the active-song
+   * highlight and the mixer's "solo cancion activa" filter. */
+  activeRegionId: string | null;
   /** region_id → flat list of clips inside that song, in the same vertical
    * order tracks appear in the DAW header pane. Each entry carries the clip
    * filename and its track's name so the cell can label both without a
@@ -202,7 +230,7 @@ type CompactViewProps = {
 function CompactViewComponent({
   regions,
   tracks,
-  playheadSeconds,
+  activeRegionId,
   clipsByRegion,
   audioRoutingOptions,
   mixerHandlers,
@@ -258,21 +286,14 @@ function CompactViewComponent({
   // the CompactMixer's "solo cancion activa" filter. null = no
   // active song under the playhead (between regions, or fresh
   // project), in which case the filter has no target set and the
-  // mixer falls back to showing every track. Recalculated on every
-  // playhead move; the underlying set is tiny so the cost is fine.
-  const activeSongTrackIds = useMemo<Set<string> | null>(() => {
-    const activeRegion = regions.find(
-      (region) =>
-        playheadSeconds >= region.startSeconds &&
-        playheadSeconds < region.endSeconds,
-    );
-    if (!activeRegion) return null;
-    const ids = new Set<string>();
-    for (const entry of clipsByRegion[activeRegion.id] ?? []) {
-      ids.add(entry.trackId);
-    }
-    return ids;
-  }, [regions, playheadSeconds, clipsByRegion]);
+  // mixer falls back to showing every track. Keyed off activeRegionId
+  // rather than the raw position: the parent only re-renders us when
+  // the playhead crosses into another song, which is precisely when
+  // this set can change.
+  const activeSongTrackIds = useMemo<Set<string> | null>(
+    () => computeActiveSongTrackIds(activeRegionId, clipsByRegion),
+    [activeRegionId, clipsByRegion],
+  );
 
   // Android: mixer collapsed by default on narrow (phone) screens, visible on
   // tablets; the user's explicit choice persists. Desktop: always visible.
@@ -330,10 +351,7 @@ function CompactViewComponent({
             region={region}
             clips={clipsByRegion[region.id] ?? []}
             moveTargets={moveTargets}
-            isActive={
-              playheadSeconds >= region.startSeconds &&
-              playheadSeconds < region.endSeconds
-            }
+            isActive={region.id === activeRegionId}
             onMasterGainChange={(gain) => onMasterGainChange(region.id, gain)}
             onMasterGainCommit={() => onMasterGainCommit(region.id)}
             onDropOsFiles={(files) => onDropOsFilesIntoSong(region.id, files)}
