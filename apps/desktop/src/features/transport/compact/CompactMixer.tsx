@@ -414,7 +414,7 @@ function CompactMixerStripComponent({
             folder
           </span>
         ) : null}
-        {track.name}
+        <span className="lt-compact-mixer-strip-name-text">{track.name}</span>
       </div>
       {parentInfo ? (
         <div

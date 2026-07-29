@@ -6522,6 +6522,15 @@ textarea {
   --parent-accent: transparent;
   position: relative;
   flex: 0 0 6.5rem;
+  /* The 6.5rem basis is only a *preferred* size: a flex item's automatic
+     minimum size (min-width: auto) is its content's intrinsic minimum, and
+     the routing <select> below reports the width of its widest <option>.
+     A user who names a folder after a song ("Rindo Mis Coronas - Gateway
+     Worship - F - 72 Bpm") therefore stretched every strip that could route
+     to it. Pin the strip to its basis so long names never widen it. */
+  width: 6.5rem;
+  min-width: 0;
+  max-width: 6.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -6615,17 +6624,33 @@ textarea {
   letter-spacing: 0.04em;
   white-space: nowrap;
   overflow: hidden;
+  /* `text-overflow` does not reach the anonymous text child of a flex
+     container, so the name is clipped hard rather than ellipsised. The
+     child rule below re-establishes block layout for the text itself. */
   text-overflow: ellipsis;
   min-height: 1.1rem;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  min-width: 0;
+}
+
+/* The track name inside the flex row. Given its own overflow context so a
+   long name ellipsises instead of clipping mid-glyph. */
+.lt-compact-mixer-strip-name-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lt-compact-mixer-folder-icon {
   font-size: 12px;
   color: #57f1db;
+  /* Never let the icon squash when the name next to it is long. */
+  flex: 0 0 auto;
 }
 
 /* Sub-text under the strip name showing the folder a child track lives in.
@@ -6921,6 +6946,11 @@ textarea {
 
 .lt-compact-mixer-audio-to {
   width: 100%;
+  /* Without this the <select> refuses to shrink below its widest <option>
+     (intrinsic min-width), which is what let long folder names widen the
+     whole strip. The closed control now ellipsises; the open dropdown is
+     drawn by the OS and still shows each option in full. */
+  min-width: 0;
   height: 1.4rem;
   /* Extra right padding leaves room for the native dropdown caret so
      a long label like "Inherited (Folder)" gets ellipsis instead of

@@ -2537,7 +2537,7 @@ function MixerStrip({
     >
       <header className="mixer-strip-header">
         <small>{track.kind === "folder" ? STRINGS.folder : STRINGS.audio}</small>
-        <strong>{track.name}</strong>
+        <strong title={track.name}>{track.name}</strong>
       </header>
 
       <div className="pan-section">
