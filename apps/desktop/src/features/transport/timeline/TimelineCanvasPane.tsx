@@ -899,6 +899,7 @@ export function TimelineCanvasPane({
     song,
     snapEnabled,
     cameraXRef,
+    rulerRef: rulerTrackRef,
     livePixelsPerSecondRef,
     pixelsPerSecond,
     onMarkerMoveCommit,

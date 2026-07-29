@@ -2726,6 +2726,47 @@ fn transport_only_updates_preserve_cross_region_after_bars_schedule() {
 }
 
 #[test]
+fn moving_a_marker_and_changing_its_lane_in_one_drag_stores_both() {
+    // Reported: dragging a section marker sideways and THEN down into the cue
+    // row left it still announcing with a count-in. A drag that changes both
+    // position and lane arrives as a single update, so both must stick.
+    let mut session = DesktopSession::default();
+    session
+        .engine
+        .load_song(demo_song_with_section())
+        .expect("song should load into engine");
+    let audio = crate::audio::engine::AudioController::default();
+
+    session
+        .update_section_marker(
+            "section_1",
+            "Intro",
+            3.5,
+            Some(libretracks_core::MarkerCategory::Cue),
+            &audio,
+        )
+        .expect("move + lane change should succeed");
+
+    let marker = session
+        .engine
+        .song()
+        .and_then(|song| song.section_markers.first())
+        .cloned()
+        .expect("marker should exist");
+    assert!(
+        (marker.start_seconds - 3.5).abs() < 1e-6,
+        "position should move, got {}",
+        marker.start_seconds
+    );
+    assert_eq!(
+        marker.category_override,
+        Some(libretracks_core::MarkerCategory::Cue),
+        "the lane change must survive alongside the move"
+    );
+    assert_eq!(marker.category(), libretracks_core::MarkerCategory::Cue);
+}
+
+#[test]
 fn dragging_a_marker_to_the_other_lane_stores_a_category_override() {
     let mut session = DesktopSession::default();
     session

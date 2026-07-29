@@ -406,6 +406,12 @@ EngineCommand command_from_json(const std::string& raw) {
                 marker.frame = item.at("frame").get<Frame>();
                 marker.kind = item.value("kind", std::string{});
                 marker.variant = item.value("variant", 0);
+                // Must mirror the other two marker parsers above. Omitting this
+                // silently reset a dragged marker's lane: SetSongMarkers
+                // delivered the override, then the reload that follows every
+                // edit came through here and dropped it, so the engine went
+                // back to announcing the marker as its kind's category.
+                marker.category_override = item.value("category_override", std::string{});
                 cmd.markers.push_back(std::move(marker));
             }
         }

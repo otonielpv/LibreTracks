@@ -3,6 +3,7 @@ import {
   useState,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from "react";
 
 import {
@@ -34,6 +35,11 @@ export function laneCategoryAtY(offsetY: number): MarkerCategory {
   return offsetY < boundary ? "cue" : "section";
 }
 
+/** Vertical middle of a ruler lane, in ruler-relative pixels. */
+function laneCentre(lane: { top: number; height: number }): number {
+  return lane.top + lane.height / 2;
+}
+
 export type MarkerMoveKind = "marker" | "cue";
 
 type MarkerMoveDrag = {
@@ -54,12 +60,6 @@ type MarkerMoveDrag = {
   pointerScaleX: number;
   initialStartSeconds: number;
   previewStartSeconds: number;
-  /**
-   * Ruler-relative Y of the pointer when the drag began, so vertical travel can
-   * be resolved against the lane bands. Ruler flags only; cue diamonds live in
-   * the track area and have no lanes to cross.
-   */
-  pointerStartOffsetY: number;
   /** Category the marker had at grab time, and the one under the pointer now. */
   initialCategory: MarkerCategory;
   previewCategory: MarkerCategory;
@@ -77,6 +77,12 @@ export type MarkerMoveDragDeps = {
   song: SongView | null | undefined;
   snapEnabled: boolean | undefined;
   cameraXRef: MutableRefObject<number>;
+  /**
+   * The ruler element, used as the fixed frame of reference for which lane the
+   * pointer is over. Must be the ruler itself (not a flag hotspot), since the
+   * hotspots move with the drag preview.
+   */
+  rulerRef?: RefObject<HTMLElement | null>;
   livePixelsPerSecondRef: MutableRefObject<number>;
   pixelsPerSecond: number;
   /** `category` is passed only when the drag actually changed lanes, so a plain
@@ -109,6 +115,7 @@ export function useMarkerMoveDrag({
   song,
   snapEnabled,
   cameraXRef,
+  rulerRef,
   livePixelsPerSecondRef,
   pixelsPerSecond,
   onMarkerMoveCommit,
@@ -133,21 +140,12 @@ export function useMarkerMoveDrag({
   ) {
     if (event.button !== 0) return;
     didDragRef.current = false;
-    // The hotspot is positioned at its lane's top, so the pointer's Y within the
-    // ruler is the hotspot's own top plus the offset inside it. Reading it this
-    // way (rather than from the ruler's rect) keeps the drag working regardless
-    // of where the ruler sits on screen.
     const marker = song?.sectionMarkers.find(
       (candidate) => candidate.id === markerId,
     );
     const initialCategory: MarkerCategory = marker
       ? markerCategory(marker)
       : "section";
-    const laneTop =
-      initialCategory === "cue" ? LANE_CUES.top : LANE_SECTIONS.top;
-    const pointerStartOffsetY =
-      laneTop +
-      (event.clientY - event.currentTarget.getBoundingClientRect().top);
     // Derive the grab anchor from the marker's own position rather than the
     // cursor's, so the pointer may land anywhere inside the hotspot without
     // shifting the marker on the first move.
@@ -169,7 +167,6 @@ export function useMarkerMoveDrag({
       ),
       initialStartSeconds: startSeconds,
       previewStartSeconds: startSeconds,
-      pointerStartOffsetY,
       initialCategory,
       previewCategory: initialCategory,
       moved: false,
@@ -203,13 +200,27 @@ export function useMarkerMoveDrag({
           ) - drag.initialStartSeconds
         : pointerDeltaPx / effectivePixelsPerSecond;
 
-    // Ruler flags can also be dragged across lanes to change category; the
-    // pointer's ruler-relative Y is the grab offset plus how far it has moved.
+    // Ruler flags can also be dragged across lanes to change category. Resolve
+    // the pointer's Y against the RULER, which stays put, rather than against
+    // the hotspot: the hotspot is a React element whose `top` follows the
+    // preview, so it shifts under the pointer as soon as the drag moves, and
+    // anchoring to its grab-time rect desynced the moment a drag went
+    // horizontal before going vertical.
     const pointerDeltaY = event.clientY - drag.pointerStartClientY;
+    const rulerTop = rulerRef?.current?.getBoundingClientRect().top;
     const nextCategory: MarkerCategory =
       drag.kind === "cue"
         ? drag.initialCategory
-        : laneCategoryAtY(drag.pointerStartOffsetY + pointerDeltaY);
+        : laneCategoryAtY(
+            rulerTop != null
+              ? event.clientY - rulerTop
+              : // No ruler to measure against (tests, or a detached node):
+                // fall back to the lane the marker started in, offset by how
+                // far the pointer has travelled.
+                (drag.initialCategory === "cue"
+                  ? laneCentre(LANE_CUES)
+                  : laneCentre(LANE_SECTIONS)) + pointerDeltaY,
+          );
 
     // Only start treating this as a drag once the pointer clears the threshold,
     // so a stationary tap/click still fires the primary action. Vertical travel

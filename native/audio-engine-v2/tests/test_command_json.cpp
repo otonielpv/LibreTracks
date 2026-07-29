@@ -93,6 +93,51 @@ TEST_CASE("parse SetSongMarkers") {
     CHECK(c.markers[0].frame == 2025472);
 }
 
+// Three separate commands carry markers, each with its own parser. A dragged
+// marker's lane arrives on SetSongMarkers, but the reload that follows every
+// edit comes through SetSongTimelineWindow / UpsertSongTracks — so a parser
+// that forgets category_override silently resets the lane and the marker goes
+// back to being announced as its kind's category. Pin all three together.
+TEST_CASE("every marker parser keeps category_override") {
+    const std::string marker =
+        R"({"id":"m1","name":"Repeticion","frame":1000,"kind":"tag","category_override":"cue"})";
+
+    SUBCASE("SetSongMarkers") {
+        auto cmd = command_from_json(
+            R"({"type":"SetSongMarkers","song_id":"s","markers":[)" + marker + "]}");
+        auto& c = std::get<CmdSetSongMarkers>(cmd);
+        REQUIRE(c.markers.size() == 1);
+        CHECK(c.markers[0].category_override == "cue");
+    }
+
+    SUBCASE("SetSongTimelineWindow") {
+        auto cmd = command_from_json(
+            R"({"type":"SetSongTimelineWindow","song_id":"s","clips":[],"regions":[],)"
+            R"("markers":[)" + marker + R"(],"bpm":120,"beats_per_bar":4,"beat_unit":4,)"
+            R"("tempo_markers":[],"time_signature_markers":[]})");
+        auto& c = std::get<CmdSetSongTimelineWindow>(cmd);
+        REQUIRE(c.markers.size() == 1);
+        CHECK(c.markers[0].category_override == "cue");
+    }
+
+    SUBCASE("UpsertSongTracks") {
+        auto cmd = command_from_json(
+            R"({"type":"UpsertSongTracks","song_id":"s","tracks":[],"regions":[],)"
+            R"("markers":[)" + marker + R"(],"bpm":120,"beats_per_bar":4,"beat_unit":4})");
+        auto& c = std::get<CmdUpsertSongTracks>(cmd);
+        REQUIRE(c.markers.size() == 1);
+        CHECK(c.markers[0].category_override == "cue");
+    }
+
+    SUBCASE("absent means inherit, for callers that never send it") {
+        auto cmd = command_from_json(
+            R"({"type":"SetSongMarkers","song_id":"s","markers":[)"
+            R"({"id":"m1","name":"Coro","frame":1000,"kind":"chorus"}]})");
+        auto& c = std::get<CmdSetSongMarkers>(cmd);
+        CHECK(c.markers[0].category_override.empty());
+    }
+}
+
 TEST_CASE("parse SetSongTiming") {
     auto cmd = command_from_json(R"({
         "type":"SetSongTiming",
