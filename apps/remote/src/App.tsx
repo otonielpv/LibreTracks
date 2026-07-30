@@ -75,6 +75,9 @@ import {
   DEFAULT_PADS_WIDGET_HEIGHT,
   LAYOUT_COLUMNS,
   LAYOUT_MAX_ROWS,
+  TAB_HEIGHT_MAX_REM,
+  TAB_HEIGHT_MIN_REM,
+  clampTabHeight,
   clearStoredLayout,
   containingGroupId,
   defaultLayout,
@@ -83,10 +86,13 @@ import {
   moveWidgetWithGroup,
   newWidgetId,
   parseLayoutFile,
+  pushWidgetsDown,
   readStoredLayout,
   reconcileWidgetGroup,
+  rectContainsPoint,
   serializeLayoutFile,
   writeStoredLayout,
+  type LayoutPlacementMode,
   type LayoutTab,
   type LayoutPresetProfile,
   type RemoteLayout,
@@ -3860,6 +3866,10 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
 const ROW_HEIGHT_PX = 18;
 const GRID_GAP_PX = 2;
 
+/** Id of the phantom placement used to compute a push preview for a widget
+ * being dragged in from the palette. Never committed to the layout. */
+const ADD_PREVIEW_ID = "layout-add-preview";
+
 function isConfigurableDesignWidget(type: WidgetType): boolean {
   return type === "layoutTitle" || type === "layoutNote" || type === "layoutGroup" || type === "separator";
 }
@@ -3945,12 +3955,19 @@ function DesignWidgetConfigDialog({
   );
 }
 
+/** Which side(s) a resize gesture grows. The corner grip keeps the classic
+ * both-axes behaviour; the dedicated edge grips constrain to one axis, which is
+ * what makes resizing usable with a fingertip on a tablet. */
+export type ResizeEdge = "corner" | "right" | "bottom";
+
 /**
  * Renders one placed widget at its absolute grid cell (x/y, w/h). In edit mode
- * the whole top chrome is the move handle and a corner grip resizes it; both
- * only emit pointer-down — the canvas owns the move/resize math (it knows the
- * grid geometry). The chrome only contains move/remove actions: dimensions are
- * changed directly with the corner grip.
+ * the whole top chrome is the move handle; resizing is available three ways —
+ * the corner grip (both axes), a right/bottom edge grip (single axis) and the
+ * ± steppers in the chrome. The steppers exist because dragging a small grip
+ * on a touch screen is the part users struggle with most; they change the same
+ * w/h by exactly one cell per tap. All grips only emit pointer-down — the
+ * canvas owns the drag math (it knows the grid geometry).
  */
 function LayoutWidgetHost({
   placement,
@@ -3958,6 +3975,7 @@ function LayoutWidgetHost({
   onRemove,
   onMovePointerDown,
   onResizePointerDown,
+  onNudgeSize,
   onConfigure,
   isDragging,
   isGroupDropTarget,
@@ -3966,7 +3984,8 @@ function LayoutWidgetHost({
   editing: boolean;
   onRemove: () => void;
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-  onResizePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onResizePointerDown: (event: ReactPointerEvent<HTMLElement>, edge: ResizeEdge) => void;
+  onNudgeSize: (axis: "w" | "h", delta: 1 | -1) => void;
   onConfigure: () => void;
   isDragging: boolean;
   isGroupDropTarget: boolean;
@@ -3976,6 +3995,7 @@ function LayoutWidgetHost({
     return null;
   }
   const { Component } = definition;
+  const label = STRINGS[definition.labelKey];
 
   return (
     <div
@@ -3991,12 +4011,52 @@ function LayoutWidgetHost({
           <div
             className="layout-widget-drag"
             role="button"
-            aria-label={`${STRINGS.moveWidget}: ${STRINGS[definition.labelKey]}`}
+            aria-label={`${STRINGS.moveWidget}: ${label}`}
             onPointerDown={onMovePointerDown}
           >
-            <span className="layout-widget-title">⠿ {STRINGS[definition.labelKey]}</span>
+            <span className="layout-widget-title">⠿ {label}</span>
           </div>
           <div className="layout-widget-sizers">
+            {/* Tap-to-resize: one grid cell per tap, on each axis. Reliable
+                where dragging a corner grip on glass is not. */}
+            <div className="layout-widget-stepper" role="group" aria-label={`${STRINGS.widgetWidth}: ${label}`}>
+              <span aria-hidden="true">↔</span>
+              <button
+                type="button"
+                aria-label={`${STRINGS.narrower}: ${label}`}
+                disabled={placement.w <= 1}
+                onClick={() => onNudgeSize("w", -1)}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                aria-label={`${STRINGS.wider}: ${label}`}
+                disabled={placement.w >= LAYOUT_COLUMNS}
+                onClick={() => onNudgeSize("w", 1)}
+              >
+                +
+              </button>
+            </div>
+            <div className="layout-widget-stepper" role="group" aria-label={`${STRINGS.widgetHeight}: ${label}`}>
+              <span aria-hidden="true">↕</span>
+              <button
+                type="button"
+                aria-label={`${STRINGS.shorter}: ${label}`}
+                disabled={placement.h <= 1}
+                onClick={() => onNudgeSize("h", -1)}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                aria-label={`${STRINGS.taller}: ${label}`}
+                disabled={placement.h >= LAYOUT_MAX_ROWS}
+                onClick={() => onNudgeSize("h", 1)}
+              >
+                +
+              </button>
+            </div>
             {isConfigurableDesignWidget(placement.type) ? (
               <button type="button" className="layout-widget-configure" onClick={onConfigure}>
                 {STRINGS.configureWidget}
@@ -4012,12 +4072,28 @@ function LayoutWidgetHost({
         <Component placement={placement} />
       </div>
       {editing ? (
-        <div
-          className="layout-widget-resize"
-          role="button"
-          aria-label={`${STRINGS.resizeWidget}: ${STRINGS[definition.labelKey]}`}
-          onPointerDown={onResizePointerDown}
-        />
+        <>
+          {/* Full-length edge grips: a much larger target than the corner and
+              constrained to one axis, so a drag can't skew both dimensions. */}
+          <div
+            className="layout-widget-resize-edge is-right"
+            role="button"
+            aria-label={`${STRINGS.resizeWidgetWidth}: ${label}`}
+            onPointerDown={(event) => onResizePointerDown(event, "right")}
+          />
+          <div
+            className="layout-widget-resize-edge is-bottom"
+            role="button"
+            aria-label={`${STRINGS.resizeWidgetHeight}: ${label}`}
+            onPointerDown={(event) => onResizePointerDown(event, "bottom")}
+          />
+          <div
+            className="layout-widget-resize"
+            role="button"
+            aria-label={`${STRINGS.resizeWidget}: ${label}`}
+            onPointerDown={(event) => onResizePointerDown(event, "corner")}
+          />
+        </>
       ) : null}
     </div>
   );
@@ -4096,6 +4172,7 @@ function LayoutTabBar({
   tabs,
   activeTabId,
   editing,
+  heightRem,
   onSelect,
   onAdd,
   onRename,
@@ -4105,6 +4182,9 @@ function LayoutTabBar({
   tabs: LayoutTab[];
   activeTabId: string;
   editing: boolean;
+  /** Height of the tab strip in rem; drives the tab min-height and font size
+   * through a CSS variable so one number makes the whole strip taller. */
+  heightRem: number;
   onSelect: (tabId: string) => void;
   onAdd: () => void;
   onRename: (tabId: string, name: string) => void;
@@ -4119,7 +4199,12 @@ function LayoutTabBar({
   };
 
   return (
-    <div className="layout-tabbar" role="tablist" aria-label={STRINGS.tabs}>
+    <div
+      className="layout-tabbar"
+      role="tablist"
+      aria-label={STRINGS.tabs}
+      style={{ "--tab-height": `${heightRem}rem` } as CSSProperties}
+    >
       {tabs.map((tab, index) => (
         <div
           key={tab.id}
@@ -4213,7 +4298,15 @@ function LayoutCanvas({
   // on the grid, which convert client coordinates to a grid cell (x/y).
   type Gesture =
     | { kind: "move"; id: string; grabDX: number; grabDY: number }
-    | { kind: "resize"; id: string; startX: number; startY: number; startW: number; startH: number }
+    | {
+        kind: "resize";
+        id: string;
+        edge: ResizeEdge;
+        startX: number;
+        startY: number;
+        startW: number;
+        startH: number;
+      }
     | { kind: "add"; type: WidgetType; startX: number; startY: number; moved: boolean };
   const gestureRef = useRef<Gesture | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -4224,10 +4317,17 @@ function LayoutCanvas({
   const [dropPreview, setDropPreview] = useState<{
     x: number; y: number; w: number; h: number; label: string;
   } | null>(null);
+  // True while the pointer is over the trash zone during a drag. Dropping there
+  // removes an existing widget, or abandons a palette add.
+  const [overTrash, setOverTrash] = useState(false);
+  const trashRef = useRef<HTMLDivElement | null>(null);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
   const cellWidthRef = useRef(0);
   const rowHeightRef = useRef(ROW_HEIGHT_PX + GRID_GAP_PX);
+
+  const placementMode: LayoutPlacementMode = layout.placementMode ?? "free";
+  const tabHeightRem = clampTabHeight(layout.tabHeightRem);
 
   const activeTab =
     layout.tabs.find((tab) => tab.id === layout.activeTabId) ?? layout.tabs[0];
@@ -4300,7 +4400,9 @@ function LayoutCanvas({
 
   const removeWidget = (id: string) => {
     if (configWidgetId === id) setConfigWidgetId(null);
-    commit(widgets
+    // Read through the ref: a trash drop commits the gesture baseline first,
+    // and React has not re-rendered `widgets` by the time this runs.
+    commit(widgetsRef.current
       .filter((widget) => widget.id !== id)
       .map((widget) => {
         if (widget.groupId !== id) return widget;
@@ -4334,6 +4436,51 @@ function LayoutCanvas({
     return nextWidgets;
   };
 
+  /**
+   * Final step of any geometry change: re-evaluate group membership and, in
+   * "push" mode, shift whatever the widget now overlaps downwards. Group
+   * membership is reconciled first so a group carries the right contents when
+   * the push moves it as one body.
+   */
+  const settlePlacement = (
+    nextWidgets: WidgetPlacement[],
+    id: string,
+  ): WidgetPlacement[] => {
+    const grouped = reconcileWidgetGroup(nextWidgets, id);
+    return placementMode === "push" ? pushWidgetsDown(grouped, id) : grouped;
+  };
+
+  /**
+   * Live push preview while a gesture is in flight. The push must be computed
+   * from the layout as it was when the gesture STARTED, not from the last
+   * previewed frame — otherwise every pointer-move would push the already
+   * displaced widgets again and they would run down the grid. So we re-apply the
+   * dragged widget's current rectangle onto the baseline, then push once.
+   *
+   * Only used in "push" mode; free mode has nothing to preview.
+   */
+  const gestureBaselineRef = useRef<WidgetPlacement[] | null>(null);
+
+  const previewPush = (id: string, rect: Partial<WidgetPlacement>) => {
+    const baseline = gestureBaselineRef.current;
+    if (placementMode !== "push" || !baseline) return;
+    const rebased = baseline.map((widget) =>
+      widget.id === id ? { ...widget, ...rect } : widget,
+    );
+    // Group contents follow their group's delta on the baseline too.
+    const target = baseline.find((widget) => widget.id === id);
+    const withGroup =
+      target?.type === "layoutGroup" && rect.x !== undefined && rect.y !== undefined
+        ? moveWidgetWithGroup(rebased, id, rect.x, rect.y)
+        : rebased;
+    commit(pushWidgetsDown(withGroup, id));
+  };
+
+  /** Is the pointer inside the trash zone? Hit-tested against the live rect so
+   * it works with pointer capture, where the event target stays the grid. */
+  const isOverTrash = (clientX: number, clientY: number): boolean =>
+    rectContainsPoint(trashRef.current?.getBoundingClientRect(), clientX, clientY);
+
   // Client coords → grid cell (col, row), clamped to the grid.
   const cellFromClient = (clientX: number, clientY: number) => {
     const rect = gridRef.current?.getBoundingClientRect();
@@ -4364,27 +4511,51 @@ function LayoutCanvas({
       grabDX: event.clientX - originX,
       grabDY: event.clientY - originY,
     };
+    gestureBaselineRef.current = widgetsRef.current;
     setDragId(id);
     setGroupDropId(widget.type === "layoutGroup" ? null : widget.groupId ?? null);
     setDropPreview({ x: widget.x, y: widget.y, w: widget.w, h: widget.h, label: STRINGS[WIDGET_REGISTRY[widget.type].labelKey] });
     gridRef.current?.setPointerCapture?.(event.pointerId);
   };
 
-  const beginResize = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+  const beginResize = (
+    id: string,
+    event: ReactPointerEvent<HTMLElement>,
+    edge: ResizeEdge,
+  ) => {
     const widget = widgetsRef.current.find((w) => w.id === id);
     if (!widget) return;
     event.stopPropagation();
     gestureRef.current = {
       kind: "resize",
       id,
+      edge,
       startX: event.clientX,
       startY: event.clientY,
       startW: widget.w,
       startH: widget.h,
     };
+    gestureBaselineRef.current = widgetsRef.current;
     setDragId(id);
     setGroupDropId(null);
     gridRef.current?.setPointerCapture?.(event.pointerId);
+  };
+
+  // Tap-to-resize from the chrome steppers: one grid cell per tap. Runs the
+  // same commit path as a drag so push mode and group membership stay correct.
+  const nudgeSize = (id: string, axis: "w" | "h", delta: 1 | -1) => {
+    const widget = widgetsRef.current.find((w) => w.id === id);
+    if (!widget) return;
+    const max = axis === "w" ? LAYOUT_COLUMNS : LAYOUT_MAX_ROWS;
+    const next = Math.max(1, Math.min(max, widget[axis] + delta));
+    if (next === widget[axis]) return;
+    // Growing the width must not push the widget past the right edge.
+    const patch =
+      axis === "w"
+        ? { w: Math.min(next, LAYOUT_COLUMNS - widget.x) }
+        : { h: next };
+    resizeWidget(id, patch);
+    commit(settlePlacement(widgetsRef.current, id));
   };
 
   const beginAdd = (type: WidgetType, event: ReactPointerEvent<HTMLElement>) => {
@@ -4395,6 +4566,7 @@ function LayoutCanvas({
       startY: event.clientY,
       moved: false,
     };
+    gestureBaselineRef.current = widgetsRef.current;
     setPendingAddType(type);
     setGroupDropId(null);
     const definition = WIDGET_REGISTRY[type];
@@ -4407,14 +4579,42 @@ function LayoutCanvas({
   const onGridPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const gesture = gestureRef.current;
     if (!gesture) return;
+
+    // Over the trash the drag is "parked": stop moving geometry so the widget
+    // doesn't also get repositioned on the way out, and highlight the zone.
+    const trashed = gesture.kind !== "resize" && isOverTrash(event.clientX, event.clientY);
+    if (trashed !== overTrash) setOverTrash(trashed);
+    if (trashed) {
+      if (gesture.kind === "add") gesture.moved = true;
+      setDropPreview(null);
+      setGroupDropId(null);
+      return;
+    }
+
     if (gesture.kind === "move") {
       const { col, row } = cellFromClient(event.clientX - gesture.grabDX, event.clientY - gesture.grabDY);
       const widget = widgetsRef.current.find((w) => w.id === gesture.id);
-      if (widget && (widget.x !== col || widget.y !== row)) {
-        const maxX = LAYOUT_COLUMNS - widget.w;
-        const x = Math.min(col, Math.max(0, maxX));
+      if (!widget) return;
+      const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - widget.w));
+      // Skip only when the target cell is unchanged. The comparison must use the
+      // CLAMPED x, and in push mode the widget's live position is the previewed
+      // one, so it is compared against the baseline instead — otherwise the
+      // guard sees "already there", stops following the pointer, and leaves the
+      // pushed neighbours stranded on top of the dragged widget.
+      const reference =
+        placementMode === "push"
+          ? gestureBaselineRef.current?.find((w) => w.id === gesture.id) ?? widget
+          : widget;
+      const settledHere =
+        reference.x === x && reference.y === row && placementMode !== "push";
+      if (!settledHere) {
         setDropPreview({ x, y: row, w: widget.w, h: widget.h, label: STRINGS[WIDGET_REGISTRY[widget.type].labelKey] });
-        const nextWidgets = updatePos(gesture.id, x, row);
+        // In push mode the displaced widgets move out of the way live, so the
+        // drop is a confirmation of what is already on screen.
+        const nextWidgets =
+          placementMode === "push"
+            ? (previewPush(gesture.id, { x, y: row }), widgetsRef.current)
+            : updatePos(gesture.id, x, row);
         const moved = nextWidgets.find((candidate) => candidate.id === gesture.id);
         setGroupDropId(
           moved && moved.type !== "layoutGroup"
@@ -4423,11 +4623,24 @@ function LayoutCanvas({
         );
       }
     } else if (gesture.kind === "resize") {
-      const dw = Math.round((event.clientX - gesture.startX) / cellWidthRef.current);
-      const dh = Math.round((event.clientY - gesture.startY) / rowHeightRef.current);
-      const nextW = Math.max(1, Math.min(LAYOUT_COLUMNS, gesture.startW + dw));
-      const nextH = Math.max(1, Math.min(LAYOUT_MAX_ROWS, gesture.startH + dh));
-      resizeWidget(gesture.id, { w: nextW, h: nextH });
+      // Edge grips constrain to one axis so a slightly diagonal finger drag
+      // can't change the dimension the user isn't aiming at.
+      const patch: { w?: number; h?: number } = {};
+      if (gesture.edge === "corner" || gesture.edge === "right") {
+        const dw = Math.round((event.clientX - gesture.startX) / cellWidthRef.current);
+        patch.w = Math.max(1, Math.min(LAYOUT_COLUMNS, gesture.startW + dw));
+      }
+      if (gesture.edge === "corner" || gesture.edge === "bottom") {
+        const dh = Math.round((event.clientY - gesture.startY) / rowHeightRef.current);
+        patch.h = Math.max(1, Math.min(LAYOUT_MAX_ROWS, gesture.startH + dh));
+      }
+      // Growing a widget also makes room live, so the neighbours below reflow
+      // while the grip is still held.
+      if (placementMode === "push") {
+        previewPush(gesture.id, patch);
+      } else {
+        resizeWidget(gesture.id, patch);
+      }
     } else if (gesture.kind === "add") {
       if (
         !gesture.moved &&
@@ -4442,37 +4655,77 @@ function LayoutCanvas({
       const x = Math.min(col, Math.max(0, LAYOUT_COLUMNS - size.w));
       setDropPreview({ x, y: row, ...size, label: STRINGS[definition.labelKey] });
       const candidate: WidgetPlacement = {
-        id: "layout-add-preview",
+        id: ADD_PREVIEW_ID,
         type: gesture.type,
         x,
         y: row,
         ...size,
       };
+      // Push preview for a palette drag: insert a phantom placement at the
+      // hovered cell so the existing widgets move aside before the drop. The
+      // phantom is dropped again on pointer-up and replaced by the real one.
+      if (placementMode === "push") {
+        const baseline = gestureBaselineRef.current ?? widgetsRef.current;
+        commit(
+          pushWidgetsDown([...baseline, candidate], ADD_PREVIEW_ID)
+            .filter((widget) => widget.id !== ADD_PREVIEW_ID),
+        );
+        setGroupDropId(containingGroupId(widgetsRef.current, candidate));
+        return;
+      }
       setGroupDropId(containingGroupId(widgetsRef.current, candidate));
     }
   };
 
   const onGridPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const gesture = gestureRef.current;
+    const baseline = gestureBaselineRef.current;
     gestureRef.current = null;
+    gestureBaselineRef.current = null;
+    const droppedOnTrash = overTrash;
+    setOverTrash(false);
     setDragId(null);
     setPendingAddType(null);
     setDropPreview(null);
     setGroupDropId(null);
     if (!gesture) return;
+
+    // Trash drop: an existing widget is removed, a palette drag is abandoned.
+    // Either way the live push preview is undone by restoring the baseline, so
+    // the widgets that moved aside during the drag snap back.
+    if (droppedOnTrash && gesture.kind !== "resize") {
+      if (baseline) commit(baseline);
+      if (gesture.kind === "move") removeWidget(gesture.id);
+      return;
+    }
+
     if (gesture.kind === "add") {
       const size = widgetDefaultSize(gesture.type, gridRef.current?.clientWidth ?? window.innerWidth);
+      // In push mode the live preview already displaced the other widgets, so
+      // the insert has to start from the untouched baseline; otherwise the drop
+      // would push them a second time.
+      const source = placementMode === "push" && baseline ? baseline : widgetsRef.current;
       const cell = gesture.moved
         ? cellFromClient(event.clientX, event.clientY)
-        : { col: 0, row: widgetsRef.current.reduce((max, widget) => Math.max(max, widget.y + widget.h), 0) };
+        : { col: 0, row: source.reduce((max, widget) => Math.max(max, widget.y + widget.h), 0) };
       const x = Math.min(cell.col, Math.max(0, LAYOUT_COLUMNS - size.w));
       const added = [
-        ...widgetsRef.current,
+        ...source,
         { id: newWidgetId(gesture.type), type: gesture.type, x, y: cell.row, ...size },
       ];
-      commit(reconcileWidgetGroup(added, added[added.length - 1].id));
+      commit(settlePlacement(added, added[added.length - 1].id));
     } else if (gesture.kind === "move" || gesture.kind === "resize") {
-      commit(reconcileWidgetGroup(widgetsRef.current, gesture.id));
+      // Same reasoning: re-apply the dragged widget's final rectangle onto the
+      // baseline and push exactly once.
+      if (placementMode === "push" && baseline) {
+        const settled = widgetsRef.current.find((widget) => widget.id === gesture.id);
+        const rebased = settled
+          ? baseline.map((widget) => (widget.id === gesture.id ? settled : widget))
+          : baseline;
+        commit(settlePlacement(rebased, gesture.id));
+        return;
+      }
+      commit(settlePlacement(widgetsRef.current, gesture.id));
     }
   };
 
@@ -4480,10 +4733,11 @@ function LayoutCanvas({
   const appendWidget = (type: WidgetType) => {
     const size = widgetDefaultSize(type, gridRef.current?.clientWidth ?? window.innerWidth);
     const y = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
-    commit([
+    const added = [
       ...widgets,
       { id: newWidgetId(type), type, x: 0, y, ...size },
-    ]);
+    ];
+    commit(settlePlacement(added, added[added.length - 1].id));
   };
 
   // The grid needs enough rows to show every widget + a little slack to drop into.
@@ -4500,6 +4754,7 @@ function LayoutCanvas({
         tabs={layout.tabs}
         activeTabId={activeTab?.id ?? layout.activeTabId}
         editing={editing}
+        heightRem={tabHeightRem}
         onSelect={selectTab}
         onAdd={addTab}
         onRename={renameTab}
@@ -4566,11 +4821,27 @@ function LayoutCanvas({
               onRemove={() => removeWidget(placement.id)}
               onConfigure={() => setConfigWidgetId(placement.id)}
               onMovePointerDown={(event) => beginMove(placement.id, event)}
-              onResizePointerDown={(event) => beginResize(placement.id, event)}
+              onResizePointerDown={(event, edge) => beginResize(placement.id, event, edge)}
+              onNudgeSize={(axis, delta) => nudgeSize(placement.id, axis, delta)}
             />
           ))}
         </div>
       )}
+      {/* Trash zone: only mounted while a move/add drag is in flight, so it
+          never covers the canvas at rest. Dropping a placed widget here deletes
+          it; dropping a palette drag here abandons the add. Resize drags are
+          excluded — there is nothing to cancel, only a size to keep. */}
+      {editing && (dragId || pendingAddType) ? (
+        <div
+          ref={trashRef}
+          className={`layout-trash ${overTrash ? "is-armed" : ""}`}
+          role="button"
+          aria-label={pendingAddType ? STRINGS.cancelDrag : STRINGS.dropToRemove}
+        >
+          <span className="layout-trash-icon" aria-hidden="true">🗑</span>
+          <span>{pendingAddType ? STRINGS.cancelDrag : STRINGS.dropToRemove}</span>
+        </div>
+      ) : null}
       {editing && configWidgetId ? (() => {
         const placement = widgets.find((widget) => widget.id === configWidgetId);
         return placement ? (
@@ -4622,6 +4893,10 @@ export function App() {
   // every change made during the session. null when not editing.
   const editBaselineRef = useRef<RemoteLayout | null>(null);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
+  // Both editor preferences are rendered by the header toolbar but consumed by
+  // the canvas, so they are read from the layout here as well.
+  const placementMode: LayoutPlacementMode = layout.placementMode ?? "free";
+  const tabHeightRem = clampTabHeight(layout.tabHeightRem);
 
   useEffect(() => {
     window.localStorage.setItem(REMOTE_SIZE_STORAGE_KEY, String(sizeLevel));
@@ -4720,17 +4995,92 @@ export function App() {
           <small>LibreTracks</small>
           <h1>{STRINGS.appTitle}</h1>
         </div>
+        {/* Edit actions live in the header's centre gap. Previously they sat in
+            their own bar below, which overlapped the tab strip on a tablet. */}
+        {editing ? (
+          <div className="layout-edit-toolbar">
+            <button type="button" className="layout-edit-done" onClick={finishEditing}>
+              ✓ {STRINGS.doneEditing}
+            </button>
+            <button type="button" className="layout-edit-cancel" onClick={cancelEditing}>
+              {STRINGS.cancelEditing}
+            </button>
+            <button
+              type="button"
+              className={`layout-placement-toggle ${placementMode === "push" ? "is-active" : ""}`}
+              role="switch"
+              aria-checked={placementMode === "push"}
+              title={placementMode === "push" ? STRINGS.placementPushHint : STRINGS.placementFreeHint}
+              onClick={() =>
+                updateLayout({
+                  ...layout,
+                  placementMode: placementMode === "push" ? "free" : "push",
+                })
+              }
+            >
+              <span aria-hidden="true">{placementMode === "push" ? "⇵" : "✥"}</span>
+              {placementMode === "push" ? STRINGS.placementPush : STRINGS.placementFree}
+            </button>
+            {/* Tab strip height: the tabs are the one piece of chrome the widget
+                grid can't resize, and the default is a small target on glass. */}
+            <div className="layout-tab-height" role="group" aria-label={STRINGS.tabHeight}>
+              <span aria-hidden="true">⇕</span>
+              <button
+                type="button"
+                aria-label={STRINGS.shorterTabs}
+                disabled={tabHeightRem <= TAB_HEIGHT_MIN_REM}
+                onClick={() => updateLayout({ ...layout, tabHeightRem: clampTabHeight(tabHeightRem - 0.3) })}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                aria-label={STRINGS.tallerTabs}
+                disabled={tabHeightRem >= TAB_HEIGHT_MAX_REM}
+                onClick={() => updateLayout({ ...layout, tabHeightRem: clampTabHeight(tabHeightRem + 0.3) })}
+              >
+                +
+              </button>
+            </div>
+            <div className="layout-edit-toolbar-actions">
+              <button type="button" className="layout-reset-button" onClick={exportLayout}>
+                {STRINGS.exportLayout}
+              </button>
+              <button
+                type="button"
+                className="layout-reset-button"
+                onClick={() => importInputRef.current?.click()}
+              >
+                {STRINGS.importLayout}
+              </button>
+              <button type="button" className="layout-reset-button" onClick={resetLayout}>
+                {STRINGS.resetLayout}
+              </button>
+            </div>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="layout-import-input"
+              onChange={onImportFileChosen}
+            />
+          </div>
+        ) : null}
         <div className="status-pill">
           {snapshot?.playbackState ? STRINGS[snapshot.playbackState] : STRINGS.idle}
         </div>
-        <button
-          type="button"
-          className={`layout-edit-button ${editing ? "is-active" : ""}`}
-          aria-pressed={editing}
-          onClick={() => (editing ? finishEditing() : startEditing())}
-        >
-          {editing ? STRINGS.doneEditing : STRINGS.editLayout}
-        </button>
+        {/* Only the entry point lives here. While editing, the toolbar's own
+            "Done" is the single way out — two of them read as two actions. */}
+        {editing ? null : (
+          <button
+            type="button"
+            className="layout-edit-button"
+            aria-pressed={false}
+            onClick={startEditing}
+          >
+            {STRINGS.editLayout}
+          </button>
+        )}
         <div className="remote-size-stepper" role="group" aria-label={STRINGS.size}>
           <button
             type="button"
@@ -4752,42 +5102,6 @@ export function App() {
           </button>
         </div>
       </header>
-
-      {/* Dedicated edit toolbar so the layout actions never crowd the header
-          (the tight phone header was pushing "Done" under the size stepper).
-          Only shown while editing; "Done" is the prominent primary action. */}
-      {editing ? (
-        <div className="layout-edit-toolbar">
-          <button type="button" className="layout-edit-done" onClick={finishEditing}>
-            ✓ {STRINGS.doneEditing}
-          </button>
-          <button type="button" className="layout-edit-cancel" onClick={cancelEditing}>
-            {STRINGS.cancelEditing}
-          </button>
-          <div className="layout-edit-toolbar-actions">
-            <button type="button" className="layout-reset-button" onClick={exportLayout}>
-              {STRINGS.exportLayout}
-            </button>
-            <button
-              type="button"
-              className="layout-reset-button"
-              onClick={() => importInputRef.current?.click()}
-            >
-              {STRINGS.importLayout}
-            </button>
-            <button type="button" className="layout-reset-button" onClick={resetLayout}>
-              {STRINGS.resetLayout}
-            </button>
-          </div>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="layout-import-input"
-            onChange={onImportFileChosen}
-          />
-        </div>
-      ) : null}
 
       <div className="remote-content">
         <LayoutCanvas layout={layout} editing={editing} onChange={updateLayout} />

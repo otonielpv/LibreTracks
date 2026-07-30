@@ -115,7 +115,7 @@ export const DEFAULT_METRONOME_WIDGET_HEIGHT = 26;
  * and the "stop with playback" switch without an inner scrollbar. Bumping this
  * re-generates the Tools preset for users who never customised their layout
  * (see the hasToolsPreset check in App.tsx). */
-export const DEFAULT_PADS_WIDGET_HEIGHT = 30;
+export const DEFAULT_PADS_WIDGET_HEIGHT = 32;
 
 export type WidgetTextAlign = "left" | "center" | "right";
 export type SeparatorStyle = "line" | "dashed" | "space";
@@ -165,14 +165,40 @@ export type RemoteLayout = {
   customized?: boolean;
   /** Device family used to create an untouched preset. */
   presetProfile?: LayoutPresetProfile;
+  /** Editor-only preference: how drops resolve overlaps. Defaults to "free". */
+  placementMode?: LayoutPlacementMode;
+  /** Tab strip height in rem, in [TAB_HEIGHT_MIN_REM, TAB_HEIGHT_MAX_REM]. */
+  tabHeightRem?: number;
 };
 
 export type LayoutPresetProfile = "standard" | "tablet" | "phone";
 
+/** How a drop resolves an overlap with the widgets already placed.
+ * "free" keeps the Mixing-Station behaviour (overlaps allowed, nothing moves);
+ * "push" shifts whatever the dropped widget lands on straight down, cascading
+ * to the widgets below it. */
+export type LayoutPlacementMode = "free" | "push";
+
+/** Height of the tab strip ("Controles", "Mixer", …) in rem. The tabs are the
+ * one piece of chrome the widget grid can't resize, and the default is a small
+ * target on a tablet. Persisted with the layout so it survives a reload. */
+export const TAB_HEIGHT_MIN_REM = 1.6;
+export const TAB_HEIGHT_MAX_REM = 5;
+export const DEFAULT_TAB_HEIGHT_REM = 1.9;
+
+export function clampTabHeight(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_TAB_HEIGHT_REM;
+  // Quantised to 0.1rem so the stepper produces stable, comparable numbers.
+  const snapped = Math.round(value * 10) / 10;
+  return Math.max(TAB_HEIGHT_MIN_REM, Math.min(TAB_HEIGHT_MAX_REM, snapped));
+}
+
 // v2 gained tabs; v3 gained absolute x/y positions; v4 moved to the 24-column
-// grid; v5 adds configurable design widgets and persisted widget groups.
+// grid; v5 adds configurable design widgets and persisted widget groups; v6
+// adds the placement mode and the tab strip height (both optional, so a v5
+// layout loads unchanged with the previous defaults).
 // normalizeLayout keeps every older shape compatible.
-export const LAYOUT_VERSION = 5;
+export const LAYOUT_VERSION = 6;
 const LEGACY_GRID_SCALE = 4;
 const LAYOUT_STORAGE_KEY = "libretracks.remote.layout";
 
@@ -245,6 +271,8 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
     tabs: [controls, mixer, tools],
     activeTabId: controls.id,
     presetProfile: profile,
+    placementMode: "free",
+    tabHeightRem: DEFAULT_TAB_HEIGHT_REM,
   };
 }
 
@@ -425,6 +453,108 @@ export function moveWidgetWithGroup(
   });
 }
 
+/** Is a client point inside a client rect (inclusive)? Used for the editor's
+ * trash zone, which is hit-tested against its live rect rather than by event
+ * target, because a drag holds pointer capture on the canvas. A zero-width rect
+ * means "not laid out yet" and never matches. */
+export function rectContainsPoint(
+  rect: { left: number; right: number; top: number; bottom: number; width: number } | null | undefined,
+  x: number,
+  y: number,
+): boolean {
+  if (!rect || rect.width === 0) return false;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function overlaps(a: WidgetPlacement, b: WidgetPlacement): boolean {
+  return (
+    a.x < b.x + b.w &&
+    b.x < a.x + a.w &&
+    a.y < b.y + b.h &&
+    b.y < a.y + a.h
+  );
+}
+
+/**
+ * Resolve overlaps by pushing widgets straight down ("push" placement mode).
+ * The widget identified by `id` is the anchor: it stays exactly where the user
+ * dropped it, and every widget it overlaps moves down just enough to clear it —
+ * cascading, so a widget displaced by the first pass in turn pushes whatever
+ * sits below it. Only y changes; columns are never reflowed, which keeps the
+ * result predictable when dragging with a finger.
+ *
+ * A layoutGroup pushes as one body: its contents move with it and the group's
+ * own children are never pushed by their group.
+ */
+export function pushWidgetsDown(
+  widgets: WidgetPlacement[],
+  id: string,
+): WidgetPlacement[] {
+  const anchor = widgets.find((widget) => widget.id === id);
+  if (!anchor) return widgets;
+
+  // Widgets moved as a unit with a placement: a group carries its contents.
+  const bodyOf = (widget: WidgetPlacement): string[] =>
+    widget.type === "layoutGroup"
+      ? [widget.id, ...widgets.filter((w) => w.groupId === widget.id).map((w) => w.id)]
+      : [widget.id];
+
+  const result = new Map(widgets.map((widget) => [widget.id, { ...widget }]));
+  // Settled bodies are final. The anchor is settled first (it stays where the
+  // user put it); every other body settles in top-down order, so a widget is
+  // only placed once everything that could push it is already fixed. Settling
+  // in queue order instead would let a lower widget freeze before the widget
+  // above it had been pushed onto it.
+  const settled = new Set(bodyOf(anchor));
+
+  // Heads still to place: one entry per body (a group's children ride along).
+  const pending = widgets
+    .filter((widget) => !settled.has(widget.id))
+    .filter((widget) => !(widget.groupId && settled.has(widget.groupId)));
+
+  // Process in the ORIGINAL top-down order. The order must be fixed up front,
+  // not re-read from `result` each round: `result` is mutated as bodies settle,
+  // so re-sorting would let a widget that was just pushed down lose its place in
+  // the queue and end up level with the widget above it.
+  pending.sort((a, b) => a.y - b.y || widgets.indexOf(a) - widgets.indexOf(b));
+
+  for (const head of pending) {
+    // A group's child is displaced by its group, never tested on its own.
+    if (head.groupId && settled.has(head.groupId)) continue;
+
+    const body = bodyOf(head).map((memberId) => result.get(memberId) as WidgetPlacement);
+
+    // Push the body below every settled body it overlaps. The shift is measured
+    // per member against the blocker's BOTTOM, and re-checked until nothing
+    // overlaps: one pass is not enough, because clearing the first blocker can
+    // slide the body onto a second one that sits lower down.
+    let guard = 0;
+    let moved = true;
+    while (moved && guard < widgets.length + 1) {
+      guard += 1;
+      moved = false;
+      let shift = 0;
+      for (const settledId of settled) {
+        const blocker = result.get(settledId) as WidgetPlacement;
+        for (const member of body) {
+          if (!overlaps(blocker, member)) continue;
+          shift = Math.max(shift, blocker.y + blocker.h - member.y);
+        }
+      }
+      if (shift > 0) {
+        for (const member of body) {
+          member.y = Math.min(LAYOUT_MAX_ROWS - 1, member.y + shift);
+        }
+        moved = true;
+      }
+    }
+    for (const member of body) settled.add(member.id);
+  }
+
+  return widgets.map((widget) => result.get(widget.id) as WidgetPlacement);
+}
+
 /** Re-evaluate membership after a drop or group resize. A normal widget joins
  * the smallest group that fully contains it; a group captures every widget
  * inside its frame and releases its former contents that no longer fit. */
@@ -498,7 +628,10 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
   if (!raw || typeof raw !== "object") {
     return defaultLayout();
   }
-  const candidate = raw as { version?: unknown; tabs?: unknown; widgets?: unknown; activeTabId?: unknown; customized?: unknown; presetProfile?: unknown };
+  const candidate = raw as { version?: unknown; tabs?: unknown; widgets?: unknown; activeTabId?: unknown; customized?: unknown; presetProfile?: unknown; placementMode?: unknown; tabHeightRem?: unknown };
+  const placementMode: LayoutPlacementMode =
+    candidate.placementMode === "push" ? "push" : "free";
+  const tabHeightRem = clampTabHeight(candidate.tabHeightRem);
   const legacyGrid = typeof candidate.version !== "number" || candidate.version < 4;
 
   // v1 → v2 migration: a flat widgets array becomes a single tab.
@@ -508,7 +641,7 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
       return defaultLayout();
     }
     const tab: LayoutTab = { id: newTabId(), name: "Principal", widgets };
-    return { version: LAYOUT_VERSION, tabs: [tab], activeTabId: tab.id };
+    return { version: LAYOUT_VERSION, tabs: [tab], activeTabId: tab.id, placementMode, tabHeightRem };
   }
 
   if (!Array.isArray(candidate.tabs)) {
@@ -550,6 +683,8 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
       candidate.presetProfile === "phone" ? "phone" :
       candidate.presetProfile === "tablet" ? "tablet" :
       candidate.presetProfile === "standard" ? "standard" : undefined,
+    placementMode,
+    tabHeightRem,
   };
 }
 

@@ -42,6 +42,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("layout editor", () => {
@@ -75,11 +76,88 @@ describe("layout editor", () => {
     expect(palette).toBeTruthy();
     // Every default widget now shows a drag handle (its label as a button).
     expect(within(palette).getAllByRole("button").length).toBeGreaterThan(5);
-    // Dimensions are edited directly through the corner grip, not steppers.
-    expect(screen.queryByRole("group", { name: /width|ancho/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: /height|alto/i })).toBeNull();
+    // Three ways to resize, because dragging a grip is the part that fails on
+    // a touch screen: per-axis ± steppers, single-axis edge grips and the
+    // both-axes corner grip.
+    expect(screen.getAllByRole("group", { name: /width|ancho/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("group", { name: /height|alto/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /resize width|redimensionar ancho/i }).length)
+      .toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /resize height|redimensionar alto/i }).length)
+      .toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /resize widget|redimensionar widget/i }).length)
       .toBeGreaterThan(0);
+  });
+
+  it("resizes a widget one cell per tap from the chrome steppers", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    const readWidth = (index: number) => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+      ) as Partial<RemoteLayout>;
+      return stored.tabs?.[0]?.widgets?.[index]?.w;
+    };
+
+    // The first default widget spans the full grid, so it can only shrink.
+    const narrower = screen.getAllByRole("button", { name: /narrower|más estrecho/i })[0];
+    fireEvent.click(narrower);
+    expect(readWidth(0)).toBe(23);
+
+    const taller = screen.getAllByRole("button", { name: /^(?:taller|más alto):/i })[0];
+    const before = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    ) as Partial<RemoteLayout>;
+    const heightBefore = before.tabs?.[0]?.widgets?.[0]?.h ?? 0;
+    fireEvent.click(taller);
+    const after = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    ) as Partial<RemoteLayout>;
+    expect(after.tabs?.[0]?.widgets?.[0]?.h).toBe(heightBefore + 1);
+  });
+
+  it("makes the tab strip taller and persists the choice", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /taller tabs|pestañas más altas/i }));
+    const stored = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    ) as Partial<RemoteLayout>;
+    expect(stored.tabHeightRem).toBeCloseTo(2.2);
+    // The height drives the tab chrome through a CSS variable on the tablist.
+    expect(screen.getByRole("tablist").getAttribute("style")).toContain("--tab-height");
+  });
+
+  it("keeps the edit actions in the header, not in a bar over the tabs", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    // The toolbar used to float below the header, where it covered the tab
+    // strip on a tablet. It must now be a child of the header itself.
+    const done = screen.getByRole("button", { name: /^✓/ });
+    const toolbar = done.closest(".layout-edit-toolbar");
+    expect(toolbar).toBeTruthy();
+    expect(toolbar?.closest("header.remote-header")).toBeTruthy();
+    // The placement toggle and tab-height stepper moved in with it.
+    expect(toolbar?.querySelector("[role='switch']")).toBeTruthy();
+    expect(toolbar?.querySelector(".layout-tab-height")).toBeTruthy();
+  });
+
+  it("toggles the placement mode between free and push", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("true");
+    const stored = JSON.parse(
+      window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+    ) as Partial<RemoteLayout>;
+    expect(stored.placementMode).toBe("push");
   });
 
   it("organizes every palette widget into labelled categories", () => {
@@ -128,6 +206,72 @@ describe("layout editor", () => {
       window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
     ) as Partial<RemoteLayout>;
     expect(stored.customized).toBe(true);
+  });
+
+  it("push mode displaces the widgets below when one grows", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+    fireEvent.click(screen.getByRole("switch"));
+
+    const readTab = () => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+      ) as Partial<RemoteLayout>;
+      return stored.tabs?.[0]?.widgets ?? [];
+    };
+
+    // The default Controls tab is a full-width stack, so growing the first
+    // widget must push every widget under it down by the same amount.
+    const before = readTab().map((widget) => widget.y);
+    fireEvent.click(screen.getAllByRole("button", { name: /^(?:taller|más alto):/i })[0]);
+    const after = readTab().map((widget) => widget.y);
+
+    expect(after[0]).toBe(before[0]);
+    for (let index = 1; index < before.length; index += 1) {
+      expect(after[index]).toBe(before[index] + 1);
+    }
+  });
+
+  // NOTE: the trash zone arms on pointer COORDINATES, and jsdom ships no
+  // PointerEvent — testing-library's pointer events therefore carry no
+  // clientX/clientY, so the arming itself cannot be driven here. The geometry
+  // check lives in rectContainsPoint (see remoteLayout.test.ts); what this test
+  // pins down is that the zone is mounted only while a drag is in flight.
+  it("mounts the trash zone only while a drag is in flight", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    const trashQuery = () =>
+      screen.queryByRole("button", { name: /drop to remove|suelta para quitar/i });
+
+    // At rest there is no trash target covering the canvas.
+    expect(trashQuery()).toBeNull();
+
+    const grid = document.querySelector(".layout-canvas") as HTMLElement;
+    const mover = screen.getAllByRole("button", { name: /move widget|mover widget/i })[0];
+    fireEvent.pointerDown(mover, { pointerId: 1 });
+    expect(trashQuery()).toBeTruthy();
+
+    fireEvent.pointerUp(grid, { pointerId: 1 });
+    expect(trashQuery()).toBeNull();
+  });
+
+  it("free mode leaves the other widgets where they are", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
+
+    const readTab = () => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
+      ) as Partial<RemoteLayout>;
+      return stored.tabs?.[0]?.widgets ?? [];
+    };
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^(?:taller|más alto):/i })[0]);
+    const after = readTab();
+    // Default (free) placement: the grown widget now overlaps its neighbour and
+    // nothing moved — that is the opt-in the push toggle exists for.
+    expect(after[1].y).toBe(defaultLayout().tabs[0].widgets[1].y);
   });
 
   it("reset restores the default layout after edits", () => {

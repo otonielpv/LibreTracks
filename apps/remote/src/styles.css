@@ -60,51 +60,57 @@ button {
   border-bottom: 1px solid rgb(255 255 255 / 0.055);
 }
 
-/* status pill takes the flexible middle; edit button + size stepper sit at the
-   end. The edit toolbar (below the header) holds export/import/reset so the
-   header never gets crowded on a phone. */
+/* The header is brand | flexible middle | status pill | edit | size stepper.
+   While editing, the edit toolbar occupies the flexible middle — it used to
+   float below the header, where it covered the tab strip. */
 .remote-header .status-pill {
   justify-self: end;
 }
 
 .layout-edit-toolbar {
+  grid-column: 2;
+  justify-self: center;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  border-bottom: 1px solid var(--outline);
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.6rem;
   background: var(--accent-soft);
 }
 
 .layout-edit-done {
-  padding: 0.4rem 1rem;
+  padding: 0.3rem 0.8rem;
   border: 1px solid var(--accent);
-  border-radius: 0.6rem;
+  border-radius: 0.5rem;
   background: var(--accent);
   color: #06201c;
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .layout-edit-cancel {
-  padding: 0.4rem 0.9rem;
+  padding: 0.3rem 0.7rem;
   border: 1px solid var(--outline);
-  border-radius: 0.6rem;
+  border-radius: 0.5rem;
   background: var(--panel-2);
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.73rem;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .layout-edit-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-left: auto;
+  gap: 0.3rem;
 }
 
 .remote-header small,
@@ -2893,58 +2899,53 @@ button {
 /* Editing controls float over the real viewport. They no longer shrink the
    canvas, so the rectangles being arranged have the same available space as
    they will after pressing Done. */
+/* The toolbar sits in the header's centre cell, so it must not force the header
+   to grow: it scrolls sideways instead of wrapping into a second line. */
 .remote-shell.is-editing-layout .layout-edit-toolbar {
-  position: fixed;
-  z-index: 40;
-  top: calc(3.4rem + env(safe-area-inset-top));
-  right: 0.75rem;
-  width: min(34rem, calc(100vw - 1.5rem));
-  border: 1px solid var(--outline);
-  border-radius: 0.75rem;
-  box-shadow: 0 0.8rem 2.5rem rgb(0 0 0 / 0.45);
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.remote-shell.is-editing-layout .layout-edit-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.remote-shell.is-editing-layout .layout-edit-done,
+.remote-shell.is-editing-layout .layout-edit-cancel,
+.remote-shell.is-editing-layout .layout-reset-button,
+.remote-shell.is-editing-layout .layout-placement-toggle,
+.remote-shell.is-editing-layout .layout-tab-height {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.remote-shell.is-editing-layout .layout-edit-toolbar-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
 }
 
 @media (max-width: 600px) {
-  /* On phones a floating two-line toolbar covers both tab management and the
-     first widgets. Keep it in normal document flow as one compact, horizontally
-     scrollable row; the canvas then starts below it with no hidden controls. */
+  /* A phone header has no room for a centre cell; drop the toolbar onto its own
+     full-width row below the brand instead of squeezing three cells. */
   .remote-shell.is-editing-layout .layout-edit-toolbar {
-    position: static;
-    flex: 0 0 auto;
-    width: auto;
-    max-width: 100%;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    gap: 0.3rem;
-    padding: 0.3rem 0.45rem;
-    border-width: 0 0 1px;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    border-width: 1px 0 0;
     border-radius: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    box-shadow: none;
-  }
-
-  .remote-shell.is-editing-layout .layout-edit-toolbar::-webkit-scrollbar {
-    display: none;
+    padding: 0.3rem 0.45rem;
   }
 
   .remote-shell.is-editing-layout .layout-edit-done,
   .remote-shell.is-editing-layout .layout-edit-cancel,
   .remote-shell.is-editing-layout .layout-reset-button {
-    flex: 0 0 auto;
     min-height: 2rem;
     padding: 0.3rem 0.55rem;
-    white-space: nowrap;
     font-size: 0.68rem;
-  }
-
-  .remote-shell.is-editing-layout .layout-edit-toolbar-actions {
-    flex: 0 0 auto;
-    flex-wrap: nowrap;
-    gap: 0.3rem;
-    margin-left: 0;
   }
 }
 
@@ -3073,8 +3074,12 @@ button {
   background: rgb(255 255 255 / 0.02);
 }
 
+/* The dragged widget rides above the rest: in push mode the neighbours reflow
+   underneath it, and without an explicit stacking order the widget that was
+   pushed can paint over the one under the finger. */
 .layout-widget.is-dragging {
   opacity: 0.55;
+  z-index: 30;
 }
 
 .layout-widget.is-drop-target {
@@ -3113,6 +3118,104 @@ button {
       color-mix(in srgb, var(--accent) 60%, transparent) 85%,
       transparent 85%
     );
+}
+
+/* Single-axis edge grips. They run the full side of the widget, so grabbing
+   them with a finger doesn't require aiming at the small corner square, and
+   they can only change one dimension. */
+.layout-widget-resize-edge {
+  position: absolute;
+  touch-action: none;
+  z-index: 11;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  transition: background-color 120ms ease;
+}
+
+/* Inset by the corner grip so the two never overlap, but clamped with a
+   percentage: a one-row widget would otherwise inset the band out of existence.
+   The band always keeps at least 40% of the side. */
+.layout-widget-resize-edge.is-right {
+  top: min(1.6rem, 30%);
+  right: 0;
+  bottom: min(1.6rem, 30%);
+  width: 0.85rem;
+  border-radius: 0.5rem 0 0 0.5rem;
+  cursor: ew-resize;
+}
+
+.layout-widget-resize-edge.is-bottom {
+  left: min(1.6rem, 30%);
+  right: min(1.6rem, 30%);
+  bottom: 0;
+  height: 0.85rem;
+  border-radius: 0.5rem 0.5rem 0 0;
+  cursor: ns-resize;
+}
+
+.layout-widget-resize-edge:active {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Coarse pointers get a wider band; the corner grip grows to match so the two
+   don't fight for the same pixels. */
+@media (pointer: coarse) {
+  .layout-widget-resize-edge.is-right {
+    width: 1.3rem;
+  }
+
+  .layout-widget-resize-edge.is-bottom {
+    height: 1.3rem;
+  }
+
+  .layout-widget-resize {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
+}
+
+/* Trash zone: a fixed target at the bottom of the viewport, mounted only while
+   a drag is in flight. Pointer-events are off so it never intercepts the drag
+   itself — the canvas hit-tests it by rect. */
+.layout-trash {
+  position: fixed;
+  z-index: 45;
+  left: 50%;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.5rem;
+  border: 2px dashed color-mix(in srgb, #ff6b6b 55%, var(--outline));
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, #2a1414 88%, transparent);
+  color: #ffb4b4;
+  font-size: 0.78rem;
+  font-weight: 700;
+  pointer-events: none;
+  box-shadow: 0 0.6rem 2rem rgb(0 0 0 / 0.5);
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+/* Armed: the pointer is inside, so the drop will delete/cancel. */
+.layout-trash.is-armed {
+  border-style: solid;
+  border-color: #ff6b6b;
+  background: color-mix(in srgb, #ff6b6b 30%, #2a1414);
+  color: #fff;
+  transform: translateX(-50%) scale(1.08);
+}
+
+.layout-trash-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+@media (pointer: coarse) {
+  .layout-trash {
+    padding: 0.85rem 1.8rem;
+    font-size: 0.85rem;
+  }
 }
 
 /* While dragging a palette item in, hint the grid is a drop zone. */
@@ -3206,6 +3309,53 @@ button {
   cursor: default;
 }
 
+/* Tap-to-resize steppers in the widget chrome. Dragging a grip is fiddly on a
+   tablet, so each axis also gets a ±  pair with a fingertip-sized target. */
+.layout-widget-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+
+.layout-widget-stepper > span {
+  padding-inline: 0.1rem;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.layout-widget-stepper button {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--outline);
+  border-radius: 0.35rem;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.layout-widget-stepper button:disabled {
+  opacity: 0.35;
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Coarse pointers (finger) get bigger targets than a mouse needs. */
+@media (pointer: coarse) {
+  .layout-widget-stepper button {
+    min-width: 2.15rem;
+    min-height: 2.15rem;
+  }
+}
+
 .layout-widget-remove {
   padding: 0.2rem 0.55rem;
   min-width: auto;
@@ -3252,6 +3402,11 @@ button {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   container-type: size;
+  /* Named so a descendant that establishes its own container (the control deck)
+     can still query the WIDGET's box. An unnamed query always binds to the
+     nearest container, and an element can never be styled by a query against a
+     container it establishes itself. */
+  container-name: widget;
 }
 
 .layout-widget-type-markerGrid .marker-grid-shell {
@@ -3309,6 +3464,371 @@ button {
   ) !important;
   grid-auto-rows: minmax(6.5rem, max-content);
   gap: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Control deck widget (controlDeck) and its split deck* siblings.    */
+/*                                                                    */
+/* Everything here scales from a single --deck-scale, derived from the  */
+/* widget's HEIGHT via a set of container-query breakpoints.            */
+/*                                                                    */
+/* Why not cqh units directly: the deck is one container holding two    */
+/* stacked rows, so `cqh` measures the whole widget. Feeding it to the  */
+/* cards made the CONFIG buttons balloon while each row stayed short —  */
+/* the "configs look weird" result. A shared multiplier grows every     */
+/* part by the same factor instead, so the summary cards, the song      */
+/* chips, transpose and the jump button all get bigger together.        */
+/* ------------------------------------------------------------------ */
+/* The default lives on its own single-class rule, deliberately LESS specific
+   than the breakpoint overrides below. Declaring it in the block that follows
+   (two classes) would outrank them and pin the scale at 1 forever. */
+.transport-control-deck {
+  --deck-scale: 1;
+}
+
+.layout-widget-type-controlDeck .transport-control-deck,
+.layout-widget-type-deckVamp .transport-control-deck,
+.layout-widget-type-deckJump .transport-control-deck,
+.layout-widget-type-deckSong .transport-control-deck {
+  height: 100%;
+  min-height: 0;
+  padding-block: 0;
+  /* Rows pack at the top and keep their intrinsic height; the widget growing is
+     absorbed by the rows themselves (via --deck-scale), not by the gaps.
+     `space-between` pushed all the slack into one huge gap between the config
+     row and the songs row, and `stretch` inflates the full-width region row
+     until it collapses — both were wrong here. */
+  align-content: flex-start;
+  gap: calc(0.35rem * var(--deck-scale, 1));
+  container-type: size;
+  /* A short widget scrolls rather than clips: the rows have real minimums. */
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* Height breakpoints, queried against the named `widget` container (the widget
+   body) rather than the deck.
+   TWO traps live here, both silent — the CSS stays valid and simply does nothing:
+   1. The query must be NAMED. The deck establishes its own container for the
+      card-level rules below, and an element can never be styled by a query
+      against a container it establishes itself, so an unnamed query would bind
+      to the deck and never match.
+   2. @container adds NO specificity. That is why the --deck-scale default sits
+      on its own single-class rule above: if it were declared in the two-class
+      block, it would outrank everything here and the scale would never move.
+   Grid rows are 18px, and the deck's default is 9 rows (~162px), so the first
+   step has to sit below that or growing by a row or two would change nothing. */
+@container widget (min-height: 150px) {
+  .layout-widget-type-controlDeck .transport-control-deck,
+  .layout-widget-type-deckVamp .transport-control-deck,
+  .layout-widget-type-deckJump .transport-control-deck,
+  .layout-widget-type-deckSong .transport-control-deck { --deck-scale: 1.15; }
+}
+@container widget (min-height: 210px) {
+  .layout-widget-type-controlDeck .transport-control-deck,
+  .layout-widget-type-deckVamp .transport-control-deck,
+  .layout-widget-type-deckJump .transport-control-deck,
+  .layout-widget-type-deckSong .transport-control-deck { --deck-scale: 1.35; }
+}
+@container widget (min-height: 280px) {
+  .layout-widget-type-controlDeck .transport-control-deck,
+  .layout-widget-type-deckVamp .transport-control-deck,
+  .layout-widget-type-deckJump .transport-control-deck,
+  .layout-widget-type-deckSong .transport-control-deck { --deck-scale: 1.6; }
+}
+@container widget (min-height: 370px) {
+  .layout-widget-type-controlDeck .transport-control-deck,
+  .layout-widget-type-deckVamp .transport-control-deck,
+  .layout-widget-type-deckJump .transport-control-deck,
+  .layout-widget-type-deckSong .transport-control-deck { --deck-scale: 1.9; }
+}
+
+/* --- Summary cards (Vamp / Jump / Song transition) ------------------- */
+.layout-widget-type-controlDeck .remote-control-card,
+.layout-widget-type-deckVamp .remote-control-card,
+.layout-widget-type-deckJump .remote-control-card,
+.layout-widget-type-deckSong .remote-control-card {
+  min-height: calc(2.55rem * var(--deck-scale, 1));
+  padding: calc(0.32rem * var(--deck-scale, 1)) calc(0.36rem * var(--deck-scale, 1))
+    calc(0.32rem * var(--deck-scale, 1)) calc(0.5rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .remote-control-card-head small,
+.layout-widget-type-deckVamp .remote-control-card-head small,
+.layout-widget-type-deckJump .remote-control-card-head small,
+.layout-widget-type-deckSong .remote-control-card-head small {
+  font-size: calc(0.5rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .remote-control-card-head strong,
+.layout-widget-type-deckVamp .remote-control-card-head strong,
+.layout-widget-type-deckJump .remote-control-card-head strong,
+.layout-widget-type-deckSong .remote-control-card-head strong {
+  font-size: calc(0.72rem * var(--deck-scale, 1));
+}
+
+/* The CONFIG button grows with the card, not faster than it — that mismatch is
+   what made the top row look wrong. */
+.layout-widget-type-controlDeck .group-settings-button,
+.layout-widget-type-deckVamp .group-settings-button,
+.layout-widget-type-deckJump .group-settings-button,
+.layout-widget-type-deckSong .group-settings-button {
+  min-height: calc(1.55rem * var(--deck-scale, 1));
+  padding-inline: calc(0.45rem * var(--deck-scale, 1));
+  font-size: calc(0.56rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .remote-global-cancel-button,
+.layout-widget-type-deckJump .remote-global-cancel-button {
+  min-height: calc(2.55rem * var(--deck-scale, 1));
+  font-size: calc(0.6rem * var(--deck-scale, 1));
+}
+
+/* --- Song row: chips, transpose and jump ----------------------------- */
+/* This row was left out before, which is why the song names, transpose and
+   "jump to song" stayed small while the cards above grew. */
+.layout-widget-type-controlDeck .region-chip,
+.layout-widget-type-deckSong .region-chip {
+  min-height: calc(2.2rem * var(--deck-scale, 1));
+  padding: calc(0.45rem * var(--deck-scale, 1)) calc(0.58rem * var(--deck-scale, 1));
+  font-size: calc(0.6rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .region-chip em,
+.layout-widget-type-deckSong .region-chip em {
+  font-size: calc(0.54rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .selected-region-transpose,
+.layout-widget-type-deckSong .selected-region-transpose {
+  min-width: calc(7.6rem * var(--deck-scale, 1));
+  padding: calc(0.32rem * var(--deck-scale, 1)) calc(0.45rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .selected-region-transpose > span,
+.layout-widget-type-deckSong .selected-region-transpose > span {
+  font-size: calc(0.52rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .selected-region-transpose-controls button,
+.layout-widget-type-deckSong .selected-region-transpose-controls button {
+  min-width: calc(1.65rem * var(--deck-scale, 1));
+  min-height: calc(1.55rem * var(--deck-scale, 1));
+  font-size: calc(0.8rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .selected-region-transpose-controls strong,
+.layout-widget-type-deckSong .selected-region-transpose-controls strong {
+  min-width: calc(3.4rem * var(--deck-scale, 1));
+  font-size: calc(0.68rem * var(--deck-scale, 1));
+}
+
+.layout-widget-type-controlDeck .region-jump-button,
+.layout-widget-type-deckSong .region-jump-button {
+  min-height: calc(2.2rem * var(--deck-scale, 1));
+  padding-inline: calc(0.6rem * var(--deck-scale, 1));
+  font-size: calc(0.62rem * var(--deck-scale, 1));
+}
+
+/* Spend the complete widget rectangle on its controls. Scaling the contents
+   alone still left the deck packed against the top of a tall widget; a grid
+   gives every section a real share of the available height. */
+.layout-widget-type-controlDeck .transport-control-deck {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(7rem, 0.55fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  align-content: stretch;
+  overflow: hidden;
+}
+
+.layout-widget-type-controlDeck .transport-control-deck > .transport-control-card {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.layout-widget-type-controlDeck .transport-control-card-region {
+  grid-column: 1 / -1;
+  display: flex;
+}
+
+.layout-widget-type-controlDeck .region-actions-row {
+  flex: 1 1 auto;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+}
+
+.layout-widget-type-controlDeck .region-carousel,
+.layout-widget-type-controlDeck .selected-region-actions {
+  align-items: stretch;
+  min-height: 0;
+}
+
+.layout-widget-type-controlDeck .region-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.layout-widget-type-controlDeck .selected-region-transpose {
+  justify-content: center;
+}
+
+.layout-widget-type-controlDeck .region-jump-button {
+  height: 100%;
+}
+
+/* Atomic deck widgets use the same fill contract. The jump widget has two
+   controls, so it allocates most of the width to the status card and the rest
+   to Cancel; the other two have a single full-surface card. */
+.layout-widget-type-deckVamp .transport-control-deck,
+.layout-widget-type-deckSong .transport-control-deck {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+}
+
+.layout-widget-type-deckJump .transport-control-deck {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 3fr) minmax(6rem, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+}
+
+.layout-widget-type-deckVamp .transport-control-deck > .transport-control-card,
+.layout-widget-type-deckJump .transport-control-deck > .transport-control-card,
+.layout-widget-type-deckSong .transport-control-deck > .transport-control-card {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Reflow the same filled surfaces instead of overflowing when a widget is made
+   narrow. These queries follow the widget, not the browser viewport. */
+@container widget (max-width: 56rem) {
+  .layout-widget-type-controlDeck .transport-control-deck {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container widget (max-width: 28rem) {
+  .layout-widget-type-controlDeck .transport-control-deck {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(5, minmax(0, 1fr));
+  }
+
+  .layout-widget-type-deckJump .transport-control-deck {
+    grid-template: repeat(2, minmax(0, 1fr)) / minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Song / transpose widget (deckRegion).                              */
+/*                                                                    */
+/* Its parts were all fixed-rem, so growing the widget only added dead */
+/* space below the row. Fill the rectangle and derive every dimension  */
+/* from the container so a taller/wider widget actually shows bigger   */
+/* song chips and transpose buttons — the reason to enlarge it.        */
+/* ------------------------------------------------------------------ */
+.layout-widget-type-deckRegion .transport-control-deck {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.layout-widget-type-deckRegion .transport-control-card-region {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  container-type: size;
+}
+
+.layout-widget-type-deckRegion .region-actions-row {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: clamp(0.3rem, 2cqh, 0.9rem);
+}
+
+/* The chip strip takes the leftover height; chips stretch to fill it, so the
+   widget's height is spent on the song buttons instead of on empty space. */
+.layout-widget-type-deckRegion .region-carousel {
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  padding-block: 0;
+  gap: clamp(0.25rem, 1.5cqh, 0.7rem);
+}
+
+.layout-widget-type-deckRegion .region-chip {
+  min-height: 0;
+  padding: clamp(0.3rem, 3cqh, 1.1rem) clamp(0.4rem, 1.6cqi, 1.4rem);
+  font-size: clamp(0.62rem, min(2.4cqi, 12cqh), 1.5rem);
+}
+
+.layout-widget-type-deckRegion .region-chip em {
+  font-size: clamp(0.5rem, min(1.9cqi, 9cqh), 1.1rem);
+}
+
+.layout-widget-type-deckRegion .selected-region-actions {
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  flex-wrap: nowrap;
+  gap: clamp(0.25rem, 1.5cqh, 0.7rem);
+}
+
+.layout-widget-type-deckRegion .selected-region-transpose {
+  justify-content: center;
+  min-width: clamp(6rem, 26cqi, 14rem);
+  padding: clamp(0.25rem, 2.5cqh, 0.9rem) clamp(0.35rem, 1.6cqi, 1.1rem);
+  gap: clamp(0.12rem, 1.5cqh, 0.5rem);
+}
+
+.layout-widget-type-deckRegion .selected-region-transpose > span {
+  font-size: clamp(0.48rem, min(1.7cqi, 8cqh), 1rem);
+}
+
+/* The ± buttons and the semitone readout are the payload of this widget: they
+   grow on both axes so a big rectangle is a big, thumb-friendly control. */
+.layout-widget-type-deckRegion .selected-region-transpose-controls {
+  justify-content: center;
+  gap: clamp(0.2rem, 1.4cqi, 0.8rem);
+}
+
+.layout-widget-type-deckRegion .selected-region-transpose-controls button {
+  min-width: clamp(1.65rem, min(6cqi, 26cqh), 4.5rem);
+  min-height: clamp(1.55rem, min(6cqi, 26cqh), 4.5rem);
+  font-size: clamp(0.7rem, min(3.4cqi, 15cqh), 2rem);
+}
+
+.layout-widget-type-deckRegion .selected-region-transpose-controls strong {
+  min-width: clamp(3.4rem, 13cqi, 7rem);
+  font-size: clamp(0.68rem, min(3cqi, 14cqh), 1.8rem);
+}
+
+.layout-widget-type-deckRegion .region-jump-button {
+  min-height: 0;
+  height: 100%;
+  padding-inline: clamp(0.5rem, 2cqi, 1.5rem);
+  font-size: clamp(0.62rem, min(2.2cqi, 11cqh), 1.3rem);
+}
+
+/* Narrow rectangles: stack the chip strip over the actions instead of letting
+   the transpose block squeeze the song chips to nothing. */
+@container (max-width: 34rem) {
+  .layout-widget-type-deckRegion .region-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .layout-widget-type-deckRegion .selected-region-actions {
+    flex: 0 0 auto;
+    height: auto;
+  }
 }
 
 /* The combined readout strip must scale from its assigned widget rectangle,
@@ -3866,14 +4386,22 @@ button {
 /* ------------------------------------------------------------------ */
 /* Layout tab bar — user-named tabs above the canvas.                 */
 /* ------------------------------------------------------------------ */
+/* --tab-height is set inline from the persisted layout: it is the height of the
+   "Controles" / "Mixer" strip. The label scales with it so a taller tab shows
+   bigger text instead of a taller empty box. Falls back to the default. */
 .layout-tabbar {
+  --tab-height: 1.9rem;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 0.3rem;
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--outline);
   margin-bottom: 0.5rem;
+}
+
+.layout-tab {
+  min-height: var(--tab-height);
 }
 
 .layout-tab {
@@ -3891,14 +4419,16 @@ button {
 }
 
 .layout-tab-select {
-  padding: 0.3rem 0.7rem;
+  padding-inline: 0.7rem;
+  padding-block: 0;
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: 0.78rem;
+  /* Grow the label with the strip, capped so a very tall tab stays readable. */
+  font-size: min(0.78rem + (var(--tab-height) - 1.9rem) * 0.34, 1.5rem);
   font-weight: 600;
   cursor: pointer;
-  max-width: 12rem;
+  max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3911,12 +4441,13 @@ button {
 .layout-tab-rename,
 .layout-tab-delete,
 .layout-tab-move {
-  padding: 0.2rem 0.4rem;
+  padding-inline: 0.4rem;
+  padding-block: 0;
   border: none;
   border-left: 1px solid var(--outline);
   background: transparent;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: min(0.72rem + (var(--tab-height) - 1.9rem) * 0.28, 1.2rem);
   cursor: pointer;
 }
 
@@ -3945,6 +4476,73 @@ button {
 .layout-tab-add:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Tab-height stepper, in the header edit toolbar. */
+.layout-tab-height {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+
+.layout-tab-height > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.layout-tab-height button,
+.layout-placement-toggle {
+  min-height: 1.85rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.35rem;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.layout-tab-height button {
+  min-width: 1.85rem;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.layout-tab-height button:disabled {
+  opacity: 0.35;
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Free-position vs push-down toggle. Lives beside Done/Cancel because it
+   changes what the very next drop will do. */
+.layout-placement-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  color: var(--text);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.layout-placement-toggle.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+@media (pointer: coarse) {
+  .layout-tab-height button,
+  .layout-placement-toggle {
+    min-width: 2.15rem;
+    min-height: 2.15rem;
+  }
 }
 
 .layout-canvas-empty {

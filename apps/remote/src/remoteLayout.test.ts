@@ -14,9 +14,15 @@ import {
   moveWidgetWithGroup,
   normalizeLayout,
   parseLayoutFile,
+  pushWidgetsDown,
+  rectContainsPoint,
   readStoredLayout,
   reconcileWidgetGroup,
   serializeLayoutFile,
+  clampTabHeight,
+  DEFAULT_TAB_HEIGHT_REM,
+  TAB_HEIGHT_MAX_REM,
+  TAB_HEIGHT_MIN_REM,
   writeStoredLayout,
   type RemoteLayout,
 } from "./remoteLayout";
@@ -461,5 +467,224 @@ describe("remoteLayout", () => {
 
   it("export filename is filesystem-friendly", () => {
     expect(layoutExportFilename()).toMatch(/^libretracks-remote-layout-[\d-]+\.json$/);
+  });
+
+  it("normalizes the placement mode and tab height with v5 defaults", () => {
+    // A v5 layout predates both fields and must load with the old behaviour.
+    const bare = normalizeLayout({
+      version: 5,
+      tabs: [{ id: "t", name: "T", widgets: [] }],
+      activeTabId: "t",
+    });
+    expect(bare.placementMode).toBe("free");
+    expect(bare.tabHeightRem).toBe(DEFAULT_TAB_HEIGHT_REM);
+
+    const custom = normalizeLayout({
+      version: 6,
+      tabs: [{ id: "t", name: "T", widgets: [] }],
+      activeTabId: "t",
+      placementMode: "push",
+      tabHeightRem: 3.1,
+    });
+    expect(custom.placementMode).toBe("push");
+    expect(custom.tabHeightRem).toBeCloseTo(3.1);
+
+    // Unknown mode / out-of-range height fall back rather than corrupting the UI.
+    const bogus = normalizeLayout({
+      version: 6,
+      tabs: [{ id: "t", name: "T", widgets: [] }],
+      activeTabId: "t",
+      placementMode: "sideways",
+      tabHeightRem: 99,
+    });
+    expect(bogus.placementMode).toBe("free");
+    expect(bogus.tabHeightRem).toBe(TAB_HEIGHT_MAX_REM);
+  });
+
+  it("clamps and quantises the tab height", () => {
+    expect(clampTabHeight(0.1)).toBe(TAB_HEIGHT_MIN_REM);
+    expect(clampTabHeight(50)).toBe(TAB_HEIGHT_MAX_REM);
+    expect(clampTabHeight("big")).toBe(DEFAULT_TAB_HEIGHT_REM);
+    expect(clampTabHeight(Number.NaN)).toBe(DEFAULT_TAB_HEIGHT_REM);
+    // Repeated 0.3 steps drift in float; the 0.1 snap keeps them comparable.
+    expect(clampTabHeight(1.9 + 0.3 + 0.3)).toBeCloseTo(2.5);
+  });
+});
+
+describe("rectContainsPoint", () => {
+  const rect = { left: 100, right: 300, top: 500, bottom: 560, width: 200 };
+
+  it("matches points inside, including the edges", () => {
+    expect(rectContainsPoint(rect, 200, 530)).toBe(true);
+    expect(rectContainsPoint(rect, 100, 500)).toBe(true);
+    expect(rectContainsPoint(rect, 300, 560)).toBe(true);
+  });
+
+  it("rejects points outside on either axis", () => {
+    expect(rectContainsPoint(rect, 99, 530)).toBe(false);
+    expect(rectContainsPoint(rect, 301, 530)).toBe(false);
+    expect(rectContainsPoint(rect, 200, 499)).toBe(false);
+    expect(rectContainsPoint(rect, 200, 561)).toBe(false);
+  });
+
+  it("never matches an unlaid-out or missing rect", () => {
+    // A zero-width rect is what an unmounted/unstyled element reports; treating
+    // it as a hit would arm the trash zone for every drag.
+    expect(rectContainsPoint({ ...rect, width: 0 }, 200, 530)).toBe(false);
+    expect(rectContainsPoint(null, 200, 530)).toBe(false);
+    expect(rectContainsPoint(undefined, 200, 530)).toBe(false);
+  });
+
+  it("rejects non-finite coordinates", () => {
+    // Pointer math can produce NaN when the grid has not been measured yet.
+    expect(rectContainsPoint(rect, Number.NaN, 530)).toBe(false);
+    expect(rectContainsPoint(rect, 200, Number.NaN)).toBe(false);
+  });
+});
+
+describe("pushWidgetsDown", () => {
+  const at = (id: string, x: number, y: number, w: number, h: number) =>
+    ({ id, type: "spacer", x, y, w, h }) as const;
+
+  it("pushes an overlapped widget just far enough to clear the anchor", () => {
+    // A dropped at y=0 covering rows 0-3; B sits at rows 2-3 → must land at 4.
+    const result = pushWidgetsDown(
+      [at("a", 0, 0, 12, 4), at("b", 0, 2, 12, 2)],
+      "a",
+    );
+    expect(result.find((w) => w.id === "a")).toMatchObject({ x: 0, y: 0 });
+    expect(result.find((w) => w.id === "b")).toMatchObject({ x: 0, y: 4 });
+  });
+
+  it("cascades: a pushed widget pushes whatever sits below it", () => {
+    const result = pushWidgetsDown(
+      [at("a", 0, 0, 12, 4), at("b", 0, 2, 12, 2), at("c", 0, 4, 12, 2)],
+      "a",
+    );
+    // B → 4 (clears A), which now overlaps C, so C → 6.
+    expect(result.find((w) => w.id === "b")?.y).toBe(4);
+    expect(result.find((w) => w.id === "c")?.y).toBe(6);
+  });
+
+  it("stacks every displaced widget instead of fusing them", () => {
+    // Regression: dropping a tall full-width widget at row 0 of the default
+    // Controles stack used to leave the first two widgets BOTH starting at the
+    // same row (visually fused). Each displaced widget must land below the
+    // previous one, not merely below the anchor.
+    const stack = [
+      at("readouts", 0, 0, 24, 4),
+      at("transport", 0, 4, 24, 5),
+      at("timeline", 0, 9, 24, 7),
+    ];
+    const dropped = [...stack, at("deck", 0, 0, 24, 9)];
+    const out = pushWidgetsDown(dropped, "deck");
+    const y = (id: string) => out.find((w) => w.id === id) as { y: number; h: number };
+
+    expect(y("deck")).toMatchObject({ y: 0 });
+    // Below the anchor, in their original order, with no two sharing a row.
+    expect(y("readouts").y).toBe(9);
+    expect(y("transport").y).toBe(y("readouts").y + y("readouts").h);
+    expect(y("timeline").y).toBe(y("transport").y + y("transport").h);
+  });
+
+  it("clears a second blocker that the first shift slides it onto", () => {
+    // One pass is not enough: clearing `high` moves the widget onto `low`, so
+    // the shift has to be re-evaluated until nothing overlaps.
+    const widgets = [
+      at("anchor", 0, 0, 24, 3),
+      at("low", 0, 6, 24, 3),
+      at("mover", 0, 1, 24, 2),
+    ];
+    const out = pushWidgetsDown(widgets, "anchor");
+    const mover = out.find((w) => w.id === "mover") as { y: number };
+    const low = out.find((w) => w.id === "low") as { y: number; h: number };
+    // mover cleared the anchor (→3), which is above low (6-8): no overlap, so it
+    // stays at 3 and low is untouched.
+    expect(mover.y).toBe(3);
+    expect(low.y).toBe(6);
+  });
+
+  it("leaves widgets in other columns alone", () => {
+    const result = pushWidgetsDown(
+      [at("a", 0, 0, 12, 4), at("side", 12, 0, 12, 4)],
+      "a",
+    );
+    expect(result.find((w) => w.id === "side")).toMatchObject({ x: 12, y: 0 });
+  });
+
+  it("never moves the anchor itself", () => {
+    const result = pushWidgetsDown(
+      [at("under", 0, 0, 24, 6), at("a", 0, 3, 24, 3)],
+      "a",
+    );
+    expect(result.find((w) => w.id === "a")).toMatchObject({ x: 0, y: 3 });
+    // The widget the anchor landed on moves down; the anchor stays put.
+    expect(result.find((w) => w.id === "under")?.y).toBe(6);
+  });
+
+  it("moves a group and its contents as one body", () => {
+    const widgets = [
+      { id: "g", type: "layoutGroup" as const, x: 0, y: 0, w: 24, h: 8 },
+      { id: "child", type: "spacer" as const, x: 1, y: 2, w: 6, h: 2, groupId: "g" },
+      { id: "a", type: "spacer" as const, x: 0, y: 0, w: 24, h: 3 },
+    ];
+    const result = pushWidgetsDown(widgets, "a");
+    const group = result.find((w) => w.id === "g");
+    const child = result.find((w) => w.id === "child");
+    // The group clears the anchor (rows 0-2) and the child keeps its offset
+    // inside the group: it was 2 rows below the frame, and still is.
+    expect(group?.y).toBe(3);
+    expect((child as { y: number }).y - (group as { y: number }).y).toBe(2);
+  });
+
+  it("never pushes a group's own children away from it", () => {
+    // Dragging a group: its children overlap it by definition, and must ride
+    // along instead of being shoved out of the frame.
+    const widgets = [
+      { id: "g", type: "layoutGroup" as const, x: 0, y: 4, w: 24, h: 8 },
+      { id: "child", type: "spacer" as const, x: 1, y: 6, w: 6, h: 2, groupId: "g" },
+    ];
+    expect(pushWidgetsDown(widgets, "g")).toEqual(widgets);
+  });
+
+  it("is idempotent from a fixed baseline (live drag preview)", () => {
+    // The editor previews a push on every pointer-move. It always re-applies the
+    // dragged rectangle onto the pre-gesture BASELINE and pushes once, so
+    // repeating the same frame must not walk the neighbours further down.
+    const baseline = [at("a", 0, 0, 24, 2), at("b", 0, 2, 24, 2), at("c", 0, 4, 24, 2)];
+    const frame = (h: number) =>
+      pushWidgetsDown(
+        baseline.map((widget) => (widget.id === "a" ? { ...widget, h } : widget)),
+        "a",
+      );
+
+    const first = frame(5);
+    const repeat = frame(5);
+    expect(repeat).toEqual(first);
+    expect(first.find((w) => w.id === "b")?.y).toBe(5);
+    expect(first.find((w) => w.id === "c")?.y).toBe(7);
+
+    // Shrinking back mid-drag must return the neighbours to where they started,
+    // not leave them pushed — the baseline is what makes that possible.
+    expect(frame(2)).toEqual(baseline);
+  });
+
+  it("returns the input untouched when nothing overlaps", () => {
+    const widgets = [at("a", 0, 0, 12, 2), at("b", 0, 4, 12, 2)];
+    const result = pushWidgetsDown(widgets, "a");
+    expect(result).toEqual(widgets);
+  });
+
+  it("is a no-op for an unknown id", () => {
+    const widgets = [at("a", 0, 0, 12, 2)];
+    expect(pushWidgetsDown(widgets, "nope")).toBe(widgets);
+  });
+
+  it("clamps a cascade that would run past the last row", () => {
+    const result = pushWidgetsDown(
+      [at("a", 0, LAYOUT_MAX_ROWS - 2, 12, 2), at("b", 0, LAYOUT_MAX_ROWS - 1, 12, 2)],
+      "a",
+    );
+    expect(result.find((w) => w.id === "b")?.y).toBeLessThanOrEqual(LAYOUT_MAX_ROWS - 1);
   });
 });
