@@ -503,8 +503,14 @@ void Mixer::render_timeline_span(float** output_channels,
             }
             track_meters_[ti].left_peak.store(track_peak_l, std::memory_order_relaxed);
             track_meters_[ti].right_peak.store(track_peak_r, std::memory_order_relaxed);
-            track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
-            track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
+            const float track_rms_l =
+                static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames)));
+            const float track_rms_r =
+                static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames)));
+            track_meters_[ti].left_rms.store(track_rms_l, std::memory_order_relaxed);
+            track_meters_[ti].right_rms.store(track_rms_r, std::memory_order_relaxed);
+            update_ancestor_folder_meters(
+                song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
             auto route = route_channels(resolve_effective_audio_route(track, song), num_channels);
             const int left_channel = route.empty() ? 0 : route[0];
@@ -807,8 +813,14 @@ void Mixer::render(float** output_channels,
                 }
                 track_meters_[ti].left_peak.store(track_peak_l, std::memory_order_relaxed);
                 track_meters_[ti].right_peak.store(track_peak_r, std::memory_order_relaxed);
-                track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
-                track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
+                const float track_rms_l =
+                    static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames)));
+                const float track_rms_r =
+                    static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames)));
+                track_meters_[ti].left_rms.store(track_rms_l, std::memory_order_relaxed);
+                track_meters_[ti].right_rms.store(track_rms_r, std::memory_order_relaxed);
+                update_ancestor_folder_meters(
+                    song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
                 auto route = route_channels(resolve_effective_audio_route(track, song), num_channels);
                 const int left_channel = route.empty() ? 0 : route[0];
@@ -1348,6 +1360,47 @@ void Mixer::reset_track_meters() noexcept {
         track_meters_[i].right_peak.store(0.f, std::memory_order_relaxed);
         track_meters_[i].left_rms.store(0.f, std::memory_order_relaxed);
         track_meters_[i].right_rms.store(0.f, std::memory_order_relaxed);
+    }
+}
+
+void Mixer::update_ancestor_folder_meters(const Song& song,
+                                          const Track& track,
+                                          float left_peak,
+                                          float right_peak,
+                                          float left_rms,
+                                          float right_rms) noexcept {
+    const Track* current = &track;
+    int depth = 0;
+    while (!current->parent_track_id.empty() && depth < kMaxFolderDepth) {
+        const auto parent = std::find_if(
+            song.tracks.begin(), song.tracks.end(),
+            [&](const Track& candidate) {
+                return candidate.id == current->parent_track_id;
+            });
+        if (parent == song.tracks.end() || parent->kind != TrackKind::Folder)
+            break;
+
+        const auto parent_index = static_cast<std::size_t>(
+            std::distance(song.tracks.begin(), parent));
+        if (parent_index >= kMaxTracks)
+            break;
+
+        auto& meter = track_meters_[parent_index];
+        meter.left_peak.store(
+            std::max(meter.left_peak.load(std::memory_order_relaxed), left_peak),
+            std::memory_order_relaxed);
+        meter.right_peak.store(
+            std::max(meter.right_peak.load(std::memory_order_relaxed), right_peak),
+            std::memory_order_relaxed);
+        meter.left_rms.store(
+            std::max(meter.left_rms.load(std::memory_order_relaxed), left_rms),
+            std::memory_order_relaxed);
+        meter.right_rms.store(
+            std::max(meter.right_rms.load(std::memory_order_relaxed), right_rms),
+            std::memory_order_relaxed);
+
+        current = &(*parent);
+        ++depth;
     }
 }
 

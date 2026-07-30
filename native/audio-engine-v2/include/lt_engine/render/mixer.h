@@ -282,6 +282,12 @@ private:
     // Check whether any track is soloed (scans control slots).
     bool any_solo_active_in_slots() const noexcept;
     void reset_track_meters() noexcept;
+    void update_ancestor_folder_meters(const Song& song,
+                                       const Track& track,
+                                       float left_peak,
+                                       float right_peak,
+                                       float left_rms,
+                                       float right_rms) noexcept;
     void render_timeline_span(float** output_channels,
                               int num_channels,
                               int num_frames,

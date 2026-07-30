@@ -183,6 +183,62 @@ TEST_CASE("folder_pan_pans_children") {
     CHECK(peak(left) < 0.005f);
 }
 
+TEST_CASE("folder_meter_reports_descendant_audio_activity") {
+    SourceManager sources;
+    add_source(sources, "src-0", 0.25f);
+    add_source(sources, "src-1", 0.5f);
+    auto session = std::make_shared<Session>(folder_session(2));
+    TransportClock clock(kSR);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    clock.play();
+
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 10, left, right);
+
+    const auto meters = mixer.track_meters();
+    REQUIRE(meters.size() == 3);
+    CHECK(meters[0].track_id == "folder");
+    CHECK(meters[0].left_peak > 0.01f);
+    CHECK(meters[0].right_peak > 0.01f);
+    CHECK(meters[0].left_rms > 0.01f);
+    CHECK(meters[0].right_rms > 0.01f);
+    CHECK(meters[0].left_peak ==
+          doctest::Approx(std::max(meters[1].left_peak, meters[2].left_peak)));
+    CHECK(meters[0].right_peak ==
+          doctest::Approx(std::max(meters[1].right_peak, meters[2].right_peak)));
+}
+
+TEST_CASE("folder_meter_includes_nested_descendants") {
+    SourceManager sources;
+    add_source(sources, "src-0");
+    auto session = folder_session(1);
+
+    Track nested;
+    nested.id = "nested";
+    nested.name = "Nested";
+    nested.kind = TrackKind::Folder;
+    nested.parent_track_id = "folder";
+    session.songs[0].tracks.insert(session.songs[0].tracks.begin() + 1, nested);
+    session.songs[0].tracks[2].parent_track_id = "nested";
+
+    auto shared = std::make_shared<Session>(session);
+    TransportClock clock(kSR);
+    JumpScheduler scheduler;
+    Mixer mixer(shared, &sources, &clock, &scheduler);
+    clock.play();
+
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 10, left, right);
+
+    const auto meters = mixer.track_meters();
+    REQUIRE(meters.size() == 3);
+    CHECK(meters[0].left_peak > 0.01f);
+    CHECK(meters[1].left_peak > 0.01f);
+    CHECK(meters[0].left_peak == doctest::Approx(meters[2].left_peak));
+    CHECK(meters[1].left_peak == doctest::Approx(meters[2].left_peak));
+}
+
 TEST_CASE("folder_audio_route_is_inherited_by_children") {
     SourceManager sources;
     add_source(sources, "src-0");
