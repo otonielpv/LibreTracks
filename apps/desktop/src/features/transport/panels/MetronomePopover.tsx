@@ -148,6 +148,23 @@ function MetronomePopoverImpl({
           />
         </div>
 
+        <label className="lt-pads-toggle">
+          <input
+            type="checkbox"
+            checked={settings.metronomeAccentEnabled}
+            onChange={(event) =>
+              onSoundChange({
+                metronomeAccentEnabled: event.target.checked,
+              })
+            }
+          />
+          <span>
+            {t("transport.settingsModal.metronomeAccentEnabled", {
+              defaultValue: "Accent enabled",
+            })}
+          </span>
+        </label>
+
         <div className="lt-pads-field">
           <span className="lt-pads-field-label">
             {t("transport.settingsModal.metronomeAccentSound", {

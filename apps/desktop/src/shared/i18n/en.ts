@@ -203,6 +203,7 @@ const en = {
       metronomeVolumeValue: "{{value}} dB",
       metronomeOutput: "Metronome output",
       voiceGuideOutput: "Voice guide output",
+      metronomeAccentEnabled: "Accent enabled",
       metronomeAccentSound: "Accent sound",
       metronomeBeatSound: "Beat sound",
       metronomeAccentPitch: "Accent pitch",

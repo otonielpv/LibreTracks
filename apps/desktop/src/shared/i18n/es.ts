@@ -215,6 +215,7 @@ const es = {
       voiceGuideCountInDescription:
         "Cuenta los beats restantes tras el nombre de la sección.",
       voiceGuideVolume: "Volumen de la voz",
+      metronomeAccentEnabled: "Acento activado",
       metronomeAccentSound: "Sonido del acento",
       metronomeBeatSound: "Sonido del pulso",
       metronomeAccentPitch: "Tono del acento",
