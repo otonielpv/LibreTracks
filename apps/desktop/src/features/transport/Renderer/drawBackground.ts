@@ -1,4 +1,5 @@
 import {
+  formatBpm,
   isAndroidApp,
   transposeKey,
   type ActiveVampSummary,
@@ -399,7 +400,7 @@ export function drawRulerRegion(
     badges.push(effectiveKey);
   }
   if (region.warpEnabled && region.warpSourceBpm && region.warpSourceBpm > 0) {
-    badges.push(`${region.warpSourceBpm.toFixed(0)} BPM`);
+    badges.push(`${formatBpm(region.warpSourceBpm)} BPM`);
   }
   if (region.transposeSemitones !== 0) {
     badges.push(

@@ -11,6 +11,7 @@ import {
 } from "@libretracks/shared/meterBallistics";
 
 import {
+  formatBpm,
   formatTransposeSemitones,
   isAndroidApp,
   type SongRegionSummary,
@@ -414,8 +415,8 @@ export function TimelineToolbar({
   const warpSummary = selectedRegion
     ? warpEnabled && warpSourceBpm && warpRatio
       ? t("timelineToolbar.regionWarpRatioDisplay", {
-          source: warpSourceBpm.toFixed(0),
-          target: selectedRegionEffectiveBpm.toFixed(0),
+          source: formatBpm(warpSourceBpm),
+          target: formatBpm(selectedRegionEffectiveBpm),
           ratio: warpRatio.toFixed(3),
         })
       : t("timelineToolbar.regionWarpSummaryOff")

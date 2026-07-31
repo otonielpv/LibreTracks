@@ -391,6 +391,20 @@ export function formatTransposeSemitones(value: number): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
+/** Display a tempo without inventing or destroying precision.
+ *
+ * BPM is stored as f64 all the way down (tempo markers, `warpSourceBpm`), so a
+ * 130.5 marker really is 130.5. Formatting it with `toFixed(0)` used to render
+ * it as "131", which reads as if warp had rounded the tempo it was matching.
+ * Integers stay bare (`120`), fractional values keep up to two decimals with
+ * trailing zeros trimmed (`130.5`, `96.41`).
+ */
+export function formatBpm(bpm: number): string {
+  if (!Number.isFinite(bpm)) return "";
+  if (Number.isInteger(bpm)) return String(bpm);
+  return bpm.toFixed(2).replace(/\.?0+$/, "");
+}
+
 export type ClipSummary = {
   id: string;
   trackId: string;

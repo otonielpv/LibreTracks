@@ -28,7 +28,11 @@ import type {
   TimelineClipSummary,
   TimelineTrackSummary,
 } from "../library/pendingAudioImports";
-import { formatTransposeSemitones, isAndroidApp } from "../desktopApi";
+import {
+  formatBpm,
+  formatTransposeSemitones,
+  isAndroidApp,
+} from "../desktopApi";
 import {
   buildSongTempoRegions,
   type MarkerCategory,
@@ -1143,7 +1147,7 @@ export function TimelineCanvasPane({
                 : isMoving
                 ? regionMovePreview.endSeconds
                 : region.endSeconds;
-              const regionDescription = `Carril superior: región ${region.name}${region.warpEnabled && region.warpSourceBpm ? `, BPM original ${region.warpSourceBpm.toFixed(0)}` : ""}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`;
+              const regionDescription = `Carril superior: región ${region.name}${region.warpEnabled && region.warpSourceBpm ? `, BPM original ${formatBpm(region.warpSourceBpm)}` : ""}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`;
               return (
                 <button
                   key={region.id}

@@ -4,6 +4,7 @@ import {
   DEFAULT_APP_SETTINGS,
   buildSongTempoRegions,
   buildWaveformLodsFromPeaks,
+  formatBpm,
   formatTransposeSemitones,
   getEffectiveBpmAt,
   getPrimarySongRegion,
@@ -68,6 +69,29 @@ describe("formatTransposeSemitones", () => {
 
   it("keeps the - for negative values", () => {
     expect(formatTransposeSemitones(-3)).toBe("-3");
+  });
+});
+
+describe("formatBpm", () => {
+  it("renders whole tempos without a decimal point", () => {
+    expect(formatBpm(120)).toBe("120");
+  });
+
+  it("preserves a fractional tempo instead of rounding it", () => {
+    // Regression: the warp badge/summary used toFixed(0), so a 130.5 tempo
+    // marker displayed as "131" even though the stored f64 was untouched.
+    expect(formatBpm(130.5)).toBe("130.5");
+  });
+
+  it("keeps up to two decimals and trims trailing zeros", () => {
+    expect(formatBpm(96.41)).toBe("96.41");
+    expect(formatBpm(96.409)).toBe("96.41");
+    expect(formatBpm(130.5)).toBe("130.5");
+  });
+
+  it("returns an empty string for non-finite input", () => {
+    expect(formatBpm(Number.NaN)).toBe("");
+    expect(formatBpm(Number.POSITIVE_INFINITY)).toBe("");
   });
 });
 
