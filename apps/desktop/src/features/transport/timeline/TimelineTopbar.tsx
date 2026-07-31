@@ -427,7 +427,12 @@ export function TimelineTopbar({
               disabled={!hasSong}
               type="number"
               min={1}
-              step={0.1}
+              // "any" instead of 0.1: on a number input `step` defines the grid
+              // of VALID values, not just the arrow increment, so step=0.1
+              // snapped a typed 130.55 to 130.6 before it ever reached the
+              // commit handler. Tempo is stored as f64 and the engine accepts
+              // arbitrary precision, so the input must not quantise it.
+              step="any"
               value={tempoDraft}
               onPointerDown={(event) => {
                 if (!learnModeActive) {

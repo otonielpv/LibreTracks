@@ -55,6 +55,26 @@ describe("App / app.render", () => {
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });
 
+  it("lets the tempo input hold a two-decimal BPM without snapping it", async () => {
+    // Regression: the input had step=0.1, and on a number input `step` defines
+    // the grid of valid values — so a typed 130.55 was snapped to 130.6 by the
+    // browser before the commit handler ever saw it. Tempo is f64 end to end.
+    await renderApp();
+
+    const bpmInput = screen.getByLabelText(
+      textMatcher(en.timelineTopbar.songBpmAria),
+    ) as HTMLInputElement;
+
+    expect(bpmInput.step).toBe("any");
+
+    await act(async () => {
+      fireEvent.change(bpmInput, { target: { value: "130.55" } });
+    });
+
+    expect(bpmInput.value).toBe("130.55");
+    expect(bpmInput.validity.stepMismatch).toBe(false);
+  });
+
   it("supports transport shortcuts from the keyboard", async () => {
     await renderApp();
 
