@@ -237,6 +237,7 @@ import { MobileLanding } from "./compact/MobileLanding";
 import {
   LANDING_RECENT_SESSIONS_LIMIT,
   loadRecentSessions,
+  removeRecentSession,
   type RecentSessionEntry,
 } from "./recentSessions";
 import { pickFilesViaWebView, stageFileForImport } from "./library/mobileFilePicker";
@@ -7194,15 +7195,38 @@ export function TransportPanelContent() {
                           {recentSessions
                             .slice(0, LANDING_RECENT_SESSIONS_LIMIT)
                             .map((entry) => (
-                              <li key={entry.path}>
+                              <li
+                                key={entry.path}
+                                className="lt-empty-state-recent-row"
+                              >
                                 <button
                                   type="button"
+                                  className="lt-empty-state-recent-open"
                                   title={entry.path}
                                   onClick={() =>
                                     handleOpenProjectFromPath(entry.path)
                                   }
                                 >
                                   {entry.name}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="lt-empty-state-recent-remove"
+                                  title={t("transport.shell.removeRecent", {
+                                    defaultValue: "Quitar de recientes",
+                                  })}
+                                  aria-label={t("transport.shell.removeRecent", {
+                                    defaultValue: "Quitar de recientes",
+                                  })}
+                                  onClick={() =>
+                                    setRecentSessions(
+                                      removeRecentSession(entry.path),
+                                    )
+                                  }
+                                >
+                                  <span className="material-symbols-outlined">
+                                    delete
+                                  </span>
                                 </button>
                               </li>
                             ))}

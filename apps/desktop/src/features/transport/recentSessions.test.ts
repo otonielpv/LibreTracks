@@ -6,6 +6,7 @@ import {
   clearRecentSessions,
   loadRecentSessions,
   pushRecentSession,
+  removeRecentSession,
 } from "./recentSessions";
 
 describe("recentSessions", () => {
@@ -33,6 +34,16 @@ describe("recentSessions", () => {
     pushRecentSession("/storage/Music/My Set/import-session.ltsession");
 
     expect(loadRecentSessions()[0]?.name).toBe("My Set");
+  });
+
+  it("removes a single entry case-insensitively and returns the rest", () => {
+    pushRecentSession("C:\\Sets\\Sunday\\Sunday.ltsession");
+    pushRecentSession("C:\\Sets\\Friday\\Friday.ltsession");
+
+    const remaining = removeRecentSession("c:\\sets\\sunday\\sunday.ltsession");
+
+    expect(remaining.map((entry) => entry.name)).toEqual(["Friday"]);
+    expect(loadRecentSessions().map((entry) => entry.name)).toEqual(["Friday"]);
   });
 
   it("tolerates malformed storage and can clear the list", () => {

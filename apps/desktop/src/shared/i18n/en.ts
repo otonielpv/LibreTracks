@@ -118,6 +118,7 @@ const en = {
       recentsHeading: "Recent",
       noRecents:
         "No recent sessions yet. Sessions you open or create will show up here.",
+      removeRecent: "Remove from recents",
       choosingProjectLocation: "Choose where to save the imported project...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",

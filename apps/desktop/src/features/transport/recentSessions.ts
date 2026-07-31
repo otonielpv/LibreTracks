@@ -114,6 +114,27 @@ export function pushRecentSession(sessionFilePath: string) {
   persist(next);
 }
 
+/**
+ * Drop a single entry from the list (landing "remove from recents" button).
+ * Path matching is case-insensitive, mirroring {@link pushRecentSession}.
+ * Returns the resulting list so callers can update their state without a
+ * second read.
+ */
+export function removeRecentSession(
+  sessionFilePath: string,
+): RecentSessionEntry[] {
+  const remaining = loadRecentSessions();
+  if (!sessionFilePath) {
+    return remaining;
+  }
+  const normalized = sessionFilePath.toLowerCase();
+  const next = remaining.filter(
+    (entry) => entry.path.toLowerCase() !== normalized,
+  );
+  persist(next);
+  return next;
+}
+
 export function clearRecentSessions() {
   if (typeof window === "undefined") {
     return;

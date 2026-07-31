@@ -9,6 +9,7 @@ import {
 import {
   LANDING_RECENT_SESSIONS_LIMIT,
   loadRecentSessions,
+  removeRecentSession,
   type RecentSessionEntry,
 } from "../recentSessions";
 
@@ -61,8 +62,8 @@ export function MobileLanding({
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [templates, setTemplates] = useState<SessionTemplateSummary[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
-  const [recentSessions] = useState<RecentSessionEntry[]>(() =>
-    loadRecentSessions(),
+  const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
+    () => loadRecentSessions(),
   );
 
   useEffect(() => {
@@ -244,13 +245,27 @@ export function MobileLanding({
                 {recentSessions
                   .slice(0, LANDING_RECENT_SESSIONS_LIMIT)
                   .map((entry) => (
-                    <li key={entry.path}>
+                    <li key={entry.path} className="lt-empty-state-recent-row">
                       <button
                         type="button"
+                        className="lt-empty-state-recent-open"
                         title={entry.path}
                         onClick={() => onOpenSessionFromPath?.(entry.path)}
                       >
                         {entry.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="lt-empty-state-recent-remove"
+                        title={t("transport.shell.removeRecent")}
+                        aria-label={t("transport.shell.removeRecent")}
+                        onClick={() =>
+                          setRecentSessions(removeRecentSession(entry.path))
+                        }
+                      >
+                        <span className="material-symbols-outlined">
+                          delete
+                        </span>
                       </button>
                     </li>
                   ))}

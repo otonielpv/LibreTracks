@@ -118,6 +118,7 @@ const es = {
       recentsHeading: "Recientes",
       noRecents:
         "Aún no hay sesiones recientes. Las sesiones que abras o crees aparecerán aquí.",
+      removeRecent: "Quitar de recientes",
       choosingProjectLocation:
         "Elige donde guardar el proyecto importado...",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",

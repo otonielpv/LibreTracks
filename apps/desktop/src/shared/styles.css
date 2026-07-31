@@ -2776,27 +2776,54 @@ textarea {
   border-color: rgb(87 241 219 / 0.4);
 }
 
+/* Row height is fixed here (not left to padding) so the 6-row cap below is an
+   exact multiple: 6 rows + the 5 gaps between them. */
 .lt-empty-state-template-list {
+  --lt-landing-row-height: 2.25rem;
+  --lt-landing-row-gap: 0.4rem;
+  --lt-landing-visible-rows: 6;
+
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  /* Cap the height so a large template collection scrolls inside its own box
-     instead of pushing the landing card open without bound. ~5 rows tall. */
-  max-height: 15rem;
+  gap: var(--lt-landing-row-gap);
+  /* Show exactly 6 rows and scroll past that, instead of letting a long list
+     push the landing card open without bound. */
+  max-height: calc(
+    var(--lt-landing-row-height) * var(--lt-landing-visible-rows) +
+      var(--lt-landing-row-gap) * (var(--lt-landing-visible-rows) - 1)
+  );
   overflow-y: auto;
+}
+
+/* Without this the <li>s are flex items that SHRINK to fit max-height — the
+   rows squash into each other and the last one clips instead of scrolling. */
+.lt-empty-state-template-list > li {
+  flex: 0 0 var(--lt-landing-row-height);
+  height: var(--lt-landing-row-height);
+  /* The row's 1px border must count inside the height, or each row measures
+     2px taller than the cap assumes and the 6th row peeks in half-cut. */
+  box-sizing: border-box;
+}
+
+.lt-empty-state-template-list > li > button,
+.lt-empty-state-recent-row {
+  box-sizing: border-box;
 }
 
 .lt-empty-state-template-list button {
   width: 100%;
+  /* Fill the row box set on the <li> rather than deriving height from padding,
+     so every row is the same height whatever the list length. */
+  height: 100%;
   text-align: left;
   border: 1px solid rgb(87 241 219 / 0.12);
   border-radius: 2px;
   background: rgb(24 24 24 / 0.9);
   color: #e5e2e1;
-  padding: 0.6rem 0.85rem;
+  padding: 0 0.85rem;
   font: 600 12px/1.2 "Space Grotesk", sans-serif;
 }
 
@@ -2809,6 +2836,86 @@ textarea {
   margin: 0;
   color: #7f7b79;
   font: 400 12px/1.4 "Space Grotesk", sans-serif;
+}
+
+/* Recents rows hold two controls (open the session, drop it from the MRU).
+   A button can't nest inside another button, so the <li> itself carries the
+   card chrome — border, background, radius — and both children are painted
+   transparent on top of it. The result reads as one button with a trash icon
+   tucked into its right edge. The trash stays hidden until hover/focus so the
+   list still reads as a plain list of sessions; on Android (no hover) it is
+   always visible. */
+.lt-empty-state-recent-row {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  /* Without this a long session name floors the row's width at its own text
+     width and the whole list grows a horizontal scrollbar. */
+  min-width: 0;
+  border: 1px solid rgb(87 241 219 / 0.12);
+  border-radius: 2px;
+  background: rgb(24 24 24 / 0.9);
+  overflow: hidden;
+}
+
+.lt-empty-state-recent-row:hover {
+  border-color: rgb(87 241 219 / 0.36);
+  background: #262626;
+}
+
+/* Beat the `.lt-empty-state-template-list button` card styling above: inside a
+   recents row the chrome lives on the <li>, so both buttons go transparent. */
+.lt-empty-state-recent-row > button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.lt-empty-state-recent-row > button:hover {
+  border: none;
+  background: transparent;
+}
+
+/* Same specificity reasoning as the trash below: beat `width: 100%` so the
+   name button flexes and its ellipsis truncation can kick in. */
+.lt-empty-state-recent-row > .lt-empty-state-recent-open {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+/* Selector is `.row > .remove`, not `.remove` alone, so it outweighs the
+   `.lt-empty-state-template-list button { width: 100% }` card rule above —
+   which otherwise stretches the trash across the whole row and squeezes the
+   session name down to a couple of letters. */
+.lt-empty-state-recent-row > .lt-empty-state-recent-remove {
+  flex: 0 0 auto;
+  width: 2.1rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(229 226 225 / 0.6);
+  opacity: 0;
+}
+
+.lt-empty-state-recent-row:hover .lt-empty-state-recent-remove,
+.lt-empty-state-recent-remove:focus-visible {
+  opacity: 1;
+}
+
+.lt-empty-state-recent-row > .lt-empty-state-recent-remove:hover {
+  background: rgb(83 24 24 / 0.72);
+  color: #ffe4df;
+}
+
+.lt-empty-state-recent-remove .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-android .lt-empty-state-recent-row > .lt-empty-state-recent-remove {
+  opacity: 1;
+  width: 2.6rem;
 }
 
 /* Android landing: name-the-session form (same visual language as the
