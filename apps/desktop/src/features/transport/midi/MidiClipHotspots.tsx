@@ -24,12 +24,8 @@ export type MidiClipHotspotsProps = {
     livePixelsPerSecondRef: MutableRefObject<number>;
     pixelsPerSecond: number;
   };
-  /** Shared screen↔time helper; camera and zoom are bound here. */
-  screenXToSeconds: (
-    screenX: number,
-    cameraX: number,
-    pixelsPerSecond: number,
-  ) => number;
+  /** Whether grid snapping is on; Shift bypasses it either way. */
+  snapEnabled?: boolean;
   /** Commit a dragged clip to its new position. */
   onMoveClip?: (clipId: string, timelineStartSeconds: number) => void;
   onEdit?: (clip: MidiClipSummary) => void;
@@ -44,7 +40,7 @@ export function MidiClipHotspots({
   song,
   trackHeight,
   camera,
-  screenXToSeconds,
+  snapEnabled,
   onMoveClip,
   onEdit,
   onContextMenu,
@@ -65,12 +61,8 @@ export function MidiClipHotspots({
     cameraXRef,
     livePixelsPerSecondRef,
     pixelsPerSecond,
-    screenXToSeconds: (screenX: number) =>
-      screenXToSeconds(
-        screenX,
-        cameraXRef.current,
-        livePixelsPerSecondRef.current ?? pixelsPerSecond,
-      ),
+    song,
+    snapEnabled,
     onMoveClip: (clipId, seconds) => onMoveClip?.(clipId, seconds),
   });
   const cameraX = cameraXRef.current;

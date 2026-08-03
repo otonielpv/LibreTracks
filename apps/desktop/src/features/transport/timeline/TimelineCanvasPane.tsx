@@ -1924,7 +1924,7 @@ export function TimelineCanvasPane({
                         song={song}
                         trackHeight={trackHeight}
                         camera={midiCamera}
-                        screenXToSeconds={screenXToSeconds}
+                        snapEnabled={snapEnabled}
                         {...(midiClips ?? {})}
                       />
                     ) : null}

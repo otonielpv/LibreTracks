@@ -7,8 +7,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { secondsToScreenX } from "../timeline/timelineMath";
-import type { MidiClipSummary } from "../desktopApi";
+import {
+  getElementScaleX,
+  screenXToSeconds,
+  secondsToScreenX,
+  snapToTimelineGrid,
+} from "../timeline/timelineMath";
+import { buildSongTempoRegions } from "@libretracks/shared/models";
+import type { MidiClipSummary, SongView } from "../desktopApi";
 
 /** Position a clip is being dragged to, while the drag is in flight. */
 export type MidiClipMovePreview = {
@@ -22,8 +28,10 @@ export type MidiClipHotspotDeps = {
   livePixelsPerSecondRef: MutableRefObject<number>;
   /** Committed zoom, used only as a fallback before the live ref is seeded. */
   pixelsPerSecond: number;
-  /** Pointer x → timeline seconds, so the drag can map screen to time. */
-  screenXToSeconds: (screenX: number) => number;
+  /** Song, for the tempo grid the drag snaps to. */
+  song: SongView | null;
+  /** Whether grid snapping is on; Shift bypasses it either way. */
+  snapEnabled?: boolean;
   /** Commit a finished drag. */
   onMoveClip: (clipId: string, timelineStartSeconds: number) => void;
 };
@@ -51,7 +59,8 @@ export function useMidiClipHotspots({
   cameraXRef,
   livePixelsPerSecondRef,
   pixelsPerSecond,
-  screenXToSeconds,
+  song,
+  snapEnabled,
   onMoveClip,
 }: MidiClipHotspotDeps) {
   const hotspotsRef = useRef(new Map<string, HTMLButtonElement>());
@@ -61,8 +70,12 @@ export function useMidiClipHotspots({
   const dragRef = useRef<{
     clipId: string;
     pointerId: number;
-    startX: number;
-    originSeconds: number;
+    pointerStartClientX: number;
+    /** Where the MARKER sat when grabbed, in local px. */
+    pointerStartLocalX: number;
+    /** CSS-zoom factor, so a scaled UI doesn't inflate the pointer delta. */
+    pointerScaleX: number;
+    initialStartSeconds: number;
     moved: boolean;
   } | null>(null);
   /** Set on drop, read (and cleared) by the click that follows it. */
@@ -86,16 +99,33 @@ export function useMidiClipHotspots({
   const beginMove = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, clip: MidiClipSummary) => {
       if (event.button !== 0) return;
+      // Anchor on the MARKER's own position, not the cursor's: the pointer may
+      // land anywhere inside the 24px hotspot, and using the cursor as the
+      // origin would jump the clip by that offset on the first move.
+      const pointerStartLocalX = secondsToScreenX(
+        clip.timelineStartSeconds,
+        cameraXRef.current,
+        livePixelsPerSecondRef.current ?? pixelsPerSecond,
+      );
       dragRef.current = {
         clipId: clip.id,
         pointerId: event.pointerId,
-        startX: event.clientX,
-        originSeconds: clip.timelineStartSeconds,
+        pointerStartClientX: event.clientX,
+        pointerStartLocalX,
+        pointerScaleX: getElementScaleX(
+          event.currentTarget.getBoundingClientRect(),
+          event.currentTarget.offsetWidth,
+        ),
+        initialStartSeconds: clip.timelineStartSeconds,
         moved: false,
       };
-      event.currentTarget.setPointerCapture(event.pointerId);
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Some engines refuse capture on a not-yet-hovered element; ignore.
+      }
     },
-    [],
+    [cameraXRef, livePixelsPerSecondRef, pixelsPerSecond],
   );
 
   const updateMove = useCallback(
@@ -103,19 +133,54 @@ export function useMidiClipHotspots({
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
 
+      const effectivePixelsPerSecond =
+        livePixelsPerSecondRef.current ?? pixelsPerSecond;
+      if (effectivePixelsPerSecond <= 0) return;
+
       if (
         !drag.moved &&
-        Math.abs(event.clientX - drag.startX) < DRAG_THRESHOLD_PX
+        Math.abs(event.clientX - drag.pointerStartClientX) < DRAG_THRESHOLD_PX
       ) {
         return;
       }
       drag.moved = true;
 
-      const next = Math.max(0, screenXToSeconds(event.clientX));
-      previewRef.current = { clipId: drag.clipId, startSeconds: next };
+      // Same resolution the automation cues use: convert the pointer's travel
+      // (de-scaled by the UI zoom) from the marker's grab-time local x, against
+      // the LIVE camera — so the clip keeps tracking the pointer even if the
+      // timeline pans mid-drag. Feeding clientX straight to screenXToSeconds
+      // ignored both the container's origin and the CSS zoom, which is what
+      // made the marker land away from the cursor.
+      const pointerDeltaPx =
+        (event.clientX - drag.pointerStartClientX) / drag.pointerScaleX;
+      const rawDelta =
+        screenXToSeconds(
+          drag.pointerStartLocalX + pointerDeltaPx,
+          cameraXRef.current,
+          effectivePixelsPerSecond,
+        ) - drag.initialStartSeconds;
+
+      let next = drag.initialStartSeconds + rawDelta;
+
+      // Snap to the same grid the user sees; Shift bypasses it.
+      if (song && snapEnabled && !event.shiftKey) {
+        next = snapToTimelineGrid(
+          next,
+          song.bpm,
+          song.timeSignature,
+          1,
+          effectivePixelsPerSecond,
+          buildSongTempoRegions(song),
+        );
+      }
+
+      previewRef.current = {
+        clipId: drag.clipId,
+        startSeconds: Math.max(0, next),
+      };
       setPreview(previewRef.current);
     },
-    [screenXToSeconds],
+    [cameraXRef, livePixelsPerSecondRef, pixelsPerSecond, snapEnabled, song],
   );
 
   const endMove = useCallback(
