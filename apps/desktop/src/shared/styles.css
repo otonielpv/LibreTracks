@@ -8909,3 +8909,14 @@ textarea {
   font-size: 0.72rem;
   color: rgb(186 202 197 / 0.65);
 }
+
+/* Grab affordance on the MIDI markers, matching the ruler flags: the hotspot
+   is transparent, so the cursor is the only hint that it can be dragged. */
+.lt-track-lane.is-midi .lt-automation-hotspot {
+  cursor: grab;
+}
+
+.lt-track-lane.is-midi .lt-automation-hotspot.is-dragging {
+  cursor: grabbing;
+  z-index: 6;
+}

@@ -247,6 +247,8 @@ export function useMidiClipHotspots({
 
   // Named to match MidiClipHotspots' props so the caller can spread them.
   return {
+    /** Where the drop guide should sit, or null when no drag is in flight. */
+    guideSeconds: preview?.startSeconds ?? null,
     registerHotspot,
     onBeginMove: beginMove,
     onUpdateMove: updateMove,

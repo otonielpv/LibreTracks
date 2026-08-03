@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent, MutableRefObject } from "react";
 
 import { secondsToScreenX } from "../timeline/timelineMath";
 import type { MidiClipSummary, SongView } from "../desktopApi";
-import { useMidiClipHotspots } from "./useMidiClipHotspots";
+import type { useMidiClipHotspots } from "./useMidiClipHotspots";
 
 /**
  * The invisible hit targets for a MIDI track's clips.
@@ -24,10 +24,8 @@ export type MidiClipHotspotsProps = {
     livePixelsPerSecondRef: MutableRefObject<number>;
     pixelsPerSecond: number;
   };
-  /** Whether grid snapping is on; Shift bypasses it either way. */
-  snapEnabled?: boolean;
-  /** Commit a dragged clip to its new position. */
-  onMoveClip?: (clipId: string, timelineStartSeconds: number) => void;
+  /** Drag state, owned by the caller so it can also draw the drop guide. */
+  hotspots: ReturnType<typeof useMidiClipHotspots>;
   onEdit?: (clip: MidiClipSummary) => void;
   onContextMenu?: (
     event: ReactMouseEvent<HTMLElement>,
@@ -35,13 +33,30 @@ export type MidiClipHotspotsProps = {
   ) => void;
 };
 
+/** The vertical guide showing where a dragged clip will land. */
+export function MidiDropGuide({
+  guideSeconds,
+  resolveLeft,
+}: {
+  guideSeconds: number | null;
+  resolveLeft: (seconds: number) => number;
+}) {
+  if (guideSeconds === null) return null;
+  return (
+    <div
+      aria-hidden="true"
+      className="lt-marker-drop-guide is-over-tracks"
+      style={{ left: resolveLeft(guideSeconds) }}
+    />
+  );
+}
+
 export function MidiClipHotspots({
   trackId,
   song,
   trackHeight,
   camera,
-  snapEnabled,
-  onMoveClip,
+  hotspots,
   onEdit,
   onContextMenu,
 }: MidiClipHotspotsProps) {
@@ -56,15 +71,7 @@ export function MidiClipHotspots({
     onEndMove,
     consumeDragClick,
     preview,
-  } = useMidiClipHotspots({
-    clips,
-    cameraXRef,
-    livePixelsPerSecondRef,
-    pixelsPerSecond,
-    song,
-    snapEnabled,
-    onMoveClip: (clipId, seconds) => onMoveClip?.(clipId, seconds),
-  });
+  } = hotspots;
   const cameraX = cameraXRef.current;
   const livePixelsPerSecond = livePixelsPerSecondRef.current ?? pixelsPerSecond;
 

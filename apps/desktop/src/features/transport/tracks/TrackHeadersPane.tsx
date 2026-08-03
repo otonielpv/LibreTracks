@@ -244,7 +244,9 @@ export function TrackHeadersPane({
                   trackColor={track.color}
                   trackHeight={trackHeight}
                   trackDepth={track.depth}
-                      midiEnabled={track.midiEnabled}
+                  midiPort={track.midiPort}
+                  midiChannel={track.midiChannel}
+                  midiEnabled={track.midiEnabled}
                   isSelected={isTrackSelected}
                   isDragging={false}
                   densityClass={trackDensityClass}

@@ -42,7 +42,8 @@ import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
-import { MidiClipHotspots } from "../midi/MidiClipHotspots";
+import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
+import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
 import {
   LANE_CUES,
@@ -943,7 +944,12 @@ export function TimelineCanvasPane({
   }, [song?.sectionMarkers, markerMovePreview]);
 
   // Keeps the cue hit targets glued to the diamonds the canvas paints.
-  const midiCamera = { cameraXRef, livePixelsPerSecondRef, pixelsPerSecond };
+  const midiLane = useMidiLane({
+    song,
+    camera: { cameraXRef, livePixelsPerSecondRef, pixelsPerSecond },
+    snapEnabled,
+    callbacks: midiClips,
+  });
   const { registerHotspot: registerAutomationHotspot } =
     useAutomationCueHotspots({
       cues: song?.automationCues,
@@ -1645,6 +1651,8 @@ export function TimelineCanvasPane({
             />
           ) : null}
 
+          <MidiDropGuide {...midiLane.guide(resolveLibraryGhostLeft)} />
+
           {clipDragSnapIndicatorSeconds !== null ? (
             <div
               aria-hidden="true"
@@ -1919,14 +1927,7 @@ export function TimelineCanvasPane({
                     }}
                   >
                     {track.kind === "midi" ? (
-                      <MidiClipHotspots
-                        trackId={track.id}
-                        song={song}
-                        trackHeight={trackHeight}
-                        camera={midiCamera}
-                        snapEnabled={snapEnabled}
-                        {...(midiClips ?? {})}
-                      />
+                      <MidiClipHotspots {...midiLane.lane(track.id, trackHeight)} />
                     ) : null}
                     {libraryClipPreview
                       .filter((preview) => preview.trackId === track.id)

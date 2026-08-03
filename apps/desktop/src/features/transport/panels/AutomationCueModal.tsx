@@ -142,6 +142,10 @@ export function AutomationCueModal({
     () => draft?.maxRuns ?? null,
   );
   const [installedPads, setInstalledPads] = useState<PadCatalogEntry[]>([]);
+  // Collapsed rows are tracked by index, not id: an action has no stable id.
+  // Reordering therefore keeps the *position* folded rather than the action,
+  // which is the lesser evil versus minting ids just for this.
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -178,6 +182,14 @@ export function AutomationCueModal({
 
   const removeAt = (index: number) =>
     setActions((prev) => prev.filter((_, i) => i !== index));
+
+  const toggleCollapsed = (index: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
 
   const move = (index: number, delta: number) =>
     setActions((prev) => {
@@ -236,9 +248,21 @@ export function AutomationCueModal({
             actions.map((action, index) => (
               <div className="lt-automation-action-row" key={index}>
                 <div className="lt-automation-action-head">
-                  <span className="lt-automation-action-kind">
-                    {t(ACTION_LABEL_KEYS[action.type])}
-                  </span>
+                  {/* The whole strip toggles the row, so a long job can be
+                      folded down to one line per action. */}
+                  <button
+                    type="button"
+                    className="lt-midi-event-toggle"
+                    aria-expanded={!collapsed.has(index)}
+                    onClick={() => toggleCollapsed(index)}
+                  >
+                    <span className="lt-midi-event-caret">
+                      {collapsed.has(index) ? "▸" : "▾"}
+                    </span>
+                    <span className="lt-automation-action-kind">
+                      {t(ACTION_LABEL_KEYS[action.type])}
+                    </span>
+                  </button>
                   <div className="lt-automation-action-tools">
                     {/* The jump is pinned last, so it can't be reordered, and
                         no action can move below it. */}
@@ -271,6 +295,7 @@ export function AutomationCueModal({
                     </button>
                   </div>
                 </div>
+                {collapsed.has(index) ? null : (
                 <ActionEditor
                   action={action}
                   regions={regions}
@@ -282,6 +307,7 @@ export function AutomationCueModal({
                   t={t}
                   onChange={(next) => updateAt(index, next)}
                 />
+                )}
               </div>
             ))
           )}
