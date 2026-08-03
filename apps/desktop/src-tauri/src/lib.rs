@@ -127,6 +127,8 @@ pub fn run() {
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
+            #[cfg(not(target_os = "android"))]
+            state.start_midi_runtime();
             let initial_device = initial_settings.selected_output_device_id.clone();
             let apply_result = state.audio.apply_settings(initial_settings);
             // Desktop: a failure to apply the initial audio settings is fatal.
@@ -323,6 +325,7 @@ pub fn run() {
             commands::timeline::upsert_midi_clip,
             commands::timeline::delete_midi_clip,
             commands::timeline::move_midi_clip,
+            commands::timeline::preview_midi_clip,
             commands::timeline::set_midi_track_routing,
             commands::timeline::set_midi_track_enabled,
             commands::timeline::set_automation_track_enabled,

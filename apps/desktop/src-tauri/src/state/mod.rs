@@ -3,7 +3,10 @@ use std::{
     fs,
     path::Path,
     path::PathBuf,
-    sync::{mpsc, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -86,6 +89,7 @@ const SESSION_EXPORT_PROGRESS_EVENT: &str = "session:export-progress";
 pub const WAVEFORM_READY_EVENT: &str = "waveform:ready";
 const TRANSPORT_RUNTIME_SYNC_INTERVAL: Duration = Duration::from_millis(250);
 const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
+const MIDI_RUNTIME_TICK_INTERVAL: Duration = Duration::from_millis(10);
 /// Track volume faders are an Ableton-style dB scale reaching +10 dB, i.e. a
 /// linear gain of 10^(10/20) ≈ 3.1623. Track gain must clamp to this headroom,
 /// not to unity — clamping to 1.0 here snaps every above-0-dB fader back down.
@@ -207,7 +211,10 @@ pub struct DesktopState {
     /// `midi` (input): a show can send without any controller attached.
     pub midi_output: Arc<MidiOutputManager>,
     pub waveform_jobs: WaveformGenerationQueue,
-    pub session: Mutex<DesktopSession>,
+    pub session: Arc<Mutex<DesktopSession>>,
+    midi_runtime_started: AtomicBool,
+    midi_runtime_stop: Arc<AtomicBool>,
+    midi_runtime_thread: Mutex<Option<thread::JoinHandle<()>>>,
     pub project_load_progress: Mutex<Option<ProjectLoadProgressEvent>>,
     /// OS resource sampler backing the top-bar CPU/RAM/disk meter. Independent
     /// of the session lock so sampling can never be blocked by heavy session
@@ -232,9 +239,53 @@ impl Default for DesktopState {
             midi: MidiManager::default(),
             midi_output,
             waveform_jobs,
-            session: Mutex::new(session),
+            session: Arc::new(Mutex::new(session)),
+            midi_runtime_started: AtomicBool::new(false),
+            midi_runtime_stop: Arc::new(AtomicBool::new(false)),
+            midi_runtime_thread: Mutex::new(None),
             project_load_progress: Mutex::new(None),
             resource_monitor: crate::platform::resource_monitor::ResourceMonitor::default(),
+        }
+    }
+}
+
+impl DesktopState {
+    /// Drive timeline MIDI independently of the UI's 250 ms snapshot poll.
+    /// The session uses `try_lock`: editing or loading wins immediately and a
+    /// later tick catches the elapsed MIDI window without blocking either path.
+    pub fn start_midi_runtime(&self) {
+        if self
+            .midi_runtime_started
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+
+        let stop = Arc::clone(&self.midi_runtime_stop);
+        let session = Arc::clone(&self.session);
+        let handle = thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                let tick_started = Instant::now();
+                if let Ok(mut session) = session.try_lock() {
+                    let _ = session.advance_midi_playback();
+                }
+                thread::sleep(MIDI_RUNTIME_TICK_INTERVAL.saturating_sub(tick_started.elapsed()));
+            }
+        });
+        if let Ok(mut slot) = self.midi_runtime_thread.lock() {
+            *slot = Some(handle);
+        }
+    }
+}
+
+impl Drop for DesktopState {
+    fn drop(&mut self) {
+        self.midi_runtime_stop.store(true, Ordering::Relaxed);
+        if let Ok(mut slot) = self.midi_runtime_thread.lock() {
+            if let Some(handle) = slot.take() {
+                let _ = handle.join();
+            }
         }
     }
 }

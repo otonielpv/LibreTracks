@@ -536,6 +536,18 @@ pub fn move_midi_clip(
 }
 
 #[tauri::command]
+pub fn preview_midi_clip(clip: MidiClip, state: State<'_, DesktopState>) -> Result<(), String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .preview_midi_clip(clip)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn set_midi_track_routing(
     track_id: String,
     port: Option<String>,

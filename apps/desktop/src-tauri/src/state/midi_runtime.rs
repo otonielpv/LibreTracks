@@ -11,10 +11,9 @@
 //! That split exists because the desktop crate links the native engine and so
 //! its tests do not run in CI.
 //!
-//! Timing note: this runs on the transport tick (`sync_position`), not on the
-//! audio thread, so resolution is the tick rate — tens of milliseconds with
-//! jitter. Ample for lighting cues and lyric triggers, which is what MIDI
-//! output exists for here; NOT suitable for playing an external instrument.
+//! Timing note: this runs on a dedicated 10 ms transport worker, not on the
+//! audio thread. That keeps cue latency low without putting device I/O in the
+//! real-time audio callback.
 
 use std::sync::Arc;
 
@@ -23,6 +22,7 @@ use libretracks_core::midi_schedule::{
     collect_events_in_window, step_control_curves, take_due_note_offs, PendingControlCurve,
     PendingNoteOff, ScheduledMidiMessage,
 };
+use libretracks_core::MidiClip;
 
 use crate::infra::error::DesktopError;
 use crate::midi::output::{MidiOutputManager, OutboundMidiMessage};
@@ -133,9 +133,51 @@ impl DesktopSession {
         }
     }
 
+    /// Fire a MIDI clip's whole bundle right now, for the editor's "test"
+    /// button, so the user can verify the cabling without playing the song.
+    ///
+    /// This is a PREVIEW, not playback: every message goes out at once and the
+    /// notes are released immediately afterwards. Honouring each note's
+    /// duration and stepping the controller sweeps would need the transport's
+    /// clock, and the point here is instant confirmation that something
+    /// arrives — a sweep still sends its start and end so the receiving device
+    /// visibly reacts.
+    pub fn preview_midi_clip(&mut self, clip: MidiClip) -> Result<(), DesktopError> {
+        let Some(output) = self.midi_output_handle() else {
+            return Ok(());
+        };
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        // Reuse the scheduler rather than re-deriving channels and ports here,
+        // so a preview can never disagree with what playback would emit. The
+        // scheduler walks EVERY clip in the song, so hand it a copy holding
+        // only this one — otherwise a neighbouring clip inside the same time
+        // window would fire too.
+        let start = clip.timeline_start_seconds;
+        let end = clip.end_seconds();
+        let mut isolated = song.clone();
+        isolated.midi_clips = vec![clip];
+        let tick = collect_events_in_window(&isolated, start - 1.0, end.max(start) + 1.0);
+
+        let mut scheduled = tick.messages;
+        // Land the sweeps on their target instead of leaving them mid-fade.
+        let (curve_tail, _) = step_control_curves(tick.started_curves, f64::MAX);
+        scheduled.extend(curve_tail);
+        // Release every note the preview just started.
+        let (note_offs, _) = take_due_note_offs(tick.started_notes, f64::MAX);
+        scheduled.extend(note_offs);
+
+        dispatch(&output, scheduled);
+        Ok(())
+    }
+
     /// Advance the MIDI cursor to the playhead, emitting everything crossed.
     ///
-    /// Called from `sync_position` on every tick while playing. Cheap when
+    /// Called by the dedicated MIDI worker and by `sync_position`. Cheap when
     /// there is nothing to do: returns immediately if no port is open.
     pub(super) fn advance_midi_playback(&mut self) -> Result<(), DesktopError> {
         let Some(output) = self.midi_output_handle() else {
@@ -157,15 +199,22 @@ impl DesktopSession {
             return Ok(());
         }
 
-        let now_seconds = self.engine.position_seconds();
+        // The core engine position is synchronized by the much slower UI
+        // snapshot path. The transport clock advances continuously between
+        // snapshots and is therefore the right clock for this 10 ms worker.
+        let now_seconds = self.current_position();
         let previous_seconds = self.midi_cursor_seconds;
 
-        // Backwards or wildly-forward movement is a discontinuity: re-anchor
-        // without firing, so a loop wrap or a stalled tick can't machine-gun
-        // the receiving device.
-        if now_seconds < previous_seconds
-            || now_seconds - previous_seconds > MAX_CONTINUOUS_TICK_SECONDS
-        {
+        // A native-clock correction can move the transport clock a few ms
+        // behind the MIDI cursor. Keep the cursor where it is until the clock
+        // catches up; moving it backwards would fire that tiny window twice.
+        if now_seconds < previous_seconds {
+            return Ok(());
+        }
+
+        // A wildly-forward movement is a discontinuity: re-anchor without
+        // firing, so a stalled tick can't machine-gun the receiving device.
+        if now_seconds - previous_seconds > MAX_CONTINUOUS_TICK_SECONDS {
             self.reset_midi_cursor(now_seconds);
             return Ok(());
         }

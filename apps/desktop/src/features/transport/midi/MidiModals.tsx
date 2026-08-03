@@ -1,5 +1,9 @@
-import type { MidiEventSummary, SongView } from "../desktopApi";
-import { MidiClipModal, type MidiClipDraft } from "../panels/MidiClipModal";
+import type { SongView } from "../desktopApi";
+import {
+  MidiClipModal,
+  type MidiClipDraft,
+  type MidiClipModalResult,
+} from "../panels/MidiClipModal";
 import { MidiRouteModal, type MidiRouteDraft } from "../panels/MidiRouteModal";
 
 /**
@@ -17,13 +21,9 @@ export type MidiModalsProps = {
   };
   availablePorts: string[];
   onRefreshPorts: () => void;
-  onSaveClip: (result: {
-    clipId: string | null;
-    trackId: string;
-    timelineStartSeconds: number;
-    name: string;
-    events: MidiEventSummary[];
-  }) => void;
+  /** Fire the editor's current values without saving them. */
+  onTestClip: (result: MidiClipModalResult) => void;
+  onSaveClip: (result: MidiClipModalResult) => void;
   onSaveRoute: (
     trackId: string,
     port: string | null,
@@ -36,6 +36,7 @@ export function MidiModals({
   drafts,
   availablePorts,
   onRefreshPorts,
+  onTestClip,
   onSaveClip,
   onSaveRoute,
 }: MidiModalsProps) {
@@ -64,6 +65,7 @@ export function MidiModals({
           draft={clipDraft}
           song={song}
           onCancel={() => closeDraft("clip")}
+          onTest={onTestClip}
           onConfirm={(result) => {
             closeDraft("clip");
             onSaveClip(result);

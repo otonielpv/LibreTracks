@@ -21,6 +21,14 @@ export type MidiClipDraft = {
   events: MidiEventSummary[];
 };
 
+export type MidiClipModalResult = {
+  clipId: string | null;
+  trackId: string;
+  timelineStartSeconds: number;
+  name: string;
+  events: MidiEventSummary[];
+};
+
 type MidiClipModalProps = {
   draft: MidiClipDraft | null;
   song: SongView | null;
@@ -30,13 +38,9 @@ type MidiClipModalProps = {
    * carries the track and position, so echoing them back here keeps the caller
    * from having to re-assemble the clip around the modal's result.
    */
-  onConfirm: (result: {
-    clipId: string | null;
-    trackId: string;
-    timelineStartSeconds: number;
-    name: string;
-    events: MidiEventSummary[];
-  }) => void;
+  /** Fire the current form values without saving them. */
+  onTest?: (result: MidiClipModalResult) => void;
+  onConfirm: (result: MidiClipModalResult) => void;
 };
 
 const EVENT_TYPES: MidiEventKindSummary["type"][] = [
@@ -99,6 +103,7 @@ export function MidiClipModal({
   draft,
   song,
   onCancel,
+  onTest,
   onConfirm,
 }: MidiClipModalProps) {
   const { t } = useTranslation();
@@ -164,6 +169,13 @@ export function MidiClipModal({
     );
 
   const canConfirm = events.length > 0;
+  const currentResult = (): MidiClipModalResult => ({
+    clipId: draft.clipId,
+    trackId: draft.trackId,
+    timelineStartSeconds: draft.timelineStartSeconds,
+    name,
+    events,
+  });
 
   return (
     <div className="lt-modal-backdrop" onClick={onCancel}>
@@ -309,6 +321,18 @@ export function MidiClipModal({
         </div>
 
         <div className="lt-inline-actions lt-automation-modal-actions">
+          {/* Preview uses this live form state and never persists the draft. */}
+          {onTest ? (
+            <button
+              type="button"
+              className="lt-secondary-button"
+              title={t("transport.midi.testClipHint")}
+              disabled={!canConfirm}
+              onClick={() => onTest(currentResult())}
+            >
+              {t("transport.midi.testClip")}
+            </button>
+          ) : null}
           <button type="button" className="lt-secondary-button" onClick={onCancel}>
             {t("common.cancel")}
           </button>
@@ -316,15 +340,7 @@ export function MidiClipModal({
             type="button"
             className="is-primary"
             disabled={!canConfirm}
-            onClick={() =>
-              onConfirm({
-                clipId: draft.clipId,
-                trackId: draft.trackId,
-                timelineStartSeconds: draft.timelineStartSeconds,
-                name,
-                events,
-              })
-            }
+            onClick={() => onConfirm(currentResult())}
           >
             {t("common.save")}
           </button>

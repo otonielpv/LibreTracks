@@ -1243,7 +1243,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     midiTrackContextMenu,
   } = createMidiMenus(getDeps, openColorMenu);
 
-  function trackContextMenu(track: TrackSummary): ContextMenuAction[] {
+  function trackContextMenu(
+    track: TrackSummary,
+    laneSeconds?: number,
+  ): ContextMenuAction[] {
     const d = getDeps();
     const { t } = d;
     const currentSong = d.songRef.current;
@@ -1252,7 +1255,9 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     }
 
     if (track.kind === "midi") {
-      return midiTrackContextMenu(track);
+      return laneSeconds === undefined
+        ? midiTrackContextMenu(track)
+        : midiLaneContextMenu(track.id, laneSeconds);
     }
 
     const previousFolder = findPreviousFolderTrack(currentSong, track.id);

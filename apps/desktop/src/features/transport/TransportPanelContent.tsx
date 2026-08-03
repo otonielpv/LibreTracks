@@ -6322,9 +6322,9 @@ export function TransportPanelContent() {
       openMenu(event, clipDisplayName(hitClip), clipContextMenu(hitClip));
       return;
     }
-
     selectTrack([track.id]);
-    openMenu(event, track.name, trackContextMenu(track));
+    const laneSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
+    openMenu(event, track.name, trackContextMenu(track, laneSeconds));
   }
 
   function handleTrackListContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
@@ -8340,6 +8340,7 @@ export function TransportPanelContent() {
               drafts={midiDrafts}
               availablePorts={midiOutputDevices}
               onRefreshPorts={handleRefreshMidiOutputDevices}
+              onTestClip={midiHandlers.testClip}
               onSaveClip={midiHandlers.saveClip}
               onSaveRoute={midiHandlers.saveRoute}
             />

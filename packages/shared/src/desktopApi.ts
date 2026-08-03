@@ -1199,6 +1199,15 @@ export async function setMidiTrackRouting(
   });
 }
 
+/**
+ * Fire a MIDI clip's messages immediately, to check the wiring without
+ * playing the song. A preview: notes are released at once and sweeps land on
+ * their end value rather than being stepped over time.
+ */
+export async function previewMidiClip(clip: MidiClipSummary): Promise<void> {
+  return invokeCommand<void>("preview_midi_clip", { clip });
+}
+
 /** Turn a MIDI track's output on or off (its equivalent of mute). */
 export async function setMidiTrackEnabled(
   trackId: string,

@@ -3,6 +3,7 @@ import {
   moveMidiClip,
   setAutomationTrackEnabled,
   setMidiTrackEnabled,
+  previewMidiClip,
   setMidiTrackRouting,
   upsertMidiClip,
   type MidiEventSummary,
@@ -187,11 +188,26 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     void handleSetMidiRoute(trackId, port, channel);
   };
 
+  /** Fire the editor's current values without persisting them first. */
+  const testClip = (input: Parameters<typeof handleSaveMidiClip>[0]) => {
+    void previewMidiClip({
+      id: input.clipId ?? "midi_clip_preview",
+      trackId: input.trackId,
+      timelineStartSeconds: input.timelineStartSeconds,
+      name: input.name,
+      events: input.events,
+      color: null,
+    })
+      .then(() => setStatus(translate("transport.midi.statusClipTested")))
+      .catch(() => setStatus(translate("transport.midi.statusClipTestFailed")));
+  };
+
   const moveClip = (clipId: string, timelineStartSeconds: number) => {
     void handleMoveMidiClip(clipId, timelineStartSeconds);
   };
 
   return {
+    testClip,
     moveClip,
     saveClip,
     saveRoute,
