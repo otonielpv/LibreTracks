@@ -605,6 +605,7 @@ const es = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      addMessage: "Anadir mensaje",
       durationNoteHint: "0 = un toque (se suelta al instante).",
       durationCurveHint: "0 = salta directo al valor final.",
       channelOverride: "Canal (opcional)",

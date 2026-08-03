@@ -8858,3 +8858,54 @@ textarea {
 .lt-midi-track-header.is-lane .lt-midi-power .material-symbols-outlined {
   font-size: 13px;
 }
+
+/* One "add" control (type dropdown + button) instead of a button per type. */
+.lt-midi-add-control {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.lt-midi-add-control select {
+  flex: 1;
+  min-width: 0;
+  border-radius: 2px;
+  border: 1px solid rgb(157 123 255 / 0.22);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.5rem 0.6rem;
+}
+
+/* The row header is a button so the whole strip toggles the row; it must not
+   look like one, hence the reset. */
+.lt-midi-event-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-midi-event-caret {
+  flex: 0 0 auto;
+  width: 0.9rem;
+  color: rgb(196 176 255 / 0.85);
+  font-size: 0.7rem;
+}
+
+/* The collapsed summary: quieter than the message type, and truncated so a
+   long controller sweep can't push the row's tools off the edge. */
+.lt-midi-event-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  color: rgb(186 202 197 / 0.65);
+}

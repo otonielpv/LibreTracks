@@ -8,6 +8,7 @@ import type {
   SongView,
 } from "../desktopApi";
 import { formatClock } from "../helpers";
+import { MidiEventFields, describeEvent } from "./MidiEventFields";
 
 /**
  * What the modal is editing. `clipId` is present when editing an existing clip.
@@ -88,11 +89,6 @@ function makeEvent(type: MidiEventKindSummary["type"]): MidiEventSummary {
   }
 }
 
-function clamp(value: number, min: number, max: number) {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
-
 /**
  * Editor for one MIDI clip: a list of messages fired when the playhead reaches
  * the clip. Deliberately not a piano roll — several notes at the same offset
@@ -110,6 +106,9 @@ export function MidiClipModal({
     () => draft?.events ?? [],
   );
   const [name, setName] = useState(() => draft?.name ?? "");
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [pendingType, setPendingType] =
+    useState<MidiEventKindSummary["type"]>("note");
 
   if (!draft) {
     return null;
@@ -120,9 +119,28 @@ export function MidiClipModal({
   const trackName = track?.name ?? draft.trackId;
   // Shown as the channel field's placeholder so an empty box reads as "this
   // message goes out on the track's channel", not as "no channel".
+  const inheritedChannel = track?.midiChannel ?? 1;
   const inheritedChannelLabel = t("transport.midi.channelInherited", {
-    channel: track?.midiChannel ?? 1,
+    channel: inheritedChannel,
   });
+
+  const toggleCollapsed = (eventId: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+
+  /** Swap a message with its neighbour. Order matters for same-offset events. */
+  const move = (index: number, delta: number) =>
+    setEvents((prev) => {
+      const target = index + delta;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
 
   const updateAt = (index: number, event: MidiEventSummary) =>
     setEvents((prev) => prev.map((item, i) => (i === index ? event : item)));
@@ -193,282 +211,100 @@ export function MidiClipModal({
           {events.length === 0 ? (
             <p className="lt-automation-empty">{t("transport.midi.modalEmpty")}</p>
           ) : (
-            <ol className="lt-automation-action-list">
-              {events.map((event, index) => (
-                <li key={event.id} className="lt-automation-action-row">
+            events.map((event, index) => {
+              const isCollapsed = collapsed.has(event.id);
+              return (
+                <div className="lt-automation-action-row" key={event.id}>
                   <div className="lt-automation-action-head">
-                    <select
-                      value={event.kind.type}
-                      aria-label={t("transport.midi.eventType")}
-                      onChange={(e) =>
-                        changeType(index, e.target.value as MidiEventKindSummary["type"])
-                      }
-                    >
-                      {EVENT_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {t(EVENT_LABEL_KEYS[type])}
-                        </option>
-                      ))}
-                    </select>
+                    {/* The whole header toggles the row, so a long list of
+                        messages can be folded down to one line each. */}
                     <button
                       type="button"
-                      className="lt-automation-action-remove"
-                      onClick={() => removeAt(index)}
-                      aria-label={t("transport.midi.removeEvent")}
+                      className="lt-midi-event-toggle"
+                      aria-expanded={!isCollapsed}
+                      onClick={() => toggleCollapsed(event.id)}
                     >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div className="lt-automation-action-fields">
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">{t("transport.midi.offsetSeconds")}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={event.atSeconds}
-                        onChange={(e) =>
-                          updateAt(index, {
-                            ...event,
-                            atSeconds: Math.max(0, Number(e.target.value) || 0),
-                          })
-                        }
-                      />
-                    </label>
-                    {/* Blank = inherit the track's channel, which is the
-                        normal case; a number overrides it for this message
-                        alone. Labelled as optional so it doesn't read as a
-                        required field the user forgot to fill in. */}
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t("transport.midi.channelOverride")}
+                      <span className="lt-midi-event-caret">
+                        {isCollapsed ? "▸" : "▾"}
                       </span>
-                      <small className="lt-settings-field-hint">
-                        {t("transport.midi.channelOverrideHint")}
-                      </small>
-                      <input
-                        type="number"
-                        min={1}
-                        max={16}
-                        placeholder={inheritedChannelLabel}
-                        value={event.channel ?? ""}
-                        onChange={(e) =>
-                          updateAt(index, {
-                            ...event,
-                            channel:
-                              e.target.value.trim() === ""
-                                ? null
-                                : clamp(Number(e.target.value) || 1, 1, 16),
-                          })
-                        }
-                      />
-                    </label>
-
-                    {event.kind.type === "note" && (
-                      <>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.note")}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={127}
-                            value={event.kind.note}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "note",
-                                note: clamp(Number(e.target.value) || 0, 0, 127),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.velocity")}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={127}
-                            value={event.kind.velocity}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "note",
-                                velocity: clamp(Number(e.target.value) || 0, 0, 127),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">
-                            {t("transport.midi.durationSeconds")}
-                          </span>
-                          <small className="lt-settings-field-hint">
-                            {t("transport.midi.durationNoteHint")}
-                          </small>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={event.kind.durationSeconds}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "note",
-                                durationSeconds: Math.max(0, Number(e.target.value) || 0),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                      </>
-                    )}
-
-                    {event.kind.type === "controlChange" && (
-                      <>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.controller")}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={127}
-                            value={event.kind.controller}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "controlChange",
-                                controller: clamp(Number(e.target.value) || 0, 0, 127),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.value")}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={127}
-                            value={event.kind.value}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "controlChange",
-                                value: clamp(Number(e.target.value) || 0, 0, 127),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                      </>
-                    )}
-
-                    {event.kind.type === "programChange" && (
-                      <label className="lt-settings-field">
-                        <span className="lt-settings-field-label">{t("transport.midi.program")}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={127}
-                          value={event.kind.program}
-                          onChange={(e) =>
-                            updateKind(index, {
-                              ...event.kind,
-                              type: "programChange",
-                              program: clamp(Number(e.target.value) || 0, 0, 127),
-                            } as MidiEventKindSummary)
-                          }
-                        />
-                      </label>
-                    )}
-
-                    {event.kind.type === "controlCurve" && (
-                      <>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.controller")}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={127}
-                            value={event.kind.controller}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "controlCurve",
-                                controller: clamp(Number(e.target.value) || 0, 0, 127),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.fromValue")}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={127}
-                            value={event.kind.fromValue}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "controlCurve",
-                                fromValue: clamp(Number(e.target.value) || 0, 0, 127),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.toValue")}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={127}
-                            value={event.kind.toValue}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "controlCurve",
-                                toValue: clamp(Number(e.target.value) || 0, 0, 127),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                        <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">
-                            {t("transport.midi.durationSeconds")}
-                          </span>
-                          <small className="lt-settings-field-hint">
-                            {t("transport.midi.durationCurveHint")}
-                          </small>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={event.kind.durationSeconds}
-                            onChange={(e) =>
-                              updateKind(index, {
-                                ...event.kind,
-                                type: "controlCurve",
-                                durationSeconds: Math.max(0, Number(e.target.value) || 0),
-                              } as MidiEventKindSummary)
-                            }
-                          />
-                        </label>
-                      </>
-                    )}
+                      <span className="lt-automation-action-kind">
+                        {t(EVENT_LABEL_KEYS[event.kind.type])}
+                      </span>
+                      <span className="lt-midi-event-summary">
+                        {describeEvent(event, t, inheritedChannel)}
+                      </span>
+                    </button>
+                    <div className="lt-automation-action-tools">
+                      <button
+                        type="button"
+                        aria-label={t("transport.automation.moveUp")}
+                        disabled={index === 0}
+                        onClick={() => move(index, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t("transport.automation.moveDown")}
+                        disabled={index >= events.length - 1}
+                        onClick={() => move(index, 1)}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t("transport.midi.removeEvent")}
+                        onClick={() => removeAt(index)}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                </li>
-              ))}
-            </ol>
+
+                  {isCollapsed ? null : (
+                    <MidiEventFields
+                      event={event}
+                      index={index}
+                      inheritedChannelLabel={inheritedChannelLabel}
+                      t={t}
+                      onChangeType={changeType}
+                      onChange={updateAt}
+                      onChangeKind={updateKind}
+                    />
+                  )}
+                </div>
+              );
+            })
           )}
 
+          {/* One "add" control instead of four buttons: the type is picked in
+              the dropdown, which is where it is edited afterwards anyway. */}
           <div className="lt-automation-add-row">
-            {EVENT_TYPES.map((type) => (
-              <button
-                key={type}
-                type="button"
-                className="lt-secondary-button"
-                onClick={() => addEvent(type)}
+            <span className="lt-settings-field-label">
+              {t("transport.midi.addMessage")}
+            </span>
+            <div className="lt-midi-add-control">
+              <select
+                value={pendingType}
+                aria-label={t("transport.midi.eventType")}
+                onChange={(e) =>
+                  setPendingType(e.target.value as MidiEventKindSummary["type"])
+                }
               >
-                + {t(EVENT_LABEL_KEYS[type])}
+                {EVENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(EVENT_LABEL_KEYS[type])}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="is-primary"
+                onClick={() => addEvent(pendingType)}
+              >
+                + {t("common.create")}
               </button>
-            ))}
+            </div>
           </div>
         </div>
 

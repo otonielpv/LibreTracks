@@ -578,6 +578,7 @@ const en = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      addMessage: "Add message",
       durationNoteHint: "0 = a blip (released immediately).",
       durationCurveHint: "0 = jump straight to the end value.",
       channelOverride: "Channel (optional)",
