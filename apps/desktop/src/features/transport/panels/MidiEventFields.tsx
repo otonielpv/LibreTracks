@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 import type { MidiEventKindSummary, MidiEventSummary } from "../desktopApi";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -21,6 +23,60 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+/** Keep an empty/intermediate number editable without writing 0 to the model. */
+function NumericInput({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max?: number;
+  step?: number;
+  onChange: (next: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState(() => String(value));
+  const normalize = (next: number) =>
+    max === undefined
+      ? Math.max(min, next)
+      : clamp(next, min, max);
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setDraft(String(value));
+    }
+  }, [value]);
+
+  return (
+    <input
+      ref={inputRef}
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={draft}
+      onChange={(event) => {
+        const nextDraft = event.target.value;
+        setDraft(nextDraft);
+        if (nextDraft.trim() === "") return;
+        const parsed = Number(nextDraft);
+        if (Number.isFinite(parsed)) onChange(normalize(parsed));
+      }}
+      onBlur={() => {
+        const parsed = Number(draft);
+        const next = draft.trim() === "" || !Number.isFinite(parsed)
+          ? value
+          : normalize(parsed);
+        setDraft(String(next));
+        onChange(next);
+      }}
+    />
+  );
+}
+
 /** 0-127 field. Every MIDI data byte is 7-bit, so they all share this shape. */
 function DataField({
   label,
@@ -37,12 +93,11 @@ function DataField({
     <label className="lt-settings-field">
       <span className="lt-settings-field-label">{label}</span>
       {hint ? <small className="lt-settings-field-hint">{hint}</small> : null}
-      <input
-        type="number"
+      <NumericInput
         min={0}
         max={127}
         value={value}
-        onChange={(event) => onChange(clamp(Number(event.target.value) || 0, 0, 127))}
+        onChange={onChange}
       />
     </label>
   );
@@ -64,14 +119,11 @@ function SecondsField({
     <label className="lt-settings-field">
       <span className="lt-settings-field-label">{label}</span>
       {hint ? <small className="lt-settings-field-hint">{hint}</small> : null}
-      <input
-        type="number"
+      <NumericInput
         min={0}
         step={0.01}
         value={value}
-        onChange={(event) =>
-          onChange(Math.max(0, Number(event.target.value) || 0))
-        }
+        onChange={onChange}
       />
     </label>
   );

@@ -12,6 +12,7 @@ vi.mock("react-i18next", () => ({
 describe("MidiClipModal", () => {
   it("previews the live values of a new unsaved MIDI clip", () => {
     const onTest = vi.fn();
+    const onCancel = vi.fn();
     const note = {
       id: "event-1",
       atSeconds: 0,
@@ -24,7 +25,7 @@ describe("MidiClipModal", () => {
       },
     };
 
-    render(
+    const { container } = render(
       <MidiClipModal
         draft={{
           clipId: null,
@@ -34,7 +35,7 @@ describe("MidiClipModal", () => {
           events: [note],
         }}
         song={null}
-        onCancel={vi.fn()}
+        onCancel={onCancel}
         onTest={onTest}
         onConfirm={vi.fn()}
       />,
@@ -43,6 +44,10 @@ describe("MidiClipModal", () => {
     fireEvent.change(screen.getByDisplayValue("Initial name"), {
       target: { value: "Unsaved edit" },
     });
+    const velocity = screen.getByLabelText("transport.midi.velocity");
+    fireEvent.change(velocity, { target: { value: "" } });
+    expect((velocity as HTMLInputElement).value).toBe("");
+    fireEvent.change(velocity, { target: { value: "123" } });
     fireEvent.click(screen.getByRole("button", { name: "transport.midi.testClip" }));
 
     expect(onTest).toHaveBeenCalledWith({
@@ -50,7 +55,10 @@ describe("MidiClipModal", () => {
       trackId: "midi-track-1",
       timelineStartSeconds: 12.5,
       name: "Unsaved edit",
-      events: [note],
+      events: [{ ...note, kind: { ...note.kind, velocity: 123 } }],
     });
+
+    fireEvent.click(container.querySelector(".lt-modal-backdrop") as Element);
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

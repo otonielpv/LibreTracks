@@ -178,7 +178,7 @@ export function MidiClipModal({
   });
 
   return (
-    <div className="lt-modal-backdrop" onClick={onCancel}>
+    <div className="lt-modal-backdrop">
       <section
         className="lt-settings-modal lt-automation-modal"
         role="dialog"
