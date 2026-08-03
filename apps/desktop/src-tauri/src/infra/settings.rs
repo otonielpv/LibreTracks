@@ -144,6 +144,11 @@ pub struct AppSettings {
     pub low_latency_output: bool,
     #[serde(default)]
     pub selected_midi_device: Option<String>,
+    /// Port the timeline's MIDI tracks send to. Separate from
+    /// `selected_midi_device` (input): sending to a lighting desk and receiving
+    /// from a foot controller are independent choices.
+    #[serde(default)]
+    pub selected_midi_output_device: Option<String>,
     #[serde(default)]
     pub suppress_missing_midi_device_warning: bool,
     #[serde(default = "default_enabled_output_channels")]
@@ -264,6 +269,7 @@ impl Default for AppSettings {
             audio_safe_mode: false,
             low_latency_output: false,
             selected_midi_device: None,
+            selected_midi_output_device: None,
             suppress_missing_midi_device_warning: false,
             enabled_output_channels: default_enabled_output_channels(),
             locale: None,

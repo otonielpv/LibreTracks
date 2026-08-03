@@ -175,6 +175,22 @@ pub fn run() {
                         eprintln!("[libretracks-midi] startup warning: {error}");
                     }
                 });
+            // Reopen the output port too, so a saved show device is live before
+            // the user presses play. A missing device is a warning, never fatal.
+            state
+                .midi_output
+                .restart(
+                    state
+                        .audio
+                        .current_settings()
+                        .ok()
+                        .and_then(|settings| settings.selected_midi_output_device),
+                )
+                .unwrap_or_else(|error| {
+                    if audio::engine::audio_debug_logging_enabled() {
+                        eprintln!("[libretracks-midi] output startup warning: {error}");
+                    }
+                });
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
             Ok(())
@@ -184,6 +200,8 @@ pub fn run() {
             commands::system::is_debug_build,
             commands::system::get_remote_server_info,
             commands::system::get_midi_inputs,
+            commands::system::get_midi_outputs,
+            commands::system::send_midi_test_note,
             commands::transport::get_transport_snapshot,
             commands::settings::get_settings,
             commands::settings::save_settings,

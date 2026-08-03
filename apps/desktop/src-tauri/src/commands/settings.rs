@@ -69,6 +69,13 @@ pub fn update_audio_settings(
             .map_err(|error| error.to_string())?;
     }
 
+    if previous_settings.selected_midi_output_device != next_settings.selected_midi_output_device {
+        state
+            .midi_output
+            .restart(next_settings.selected_midi_output_device.clone())
+            .map_err(|error| error.to_string())?;
+    }
+
     if previous_settings != next_settings {
         app.emit("settings:updated", next_settings.clone())
             .map_err(|error| error.to_string())?;

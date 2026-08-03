@@ -34,6 +34,7 @@ use crate::audio::automation::{
     AutomationTransitionMode,
 };
 use crate::infra::error::DesktopError;
+use crate::midi::output::MidiOutputManager;
 use crate::midi::MidiManager;
 use crate::models::view::{
     active_vamp_to_summary, active_vamp_to_warped_summary, automation_cues_to_summary,
@@ -58,6 +59,7 @@ mod automation_runtime;
 mod external_import;
 mod history;
 mod library;
+mod midi_runtime;
 mod regions;
 mod session;
 mod song_edit;
@@ -200,6 +202,9 @@ pub struct WaveformGenerationQueue {
 pub struct DesktopState {
     pub audio: Arc<AudioController>,
     pub midi: MidiManager,
+    /// Outbound MIDI port driven by the timeline's MIDI tracks. Independent of
+    /// `midi` (input): a show can send without any controller attached.
+    pub midi_output: Arc<MidiOutputManager>,
     pub waveform_jobs: WaveformGenerationQueue,
     pub session: Mutex<DesktopSession>,
     pub project_load_progress: Mutex<Option<ProjectLoadProgressEvent>>,
@@ -216,11 +221,17 @@ impl Default for DesktopState {
         // Let the waveform worker reuse the engine's same-pass peaks instead of
         // re-decoding each file.
         waveform_jobs.set_audio(Arc::clone(&audio));
+        let midi_output = Arc::new(MidiOutputManager::default());
+        let mut session = DesktopSession::default();
+        // The session drives MIDI playback from the transport tick, so it needs
+        // the port handle without it being threaded through sync_position.
+        session.midi_output = Some(Arc::clone(&midi_output));
         Self {
             audio,
             midi: MidiManager::default(),
+            midi_output,
             waveform_jobs,
-            session: Mutex::new(DesktopSession::default()),
+            session: Mutex::new(session),
             project_load_progress: Mutex::new(None),
             resource_monitor: crate::platform::resource_monitor::ResourceMonitor::default(),
         }
@@ -251,6 +262,18 @@ pub struct DesktopSession {
     pub(super) automation_run_counts: HashMap<String, u32>,
     /// In-progress volume/pan ramps from SetTrackMix actions with ramp_seconds.
     pub(super) active_mix_ramps: Vec<ActiveMixRamp>,
+    /// Output port the timeline's MIDI tracks send to. Held here rather than
+    /// threaded through `sync_position`, which has dozens of call sites; the
+    /// manager is internally synchronised and cheap to clone as an `Arc`.
+    /// `None` until `DesktopState` wires it at startup.
+    pub(super) midi_output: Option<Arc<MidiOutputManager>>,
+    /// Position the MIDI tracks have already been emitted up to. Events fire
+    /// when they fall in `(midi_cursor_seconds, position]`.
+    pub(super) midi_cursor_seconds: f64,
+    /// Notes currently sounding, so their note-offs survive a jump.
+    pub(super) active_midi_notes: Vec<ActiveMidiNote>,
+    /// In-progress controller sweeps from `ControlCurve` events.
+    pub(super) active_midi_curves: Vec<ActiveMidiCurve>,
     pub(super) project_revision: u64,
     pub(super) undo_stack: Vec<Song>,
     pub(super) redo_stack: Vec<Song>,
@@ -312,6 +335,12 @@ pub(super) struct ActiveMixRamp {
     pub(super) pan: Option<(f64, f64)>,    // (from, to)
 }
 
+// A sounding MIDI note and an in-progress controller sweep. Defined in
+// `libretracks_core::midi_schedule` (where the logic that produces them is
+// tested) and re-exported by `midi_runtime` so the session fields below can
+// name them without reaching into core here.
+use midi_runtime::{ActiveMidiCurve, ActiveMidiNote};
+
 #[derive(Debug, Default)]
 pub(super) struct TransportClock {
     anchor_position_seconds: f64,
@@ -339,6 +368,10 @@ impl Default for DesktopSession {
             active_automation_job: None,
             automation_run_counts: HashMap::new(),
             active_mix_ramps: Vec::new(),
+            midi_output: None,
+            midi_cursor_seconds: 0.0,
+            active_midi_notes: Vec::new(),
+            active_midi_curves: Vec::new(),
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1471,6 +1504,9 @@ impl DesktopSession {
         self.engine.play()?;
         self.transport_clock
             .start_from(self.engine.position_seconds());
+        // Anchor MIDI at the start position so the first tick only fires what
+        // lies ahead, not everything since the top of the song.
+        self.reset_midi_cursor(self.engine.position_seconds());
         self.schedule_next_automation_jump(audio)?;
         self.capture_transport_drift_sample(
             audio,
@@ -1490,6 +1526,9 @@ impl DesktopSession {
         self.engine.pause()?;
         self.transport_clock
             .pause_at(self.engine.position_seconds());
+        // Release sounding notes; the cursor stays put so resuming continues
+        // from here rather than replaying the section.
+        self.release_all_midi_notes();
 
         Ok(self.snapshot())
     }
@@ -1504,6 +1543,10 @@ impl DesktopSession {
         self.active_mix_ramps.clear();
         // A fresh session: every cue can fire its full quota again.
         self.reset_automation_run_counts(None);
+        // Full panic rather than just note-offs: on stop the show device should
+        // be left silent even if something was started before a reload.
+        self.panic_midi();
+        self.midi_cursor_seconds = self.engine.position_seconds().max(0.0);
         audio.cancel_scheduled_jumps()?;
 
         Ok(self.snapshot())
@@ -1529,6 +1572,9 @@ impl DesktopSession {
         self.reset_automation_run_counts(Some(self.engine.position_seconds()));
         // A seek cancels any in-progress ramps (their timeline anchor is stale).
         self.active_mix_ramps.clear();
+        // Re-anchor MIDI at the new position and release anything sounding, so
+        // a seek mid-note can't leave a hanging note on the show device.
+        self.reset_midi_cursor(self.engine.position_seconds());
         if was_playing {
             self.reposition_audio(audio, PlaybackStartReason::Seek)?;
             self.transport_clock
@@ -2237,6 +2283,8 @@ impl DesktopSession {
             self.advance_automation_job_actions(audio)?;
             // Step any in-progress volume/pan ramps.
             self.advance_mix_ramps(audio)?;
+            // Emit the MIDI tracks' events crossed by this tick.
+            self.advance_midi_playback()?;
             self.start_pending_automation_fade_if_due(audio)?;
             if self.pending_automation_jump.is_some() {
                 return Ok(());
@@ -2280,6 +2328,9 @@ impl DesktopSession {
                     audio.start_master_fade(1.0, duration_seconds)?;
                     self.transport_clock
                         .note_jump_while_playing(target_position);
+                    // A jump is a discontinuity: re-anchor MIDI at the landing
+                    // point so events between here and there don't all fire.
+                    self.reset_midi_cursor(target_position);
                     self.capture_transport_drift_sample(
                         audio,
                         "jump",
@@ -2313,6 +2364,9 @@ impl DesktopSession {
             self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
             self.transport_clock
                 .note_jump_while_playing(advanced_position);
+            // Same as the faded-jump path: re-anchor rather than replay the
+            // span the playhead skipped over (or looped back across).
+            self.reset_midi_cursor(advanced_position);
             self.capture_transport_drift_sample(
                 audio,
                 "jump",

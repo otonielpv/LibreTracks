@@ -3005,6 +3005,7 @@ mod tests {
                 fade_out_seconds: None,
                 color: None,
             }],
+            midi_clips: vec![],
             section_markers: vec![],
         }
     }

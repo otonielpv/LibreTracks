@@ -1285,6 +1285,7 @@ mod tests {
             regions: vec![region("r1", 0.0, 12.0)],
             tracks: vec![track("t1", TrackKind::Audio, None)],
             clips: vec![clip("c1", "t1", 1.0, 4.0, "audio/a.wav")],
+            midi_clips: vec![],
             section_markers: vec![Marker {
                 id: "m1".into(),
                 name: "Intro".into(),

@@ -11,6 +11,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::audio::engine::{AudioDebugSnapshot, AudioOutputMeterLevel};
 use crate::infra::error::DesktopError;
 use crate::midi::get_midi_input_names;
+use crate::midi::output::{get_midi_output_names, OutboundMidiMessage};
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
 #[cfg(not(target_os = "android"))]
 use crate::remote;
@@ -254,6 +255,27 @@ pub fn get_remote_server_info() -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub fn get_midi_inputs() -> Result<Vec<String>, String> {
     get_midi_input_names()
+}
+
+#[tauri::command]
+pub fn get_midi_outputs() -> Result<Vec<String>, String> {
+    get_midi_output_names()
+}
+
+/// Send a short note on the configured output port so the user can confirm the
+/// cabling reaches the target software without having to build a timeline
+/// first. Note-on and note-off are queued back to back; the receiving device
+/// sees a blip, which is enough for a MIDI monitor or a "learn" dialog.
+#[tauri::command]
+pub fn send_midi_test_note(state: State<'_, DesktopState>, channel: u8, note: u8) -> Result<(), String> {
+    if !state.midi_output.is_open() {
+        return Err("no MIDI output device is selected".to_string());
+    }
+    state.midi_output.send(&[
+        OutboundMidiMessage::note_on(channel, note, 100),
+        OutboundMidiMessage::note_off(channel, note),
+    ]);
+    Ok(())
 }
 
 /// Fetch the latest GitHub release metadata from the Rust side.

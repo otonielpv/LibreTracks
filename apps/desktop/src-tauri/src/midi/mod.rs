@@ -1,3 +1,5 @@
+pub mod output;
+
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},

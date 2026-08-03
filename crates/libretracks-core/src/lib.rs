@@ -1,3 +1,4 @@
+pub mod midi_schedule;
 pub mod model;
 pub mod validation;
 pub mod warp;

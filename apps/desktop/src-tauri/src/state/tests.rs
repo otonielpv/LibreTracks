@@ -73,6 +73,7 @@ fn demo_song() -> Song {
             fade_out_seconds: None,
             color: None,
         }],
+        midi_clips: vec![],
         section_markers: vec![],
     }
 }
@@ -399,6 +400,7 @@ fn hierarchy_song() -> Song {
             },
         ],
         clips: vec![],
+        midi_clips: vec![],
         section_markers: vec![],
     }
 }
@@ -896,6 +898,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
             },
         ],
         clips: vec![],
+        midi_clips: vec![],
         section_markers: vec![],
     };
 
