@@ -579,6 +579,7 @@ mod tests {
                 clip("c1", "t1", "audio/one.wav", 0.0, 10.0),
                 clip("c2", "t1", "audio/two.wav", 30.0, 10.0),
             ],
+            midi_clips: vec![],
             section_markers: vec![],
         }
     }

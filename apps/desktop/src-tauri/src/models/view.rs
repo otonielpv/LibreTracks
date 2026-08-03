@@ -2,7 +2,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
 use libretracks_core::{
     audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, MarkerCategory,
-    MarkerKind, Song, SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
+    MarkerKind, MidiClip, MidiEvent, Song, SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -124,6 +124,7 @@ pub struct SongView {
     pub regions: Vec<SongRegionSummary>,
     pub section_markers: Vec<MarkerSummary>,
     pub clips: Vec<ClipSummary>,
+    pub midi_clips: Vec<MidiClipSummary>,
     pub tracks: Vec<TrackSummary>,
     pub automation_cues: Vec<AutomationCueSummary>,
     pub mix_scenes: Vec<MixSceneSummary>,
@@ -132,6 +133,20 @@ pub struct SongView {
     pub automation_track: Option<AutomationTrackSummary>,
     pub waveforms: Vec<WaveformSummaryDto>,
     pub project_revision: u64,
+}
+
+/// A MIDI clip in view space. `events` are passed through unchanged — the
+/// core `MidiEvent` already serializes as camelCase, so there is no separate
+/// summary type to keep in step.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MidiClipSummary {
+    pub id: String,
+    pub track_id: String,
+    pub timeline_start_seconds: f64,
+    pub name: String,
+    pub events: Vec<MidiEvent>,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -573,6 +588,11 @@ pub(crate) fn song_to_view(
             .iter()
             .map(|clip| clip_to_summary(song, clip, waveform_cache, song_dir))
             .collect(),
+        midi_clips: song
+            .midi_clips
+            .iter()
+            .map(|clip| midi_clip_to_summary(song, clip))
+            .collect(),
         tracks: song
             .tracks
             .iter()
@@ -806,6 +826,21 @@ pub(crate) fn clip_to_summary(
             track_transpose_enabled,
         ),
         gain: clip.gain,
+        color: clip.color.clone(),
+    }
+}
+
+/// Map a MIDI clip into view space. Only `timeline_start_seconds` is warped —
+/// event offsets stay in wall-clock seconds because they describe how long a
+/// note is held or how long a controller sweep takes, which is a property of
+/// the receiving device, not of the timeline's musical grid.
+pub(crate) fn midi_clip_to_summary(song: &Song, clip: &MidiClip) -> MidiClipSummary {
+    MidiClipSummary {
+        id: clip.id.clone(),
+        track_id: clip.track_id.clone(),
+        timeline_start_seconds: warp_timeline_seconds_at(song, clip.timeline_start_seconds),
+        name: clip.name.clone(),
+        events: clip.events.clone(),
         color: clip.color.clone(),
     }
 }
@@ -1107,6 +1142,7 @@ fn track_kind_label(kind: TrackKind) -> &'static str {
     match kind {
         TrackKind::Audio => "audio",
         TrackKind::Folder => "folder",
+        TrackKind::Midi => "midi",
     }
 }
 

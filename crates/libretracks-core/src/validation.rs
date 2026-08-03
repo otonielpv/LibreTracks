@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 
-use crate::model::{Song, TrackKind};
+use crate::model::{
+    MidiEvent, MidiEventKind, Song, TrackKind, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE,
+    MIN_MIDI_CHANNEL,
+};
 
 pub const MIN_TRANSPOSE_SEMITONES: i32 = -12;
 pub const MAX_TRANSPOSE_SEMITONES: i32 = 12;
@@ -90,6 +93,31 @@ pub enum DomainError {
     },
     #[error("clip {clip_id} spans the boundary between region {region_id} and the next region")]
     ClipCrossesRegionBoundary { clip_id: String, region_id: String },
+    #[error("duplicate midi clip id: {0}")]
+    DuplicateMidiClipId(String),
+    #[error("midi clip {clip_id} references unknown track {track_id}")]
+    UnknownMidiClipTrack { clip_id: String, track_id: String },
+    #[error("midi clip {clip_id} must target a midi track, got {track_id}")]
+    MidiClipTargetsNonMidiTrack { clip_id: String, track_id: String },
+    #[error("audio clip {clip_id} cannot target midi track {track_id}")]
+    ClipTargetsMidiTrack { clip_id: String, track_id: String },
+    #[error("midi clip {clip_id} has invalid position {start_seconds}")]
+    InvalidMidiClipPosition {
+        clip_id: String,
+        start_seconds: String,
+    },
+    #[error("duplicate midi event id {event_id} in clip {clip_id}")]
+    DuplicateMidiEventId { clip_id: String, event_id: String },
+    #[error("midi event {event_id} has invalid channel {channel}")]
+    InvalidMidiChannel { event_id: String, channel: u8 },
+    #[error("midi event {event_id} has invalid {field} value {value}")]
+    InvalidMidiDataValue {
+        event_id: String,
+        field: &'static str,
+        value: u8,
+    },
+    #[error("midi event {event_id} has invalid offset or duration")]
+    InvalidMidiEventTiming { event_id: String },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -186,6 +214,13 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             });
         }
 
+        if track.kind == TrackKind::Midi {
+            return Err(DomainError::ClipTargetsMidiTrack {
+                clip_id: clip.id.clone(),
+                track_id: clip.track_id.clone(),
+            });
+        }
+
         // Invariant: every clip lives inside exactly one region.
         // - The start of the clip (clip.timeline_start_seconds) must fall in
         //   [region.start, region.end) of some region.
@@ -215,6 +250,53 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
                     region_id: containing_region.id.clone(),
                 });
             }
+        }
+    }
+
+    // MIDI clips are validated against their own list. Note they are NOT
+    // subject to the "clip lives inside exactly one region" invariant: a clip
+    // is a point that fires messages, and a controller sweep crossing a region
+    // boundary is legitimate — nothing downstream slices MIDI per region the
+    // way the mixer slices audio.
+    let mut midi_clip_ids = HashSet::new();
+    for midi_clip in &song.midi_clips {
+        if !midi_clip_ids.insert(midi_clip.id.as_str()) {
+            return Err(DomainError::DuplicateMidiClipId(midi_clip.id.clone()));
+        }
+
+        if !midi_clip.timeline_start_seconds.is_finite() || midi_clip.timeline_start_seconds < 0.0 {
+            return Err(DomainError::InvalidMidiClipPosition {
+                clip_id: midi_clip.id.clone(),
+                start_seconds: format!("{}", midi_clip.timeline_start_seconds),
+            });
+        }
+
+        let track = song
+            .tracks
+            .iter()
+            .find(|track| track.id == midi_clip.track_id)
+            .ok_or_else(|| DomainError::UnknownMidiClipTrack {
+                clip_id: midi_clip.id.clone(),
+                track_id: midi_clip.track_id.clone(),
+            })?;
+
+        if track.kind != TrackKind::Midi {
+            return Err(DomainError::MidiClipTargetsNonMidiTrack {
+                clip_id: midi_clip.id.clone(),
+                track_id: midi_clip.track_id.clone(),
+            });
+        }
+
+        let mut event_ids = HashSet::new();
+        for event in &midi_clip.events {
+            if !event_ids.insert(event.id.as_str()) {
+                return Err(DomainError::DuplicateMidiEventId {
+                    clip_id: midi_clip.id.clone(),
+                    event_id: event.id.clone(),
+                });
+            }
+
+            validate_midi_event(event)?;
         }
     }
 
@@ -353,6 +435,75 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
     Ok(())
 }
 
+/// Check one MIDI event's channel, data bytes and timing. Values are validated
+/// here rather than clamped at send time so a malformed file is rejected on
+/// load instead of silently firing a different message than the user wrote.
+fn validate_midi_event(event: &MidiEvent) -> Result<(), DomainError> {
+    if !(MIN_MIDI_CHANNEL..=MAX_MIDI_CHANNEL).contains(&event.channel) {
+        return Err(DomainError::InvalidMidiChannel {
+            event_id: event.id.clone(),
+            channel: event.channel,
+        });
+    }
+
+    if !event.at_seconds.is_finite() || event.at_seconds < 0.0 {
+        return Err(DomainError::InvalidMidiEventTiming {
+            event_id: event.id.clone(),
+        });
+    }
+
+    let check_value = |field: &'static str, value: u8| -> Result<(), DomainError> {
+        if value > MAX_MIDI_DATA_VALUE {
+            return Err(DomainError::InvalidMidiDataValue {
+                event_id: event.id.clone(),
+                field,
+                value,
+            });
+        }
+        Ok(())
+    };
+
+    match &event.kind {
+        MidiEventKind::Note {
+            note,
+            velocity,
+            duration_seconds,
+        } => {
+            check_value("note", *note)?;
+            check_value("velocity", *velocity)?;
+            if !duration_seconds.is_finite() || *duration_seconds < 0.0 {
+                return Err(DomainError::InvalidMidiEventTiming {
+                    event_id: event.id.clone(),
+                });
+            }
+        }
+        MidiEventKind::ControlChange { controller, value } => {
+            check_value("controller", *controller)?;
+            check_value("value", *value)?;
+        }
+        MidiEventKind::ProgramChange { program } => {
+            check_value("program", *program)?;
+        }
+        MidiEventKind::ControlCurve {
+            controller,
+            from_value,
+            to_value,
+            duration_seconds,
+        } => {
+            check_value("controller", *controller)?;
+            check_value("fromValue", *from_value)?;
+            check_value("toValue", *to_value)?;
+            if !duration_seconds.is_finite() || *duration_seconds < 0.0 {
+                return Err(DomainError::InvalidMidiEventTiming {
+                    event_id: event.id.clone(),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn parse_time_signature(time_signature: &str) -> Option<(u32, u32)> {
     let (numerator, denominator) = time_signature.split_once('/')?;
     let numerator = numerator.parse::<u32>().ok()?;
@@ -367,7 +518,7 @@ fn parse_time_signature(time_signature: &str) -> Option<(u32, u32)> {
 mod tests {
     use super::*;
     use crate::model::{
-        Clip, Marker, MarkerKind, SongMaster, SongRegion, TimeSignatureMarker, Track,
+        Clip, Marker, MarkerKind, MidiClip, SongMaster, SongRegion, TimeSignatureMarker, Track,
     };
 
     fn region(id: &str, start: f64, end: f64) -> SongRegion {
@@ -420,6 +571,7 @@ mod tests {
             regions: vec![region("r1", 0.0, 100.0)],
             tracks: vec![track("t1", TrackKind::Audio, None)],
             clips: vec![],
+            midi_clips: vec![],
             section_markers: vec![],
         }
     }
@@ -751,5 +903,321 @@ mod tests {
             validate_song(&song),
             Err(DomainError::TimeSignatureMarkersOutOfOrder { .. })
         ));
+    }
+
+    fn midi_event(id: &str, kind: MidiEventKind) -> MidiEvent {
+        MidiEvent {
+            id: id.into(),
+            at_seconds: 0.0,
+            channel: 1,
+            kind,
+        }
+    }
+
+    fn note_event(id: &str) -> MidiEvent {
+        midi_event(
+            id,
+            MidiEventKind::Note {
+                note: 60,
+                velocity: 100,
+                duration_seconds: 0.5,
+            },
+        )
+    }
+
+    /// Song with one MIDI track holding one clip of `events`.
+    fn song_with_midi(events: Vec<MidiEvent>) -> Song {
+        let mut song = valid_song();
+        song.tracks.push(track("midi1", TrackKind::Midi, None));
+        song.midi_clips.push(MidiClip {
+            id: "mc1".into(),
+            track_id: "midi1".into(),
+            timeline_start_seconds: 10.0,
+            name: "Lights".into(),
+            events,
+            color: None,
+        });
+        song
+    }
+
+    #[test]
+    fn accepts_a_well_formed_midi_clip() {
+        let song = song_with_midi(vec![
+            note_event("e1"),
+            midi_event(
+                "e2",
+                MidiEventKind::ProgramChange { program: 5 },
+            ),
+            midi_event(
+                "e3",
+                MidiEventKind::ControlCurve {
+                    controller: 74,
+                    from_value: 0,
+                    to_value: 127,
+                    duration_seconds: 8.0,
+                },
+            ),
+        ]);
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn accepts_several_notes_stacked_at_the_same_offset() {
+        // The chord case the editor is built around: one point, many notes,
+        // each with its own velocity.
+        let song = song_with_midi(vec![
+            note_event("e1"),
+            MidiEvent {
+                id: "e2".into(),
+                at_seconds: 0.0,
+                channel: 1,
+                kind: MidiEventKind::Note {
+                    note: 64,
+                    velocity: 80,
+                    duration_seconds: 0.5,
+                },
+            },
+            MidiEvent {
+                id: "e3".into(),
+                at_seconds: 0.0,
+                channel: 1,
+                kind: MidiEventKind::Note {
+                    note: 67,
+                    velocity: 60,
+                    duration_seconds: 0.5,
+                },
+            },
+        ]);
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn rejects_midi_clip_on_a_non_midi_track() {
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].track_id = "t1".into();
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::MidiClipTargetsNonMidiTrack { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_audio_clip_on_a_midi_track() {
+        let mut song = song_with_midi(vec![]);
+        song.clips.push(Clip {
+            id: "c1".into(),
+            track_id: "midi1".into(),
+            file_path: "audio/a.wav".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 10.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        });
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::ClipTargetsMidiTrack { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_midi_clip_on_unknown_track() {
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].track_id = "ghost".into();
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::UnknownMidiClipTrack { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_midi_clip_and_event_ids() {
+        let mut song = song_with_midi(vec![note_event("e1"), note_event("e1")]);
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::DuplicateMidiEventId { .. })
+        ));
+
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        let duplicate = song.midi_clips[0].clone();
+        song.midi_clips.push(duplicate);
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::DuplicateMidiClipId(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_out_of_range_channel_and_data_values() {
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].events[0].channel = 0;
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMidiChannel { .. })
+        ));
+
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].events[0].channel = 17;
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMidiChannel { .. })
+        ));
+
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].events[0].kind = MidiEventKind::Note {
+            note: 128,
+            velocity: 100,
+            duration_seconds: 0.5,
+        };
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMidiDataValue { field: "note", .. })
+        ));
+
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].events[0].kind = MidiEventKind::ControlCurve {
+            controller: 74,
+            from_value: 0,
+            to_value: 200,
+            duration_seconds: 4.0,
+        };
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMidiDataValue {
+                field: "toValue",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn rejects_non_finite_or_negative_timing() {
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].events[0].at_seconds = -1.0;
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMidiEventTiming { .. })
+        ));
+
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].events[0].kind = MidiEventKind::Note {
+            note: 60,
+            velocity: 100,
+            duration_seconds: f64::NAN,
+        };
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMidiEventTiming { .. })
+        ));
+
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.midi_clips[0].timeline_start_seconds = -0.5;
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMidiClipPosition { .. })
+        ));
+    }
+
+    #[test]
+    fn midi_clips_may_cross_region_boundaries() {
+        // Unlike audio clips, a MIDI clip is a firing point: a controller sweep
+        // that runs past the end of its region is legitimate, so the
+        // one-clip-one-region invariant must not apply to it.
+        let mut song = song_with_midi(vec![midi_event(
+            "e1",
+            MidiEventKind::ControlCurve {
+                controller: 74,
+                from_value: 0,
+                to_value: 127,
+                duration_seconds: 60.0,
+            },
+        )]);
+        song.regions = vec![region("r1", 0.0, 50.0), region("r2", 50.0, 100.0)];
+        song.midi_clips[0].timeline_start_seconds = 40.0;
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn midi_clips_are_valid_in_a_song_with_no_regions() {
+        // "Regions" are what the user calls songs. MIDI must be usable in a
+        // session that has none yet — an empty session where the user drops a
+        // MIDI track to drive lights before importing any audio. Audio clips
+        // must live inside a region; MIDI clips deliberately need not, so an
+        // empty timeline is still a valid place to author them.
+        let mut song = song_with_midi(vec![note_event("e1")]);
+        song.regions.clear();
+        song.clips.clear();
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn a_midi_only_song_with_no_audio_tracks_is_valid() {
+        // The extreme case: a session whose only content is MIDI.
+        let mut song = valid_song();
+        song.regions.clear();
+        song.tracks = vec![track("midi1", TrackKind::Midi, None)];
+        song.midi_clips = vec![MidiClip {
+            id: "mc1".into(),
+            track_id: "midi1".into(),
+            timeline_start_seconds: 0.0,
+            name: "Lights".into(),
+            events: vec![note_event("e1")],
+            color: None,
+        }];
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn midi_clip_duration_spans_its_longest_event() {
+        let clip = MidiClip {
+            id: "mc".into(),
+            track_id: "midi1".into(),
+            timeline_start_seconds: 10.0,
+            name: String::new(),
+            events: vec![
+                MidiEvent {
+                    id: "e1".into(),
+                    at_seconds: 0.0,
+                    channel: 1,
+                    kind: MidiEventKind::Note {
+                        note: 60,
+                        velocity: 100,
+                        duration_seconds: 2.0,
+                    },
+                },
+                MidiEvent {
+                    id: "e2".into(),
+                    at_seconds: 4.0,
+                    channel: 1,
+                    kind: MidiEventKind::ControlChange {
+                        controller: 1,
+                        value: 64,
+                    },
+                },
+            ],
+            color: None,
+        };
+        assert_eq!(clip.duration_seconds(), 4.0);
+        assert_eq!(clip.end_seconds(), 14.0);
+    }
+
+    #[test]
+    fn a_clip_of_instantaneous_messages_has_zero_duration() {
+        let clip = MidiClip {
+            id: "mc".into(),
+            track_id: "midi1".into(),
+            timeline_start_seconds: 3.0,
+            name: String::new(),
+            events: vec![MidiEvent {
+                id: "e1".into(),
+                at_seconds: 0.0,
+                channel: 1,
+                kind: MidiEventKind::ProgramChange { program: 5 },
+            }],
+            color: None,
+        };
+        assert_eq!(clip.duration_seconds(), 0.0);
     }
 }

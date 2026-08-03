@@ -12,7 +12,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 pub const SONG_FILE_NAME: &str = "song.ltsession";
-const SONG_FORMAT_VERSION: u32 = 6;
+const SONG_FORMAT_VERSION: u32 = 7;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -181,6 +181,13 @@ pub fn load_song_from_file(song_file: impl AsRef<Path>) -> Result<Song, ProjectE
             let document: SongDocument = serde_json::from_str(&json)?;
             load_current_song(document.song)
         }
+        6 => {
+            // v6 is v7 without `midiClips`; `#[serde(default)]` on the field
+            // fills the empty list, so the document parses as-is and only the
+            // stored version number changes on the next save.
+            let document: SongDocument = serde_json::from_str(&json)?;
+            load_current_song(document.song)
+        }
         5 => {
             // v5 had the same on-disk shape as v6 but predates the
             // "clip lives inside one region" invariant. Deserialize as
@@ -260,6 +267,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
         }],
         tracks: document.tracks,
         clips: document.clips,
+        midi_clips: vec![],
         section_markers,
     };
 
@@ -292,6 +300,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
         }],
         tracks: document.tracks,
         clips: document.clips,
+        midi_clips: vec![],
         section_markers: document.section_markers,
     };
 
@@ -314,6 +323,7 @@ fn migrate_v4_song(document: LegacySongDocumentV4) -> Result<Song, ProjectError>
         regions: document.regions,
         tracks: document.tracks,
         clips: document.clips,
+        midi_clips: vec![],
         section_markers: document.section_markers,
     };
 
@@ -548,6 +558,7 @@ mod tests {
                 auto_created: false,
             }],
             clips: vec![],
+            midi_clips: vec![],
             section_markers: vec![],
         }
     }
@@ -770,5 +781,114 @@ mod tests {
             .expect("first region");
         assert!((r1.end_seconds - 11.0).abs() < 1e-9);
         validate_song(&song).expect("recovered song must satisfy invariants");
+    }
+
+    #[test]
+    fn loading_v6_song_without_midi_clips_migrates_to_v7() {
+        // A project saved before MIDI tracks existed: no `midiClips` key at
+        // all. It must load with an empty list rather than being rejected as
+        // an unsupported version.
+        let v6_json = r#"{
+            "version": 6,
+            "id": "song_test",
+            "title": "Pre-MIDI",
+            "artist": null,
+            "key": null,
+            "bpm": 120.0,
+            "timeSignature": "4/4",
+            "durationSeconds": 30.0,
+            "tempoMarkers": [],
+            "timeSignatureMarkers": [],
+            "regions": [{
+                "id": "r1",
+                "name": "Cancion",
+                "startSeconds": 0.0,
+                "endSeconds": 30.0,
+                "transposeSemitones": 0,
+                "warpEnabled": false,
+                "warpSourceBpm": null
+            }],
+            "tracks": [{
+                "id": "t1",
+                "name": "T1",
+                "kind": "audio",
+                "parentTrackId": null,
+                "volume": 1.0,
+                "pan": 0.0,
+                "muted": false,
+                "solo": false,
+                "transposeEnabled": true,
+                "audioTo": "master"
+            }],
+            "clips": [],
+            "sectionMarkers": []
+        }"#;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("song.ltsession");
+        std::fs::write(&path, v6_json).expect("write json");
+
+        let song = load_song_from_file(&path).expect("v6 song must load");
+        assert!(song.midi_clips.is_empty());
+        validate_song(&song).expect("migrated song must satisfy invariants");
+    }
+
+    #[test]
+    fn midi_clips_round_trip_through_save_and_load() {
+        let mut song = base_song();
+        song.tracks.push(libretracks_core::Track {
+            id: "midi1".into(),
+            name: "Lights".into(),
+            kind: TrackKind::Midi,
+            parent_track_id: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "master".into(),
+            color: None,
+            auto_created: false,
+        });
+        song.midi_clips.push(libretracks_core::MidiClip {
+            id: "mc1".into(),
+            track_id: "midi1".into(),
+            timeline_start_seconds: 12.5,
+            name: "Chorus lights".into(),
+            events: vec![
+                libretracks_core::MidiEvent {
+                    id: "e1".into(),
+                    at_seconds: 0.0,
+                    channel: 3,
+                    kind: libretracks_core::MidiEventKind::ProgramChange { program: 7 },
+                },
+                libretracks_core::MidiEvent {
+                    id: "e2".into(),
+                    at_seconds: 0.25,
+                    channel: 3,
+                    kind: libretracks_core::MidiEventKind::ControlCurve {
+                        controller: 74,
+                        from_value: 0,
+                        to_value: 127,
+                        duration_seconds: 8.0,
+                    },
+                },
+            ],
+            color: None,
+        });
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        save_song(dir.path(), &song).expect("save song with midi clips");
+        let loaded = load_song(dir.path()).expect("reload song with midi clips");
+
+        assert_eq!(loaded.midi_clips, song.midi_clips);
+        assert_eq!(
+            loaded
+                .tracks
+                .iter()
+                .find(|track| track.id == "midi1")
+                .map(|track| track.kind),
+            Some(TrackKind::Midi)
+        );
     }
 }

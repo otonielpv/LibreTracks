@@ -273,6 +273,7 @@ pub fn import_wav_song(
                 color: None,
             })
             .collect(),
+        midi_clips: vec![],
         section_markers: vec![],
     };
 

@@ -8,7 +8,7 @@ import {
 const AUX_MAX_GAIN = positionToGain(1, AUX_FADER_SCALE);
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
-export type TrackKind = "audio" | "folder";
+export type TrackKind = "audio" | "folder" | "midi";
 export type JumpTriggerLabel =
   | "immediate"
   | "next_marker"
@@ -421,6 +421,42 @@ export type ClipSummary = {
   color?: string | null;
 };
 
+/** Mirrors Rust `MidiEventKind` (serde camelCase, internally tagged on `type`). */
+export type MidiEventKindSummary =
+  | { type: "note"; note: number; velocity: number; durationSeconds: number }
+  | { type: "controlChange"; controller: number; value: number }
+  | { type: "programChange"; program: number }
+  | {
+      type: "controlCurve";
+      controller: number;
+      fromValue: number;
+      toValue: number;
+      durationSeconds: number;
+    };
+
+export type MidiEventSummary = {
+  id: string;
+  /** Offset from the clip start in seconds; 0 = fires with the clip. */
+  atSeconds: number;
+  /** 1-16, as printed on hardware. */
+  channel: number;
+  kind: MidiEventKindSummary;
+};
+
+/**
+ * A bundle of MIDI messages anchored to one point on the timeline. Not a piano
+ * roll — the unit is "at this point, fire these messages", which is what a
+ * multitrack player needs to drive lighting desks and lyric projection.
+ */
+export type MidiClipSummary = {
+  id: string;
+  trackId: string;
+  timelineStartSeconds: number;
+  name: string;
+  events: MidiEventSummary[];
+  color?: string | null;
+};
+
 export type SongView = {
   id: string;
   title: string;
@@ -434,6 +470,8 @@ export type SongView = {
   regions: SongRegionSummary[];
   sectionMarkers: SectionMarkerSummary[];
   clips: ClipSummary[];
+  /** Absent on snapshots from before MIDI tracks existed. */
+  midiClips?: MidiClipSummary[];
   tracks: TrackSummary[];
   automationCues?: AutomationCueSummary[];
   mixScenes?: MixSceneSummary[];

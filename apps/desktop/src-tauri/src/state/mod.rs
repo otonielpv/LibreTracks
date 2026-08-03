@@ -2877,6 +2877,7 @@ pub(super) fn build_empty_song(song_id: String, title: String) -> Song {
         regions: vec![],
         tracks: vec![],
         clips: vec![],
+        midi_clips: vec![],
         section_markers: vec![],
     }
 }
@@ -2897,6 +2898,9 @@ pub(super) fn strip_song_to_template(mut song: Song) -> Song {
     song.time_signature_markers.clear();
     song.regions.clear();
     song.clips.clear();
+    // MIDI clips are song content, not structure: the MIDI track survives (so
+    // its name/routing is part of the template) but its messages do not.
+    song.midi_clips.clear();
     song.section_markers.clear();
 
     for track in song.tracks.iter_mut() {

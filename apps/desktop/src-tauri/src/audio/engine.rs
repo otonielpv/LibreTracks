@@ -1119,6 +1119,10 @@ impl AudioController {
             let tracks = resolved_song
                 .tracks
                 .iter()
+                // MIDI tracks produce no audio and the engine has no concept of
+                // them, so they never cross the FFI. Their messages are sent
+                // from the Rust transport tick instead.
+                .filter(|track| track.kind != TrackKind::Midi)
                 .map(|track| TrackUpsert {
                     id: track.id.clone(),
                     name: track.name.clone(),
@@ -1137,7 +1141,7 @@ impl AudioController {
                     role: String::new(),
                     kind: match track.kind {
                         TrackKind::Folder => "folder".to_string(),
-                        TrackKind::Audio => "audio".to_string(),
+                        TrackKind::Audio | TrackKind::Midi => "audio".to_string(),
                     },
                     parent_track_id: track.parent_track_id.clone().unwrap_or_default(),
                     clips: clips_by_track.remove(&track.id).unwrap_or_default(),

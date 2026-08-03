@@ -3,9 +3,10 @@ pub mod validation;
 pub mod warp;
 
 pub use model::{
-    default_audio_to, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, Project,
-    Song, SongMaster, SongRegion, TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker,
-    Track, TrackKind,
+    default_audio_to, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
+    MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
+    TempoSource, TimeSignatureMarker, Track, TrackKind, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE,
+    MIN_MIDI_CHANNEL,
 };
 pub use validation::{
     validate_song, DomainError, MAX_TRANSPOSE_SEMITONES, MAX_WARP_SOURCE_BPM,
@@ -88,6 +89,7 @@ mod tests {
                 fade_out_seconds: None,
                 color: None,
             }],
+            midi_clips: vec![],
             section_markers: vec![Marker {
                 id: "section_intro".into(),
                 name: "Intro".into(),

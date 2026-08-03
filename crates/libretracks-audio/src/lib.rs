@@ -1175,6 +1175,7 @@ mod tests {
                     color: None,
                 },
             ],
+            midi_clips: vec![],
             section_markers: vec![
                 Marker {
                     id: "section_intro".into(),
@@ -1322,6 +1323,7 @@ mod tests {
                     color: None,
                 },
             ],
+            midi_clips: vec![],
             section_markers: vec![
                 Marker {
                     id: "section_intro".into(),

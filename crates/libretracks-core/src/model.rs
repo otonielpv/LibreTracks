@@ -41,6 +41,12 @@ pub struct Song {
     pub regions: Vec<SongRegion>,
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
+    /// MIDI clips, kept in a list of their own rather than mixed into `clips`:
+    /// they carry messages instead of audio, and every consumer of `clips`
+    /// (mixer, waveforms, warp) would have to learn to skip them. Songs saved
+    /// before MIDI tracks existed deserialize to an empty list.
+    #[serde(default)]
+    pub midi_clips: Vec<MidiClip>,
     pub section_markers: Vec<Marker>,
 }
 
@@ -99,6 +105,11 @@ impl Default for SongMaster {
 pub enum TrackKind {
     Audio,
     Folder,
+    /// Sends MIDI to an external device (lighting desks, lyric projection).
+    /// Produces no audio, so it is filtered out before the song is handed to
+    /// the native engine — unlike [`TrackKind::Folder`], which the engine does
+    /// know about for gain/mute folding.
+    Midi,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -145,6 +156,118 @@ pub struct Clip {
     pub fade_out_seconds: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+}
+
+/// Lowest/highest valid value for a MIDI channel as the user sees it (1-16).
+/// Stored 1-based to match every hardware label; the wire format's 0-based
+/// nibble is produced at send time.
+pub const MIN_MIDI_CHANNEL: u8 = 1;
+pub const MAX_MIDI_CHANNEL: u8 = 16;
+/// MIDI data bytes are 7-bit: note numbers, velocities, controllers and
+/// controller values all share this ceiling.
+pub const MAX_MIDI_DATA_VALUE: u8 = 127;
+
+/// A bundle of MIDI messages anchored to one point on the timeline.
+///
+/// This is deliberately *not* a piano roll. LibreTracks is a multitrack
+/// player, so the useful unit is "when the playhead reaches this point, fire
+/// these messages" — several notes at once with their own velocities, a
+/// program change, a controller sweep. Events carry no absolute time of their
+/// own; they are all relative to `timeline_start_seconds`, so moving the clip
+/// moves its contents with it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MidiClip {
+    pub id: String,
+    pub track_id: String,
+    /// Position on the timeline, in the song's source seconds (the same space
+    /// as [`Clip::timeline_start_seconds`], i.e. pre-warp).
+    pub timeline_start_seconds: f64,
+    /// Free-text label shown on the clip in the timeline.
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub events: Vec<MidiEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+/// One message (or sweep) inside a [`MidiClip`].
+///
+/// `at_seconds` is an offset from the clip's start, so the common case — a
+/// chord where everything fires together — is several events all at `0.0`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MidiEvent {
+    pub id: String,
+    /// Offset from the clip start in seconds. `0.0` = fires with the clip.
+    #[serde(default)]
+    pub at_seconds: f64,
+    /// 1-16, as printed on hardware.
+    pub channel: u8,
+    pub kind: MidiEventKind,
+}
+
+/// What a [`MidiEvent`] actually sends.
+///
+/// Note that `Note` carries a duration rather than being split into a
+/// note-on/note-off pair: the pairing is the runtime's job, which keeps the
+/// editor to one row per musical intention instead of two.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum MidiEventKind {
+    /// A note held for `duration_seconds`, then released.
+    Note {
+        note: u8,
+        velocity: u8,
+        duration_seconds: f64,
+    },
+    /// A single controller value.
+    ControlChange { controller: u8, value: u8 },
+    /// A patch/scene recall — the usual way to drive a lighting desk.
+    ProgramChange { program: u8 },
+    /// A controller swept from `from_value` to `to_value` over
+    /// `duration_seconds`. Interpolated at the transport's tick rate, which is
+    /// ample for fades but not sample-accurate.
+    ControlCurve {
+        controller: u8,
+        from_value: u8,
+        to_value: u8,
+        duration_seconds: f64,
+    },
+}
+
+impl MidiEvent {
+    /// How long this event occupies the timeline, measured from `at_seconds`.
+    /// Instantaneous messages report `0.0`.
+    pub fn duration_seconds(&self) -> f64 {
+        match self.kind {
+            MidiEventKind::Note {
+                duration_seconds, ..
+            }
+            | MidiEventKind::ControlCurve {
+                duration_seconds, ..
+            } => duration_seconds.max(0.0),
+            MidiEventKind::ControlChange { .. } | MidiEventKind::ProgramChange { .. } => 0.0,
+        }
+    }
+}
+
+impl MidiClip {
+    /// The clip's extent: from its start to the end of its longest event. A
+    /// clip of instantaneous messages has zero duration, which is intentional —
+    /// it renders as a marker rather than a block.
+    pub fn duration_seconds(&self) -> f64 {
+        self.events
+            .iter()
+            .map(|event| event.at_seconds.max(0.0) + event.duration_seconds())
+            .fold(0.0, f64::max)
+    }
+
+    /// Timeline position of the clip's end.
+    pub fn end_seconds(&self) -> f64 {
+        self.timeline_start_seconds + self.duration_seconds()
+    }
 }
 
 /// Semantic type of a section marker. Drives the pre-recorded voice-guide clip
@@ -545,6 +668,7 @@ mod tests {
             regions: vec![],
             tracks: vec![],
             clips: vec![],
+            midi_clips: vec![],
             section_markers: markers,
         }
     }
