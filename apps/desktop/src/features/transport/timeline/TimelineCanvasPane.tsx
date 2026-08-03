@@ -17,6 +17,7 @@ import type {
   ActiveVampSummary,
   AutomationCueSummary,
   ClipSummary,
+  MidiClipSummary,
   PendingAutomationCueSummary,
   PendingJumpSummary,
   SongRegionSummary,
@@ -41,6 +42,7 @@ import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
+import { MidiClipHotspots } from "../midi/MidiClipHotspots";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
 import {
   LANE_CUES,
@@ -340,6 +342,15 @@ type TimelineCanvasPaneProps = {
    * edge; returns the clamped camera offset. */
   onPlayheadEdgeAutoScroll: (deltaPx: number) => number;
   onTrackListContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  /** MIDI clip callbacks (edit, context menu, drag commit), grouped. */
+  midiClips?: {
+    onEdit?: (clip: MidiClipSummary) => void;
+    onContextMenu?: (
+      event: ReactMouseEvent<HTMLElement>,
+      clip: MidiClipSummary,
+    ) => void;
+    onMoveClip?: (clipId: string, timelineStartSeconds: number) => void;
+  };
   onTrackLaneMouseDown: (
     event: ReactMouseEvent<HTMLDivElement>,
     track: TimelineTrackSummary,
@@ -439,6 +450,7 @@ export function TimelineCanvasPane({
   onPlayheadSeekCommit,
   onPlayheadEdgeAutoScroll,
   onTrackListContextMenu,
+  midiClips,
   onTrackLaneMouseDown,
   onTimelineBackgroundMouseDown,
   onTrackLaneContextMenu,
@@ -931,6 +943,7 @@ export function TimelineCanvasPane({
   }, [song?.sectionMarkers, markerMovePreview]);
 
   // Keeps the cue hit targets glued to the diamonds the canvas paints.
+  const midiCamera = { cameraXRef, livePixelsPerSecondRef, pixelsPerSecond };
   const { registerHotspot: registerAutomationHotspot } =
     useAutomationCueHotspots({
       cues: song?.automationCues,
@@ -1905,6 +1918,16 @@ export function TimelineCanvasPane({
                       }
                     }}
                   >
+                    {track.kind === "midi" ? (
+                      <MidiClipHotspots
+                        trackId={track.id}
+                        song={song}
+                        trackHeight={trackHeight}
+                        camera={midiCamera}
+                        screenXToSeconds={screenXToSeconds}
+                        {...(midiClips ?? {})}
+                      />
+                    ) : null}
                     {libraryClipPreview
                       .filter((preview) => preview.trackId === track.id)
                       .map((preview) => (

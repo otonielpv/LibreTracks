@@ -300,7 +300,12 @@ export function MidiClipModal({
                           />
                         </label>
                         <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.durationSeconds")}</span>
+                          <span className="lt-settings-field-label">
+                            {t("transport.midi.durationSeconds")}
+                          </span>
+                          <small className="lt-settings-field-hint">
+                            {t("transport.midi.durationNoteHint")}
+                          </small>
                           <input
                             type="number"
                             min={0}
@@ -425,7 +430,12 @@ export function MidiClipModal({
                           />
                         </label>
                         <label className="lt-settings-field">
-                          <span className="lt-settings-field-label">{t("transport.midi.durationSeconds")}</span>
+                          <span className="lt-settings-field-label">
+                            {t("transport.midi.durationSeconds")}
+                          </span>
+                          <small className="lt-settings-field-hint">
+                            {t("transport.midi.durationCurveHint")}
+                          </small>
                           <input
                             type="number"
                             min={0}

@@ -1,6 +1,7 @@
 import { promptDialog } from "../../../shared/dialog/dialogService";
 import { deleteTrack, updateTrack } from "../desktopApi";
 import type { MidiClipSummary, TrackSummary } from "@libretracks/shared/models";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { ContextMenuAction } from "../types";
 import type { TimelineMenuDeps, ColorPickerPopoverState } from "./timelineMenus";
 
@@ -143,7 +144,30 @@ function midiTrackContextMenu(track: TrackSummary): ContextMenuAction[] {
 }
 
 
+  /** Open the clip's menu at the pointer, the way the cue lane does. */
+  function openMidiClipMenu(
+    event: ReactMouseEvent<HTMLElement>,
+    clip: MidiClipSummary,
+  ) {
+    getDeps().setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      title: clip.name || "MIDI",
+      actions: midiClipContextMenu(clip),
+    });
+  }
+
+  /** The timeline lane's MIDI callbacks, bundled as one prop. */
+  const clipCallbacks = {
+    onEdit: editMidiClip,
+    onContextMenu: openMidiClipMenu,
+    onMoveClip: (clipId: string, timelineStartSeconds: number) =>
+      getDeps().moveMidiClip(clipId, timelineStartSeconds),
+  };
+
   return {
+    clipCallbacks,
+    openMidiClipMenu,
     createMidiClipAt,
     editMidiClip,
     midiClipContextMenu,

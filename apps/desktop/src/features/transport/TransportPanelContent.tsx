@@ -2228,8 +2228,7 @@ export function TransportPanelContent() {
       }),
     [runAction, applyPlaybackSnapshot, setStatus, t, refreshSongView],
   );
-  const { handleDeleteMidiClip, openMidiRouteEditor, handleToggleMidiEnabled } =
-    midiHandlers;
+
 
   const missingFilePaths = useMemo(() => {
     const paths = new Set<string>();
@@ -5262,9 +5261,10 @@ export function TransportPanelContent() {
       setExportSongTarget,
       setAutomationCueDraft,
       setMidiClipDraft: midiDrafts.setMidiClipDraft,
-      openMidiRouteEditor,
-      toggleMidiTrackEnabled: handleToggleMidiEnabled,
-      deleteMidiClip: handleDeleteMidiClip,
+      openMidiRouteEditor: midiHandlers.openMidiRouteEditor,
+      toggleMidiTrackEnabled: midiHandlers.handleToggleMidiEnabled,
+      deleteMidiClip: midiHandlers.handleDeleteMidiClip,
+      moveMidiClip: midiHandlers.moveClip,
       setIsMixSceneModalOpen,
       clearSelection,
       selectTrack,
@@ -7525,9 +7525,7 @@ export function TransportPanelContent() {
                           onCommitPan={handleTrackHeaderPanCommit}
                           audioRoutingOptions={audioRoutingOptions}
                           onAudioToChange={handleTrackAudioToChange}
-                          midiLanes={midiHandlers.laneControls(
-                            song?.automationTrack?.enabled,
-                          )}
+                          midiLanes={midiHandlers.laneControls(song?.automationTrack?.enabled)}
                         />
 
                         <TimelineCanvasPane
@@ -8065,6 +8063,7 @@ export function TransportPanelContent() {
                             return cameraXRef.current;
                           }}
                           onTrackListContextMenu={handleTrackListContextMenu}
+                          midiClips={timelineMenus.midiClipCallbacks}
                           onTrackLaneMouseDown={handleTrackLaneMouseDown}
                           onTimelineBackgroundMouseDown={(event) => {
                             if (

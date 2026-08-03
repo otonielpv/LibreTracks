@@ -752,6 +752,21 @@ mod tests {
     }
 
     #[test]
+    fn a_disabled_track_sends_nothing() {
+        // The MIDI track's equivalent of mute. Regression guard: the enable
+        // flag has to be read from the track, not assumed true.
+        let mut song = song_on(
+            3,
+            None,
+            vec![clip("c", 1.0, vec![note_event("e", 0.0, 60, 100, 1.0)])],
+        );
+        assert_eq!(collect_events_in_window(&song, 0.0, 5.0).messages.len(), 1);
+
+        song.tracks[0].midi_enabled = false;
+        assert!(collect_events_in_window(&song, 0.0, 5.0).messages.is_empty());
+    }
+
+    #[test]
     fn a_clip_whose_track_is_missing_produces_nothing() {
         // A dangling clip must not fall back to some default channel and fire
         // at an unrelated device.

@@ -622,9 +622,9 @@ pub(crate) fn song_to_view(
                 audio_to: track.audio_to.clone(),
                 color: track.color.clone(),
                 auto_created: track.auto_created,
-                midi_port: None,
-                midi_channel: 1,
-                midi_enabled: true,
+                midi_port: track.midi_port.clone(),
+                midi_channel: track.midi_channel,
+                midi_enabled: track.midi_enabled,
             })
             .collect(),
         automation_cues: automation_cues_to_summary(

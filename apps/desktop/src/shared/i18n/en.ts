@@ -578,6 +578,8 @@ const en = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      durationNoteHint: "0 = a blip (released immediately).",
+      durationCurveHint: "0 = jump straight to the end value.",
       channelOverride: "Channel (optional)",
       channelOverrideHint: "Leave empty to use the track’s channel.",
       enableTrack: "Enable MIDI track",

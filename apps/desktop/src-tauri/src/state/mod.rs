@@ -2261,6 +2261,12 @@ impl DesktopSession {
             return Ok(());
         }
 
+        // Emit the MIDI tracks' events crossed by this tick BEFORE the early
+        // returns below. Nested inside the runtime-position branch it never ran
+        // for a vamp or an armed jump — and it also depended on the native
+        // engine reporting Playing, which MIDI has no reason to wait for.
+        self.advance_midi_playback()?;
+
         if self.sync_native_scheduled_jump_if_needed(audio)? {
             return Ok(());
         }
@@ -2284,8 +2290,6 @@ impl DesktopSession {
             self.advance_automation_job_actions(audio)?;
             // Step any in-progress volume/pan ramps.
             self.advance_mix_ramps(audio)?;
-            // Emit the MIDI tracks' events crossed by this tick.
-            self.advance_midi_playback()?;
             self.start_pending_automation_fade_if_due(audio)?;
             if self.pending_automation_jump.is_some() {
                 return Ok(());

@@ -187,7 +187,12 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     void handleSetMidiRoute(trackId, port, channel);
   };
 
+  const moveClip = (clipId: string, timelineStartSeconds: number) => {
+    void handleMoveMidiClip(clipId, timelineStartSeconds);
+  };
+
   return {
+    moveClip,
     saveClip,
     saveRoute,
     laneControls,

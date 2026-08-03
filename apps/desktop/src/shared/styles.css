@@ -8826,3 +8826,35 @@ textarea {
   color: #f3f0ef;
   padding: 0.45rem 0.6rem;
 }
+
+/* Short lanes: below ~68px there is no room for the name AND the route badge,
+   so the badge collapses and the row becomes a single line — the same thing
+   the audio header does with its faders at these heights. */
+.lt-midi-track-header.is-micro .lt-midi-route-badge,
+.lt-midi-track-header.is-lane .lt-midi-route-badge {
+  display: none;
+}
+
+.lt-midi-track-header.is-micro .lt-midi-header-text,
+.lt-midi-track-header.is-lane .lt-midi-header-text {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.lt-midi-track-header.is-micro .lt-track-meta,
+.lt-midi-track-header.is-lane .lt-track-meta {
+  display: none;
+}
+
+/* The power button shrinks with the row rather than pushing the name out. */
+.lt-midi-track-header.is-micro .lt-midi-power,
+.lt-midi-track-header.is-lane .lt-midi-power {
+  width: 20px;
+  height: 20px;
+}
+
+.lt-midi-track-header.is-micro .lt-midi-power .material-symbols-outlined,
+.lt-midi-track-header.is-lane .lt-midi-power .material-symbols-outlined {
+  font-size: 13px;
+}

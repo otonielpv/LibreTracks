@@ -605,6 +605,8 @@ const es = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      durationNoteHint: "0 = un toque (se suelta al instante).",
+      durationCurveHint: "0 = salta directo al valor final.",
       channelOverride: "Canal (opcional)",
       channelOverrideHint: "Dejalo vacio para usar el canal de la pista.",
       enableTrack: "Activar pista MIDI",

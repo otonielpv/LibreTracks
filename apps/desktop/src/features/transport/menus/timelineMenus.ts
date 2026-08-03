@@ -205,6 +205,7 @@ export type TimelineMenuDeps = {
   openMidiRouteEditor: (trackId: string) => void;
   toggleMidiTrackEnabled: (trackId: string) => void;
   deleteMidiClip: (clipId: string) => Promise<unknown>;
+  moveMidiClip: (clipId: string, timelineStartSeconds: number) => void;
   setIsMixSceneModalOpen: (next: boolean) => void;
   clearSelection: () => void;
   selectTrack: (trackIds: string[]) => void;
@@ -1237,6 +1238,8 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     editMidiClip,
     midiClipContextMenu,
     midiLaneContextMenu,
+    openMidiClipMenu,
+    clipCallbacks: midiClipCallbacks,
     midiTrackContextMenu,
   } = createMidiMenus(getDeps, openColorMenu);
 
@@ -1588,6 +1591,8 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     editMidiClip,
     midiClipContextMenu,
     midiLaneContextMenu,
+    openMidiClipMenu,
+    midiClipCallbacks,
     rulerContextMenu,
     songRegionContextMenu,
     tempoMarkerContextMenu,
