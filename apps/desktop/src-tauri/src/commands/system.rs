@@ -268,7 +268,7 @@ pub fn get_midi_outputs() -> Result<Vec<String>, String> {
 /// sees a blip, which is enough for a MIDI monitor or a "learn" dialog.
 #[tauri::command]
 pub fn send_midi_test_note(state: State<'_, DesktopState>, channel: u8, note: u8) -> Result<(), String> {
-    if !state.midi_output.is_open() {
+    if !state.midi_output.is_default_port_open() {
         return Err("no MIDI output device is selected".to_string());
     }
     state.midi_output.send(&[

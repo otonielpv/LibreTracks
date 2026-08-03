@@ -337,6 +337,10 @@ pub struct TrackSummary {
     pub audio_to: String,
     pub color: Option<String>,
     pub auto_created: bool,
+    /// MIDI routing, meaningful only on `kind == "midi"` tracks. `midi_port`
+    /// of `None` means "use the app-wide output device".
+    pub midi_port: Option<String>,
+    pub midi_channel: u8,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -614,6 +618,8 @@ pub(crate) fn song_to_view(
                 audio_to: track.audio_to.clone(),
                 color: track.color.clone(),
                 auto_created: track.auto_created,
+                midi_port: None,
+                midi_channel: 1,
             })
             .collect(),
         automation_cues: automation_cues_to_summary(
@@ -1239,6 +1245,8 @@ mod tests {
             audio_to: "master".into(),
             color: None,
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         }
     }
 

@@ -395,6 +395,8 @@ impl DesktopSession {
             audio_to,
             color: None,
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         };
 
         insert_track(
@@ -506,6 +508,8 @@ impl DesktopSession {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: true,
+                midi_port: None,
+                midi_channel: 1,
             });
             append_clip_to_song(
                 &mut song,
@@ -573,6 +577,8 @@ impl DesktopSession {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             });
             append_clip_to_song(
                 &mut song,

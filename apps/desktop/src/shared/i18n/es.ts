@@ -605,6 +605,18 @@ const es = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      statusRouteUpdated: "Enrutado MIDI actualizado",
+      routeLabel: "Envia a",
+      routeAria: "Enrutado MIDI de {{name}}",
+      channelShort: "Can {{channel}}",
+      channelInherited: "Pista (Can {{channel}})",
+      outputDeviceDefault: "Salida por defecto",
+      routeModalTitle: "Enrutado MIDI",
+      routePort: "Puerto",
+      routeChannel: "Canal",
+      routePortHint:
+        "El cable por el que salen los mensajes. “Salida por defecto” usa el puerto de Ajustes.",
+      routeChannelHint: "A cual de las 16 direcciones dentro de ese cable van dirigidos. Cada mensaje puede sobreescribirlo.",
       addTrack: "Anadir pista MIDI",
       addClip: "Anadir MIDI aqui",
       editClip: "Editar MIDI",

@@ -60,7 +60,10 @@ function nextEventId() {
 
 /** A fresh event of the given type, seeded with values that do something audible. */
 function makeEvent(type: MidiEventKindSummary["type"]): MidiEventSummary {
-  const base = { id: nextEventId(), atSeconds: 0, channel: 1 };
+  // channel omitted on purpose: a new message inherits the track's channel,
+  // which is what makes "one track = one destination" work without repeating
+  // the channel on every row.
+  const base = { id: nextEventId(), atSeconds: 0, channel: null };
   switch (type) {
     case "note":
       return {
@@ -113,8 +116,13 @@ export function MidiClipModal({
   }
 
   const isEditing = draft.clipId !== null;
-  const trackName =
-    song?.tracks.find((track) => track.id === draft.trackId)?.name ?? draft.trackId;
+  const track = song?.tracks.find((candidate) => candidate.id === draft.trackId);
+  const trackName = track?.name ?? draft.trackId;
+  // Shown as the channel field's placeholder so an empty box reads as "this
+  // message goes out on the track's channel", not as "no channel".
+  const inheritedChannelLabel = t("transport.midi.channelInherited", {
+    channel: track?.midiChannel ?? 1,
+  });
 
   const updateAt = (index: number, event: MidiEventSummary) =>
     setEvents((prev) => prev.map((item, i) => (i === index ? event : item)));
@@ -226,17 +234,24 @@ export function MidiClipModal({
                         }
                       />
                     </label>
+                    {/* Blank = inherit the track's channel, which is the
+                        normal case; a number overrides it for this message
+                        alone. */}
                     <label>
                       <span>{t("transport.midi.channel")}</span>
                       <input
                         type="number"
                         min={1}
                         max={16}
-                        value={event.channel}
+                        placeholder={inheritedChannelLabel}
+                        value={event.channel ?? ""}
                         onChange={(e) =>
                           updateAt(index, {
                             ...event,
-                            channel: clamp(Number(e.target.value) || 1, 1, 16),
+                            channel:
+                              e.target.value.trim() === ""
+                                ? null
+                                : clamp(Number(e.target.value) || 1, 1, 16),
                           })
                         }
                       />

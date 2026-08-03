@@ -15,33 +15,44 @@
 use crate::model::{MidiEventKind, Song, TrackKind};
 
 /// A MIDI message to emit, in terms the caller turns into wire bytes.
-/// `channel` is 1-16 as the user sees it; the 0-based wire nibble is produced
-/// at send time by the output layer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Two routing facts travel with every message and are easy to conflate:
+/// `port` is the cable it leaves by (a device, `None` = the app-wide default),
+/// while `channel` is which of the 16 addresses *inside* that cable the
+/// message is tagged with. `channel` is 1-16 as the user sees it; the 0-based
+/// wire nibble is produced at send time by the output layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScheduledMidiMessage {
     NoteOn {
+        port: Option<String>,
         channel: u8,
         note: u8,
         velocity: u8,
     },
     NoteOff {
+        port: Option<String>,
         channel: u8,
         note: u8,
     },
     ControlChange {
+        port: Option<String>,
         channel: u8,
         controller: u8,
         value: u8,
     },
     ProgramChange {
+        port: Option<String>,
         channel: u8,
         program: u8,
     },
 }
 
 /// A note sounding on the output, awaiting its note-off.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PendingNoteOff {
+    /// Port the note-on went out by; the note-off must follow it, or the note
+    /// hangs on the device that actually sounded it.
+    pub port: Option<String>,
     pub channel: u8,
     pub note: u8,
     /// Timeline position (source seconds) at which the note-off is due.
@@ -49,8 +60,9 @@ pub struct PendingNoteOff {
 }
 
 /// An in-progress controller sweep started by a `ControlCurve` event.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PendingControlCurve {
+    pub port: Option<String>,
     pub channel: u8,
     pub controller: u8,
     pub from_value: u8,
@@ -86,18 +98,29 @@ pub fn collect_events_in_window(
     let mut output = MidiTickOutput::default();
 
     for clip in &song.midi_clips {
-        let muted = song.tracks.iter().any(|track| {
-            track.id == clip.track_id && track.kind == TrackKind::Midi && track.muted
-        });
-        if muted {
+        // Resolve the owning track once: it carries both the channel every
+        // event inherits and the port the messages leave by. A clip whose
+        // track is missing or muted produces nothing.
+        let Some(track) = song
+            .tracks
+            .iter()
+            .find(|track| track.id == clip.track_id && track.kind == TrackKind::Midi)
+        else {
+            continue;
+        };
+        if track.muted {
             continue;
         }
+        let track_channel = track.midi_channel;
+        let port = track.midi_port.clone();
 
         for event in &clip.events {
             let event_seconds = clip.timeline_start_seconds + event.at_seconds.max(0.0);
             if event_seconds <= previous_seconds || event_seconds > now_seconds {
                 continue;
             }
+
+            let channel = event.effective_channel(track_channel);
 
             match event.kind {
                 MidiEventKind::Note {
@@ -106,26 +129,30 @@ pub fn collect_events_in_window(
                     duration_seconds,
                 } => {
                     output.messages.push(ScheduledMidiMessage::NoteOn {
-                        channel: event.channel,
+                        port: port.clone(),
+                        channel,
                         note,
                         velocity,
                     });
                     output.started_notes.push(PendingNoteOff {
-                        channel: event.channel,
+                        port: port.clone(),
+                        channel,
                         note,
                         off_at_seconds: event_seconds + duration_seconds.max(0.0),
                     });
                 }
                 MidiEventKind::ControlChange { controller, value } => {
                     output.messages.push(ScheduledMidiMessage::ControlChange {
-                        channel: event.channel,
+                        port: port.clone(),
+                        channel,
                         controller,
                         value,
                     });
                 }
                 MidiEventKind::ProgramChange { program } => {
                     output.messages.push(ScheduledMidiMessage::ProgramChange {
-                        channel: event.channel,
+                        port: port.clone(),
+                        channel,
                         program,
                     });
                 }
@@ -139,19 +166,22 @@ pub fn collect_events_in_window(
                     // start and end would send two messages for one intent.
                     if duration_seconds <= 0.0 {
                         output.messages.push(ScheduledMidiMessage::ControlChange {
-                            channel: event.channel,
+                            port: port.clone(),
+                            channel,
                             controller,
                             value: to_value,
                         });
                         continue;
                     }
                     output.messages.push(ScheduledMidiMessage::ControlChange {
-                        channel: event.channel,
+                        port: port.clone(),
+                        channel,
                         controller,
                         value: from_value,
                     });
                     output.started_curves.push(PendingControlCurve {
-                        channel: event.channel,
+                        port: port.clone(),
+                        channel,
                         controller,
                         from_value,
                         to_value,
@@ -178,6 +208,7 @@ pub fn take_due_note_offs(
     for note in notes {
         if note.off_at_seconds <= now_seconds {
             messages.push(ScheduledMidiMessage::NoteOff {
+                port: note.port.clone(),
                 channel: note.channel,
                 note: note.note,
             });
@@ -218,6 +249,7 @@ pub fn step_control_curves(
         if value != curve.last_sent_value {
             curve.last_sent_value = value;
             messages.push(ScheduledMidiMessage::ControlChange {
+                port: curve.port.clone(),
                 channel: curve.channel,
                 controller: curve.controller,
                 value,
@@ -240,6 +272,10 @@ mod tests {
     use crate::model::{MidiClip, MidiEvent, Song, Track};
 
     fn midi_track(id: &str, muted: bool) -> Track {
+        midi_track_on(id, muted, 1, None)
+    }
+
+    fn midi_track_on(id: &str, muted: bool, channel: u8, port: Option<&str>) -> Track {
         Track {
             id: id.into(),
             name: id.into(),
@@ -253,6 +289,8 @@ mod tests {
             audio_to: "master".into(),
             color: None,
             auto_created: false,
+            midi_port: port.map(str::to_string),
+            midi_channel: channel,
         }
     }
 
@@ -279,7 +317,7 @@ mod tests {
         MidiEvent {
             id: id.into(),
             at_seconds: at,
-            channel: 1,
+            channel: None,
             kind: MidiEventKind::Note {
                 note,
                 velocity,
@@ -411,6 +449,7 @@ mod tests {
         assert_eq!(
             messages,
             vec![ScheduledMidiMessage::NoteOff {
+                port: None,
                 channel: 1,
                 note: 60
             }]
@@ -427,7 +466,7 @@ mod tests {
                 vec![MidiEvent {
                     id: "e".into(),
                     at_seconds: 0.0,
-                    channel: 2,
+                    channel: Some(2),
                     kind: MidiEventKind::ControlCurve {
                         controller: 74,
                         from_value: 0,
@@ -443,6 +482,7 @@ mod tests {
         assert_eq!(
             output.messages,
             vec![ScheduledMidiMessage::ControlChange {
+                port: None,
                 channel: 2,
                 controller: 74,
                 value: 0
@@ -454,6 +494,7 @@ mod tests {
     #[test]
     fn a_sweep_interpolates_and_finishes_at_its_target() {
         let curve = PendingControlCurve {
+            port: None,
             channel: 1,
             controller: 74,
             from_value: 0,
@@ -476,6 +517,7 @@ mod tests {
     fn a_sweep_does_not_resend_an_unchanged_value() {
         // Two ticks 5ms apart on a 100s sweep round to the same byte.
         let curve = PendingControlCurve {
+            port: None,
             channel: 1,
             controller: 74,
             from_value: 0,
@@ -494,6 +536,7 @@ mod tests {
     #[test]
     fn a_descending_sweep_walks_downward() {
         let curve = PendingControlCurve {
+            port: None,
             channel: 1,
             controller: 74,
             from_value: 127,
@@ -515,7 +558,7 @@ mod tests {
                 vec![MidiEvent {
                     id: "e".into(),
                     at_seconds: 0.0,
-                    channel: 1,
+                    channel: None,
                     kind: MidiEventKind::ControlCurve {
                         controller: 74,
                         from_value: 0,
@@ -531,6 +574,7 @@ mod tests {
         assert_eq!(
             output.messages,
             vec![ScheduledMidiMessage::ControlChange {
+                port: None,
                 channel: 1,
                 controller: 74,
                 value: 90
@@ -548,7 +592,7 @@ mod tests {
                 vec![MidiEvent {
                     id: "e".into(),
                     at_seconds: 0.0,
-                    channel: 3,
+                    channel: Some(3),
                     kind: MidiEventKind::ProgramChange { program: 7 },
                 }],
             )],
@@ -557,6 +601,7 @@ mod tests {
         assert_eq!(
             collect_events_in_window(&song, 0.0, 2.0).messages,
             vec![ScheduledMidiMessage::ProgramChange {
+                port: None,
                 channel: 3,
                 program: 7
             }]
@@ -570,5 +615,147 @@ mod tests {
             collect_events_in_window(&song, 0.0, 100.0),
             MidiTickOutput::default()
         );
+    }
+
+    // ── channel inheritance and per-track port ────────────────────────────
+
+    /// Song whose single MIDI track sits on `channel` / `port`.
+    fn song_on(channel: u8, port: Option<&str>, clips: Vec<MidiClip>) -> Song {
+        let mut song = song_with(clips, false);
+        song.tracks = vec![midi_track_on("midi1", false, channel, port)];
+        song
+    }
+
+    fn channel_of(message: &ScheduledMidiMessage) -> u8 {
+        match message {
+            ScheduledMidiMessage::NoteOn { channel, .. }
+            | ScheduledMidiMessage::NoteOff { channel, .. }
+            | ScheduledMidiMessage::ControlChange { channel, .. }
+            | ScheduledMidiMessage::ProgramChange { channel, .. } => *channel,
+        }
+    }
+
+    fn port_of(message: &ScheduledMidiMessage) -> Option<String> {
+        match message {
+            ScheduledMidiMessage::NoteOn { port, .. }
+            | ScheduledMidiMessage::NoteOff { port, .. }
+            | ScheduledMidiMessage::ControlChange { port, .. }
+            | ScheduledMidiMessage::ProgramChange { port, .. } => port.clone(),
+        }
+    }
+
+    #[test]
+    fn an_event_without_a_channel_inherits_the_tracks() {
+        let song = song_on(
+            7,
+            None,
+            vec![clip("c", 1.0, vec![note_event("e", 0.0, 60, 100, 1.0)])],
+        );
+        let fired = collect_events_in_window(&song, 0.0, 2.0).messages;
+        assert_eq!(channel_of(&fired[0]), 7);
+    }
+
+    #[test]
+    fn an_explicit_event_channel_overrides_the_tracks() {
+        // "everything on channel 7, but this one message goes to 10".
+        let mut clip_with_override = clip("c", 1.0, vec![note_event("e", 0.0, 60, 100, 1.0)]);
+        clip_with_override.events[0].channel = Some(10);
+        let song = song_on(7, None, vec![clip_with_override]);
+
+        let fired = collect_events_in_window(&song, 0.0, 2.0).messages;
+        assert_eq!(channel_of(&fired[0]), 10);
+    }
+
+    #[test]
+    fn messages_carry_the_tracks_port() {
+        let song = song_on(
+            3,
+            Some("loopMIDI Port 2"),
+            vec![clip("c", 1.0, vec![note_event("e", 0.0, 60, 100, 1.0)])],
+        );
+        let output = collect_events_in_window(&song, 0.0, 2.0);
+        assert_eq!(
+            port_of(&output.messages[0]),
+            Some("loopMIDI Port 2".to_string())
+        );
+        // The pending note-off must remember the same port, or the note hangs
+        // on whichever device actually sounded it.
+        assert_eq!(
+            output.started_notes[0].port,
+            Some("loopMIDI Port 2".to_string())
+        );
+    }
+
+    #[test]
+    fn two_tracks_can_target_different_ports_and_channels() {
+        // The whole point of per-track routing: a lighting desk and lyric
+        // software driven at once, each on its own cable.
+        let mut song = song_with(
+            vec![
+                clip("lights", 1.0, vec![note_event("e1", 0.0, 60, 100, 1.0)]),
+                MidiClip {
+                    id: "lyrics".into(),
+                    track_id: "midi2".into(),
+                    timeline_start_seconds: 1.0,
+                    name: String::new(),
+                    events: vec![note_event("e2", 0.0, 62, 100, 1.0)],
+                    color: None,
+                },
+            ],
+            false,
+        );
+        song.tracks = vec![
+            midi_track_on("midi1", false, 3, Some("Port A")),
+            midi_track_on("midi2", false, 1, Some("Port B")),
+        ];
+
+        let fired = collect_events_in_window(&song, 0.0, 2.0).messages;
+        assert_eq!(fired.len(), 2);
+        assert_eq!(port_of(&fired[0]), Some("Port A".to_string()));
+        assert_eq!(channel_of(&fired[0]), 3);
+        assert_eq!(port_of(&fired[1]), Some("Port B".to_string()));
+        assert_eq!(channel_of(&fired[1]), 1);
+    }
+
+    #[test]
+    fn a_curve_keeps_the_tracks_port_and_channel_while_it_steps() {
+        let song = song_on(
+            5,
+            Some("Port A"),
+            vec![clip(
+                "c",
+                0.0,
+                vec![MidiEvent {
+                    id: "e".into(),
+                    at_seconds: 0.0,
+                    channel: None,
+                    kind: MidiEventKind::ControlCurve {
+                        controller: 74,
+                        from_value: 0,
+                        to_value: 127,
+                        duration_seconds: 4.0,
+                    },
+                }],
+            )],
+        );
+
+        let started = collect_events_in_window(&song, -1.0, 0.5).started_curves;
+        assert_eq!(started.len(), 1);
+
+        let (messages, _) = step_control_curves(started, 2.0);
+        assert_eq!(port_of(&messages[0]), Some("Port A".to_string()));
+        assert_eq!(channel_of(&messages[0]), 5);
+    }
+
+    #[test]
+    fn a_clip_whose_track_is_missing_produces_nothing() {
+        // A dangling clip must not fall back to some default channel and fire
+        // at an unrelated device.
+        let mut song = song_with(
+            vec![clip("c", 1.0, vec![note_event("e", 0.0, 60, 100, 1.0)])],
+            false,
+        );
+        song.tracks.clear();
+        assert!(collect_events_in_window(&song, 0.0, 5.0).messages.is_empty());
     }
 }

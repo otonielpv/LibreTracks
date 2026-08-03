@@ -1183,6 +1183,22 @@ export async function moveMidiClip(
   });
 }
 
+/**
+ * Set a MIDI track's routing. `port` of null routes it to the app-wide output
+ * device; `channel` is the 1-16 default every event on the track inherits.
+ */
+export async function setMidiTrackRouting(
+  trackId: string,
+  port: string | null,
+  channel: number | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_midi_track_routing", {
+    trackId,
+    port,
+    channel,
+  });
+}
+
 /** MIDI output ports available to send to (lighting desks, lyric software). */
 export async function getMidiOutputs(): Promise<string[]> {
   return invokeCommand<string[]>("get_midi_outputs");

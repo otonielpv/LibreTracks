@@ -20,12 +20,17 @@ export type MidiSettingsTabProps = {
   onMidiInputDeviceChange: (value: string) => void;
   onRefreshMidiInputDevices: () => void;
 
-  midiOutputDevices: string[];
-  selectedMidiOutputDevice: string;
-  selectedMidiOutputDeviceMissing: boolean;
-  onMidiOutputDeviceChange: (value: string) => void;
-  onRefreshMidiOutputDevices: () => void;
-  onSendMidiTestNote: () => void;
+  midiOutput: MidiOutputSettings;
+};
+
+/** The output port controls, grouped so they travel as one prop. */
+export type MidiOutputSettings = {
+  devices: string[];
+  selected: string;
+  selectedMissing: boolean;
+  onChange: (value: string) => void;
+  onRefresh: () => void;
+  onSendTestNote: () => void;
 };
 
 export function MidiSettingsTab({
@@ -37,13 +42,16 @@ export function MidiSettingsTab({
   selectedMidiInputDeviceMissing,
   onMidiInputDeviceChange,
   onRefreshMidiInputDevices,
-  midiOutputDevices,
-  selectedMidiOutputDevice,
-  selectedMidiOutputDeviceMissing,
-  onMidiOutputDeviceChange,
-  onRefreshMidiOutputDevices,
-  onSendMidiTestNote,
+  midiOutput,
 }: MidiSettingsTabProps) {
+  const {
+    devices: midiOutputDevices,
+    selected: selectedMidiOutputDevice,
+    selectedMissing: selectedMidiOutputDeviceMissing,
+    onChange: onMidiOutputDeviceChange,
+    onRefresh: onRefreshMidiOutputDevices,
+    onSendTestNote: onSendMidiTestNote,
+  } = midiOutput;
   const { t } = useTranslation();
 
   return (

@@ -556,6 +556,8 @@ mod tests {
                 audio_to: "master".into(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             }],
             clips: vec![],
             midi_clips: vec![],
@@ -849,6 +851,8 @@ mod tests {
             audio_to: "master".into(),
             color: None,
             auto_created: false,
+            midi_port: Some("loopMIDI Port 2".into()),
+            midi_channel: 3,
         });
         song.midi_clips.push(libretracks_core::MidiClip {
             id: "mc1".into(),
@@ -859,13 +863,15 @@ mod tests {
                 libretracks_core::MidiEvent {
                     id: "e1".into(),
                     at_seconds: 0.0,
-                    channel: 3,
+                    // No channel: inherits the track's (3).
+                    channel: None,
                     kind: libretracks_core::MidiEventKind::ProgramChange { program: 7 },
                 },
                 libretracks_core::MidiEvent {
                     id: "e2".into(),
                     at_seconds: 0.25,
-                    channel: 3,
+                    // Explicit override, so both cases round-trip.
+                    channel: Some(10),
                     kind: libretracks_core::MidiEventKind::ControlCurve {
                         controller: 74,
                         from_value: 0,
@@ -882,6 +888,17 @@ mod tests {
         let loaded = load_song(dir.path()).expect("reload song with midi clips");
 
         assert_eq!(loaded.midi_clips, song.midi_clips);
+        // Inherited (None) must not be persisted as a concrete channel, or the
+        // track's channel would stop governing the event after a reload.
+        assert_eq!(loaded.midi_clips[0].events[0].channel, None);
+        assert_eq!(loaded.midi_clips[0].events[1].channel, Some(10));
+        let midi_track = loaded
+            .tracks
+            .iter()
+            .find(|track| track.id == "midi1")
+            .expect("midi track");
+        assert_eq!(midi_track.midi_port.as_deref(), Some("loopMIDI Port 2"));
+        assert_eq!(midi_track.midi_channel, 3);
         assert_eq!(
             loaded
                 .tracks

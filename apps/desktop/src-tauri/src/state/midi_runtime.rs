@@ -35,25 +35,54 @@ use super::DesktopSession;
 /// against a stalled tick (a hitched frame, a machine coming back from sleep).
 const MAX_CONTINUOUS_TICK_SECONDS: f64 = 1.0;
 
-/// Translate a scheduling decision into the wire-level message type.
-fn to_outbound(message: ScheduledMidiMessage) -> OutboundMidiMessage {
+/// Translate a scheduling decision into the wire-level message plus the port
+/// it must leave by (`None` = the app-wide output).
+fn to_outbound(message: ScheduledMidiMessage) -> (Option<String>, OutboundMidiMessage) {
     match message {
         ScheduledMidiMessage::NoteOn {
+            port,
             channel,
             note,
             velocity,
-        } => OutboundMidiMessage::note_on(channel, note, velocity),
-        ScheduledMidiMessage::NoteOff { channel, note } => {
-            OutboundMidiMessage::note_off(channel, note)
-        }
+        } => (port, OutboundMidiMessage::note_on(channel, note, velocity)),
+        ScheduledMidiMessage::NoteOff {
+            port,
+            channel,
+            note,
+        } => (port, OutboundMidiMessage::note_off(channel, note)),
         ScheduledMidiMessage::ControlChange {
+            port,
             channel,
             controller,
             value,
-        } => OutboundMidiMessage::control_change(channel, controller, value),
-        ScheduledMidiMessage::ProgramChange { channel, program } => {
-            OutboundMidiMessage::program_change(channel, program)
+        } => (
+            port,
+            OutboundMidiMessage::control_change(channel, controller, value),
+        ),
+        ScheduledMidiMessage::ProgramChange {
+            port,
+            channel,
+            program,
+        } => (port, OutboundMidiMessage::program_change(channel, program)),
+    }
+}
+
+/// Group messages by port and hand each group to its output, so a tick costs
+/// one send per port rather than one per message.
+fn dispatch(output: &MidiOutputManager, messages: Vec<ScheduledMidiMessage>) {
+    if messages.is_empty() {
+        return;
+    }
+    let mut by_port: Vec<(Option<String>, Vec<OutboundMidiMessage>)> = Vec::new();
+    for message in messages {
+        let (port, outbound) = to_outbound(message);
+        match by_port.iter_mut().find(|(existing, _)| *existing == port) {
+            Some((_, group)) => group.push(outbound),
+            None => by_port.push((port, vec![outbound])),
         }
+    }
+    for (port, group) in by_port {
+        output.send_to(port.as_deref(), &group);
     }
 }
 
@@ -81,10 +110,14 @@ impl DesktopSession {
         let messages = self
             .active_midi_notes
             .drain(..)
-            .map(|note: PendingNoteOff| OutboundMidiMessage::note_off(note.channel, note.note))
+            .map(|note: PendingNoteOff| ScheduledMidiMessage::NoteOff {
+                port: note.port,
+                channel: note.channel,
+                note: note.note,
+            })
             .collect::<Vec<_>>();
         if let Some(output) = self.midi_output_handle() {
-            output.send(&messages);
+            dispatch(&output, messages);
         }
     }
 
@@ -95,9 +128,8 @@ impl DesktopSession {
         self.active_midi_notes.clear();
         self.active_midi_curves.clear();
         if let Some(output) = self.midi_output_handle() {
-            if output.is_open() {
-                output.panic();
-            }
+            // Covers every open port, not just the app-wide one.
+            output.panic();
         }
     }
 
@@ -109,15 +141,15 @@ impl DesktopSession {
         let Some(output) = self.midi_output_handle() else {
             return Ok(());
         };
-        if !output.is_open() {
-            return Ok(());
-        }
         if self.engine.playback_state() != PlaybackState::Playing {
             return Ok(());
         }
         let Some(song) = self.engine.song() else {
             return Ok(());
         };
+        // Gate on there being MIDI to send, NOT on a port being open: tracks
+        // that name their own port have it opened lazily by `send_to`, so a
+        // song using only per-track ports must still reach the walk below.
         if song.midi_clips.is_empty()
             && self.active_midi_notes.is_empty()
             && self.active_midi_curves.is_empty()
@@ -139,28 +171,26 @@ impl DesktopSession {
         }
 
         let song = song.clone();
-        let mut outbound: Vec<OutboundMidiMessage> = Vec::new();
+        let mut scheduled: Vec<ScheduledMidiMessage> = Vec::new();
 
         // Note-offs first: a note ending exactly where another starts should
         // release before the new one sounds.
         let held = std::mem::take(&mut self.active_midi_notes);
         let (note_offs, still_held) = take_due_note_offs(held, now_seconds);
         self.active_midi_notes = still_held;
-        outbound.extend(note_offs.into_iter().map(to_outbound));
+        scheduled.extend(note_offs);
 
         let tick = collect_events_in_window(&song, previous_seconds, now_seconds);
-        outbound.extend(tick.messages.into_iter().map(to_outbound));
+        scheduled.extend(tick.messages);
         self.active_midi_notes.extend(tick.started_notes);
         self.active_midi_curves.extend(tick.started_curves);
 
         let curves = std::mem::take(&mut self.active_midi_curves);
         let (curve_messages, still_running) = step_control_curves(curves, now_seconds);
         self.active_midi_curves = still_running;
-        outbound.extend(curve_messages.into_iter().map(to_outbound));
+        scheduled.extend(curve_messages);
 
-        if !outbound.is_empty() {
-            output.send(&outbound);
-        }
+        dispatch(&output, scheduled);
 
         self.midi_cursor_seconds = now_seconds;
         Ok(())

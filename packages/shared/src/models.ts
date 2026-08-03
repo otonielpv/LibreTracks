@@ -381,6 +381,14 @@ export type TrackSummary = {
    * tracks never disappear on their own. Optional + defaults to false for
    * back-compat with older snapshots that lacked the field. */
   autoCreated?: boolean;
+  /**
+   * MIDI routing, meaningful only on `kind === "midi"` tracks. The port is the
+   * cable the messages leave by (null = the app-wide output device); the
+   * channel is which of the 16 addresses inside that cable they are tagged
+   * with, and every event inherits it unless it overrides it.
+   */
+  midiPort?: string | null;
+  midiChannel?: number;
 };
 
 export function formatTransposeSemitones(value: number): string {
@@ -438,8 +446,12 @@ export type MidiEventSummary = {
   id: string;
   /** Offset from the clip start in seconds; 0 = fires with the clip. */
   atSeconds: number;
-  /** 1-16, as printed on hardware. */
-  channel: number;
+  /**
+   * Per-event channel override (1-16). Absent/null — the normal case — means
+   * "use the track's channel", so a track that talks to one device is
+   * configured in one place.
+   */
+  channel?: number | null;
   kind: MidiEventKindSummary;
 };
 

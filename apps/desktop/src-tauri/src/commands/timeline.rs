@@ -536,6 +536,23 @@ pub fn move_midi_clip(
 }
 
 #[tauri::command]
+pub fn set_midi_track_routing(
+    track_id: String,
+    port: Option<String>,
+    channel: Option<u8>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_midi_track_routing(&track_id, port.as_deref(), channel, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn upsert_automation_cue(
     cue: AutomationCue,
     state: State<'_, DesktopState>,

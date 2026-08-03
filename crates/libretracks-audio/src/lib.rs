@@ -1105,6 +1105,8 @@ mod tests {
                     audio_to: "ext:2-3".to_string(),
                     color: None,
                     auto_created: false,
+                    midi_port: None,
+                    midi_channel: 1,
                 },
                 Track {
                     id: "track_click".into(),
@@ -1119,6 +1121,8 @@ mod tests {
                     audio_to: "ext:2-3".to_string(),
                     color: None,
                     auto_created: false,
+                    midi_port: None,
+                    midi_channel: 1,
                 },
                 Track {
                     id: "folder_main".into(),
@@ -1133,6 +1137,8 @@ mod tests {
                     audio_to: "master".to_string(),
                     color: None,
                     auto_created: false,
+                    midi_port: None,
+                    midi_channel: 1,
                 },
                 Track {
                     id: "track_drums".into(),
@@ -1147,6 +1153,8 @@ mod tests {
                     audio_to: "master".to_string(),
                     color: None,
                     auto_created: false,
+                    midi_port: None,
+                    midi_channel: 1,
                 },
             ],
             clips: vec![
@@ -1281,6 +1289,8 @@ mod tests {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             }],
             // One clip per region so each respects the "clip inside one
             // region" invariant. Together they cover the full timeline

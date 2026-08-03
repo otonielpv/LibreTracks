@@ -136,10 +136,26 @@ pub struct Track {
     /// with a target_track_id) stay false and survive becoming empty.
     #[serde(default)]
     pub auto_created: bool,
+    /// MIDI output port this track sends to, for [`TrackKind::Midi`] tracks.
+    /// `None` = fall back to the app-wide output device, which is what a
+    /// single-destination setup wants. Set it per track to drive two programs
+    /// (say a lighting desk and lyric projection) on different ports at once.
+    /// Ignored by every other track kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub midi_port: Option<String>,
+    /// Channel (1-16) every message from this track uses unless the individual
+    /// event overrides it. The port is the cable; the channel is which of the
+    /// 16 addresses inside that cable the message is tagged with.
+    #[serde(default = "default_midi_channel")]
+    pub midi_channel: u8,
 }
 
 pub fn default_audio_to() -> String {
     "master".to_string()
+}
+
+pub fn default_midi_channel() -> u8 {
+    1
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -203,8 +219,13 @@ pub struct MidiEvent {
     /// Offset from the clip start in seconds. `0.0` = fires with the clip.
     #[serde(default)]
     pub at_seconds: f64,
-    /// 1-16, as printed on hardware.
-    pub channel: u8,
+    /// Per-event channel override (1-16). `None` — the normal case — means
+    /// "use the track's channel", so a track that talks to one device is
+    /// configured in one place. An override exists because "everything on
+    /// channel 3, but this one program change goes to 10" is a real lighting
+    /// case that would otherwise need a whole extra track.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel: Option<u8>,
     pub kind: MidiEventKind,
 }
 
@@ -238,6 +259,13 @@ pub enum MidiEventKind {
 }
 
 impl MidiEvent {
+    /// The channel this event actually goes out on: its own override if set,
+    /// otherwise the owning track's. Single place the fallback is decided, so
+    /// playback, the editor and the timeline can never disagree about it.
+    pub fn effective_channel(&self, track_channel: u8) -> u8 {
+        self.channel.unwrap_or(track_channel)
+    }
+
     /// How long this event occupies the timeline, measured from `at_seconds`.
     /// Instantaneous messages report `0.0`.
     pub fn duration_seconds(&self) -> f64 {

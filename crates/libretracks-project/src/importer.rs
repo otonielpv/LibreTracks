@@ -256,6 +256,8 @@ pub fn import_wav_song(
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             })
             .collect(),
         clips: imported_files
@@ -337,6 +339,8 @@ pub fn append_wav_files_to_song(
             audio_to: "master".to_string(),
             color: None,
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         });
 
         next_song.clips.push(Clip {

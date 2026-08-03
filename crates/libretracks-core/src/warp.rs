@@ -280,6 +280,8 @@ mod tests {
                 audio_to: crate::model::default_audio_to(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             }],
             clips: vec![Clip {
                 id: "c".into(),

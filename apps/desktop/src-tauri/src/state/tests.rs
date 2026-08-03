@@ -60,6 +60,8 @@ fn demo_song() -> Song {
             audio_to: "master".to_string(),
             color: None,
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         }],
         clips: vec![Clip {
             id: "clip_1".into(),
@@ -274,6 +276,8 @@ fn demo_song_with_folder_track() -> Song {
             audio_to: "master".to_string(),
             color: None,
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         },
     );
     // Make the audio track a child of the folder.
@@ -355,6 +359,8 @@ fn hierarchy_song() -> Song {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             },
             Track {
                 id: "track_child_a".into(),
@@ -369,6 +375,8 @@ fn hierarchy_song() -> Song {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             },
             Track {
                 id: "track_folder_b".into(),
@@ -383,6 +391,8 @@ fn hierarchy_song() -> Song {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             },
             Track {
                 id: "track_child_b".into(),
@@ -397,6 +407,8 @@ fn hierarchy_song() -> Song {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             },
         ],
         clips: vec![],
@@ -881,6 +893,8 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             },
             Track {
                 id: "track-drums_01".into(),
@@ -895,6 +909,8 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
                 audio_to: "master".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             },
         ],
         clips: vec![],
@@ -1071,6 +1087,8 @@ fn batch_move_can_reassign_clip_to_another_track() {
         audio_to: "master".to_string(),
         color: None,
         auto_created: false,
+        midi_port: None,
+        midi_channel: 1,
     });
     let mut session = session_with_song_dir("batch-move-track", song);
     let audio = crate::audio::engine::AudioController::default();
@@ -1875,6 +1893,8 @@ fn song_with_folder_hierarchy() -> Song {
             audio_to: "bus_a".to_string(),
             color: Some("#ff0000".into()),
             auto_created: true,
+            midi_port: None,
+            midi_channel: 1,
         },
     );
     song.tracks.push(Track {
@@ -1890,6 +1910,8 @@ fn song_with_folder_hierarchy() -> Song {
         audio_to: "bus_a".to_string(),
         color: Some("#00ff00".into()),
         auto_created: true,
+        midi_port: None,
+        midi_channel: 1,
     });
     song
 }

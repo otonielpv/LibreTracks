@@ -1,4 +1,13 @@
-import type { MidiClipSummary, MidiEventSummary, TransportSnapshot } from "../desktopApi";
+import {
+  deleteMidiClip,
+  moveMidiClip,
+  setMidiTrackRouting,
+  upsertMidiClip,
+  type MidiEventSummary,
+  type TrackSummary,
+  type TransportSnapshot,
+} from "../desktopApi";
+import type { MidiRouteDraft } from "../panels/MidiRouteModal";
 
 /**
  * Handlers for creating, editing, moving and deleting MIDI clips.
@@ -13,13 +22,13 @@ export type MidiClipHandlerDeps = {
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   setStatus: (message: string) => void;
   translate: (key: string) => string;
-  upsertMidiClip: (clip: MidiClipSummary) => Promise<TransportSnapshot>;
-  deleteMidiClip: (clipId: string) => Promise<TransportSnapshot>;
-  moveMidiClip: (
-    clipId: string,
-    timelineStartSeconds: number,
-    targetTrackId: string | null,
-  ) => Promise<TransportSnapshot>;
+  refreshSongView: (options?: {
+    sync?: boolean;
+    includeWaveforms?: boolean;
+  }) => Promise<unknown>;
+  /** Reads the live song, so the factory never closes over a stale track. */
+  getTrack: (trackId: string) => TrackSummary | null;
+  setMidiRouteDraft: (draft: MidiRouteDraft | null) => void;
 };
 
 let clipCounter = 0;
@@ -34,9 +43,9 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     applyPlaybackSnapshot,
     setStatus,
     translate,
-    upsertMidiClip,
-    deleteMidiClip,
-    moveMidiClip,
+    refreshSongView,
+    getTrack,
+    setMidiRouteDraft,
   } = deps;
 
   /**
@@ -95,9 +104,41 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     });
   };
 
+  /**
+   * Point a MIDI track at a port and channel. The song view is refreshed
+   * because the header badge reads these straight off the track — leaving it
+   * to the next snapshot would show stale routing for a moment.
+   */
+  const handleSetMidiRoute = async (
+    trackId: string,
+    port: string | null,
+    channel: number,
+  ) => {
+    await runAction(async () => {
+      const snapshot = await setMidiTrackRouting(trackId, port, channel);
+      applyPlaybackSnapshot(snapshot);
+      await refreshSongView({ includeWaveforms: false, sync: true });
+      setStatus(translate("transport.midi.statusRouteUpdated"));
+    });
+  };
+
+  /** Seed the routing dialog from the track's current port and channel. */
+  const openMidiRouteEditor = (trackId: string) => {
+    const track = getTrack(trackId);
+    if (!track) return;
+    setMidiRouteDraft({
+      trackId,
+      trackName: track.name,
+      port: track.midiPort ?? null,
+      channel: track.midiChannel ?? 1,
+    });
+  };
+
   return {
+    openMidiRouteEditor,
     handleSaveMidiClip,
     handleDeleteMidiClip,
     handleMoveMidiClip,
+    handleSetMidiRoute,
   };
 }

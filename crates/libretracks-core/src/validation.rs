@@ -118,6 +118,8 @@ pub enum DomainError {
     },
     #[error("midi event {event_id} has invalid offset or duration")]
     InvalidMidiEventTiming { event_id: String },
+    #[error("midi track {track_id} has invalid channel {channel}")]
+    InvalidMidiTrackChannel { track_id: String, channel: u8 },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -189,6 +191,17 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
     for track in &song.tracks {
         if !track_ids.insert(track.id.as_str()) {
             return Err(DomainError::DuplicateTrackId(track.id.clone()));
+        }
+
+        // The channel only means anything on a MIDI track; other kinds carry
+        // the serde default and are not held to it.
+        if track.kind == TrackKind::Midi
+            && !(MIN_MIDI_CHANNEL..=MAX_MIDI_CHANNEL).contains(&track.midi_channel)
+        {
+            return Err(DomainError::InvalidMidiTrackChannel {
+                track_id: track.id.clone(),
+                channel: track.midi_channel,
+            });
         }
     }
 
@@ -439,11 +452,15 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
 /// here rather than clamped at send time so a malformed file is rejected on
 /// load instead of silently firing a different message than the user wrote.
 fn validate_midi_event(event: &MidiEvent) -> Result<(), DomainError> {
-    if !(MIN_MIDI_CHANNEL..=MAX_MIDI_CHANNEL).contains(&event.channel) {
-        return Err(DomainError::InvalidMidiChannel {
-            event_id: event.id.clone(),
-            channel: event.channel,
-        });
+    // Only an explicit override is checked here; `None` inherits the track's
+    // channel, which is validated separately with the track.
+    if let Some(channel) = event.channel {
+        if !(MIN_MIDI_CHANNEL..=MAX_MIDI_CHANNEL).contains(&channel) {
+            return Err(DomainError::InvalidMidiChannel {
+                event_id: event.id.clone(),
+                channel,
+            });
+        }
     }
 
     if !event.at_seconds.is_finite() || event.at_seconds < 0.0 {
@@ -553,6 +570,8 @@ mod tests {
             audio_to: "master".into(),
             color: None,
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         }
     }
 
@@ -909,7 +928,7 @@ mod tests {
         MidiEvent {
             id: id.into(),
             at_seconds: 0.0,
-            channel: 1,
+            channel: None,
             kind,
         }
     }
@@ -970,7 +989,7 @@ mod tests {
             MidiEvent {
                 id: "e2".into(),
                 at_seconds: 0.0,
-                channel: 1,
+                channel: None,
                 kind: MidiEventKind::Note {
                     note: 64,
                     velocity: 80,
@@ -980,7 +999,7 @@ mod tests {
             MidiEvent {
                 id: "e3".into(),
                 at_seconds: 0.0,
-                channel: 1,
+                channel: None,
                 kind: MidiEventKind::Note {
                     note: 67,
                     velocity: 60,
@@ -1052,14 +1071,14 @@ mod tests {
     #[test]
     fn rejects_out_of_range_channel_and_data_values() {
         let mut song = song_with_midi(vec![note_event("e1")]);
-        song.midi_clips[0].events[0].channel = 0;
+        song.midi_clips[0].events[0].channel = Some(0);
         assert!(matches!(
             validate_song(&song),
             Err(DomainError::InvalidMidiChannel { .. })
         ));
 
         let mut song = song_with_midi(vec![note_event("e1")]);
-        song.midi_clips[0].events[0].channel = 17;
+        song.midi_clips[0].events[0].channel = Some(17);
         assert!(matches!(
             validate_song(&song),
             Err(DomainError::InvalidMidiChannel { .. })
@@ -1180,7 +1199,7 @@ mod tests {
                 MidiEvent {
                     id: "e1".into(),
                     at_seconds: 0.0,
-                    channel: 1,
+                    channel: None,
                     kind: MidiEventKind::Note {
                         note: 60,
                         velocity: 100,
@@ -1190,7 +1209,7 @@ mod tests {
                 MidiEvent {
                     id: "e2".into(),
                     at_seconds: 4.0,
-                    channel: 1,
+                    channel: None,
                     kind: MidiEventKind::ControlChange {
                         controller: 1,
                         value: 64,
@@ -1213,7 +1232,7 @@ mod tests {
             events: vec![MidiEvent {
                 id: "e1".into(),
                 at_seconds: 0.0,
-                channel: 1,
+                channel: None,
                 kind: MidiEventKind::ProgramChange { program: 5 },
             }],
             color: None,

@@ -3,7 +3,9 @@
 //! Sibling `impl DesktopSession` block, same shape as `state/song_edit.rs`.
 //! The runtime that *plays* these clips lives in `state/midi_runtime.rs`.
 
-use libretracks_core::{source_seconds_at_view, MidiClip, TrackKind};
+use libretracks_core::{
+    source_seconds_at_view, MidiClip, TrackKind, MAX_MIDI_CHANNEL, MIN_MIDI_CHANNEL,
+};
 
 use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
@@ -136,6 +138,52 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        self.commit_midi_clips(song, audio)
+    }
+
+    /// Set a MIDI track's routing: which port its messages leave by and which
+    /// channel they carry by default.
+    ///
+    /// `port` of `None` means "use the app-wide output device". Kept out of
+    /// `update_track` (the mixer path, which issues engine commands per changed
+    /// field) because none of this reaches the engine.
+    pub fn set_midi_track_routing(
+        &mut self,
+        track_id: &str,
+        port: Option<&str>,
+        channel: Option<u8>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let Some(track) = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id && track.kind == TrackKind::Midi)
+        else {
+            return Err(DesktopError::AudioCommand(
+                "midi routing can only be set on a midi track".into(),
+            ));
+        };
+
+        if let Some(channel) = channel {
+            if !(MIN_MIDI_CHANNEL..=MAX_MIDI_CHANNEL).contains(&channel) {
+                return Err(DesktopError::AudioCommand(format!(
+                    "midi channel must be {MIN_MIDI_CHANNEL}-{MAX_MIDI_CHANNEL}, got {channel}"
+                )));
+            }
+            track.midi_channel = channel;
+        }
+        // A blank name clears the override back to the app-wide port.
+        track.midi_port = port.map(str::trim).filter(|p| !p.is_empty()).map(str::to_string);
+
+        self.push_history_entry();
+        self.redo_stack.clear();
         self.commit_midi_clips(song, audio)
     }
 

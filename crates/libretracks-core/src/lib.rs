@@ -62,6 +62,8 @@ mod tests {
                     audio_to: "master".into(),
                     color: None,
                     auto_created: false,
+                    midi_port: None,
+                    midi_channel: 1,
                 },
                 Track {
                     id: "track_click".into(),
@@ -76,6 +78,8 @@ mod tests {
                     audio_to: "ext:2-3".into(),
                     color: None,
                     auto_created: false,
+                    midi_port: None,
+                    midi_channel: 1,
                 },
             ],
             clips: vec![Clip {

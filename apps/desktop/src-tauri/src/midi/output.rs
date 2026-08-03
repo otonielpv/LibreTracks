@@ -12,6 +12,7 @@
 //! a stalled transport.
 
 use std::{
+    collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, RecvTimeoutError, Sender},
@@ -112,10 +113,19 @@ struct OutputHandle {
     thread: JoinHandle<()>,
 }
 
-/// Owns the currently open MIDI output port, if any.
+/// Owns the open MIDI output ports.
+///
+/// There is a *default* port (the app-wide setting, used by tracks that don't
+/// name one) plus any number of per-track ports, opened on demand. Two ports
+/// are needed the moment a show drives, say, a lighting desk and lyric
+/// projection through different virtual cables.
 #[derive(Default)]
 pub struct MidiOutputManager {
+    /// The app-wide port. `None` when no output device is configured.
     active: Mutex<Option<OutputHandle>>,
+    /// Ports opened because a track asked for them by name, keyed by port
+    /// name. Kept open until `close_all`, since a show reuses them every bar.
+    extra: Mutex<HashMap<String, Option<OutputHandle>>>,
 }
 
 impl MidiOutputManager {
@@ -148,18 +158,23 @@ impl MidiOutputManager {
         Ok(())
     }
 
-    /// True when a port is open. The transport tick checks this before doing
-    /// any per-event work so a session with no MIDI device costs nothing.
-    pub fn is_open(&self) -> bool {
+    /// True when the app-wide port is open.
+    ///
+    /// Note this is NOT the gate for doing any MIDI work: a song whose tracks
+    /// all name their own ports has no app-wide port and would report `false`
+    /// while still having everything to send. `send_to` opens named ports on
+    /// demand, so the tick must reach it regardless — see
+    /// `advance_midi_playback`, which gates on the song having MIDI clips.
+    pub fn is_default_port_open(&self) -> bool {
         self.active
             .lock()
             .map(|active| active.is_some())
             .unwrap_or(false)
     }
 
-    /// Queue messages for delivery. Never blocks on the device; if the port is
-    /// closed the messages are dropped, which is what we want for a transport
-    /// running without any MIDI hardware attached.
+    /// Queue messages for delivery on the app-wide port. Never blocks on the
+    /// device; if the port is closed the messages are dropped, which is what we
+    /// want for a transport running without any MIDI hardware attached.
     pub fn send(&self, messages: &[OutboundMidiMessage]) {
         if messages.is_empty() {
             return;
@@ -178,9 +193,58 @@ impl MidiOutputManager {
         }
     }
 
-    /// Silence every channel on the open port.
+    /// Queue messages on a named port, opening it the first time it is asked
+    /// for. `port_name` of `None` routes to the app-wide port.
+    ///
+    /// A port that fails to open is remembered as unavailable (a `None` entry)
+    /// so a missing device costs one failed attempt, not one per tick.
+    pub fn send_to(&self, port_name: Option<&str>, messages: &[OutboundMidiMessage]) {
+        let Some(port_name) = port_name else {
+            self.send(messages);
+            return;
+        };
+        if messages.is_empty() {
+            return;
+        }
+
+        let Ok(mut extra) = self.extra.lock() else {
+            return;
+        };
+        let handle = extra
+            .entry(port_name.to_string())
+            .or_insert_with(|| spawn_output(port_name.to_string()).ok());
+        let Some(handle) = handle.as_ref() else {
+            return;
+        };
+        for message in messages {
+            let _ = handle.sender.send(*message);
+        }
+    }
+
+    /// Silence every channel on every open port.
     pub fn panic(&self) {
-        self.send(&panic_messages());
+        let messages = panic_messages();
+        self.send(&messages);
+        if let Ok(extra) = self.extra.lock() {
+            for handle in extra.values().flatten() {
+                for message in &messages {
+                    let _ = handle.sender.send(*message);
+                }
+            }
+        }
+    }
+
+    /// Close every per-track port. Called when the song changes, so ports a
+    /// previous song opened don't linger.
+    pub fn close_extra_ports(&self) {
+        let Ok(mut extra) = self.extra.lock() else {
+            return;
+        };
+        for (_, handle) in extra.drain() {
+            if let Some(handle) = handle {
+                stop_output(handle);
+            }
+        }
     }
 }
 
@@ -191,6 +255,7 @@ impl Drop for MidiOutputManager {
                 stop_output(handle);
             }
         }
+        self.close_extra_ports();
     }
 }
 
@@ -369,7 +434,7 @@ mod tests {
     #[test]
     fn sending_with_no_open_port_is_a_no_op() {
         let manager = MidiOutputManager::default();
-        assert!(!manager.is_open());
+        assert!(!manager.is_default_port_open());
         manager.send(&[OutboundMidiMessage::note_on(1, 60, 100)]);
         manager.panic();
     }
@@ -379,6 +444,6 @@ mod tests {
         let manager = MidiOutputManager::default();
         assert!(manager.restart(None).is_ok());
         assert!(manager.restart(Some("   ".into())).is_ok());
-        assert!(!manager.is_open());
+        assert!(!manager.is_default_port_open());
     }
 }

@@ -83,6 +83,8 @@ mod tests {
                 audio_to: "ext:2-3".to_string(),
                 color: None,
                 auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
             }],
             clips: vec![Clip {
                 id: "clip_click".into(),

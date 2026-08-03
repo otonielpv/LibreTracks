@@ -40,6 +40,8 @@ type TrackHeadersPaneProps = {
   onCommitPan: (trackId: string) => void;
   audioRoutingOptions: Array<{ value: string; label: string }>;
   onAudioToChange: (trackId: string, nextAudioTo: string) => void;
+  /** Opens the MIDI routing dialog for a midi track. */
+  onEditMidiRoute?: (trackId: string) => void;
   /** Android: the ruler-header cell is mostly empty there, so it hosts the
    * touch controls (track density, seek lock) instead of wasting the space. */
   headerActions?: ReactNode;
@@ -68,6 +70,7 @@ export function TrackHeadersPane({
   onCommitPan,
   audioRoutingOptions,
   onAudioToChange,
+  onEditMidiRoute,
   headerActions,
 }: TrackHeadersPaneProps) {
   const { t } = useTranslation();
@@ -221,6 +224,9 @@ export function TrackHeadersPane({
                 volumeValue={track.volume}
                 audioTo={track.audioTo}
                 audioRoutingOptions={audioRoutingOptions}
+                midiPort={track.midiPort}
+                midiChannel={track.midiChannel}
+                onEditMidiRoute={onEditMidiRoute}
                 isCollapsed={collapsedFolders.has(track.id)}
                 isSelected={isTrackSelected}
                 isDropTarget={false}

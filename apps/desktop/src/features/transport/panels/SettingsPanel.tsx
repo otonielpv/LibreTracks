@@ -30,7 +30,10 @@ import {
 } from "../../updates/updateCheckStore";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
-import { MidiSettingsTab } from "./MidiSettingsTab";
+import {
+  MidiSettingsTab,
+  type MidiOutputSettings,
+} from "./MidiSettingsTab";
 
 type AudioRoutingOption = { value: string; label: string };
 
@@ -83,12 +86,8 @@ type SettingsPanelProps = {
   onMidiInputDeviceChange: (value: string) => void;
   onRefreshMidiInputDevices: () => void;
 
-  midiOutputDevices: string[];
-  selectedMidiOutputDevice: string;
-  selectedMidiOutputDeviceMissing: boolean;
-  onMidiOutputDeviceChange: (value: string) => void;
-  onRefreshMidiOutputDevices: () => void;
-  onSendMidiTestNote: () => void;
+  /** Grouped so the MIDI tab's output controls travel as one prop. */
+  midiOutput: MidiOutputSettings;
 
   selectedLocale: string;
   onLocaleChange: (value: string) => void;
@@ -154,12 +153,7 @@ export function SettingsPanel({
   selectedMidiInputDeviceMissing,
   onMidiInputDeviceChange,
   onRefreshMidiInputDevices,
-  midiOutputDevices,
-  selectedMidiOutputDevice,
-  selectedMidiOutputDeviceMissing,
-  onMidiOutputDeviceChange,
-  onRefreshMidiOutputDevices,
-  onSendMidiTestNote,
+  midiOutput,
   selectedLocale,
   onLocaleChange,
   onTimelineNavigationSchemeChange,
@@ -600,12 +594,7 @@ export function SettingsPanel({
                   selectedMidiInputDeviceMissing={selectedMidiInputDeviceMissing}
                   onMidiInputDeviceChange={onMidiInputDeviceChange}
                   onRefreshMidiInputDevices={onRefreshMidiInputDevices}
-                  midiOutputDevices={midiOutputDevices}
-                  selectedMidiOutputDevice={selectedMidiOutputDevice}
-                  selectedMidiOutputDeviceMissing={selectedMidiOutputDeviceMissing}
-                  onMidiOutputDeviceChange={onMidiOutputDeviceChange}
-                  onRefreshMidiOutputDevices={onRefreshMidiOutputDevices}
-                  onSendMidiTestNote={onSendMidiTestNote}
+                  midiOutput={midiOutput}
                 />
               ) : null}
 

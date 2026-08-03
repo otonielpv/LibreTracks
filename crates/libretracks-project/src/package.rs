@@ -530,6 +530,8 @@ pub fn merge_extracted_song_package(
             audio_to: "master".to_string(),
             color: track.color.clone(),
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         });
         target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
@@ -701,6 +703,8 @@ mod tests {
             audio_to: "master".into(),
             color: None,
             auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
         }
     }
 

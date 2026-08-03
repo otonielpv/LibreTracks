@@ -52,6 +52,10 @@ type TrackHeaderItemProps = {
   volumeValue: number;
   audioTo: string;
   audioRoutingOptions: Array<{ value: string; label: string }>;
+  /** MIDI routing, only meaningful when trackKind === "midi". */
+  midiPort?: string | null;
+  midiChannel?: number;
+  onEditMidiRoute?: (trackId: string) => void;
   isCollapsed: boolean;
   isSelected: boolean;
   isDropTarget: boolean;
@@ -91,6 +95,9 @@ function TrackHeaderItemComponent({
   volumeValue,
   audioTo,
   audioRoutingOptions,
+  midiPort,
+  midiChannel,
+  onEditMidiRoute,
   isCollapsed,
   isSelected,
   isDropTarget,
@@ -324,18 +331,44 @@ function TrackHeaderItemComponent({
                   }}
                 />
               </label>
-              <label className="lt-track-audio-to">
-                <span>{t("trackHeader.audioTo", { defaultValue: "Audio To" })}</span>
-                <AudioRouteCombobox
-                  value={audioTo}
-                  options={routeOptions}
-                  ariaLabel={t("trackHeader.audioToAria", {
-                    name: trackName,
-                    defaultValue: `Audio To ${trackName}`,
-                  })}
-                  onChange={(next) => onAudioToChange(trackId, next)}
-                />
-              </label>
+              {trackKind === "midi" ? (
+                // A MIDI track has no audio route; what it needs shown is
+                // where its messages go. The badge is derived from the track's
+                // real fields, so unlike a name baked with "port · channel" it
+                // can never drift out of step with them.
+                <label className="lt-track-audio-to lt-track-midi-route">
+                  <span>{t("transport.midi.routeLabel")}</span>
+                  <button
+                    type="button"
+                    className="lt-track-midi-route-badge"
+                    aria-label={t("transport.midi.routeAria", {
+                      name: trackName,
+                    })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEditMidiRoute?.(trackId);
+                    }}
+                  >
+                    {`${midiPort ?? t("transport.midi.outputDeviceDefault")} · ${t(
+                      "transport.midi.channelShort",
+                      { channel: midiChannel ?? 1 },
+                    )}`}
+                  </button>
+                </label>
+              ) : (
+                <label className="lt-track-audio-to">
+                  <span>{t("trackHeader.audioTo", { defaultValue: "Audio To" })}</span>
+                  <AudioRouteCombobox
+                    value={audioTo}
+                    options={routeOptions}
+                    ariaLabel={t("trackHeader.audioToAria", {
+                      name: trackName,
+                      defaultValue: `Audio To ${trackName}`,
+                    })}
+                    onChange={(next) => onAudioToChange(trackId, next)}
+                  />
+                </label>
+              )}
             </div>
           </div>
         </div>
@@ -350,6 +383,8 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
   return (
     previous.trackId === next.trackId &&
     previous.trackName === next.trackName &&
+    previous.midiPort === next.midiPort &&
+    previous.midiChannel === next.midiChannel &&
     previous.trackKind === next.trackKind &&
     previous.trackDepth === next.trackDepth &&
     previous.trackColor === next.trackColor &&

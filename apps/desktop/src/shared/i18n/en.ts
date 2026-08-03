@@ -578,6 +578,18 @@ const en = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      statusRouteUpdated: "MIDI routing updated",
+      routeLabel: "Sends to",
+      routeAria: "MIDI routing for {{name}}",
+      channelShort: "Ch {{channel}}",
+      channelInherited: "Track (Ch {{channel}})",
+      outputDeviceDefault: "Default output",
+      routeModalTitle: "MIDI routing",
+      routePort: "Port",
+      routeChannel: "Channel",
+      routePortHint:
+        "The cable the messages leave by. “Default output” uses the port set in Settings.",
+      routeChannelHint: "Which of the 16 addresses inside that cable the messages are tagged with. Each message can override it.",
       addTrack: "Add MIDI track",
       addClip: "Add MIDI here",
       editClip: "Edit MIDI",
