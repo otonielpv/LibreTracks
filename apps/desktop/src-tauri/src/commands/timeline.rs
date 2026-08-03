@@ -4,7 +4,7 @@ use crate::audio::automation::{AutomationCue, MixScene};
 use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::{ClipMoveRequest, DesktopState};
-use libretracks_core::{MarkerCategory, MarkerKind, TrackKind};
+use libretracks_core::{MarkerCategory, MarkerKind, MidiClip, TrackKind};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -480,6 +480,58 @@ pub fn split_song_region(
 
     session
         .split_song_region(&region_id, split_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn upsert_midi_clip(
+    clip: MidiClip,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .upsert_midi_clip(clip, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_midi_clip(
+    clip_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_midi_clip(&clip_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn move_midi_clip(
+    clip_id: String,
+    timeline_start_seconds: f64,
+    target_track_id: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_midi_clip(
+            &clip_id,
+            timeline_start_seconds,
+            target_track_id.as_deref(),
+            &state.audio,
+        )
         .map_err(|error| error.to_string())
 }
 

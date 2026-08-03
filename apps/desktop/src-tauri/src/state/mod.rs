@@ -59,6 +59,7 @@ mod automation_runtime;
 mod external_import;
 mod history;
 mod library;
+mod midi_edit;
 mod midi_runtime;
 mod regions;
 mod session;

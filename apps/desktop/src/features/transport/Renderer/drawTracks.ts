@@ -315,6 +315,142 @@ export function drawAutomationLane(
   }
 }
 
+/**
+ * Paint a MIDI track's clips.
+ *
+ * A MIDI clip is a bundle of messages fired at one point, not a block of
+ * audio, so it reads as a marker with a label rather than a waveform. Clips
+ * whose events span time (a held note, a controller sweep) get a trailing bar
+ * showing that extent, which is what makes a long fade legible on the timeline.
+ */
+export function drawMidiLane(
+  context: CanvasRenderingContext2D,
+  snapshot: TrackSceneSnapshot,
+  trackTop: number,
+  trackId: string,
+) {
+  const laneHeight = snapshot.trackHeight;
+  const centerY = trackTop + laneHeight / 2;
+
+  const clips = (snapshot.song.midiClips ?? [])
+    .filter((clip) => clip.trackId === trackId)
+    .sort((left, right) => left.timelineStartSeconds - right.timelineStartSeconds);
+  if (clips.length === 0) {
+    return;
+  }
+
+  const LABEL_PADDING_X = 8;
+  const LABEL_GAP = 10;
+  const MARKER_HALF = 5;
+  // Same violet the MIDI track header uses, so the lane reads as belonging to
+  // it rather than to the (pink) automation lane.
+  const ACCENT = "#9d7bff";
+
+  context.font = '700 10px "Space Grotesk", sans-serif';
+
+  for (let index = 0; index < clips.length; index += 1) {
+    const clip = clips[index];
+    const x = secondsToScreenX(
+      clip.timelineStartSeconds,
+      snapshot.cameraX,
+      snapshot.zoomLevel,
+    );
+    const snappedX = Math.round(x) + 0.5;
+
+    // How far the clip's contents run: the longest (offset + duration) of its
+    // events. Instantaneous bundles report 0 and draw as a bare marker.
+    let extentSeconds = 0;
+    for (const event of clip.events ?? []) {
+      const eventDuration =
+        event.kind.type === "note" || event.kind.type === "controlCurve"
+          ? Math.max(0, event.kind.durationSeconds)
+          : 0;
+      extentSeconds = Math.max(
+        extentSeconds,
+        Math.max(0, event.atSeconds) + eventDuration,
+      );
+    }
+    const endX = secondsToScreenX(
+      clip.timelineStartSeconds + extentSeconds,
+      snapshot.cameraX,
+      snapshot.zoomLevel,
+    );
+
+    if (
+      endX < -MARKER_HALF - 2 ||
+      snappedX > snapshot.width + MARKER_HALF + 2
+    ) {
+      continue;
+    }
+
+    const strokeStyle = clip.color ?? ACCENT;
+    const fillStyle = blendOnTrackBackdrop(clip.color ?? ACCENT, 0.22);
+
+    context.save();
+    context.strokeStyle = strokeStyle;
+    context.fillStyle = fillStyle;
+    context.lineWidth = 1.2;
+
+    // Extent bar first, so the marker draws over its left edge.
+    if (endX - snappedX > 1) {
+      context.beginPath();
+      context.roundRect(snappedX, centerY - 3.5, endX - snappedX, 7, 3);
+      context.fill();
+      context.stroke();
+    }
+
+    // Full-height stem + marker, mirroring the automation lane's anchor.
+    context.beginPath();
+    context.moveTo(snappedX, trackTop + 3);
+    context.lineTo(snappedX, trackTop + laneHeight - 3);
+    context.stroke();
+
+    context.beginPath();
+    context.moveTo(snappedX, centerY - MARKER_HALF);
+    context.lineTo(snappedX + MARKER_HALF, centerY);
+    context.lineTo(snappedX, centerY + MARKER_HALF);
+    context.lineTo(snappedX - MARKER_HALF, centerY);
+    context.closePath();
+    context.fill();
+    context.stroke();
+
+    const eventCount = (clip.events ?? []).length;
+    const countSuffix = eventCount > 1 ? `  ·  ${eventCount}` : "";
+    const fullLabel = `${clip.name || "MIDI"}${countSuffix}`;
+
+    const labelStart = Math.max(snappedX, endX) + MARKER_HALF + 2;
+    const nextClip = clips[index + 1];
+    const nextX = nextClip
+      ? secondsToScreenX(
+          nextClip.timelineStartSeconds,
+          snapshot.cameraX,
+          snapshot.zoomLevel,
+        )
+      : Number.POSITIVE_INFINITY;
+    const rightBoundary = Math.min(
+      snapshot.width - 4,
+      Number.isFinite(nextX) ? nextX - MARKER_HALF - LABEL_GAP : snapshot.width - 4,
+    );
+    const availableTextWidth = rightBoundary - labelStart - LABEL_PADDING_X * 2;
+
+    const fitted =
+      availableTextWidth > 8 ? fitLabel(context, fullLabel, availableTextWidth) : null;
+
+    if (fitted) {
+      const textWidth = context.measureText(fitted).width;
+      const pillWidth = textWidth + LABEL_PADDING_X * 2;
+      context.beginPath();
+      context.roundRect(labelStart, centerY - 7.5, pillWidth, 15, 4);
+      context.fill();
+      context.stroke();
+      context.fillStyle = clip.color ?? "#c4b0ff";
+      context.textBaseline = "middle";
+      context.fillText(fitted, labelStart + LABEL_PADDING_X, centerY + 0.5);
+    }
+    context.restore();
+  }
+}
+
 export function drawTrackClipsLayer(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
@@ -347,6 +483,11 @@ export function drawTrackClipsLayer(
 
     if (track.isAutomation) {
       drawAutomationLane(context, snapshot, trackTop);
+      continue;
+    }
+
+    if (track.kind === "midi") {
+      drawMidiLane(context, snapshot, trackTop, track.id);
       continue;
     }
 

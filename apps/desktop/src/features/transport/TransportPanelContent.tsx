@@ -75,6 +75,9 @@ import {
   deleteSongTempoMarker,
   deleteSongTimeSignatureMarker,
   deleteAutomationCue,
+  deleteMidiClip,
+  moveMidiClip,
+  upsertMidiClip,
   deleteTrack,
   duplicateClips,
   exportRegionAsPackage,
@@ -83,6 +86,8 @@ import {
   getLibraryFolders,
   getLibraryWaveformSummaries,
   getMidiInputs,
+  getMidiOutputs,
+  sendMidiTestNote,
   getRemoteServerInfo,
   getSongView,
   getWaveformSummaries,
@@ -231,6 +236,8 @@ import {
   AutomationCueModal,
   type AutomationCueDraft,
 } from "./panels/AutomationCueModal";
+import { MidiClipModal, type MidiClipDraft } from "./panels/MidiClipModal";
+import { createMidiClipHandlers } from "./midi/midiClipHandlers";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { MobileLanding } from "./compact/MobileLanding";
@@ -964,6 +971,7 @@ export function TransportPanelContent() {
   };
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
+  const [midiClipDraft, setMidiClipDraft] = useState<MidiClipDraft | null>(null);
   const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
   const [isPadsPopoverOpen, setIsPadsPopoverOpen] = useState(false);
   const padButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -1084,6 +1092,8 @@ export function TransportPanelContent() {
     setDefaultAudioOutputDevice,
     midiInputDevices,
     setMidiInputDevices,
+    midiOutputDevices,
+    setMidiOutputDevices,
     isMidiInputRefreshing,
     setIsMidiInputRefreshing,
     isAudioRefreshing,
@@ -2016,6 +2026,7 @@ export function TransportPanelContent() {
         setAudioOutputChannelCounts,
         setDefaultAudioOutputDevice,
         setMidiInputDevices,
+        setMidiOutputDevices,
         metronomeLiveRequestIdRef,
         isTauriApp,
         isMidiInputRefreshing: () => isMidiInputRefreshingRef.current,
@@ -2026,6 +2037,8 @@ export function TransportPanelContent() {
         t,
         getAudioOutputDevices,
         getMidiInputs,
+        getMidiOutputs,
+        sendMidiTestNote,
         setMetronomeSoundRealtime,
         setMetronomeEnabledRealtime,
         setMetronomeVolumeRealtime,
@@ -2048,6 +2061,9 @@ export function TransportPanelContent() {
     commitMetronomeVolumeDraft,
     handleMidiInputDeviceChange,
     handleRefreshMidiInputDevices,
+    handleMidiOutputDeviceChange,
+    handleRefreshMidiOutputDevices,
+    handleSendMidiTestNote,
   } = metronomeDeviceHandlers;
 
   // Library asset/folder mutation handlers. See ./library/libraryHandlers.
@@ -2196,6 +2212,20 @@ export function TransportPanelContent() {
         updateClipColor,
       }),
     [runAction, setSong, applyPlaybackSnapshot, setStatus],
+  );
+
+  const { handleSaveMidiClip, handleDeleteMidiClip, handleMoveMidiClip } = useMemo(
+    () =>
+      createMidiClipHandlers({
+        runAction,
+        applyPlaybackSnapshot,
+        setStatus,
+        translate: t,
+        upsertMidiClip,
+        deleteMidiClip,
+        moveMidiClip,
+      }),
+    [runAction, applyPlaybackSnapshot, setStatus, t],
   );
 
   const missingFilePaths = useMemo(() => {
@@ -5228,6 +5258,8 @@ export function TransportPanelContent() {
       setSelectedSectionId,
       setExportSongTarget,
       setAutomationCueDraft,
+      setMidiClipDraft,
+      deleteMidiClip: handleDeleteMidiClip,
       setIsMixSceneModalOpen,
       clearSelection,
       selectTrack,
@@ -6619,6 +6651,11 @@ export function TransportPanelContent() {
         });
   const outputBufferSizes =
     previewAudioOutputDescriptor?.supportedBufferSizes ?? [];
+  const selectedMidiOutputDevice = appSettings.selectedMidiOutputDevice ?? "";
+  const selectedMidiOutputDeviceMissing = Boolean(
+    appSettings.selectedMidiOutputDevice &&
+      !midiOutputDevices.includes(appSettings.selectedMidiOutputDevice),
+  );
   const selectedMidiInputDeviceMissing = Boolean(
     appSettings.selectedMidiDevice &&
     !midiInputDevices.includes(appSettings.selectedMidiDevice),
@@ -8167,6 +8204,12 @@ export function TransportPanelContent() {
               selectedMidiInputDeviceMissing={selectedMidiInputDeviceMissing}
               onMidiInputDeviceChange={handleMidiInputDeviceChange}
               onRefreshMidiInputDevices={handleRefreshMidiInputDevices}
+              midiOutputDevices={midiOutputDevices}
+              selectedMidiOutputDevice={selectedMidiOutputDevice}
+              selectedMidiOutputDeviceMissing={selectedMidiOutputDeviceMissing}
+              onMidiOutputDeviceChange={handleMidiOutputDeviceChange}
+              onRefreshMidiOutputDevices={handleRefreshMidiOutputDevices}
+              onSendMidiTestNote={handleSendMidiTestNote}
               selectedLocale={selectedLocale}
               onLocaleChange={handleLocaleChange}
               onTimelineNavigationSchemeChange={
@@ -8287,6 +8330,18 @@ export function TransportPanelContent() {
                 padRouteOptions={audioRoutingOptions}
                 onCancel={() => setAutomationCueDraft(null)}
                 onConfirm={handleConfirmAutomationCue}
+              />
+            ) : null}
+
+            {midiClipDraft ? (
+              <MidiClipModal
+                draft={midiClipDraft}
+                song={song}
+                onCancel={() => setMidiClipDraft(null)}
+                onConfirm={(result) => {
+                  setMidiClipDraft(null);
+                  void handleSaveMidiClip(result);
+                }}
               />
             ) : null}
 

@@ -15,6 +15,7 @@ import type {
   LibraryImportProgressEvent,
   MarkerCategory,
   MarkerKind,
+  MidiClipSummary,
   MixSceneSummary,
   PadCatalogEntry,
   PadsCatalog,
@@ -1158,6 +1159,41 @@ export async function splitSongRegion(
     regionId,
     splitSeconds,
   });
+}
+
+export async function upsertMidiClip(
+  clip: MidiClipSummary,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("upsert_midi_clip", { clip });
+}
+
+export async function deleteMidiClip(clipId: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("delete_midi_clip", { clipId });
+}
+
+export async function moveMidiClip(
+  clipId: string,
+  timelineStartSeconds: number,
+  targetTrackId: string | null = null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("move_midi_clip", {
+    clipId,
+    timelineStartSeconds,
+    targetTrackId,
+  });
+}
+
+/** MIDI output ports available to send to (lighting desks, lyric software). */
+export async function getMidiOutputs(): Promise<string[]> {
+  return invokeCommand<string[]>("get_midi_outputs");
+}
+
+/** Fire a short note so the user can confirm the cabling reaches the target. */
+export async function sendMidiTestNote(
+  channel = 1,
+  note = 60,
+): Promise<void> {
+  return invokeCommand<void>("send_midi_test_note", { channel, note });
 }
 
 export async function upsertAutomationCue(

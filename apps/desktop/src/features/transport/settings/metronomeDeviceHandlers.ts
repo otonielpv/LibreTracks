@@ -35,6 +35,7 @@ export type MetronomeDeviceHandlerDeps = {
   setAudioOutputChannelCounts: (counts: Record<string, number>) => void;
   setDefaultAudioOutputDevice: (device: string | null) => void;
   setMidiInputDevices: (devices: string[]) => void;
+  setMidiOutputDevices: (devices: string[]) => void;
   /** Guards against out-of-order realtime volume responses. */
   metronomeLiveRequestIdRef: { current: number };
   /** True only inside the Tauri shell; gates the MIDI refresh. */
@@ -53,6 +54,8 @@ export type MetronomeDeviceHandlerDeps = {
     force?: boolean;
   }) => Promise<AudioDeviceListLike>;
   getMidiInputs: () => Promise<string[]>;
+  getMidiOutputs: () => Promise<string[]>;
+  sendMidiTestNote: () => Promise<void>;
   setMetronomeSoundRealtime: (settings: AppSettings) => Promise<AppSettings>;
   setMetronomeEnabledRealtime: (enabled: boolean) => Promise<void>;
   setMetronomeVolumeRealtime: (volume: number) => Promise<void>;
@@ -89,6 +92,7 @@ export function createMetronomeDeviceHandlers(
     setAudioOutputChannelCounts,
     setDefaultAudioOutputDevice,
     setMidiInputDevices,
+    setMidiOutputDevices,
     metronomeLiveRequestIdRef,
     isTauriApp,
     isMidiInputRefreshing,
@@ -99,6 +103,8 @@ export function createMetronomeDeviceHandlers(
     t,
     getAudioOutputDevices,
     getMidiInputs,
+    getMidiOutputs,
+    sendMidiTestNote,
     setMetronomeSoundRealtime,
     setMetronomeEnabledRealtime,
     setMetronomeVolumeRealtime,
@@ -367,6 +373,43 @@ export function createMetronomeDeviceHandlers(
         setStatus(formatErrorStatus(error));
       } finally {
         setIsMidiInputRefreshing(false);
+      }
+    },
+
+    handleMidiOutputDeviceChange(nextValue: string) {
+      persistAudioSettings(
+        {
+          ...appSettingsRef.current,
+          selectedMidiOutputDevice: nextValue || null,
+        },
+        nextValue
+          ? t("transport.status.midiDeviceUpdated", { name: nextValue })
+          : t("transport.status.midiDeviceDisabled"),
+      );
+    },
+
+    async handleRefreshMidiOutputDevices() {
+      if (!isTauriApp) {
+        return;
+      }
+      try {
+        setMidiOutputDevices(await getMidiOutputs());
+        setStatus(t("transport.status.midiDevicesRefreshed"));
+      } catch (error) {
+        setStatus(formatErrorStatus(error));
+      }
+    },
+
+    /** Fire a blip so the user can confirm the port reaches the target app. */
+    async handleSendMidiTestNote() {
+      if (!isTauriApp) {
+        return;
+      }
+      try {
+        await sendMidiTestNote();
+        setStatus(t("transport.midi.testNoteSent"));
+      } catch {
+        setStatus(t("transport.midi.testNoteFailed"));
       }
     },
   };

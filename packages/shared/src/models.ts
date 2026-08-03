@@ -781,6 +781,8 @@ export type AppSettings = {
   /** Android only: open the output stream in AAudio low-latency mode. */
   lowLatencyOutput: boolean;
   selectedMidiDevice: string | null;
+  /** Port the timeline MIDI tracks send to. Separate from the input device. */
+  selectedMidiOutputDevice: string | null;
   suppressMissingMidiDeviceWarning: boolean;
   enabledOutputChannels: number[];
   locale: string | null;
@@ -849,6 +851,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   audioSafeMode: false,
   lowLatencyOutput: false,
   selectedMidiDevice: null,
+  selectedMidiOutputDevice: null,
   suppressMissingMidiDeviceWarning: false,
   enabledOutputChannels: [0, 1],
   locale: null,
@@ -924,6 +927,8 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     settings.outputSampleFormat,
   );
   const selectedMidiDevice = settings.selectedMidiDevice?.trim() || null;
+  const selectedMidiOutputDevice =
+    settings.selectedMidiOutputDevice?.trim() || null;
   const locale = settings.locale?.trim().toLowerCase();
   // Aux faders (click / voice guide) run an Ableton-style dB scale up to
   // +20 dB, i.e. a linear gain of ~10. Clamp to that headroom, not to unity.
@@ -1046,6 +1051,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     audioSafeMode: Boolean(settings.audioSafeMode),
     lowLatencyOutput: Boolean(settings.lowLatencyOutput),
     selectedMidiDevice,
+    selectedMidiOutputDevice,
     suppressMissingMidiDeviceWarning: Boolean(
       settings.suppressMissingMidiDeviceWarning,
     ),

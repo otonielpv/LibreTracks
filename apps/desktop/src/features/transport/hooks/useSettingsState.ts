@@ -10,6 +10,7 @@ import {
 import {
   getAudioOutputDevices,
   getMidiInputs,
+  getMidiOutputs,
   getSettings,
 } from "../desktopApi";
 import type { MidiLearnFeedback, SettingsTab } from "../types";
@@ -61,6 +62,7 @@ export function useSettingsState({
     string | null
   >(null);
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
+  const [midiOutputDevices, setMidiOutputDevices] = useState<string[]>([]);
   const [isMidiInputRefreshing, setIsMidiInputRefreshing] = useState(false);
   const [isAudioRefreshing, setIsAudioRefreshing] = useState(false);
 
@@ -71,10 +73,12 @@ export function useSettingsState({
 
   /** Load settings + audio devices + MIDI inputs in one pass and apply them. */
   const refreshAudioSettings = useCallback(async () => {
-    const [nextSettings, nextAudioDevices, nextMidiInputs] = await Promise.all([
+    const [nextSettings, nextAudioDevices, nextMidiInputs, nextMidiOutputs] =
+      await Promise.all([
       getSettings(),
       getAudioOutputDevices(),
       getMidiInputs(),
+      getMidiOutputs(),
     ]);
     const normalizedSettings = normalizeAppSettings(nextSettings);
     setAppSettings(normalizedSettings);
@@ -83,6 +87,7 @@ export function useSettingsState({
     setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
     setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
     setMidiInputDevices(nextMidiInputs);
+    setMidiOutputDevices(nextMidiOutputs);
     return normalizedSettings;
   }, [syncSettingsLanguage]);
 
@@ -116,6 +121,8 @@ export function useSettingsState({
     setDefaultAudioOutputDevice,
     midiInputDevices,
     setMidiInputDevices,
+    midiOutputDevices,
+    setMidiOutputDevices,
     isMidiInputRefreshing,
     setIsMidiInputRefreshing,
     isAudioRefreshing,

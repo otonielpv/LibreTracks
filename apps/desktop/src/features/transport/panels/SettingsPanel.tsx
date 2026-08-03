@@ -30,6 +30,7 @@ import {
 } from "../../updates/updateCheckStore";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
+import { MidiSettingsTab } from "./MidiSettingsTab";
 
 type AudioRoutingOption = { value: string; label: string };
 
@@ -81,6 +82,13 @@ type SettingsPanelProps = {
   selectedMidiInputDeviceMissing: boolean;
   onMidiInputDeviceChange: (value: string) => void;
   onRefreshMidiInputDevices: () => void;
+
+  midiOutputDevices: string[];
+  selectedMidiOutputDevice: string;
+  selectedMidiOutputDeviceMissing: boolean;
+  onMidiOutputDeviceChange: (value: string) => void;
+  onRefreshMidiOutputDevices: () => void;
+  onSendMidiTestNote: () => void;
 
   selectedLocale: string;
   onLocaleChange: (value: string) => void;
@@ -146,6 +154,12 @@ export function SettingsPanel({
   selectedMidiInputDeviceMissing,
   onMidiInputDeviceChange,
   onRefreshMidiInputDevices,
+  midiOutputDevices,
+  selectedMidiOutputDevice,
+  selectedMidiOutputDeviceMissing,
+  onMidiOutputDeviceChange,
+  onRefreshMidiOutputDevices,
+  onSendMidiTestNote,
   selectedLocale,
   onLocaleChange,
   onTimelineNavigationSchemeChange,
@@ -577,73 +591,22 @@ export function SettingsPanel({
               ) : null}
 
               {activeTab === "midi" ? (
-                <section
-                  className="lt-settings-tab-panel"
-                  role="tabpanel"
-                  id="lt-settings-panel-midi"
-                  aria-labelledby="lt-settings-tab-midi"
-                >
-                  <div className="lt-settings-section-grid">
-                    <div className="lt-settings-field">
-                      <label
-                        className="lt-settings-field-label"
-                        htmlFor="lt-midi-input-device"
-                      >
-                        {t("transport.settingsModal.midiDevice")}
-                      </label>
-                      <div className="lt-settings-field-control-row">
-                        <select
-                          id="lt-midi-input-device"
-                          value={selectedMidiInputDevice}
-                          disabled={
-                            isLoading || isSaving || isMidiInputRefreshing
-                          }
-                          onChange={(event) =>
-                            onMidiInputDeviceChange(event.target.value)
-                          }
-                        >
-                          <option value="">
-                            {t("transport.settingsModal.midiDeviceNone")}
-                          </option>
-                          {selectedMidiInputDeviceMissing ? (
-                            <option value={selectedMidiInputDevice}>
-                              {t(
-                                "transport.settingsModal.midiDeviceUnavailable",
-                                { name: selectedMidiInputDevice },
-                              )}
-                            </option>
-                          ) : null}
-                          {midiInputDevices.map((deviceName) => (
-                            <option key={deviceName} value={deviceName}>
-                              {deviceName}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="lt-settings-icon-button"
-                          aria-label={t(
-                            "transport.settingsModal.midiDeviceRefresh",
-                          )}
-                          title={t(
-                            "transport.settingsModal.midiDeviceRefresh",
-                          )}
-                          disabled={
-                            isLoading || isSaving || isMidiInputRefreshing
-                          }
-                          onClick={onRefreshMidiInputDevices}
-                        >
-                          <span className="material-symbols-outlined">
-                            refresh
-                          </span>
-                        </button>
-                      </div>
-                      <small>
-                        {t("transport.settingsModal.midiDeviceHelp")}
-                      </small>
-                    </div>
-                  </div>
-                </section>
+                <MidiSettingsTab
+                  isLoading={isLoading}
+                  isSaving={isSaving}
+                  midiInputDevices={midiInputDevices}
+                  isMidiInputRefreshing={isMidiInputRefreshing}
+                  selectedMidiInputDevice={selectedMidiInputDevice}
+                  selectedMidiInputDeviceMissing={selectedMidiInputDeviceMissing}
+                  onMidiInputDeviceChange={onMidiInputDeviceChange}
+                  onRefreshMidiInputDevices={onRefreshMidiInputDevices}
+                  midiOutputDevices={midiOutputDevices}
+                  selectedMidiOutputDevice={selectedMidiOutputDevice}
+                  selectedMidiOutputDeviceMissing={selectedMidiOutputDeviceMissing}
+                  onMidiOutputDeviceChange={onMidiOutputDeviceChange}
+                  onRefreshMidiOutputDevices={onRefreshMidiOutputDevices}
+                  onSendMidiTestNote={onSendMidiTestNote}
+                />
               ) : null}
 
               {activeTab === "general" ? (
