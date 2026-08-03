@@ -532,6 +532,7 @@ pub fn merge_extracted_song_package(
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         });
         target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
@@ -705,6 +706,7 @@ mod tests {
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         }
     }
 

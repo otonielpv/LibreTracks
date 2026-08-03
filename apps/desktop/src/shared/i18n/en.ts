@@ -578,6 +578,12 @@ const en = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      channelOverride: "Channel (optional)",
+      channelOverrideHint: "Leave empty to use the track’s channel.",
+      enableTrack: "Enable MIDI track",
+      disableTrack: "Disable MIDI track",
+      statusTrackEnabled: "MIDI track enabled",
+      statusTrackDisabled: "MIDI track disabled",
       statusRouteUpdated: "MIDI routing updated",
       routeLabel: "Sends to",
       routeAria: "MIDI routing for {{name}}",
@@ -630,6 +636,10 @@ const en = {
       testNoteFailed: "Could not send the test note",
     },
     automation: {
+      enableTrack: "Enable automation",
+      disableTrack: "Disable automation",
+      statusTrackEnabled: "Automation enabled",
+      statusTrackDisabled: "Automation disabled",
       trackName: "Automation",
       trackHeaderAria: "Automation track",
       trackMeta: "Automatic jumps",

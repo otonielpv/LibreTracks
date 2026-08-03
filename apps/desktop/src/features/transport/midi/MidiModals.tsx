@@ -9,11 +9,14 @@ import { MidiRouteModal, type MidiRouteDraft } from "../panels/MidiRouteModal";
  */
 export type MidiModalsProps = {
   song: SongView | null;
-  clipDraft: MidiClipDraft | null;
-  routeDraft: MidiRouteDraft | null;
+  /** The two dialog states plus their closer, straight from useMidiDrafts. */
+  drafts: {
+    midiClipDraft: MidiClipDraft | null;
+    midiRouteDraft: MidiRouteDraft | null;
+    closeDraft: (kind: "clip" | "route") => void;
+  };
   availablePorts: string[];
-  onCloseClip: () => void;
-  onCloseRoute: () => void;
+  onRefreshPorts: () => void;
   onSaveClip: (result: {
     clipId: string | null;
     trackId: string;
@@ -30,24 +33,26 @@ export type MidiModalsProps = {
 
 export function MidiModals({
   song,
-  clipDraft,
-  routeDraft,
+  drafts,
   availablePorts,
-  onCloseClip,
-  onCloseRoute,
+  onRefreshPorts,
   onSaveClip,
   onSaveRoute,
 }: MidiModalsProps) {
+  const { midiClipDraft: clipDraft, midiRouteDraft: routeDraft, closeDraft } =
+    drafts;
   return (
     <>
       {routeDraft ? (
         <MidiRouteModal
+          key={routeDraft.trackId}
           draft={routeDraft}
           availablePorts={availablePorts}
-          onCancel={onCloseRoute}
+          onRefreshPorts={onRefreshPorts}
+          onCancel={() => closeDraft("route")}
           onConfirm={(result) => {
             const trackId = routeDraft.trackId;
-            onCloseRoute();
+            closeDraft("route");
             onSaveRoute(trackId, result.port, result.channel);
           }}
         />
@@ -55,11 +60,12 @@ export function MidiModals({
 
       {clipDraft ? (
         <MidiClipModal
+          key={clipDraft.clipId ?? "new"}
           draft={clipDraft}
           song={song}
-          onCancel={onCloseClip}
+          onCancel={() => closeDraft("clip")}
           onConfirm={(result) => {
-            onCloseClip();
+            closeDraft("clip");
             onSaveClip(result);
           }}
         />

@@ -1,6 +1,8 @@
 import {
   deleteMidiClip,
   moveMidiClip,
+  setAutomationTrackEnabled,
+  setMidiTrackEnabled,
   setMidiTrackRouting,
   upsertMidiClip,
   type MidiEventSummary,
@@ -134,8 +136,64 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     });
   };
 
+  /** MIDI's answer to mute: the track either sends or it doesn't. */
+  const handleToggleMidiEnabled = async (trackId: string) => {
+    const track = getTrack(trackId);
+    if (!track) return;
+    const next = track.midiEnabled === false;
+    await runAction(async () => {
+      const snapshot = await setMidiTrackEnabled(trackId, next);
+      applyPlaybackSnapshot(snapshot);
+      await refreshSongView({ includeWaveforms: false, sync: true });
+      setStatus(
+        translate(
+          next
+            ? "transport.midi.statusTrackEnabled"
+            : "transport.midi.statusTrackDisabled",
+        ),
+      );
+    });
+  };
+
+  /** Same switch for the automation lane; its cues stay authored either way. */
+  const handleToggleAutomationEnabled = async (enabled: boolean) => {
+    await runAction(async () => {
+      const snapshot = await setAutomationTrackEnabled(enabled);
+      applyPlaybackSnapshot(snapshot);
+      await refreshSongView({ includeWaveforms: false, sync: true });
+      setStatus(
+        translate(
+          enabled
+            ? "transport.automation.statusTrackEnabled"
+            : "transport.automation.statusTrackDisabled",
+        ),
+      );
+    });
+  };
+
+  /** The lane controls the track headers need, bundled as one prop. */
+  const laneControls = (automationEnabled?: boolean) => ({
+    onEditRoute: openMidiRouteEditor,
+    onToggleMidiEnabled: handleToggleMidiEnabled,
+    onToggleAutomationEnabled: handleToggleAutomationEnabled,
+    automationEnabled,
+  });
+
+  // Fire-and-forget wrappers for the modals, which are not async-aware.
+  const saveClip = (result: Parameters<typeof handleSaveMidiClip>[0]) => {
+    void handleSaveMidiClip(result);
+  };
+  const saveRoute = (trackId: string, port: string | null, channel: number) => {
+    void handleSetMidiRoute(trackId, port, channel);
+  };
+
   return {
+    saveClip,
+    saveRoute,
+    laneControls,
     openMidiRouteEditor,
+    handleToggleMidiEnabled,
+    handleToggleAutomationEnabled,
     handleSaveMidiClip,
     handleDeleteMidiClip,
     handleMoveMidiClip,

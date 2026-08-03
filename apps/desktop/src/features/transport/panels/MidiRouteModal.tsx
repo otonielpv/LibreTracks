@@ -19,6 +19,8 @@ type MidiRouteModalProps = {
   draft: MidiRouteDraft | null;
   /** Ports currently offered by the OS. */
   availablePorts: string[];
+  /** Re-scan the OS for ports, for when a device is plugged in mid-dialog. */
+  onRefreshPorts: () => void;
   onCancel: () => void;
   onConfirm: (result: { port: string | null; channel: number }) => void;
 };
@@ -28,6 +30,7 @@ const CHANNELS = Array.from({ length: 16 }, (_, index) => index + 1);
 export function MidiRouteModal({
   draft,
   availablePorts,
+  onRefreshPorts,
   onCancel,
   onConfirm,
 }: MidiRouteModalProps) {
@@ -68,6 +71,7 @@ export function MidiRouteModal({
               <span className="lt-settings-field-label">
                 {t("transport.midi.routePort")}
               </span>
+              <div className="lt-settings-field-control-row">
               <select value={port} onChange={(event) => setPort(event.target.value)}>
                 <option value="">
                   {t("transport.midi.outputDeviceDefault")}
@@ -85,6 +89,16 @@ export function MidiRouteModal({
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                className="lt-settings-icon-button"
+                aria-label={t("transport.settingsModal.midiDeviceRefresh")}
+                title={t("transport.settingsModal.midiDeviceRefresh")}
+                onClick={onRefreshPorts}
+              >
+                <span className="material-symbols-outlined">refresh</span>
+              </button>
+              </div>
               <small>{t("transport.midi.routePortHint")}</small>
             </label>
 
@@ -107,18 +121,18 @@ export function MidiRouteModal({
           </div>
         </div>
 
-        <footer className="lt-settings-modal-footer">
-          <button type="button" className="lt-ghost-button" onClick={onCancel}>
+        <div className="lt-inline-actions lt-automation-modal-actions">
+          <button type="button" className="lt-secondary-button" onClick={onCancel}>
             {t("common.cancel")}
           </button>
           <button
             type="button"
-            className="lt-primary-button"
+            className="is-primary"
             onClick={() => onConfirm({ port: port || null, channel })}
           >
             {t("common.save")}
           </button>
-        </footer>
+        </div>
       </section>
     </div>
   );

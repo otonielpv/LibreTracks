@@ -15,7 +15,7 @@ pub enum AutomationError {
     Json(#[from] serde_json::Error),
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AutomationDocument {
     #[serde(default)]
@@ -32,6 +32,30 @@ pub struct AutomationDocument {
     /// the real tracks without index recomputation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub track_after_id: Option<String>,
+    /// Whether the automation lane runs. Lets the user park a whole set of cues
+    /// without deleting them — the same on/off a MIDI track has. Documents
+    /// written before this field default to enabled.
+    #[serde(default = "default_true")]
+    pub track_enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+// Hand-written rather than derived: `derive(Default)` would make
+// `track_enabled` false, so a brand-new document would start with its
+// automation switched off.
+impl Default for AutomationDocument {
+    fn default() -> Self {
+        Self {
+            cues: Vec::new(),
+            mix_scenes: Vec::new(),
+            track_present: false,
+            track_after_id: None,
+            track_enabled: true,
+        }
+    }
 }
 
 /// A cue is a "job": an ordered list of actions executed in sequence when the
@@ -290,10 +314,6 @@ pub fn save_automation(
     let json = serde_json::to_string_pretty(automation)?;
     fs::write(&path, json)?;
     Ok(path)
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[cfg(test)]

@@ -10,6 +10,15 @@ import { densityFromHeight } from "../constants";
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import { useSongStore } from "../songStore";
 import { TrackHeaderItem } from "./TrackHeaderItem";
+import { MidiTrackHeader } from "../midi/MidiTrackHeader";
+
+/** Grouped so the MIDI/automation lane controls travel as a single prop. */
+export type MidiLaneControls = {
+  onEditRoute: (trackId: string) => void;
+  onToggleMidiEnabled: (trackId: string) => void;
+  onToggleAutomationEnabled: (enabled: boolean) => void;
+  automationEnabled?: boolean;
+};
 
 type LibraryPreviewRow = {
   rowOffset: number;
@@ -40,8 +49,8 @@ type TrackHeadersPaneProps = {
   onCommitPan: (trackId: string) => void;
   audioRoutingOptions: Array<{ value: string; label: string }>;
   onAudioToChange: (trackId: string, nextAudioTo: string) => void;
-  /** Opens the MIDI routing dialog for a midi track. */
-  onEditMidiRoute?: (trackId: string) => void;
+  /** Controls for the non-audio lanes (MIDI tracks + the automation lane). */
+  midiLanes?: MidiLaneControls;
   /** Android: the ruler-header cell is mostly empty there, so it hosts the
    * touch controls (track density, seek lock) instead of wasting the space. */
   headerActions?: ReactNode;
@@ -70,7 +79,7 @@ export function TrackHeadersPane({
   onCommitPan,
   audioRoutingOptions,
   onAudioToChange,
-  onEditMidiRoute,
+  midiLanes,
   headerActions,
 }: TrackHeadersPaneProps) {
   const { t } = useTranslation();
@@ -120,6 +129,7 @@ export function TrackHeadersPane({
         ref={headersListRef}
       >
         {hasSong && visibleTracks.map((track) => {
+          const automationEnabled = midiLanes?.automationEnabled !== false;
           const isTrackSelected = selectedTrackIds.includes(track.id);
           const childCount = getTrackChildCount(track.id);
           const trackDensityClass = densityFromHeight(trackHeight);
@@ -133,9 +143,9 @@ export function TrackHeadersPane({
                 style={{ height: trackHeight }}
               >
                 <div
-                  className={`lt-track-header ${trackDensityClass} is-automation ${
+                  className={`lt-track-header lt-midi-track-header ${trackDensityClass} is-automation ${
                     isTrackSelected ? "is-selected" : ""
-                  }`}
+                  } ${automationEnabled ? "" : "is-midi-off"}`}
                   style={{ height: trackHeight, paddingLeft: 8 }}
                   role="button"
                   tabIndex={0}
@@ -151,18 +161,37 @@ export function TrackHeadersPane({
                   onContextMenu={(event) => onOpenContextMenu(event, track.id)}
                 >
                   <div className="lt-track-header-body">
-                    <div className="lt-track-header-content">
-                      <div className="lt-track-header-summary">
-                        <div className="lt-track-header-main">
-                          <div className="lt-track-title-row">
-                            <strong>
-                              ⚙ {t("transport.automation.trackName")}
-                            </strong>
-                          </div>
-                          <span className="lt-track-meta">
-                            {t("transport.automation.trackMeta")}
-                          </span>
-                        </div>
+                    <div className="lt-midi-header-row">
+                      {/* Same on/off affordance as a MIDI track: the lane has
+                          no mix either, so enable/disable is all it needs. */}
+                      <button
+                        type="button"
+                        className={`lt-midi-power ${automationEnabled ? "is-active" : ""}`}
+                        aria-pressed={automationEnabled}
+                        aria-label={t(
+                          automationEnabled
+                            ? "transport.automation.disableTrack"
+                            : "transport.automation.enableTrack",
+                        )}
+                        title={t(
+                          automationEnabled
+                            ? "transport.automation.disableTrack"
+                            : "transport.automation.enableTrack",
+                        )}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          midiLanes?.onToggleAutomationEnabled(!automationEnabled);
+                        }}
+                      >
+                        <span className="material-symbols-outlined">
+                          power_settings_new
+                        </span>
+                      </button>
+                      <div className="lt-midi-header-text">
+                        <strong>⚙ {t("transport.automation.trackName")}</strong>
+                        <span className="lt-track-meta">
+                          {t("transport.automation.trackMeta")}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -208,6 +237,24 @@ export function TrackHeadersPane({
               data-track-id={track.id}
               style={{ height: trackHeight }}
             >
+              {track.kind === "midi" ? (
+                <MidiTrackHeader
+                  trackId={track.id}
+                  trackName={track.name}
+                  trackColor={track.color}
+                  trackHeight={trackHeight}
+                  trackDepth={track.depth}
+                      midiEnabled={track.midiEnabled}
+                  isSelected={isTrackSelected}
+                  isDragging={false}
+                  densityClass={trackDensityClass}
+                  onSelectTrack={onSelectTrack}
+                  onOpenContextMenu={onOpenContextMenu}
+                  onStartTrackDrag={onStartTrackDrag}
+                  onToggleEnabled={midiLanes?.onToggleMidiEnabled ?? (() => {})}
+                  onEditRoute={midiLanes?.onEditRoute ?? (() => {})}
+                />
+              ) : (
               <TrackHeaderItem
                 trackId={track.id}
                 trackName={track.name}
@@ -224,9 +271,6 @@ export function TrackHeadersPane({
                 volumeValue={track.volume}
                 audioTo={track.audioTo}
                 audioRoutingOptions={audioRoutingOptions}
-                midiPort={track.midiPort}
-                midiChannel={track.midiChannel}
-                onEditMidiRoute={onEditMidiRoute}
                 isCollapsed={collapsedFolders.has(track.id)}
                 isSelected={isTrackSelected}
                 isDropTarget={false}
@@ -246,6 +290,7 @@ export function TrackHeadersPane({
                 onCommitPan={onCommitPan}
                 onAudioToChange={onAudioToChange}
               />
+              )}
             </div>
           );
         })}

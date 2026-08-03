@@ -108,7 +108,10 @@ pub fn collect_events_in_window(
         else {
             continue;
         };
-        if track.muted {
+        // A MIDI track is silenced by its enable toggle (its equivalent of
+        // mute); `muted` is still honoured for tracks carried over from before
+        // the toggle existed.
+        if !track.midi_enabled || track.muted {
             continue;
         }
         let track_channel = track.midi_channel;
@@ -291,6 +294,7 @@ mod tests {
             auto_created: false,
             midi_port: port.map(str::to_string),
             midi_channel: channel,
+            midi_enabled: true,
         }
     }
 

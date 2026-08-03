@@ -62,6 +62,7 @@ fn demo_song() -> Song {
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         }],
         clips: vec![Clip {
             id: "clip_1".into(),
@@ -278,6 +279,7 @@ fn demo_song_with_folder_track() -> Song {
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         },
     );
     // Make the audio track a child of the folder.
@@ -361,6 +363,7 @@ fn hierarchy_song() -> Song {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             },
             Track {
                 id: "track_child_a".into(),
@@ -377,6 +380,7 @@ fn hierarchy_song() -> Song {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             },
             Track {
                 id: "track_folder_b".into(),
@@ -393,6 +397,7 @@ fn hierarchy_song() -> Song {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             },
             Track {
                 id: "track_child_b".into(),
@@ -409,6 +414,7 @@ fn hierarchy_song() -> Song {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             },
         ],
         clips: vec![],
@@ -895,6 +901,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             },
             Track {
                 id: "track-drums_01".into(),
@@ -911,6 +918,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             },
         ],
         clips: vec![],
@@ -1089,6 +1097,7 @@ fn batch_move_can_reassign_clip_to_another_track() {
         auto_created: false,
         midi_port: None,
         midi_channel: 1,
+        midi_enabled: true,
     });
     let mut session = session_with_song_dir("batch-move-track", song);
     let audio = crate::audio::engine::AudioController::default();
@@ -1895,6 +1904,7 @@ fn song_with_folder_hierarchy() -> Song {
             auto_created: true,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         },
     );
     song.tracks.push(Track {
@@ -1912,6 +1922,7 @@ fn song_with_folder_hierarchy() -> Song {
         auto_created: true,
         midi_port: None,
         midi_channel: 1,
+        midi_enabled: true,
     });
     song
 }

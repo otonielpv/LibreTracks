@@ -972,7 +972,6 @@ export function TransportPanelContent() {
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
   const midiDrafts = useMidiDrafts();
-  const { midiClipDraft, setMidiClipDraft, setMidiRouteDraft } = midiDrafts;
   const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
   const [isPadsPopoverOpen, setIsPadsPopoverOpen] = useState(false);
   const padButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -2225,11 +2224,12 @@ export function TransportPanelContent() {
         refreshSongView,
         getTrack: (trackId) =>
           songRef.current?.tracks.find((item) => item.id === trackId) ?? null,
-        setMidiRouteDraft,
+        setMidiRouteDraft: midiDrafts.setMidiRouteDraft,
       }),
     [runAction, applyPlaybackSnapshot, setStatus, t, refreshSongView],
   );
-  const { handleDeleteMidiClip, openMidiRouteEditor } = midiHandlers;
+  const { handleDeleteMidiClip, openMidiRouteEditor, handleToggleMidiEnabled } =
+    midiHandlers;
 
   const missingFilePaths = useMemo(() => {
     const paths = new Set<string>();
@@ -5261,7 +5261,9 @@ export function TransportPanelContent() {
       setSelectedSectionId,
       setExportSongTarget,
       setAutomationCueDraft,
-      setMidiClipDraft,
+      setMidiClipDraft: midiDrafts.setMidiClipDraft,
+      openMidiRouteEditor,
+      toggleMidiTrackEnabled: handleToggleMidiEnabled,
       deleteMidiClip: handleDeleteMidiClip,
       setIsMixSceneModalOpen,
       clearSelection,
@@ -7523,7 +7525,9 @@ export function TransportPanelContent() {
                           onCommitPan={handleTrackHeaderPanCommit}
                           audioRoutingOptions={audioRoutingOptions}
                           onAudioToChange={handleTrackAudioToChange}
-                          onEditMidiRoute={openMidiRouteEditor}
+                          midiLanes={midiHandlers.laneControls(
+                            song?.automationTrack?.enabled,
+                          )}
                         />
 
                         <TimelineCanvasPane
@@ -8334,15 +8338,11 @@ export function TransportPanelContent() {
 
             <MidiModals
               song={song}
-              clipDraft={midiClipDraft}
-              routeDraft={midiDrafts.midiRouteDraft}
+              drafts={midiDrafts}
               availablePorts={midiOutputDevices}
-              onCloseClip={() => setMidiClipDraft(null)}
-              onCloseRoute={() => setMidiRouteDraft(null)}
-              onSaveClip={(result) => void midiHandlers.handleSaveMidiClip(result)}
-              onSaveRoute={(id, port, ch) =>
-                void midiHandlers.handleSetMidiRoute(id, port, ch)
-              }
+              onRefreshPorts={handleRefreshMidiOutputDevices}
+              onSaveClip={midiHandlers.saveClip}
+              onSaveRoute={midiHandlers.saveRoute}
             />
 
             <MixSceneModal

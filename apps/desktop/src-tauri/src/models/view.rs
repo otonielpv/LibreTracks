@@ -154,6 +154,8 @@ pub struct MidiClipSummary {
 pub struct AutomationTrackSummary {
     /// Id of the audio track the automation lane sits after; `None` = first row.
     pub after_track_id: Option<String>,
+    /// Whether the lane runs. Cues stay authored while it is off.
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -341,6 +343,8 @@ pub struct TrackSummary {
     /// of `None` means "use the app-wide output device".
     pub midi_port: Option<String>,
     pub midi_channel: u8,
+    /// Whether a midi track sends. A MIDI track has this instead of mute/solo.
+    pub midi_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -620,6 +624,7 @@ pub(crate) fn song_to_view(
                 auto_created: track.auto_created,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             })
             .collect(),
         automation_cues: automation_cues_to_summary(
@@ -631,6 +636,7 @@ pub(crate) fn song_to_view(
         automation_track: if automation.track_present {
             Some(AutomationTrackSummary {
                 after_track_id: automation.track_after_id.clone(),
+                enabled: automation.track_enabled,
             })
         } else {
             None
@@ -1247,6 +1253,7 @@ mod tests {
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         }
     }
 

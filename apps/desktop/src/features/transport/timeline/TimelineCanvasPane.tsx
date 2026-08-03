@@ -1890,7 +1890,7 @@ export function TimelineCanvasPane({
                   style={{ height: trackHeight }}
                 >
                   <div
-                    className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""} ${isPendingTrack ? "is-pending" : ""}`}
+                    className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""} ${track.kind === "midi" ? "is-midi" : ""} ${isPendingTrack ? "is-pending" : ""}`}
                     style={{ height: trackHeight }}
                     aria-label={`Lane ${track.name}`}
                     onDragEnter={handleTimelineDragEnter}

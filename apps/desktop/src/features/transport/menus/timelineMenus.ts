@@ -83,6 +83,7 @@ import type {
 } from "../types";
 import type { AutomationCueDraft } from "../panels/AutomationCueModal";
 import type { MidiClipDraft } from "../panels/MidiClipModal";
+import { createMidiMenus } from "./midiMenus";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import type { ShortcutActionId } from "../keyboard/actions";
 
@@ -201,6 +202,8 @@ export type TimelineMenuDeps = {
   setExportSongTarget: (next: ExportSongTarget | null) => void;
   setAutomationCueDraft: (next: AutomationCueDraft | null) => void;
   setMidiClipDraft: (next: MidiClipDraft | null) => void;
+  openMidiRouteEditor: (trackId: string) => void;
+  toggleMidiTrackEnabled: (trackId: string) => void;
   deleteMidiClip: (clipId: string) => Promise<unknown>;
   setIsMixSceneModalOpen: (next: boolean) => void;
   clearSelection: () => void;
@@ -366,60 +369,6 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       maxRuns: null,
       actions: seedActions,
     });
-  }
-
-  /** Open the editor for a brand-new MIDI clip on `trackId` at `atSeconds`. */
-  function createMidiClipAt(trackId: string, atSeconds: number) {
-    const d = getDeps();
-    d.setMidiClipDraft({
-      clipId: null,
-      trackId,
-      timelineStartSeconds: Math.max(0, atSeconds),
-      name: d.t("transport.midi.trackDefaultName"),
-      events: [],
-    });
-  }
-
-  /** Open the editor for an existing MIDI clip. */
-  function editMidiClip(clip: MidiClipSummary) {
-    getDeps().setMidiClipDraft({
-      clipId: clip.id,
-      trackId: clip.trackId,
-      timelineStartSeconds: clip.timelineStartSeconds,
-      name: clip.name,
-      events: clip.events,
-    });
-  }
-
-  function midiClipContextMenu(clip: MidiClipSummary): ContextMenuAction[] {
-    const d = getDeps();
-    const { t } = d;
-    return [
-      {
-        label: t("transport.midi.editClip"),
-        onSelect: () => editMidiClip(clip),
-      },
-      {
-        label: t("transport.midi.deleteClip"),
-        onSelect: () => {
-          void d.deleteMidiClip(clip.id);
-        },
-      },
-    ];
-  }
-
-  /** Right-click on empty space of a MIDI lane: offer to add a clip there. */
-  function midiLaneContextMenu(
-    trackId: string,
-    atSeconds: number,
-  ): ContextMenuAction[] {
-    const d = getDeps();
-    return [
-      {
-        label: d.t("transport.midi.addClip"),
-        onSelect: () => createMidiClipAt(trackId, atSeconds),
-      },
-    ];
   }
 
   // Open the editor for an existing cue (used by the cue's context menu).
@@ -1283,12 +1232,24 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     });
   }
 
+  const {
+    createMidiClipAt,
+    editMidiClip,
+    midiClipContextMenu,
+    midiLaneContextMenu,
+    midiTrackContextMenu,
+  } = createMidiMenus(getDeps, openColorMenu);
+
   function trackContextMenu(track: TrackSummary): ContextMenuAction[] {
     const d = getDeps();
     const { t } = d;
     const currentSong = d.songRef.current;
     if (!currentSong) {
       return [];
+    }
+
+    if (track.kind === "midi") {
+      return midiTrackContextMenu(track);
     }
 
     const previousFolder = findPreviousFolderTrack(currentSong, track.id);

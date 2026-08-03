@@ -553,6 +553,37 @@ pub fn set_midi_track_routing(
 }
 
 #[tauri::command]
+pub fn set_midi_track_enabled(
+    track_id: String,
+    enabled: bool,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_midi_track_enabled(&track_id, enabled, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_automation_track_enabled(
+    enabled: bool,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_automation_track_enabled(enabled, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn upsert_automation_cue(
     cue: AutomationCue,
     state: State<'_, DesktopState>,

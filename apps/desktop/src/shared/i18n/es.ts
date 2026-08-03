@@ -605,6 +605,12 @@ const es = {
     },
     midi: {
       trackDefaultName: "MIDI",
+      channelOverride: "Canal (opcional)",
+      channelOverrideHint: "Dejalo vacio para usar el canal de la pista.",
+      enableTrack: "Activar pista MIDI",
+      disableTrack: "Desactivar pista MIDI",
+      statusTrackEnabled: "Pista MIDI activada",
+      statusTrackDisabled: "Pista MIDI desactivada",
       statusRouteUpdated: "Enrutado MIDI actualizado",
       routeLabel: "Envia a",
       routeAria: "Enrutado MIDI de {{name}}",
@@ -657,6 +663,10 @@ const es = {
       testNoteFailed: "No se pudo enviar la nota de prueba",
     },
     automation: {
+      enableTrack: "Activar automatismos",
+      disableTrack: "Desactivar automatismos",
+      statusTrackEnabled: "Automatismos activados",
+      statusTrackDisabled: "Automatismos desactivados",
       trackName: "Automatismos",
       trackHeaderAria: "Pista de automatismos",
       trackMeta: "Saltos automaticos",

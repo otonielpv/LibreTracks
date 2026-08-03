@@ -8680,3 +8680,149 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── MIDI track headers ────────────────────────────────────────────────────
+   A MIDI track (and the automation lane) has no mix, so its header is a
+   single row: an on/off button plus the name and destination. Deliberately
+   NOT the audio header's grid of faders and M/S/T toggles. */
+.lt-midi-track-header .lt-midi-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  padding-right: 8px;
+  min-width: 0;
+}
+
+.lt-midi-track-header .lt-midi-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lt-midi-track-header .lt-midi-header-text strong {
+  font-size: 12px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-midi-power {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(186, 202, 197, 0.28);
+  background: rgba(20, 20, 20, 0.85);
+  color: rgba(186, 202, 197, 0.6);
+  cursor: pointer;
+  padding: 0;
+}
+
+.lt-midi-power .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.lt-midi-power.is-active {
+  border-color: rgba(157, 123, 255, 0.85);
+  background: rgba(157, 123, 255, 0.18);
+  color: #c4b0ff;
+}
+
+.lt-midi-power:hover {
+  border-color: rgba(157, 123, 255, 0.7);
+}
+
+/* The route badge doubles as the button that opens the routing dialog, so it
+   has to read as clickable while staying visually quieter than the name. */
+.lt-midi-route-badge {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 10px;
+  line-height: 1.3;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(157, 123, 255, 0.35);
+  background: rgba(157, 123, 255, 0.1);
+  color: rgba(196, 176, 255, 0.9);
+  cursor: pointer;
+}
+
+.lt-midi-route-badge:hover {
+  border-color: rgba(157, 123, 255, 0.75);
+  background: rgba(157, 123, 255, 0.18);
+}
+
+/* Violet identity for MIDI, mirroring the automation lane's pink. Header,
+   timeline lane and disabled state all key off the same hue so the two lane
+   types read as siblings rather than as an audio track in disguise. */
+.lt-track-header.lt-midi-track-header:not(.is-automation) {
+  background:
+    linear-gradient(180deg, rgb(32 27 45 / 0.98) 0%, rgb(24 21 34 / 0.98) 100%);
+  border-right-color: rgb(157 123 255 / 0.22);
+  border-bottom-color: rgb(157 123 255 / 0.18);
+  cursor: grab;
+}
+
+.lt-track-header.lt-midi-track-header:not(.is-automation).is-selected {
+  background:
+    linear-gradient(180deg, rgb(44 34 64 / 0.98) 0%, rgb(32 26 46 / 0.98) 100%);
+}
+
+.lt-track-lane.is-midi {
+  padding-top: 0;
+  background: rgb(157 123 255 / 0.045);
+  border-top: 1px solid rgb(157 123 255 / 0.16);
+  border-bottom: 1px solid rgb(157 123 255 / 0.16);
+}
+
+/* Disabled: drain the row of colour so an off lane reads as off at a glance,
+   the same way a disabled automation cue greys out. */
+.lt-midi-track-header.is-midi-off {
+  filter: saturate(0.25);
+}
+
+.lt-midi-track-header.is-midi-off .lt-midi-header-text,
+.lt-midi-track-header.is-midi-off .lt-midi-route-badge {
+  opacity: 0.4;
+}
+
+.lt-midi-track-header.is-midi-off .lt-midi-power {
+  color: rgb(186 202 197 / 0.4);
+}
+
+/* The clip's name sits above the message list, not inside the fields grid, so
+   it needs its own width rule rather than the grid's stretch. */
+.lt-midi-name-field {
+  margin-bottom: 0.75rem;
+}
+
+.lt-midi-name-field input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(157 123 255 / 0.22);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.6rem 0.7rem;
+}
+
+/* The message-type select heads each row; give it the same treatment the
+   fields grid gives its own controls so the row reads as one unit. */
+.lt-automation-action-head select {
+  border-radius: 2px;
+  border: 1px solid rgb(157 123 255 / 0.22);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.45rem 0.6rem;
+}

@@ -178,8 +178,10 @@ export function MidiClipModal({
         </header>
 
         <div className="lt-settings-modal-body lt-automation-actions-body">
-          <label className="lt-midi-name-field">
-            <span>{t("transport.midi.clipName")}</span>
+          <label className="lt-settings-field lt-midi-name-field">
+            <span className="lt-settings-field-label">
+              {t("transport.midi.clipName")}
+            </span>
             <input
               type="text"
               value={name}
@@ -210,7 +212,7 @@ export function MidiClipModal({
                     </select>
                     <button
                       type="button"
-                      className="lt-ghost-button"
+                      className="lt-automation-action-remove"
                       onClick={() => removeAt(index)}
                       aria-label={t("transport.midi.removeEvent")}
                     >
@@ -219,8 +221,8 @@ export function MidiClipModal({
                   </div>
 
                   <div className="lt-automation-action-fields">
-                    <label>
-                      <span>{t("transport.midi.offsetSeconds")}</span>
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">{t("transport.midi.offsetSeconds")}</span>
                       <input
                         type="number"
                         min={0}
@@ -236,9 +238,15 @@ export function MidiClipModal({
                     </label>
                     {/* Blank = inherit the track's channel, which is the
                         normal case; a number overrides it for this message
-                        alone. */}
-                    <label>
-                      <span>{t("transport.midi.channel")}</span>
+                        alone. Labelled as optional so it doesn't read as a
+                        required field the user forgot to fill in. */}
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.midi.channelOverride")}
+                      </span>
+                      <small className="lt-settings-field-hint">
+                        {t("transport.midi.channelOverrideHint")}
+                      </small>
                       <input
                         type="number"
                         min={1}
@@ -259,8 +267,8 @@ export function MidiClipModal({
 
                     {event.kind.type === "note" && (
                       <>
-                        <label>
-                          <span>{t("transport.midi.note")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.note")}</span>
                           <input
                             type="number"
                             min={0}
@@ -275,8 +283,8 @@ export function MidiClipModal({
                             }
                           />
                         </label>
-                        <label>
-                          <span>{t("transport.midi.velocity")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.velocity")}</span>
                           <input
                             type="number"
                             min={0}
@@ -291,8 +299,8 @@ export function MidiClipModal({
                             }
                           />
                         </label>
-                        <label>
-                          <span>{t("transport.midi.durationSeconds")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.durationSeconds")}</span>
                           <input
                             type="number"
                             min={0}
@@ -312,8 +320,8 @@ export function MidiClipModal({
 
                     {event.kind.type === "controlChange" && (
                       <>
-                        <label>
-                          <span>{t("transport.midi.controller")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.controller")}</span>
                           <input
                             type="number"
                             min={0}
@@ -328,8 +336,8 @@ export function MidiClipModal({
                             }
                           />
                         </label>
-                        <label>
-                          <span>{t("transport.midi.value")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.value")}</span>
                           <input
                             type="number"
                             min={0}
@@ -348,8 +356,8 @@ export function MidiClipModal({
                     )}
 
                     {event.kind.type === "programChange" && (
-                      <label>
-                        <span>{t("transport.midi.program")}</span>
+                      <label className="lt-settings-field">
+                        <span className="lt-settings-field-label">{t("transport.midi.program")}</span>
                         <input
                           type="number"
                           min={0}
@@ -368,8 +376,8 @@ export function MidiClipModal({
 
                     {event.kind.type === "controlCurve" && (
                       <>
-                        <label>
-                          <span>{t("transport.midi.controller")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.controller")}</span>
                           <input
                             type="number"
                             min={0}
@@ -384,8 +392,8 @@ export function MidiClipModal({
                             }
                           />
                         </label>
-                        <label>
-                          <span>{t("transport.midi.fromValue")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.fromValue")}</span>
                           <input
                             type="number"
                             min={0}
@@ -400,8 +408,8 @@ export function MidiClipModal({
                             }
                           />
                         </label>
-                        <label>
-                          <span>{t("transport.midi.toValue")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.toValue")}</span>
                           <input
                             type="number"
                             min={0}
@@ -416,8 +424,8 @@ export function MidiClipModal({
                             }
                           />
                         </label>
-                        <label>
-                          <span>{t("transport.midi.durationSeconds")}</span>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">{t("transport.midi.durationSeconds")}</span>
                           <input
                             type="number"
                             min={0}
@@ -445,7 +453,7 @@ export function MidiClipModal({
               <button
                 key={type}
                 type="button"
-                className="lt-ghost-button"
+                className="lt-secondary-button"
                 onClick={() => addEvent(type)}
               >
                 + {t(EVENT_LABEL_KEYS[type])}
@@ -454,13 +462,13 @@ export function MidiClipModal({
           </div>
         </div>
 
-        <footer className="lt-settings-modal-footer">
-          <button type="button" className="lt-ghost-button" onClick={onCancel}>
+        <div className="lt-inline-actions lt-automation-modal-actions">
+          <button type="button" className="lt-secondary-button" onClick={onCancel}>
             {t("common.cancel")}
           </button>
           <button
             type="button"
-            className="lt-primary-button"
+            className="is-primary"
             disabled={!canConfirm}
             onClick={() =>
               onConfirm({
@@ -474,7 +482,7 @@ export function MidiClipModal({
           >
             {t("common.save")}
           </button>
-        </footer>
+        </div>
       </section>
     </div>
   );

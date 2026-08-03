@@ -2994,6 +2994,7 @@ mod tests {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             }],
             clips: vec![Clip {
                 id: "clip".into(),

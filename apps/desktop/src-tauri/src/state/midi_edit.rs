@@ -187,6 +187,48 @@ impl DesktopSession {
         self.commit_midi_clips(song, audio)
     }
 
+    /// Turn a MIDI track's output on or off.
+    ///
+    /// This is what a MIDI track has instead of mute/solo: there is no mix to
+    /// fold it into, so the only meaningful state is whether it sends.
+    /// Disabling releases anything currently sounding, or a note held when the
+    /// track went silent would hang on the device.
+    pub fn set_midi_track_enabled(
+        &mut self,
+        track_id: &str,
+        enabled: bool,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let Some(track) = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id && track.kind == TrackKind::Midi)
+        else {
+            return Err(DesktopError::AudioCommand(
+                "not a midi track".into(),
+            ));
+        };
+        if track.midi_enabled == enabled {
+            return Ok(self.snapshot());
+        }
+        track.midi_enabled = enabled;
+
+        if !enabled {
+            self.release_all_midi_notes();
+        }
+
+        self.push_history_entry();
+        self.redo_stack.clear();
+        self.commit_midi_clips(song, audio)
+    }
+
     /// Persist a song whose MIDI clips changed.
     ///
     /// Committed as `MixerOnly`: MIDI never reaches the native engine, so

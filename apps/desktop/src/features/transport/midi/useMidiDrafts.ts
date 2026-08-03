@@ -15,7 +15,14 @@ export function useMidiDrafts() {
   const [midiRouteDraft, setMidiRouteDraft] = useState<MidiRouteDraft | null>(
     null,
   );
+  /** Close whichever dialog is open, by kind. */
+  const closeDraft = (kind: "clip" | "route") => {
+    if (kind === "clip") setMidiClipDraft(null);
+    else setMidiRouteDraft(null);
+  };
+
   return {
+    closeDraft,
     midiClipDraft,
     setMidiClipDraft,
     midiRouteDraft,

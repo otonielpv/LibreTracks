@@ -76,6 +76,31 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Turn the automation lane on or off without deleting its cues.
+    ///
+    /// Disabling cancels anything already armed, so a jump scheduled a moment
+    /// ago doesn't still fire after the user switched the lane off.
+    pub fn set_automation_track_enabled(
+        &mut self,
+        enabled: bool,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if self.automation.track_enabled == enabled {
+            return Ok(self.snapshot());
+        }
+        self.automation.track_enabled = enabled;
+        if !enabled {
+            self.pending_automation_jump = None;
+            self.active_automation_job = None;
+            audio.cancel_scheduled_jumps()?;
+        }
+        self.persist_automation(audio)?;
+        if enabled {
+            self.schedule_next_automation_jump(audio)?;
+        }
+        Ok(self.snapshot())
+    }
+
     pub fn add_automation_track(
         &mut self,
         after_track_id: Option<String>,
@@ -295,6 +320,10 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         if self.engine.playback_state() != PlaybackState::Playing {
+            return Ok(());
+        }
+        // The lane's on/off switch: cues stay authored but nothing arms.
+        if !self.automation.track_enabled {
             return Ok(());
         }
         if self.engine.pending_marker_jump().is_some() || self.engine.active_vamp().is_some() {

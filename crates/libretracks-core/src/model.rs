@@ -148,6 +148,11 @@ pub struct Track {
     /// 16 addresses inside that cable the message is tagged with.
     #[serde(default = "default_midi_channel")]
     pub midi_channel: u8,
+    /// Whether this MIDI track sends at all. This is what a MIDI track has
+    /// instead of mute/solo: there is no mix to fold it into, so the only
+    /// meaningful state is on or off.
+    #[serde(default = "default_true")]
+    pub midi_enabled: bool,
 }
 
 pub fn default_audio_to() -> String {
@@ -234,8 +239,12 @@ pub struct MidiEvent {
 /// Note that `Note` carries a duration rather than being split into a
 /// note-on/note-off pair: the pairing is the runtime's job, which keeps the
 /// editor to one row per musical intention instead of two.
+// `rename_all` renames the VARIANTS; struct-variant FIELDS need
+// `rename_all_fields` as well, or `durationSeconds` from the frontend fails to
+// deserialize into `duration_seconds`. Same trap the AutomationActionSummary
+// enum documents in models/view.rs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "type")]
 pub enum MidiEventKind {
     /// A note held for `duration_seconds`, then released.
     Note {

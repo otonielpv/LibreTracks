@@ -337,6 +337,7 @@ impl DesktopSession {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             });
             imported_track_ids_by_index.push(track_id.clone());
 

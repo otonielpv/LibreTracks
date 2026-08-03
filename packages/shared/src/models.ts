@@ -359,6 +359,8 @@ export type PendingAutomationCueSummary = {
 export type AutomationTrackSummary = {
   /** Id of the audio track the lane sits after; `null` = first row. */
   afterTrackId?: string | null;
+  /** Whether the lane runs. Cues stay authored while it is off. */
+  enabled?: boolean;
 };
 
 export type TrackSummary = {
@@ -389,6 +391,8 @@ export type TrackSummary = {
    */
   midiPort?: string | null;
   midiChannel?: number;
+  /** Whether a midi track sends. Its equivalent of mute/solo. */
+  midiEnabled?: boolean;
 };
 
 export function formatTransposeSemitones(value: number): string {

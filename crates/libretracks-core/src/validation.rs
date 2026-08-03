@@ -572,6 +572,7 @@ mod tests {
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         }
     }
 
@@ -1156,6 +1157,57 @@ mod tests {
         song.regions = vec![region("r1", 0.0, 50.0), region("r2", 50.0, 100.0)];
         song.midi_clips[0].timeline_start_seconds = 40.0;
         assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn midi_events_deserialize_from_the_frontend_camel_case_shape() {
+        // Regression: `rename_all` renames variants but NOT struct-variant
+        // fields, so without `rename_all_fields` the frontend's
+        // `durationSeconds` failed with "missing field `duration_seconds`".
+        let json = r#"{
+            "id": "e1",
+            "atSeconds": 0.25,
+            "kind": {
+                "type": "note",
+                "note": 60,
+                "velocity": 100,
+                "durationSeconds": 0.5
+            }
+        }"#;
+        let event: MidiEvent = serde_json::from_str(json).expect("camelCase event must parse");
+        assert_eq!(event.channel, None, "absent channel inherits the track's");
+        assert_eq!(
+            event.kind,
+            MidiEventKind::Note {
+                note: 60,
+                velocity: 100,
+                duration_seconds: 0.5
+            }
+        );
+
+        let curve = r#"{
+            "id": "e2",
+            "atSeconds": 0,
+            "channel": 3,
+            "kind": {
+                "type": "controlCurve",
+                "controller": 74,
+                "fromValue": 0,
+                "toValue": 127,
+                "durationSeconds": 4
+            }
+        }"#;
+        let event: MidiEvent = serde_json::from_str(curve).expect("curve must parse");
+        assert_eq!(event.channel, Some(3));
+        assert_eq!(
+            event.kind,
+            MidiEventKind::ControlCurve {
+                controller: 74,
+                from_value: 0,
+                to_value: 127,
+                duration_seconds: 4.0
+            }
+        );
     }
 
     #[test]

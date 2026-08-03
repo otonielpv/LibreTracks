@@ -1199,6 +1199,26 @@ export async function setMidiTrackRouting(
   });
 }
 
+/** Turn a MIDI track's output on or off (its equivalent of mute). */
+export async function setMidiTrackEnabled(
+  trackId: string,
+  enabled: boolean,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_midi_track_enabled", {
+    trackId,
+    enabled,
+  });
+}
+
+/** Turn the automation lane on or off without deleting its cues. */
+export async function setAutomationTrackEnabled(
+  enabled: boolean,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_automation_track_enabled", {
+    enabled,
+  });
+}
+
 /** MIDI output ports available to send to (lighting desks, lyric software). */
 export async function getMidiOutputs(): Promise<string[]> {
   return invokeCommand<string[]>("get_midi_outputs");

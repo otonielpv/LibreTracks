@@ -2642,6 +2642,7 @@ impl DesktopSession {
             automation_track: if self.automation.track_present {
                 Some(crate::models::view::AutomationTrackSummary {
                     after_track_id: self.automation.track_after_id.clone(),
+                    enabled: self.automation.track_enabled,
                 })
             } else {
                 None

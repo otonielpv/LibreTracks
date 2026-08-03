@@ -558,6 +558,7 @@ mod tests {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             }],
             clips: vec![],
             midi_clips: vec![],
@@ -853,6 +854,7 @@ mod tests {
             auto_created: false,
             midi_port: Some("loopMIDI Port 2".into()),
             midi_channel: 3,
+            midi_enabled: true,
         });
         song.midi_clips.push(libretracks_core::MidiClip {
             id: "mc1".into(),

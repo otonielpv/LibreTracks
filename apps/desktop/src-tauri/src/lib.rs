@@ -324,6 +324,8 @@ pub fn run() {
             commands::timeline::delete_midi_clip,
             commands::timeline::move_midi_clip,
             commands::timeline::set_midi_track_routing,
+            commands::timeline::set_midi_track_enabled,
+            commands::timeline::set_automation_track_enabled,
             commands::timeline::upsert_automation_cue,
             commands::timeline::delete_automation_cue,
             commands::timeline::add_automation_track,

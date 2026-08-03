@@ -397,6 +397,7 @@ impl DesktopSession {
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
+            midi_enabled: true,
         };
 
         insert_track(
@@ -510,6 +511,7 @@ impl DesktopSession {
                 auto_created: true,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             });
             append_clip_to_song(
                 &mut song,
@@ -579,6 +581,7 @@ impl DesktopSession {
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,
+                midi_enabled: true,
             });
             append_clip_to_song(
                 &mut song,
