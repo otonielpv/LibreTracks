@@ -19,8 +19,8 @@ use std::sync::Arc;
 
 use libretracks_audio::PlaybackState;
 use libretracks_core::midi_schedule::{
-    collect_events_in_window, step_control_curves, take_due_note_offs, PendingControlCurve,
-    PendingNoteOff, ScheduledMidiMessage,
+    collect_events_in_window, has_enabled_midi_events, step_control_curves, take_due_note_offs,
+    PendingControlCurve, PendingNoteOff, ScheduledMidiMessage,
 };
 use libretracks_core::MidiClip;
 
@@ -87,6 +87,16 @@ fn dispatch(output: &MidiOutputManager, messages: Vec<ScheduledMidiMessage>) {
 }
 
 impl DesktopSession {
+    pub(super) fn midi_runtime_should_tick(&self) -> bool {
+        if self.engine.playback_state() != PlaybackState::Playing {
+            return false;
+        }
+        if !self.active_midi_notes.is_empty() || !self.active_midi_curves.is_empty() {
+            return true;
+        }
+        self.engine.song().is_some_and(has_enabled_midi_events)
+    }
+
     /// The output port handle, if one is wired. Returned as an owned `Arc` so
     /// callers can send while still holding `&mut self`.
     fn midi_output_handle(&self) -> Option<Arc<MidiOutputManager>> {

@@ -239,9 +239,12 @@ pub fn undo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, 
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .undo_action(&state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    drop(session);
+    state.notify_midi_runtime();
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -251,9 +254,12 @@ pub fn redo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, 
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .redo_action(&state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    drop(session);
+    state.notify_midi_runtime();
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -493,9 +499,12 @@ pub fn upsert_midi_clip(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .upsert_midi_clip(clip, &state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    drop(session);
+    state.notify_midi_runtime();
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -575,9 +584,12 @@ pub fn set_midi_track_enabled(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .set_midi_track_enabled(&track_id, enabled, &state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    drop(session);
+    state.notify_midi_runtime();
+    Ok(snapshot)
 }
 
 #[tauri::command]

@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc, Arc, Condvar, Mutex,
     },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -214,6 +214,7 @@ pub struct DesktopState {
     pub session: Arc<Mutex<DesktopSession>>,
     midi_runtime_started: AtomicBool,
     midi_runtime_stop: Arc<AtomicBool>,
+    midi_runtime_wake: Arc<(Mutex<bool>, Condvar)>,
     midi_runtime_thread: Mutex<Option<thread::JoinHandle<()>>>,
     pub project_load_progress: Mutex<Option<ProjectLoadProgressEvent>>,
     /// OS resource sampler backing the top-bar CPU/RAM/disk meter. Independent
@@ -242,6 +243,7 @@ impl Default for DesktopState {
             session: Arc::new(Mutex::new(session)),
             midi_runtime_started: AtomicBool::new(false),
             midi_runtime_stop: Arc::new(AtomicBool::new(false)),
+            midi_runtime_wake: Arc::new((Mutex::new(false), Condvar::new())),
             midi_runtime_thread: Mutex::new(None),
             project_load_progress: Mutex::new(None),
             resource_monitor: crate::platform::resource_monitor::ResourceMonitor::default(),
@@ -250,10 +252,9 @@ impl Default for DesktopState {
 }
 
 impl DesktopState {
-    /// Drive timeline MIDI independently of the UI's 250 ms snapshot poll.
-    /// The session uses `try_lock`: editing or loading wins immediately and a
-    /// later tick catches the elapsed MIDI window without blocking either path.
-    pub fn start_midi_runtime(&self) {
+    /// Drive timeline MIDI independently of the UI's 250 ms snapshot poll. It
+    /// ticks at 10 ms only while useful and parks on the condition otherwise.
+    pub(crate) fn start_midi_runtime(&self) {
         if self
             .midi_runtime_started
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -263,18 +264,57 @@ impl DesktopState {
         }
 
         let stop = Arc::clone(&self.midi_runtime_stop);
+        let wake = Arc::clone(&self.midi_runtime_wake);
         let session = Arc::clone(&self.session);
         let handle = thread::spawn(move || {
             while !stop.load(Ordering::Relaxed) {
-                let tick_started = Instant::now();
-                if let Ok(mut session) = session.try_lock() {
-                    let _ = session.advance_midi_playback();
+                let active = match session.try_lock() {
+                    Ok(mut session) => {
+                        let active = session.midi_runtime_should_tick();
+                        if active {
+                            let _ = session.advance_midi_playback();
+                        }
+                        active
+                    }
+                    Err(std::sync::TryLockError::WouldBlock) => true,
+                    Err(std::sync::TryLockError::Poisoned(_)) => false,
+                };
+
+                let (wake_requested, condition) = &*wake;
+                let Ok(mut requested) = wake_requested.lock() else {
+                    break;
+                };
+                if active {
+                    if !*requested && !stop.load(Ordering::Relaxed) {
+                        let Ok((guard, _)) = condition.wait_timeout(
+                            requested,
+                            MIDI_RUNTIME_TICK_INTERVAL,
+                        ) else {
+                            break;
+                        };
+                        requested = guard;
+                    }
+                } else {
+                    while !*requested && !stop.load(Ordering::Relaxed) {
+                        let Ok(guard) = condition.wait(requested) else {
+                            return;
+                        };
+                        requested = guard;
+                    }
                 }
-                thread::sleep(MIDI_RUNTIME_TICK_INTERVAL.saturating_sub(tick_started.elapsed()));
+                *requested = false;
             }
         });
         if let Ok(mut slot) = self.midi_runtime_thread.lock() {
             *slot = Some(handle);
+        }
+    }
+
+    pub(crate) fn notify_midi_runtime(&self) {
+        let (wake_requested, condition) = &*self.midi_runtime_wake;
+        if let Ok(mut requested) = wake_requested.lock() {
+            *requested = true;
+            condition.notify_one();
         }
     }
 }
@@ -282,6 +322,7 @@ impl DesktopState {
 impl Drop for DesktopState {
     fn drop(&mut self) {
         self.midi_runtime_stop.store(true, Ordering::Relaxed);
+        self.notify_midi_runtime();
         if let Ok(mut slot) = self.midi_runtime_thread.lock() {
             if let Some(handle) = slot.take() {
                 let _ = handle.join();

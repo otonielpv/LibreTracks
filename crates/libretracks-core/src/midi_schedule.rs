@@ -83,6 +83,20 @@ pub struct MidiTickOutput {
     pub started_curves: Vec<PendingControlCurve>,
 }
 
+/// Whether the song contains authored MIDI work on an enabled MIDI track.
+/// `muted` is deliberately ignored here: automation can change it internally,
+/// without an IPC command available to wake a parked worker.
+pub fn has_enabled_midi_events(song: &Song) -> bool {
+    song.midi_clips.iter().any(|clip| {
+        !clip.events.is_empty()
+            && song.tracks.iter().any(|track| {
+                track.id == clip.track_id
+                    && track.kind == TrackKind::Midi
+                    && track.midi_enabled
+            })
+    })
+}
+
 /// Collect every event in the half-open window `(previous_seconds, now_seconds]`.
 ///
 /// The window is half-open on purpose: an event landing exactly on a tick
@@ -353,6 +367,23 @@ mod tests {
         assert!(collect_events_in_window(&song, 10.5, 12.0)
             .messages
             .is_empty());
+    }
+
+    #[test]
+    fn enabled_midi_events_control_whether_a_runtime_tick_is_needed() {
+        let populated = clip("c", 10.0, vec![note_event("e", 0.0, 60, 100, 1.0)]);
+        let mut song = song_with(vec![populated], false);
+        assert!(has_enabled_midi_events(&song));
+
+        song.tracks[0].midi_enabled = false;
+        assert!(!has_enabled_midi_events(&song));
+
+        song.tracks[0].midi_enabled = true;
+        song.tracks[0].muted = true;
+        assert!(has_enabled_midi_events(&song));
+
+        let empty = song_with(vec![clip("empty", 10.0, vec![])], false);
+        assert!(!has_enabled_midi_events(&empty));
     }
 
     #[test]

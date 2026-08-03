@@ -33,6 +33,8 @@ pub fn play_transport(
     let snapshot = session
         .play(&state.audio)
         .map_err(|error| error.to_string())?;
+    drop(session);
+    state.notify_midi_runtime();
     emit_transport_lifecycle_event(&app, "play", &snapshot);
     Ok(snapshot)
 }
