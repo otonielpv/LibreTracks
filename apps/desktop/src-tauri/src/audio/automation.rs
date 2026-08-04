@@ -372,6 +372,7 @@ mod tests {
             }],
             track_present: true,
             track_after_id: Some("track_drums".into()),
+            track_enabled: true,
         };
 
         save_automation(dir.path(), &document).expect("save automation");

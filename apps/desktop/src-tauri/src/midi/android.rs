@@ -83,7 +83,18 @@ pub mod output {
             false
         }
 
+        pub fn is_default_port_open(&self) -> bool {
+            false
+        }
+
         pub fn send(&self, _messages: &[OutboundMidiMessage]) {}
+
+        pub fn send_to(
+            &self,
+            _port_name: Option<&str>,
+            _messages: &[OutboundMidiMessage],
+        ) {
+        }
 
         pub fn panic(&self) {}
     }
