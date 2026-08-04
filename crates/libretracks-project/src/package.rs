@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use libretracks_core::{Clip, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track};
+use libretracks_core::{Clip, MidiClip, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track};
 use serde::{Deserialize, Serialize};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
@@ -115,6 +115,11 @@ struct SongPackageManifest {
     tracks: Vec<Track>,
     #[serde(default)]
     clips: Vec<Clip>,
+    /// MIDI remains independent from regions in the song model. A region
+    /// package only carries the events whose trigger falls inside the exported
+    /// interval, rebased so the package starts at zero.
+    #[serde(default)]
+    midi_clips: Vec<MidiClip>,
     #[serde(default)]
     section_markers: Vec<libretracks_core::Marker>,
     #[serde(default)]
@@ -146,6 +151,44 @@ pub struct SongPackageImportResult {
     pub bundled_audio: std::collections::HashMap<String, Vec<u8>>,
 }
 
+fn midi_clips_in_region(song: &Song, region: &SongRegion) -> Vec<MidiClip> {
+    song.midi_clips
+        .iter()
+        .filter_map(|clip| {
+            // Keep the original anchor when it is already inside the region.
+            // A clip may start before the region while some of its events fall
+            // inside it; in that case anchor the exported copy at zero so its
+            // position stays valid and move the retained event offsets forward.
+            let exported_start =
+                clip.timeline_start_seconds.max(region.start_seconds) - region.start_seconds;
+            let exported_absolute_start = region.start_seconds + exported_start;
+            let events = clip
+                .events
+                .iter()
+                .filter(|event| {
+                    let trigger = clip.timeline_start_seconds + event.at_seconds;
+                    trigger >= region.start_seconds && trigger < region.end_seconds
+                })
+                .cloned()
+                .map(|mut event| {
+                    let trigger = clip.timeline_start_seconds + event.at_seconds;
+                    event.at_seconds = (trigger - exported_absolute_start).max(0.0);
+                    event
+                })
+                .collect::<Vec<_>>();
+
+            if events.is_empty() {
+                return None;
+            }
+
+            let mut exported = clip.clone();
+            exported.timeline_start_seconds = exported_start;
+            exported.events = events;
+            Some(exported)
+        })
+        .collect()
+}
+
 pub fn export_region_as_package(
     cache_root: &Path,
     song_dir: &Path,
@@ -174,9 +217,11 @@ pub fn export_region_as_package(
             clip
         })
         .collect::<Vec<_>>();
+    let midi_clips = midi_clips_in_region(song, region);
     let used_track_ids = clips
         .iter()
         .map(|clip| clip.track_id.as_str())
+        .chain(midi_clips.iter().map(|clip| clip.track_id.as_str()))
         .collect::<HashSet<_>>();
     let tracks = song
         .tracks
@@ -265,6 +310,7 @@ pub fn export_region_as_package(
         region_key: region.key.clone(),
         tracks,
         clips: clips.clone(),
+        midi_clips,
         section_markers,
         tempo_markers,
         time_signature_markers,
@@ -476,16 +522,13 @@ pub fn merge_extracted_song_package(
     let library_meta = manifest.library_meta.clone();
 
     let mut next_song = song.clone();
-    // Names that already exist in the destination session. A package track
-    // whose name matches one of these merges into the existing track (clips
-    // append there). This map must NOT grow as we create new tracks during the
-    // import — otherwise two package tracks that share a name would collapse
-    // into the first one, dumping both their clips onto a single track.
-    let existing_track_ids_by_name = next_song
-        .tracks
-        .iter()
-        .map(|track| (track.name.clone(), track.id.clone()))
-        .collect::<HashMap<_, _>>();
+    // Tracks that already exist in the destination session. A package track
+    // whose name and kind match one of these merges into it (clips append
+    // there). This snapshot must NOT grow as we create tracks during import —
+    // otherwise two package tracks sharing a name would collapse into the
+    // first one. Matching the kind also keeps an audio and a MIDI track with
+    // the same display name separate.
+    let existing_tracks = next_song.tracks.clone();
     let mut used_track_ids = next_song
         .tracks
         .iter()
@@ -496,8 +539,15 @@ pub fn merge_extracted_song_package(
         .iter()
         .map(|clip| clip.id.clone())
         .collect::<HashSet<_>>();
+    let mut used_midi_clip_ids = next_song
+        .midi_clips
+        .iter()
+        .map(|clip| clip.id.clone())
+        .collect::<HashSet<_>>();
     let insert_at_seconds = insert_at_seconds.max(0.0);
-    let is_empty_session = next_song.tracks.is_empty() && next_song.clips.is_empty();
+    let is_empty_session = next_song.tracks.is_empty()
+        && next_song.clips.is_empty()
+        && next_song.midi_clips.is_empty();
 
     // Resolve every manifest track to a destination track, keyed by the
     // manifest's own track id (unique within the package). This is what clips
@@ -512,8 +562,11 @@ pub fn merge_extracted_song_package(
         // Merge into a track that already existed in the destination session,
         // but only those — not tracks we created earlier in THIS loop, so two
         // package tracks sharing a name stay separate.
-        if let Some(existing_id) = existing_track_ids_by_name.get(&track.name) {
-            target_track_id_by_manifest_id.insert(track.id.clone(), existing_id.clone());
+        if let Some(existing) = existing_tracks
+            .iter()
+            .find(|existing| existing.name == track.name && existing.kind == track.kind)
+        {
+            target_track_id_by_manifest_id.insert(track.id.clone(), existing.id.clone());
             continue;
         }
         let track_id = unique_id("track", &track.id, &mut used_track_ids);
@@ -530,9 +583,9 @@ pub fn merge_extracted_song_package(
             audio_to: "master".to_string(),
             color: track.color.clone(),
             auto_created: false,
-            midi_port: None,
-            midi_channel: 1,
-            midi_enabled: true,
+            midi_port: track.midi_port.clone(),
+            midi_channel: track.midi_channel,
+            midi_enabled: track.midi_enabled,
         });
         target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
@@ -555,6 +608,18 @@ pub fn merge_extracted_song_package(
             fade_out_seconds: clip.fade_out_seconds,
             color: clip.color.clone(),
         });
+    }
+
+    for clip in &manifest.midi_clips {
+        let target_track_id = target_track_id_by_manifest_id
+            .get(&clip.track_id)
+            .cloned()
+            .ok_or_else(|| ProjectError::AudioDecode("package MIDI track not found".into()))?;
+        let mut imported = clip.clone();
+        imported.id = unique_id("midi_clip", &clip.id, &mut used_midi_clip_ids);
+        imported.track_id = target_track_id;
+        imported.timeline_start_seconds += insert_at_seconds;
+        next_song.midi_clips.push(imported);
     }
 
     for marker in &manifest.section_markers {
@@ -687,7 +752,9 @@ fn unique_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libretracks_core::{validate_song, MarkerKind, SongMaster, TrackKind};
+    use libretracks_core::{
+        validate_song, MarkerKind, MidiEvent, MidiEventKind, SongMaster, TrackKind,
+    };
     use tempfile::tempdir;
 
     fn track(id: &str, name: &str) -> Track {
@@ -722,6 +789,35 @@ mod tests {
             fade_in_seconds: None,
             fade_out_seconds: None,
             color: None,
+        }
+    }
+
+    fn midi_track(id: &str, name: &str, channel: u8, port: Option<&str>) -> Track {
+        Track {
+            id: id.into(),
+            name: name.into(),
+            kind: TrackKind::Midi,
+            parent_track_id: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: false,
+            audio_to: "master".into(),
+            color: None,
+            auto_created: false,
+            midi_port: port.map(str::to_string),
+            midi_channel: channel,
+            midi_enabled: true,
+        }
+    }
+
+    fn program_event(id: &str, at_seconds: f64, program: u8) -> MidiEvent {
+        MidiEvent {
+            id: id.into(),
+            at_seconds,
+            channel: None,
+            kind: MidiEventKind::ProgramChange { program },
         }
     }
 
@@ -845,6 +941,90 @@ mod tests {
         assert_eq!(result.song.clips.len(), 1);
         assert_eq!(result.song.regions.len(), 1);
         // The imported region must span the clip so the song stays valid.
+        assert!(validate_song(&result.song).is_ok());
+    }
+
+    #[test]
+    fn export_includes_only_midi_events_triggered_inside_the_region() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        source.regions = vec![region("r1", "Chorus", 10.0, 20.0)];
+        source.tracks = vec![midi_track("midi", "Lyrics", 7, Some("FreeShow"))];
+        source.clips.clear();
+        source.midi_clips = vec![
+            MidiClip {
+                id: "crossing".into(),
+                track_id: "midi".into(),
+                timeline_start_seconds: 8.0,
+                name: "Cues".into(),
+                events: vec![
+                    program_event("before", 1.0, 1),
+                    program_event("at_start", 2.0, 2),
+                    program_event("inside", 5.0, 3),
+                    program_event("at_end", 12.0, 4),
+                ],
+                color: None,
+            },
+            MidiClip {
+                id: "inside_clip".into(),
+                track_id: "midi".into(),
+                timeline_start_seconds: 15.0,
+                name: "Lights".into(),
+                events: vec![program_event("later", 1.0, 5)],
+                color: None,
+            },
+            MidiClip {
+                id: "outside".into(),
+                track_id: "midi".into(),
+                timeline_start_seconds: 25.0,
+                name: "Other song".into(),
+                events: vec![program_event("not_exported", 0.0, 6)],
+                color: None,
+            },
+        ];
+
+        let package_path = song_dir.join("chorus.ltsong");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export MIDI region");
+
+        let mut destination = song();
+        destination.tracks.clear();
+        destination.clips.clear();
+        destination.midi_clips.clear();
+        destination.regions.clear();
+        destination.section_markers.clear();
+        let result = import_song_package(song_dir, &destination, &package_path, 100.0)
+            .expect("import MIDI region");
+
+        assert_eq!(result.song.tracks.len(), 1);
+        let imported_track = &result.song.tracks[0];
+        assert_eq!(imported_track.kind, TrackKind::Midi);
+        assert_eq!(imported_track.midi_channel, 7);
+        assert_eq!(imported_track.midi_port.as_deref(), Some("FreeShow"));
+        assert_eq!(result.song.midi_clips.len(), 2);
+
+        let mut triggers = result
+            .song
+            .midi_clips
+            .iter()
+            .flat_map(|clip| {
+                clip.events.iter().map(|event| {
+                    (
+                        event.id.as_str(),
+                        clip.timeline_start_seconds + event.at_seconds,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        triggers.sort_by(|left, right| left.1.partial_cmp(&right.1).unwrap());
+        assert_eq!(triggers.len(), 3);
+        assert_eq!(triggers[0].0, "at_start");
+        assert!((triggers[0].1 - 100.0).abs() < 1e-6);
+        assert_eq!(triggers[1].0, "inside");
+        assert!((triggers[1].1 - 103.0).abs() < 1e-6);
+        assert_eq!(triggers[2].0, "later");
+        assert!((triggers[2].1 - 106.0).abs() < 1e-6);
         assert!(validate_song(&result.song).is_ok());
     }
 
