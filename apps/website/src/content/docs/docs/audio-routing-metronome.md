@@ -56,3 +56,15 @@ Choose a `MIDI input device` in `Settings`. Use `Refresh MIDI devices` if the co
 `MIDI Learn` maps notes or CC messages to live controls such as `Play`, `Stop`, `Vamp`, marker jump modes, song jump triggers, song transition mode, region selection, transpose actions, and bar-count controls.
 
 ![MIDI configuration](/screenshots/Midi-Config.gif)
+
+## MIDI Output Tracks
+
+On desktop, add a MIDI track from the track-list context menu when the show needs to control an instrument, lighting desk, lyrics application, or another MIDI destination. The track header lets you choose a port and one of the 16 channels; individual messages can override that channel when needed.
+
+Right-click the MIDI lane to add a timed MIDI clip. A clip can contain notes, control changes, program changes, and smooth control curves at different offsets. Messages at the same offset follow the order shown in the editor, and you can reorder, collapse, or test them before saving.
+
+![MIDI message editor with note, control, and program messages](/screenshots/Midi-Track-Editor.png)
+
+Saved MIDI clips appear directly on the timeline and can be edited, dragged to a new time, disabled with the track power button, or exported inside a LibreTracks song package.
+
+![MIDI output track and clip on the timeline](/screenshots/Midi-Track-Timeline.png)

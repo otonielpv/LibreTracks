@@ -56,3 +56,15 @@ Elige un `Dispositivo de entrada MIDI` en `Configuracion`. Usa `Refrescar dispos
 `MIDI Learn` asigna notas o mensajes CC a controles de directo como `Play`, `Stop`, `Vamp`, modos de salto de marca, disparadores de salto de cancion, modo de transicion, selección de regiones, acciones de transposicion y controles de numero de compases.
 
 ![Configuracion MIDI](/screenshots/Midi-Config.gif)
+
+## Pistas De Salida MIDI
+
+En escritorio, añade una pista MIDI desde el menú contextual de la lista de pistas cuando el show necesite controlar un instrumento, una mesa de luces, una aplicación de letras u otro destino MIDI. Desde la cabecera puedes elegir el puerto y uno de los 16 canales; cada mensaje también puede usar otro canal cuando haga falta.
+
+Haz clic derecho en el carril MIDI para añadir un clip en el punto elegido. Un clip puede contener notas, controles, cambios de programa y curvas de control suaves con distintos desfases. Los mensajes que coinciden en el tiempo siguen el orden del editor, donde puedes reordenarlos, plegarlos o probarlos antes de guardar.
+
+![Editor MIDI con mensajes de nota, control y programa](/screenshots/Midi-Track-Editor.png)
+
+Los clips MIDI guardados aparecen directamente en el timeline y se pueden editar, arrastrar a otro punto, desactivar desde el botón de encendido de la pista o exportar dentro de un paquete de canción de LibreTracks.
+
+![Pista de salida MIDI y clip en el timeline](/screenshots/Midi-Track-Timeline.png)
