@@ -451,7 +451,14 @@ export function LibrarySidebarPanel({
                   {isPending ? "hourglass_top" : asset.isMissing ? "warning" : "music_note"}
                 </span>
                 <span className="lt-library-asset-copy" title={asset.fileName}>{asset.fileName}</span>
-                <span className="lt-library-asset-duration">
+                <span
+                  className="lt-library-asset-duration"
+                  // A failed import carries the backend's reason (e.g. "no cabe
+                  // aqui: solo hay 0:12 libres antes de 'Song 5'"). Surface it
+                  // on hover — the status label alone only says "Error al
+                  // importar", which reads as if the file were corrupt.
+                  title={asset.pendingError ?? undefined}
+                >
                   {isPending ? getPendingClipLabel(asset.pendingStatus ?? "queued", t) : formatAssetDuration(asset.durationSeconds)}
                 </span>
               </div>

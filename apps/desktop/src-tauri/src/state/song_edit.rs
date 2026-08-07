@@ -24,6 +24,22 @@ pub(super) fn normalize_timeline_start_seconds(value: f64) -> f64 {
     }
 }
 
+/// Format a duration as `m:ss` so rejection messages talk in the units the
+/// user reads off the timeline instead of raw seconds.
+fn format_duration_label(seconds: f64) -> String {
+    let total = seconds.max(0.0).round() as i64;
+    format!("{}:{:02}", total / 60, total % 60)
+}
+
+/// Last path segment, for naming the offending file in an error message.
+fn file_label(file_path: &str) -> String {
+    file_path
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(file_path)
+        .to_string()
+}
+
 pub(super) fn validate_clip_window(
     song_dir: &std::path::Path,
     clip_file_path: &str,
@@ -70,8 +86,14 @@ pub(super) fn append_clip_to_song(
     // Enforce the "clip lives inside one region" invariant by either
     // extending the region the clip lands in, or creating a new region
     // around it when it falls between songs. A clip whose span would
-    // invade a neighbouring song is rejected.
-    ensure_region_covers_clip(song, clip_start, clip_end)?;
+    // invade a neighbouring song is rejected — naming the file so the
+    // rejection is actionable instead of a bare "no cabe".
+    ensure_region_covers_clip_for_file(
+        song,
+        clip_start,
+        clip_end,
+        Some(&normalized_file_path),
+    )?;
 
     song.clips.push(Clip {
         id: clip_id,
@@ -111,11 +133,41 @@ pub(super) fn ensure_region_covers_clip(
     clip_start: f64,
     clip_end: f64,
 ) -> Result<(), DesktopError> {
+    ensure_region_covers_clip_for_file(song, clip_start, clip_end, None)
+}
+
+/// Same as [`ensure_region_covers_clip`], but names the audio file in the
+/// rejection message.
+///
+/// The common failure is dropping a full-length track between two songs that
+/// sit back to back: there is no free time before the next song starts, so the
+/// clip is refused. The bare "would extend into the next song" gave the user no
+/// way to act — it named neither the file nor how much room was missing, and
+/// the library badge only showed the generic "Error al importar", which reads
+/// as if the audio file itself were broken. We report which file, how long it
+/// is, how much space is actually free, and by how much it overflows.
+pub(super) fn ensure_region_covers_clip_for_file(
+    song: &mut Song,
+    clip_start: f64,
+    clip_end: f64,
+    file_path: Option<&str>,
+) -> Result<(), DesktopError> {
     if clip_end <= clip_start {
         return Err(DesktopError::AudioCommand(
             "clip must have a positive duration".into(),
         ));
     }
+
+    // "<file> (m:ss) " prefix when we know which file we are placing.
+    let subject = |duration: f64| match file_path {
+        Some(path) => format!(
+            "'{}' ({})",
+            file_label(path),
+            format_duration_label(duration)
+        ),
+        None => format!("el clip ({})", format_duration_label(duration)),
+    };
+    let clip_duration = clip_end - clip_start;
 
     // Pre-sort so neighbour lookups are deterministic.
     sort_song_regions(&mut song.regions);
@@ -135,9 +187,18 @@ pub(super) fn ensure_region_covers_clip(
         // or implicitly delete it (data loss).
         if let Some(next) = song.regions.get(idx + 1) {
             if clip_end > next.start_seconds {
-                return Err(DesktopError::AudioCommand(
-                    "clip would extend into the next song; move it earlier or shorten it".into(),
-                ));
+                let available = next.start_seconds - clip_start;
+                let overflow = clip_end - next.start_seconds;
+                return Err(DesktopError::AudioCommand(format!(
+                    "{} no cabe aqui: solo hay {} libres antes de '{}' y se pasa {}. \
+                     Alarga la cancion '{}', sueltalo mas atras o haz sitio moviendo '{}'.",
+                    subject(clip_duration),
+                    format_duration_label(available),
+                    next.name,
+                    format_duration_label(overflow),
+                    song.regions[idx].name,
+                    next.name,
+                )));
             }
         }
         song.regions[idx].end_seconds = clip_end;
@@ -152,8 +213,12 @@ pub(super) fn ensure_region_covers_clip(
         .find(|region| !(clip_end <= region.start_seconds || clip_start >= region.end_seconds))
     {
         return Err(DesktopError::AudioCommand(format!(
-            "clip overlaps song '{}' but does not lie inside it; move it earlier or later",
-            neighbour.name
+            "{} pisa la cancion '{}' sin quedar dentro de ella. \
+             Sueltalo dentro de '{}' o en un hueco libre de {} o mas.",
+            subject(clip_duration),
+            neighbour.name,
+            neighbour.name,
+            format_duration_label(clip_duration),
         )));
     }
     let region_index = song.regions.len();
@@ -275,4 +340,249 @@ pub(super) fn prune_auto_created_empty_tracks(song: &mut Song) {
             && track.kind != libretracks_core::TrackKind::Folder
             && !used_track_ids.contains(track.id.as_str()))
     });
+}
+
+#[cfg(test)]
+mod region_message_tests {
+    use super::*;
+
+    fn region(name: &str, start: f64, end: f64) -> SongRegion {
+        SongRegion {
+            id: format!("region_{name}"),
+            name: name.to_string(),
+            start_seconds: start,
+            end_seconds: end,
+            transpose_semitones: 0,
+            key: None,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: libretracks_core::SongMaster::default(),
+        }
+    }
+
+    fn song_with_regions(regions: Vec<SongRegion>) -> Song {
+        Song {
+            id: "song_test".into(),
+            title: "Test".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 600.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions,
+            tracks: vec![],
+            clips: vec![],
+            midi_clips: vec![],
+            section_markers: vec![],
+        }
+    }
+
+    /// Two songs back to back, as in a real set list: there is no free time
+    /// between them.
+    fn setlist_song() -> Song {
+        song_with_regions(vec![
+            region("Digno", 0.0, 180.0),
+            region("Si tu presencia", 180.0, 400.0),
+        ])
+    }
+
+    fn error_text(result: Result<(), DesktopError>) -> String {
+        match result {
+            Ok(()) => panic!("expected the placement to be rejected"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    #[test]
+    fn rejection_names_the_file_the_space_left_and_the_overflow() {
+        let mut song = setlist_song();
+        // A 4-minute track dropped 20s into the first song. Only 2:40 is free
+        // before "Si tu presencia" starts, so it overflows by 1:20.
+        let message = error_text(ensure_region_covers_clip_for_file(
+            &mut song,
+            20.0,
+            260.0,
+            Some("C:/audio/Dios es Real - Bajo.mp3"),
+        ));
+
+        assert!(
+            message.contains("Dios es Real - Bajo.mp3"),
+            "must name the offending file, got: {message}"
+        );
+        assert!(
+            message.contains("2:40"),
+            "must state the free space, got: {message}"
+        );
+        assert!(
+            message.contains("1:20"),
+            "must state the overflow, got: {message}"
+        );
+        assert!(
+            message.contains("Si tu presencia"),
+            "must name the song in the way, got: {message}"
+        );
+    }
+
+    #[test]
+    fn straddling_rejection_names_the_song_and_the_room_required() {
+        // Gap between the two songs, but the clip is longer than the gap.
+        let mut song = song_with_regions(vec![
+            region("Digno", 0.0, 180.0),
+            region("Si tu presencia", 300.0, 500.0),
+        ]);
+
+        let message = error_text(ensure_region_covers_clip_for_file(
+            &mut song,
+            200.0,
+            380.0,
+            Some("audio/Guia.wav"),
+        ));
+
+        assert!(message.contains("Guia.wav"), "got: {message}");
+        assert!(message.contains("Si tu presencia"), "got: {message}");
+        // 180s of audio -> needs a 3:00 slot.
+        assert!(message.contains("3:00"), "got: {message}");
+    }
+
+    #[test]
+    fn placements_that_already_worked_are_unaffected() {
+        // Fits inside the first song.
+        let mut song = setlist_song();
+        assert!(
+            ensure_region_covers_clip_for_file(&mut song, 20.0, 100.0, Some("a.wav")).is_ok()
+        );
+
+        // Free space after the last song: a region is auto-created.
+        let mut song = setlist_song();
+        assert!(
+            ensure_region_covers_clip_for_file(&mut song, 400.0, 640.0, Some("b.wav")).is_ok()
+        );
+        assert_eq!(song.regions.len(), 3);
+
+        // Extending the LAST song has no neighbour to collide with.
+        let mut song = setlist_song();
+        assert!(
+            ensure_region_covers_clip_for_file(&mut song, 380.0, 700.0, Some("c.wav")).is_ok()
+        );
+        assert_eq!(song.regions.len(), 2);
+
+        // A stacked multitrack keeps extending the SAME region rather than
+        // creating one per stem.
+        let mut song = song_with_regions(vec![region("Song 1", 0.0, 60.0)]);
+        for end in [30.0, 200.0, 120.0] {
+            assert!(
+                ensure_region_covers_clip_for_file(&mut song, 0.0, end, Some("stem.wav")).is_ok()
+            );
+        }
+        assert_eq!(song.regions.len(), 1, "a multitrack must stay one region");
+        assert!((song.regions[0].end_seconds - 200.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn duration_labels_render_as_minutes_and_seconds() {
+        assert_eq!(format_duration_label(0.0), "0:00");
+        assert_eq!(format_duration_label(59.4), "0:59");
+        assert_eq!(format_duration_label(60.0), "1:00");
+        assert_eq!(format_duration_label(245.0), "4:05");
+        // Never renders a negative slot.
+        assert_eq!(format_duration_label(-5.0), "0:00");
+    }
+
+    #[test]
+    fn file_label_takes_the_last_path_segment() {
+        assert_eq!(file_label("C:/audio/Bajo.mp3"), "Bajo.mp3");
+        assert_eq!(file_label("audio\\Guia.wav"), "Guia.wav");
+        assert_eq!(file_label("kick.wav"), "kick.wav");
+    }
+
+    fn clip_on(track_id: &str, start: f64, duration: f64) -> Clip {
+        Clip {
+            id: format!("clip_{track_id}"),
+            track_id: track_id.to_string(),
+            file_path: format!("audio/{track_id}.wav"),
+            timeline_start_seconds: start,
+            source_start_seconds: 0.0,
+            duration_seconds: duration,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        }
+    }
+
+    /// Regression for the ghost region left behind by `delete_tracks`.
+    ///
+    /// Deleting a track drops its clips, which can empty a region. Every other
+    /// clip-removing path prunes those; `delete_tracks` did not, so removing
+    /// all of a song's tracks left the region on the timeline with nothing in
+    /// it — and a later re-import landed inside that leftover region instead of
+    /// creating a fresh one.
+    #[test]
+    fn a_region_that_loses_all_its_clips_is_pruned() {
+        let mut song = song_with_regions(vec![
+            region("Cancion A", 0.0, 180.0),
+            region("Cancion B", 180.0, 400.0),
+        ]);
+        song.clips = vec![
+            clip_on("t_a1", 0.0, 180.0),
+            clip_on("t_b1", 180.0, 220.0),
+        ];
+
+        // Simulate delete_tracks removing every clip of "Cancion B".
+        song.clips.retain(|clip| clip.track_id != "t_b1");
+        prune_empty_regions(&mut song);
+
+        assert_eq!(
+            song.regions.len(),
+            1,
+            "the emptied region must not survive: {:?}",
+            song.regions.iter().map(|r| &r.name).collect::<Vec<_>>()
+        );
+        assert_eq!(song.regions[0].name, "Cancion A");
+    }
+
+    /// With the ghost region gone, re-importing the deleted song creates a new
+    /// region sized to the audio instead of inheriting the stale bounds.
+    #[test]
+    fn reimporting_after_deleting_a_song_creates_a_fresh_region() {
+        let mut song = song_with_regions(vec![
+            region("Cancion A", 0.0, 180.0),
+            region("Cancion B", 180.0, 400.0),
+        ]);
+        song.clips = vec![clip_on("t_a1", 0.0, 180.0), clip_on("t_b1", 180.0, 220.0)];
+
+        song.clips.retain(|clip| clip.track_id != "t_b1");
+        prune_empty_regions(&mut song);
+
+        // Re-import a 5-minute version where the old song used to be.
+        ensure_region_covers_clip_for_file(&mut song, 180.0, 480.0, Some("Cancion B.mp3"))
+            .expect("the slot is free once the ghost region is gone");
+
+        let created = song
+            .regions
+            .iter()
+            .find(|r| (r.start_seconds - 180.0).abs() < 0.01)
+            .expect("a region should be created for the re-import");
+        assert!(
+            (created.end_seconds - 480.0).abs() < 0.01,
+            "the new region must match the re-imported audio, got {}",
+            created.end_seconds
+        );
+    }
+
+    /// A region that still holds clips is never pruned.
+    #[test]
+    fn regions_that_still_have_clips_survive() {
+        let mut song = song_with_regions(vec![
+            region("Cancion A", 0.0, 180.0),
+            region("Cancion B", 180.0, 400.0),
+        ]);
+        song.clips = vec![clip_on("t_a1", 0.0, 180.0), clip_on("t_b1", 180.0, 220.0)];
+
+        prune_empty_regions(&mut song);
+
+        assert_eq!(song.regions.len(), 2);
+    }
 }
