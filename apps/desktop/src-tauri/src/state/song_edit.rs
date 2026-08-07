@@ -9,6 +9,7 @@ use std::path::Path;
 use libretracks_core::{Clip, Song, SongRegion, TrackKind};
 use libretracks_project::read_audio_metadata;
 
+use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
 
 use super::{
@@ -29,6 +30,29 @@ pub(super) fn normalize_timeline_start_seconds(value: f64) -> f64 {
 fn format_duration_label(seconds: f64) -> String {
     let total = seconds.max(0.0).round() as i64;
     format!("{}:{:02}", total / 60, total % 60)
+}
+
+/// The UI language the user picked, lowercased, or `None` when settings can't
+/// be read. Auto-created songs are named in this language.
+pub(super) fn ui_locale(audio: &AudioController) -> Option<String> {
+    audio
+        .current_settings()
+        .ok()
+        .and_then(|settings| settings.locale)
+        .map(|locale| locale.to_ascii_lowercase())
+}
+
+/// Default name for the `index`-th auto-created song, in the user's language.
+///
+/// Every path that creates a song without the user typing a name must go
+/// through here. Regions born from a clip drop used to hardcode `"Song N"`
+/// while the ones created from the timeline header were localized, so the same
+/// session ended up with a mix of "Canción 1" and "Song 2".
+pub(super) fn default_region_name(locale: Option<&str>, index: usize) -> String {
+    match locale {
+        Some("es") => format!("Canción {}", index + 1),
+        _ => format!("Song {}", index + 1),
+    }
 }
 
 /// Last path segment, for naming the offending file in an error message.
@@ -64,6 +88,7 @@ pub(super) fn append_clip_to_song(
     song: &mut Song,
     song_dir: &Path,
     request: &CreateClipRequest,
+    locale: Option<&str>,
 ) -> Result<(), DesktopError> {
     let track = song
         .tracks
@@ -93,6 +118,7 @@ pub(super) fn append_clip_to_song(
         clip_start,
         clip_end,
         Some(&normalized_file_path),
+        locale,
     )?;
 
     song.clips.push(Clip {
@@ -132,8 +158,9 @@ pub(super) fn ensure_region_covers_clip(
     song: &mut Song,
     clip_start: f64,
     clip_end: f64,
+    locale: Option<&str>,
 ) -> Result<(), DesktopError> {
-    ensure_region_covers_clip_for_file(song, clip_start, clip_end, None)
+    ensure_region_covers_clip_for_file(song, clip_start, clip_end, None, locale)
 }
 
 /// Same as [`ensure_region_covers_clip`], but names the audio file in the
@@ -151,6 +178,7 @@ pub(super) fn ensure_region_covers_clip_for_file(
     clip_start: f64,
     clip_end: f64,
     file_path: Option<&str>,
+    locale: Option<&str>,
 ) -> Result<(), DesktopError> {
     if clip_end <= clip_start {
         return Err(DesktopError::AudioCommand(
@@ -190,8 +218,11 @@ pub(super) fn ensure_region_covers_clip_for_file(
                 let available = next.start_seconds - clip_start;
                 let overflow = clip_end - next.start_seconds;
                 return Err(DesktopError::AudioCommand(format!(
-                    "{} no cabe aqui: solo hay {} libres antes de '{}' y se pasa {}. \
-                     Alarga la cancion '{}', sueltalo mas atras o haz sitio moviendo '{}'.",
+                    "{} no cabe donde lo has soltado.\n\n\
+                     Solo hay {} libres antes de que empiece '{}', \
+                     asi que se pasa {}.\n\n\
+                     Puedes alargar la cancion '{}', soltarlo mas atras, \
+                     o mover '{}' para hacer sitio.",
                     subject(clip_duration),
                     format_duration_label(available),
                     next.name,
@@ -212,11 +243,26 @@ pub(super) fn ensure_region_covers_clip_for_file(
         .iter()
         .find(|region| !(clip_end <= region.start_seconds || clip_start >= region.end_seconds))
     {
+        // Dropping into the gap between two songs is the common case here, and
+        // the useful number is how big that gap actually is: the free run from
+        // the drop point to whatever starts next. Without it the user only
+        // learns that it did not fit, not how much room they need to make.
+        let gap_until_neighbour = neighbour.start_seconds - clip_start;
+        let gap_hint = if gap_until_neighbour > 0.0 {
+            format!(
+                "El hueco donde lo has soltado solo tiene {} antes de que empiece '{}'.\n\n",
+                format_duration_label(gap_until_neighbour),
+                neighbour.name,
+            )
+        } else {
+            String::new()
+        };
         return Err(DesktopError::AudioCommand(format!(
-            "{} pisa la cancion '{}' sin quedar dentro de ella. \
-             Sueltalo dentro de '{}' o en un hueco libre de {} o mas.",
+            "{} no cabe en este hueco.\n\n\
+             {}Sueltalo dentro de '{}', o haz un hueco de {} o mas \
+             moviendo las canciones de alrededor.",
             subject(clip_duration),
-            neighbour.name,
+            gap_hint,
             neighbour.name,
             format_duration_label(clip_duration),
         )));
@@ -224,7 +270,7 @@ pub(super) fn ensure_region_covers_clip_for_file(
     let region_index = song.regions.len();
     song.regions.push(SongRegion {
         id: format!("region_{}_{}", timestamp_suffix(), region_index),
-        name: format!("Song {}", region_index + 1),
+        name: default_region_name(locale, region_index),
         start_seconds: clip_start,
         end_seconds: clip_end,
         transpose_semitones: 0,
@@ -245,6 +291,7 @@ pub(super) fn ensure_region_covers_clip_for_file(
 pub(super) fn apply_clip_moves_with_region_reshape(
     song: &mut Song,
     moves: &[ClipMoveRequest],
+    locale: Option<&str>,
 ) -> Result<(), DesktopError> {
     for request in moves {
         let new_start = normalize_timeline_start_seconds(request.timeline_start_seconds);
@@ -270,7 +317,7 @@ pub(super) fn apply_clip_moves_with_region_reshape(
                 ));
             }
         }
-        ensure_region_covers_clip(song, new_start, new_start + clip_duration)?;
+        ensure_region_covers_clip(song, new_start, new_start + clip_duration, locale)?;
         let clip = song
             .clips
             .iter_mut()
@@ -405,6 +452,7 @@ mod region_message_tests {
             20.0,
             260.0,
             Some("C:/audio/Dios es Real - Bajo.mp3"),
+            None,
         ));
 
         assert!(
@@ -438,6 +486,7 @@ mod region_message_tests {
             200.0,
             380.0,
             Some("audio/Guia.wav"),
+            None,
         ));
 
         assert!(message.contains("Guia.wav"), "got: {message}");
@@ -451,20 +500,20 @@ mod region_message_tests {
         // Fits inside the first song.
         let mut song = setlist_song();
         assert!(
-            ensure_region_covers_clip_for_file(&mut song, 20.0, 100.0, Some("a.wav")).is_ok()
+            ensure_region_covers_clip_for_file(&mut song, 20.0, 100.0, Some("a.wav"), None).is_ok()
         );
 
         // Free space after the last song: a region is auto-created.
         let mut song = setlist_song();
         assert!(
-            ensure_region_covers_clip_for_file(&mut song, 400.0, 640.0, Some("b.wav")).is_ok()
+            ensure_region_covers_clip_for_file(&mut song, 400.0, 640.0, Some("b.wav"), None).is_ok()
         );
         assert_eq!(song.regions.len(), 3);
 
         // Extending the LAST song has no neighbour to collide with.
         let mut song = setlist_song();
         assert!(
-            ensure_region_covers_clip_for_file(&mut song, 380.0, 700.0, Some("c.wav")).is_ok()
+            ensure_region_covers_clip_for_file(&mut song, 380.0, 700.0, Some("c.wav"), None).is_ok()
         );
         assert_eq!(song.regions.len(), 2);
 
@@ -473,11 +522,36 @@ mod region_message_tests {
         let mut song = song_with_regions(vec![region("Song 1", 0.0, 60.0)]);
         for end in [30.0, 200.0, 120.0] {
             assert!(
-                ensure_region_covers_clip_for_file(&mut song, 0.0, end, Some("stem.wav")).is_ok()
+                ensure_region_covers_clip_for_file(&mut song, 0.0, end, Some("stem.wav"), None)
+                    .is_ok()
             );
         }
         assert_eq!(song.regions.len(), 1, "a multitrack must stay one region");
         assert!((song.regions[0].end_seconds - 200.0).abs() < 0.001);
+    }
+
+    /// Dropping audio onto empty timeline used to hardcode "Song N" while the
+    /// timeline header's "create song" was localized, so a Spanish session
+    /// ended up mixing "Canción 1" with "Song 2".
+    #[test]
+    fn an_auto_created_region_is_named_in_the_ui_language() {
+        let mut song = song_with_regions(vec![]);
+        ensure_region_covers_clip_for_file(&mut song, 0.0, 180.0, Some("a.wav"), Some("es"))
+            .expect("an empty timeline always has room");
+        assert_eq!(song.regions[0].name, "Canción 1");
+
+        let mut song = song_with_regions(vec![]);
+        ensure_region_covers_clip_for_file(&mut song, 0.0, 180.0, Some("a.wav"), Some("en"))
+            .expect("an empty timeline always has room");
+        assert_eq!(song.regions[0].name, "Song 1");
+    }
+
+    #[test]
+    fn region_names_fall_back_to_english_for_unknown_locales() {
+        assert_eq!(default_region_name(Some("es"), 0), "Canción 1");
+        assert_eq!(default_region_name(Some("en"), 1), "Song 2");
+        assert_eq!(default_region_name(None, 2), "Song 3");
+        assert_eq!(default_region_name(Some("pt"), 0), "Song 1");
     }
 
     #[test]
@@ -557,7 +631,7 @@ mod region_message_tests {
         prune_empty_regions(&mut song);
 
         // Re-import a 5-minute version where the old song used to be.
-        ensure_region_covers_clip_for_file(&mut song, 180.0, 480.0, Some("Cancion B.mp3"))
+        ensure_region_covers_clip_for_file(&mut song, 180.0, 480.0, Some("Cancion B.mp3"), None)
             .expect("the slot is free once the ghost region is gone");
 
         let created = song

@@ -15,7 +15,7 @@ use super::{
     append_clip_to_song, apply_clip_moves_with_region_reshape, delete_track_and_repair_hierarchy,
     ensure_region_covers_clip, file_stem_for_auto_track, insert_track,
     normalize_timeline_start_seconds, normalize_ui_color, prune_auto_created_empty_tracks,
-    prune_empty_regions, refresh_song_duration, reparent_track, timestamp_suffix,
+    prune_empty_regions, refresh_song_duration, reparent_track, timestamp_suffix, ui_locale,
     validate_clip_window, AudioChangeImpact, ClipMoveRequest, CreateAudioTrackWithClipRequest,
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession,
 };
@@ -45,7 +45,12 @@ impl DesktopSession {
         // Reshape the regions first (auto-create or auto-extend) so the
         // move never produces a transient state where the clip lives
         // outside every region.
-        ensure_region_covers_clip(&mut song, new_start, new_start + clip_duration)?;
+        ensure_region_covers_clip(
+            &mut song,
+            new_start,
+            new_start + clip_duration,
+            ui_locale(audio).as_deref(),
+        )?;
 
         let clip = song
             .clips
@@ -86,7 +91,12 @@ impl DesktopSession {
             .map(|clip| clip.duration_seconds)
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
 
-        ensure_region_covers_clip(&mut song, new_start, new_start + clip_duration)?;
+        ensure_region_covers_clip(
+            &mut song,
+            new_start,
+            new_start + clip_duration,
+            ui_locale(audio).as_deref(),
+        )?;
 
         let clip = song
             .clips
@@ -124,7 +134,7 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        apply_clip_moves_with_region_reshape(&mut song, moves)?;
+        apply_clip_moves_with_region_reshape(&mut song, moves, ui_locale(audio).as_deref())?;
         prune_empty_regions(&mut song);
         prune_auto_created_empty_tracks(&mut song);
         refresh_song_duration(&mut song);
@@ -151,7 +161,7 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        apply_clip_moves_with_region_reshape(&mut song, moves)?;
+        apply_clip_moves_with_region_reshape(&mut song, moves, ui_locale(audio).as_deref())?;
         prune_empty_regions(&mut song);
         prune_auto_created_empty_tracks(&mut song);
         refresh_song_duration(&mut song);
@@ -459,8 +469,9 @@ impl DesktopSession {
                 timeline_start_seconds: source_seconds_at_view(&song, req.timeline_start_seconds),
             })
             .collect();
+        let locale = ui_locale(audio);
         for request in &mapped_requests {
-            append_clip_to_song(&mut song, &song_dir, request)?;
+            append_clip_to_song(&mut song, &song_dir, request, locale.as_deref())?;
         }
         refresh_song_duration(&mut song);
 
@@ -490,6 +501,7 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
+        let locale = ui_locale(audio);
         for (offset, request) in requests.iter().enumerate() {
             let source_start_seconds =
                 source_seconds_at_view(&song, request.timeline_start_seconds);
@@ -525,6 +537,7 @@ impl DesktopSession {
                     file_path: request.file_path.clone(),
                     timeline_start_seconds: source_start_seconds,
                 },
+                locale.as_deref(),
             )?;
         }
 
@@ -554,6 +567,7 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
+        let locale = ui_locale(audio);
         for (offset, request) in requests.iter().enumerate() {
             let trimmed_name = request.track_name.trim();
             if trimmed_name.is_empty() {
@@ -596,6 +610,7 @@ impl DesktopSession {
                     file_path: request.file_path.clone(),
                     timeline_start_seconds: source_start_seconds,
                 },
+                locale.as_deref(),
             )?;
         }
 

@@ -13,12 +13,12 @@ use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 
 use super::{
-    bar_seconds_at, next_downbeat_after_in_song, prune_auto_created_empty_tracks,
-    realign_regions_after_warp_tempo_change, refresh_song_duration, replace_song_region_range,
-    sanitize_region_bounds, set_song_tempo_at_source_position, shift_song_suffix,
-    snap_regions_after_to_downbeats, song_has_active_warp, sort_song_regions,
-    split_clips_crossing_point, timestamp_suffix, validate_time_signature, AudioChangeImpact,
-    DesktopSession, TransposeHistoryTarget,
+    bar_seconds_at, default_region_name, next_downbeat_after_in_song,
+    prune_auto_created_empty_tracks, realign_regions_after_warp_tempo_change, refresh_song_duration,
+    replace_song_region_range, sanitize_region_bounds, set_song_tempo_at_source_position,
+    shift_song_suffix, snap_regions_after_to_downbeats, song_has_active_warp, sort_song_regions,
+    split_clips_crossing_point, timestamp_suffix, ui_locale, validate_time_signature,
+    AudioChangeImpact, DesktopSession, TransposeHistoryTarget,
 };
 
 impl DesktopSession {
@@ -173,16 +173,7 @@ impl DesktopSession {
         let (start_seconds, end_seconds) =
             sanitize_region_bounds(&song, start_seconds, end_seconds)?;
         let region_index = song.regions.len();
-        let region_name = audio
-            .current_settings()
-            .ok()
-            .and_then(|settings| settings.locale)
-            .map(|locale| locale.to_ascii_lowercase())
-            .map(|locale| match locale.as_str() {
-                "es" => format!("Canción {}", region_index + 1),
-                _ => format!("Song {}", region_index + 1),
-            })
-            .unwrap_or_else(|| format!("Song {}", region_index + 1));
+        let region_name = default_region_name(ui_locale(audio).as_deref(), region_index);
         let region = SongRegion {
             id: format!("region_{}_{}", timestamp_suffix(), region_index),
             name: region_name,
@@ -252,17 +243,7 @@ impl DesktopSession {
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .map(str::to_string)
-            .unwrap_or_else(|| {
-                let locale = audio
-                    .current_settings()
-                    .ok()
-                    .and_then(|settings| settings.locale)
-                    .map(|locale| locale.to_ascii_lowercase());
-                match locale.as_deref() {
-                    Some("es") => format!("Canción {}", region_index + 1),
-                    _ => format!("Song {}", region_index + 1),
-                }
-            });
+            .unwrap_or_else(|| default_region_name(ui_locale(audio).as_deref(), region_index));
 
         let region = SongRegion {
             id: format!("region_{}_{}", timestamp_suffix(), region_index),
