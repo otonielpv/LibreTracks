@@ -36,6 +36,14 @@ impl DesktopSession {
         song_dir: PathBuf,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
+        // Edits live in memory until an explicit save (see persist_song_update,
+        // which only touches the engine + model). Loading another session
+        // replaces that memory, so anything unsaved would be silently lost.
+        // Flush it first — this is the single choke point every
+        // session-replacing flow goes through (open, open-from-path, new
+        // project, from template, .ltset import).
+        self.save_current_session_before_close();
+
         audio.stop()?;
         // LoadSession (via replace_song_buffers) initializes the complete C++ mixer runtime:
         // gain, pan, mute, solo, audio_to, transpose_behavior, folder parent chains.

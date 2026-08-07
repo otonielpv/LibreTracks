@@ -372,6 +372,37 @@ pub fn run() {
             commands::engine_v2::engine_v2_get_diagnostics,
             commands::engine_v2::engine_v2_load_session
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run LibreTracks desktop application");
+        .build(tauri::generate_context!())
+        .expect("failed to run LibreTracks desktop application")
+        .run(|app, event| {
+            // Save the open session on the way out. Edits only live in memory
+            // until an explicit save (see persist_song_update), so without this
+            // quitting the app throws away everything since the last Ctrl+S.
+            // ExitRequested covers every quit route — window close button, the
+            // app menu, and an OS shutdown — in one place; the session-switch
+            // case is handled in load_song_from_path instead.
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                save_session_on_exit(app);
+            }
+        });
+}
+
+/// Best-effort flush of the loaded session during app shutdown.
+///
+/// Never blocks the quit: if another operation still holds the session lock we
+/// give up rather than hanging the exit on it (the alternative is an app that
+/// won't close). `try_lock` also keeps us safe from the case where the quit was
+/// triggered from inside a command that already holds the lock.
+fn save_session_on_exit(app: &tauri::AppHandle) {
+    // Clone the Arc so the guard doesn't borrow from the `State` temporary, and
+    // bind the Result before matching: its Err variant carries a guard, so as a
+    // match scrutinee it would outlive the handle it borrows from.
+    let session_handle = std::sync::Arc::clone(&app.state::<DesktopState>().session);
+    let locked = session_handle.try_lock();
+    match locked {
+        Ok(mut session) => session.save_current_session_before_close(),
+        Err(_) => {
+            eprintln!("[libretracks-session] session busy at exit; skipping the autosave");
+        }
+    }
 }

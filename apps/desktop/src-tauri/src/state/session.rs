@@ -225,6 +225,23 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Flush the loaded session to disk before it stops being the current one.
+    ///
+    /// Called when the session is about to be replaced (opening another
+    /// project, creating one, importing a `.ltset`) and when the app is
+    /// quitting. Best-effort by design: there is no user to answer a dialog at
+    /// these moments, and a failure here must never block the quit or leave the
+    /// app wedged with a half-loaded session — so we log and carry on rather
+    /// than propagating. No-op when no session is loaded yet.
+    pub fn save_current_session_before_close(&mut self) {
+        if self.engine.song().is_none() || self.song_dir.is_none() {
+            return;
+        }
+        if let Err(error) = self.save_project() {
+            eprintln!("[libretracks-session] autosave before close failed: {error}");
+        }
+    }
+
     pub fn resolve_missing_file(
         &mut self,
         old_path: &str,
