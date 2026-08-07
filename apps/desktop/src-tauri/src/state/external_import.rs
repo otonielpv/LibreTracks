@@ -338,6 +338,7 @@ impl DesktopSession {
                 midi_port: None,
                 midi_channel: 1,
                 midi_enabled: true,
+                collapsed: false,
             });
             imported_track_ids_by_index.push(track_id.clone());
 

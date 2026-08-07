@@ -283,6 +283,7 @@ mod tests {
                 midi_port: None,
                 midi_channel: 1,
                 midi_enabled: true,
+                collapsed: false,
             }],
             clips: vec![Clip {
                 id: "c".into(),

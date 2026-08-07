@@ -64,6 +64,11 @@ export type TrackHeaderHandlerDeps = {
     trackId: string;
     transposeEnabled: boolean;
   }) => Promise<TransportSnapshot>;
+  /** Persists a folder's collapsed state so it survives reopening the session. */
+  updateTrackCollapsed: (args: {
+    trackId: string;
+    collapsed: boolean;
+  }) => Promise<TransportSnapshot>;
   /** Swallows the click that follows a drag release. */
   suppressTrackClickRef: { current: boolean };
   /** Anchor track for shift-click range selection. */
@@ -96,6 +101,7 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     setStatus,
     t,
     updateTrackTransposeEnabled,
+    updateTrackCollapsed,
     suppressTrackClickRef,
     trackSelectionAnchorRef,
     trackDragRef,
@@ -199,14 +205,46 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
   };
 
   const handleTrackHeaderFolderToggle = (trackId: string) => {
+    // Fold locally first so the arrangement reacts on the same frame as the
+    // click; the collapsed flag is view state, so there is nothing to wait for.
+    let nextCollapsed = false;
     setCollapsedFolders((current) => {
       const next = new Set(current);
       if (next.has(trackId)) {
         next.delete(trackId);
+        nextCollapsed = false;
       } else {
         next.add(trackId);
+        nextCollapsed = true;
       }
       return next;
+    });
+
+    // Then write it to the song so it survives reopening the session. Mirrors
+    // the transpose toggle's optimistic bookkeeping: claim the revision the
+    // backend is about to report so the incoming snapshot doesn't re-render as
+    // if it were someone else's edit.
+    void runAction(async () => {
+      const nextSnapshot = await updateTrackCollapsed({
+        trackId,
+        collapsed: nextCollapsed,
+      });
+      optimisticallyAppliedRevisionsRef.current.add(
+        nextSnapshot.projectRevision,
+      );
+      setSong((previous) => {
+        if (!previous) return previous;
+        return {
+          ...previous,
+          projectRevision: nextSnapshot.projectRevision,
+          tracks: previous.tracks.map((track) =>
+            track.id === trackId
+              ? { ...track, collapsed: nextCollapsed }
+              : track,
+          ),
+        };
+      });
+      applyPlaybackSnapshot(nextSnapshot);
     });
   };
 

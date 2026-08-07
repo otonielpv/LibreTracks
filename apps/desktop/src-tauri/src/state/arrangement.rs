@@ -398,6 +398,9 @@ impl DesktopSession {
             midi_port: None,
             midi_channel: 1,
             midi_enabled: true,
+            // A folder the user just made starts open — they need to see what
+            // they are about to drag into it.
+            collapsed: false,
         };
 
         insert_track(
@@ -512,6 +515,7 @@ impl DesktopSession {
                 midi_port: None,
                 midi_channel: 1,
                 midi_enabled: true,
+                collapsed: false,
             });
             append_clip_to_song(
                 &mut song,
@@ -582,6 +586,7 @@ impl DesktopSession {
                 midi_port: None,
                 midi_channel: 1,
                 midi_enabled: true,
+                collapsed: false,
             });
             append_clip_to_song(
                 &mut song,
@@ -664,6 +669,41 @@ impl DesktopSession {
             .find(|track| track.id == track_id)
             .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
         track.color = color;
+
+        self.perf_metrics.song_save_millis = 0;
+        self.project_revision = self.project_revision.saturating_add(1);
+        audio.record_commit_model_only();
+        Ok(self.snapshot())
+    }
+
+    /// Persist whether a folder track is collapsed in the arrangement.
+    ///
+    /// Deliberately does NOT push a history entry: collapsing a folder is a
+    /// view gesture, and burying real edits under a stack of undoable folder
+    /// toggles is exactly what users don't expect from Ctrl+Z. It also never
+    /// reaches the engine — the flag has no effect on the mix — so this is a
+    /// model-only commit like [`update_track_color`](Self::update_track_color).
+    pub fn update_track_collapsed(
+        &mut self,
+        track_id: &str,
+        collapsed: bool,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let track = self
+            .engine
+            .song_mut()?
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        if track.kind != TrackKind::Folder {
+            return Err(DesktopError::TrackNotFound(track_id.to_string()));
+        }
+        if track.collapsed == collapsed {
+            return Ok(self.snapshot());
+        }
+        track.collapsed = collapsed;
 
         self.perf_metrics.song_save_millis = 0;
         self.project_revision = self.project_revision.saturating_add(1);

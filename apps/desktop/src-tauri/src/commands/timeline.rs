@@ -952,6 +952,22 @@ pub fn update_track_color(
 }
 
 #[tauri::command]
+pub fn update_track_collapsed(
+    track_id: String,
+    collapsed: bool,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_track_collapsed(&track_id, collapsed, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn update_track_transpose_enabled(
     track_id: String,
     transpose_enabled: bool,

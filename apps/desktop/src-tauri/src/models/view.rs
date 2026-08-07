@@ -345,6 +345,10 @@ pub struct TrackSummary {
     pub midi_channel: u8,
     /// Whether a midi track sends. A MIDI track has this instead of mute/solo.
     pub midi_enabled: bool,
+    /// Whether a folder track is collapsed in the arrangement. View state the
+    /// frontend restores on load so a collapsed folder stays collapsed across
+    /// sessions; always false on non-folder tracks.
+    pub collapsed: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -625,6 +629,7 @@ pub(crate) fn song_to_view(
                 midi_port: track.midi_port.clone(),
                 midi_channel: track.midi_channel,
                 midi_enabled: track.midi_enabled,
+                collapsed: track.collapsed,
             })
             .collect(),
         automation_cues: automation_cues_to_summary(
@@ -1254,6 +1259,7 @@ mod tests {
             midi_port: None,
             midi_channel: 1,
             midi_enabled: true,
+            collapsed: false,
         }
     }
 

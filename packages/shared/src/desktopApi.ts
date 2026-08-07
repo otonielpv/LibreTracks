@@ -1440,6 +1440,15 @@ export async function updateTrackColor(args: {
   return invokeCommand<TransportSnapshot>("update_track_color", args);
 }
 
+/** Persist a folder track's collapsed state. View-only: never reaches the
+ * engine and deliberately isn't undoable. */
+export async function updateTrackCollapsed(args: {
+  trackId: string;
+  collapsed: boolean;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_track_collapsed", args);
+}
+
 export async function commitTrackMixChange(args: {
   trackId: string;
   volume?: number;

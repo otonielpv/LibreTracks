@@ -148,6 +148,7 @@ import {
   updateSongTimeSignature,
   updateTrack,
   updateTrackColor,
+  updateTrackCollapsed,
   updateTrackMixRealtime,
   commitTrackMixChange,
   updateTrackTransposeEnabled,
@@ -410,6 +411,7 @@ import { createCompactSongHandlers } from "./compact/compactSongHandlers";
 import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
+import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useDragListeners } from "./hooks/useDragListeners";
 import { useSongViewLoader } from "./hooks/useSongViewLoader";
@@ -896,9 +898,6 @@ export function TransportPanelContent() {
   // Android: file-actions submenu (import song / export session) toggled from
   // its side-rail button.
   const [isMobileFileActionsOpen, setIsMobileFileActionsOpen] = useState(false);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
-    new Set(),
-  );
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(
     null,
   );
@@ -5414,41 +5413,14 @@ export function TransportPanelContent() {
     );
   }, [sessionTemplates, templateFilter]);
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
-  const visibleTracks = useMemo<TimelineTrackSummary[]>(() => {
-    const realTracks: TimelineTrackSummary[] = song
-      ? buildVisibleTracks(song, collapsedFolders)
-      : [];
-
-    // Inject the synthetic automation lane (if the user added it) at the saved
-    // position: after the track whose id is `afterTrackId`, or first when null.
-    // It is not a real song track — see toAutomationTrack().
-    if (song?.automationTrack) {
-      const afterId = song.automationTrack.afterTrackId ?? null;
-      const automationRow = toAutomationTrack(
-        t("transport.automation.trackName"),
-      );
-      if (afterId === null) {
-        realTracks.unshift(automationRow);
-      } else {
-        const anchorIndex = realTracks.findIndex(
-          (track) => track.id === afterId,
-        );
-        if (anchorIndex >= 0) {
-          realTracks.splice(anchorIndex + 1, 0, automationRow);
-        } else {
-          // Anchor track no longer visible/exists: fall back to the top.
-          realTracks.unshift(automationRow);
-        }
-      }
-    }
-
-    return [
-      ...realTracks,
-      ...pendingAudioImports
-        .filter((pendingImport) => pendingImport.showInTimeline)
-        .map(toPendingTrack),
-    ];
-  }, [collapsedFolders, pendingAudioImports, song, t]);
+  // Collapsed folders (restored from the song) and the rows they leave visible.
+  // See ./hooks/useVisibleTracks.
+  const { collapsedFolders, setCollapsedFolders, visibleTracks } =
+    useVisibleTracks({
+      song,
+      pendingAudioImports,
+      automationTrackName: t("transport.automation.trackName"),
+    });
   // Mirror the visible-track order into a ref so the global mouse handlers
   // (which intentionally don't re-bind on every track/zoom change) can map a
   // cursor Y to a destination track during a vertical clip drag.
@@ -6030,6 +6002,7 @@ export function TransportPanelContent() {
         setStatus,
         t,
         updateTrackTransposeEnabled,
+        updateTrackCollapsed,
         suppressTrackClickRef,
         trackSelectionAnchorRef,
         trackDragRef,

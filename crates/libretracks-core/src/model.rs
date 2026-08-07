@@ -153,6 +153,14 @@ pub struct Track {
     /// meaningful state is on or off.
     #[serde(default = "default_true")]
     pub midi_enabled: bool,
+    /// Whether a [`TrackKind::Folder`] is collapsed in the arrangement view,
+    /// hiding its children. Purely a view state — the engine never reads it,
+    /// folding gain/mute happens regardless — but it lives on the track so it
+    /// survives closing the session and travels with the .ltpkg/template,
+    /// which is what users expect from a folder they collapsed. Meaningless
+    /// on non-folder tracks, where it stays false.
+    #[serde(default)]
+    pub collapsed: bool,
 }
 
 pub fn default_audio_to() -> String {

@@ -309,6 +309,7 @@ mod tests {
             midi_port: port.map(str::to_string),
             midi_channel: channel,
             midi_enabled: true,
+            collapsed: false,
         }
     }
 

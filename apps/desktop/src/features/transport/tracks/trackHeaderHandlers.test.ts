@@ -57,6 +57,9 @@ function setup(overrides: Partial<TrackHeaderHandlerDeps> = {}) {
   let selected: string[] = [];
   let songPatch: ((p: SongView | null) => SongView | null) | undefined;
   let collapsedPatch: ((c: Set<string>) => Set<string>) | undefined;
+  // Mirrors React: the updater is applied against live state, which the folder
+  // toggle relies on to know which way it just folded.
+  let collapsedFolders = new Set<string>();
 
   const deps: TrackHeaderHandlerDeps = {
     findTrack: (trackId) => tracks[trackId] ?? null,
@@ -84,12 +87,14 @@ function setup(overrides: Partial<TrackHeaderHandlerDeps> = {}) {
     }),
     setCollapsedFolders: vi.fn((update) => {
       collapsedPatch = update;
+      collapsedFolders = update(collapsedFolders);
     }),
     setContextMenu: vi.fn(),
     setPitchPrepareUiState: vi.fn(),
     setStatus: vi.fn(),
     t: (key, options) => `${key}:${JSON.stringify(options ?? {})}`,
     updateTrackTransposeEnabled: vi.fn(async () => snapshot(11)),
+    updateTrackCollapsed: vi.fn(async () => snapshot(13)),
     suppressTrackClickRef,
     trackSelectionAnchorRef,
     trackDragRef,
@@ -111,6 +116,7 @@ function setup(overrides: Partial<TrackHeaderHandlerDeps> = {}) {
     getSelected: () => selected,
     getSongPatch: () => songPatch,
     getCollapsedPatch: () => collapsedPatch,
+    getCollapsedFolders: () => collapsedFolders,
   };
 }
 
@@ -335,6 +341,45 @@ describe("createTrackHeaderHandlers", () => {
 
       handlers.handleTrackHeaderFolderToggle("f1");
       expect(getCollapsedPatch()?.(new Set(["f1"]))).toEqual(new Set());
+    });
+
+    it("persists the new collapsed state so it survives reopening", async () => {
+      const { handlers, deps } = setup();
+
+      await handlers.handleTrackHeaderFolderToggle("f1");
+      expect(deps.updateTrackCollapsed).toHaveBeenCalledWith({
+        trackId: "f1",
+        collapsed: true,
+      });
+
+      await handlers.handleTrackHeaderFolderToggle("f1");
+      expect(deps.updateTrackCollapsed).toHaveBeenLastCalledWith({
+        trackId: "f1",
+        collapsed: false,
+      });
+    });
+
+    it("optimistically patches the song and records the revision", async () => {
+      const {
+        handlers,
+        optimisticallyAppliedRevisionsRef,
+        getSongPatch,
+      } = setup();
+
+      await handlers.handleTrackHeaderFolderToggle("f1");
+
+      expect(optimisticallyAppliedRevisionsRef.current.has(13)).toBe(true);
+      const patched = getSongPatch()?.({
+        projectRevision: 12,
+        tracks: [track("f1"), track("t1")],
+      } as unknown as SongView);
+      expect(patched?.projectRevision).toBe(13);
+      expect(
+        patched?.tracks.find((entry) => entry.id === "f1")?.collapsed,
+      ).toBe(true);
+      expect(
+        patched?.tracks.find((entry) => entry.id === "t1")?.collapsed,
+      ).toBeUndefined();
     });
   });
 

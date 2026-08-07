@@ -393,6 +393,11 @@ export type TrackSummary = {
   midiChannel?: number;
   /** Whether a midi track sends. Its equivalent of mute/solo. */
   midiEnabled?: boolean;
+  /** Whether a folder track is collapsed in the arrangement. Persisted with
+   * the song so a folder the user collapsed is still collapsed next time they
+   * open the session. Optional + defaults to false for back-compat with
+   * snapshots written before the field existed. */
+  collapsed?: boolean;
 };
 
 export function formatTransposeSemitones(value: number): string {

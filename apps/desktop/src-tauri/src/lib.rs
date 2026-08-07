@@ -358,6 +358,7 @@ pub fn run() {
             commands::timeline::update_track,
             commands::timeline::update_track_color,
             commands::timeline::update_track_transpose_enabled,
+            commands::timeline::update_track_collapsed,
             commands::timeline::delete_track,
             commands::timeline::delete_tracks,
             // ── Engine v2 commands (only available with `audio-engine-v2` feature) ──

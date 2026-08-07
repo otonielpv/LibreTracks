@@ -559,6 +559,7 @@ mod tests {
                 midi_port: None,
                 midi_channel: 1,
                 midi_enabled: true,
+                collapsed: false,
             }],
             clips: vec![],
             midi_clips: vec![],
@@ -836,6 +837,80 @@ mod tests {
         validate_song(&song).expect("migrated song must satisfy invariants");
     }
 
+    /// A folder the user collapsed must still be collapsed after reopening the
+    /// session — before the flag was persisted it lived only in frontend state,
+    /// so every folder came back expanded.
+    #[test]
+    fn folder_collapsed_state_round_trips_through_save_and_load() {
+        let mut song = base_song();
+        song.tracks.push(libretracks_core::Track {
+            id: "folder1".into(),
+            name: "Rhythm".into(),
+            kind: TrackKind::Folder,
+            parent_track_id: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "master".into(),
+            color: None,
+            auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
+            midi_enabled: true,
+            collapsed: true,
+        });
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        save_song(dir.path(), &song).expect("save song with a collapsed folder");
+        let loaded = load_song(dir.path()).expect("reload song");
+
+        let folder = loaded
+            .tracks
+            .iter()
+            .find(|track| track.id == "folder1")
+            .expect("folder track survives the round trip");
+        assert!(folder.collapsed, "collapsed folder must reload collapsed");
+        // Non-folder tracks stay false; the flag is meaningless on them.
+        let audio = loaded
+            .tracks
+            .iter()
+            .find(|track| track.id == "t1")
+            .expect("audio track");
+        assert!(!audio.collapsed);
+    }
+
+    /// Sessions written before the field existed must still load, with every
+    /// folder treated as expanded rather than failing to parse.
+    #[test]
+    fn songs_without_the_collapsed_field_default_to_expanded() {
+        let mut song = base_song();
+        song.tracks[0].kind = TrackKind::Folder;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        save_song(dir.path(), &song).expect("save song");
+
+        // Strip the field the way an older LibreTracks would have written it.
+        let song_path = dir.path().join(SONG_FILE_NAME);
+        let raw = std::fs::read_to_string(&song_path).expect("read song file");
+        let mut document: serde_json::Value =
+            serde_json::from_str(&raw).expect("song file is json");
+        for track in document["tracks"]
+            .as_array_mut()
+            .expect("tracks is an array")
+        {
+            track
+                .as_object_mut()
+                .expect("track is an object")
+                .remove("collapsed");
+        }
+        std::fs::write(&song_path, document.to_string()).expect("rewrite song file");
+
+        let loaded = load_song(dir.path()).expect("legacy song still loads");
+        assert!(!loaded.tracks[0].collapsed);
+    }
+
     #[test]
     fn midi_clips_round_trip_through_save_and_load() {
         let mut song = base_song();
@@ -855,6 +930,7 @@ mod tests {
             midi_port: Some("loopMIDI Port 2".into()),
             midi_channel: 3,
             midi_enabled: true,
+            collapsed: false,
         });
         song.midi_clips.push(libretracks_core::MidiClip {
             id: "mc1".into(),

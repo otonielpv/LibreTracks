@@ -586,6 +586,7 @@ pub fn merge_extracted_song_package(
             midi_port: track.midi_port.clone(),
             midi_channel: track.midi_channel,
             midi_enabled: track.midi_enabled,
+            collapsed: track.collapsed,
         });
         target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
@@ -774,6 +775,7 @@ mod tests {
             midi_port: None,
             midi_channel: 1,
             midi_enabled: true,
+            collapsed: false,
         }
     }
 
@@ -809,6 +811,7 @@ mod tests {
             midi_port: port.map(str::to_string),
             midi_channel: channel,
             midi_enabled: true,
+            collapsed: false,
         }
     }
 
