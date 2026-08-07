@@ -861,6 +861,15 @@ impl DesktopSession {
         }
 
         if any_audio_deleted {
+            // Deleting a track takes its clips with it, so a region can be left
+            // with nothing in it. Every other clip-removing path (delete_clips,
+            // the move-clip paths) prunes those; this one did not, so deleting
+            // all of a song's tracks left the region behind as a ghost: it kept
+            // its slot on the timeline and kept `duration_seconds` stretched to
+            // its end. Re-importing the song then landed INSIDE that leftover
+            // region instead of creating a fresh one, which is how a session
+            // ends up with songs that look right but do not line up.
+            prune_empty_regions(&mut song);
             refresh_song_duration(&mut song);
         }
 
