@@ -1196,6 +1196,15 @@ export const testDesktopApiMock = {
     delete state.waveforms[filePath];
     return clone(state.libraryAssets);
   },
+  forgetLibraryAssets: async (filePaths: string[]) => {
+    // Mirrors the backend: manifest entries only, and never one a clip uses.
+    const inUse = new Set(state.song.clips.map((clip) => clip.filePath));
+    const doomed = new Set(filePaths.filter((path) => !inUse.has(path)));
+    state.libraryAssets = state.libraryAssets.filter(
+      (asset) => !doomed.has(asset.filePath),
+    );
+    return clone(state.libraryAssets);
+  },
   moveLibraryAsset: async (filePath: string, folderPath?: string | null) => {
     state.libraryAssets = sortLibraryAssets(
       state.libraryAssets.map((asset) =>

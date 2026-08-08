@@ -131,6 +131,24 @@ pub fn delete_library_asset(
         .map_err(|error| error.to_string())
 }
 
+/// Roll a library import back out of the manifest after its timeline placement
+/// was rejected. Never deletes audio from disk — see
+/// `DesktopSession::forget_library_assets`.
+#[tauri::command]
+pub fn forget_library_assets(
+    file_paths: Vec<String>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .forget_library_assets(&file_paths)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn move_library_asset(
     file_path: String,

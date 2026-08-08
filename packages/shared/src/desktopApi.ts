@@ -854,6 +854,19 @@ export async function deleteLibraryAsset(filePath: string): Promise<LibraryAsset
   return invokeCommand<LibraryAssetSummary[]>("delete_library_asset", { filePath });
 }
 
+/**
+ * Undo a library import whose timeline placement was rejected. Removes the
+ * manifest entries only — the audio files themselves are never deleted, and
+ * assets already referenced by a clip are kept.
+ */
+export async function forgetLibraryAssets(
+  filePaths: string[],
+): Promise<LibraryAssetSummary[]> {
+  return invokeCommand<LibraryAssetSummary[]>("forget_library_assets", {
+    filePaths,
+  });
+}
+
 export async function moveLibraryAsset(
   filePath: string,
   newFolderPath: string | null,

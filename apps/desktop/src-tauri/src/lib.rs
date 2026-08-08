@@ -273,6 +273,7 @@ pub fn run() {
             commands::project::import_external_project,
             commands::project::resolve_missing_file,
             commands::library::delete_library_asset,
+            commands::library::forget_library_assets,
             commands::library::move_library_asset,
             commands::library::create_library_folder,
             commands::library::rename_library_folder,

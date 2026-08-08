@@ -1,4 +1,6 @@
 import type { LibraryAssetSummary } from "@libretracks/shared/models";
+import { alertDialog } from "../../../shared/dialog/dialogService";
+import { forgetLibraryAssets } from "../desktopApi";
 import { useTransportStore } from "../store";
 
 /** Shared audio-import pipeline for ALL entry points (drag files, drag paths,
@@ -31,6 +33,36 @@ export type RunAudioImportPipelineArgs = {
   successMessage: (importedAssets: LibraryAssetSummary[]) => string;
 };
 
+/** Fallback shown only when the failure carries no usable text at all. */
+const GENERIC_IMPORT_ERROR =
+  "Could not import audio files. Please check the files and try again.";
+
+/**
+ * Extract the human-readable reason from whatever a rejected import threw.
+ *
+ * Tauri rejects `invoke` with a plain STRING, not an `Error`, so the old
+ * `error instanceof Error ? error.message : <generic>` check discarded every
+ * backend message and always showed the generic text — which is why a clip
+ * that simply did not fit between two songs was reported as if the audio file
+ * were broken. Strings, `Error`s and `{ message }` objects all carry their
+ * reason through; only genuinely empty values fall back.
+ */
+export function importErrorMessage(error: unknown): string {
+  if (typeof error === "string") {
+    return error.trim() || GENERIC_IMPORT_ERROR;
+  }
+  if (error instanceof Error) {
+    return error.message.trim() || GENERIC_IMPORT_ERROR;
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  }
+  return GENERIC_IMPORT_ERROR;
+}
+
 export async function runAudioImportPipeline({
   pendingIds,
   importFn,
@@ -42,6 +74,11 @@ export async function runAudioImportPipeline({
   successMessage,
 }: RunAudioImportPipelineArgs): Promise<void> {
   const store = useTransportStore.getState();
+  // Assets that made it into the library before a later step failed. Files are
+  // registered BEFORE they are placed, so a drop the region rules reject would
+  // otherwise leave its audio in the library while telling the user nothing was
+  // imported. Tracked here so the catch can roll them back out again.
+  let assetsToRollBack: LibraryAssetSummary[] = [];
   try {
     if (beforeImport) {
       store.updatePendingAudioImportStatus(pendingIds, "reading");
@@ -57,17 +94,51 @@ export async function runAudioImportPipeline({
 
     store.updatePendingAudioImportStatus(pendingIds, "analyzing");
     if (onImported) {
+      // Only the placement tail can strand assets: everything before this
+      // point either failed before importing, or is what we would roll back.
+      assetsToRollBack = importedAssets;
       await onImported(importedAssets);
+      assetsToRollBack = [];
     }
 
     store.removePendingAudioImports(pendingIds);
     setStatus(successMessage(importedAssets));
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Could not import audio files. Please check the files and try again.";
+    const message = importErrorMessage(error);
     store.markPendingAudioImportsFailed(pendingIds, message);
     setStatus(message);
+
+    // Roll the half-done import back out of the library. Registering the files
+    // happens before placing them, so without this a rejected drop still left
+    // its audio in the library list — the user was told the import failed while
+    // the assets were sitting right there. Best-effort: a failing rollback must
+    // not replace the real error the user needs to read.
+    if (assetsToRollBack.length) {
+      try {
+        await forgetLibraryAssets(
+          assetsToRollBack.map((asset) => asset.filePath),
+        );
+        await refreshLibraryState();
+      } catch {
+        // Leave the assets in place rather than surfacing a second failure.
+      }
+    }
+
+    // The status bar alone was not enough: on a wide window it can sit outside
+    // the user's field of view, so a rejected drop looked like nothing had
+    // happened while the timeline still showed placeholder tracks/clips reading
+    // "Error al importar" — which reads as a corrupt file rather than a
+    // placement that did not fit. Show the real reason in a modal, then drop
+    // the placeholders so the timeline matches what was actually saved: nothing.
+    // The backend is atomic (create_audio_tracks_with_clips aborts before
+    // persisting), so there is no partial state to keep on screen.
+    void alertDialog(message).then((acknowledged) => {
+      // Only clear once the user has actually seen the reason. With no dialog
+      // host mounted (early startup, tests) the placeholders stay put, so the
+      // failure stays visible instead of vanishing unexplained.
+      if (acknowledged) {
+        useTransportStore.getState().removePendingAudioImports(pendingIds);
+      }
+    });
   }
 }

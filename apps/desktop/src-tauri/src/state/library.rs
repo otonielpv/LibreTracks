@@ -148,6 +148,47 @@ impl DesktopSession {
         list_library_assets(&song_dir, Some(&song))
     }
 
+    /// Undo a library import whose timeline placement was then rejected.
+    ///
+    /// Importing runs before placement, so a drop that the region rules refuse
+    /// still left its files sitting in the library — the user was told nothing
+    /// was imported while the assets were in fact there. This removes those
+    /// manifest entries again.
+    ///
+    /// Unlike [`Self::delete_library_asset`] this NEVER touches the audio on
+    /// disk: undoing an import that only registered a path must not delete the
+    /// user's original file. Entries that are referenced by a clip are kept —
+    /// if some of the batch did land on the timeline, those assets are in
+    /// legitimate use.
+    pub fn forget_library_assets(
+        &mut self,
+        file_paths: &[String],
+    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let doomed: HashSet<String> = file_paths
+            .iter()
+            .map(|path| normalize_library_file_path(path))
+            .collect();
+        let in_use: HashSet<String> = song
+            .clips
+            .iter()
+            .map(|clip| normalize_library_file_path(&clip.file_path))
+            .collect();
+
+        let mut library_assets = list_library_assets(&song_dir, Some(&song))?;
+        library_assets
+            .retain(|asset| !doomed.contains(&asset.file_path) || in_use.contains(&asset.file_path));
+        write_library_manifest_assets(&song_dir, &library_assets)?;
+
+        list_library_assets(&song_dir, Some(&song))
+    }
+
     pub fn move_library_asset(
         &mut self,
         file_path: &str,
