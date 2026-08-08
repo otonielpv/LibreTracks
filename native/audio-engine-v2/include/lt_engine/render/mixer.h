@@ -146,10 +146,24 @@ private:
     JumpScheduler*       scheduler_;
     class BungeeVoiceManager* bungee_voices_ = nullptr;
 
-    // Per-track renderer pool (one per track, up to kMaxTracks).
-    // Allocated once on construction, never in render().
-    static constexpr int kMaxTracks = 64;
-    std::array<TrackRenderer, kMaxTracks> renderers_;
+    // Per-track renderer pool (one per track). Grown on the CONTROL thread only
+    // (prepare_render_resources, called from set_session and the constructor),
+    // never in render(). The audio thread bounds its loops by renderer_count_,
+    // which is published with release after the pool is fully grown+prepared, so
+    // it never indexes a slot that doesn't exist or isn't scratch-allocated.
+    //
+    // This used to be a std::array<TrackRenderer, 64> and the render loops were
+    // bounded by that 64. Sessions with more than 64 tracks in one song had
+    // track 65+ silently skipped (no audio at all, while its mixer controls
+    // still responded because those live in controls_, capped separately at
+    // kMaxControlSlots). Track count is now limited only by memory/CPU.
+    // Heap-boxed: TrackRenderer owns a BlockCache (mutex + atomics) so it is
+    // neither copyable nor movable, and growing a vector of them by value would
+    // have to relocate the live ones. With unique_ptr the growth only moves
+    // pointers, so a renderer the audio thread is mid-render on never moves.
+    static constexpr int kInitialTrackCapacity = 64;
+    std::vector<std::unique_ptr<TrackRenderer>> renderers_;
+    std::atomic<int> renderer_count_{0};
 
     // Per-track mix overrides (command thread writes, audio thread reads).
     struct TrackControlState {
@@ -167,9 +181,14 @@ private:
         float current_solo_gain = 1.0f;
         bool initialized = false;
     };
-    static constexpr int kMaxControlSlots = 256;
+    // Control slots cover every track of every song in the session, so a set of
+    // songs with many tracks each used to exhaust the old fixed 256 and leave
+    // the surplus tracks without gain/pan/mute/solo. Grown on the control thread
+    // in rebuild_control_slots while control_count_ is 0 (audio thread is then
+    // reading fallback_control_), so the growth never races a live scan.
+    static constexpr int kInitialControlSlots = 256;
     static constexpr int kMaxFolderDepth  = 8;
-    std::array<TrackControlState, kMaxControlSlots> controls_;
+    std::vector<std::unique_ptr<TrackControlState>> controls_;
     std::atomic<int> control_count_{0};
     TrackControlState fallback_control_;
 
@@ -212,7 +231,11 @@ private:
         std::atomic<float> left_rms{0.f};
         std::atomic<float> right_rms{0.f};
     };
-    std::array<TrackMeterSlot, kMaxTracks> track_meters_;
+    // Sized alongside renderers_ on the control thread. std::atomic is neither
+    // copyable nor movable, so the slots are heap-boxed: growing the outer
+    // vector then only moves pointers and never touches a slot the audio thread
+    // may be storing into. track_meter_count_ still bounds audio-thread access.
+    std::vector<std::unique_ptr<TrackMeterSlot>> track_meters_;
     std::atomic<int> track_meter_count_{0};
 
     // Per-region meters. Updated inside update_region_meters so the value

@@ -607,3 +607,191 @@ TEST_CASE("metronome clicks while playing an empty song") {
 
     CHECK(mixer.metronome_diagnostics().rendered_clicks_count > 0);
 }
+
+// Repro: the mixer's renderer pool was a fixed std::array of 64, and both
+// render loops were bounded by that constant. A song with more than 64 tracks
+// had track 65 onward silently skipped — no audio at all, while the track's
+// mixer controls still responded (those live in controls_, capped separately),
+// which is what made it look like a UI bug rather than a render-pool limit.
+// Moving a track from slot 65 to slot 64 made it audible again.
+//
+// The pool now grows on the control thread to fit the largest song, so a
+// track's index must not decide whether it is heard.
+TEST_CASE("tracks past the old 64-track render pool still produce audio") {
+    constexpr int kTrackCount = 100;   // comfortably past the old cap
+    constexpr Frame kDuration = 48000;
+
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, kDuration);
+
+    auto session = std::make_shared<Session>();
+    session->id = "session";
+    session->sample_rate = test::kFixtureSampleRate;
+    session->sources.push_back(Source{"source", ""});
+
+    Song song;
+    song.id = "song";
+    song.start_frame = 0;
+    song.end_frame = kDuration;
+    // Every track is silent except the last one, so any audio on the bus can
+    // only have come from the track sitting well past the old limit.
+    for (int i = 0; i < kTrackCount; ++i) {
+        Track track;
+        track.id = "track-" + std::to_string(i);
+        track.gain = (i == kTrackCount - 1) ? 1.0f : 0.0f;
+        track.clips.push_back(Clip{"clip-" + std::to_string(i), "source", 0, 0, kDuration});
+        song.tracks.push_back(track);
+    }
+    session->songs.push_back(song);
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.prepare_render_resources(kBlock);
+    clock.play();
+
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 4, left, right);
+
+    CHECK(peak(left) > 0.01f);
+    CHECK(peak(right) > 0.01f);
+
+    // The last track must also report a meter, i.e. it was really rendered
+    // rather than merely leaking through some other path.
+    const auto meters = mixer.track_meters();
+    REQUIRE(meters.size() == static_cast<std::size_t>(kTrackCount));
+    CHECK(meters.back().track_id == "track-" + std::to_string(kTrackCount - 1));
+    CHECK(meters.back().left_peak > 0.01f);
+}
+
+// Companion to the above: control slots (gain/pan/mute/solo) were capped at
+// 256 across the WHOLE session, so several songs with many tracks each left the
+// surplus tracks without working mixer controls. Muting must work at any index.
+TEST_CASE("mute works for a track past the old 256 control-slot cap") {
+    constexpr int kSongs = 4;
+    constexpr int kTracksPerSong = 100;   // 400 slots total, past the old 256
+    constexpr Frame kDuration = 48000;
+
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, kDuration * kSongs);
+
+    auto session = std::make_shared<Session>();
+    session->id = "session";
+    session->sample_rate = test::kFixtureSampleRate;
+    session->sources.push_back(Source{"source", ""});
+
+    Id last_track_id;
+    for (int s = 0; s < kSongs; ++s) {
+        Song song;
+        song.id = "song-" + std::to_string(s);
+        song.start_frame = kDuration * s;
+        song.end_frame = kDuration * (s + 1);
+        for (int i = 0; i < kTracksPerSong; ++i) {
+            Track track;
+            track.id = "s" + std::to_string(s) + "-track-" + std::to_string(i);
+            // Only the final track of the final song is audible.
+            const bool audible = (s == kSongs - 1) && (i == kTracksPerSong - 1);
+            track.gain = audible ? 1.0f : 0.0f;
+            if (audible) last_track_id = track.id;
+            track.clips.push_back(Clip{"clip-" + track.id, "source",
+                                       song.start_frame, 0, kDuration});
+            song.tracks.push_back(track);
+        }
+        session->songs.push_back(song);
+    }
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.prepare_render_resources(kBlock);
+
+    // Play inside the LAST song, where the audible track lives.
+    clock.seek(kDuration * (kSongs - 1));
+    clock.play();
+
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 4, left, right);
+    const float unmuted_peak = peak(left);
+    CHECK(unmuted_peak > 0.01f);
+
+    // Muting that track must actually silence it — proof it owns a real
+    // control slot rather than falling back to its baked-in gain.
+    mixer.set_track_mute(last_track_id, true);
+    render_blocks(mixer, clock, 40, left, right);   // let the 10ms ramp settle
+    CHECK(peak(left) < unmuted_peak * 0.05f);
+}
+
+// set_session(preserve_realtime_state=true) is the path used by transpose and
+// region edits: the session pointer is swapped but live fader/mute state must
+// survive. rebuild_control_slots looks up each track's previous slot to carry
+// those values over — and it has to do so against the slots that were live
+// BEFORE control_count_ is zeroed for the rebuild. Getting that wrong silently
+// resets every fader on each transpose.
+//
+// Checked on the output bus, not the per-track meter: track meters are
+// pre-fader, so a muted track still meters its raw signal.
+TEST_CASE("session swap preserves live mute past the old control-slot cap") {
+    constexpr int kTrackCount = 300;   // past the old 256 control-slot cap
+    constexpr Frame kDuration = 48000;
+
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, kDuration);
+
+    // Exactly one track carries audio, so the bus level reports that track alone.
+    const Id late_track = "track-" + std::to_string(kTrackCount - 1);
+    auto build = [&] {
+        auto session = std::make_shared<Session>();
+        session->id = "session";
+        session->sample_rate = test::kFixtureSampleRate;
+        session->sources.push_back(Source{"source", ""});
+        Song song;
+        song.id = "song";
+        song.start_frame = 0;
+        song.end_frame = kDuration;
+        for (int i = 0; i < kTrackCount; ++i) {
+            Track track;
+            track.id = "track-" + std::to_string(i);
+            // The session always describes every track as unmuted and only the
+            // last one as audible.
+            track.gain = (track.id == late_track) ? 1.0f : 0.0f;
+            track.mute = false;
+            track.clips.push_back(Clip{"clip-" + std::to_string(i), "source", 0, 0, kDuration});
+            song.tracks.push_back(track);
+        }
+        session->songs.push_back(song);
+        return session;
+    };
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(build(), &sources, &clock, &scheduler);
+    mixer.prepare_render_resources(kBlock);
+    clock.play();
+
+    // The song is only 1s long, so seek back before each measurement: 40 blocks
+    // is ~0.43s and three passes would otherwise run off the end into silence.
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 40, left, right);
+    const float audible_peak = peak(left);
+    CHECK(audible_peak > 0.01f);
+
+    // Mute it live, then swap the session the way a transpose does. The mute
+    // must survive even though the incoming session says the track is unmuted.
+    mixer.set_track_mute(late_track, true);
+    clock.seek(0);
+    render_blocks(mixer, clock, 40, left, right);
+    REQUIRE(peak(left) < audible_peak * 0.05f);
+
+    mixer.set_session(build(), /*preserve_realtime_state=*/true);
+    clock.seek(0);
+    render_blocks(mixer, clock, 40, left, right);
+    CHECK(peak(left) < audible_peak * 0.05f);
+
+    // And preserve_realtime_state=false must do the opposite: take the
+    // session's own value, un-muting the track again. Seek back first — the
+    // song is only 1s long and the renders above have already run past its end.
+    mixer.set_session(build(), /*preserve_realtime_state=*/false);
+    clock.seek(0);
+    render_blocks(mixer, clock, 40, left, right);
+    CHECK(peak(left) > 0.01f);
+}

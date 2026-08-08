@@ -229,41 +229,45 @@ void Mixer::store_session(std::shared_ptr<const Session> session) noexcept {
 }
 
 bool Mixer::any_solo_active_in_slots() const noexcept {
-    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0,
+                                 static_cast<int>(controls_.size()));
     for (int i = 0; i < count; ++i) {
-        if (controls_[static_cast<std::size_t>(i)].initialized
-            && controls_[static_cast<std::size_t>(i)].solo.load(std::memory_order_relaxed))
+        if (controls_[static_cast<std::size_t>(i)]->initialized
+            && controls_[static_cast<std::size_t>(i)]->solo.load(std::memory_order_relaxed))
             return true;
     }
     return false;
 }
 
 Mixer::TrackControlState* Mixer::control_for_track(const Id& track_id) noexcept {
-    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0,
+                                 static_cast<int>(controls_.size()));
     for (int i = 0; i < count; ++i) {
-        if (controls_[static_cast<std::size_t>(i)].initialized
-            && controls_[static_cast<std::size_t>(i)].track_id == track_id)
-            return &controls_[static_cast<std::size_t>(i)];
+        if (controls_[static_cast<std::size_t>(i)]->initialized
+            && controls_[static_cast<std::size_t>(i)]->track_id == track_id)
+            return controls_[static_cast<std::size_t>(i)].get();
     }
     return nullptr;
 }
 
 const Mixer::TrackControlState* Mixer::control_for_track(const Id& track_id) const noexcept {
-    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0,
+                                 static_cast<int>(controls_.size()));
     for (int i = 0; i < count; ++i) {
-        if (controls_[static_cast<std::size_t>(i)].initialized
-            && controls_[static_cast<std::size_t>(i)].track_id == track_id)
-            return &controls_[static_cast<std::size_t>(i)];
+        if (controls_[static_cast<std::size_t>(i)]->initialized
+            && controls_[static_cast<std::size_t>(i)]->track_id == track_id)
+            return controls_[static_cast<std::size_t>(i)].get();
     }
     return nullptr;
 }
 
 int Mixer::control_index_for_track(const Id& track_id) const noexcept {
     if (track_id.empty()) return -1;
-    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0,
+                                 static_cast<int>(controls_.size()));
     for (int i = 0; i < count; ++i) {
-        if (controls_[static_cast<std::size_t>(i)].initialized
-            && controls_[static_cast<std::size_t>(i)].track_id == track_id)
+        if (controls_[static_cast<std::size_t>(i)]->initialized
+            && controls_[static_cast<std::size_t>(i)]->track_id == track_id)
             return i;
     }
     return -1;
@@ -273,10 +277,10 @@ bool Mixer::is_solo_eligible(int slot_index) const noexcept {
     // Walk parent chain: eligible if any ancestor or self is soloed.
     int depth = 0;
     int idx = slot_index;
-    while (idx >= 0 && idx < kMaxControlSlots && depth < kMaxFolderDepth) {
-        if (controls_[static_cast<std::size_t>(idx)].solo.load(std::memory_order_relaxed))
+    while (idx >= 0 && idx < static_cast<int>(controls_.size()) && depth < kMaxFolderDepth) {
+        if (controls_[static_cast<std::size_t>(idx)]->solo.load(std::memory_order_relaxed))
             return true;
-        idx = controls_[static_cast<std::size_t>(idx)].parent_control_index;
+        idx = controls_[static_cast<std::size_t>(idx)]->parent_control_index;
         ++depth;
     }
     return false;
@@ -290,8 +294,8 @@ Mixer::EffectiveControls Mixer::compute_effective_controls(int slot_index, bool 
     // Walk the parent chain (bounded).
     int depth = 0;
     int idx = slot_index;
-    while (idx >= 0 && idx < kMaxControlSlots && depth < kMaxFolderDepth) {
-        const auto& slot = controls_[static_cast<std::size_t>(idx)];
+    while (idx >= 0 && idx < static_cast<int>(controls_.size()) && depth < kMaxFolderDepth) {
+        const auto& slot = *controls_[static_cast<std::size_t>(idx)];
         eff_gain  *= slot.gain.load(std::memory_order_relaxed);
         eff_pan    = clamp_pan(eff_pan + slot.pan.load(std::memory_order_relaxed));
         if (slot.mute.load(std::memory_order_relaxed)) eff_muted = true;
@@ -304,15 +308,67 @@ Mixer::EffectiveControls Mixer::compute_effective_controls(int slot_index, bool 
 }
 
 void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
-    std::array<TrackControlState, kMaxControlSlots> next;
+    // Total slots this session needs, across every song.
+    std::size_t needed = 0;
+    if (session) {
+        for (const auto& song : session->songs)
+            needed += song.tracks.size();
+    }
+    needed = std::max<std::size_t>(needed, kInitialControlSlots);
+
+    std::vector<std::unique_ptr<TrackControlState>> next;
+    try {
+        next.reserve(needed);
+        while (next.size() < needed)
+            next.push_back(std::make_unique<TrackControlState>());
+    } catch (...) {
+        // Out of memory: fall back to whatever capacity we already have. The
+        // loop below bounds itself by that, so surplus tracks keep their
+        // baked-in gain via fallback_control_ instead of crashing.
+    }
+
+    // How many slots were live before this rebuild. preserve_realtime_state
+    // looks up the previous values below, and control_for_track bounds its scan
+    // by control_count_ — which is about to become 0 — so capture it first.
+    const std::size_t previous_count = static_cast<std::size_t>(
+        std::clamp(control_count_.load(std::memory_order_acquire), 0,
+                   static_cast<int>(controls_.size())));
+
+    // Growing controls_ reallocates its buffer, so the audio thread must not be
+    // scanning it. Publishing 0 first (release) makes every audio-thread lookup
+    // bail out immediately and use fallback_control_, exactly as it already does
+    // for the in-place rewrite below — see the long note further down. The
+    // pre-existing code could grow nothing, so this store used to sit after the
+    // sizing; it has to happen before any reallocation.
+    control_count_.store(0, std::memory_order_release);
+
+    try {
+        while (controls_.size() < needed)
+            controls_.push_back(std::make_unique<TrackControlState>());
+    } catch (...) {
+        // As above: keep the capacity we already had.
+    }
+    const std::size_t capacity = std::min(next.size(), controls_.size());
+
+    // Same job as control_for_track, but scanning the slots that were live
+    // before control_count_ was zeroed above. Using control_for_track here would
+    // now always miss and silently reset every fader on a session swap.
+    const auto previous_control_for = [&](const Id& track_id) -> const TrackControlState* {
+        for (std::size_t i = 0; i < previous_count; ++i) {
+            if (controls_[i]->initialized && controls_[i]->track_id == track_id)
+                return controls_[i].get();
+        }
+        return nullptr;
+    };
+
     int count = 0;
     if (session) {
         for (const auto& song : session->songs) {
             for (const auto& track : song.tracks) {
-                if (count >= kMaxControlSlots)
+                if (static_cast<std::size_t>(count) >= capacity)
                     break;
-                auto& slot = next[static_cast<std::size_t>(count)];
-                const auto* previous = preserve_realtime_state ? control_for_track(track.id) : nullptr;
+                auto& slot = *next[static_cast<std::size_t>(count)];
+                const auto* previous = preserve_realtime_state ? previous_control_for(track.id) : nullptr;
                 slot.track_id       = track.id;
                 slot.parent_track_id = track.parent_track_id;
                 slot.is_folder      = (track.kind == TrackKind::Folder);
@@ -337,23 +393,23 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
         }
     }
 
-    // Publish count=0 (release) BEFORE mutating controls_ in place. The audio
-    // thread's lookups (control_index_for_track / control_for_track /
-    // any_solo_active_in_slots) all bound their scan by control_count_ with
-    // acquire, so while it reads 0 they skip every slot and fall back to
-    // fallback_control_ — which render_timeline_span fills from the live track's
-    // own gain/pan/mute/solo. So during the rebuild a track still plays with its
-    // correct values instead of the audio thread reading a track_id (std::string)
-    // mid-move or a half-resolved parent_control_index. This is what removes the
+    // count=0 was already published (release) above, BEFORE both the growth and
+    // the in-place mutation below. The audio thread's lookups
+    // (control_index_for_track / control_for_track / any_solo_active_in_slots)
+    // all bound their scan by control_count_ with acquire, so while it reads 0
+    // they skip every slot and fall back to fallback_control_ — which
+    // render_timeline_span fills from the live track's own gain/pan/mute/solo.
+    // So during the rebuild a track still plays with its correct values instead
+    // of the audio thread reading a track_id (std::string) mid-move or a
+    // half-resolved parent_control_index. This is what removes the
     // import-while-playing click: set_session used to mutate controls_ in place
     // while the callback was actively scanning it. The window is a few hundred ns
     // (a handful of string moves), well under one audio block.
-    control_count_.store(0, std::memory_order_release);
 
     // Copy next into controls_ so control_index_for_track can find them.
-    for (int i = 0; i < kMaxControlSlots; ++i) {
-        auto& dst = controls_[static_cast<std::size_t>(i)];
-        auto& src = next[static_cast<std::size_t>(i)];
+    for (std::size_t i = 0; i < capacity; ++i) {
+        auto& dst = *controls_[i];
+        auto& src = *next[i];
         dst.track_id       = std::move(src.track_id);
         dst.parent_track_id = std::move(src.parent_track_id);
         dst.is_folder      = src.is_folder;
@@ -375,13 +431,13 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
     // the release-store means the audio thread never sees a published slot with a
     // stale/half-resolved parent index.
     for (int i = 0; i < count; ++i) {
-        auto& slot = controls_[static_cast<std::size_t>(i)];
+        auto& slot = *controls_[static_cast<std::size_t>(i)];
         slot.parent_control_index = -1;
         if (slot.parent_track_id.empty())
             continue;
         for (int j = 0; j < count; ++j) {
-            if (controls_[static_cast<std::size_t>(j)].initialized
-                && controls_[static_cast<std::size_t>(j)].track_id == slot.parent_track_id) {
+            if (controls_[static_cast<std::size_t>(j)]->initialized
+                && controls_[static_cast<std::size_t>(j)]->track_id == slot.parent_track_id) {
                 slot.parent_control_index = j;
                 break;
             }
@@ -407,13 +463,18 @@ void Mixer::render_timeline_span(float** output_channels,
     std::uint64_t rendered_this_block = 0;
     std::uint64_t skipped_this_block = 0;
 
+    // Renderer slots available to the audio thread this block. Grown off-thread
+    // by prepare_render_resources; never exceed it here.
+    const std::size_t renderer_slots =
+        static_cast<std::size_t>(std::max(0, renderer_count_.load(std::memory_order_acquire)));
+
     for (const auto& song : session->songs) {
         if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
             continue;
 
         const bool solo_active = any_solo_active_in_slots();
 
-        for (std::size_t ti = 0; ti < song.tracks.size() && ti < kMaxTracks; ++ti) {
+        for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
             const Track& track = song.tracks[ti];
 
             if (track.kind == TrackKind::Folder) {
@@ -422,7 +483,7 @@ void Mixer::render_timeline_span(float** output_channels,
             }
 
             int slot_idx = control_index_for_track(track.id);
-            TrackControlState* control = (slot_idx >= 0) ? &controls_[static_cast<std::size_t>(slot_idx)] : nullptr;
+            TrackControlState* control = (slot_idx >= 0) ? controls_[static_cast<std::size_t>(slot_idx)].get() : nullptr;
 
             if (!control) {
                 fallback_control_.track_id = track.id;
@@ -486,7 +547,7 @@ void Mixer::render_timeline_span(float** output_channels,
             // below, so we neutralize them here WITHOUT copying the Track (that
             // per-block heap allocation contended the global allocator lock with
             // import-time allocations and stalled the audio thread).
-            renderers_[ti].render(track, timeline_frame, num_frames,
+            renderers_[ti]->render(track, timeline_frame, num_frames,
                                    mix_, 2, *sources_, bungee_voices_,
                                    clock_->sample_rate(), 0, &song,
                                    /*track_is_silent=*/settled_silent,
@@ -501,14 +562,14 @@ void Mixer::render_timeline_span(float** output_channels,
                 track_sum_l += static_cast<double>(mix_l_[f]) * mix_l_[f];
                 track_sum_r += static_cast<double>(mix_r_[f]) * mix_r_[f];
             }
-            track_meters_[ti].left_peak.store(track_peak_l, std::memory_order_relaxed);
-            track_meters_[ti].right_peak.store(track_peak_r, std::memory_order_relaxed);
+            track_meters_[ti]->left_peak.store(track_peak_l, std::memory_order_relaxed);
+            track_meters_[ti]->right_peak.store(track_peak_r, std::memory_order_relaxed);
             const float track_rms_l =
                 static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames)));
             const float track_rms_r =
                 static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames)));
-            track_meters_[ti].left_rms.store(track_rms_l, std::memory_order_relaxed);
-            track_meters_[ti].right_rms.store(track_rms_r, std::memory_order_relaxed);
+            track_meters_[ti]->left_rms.store(track_rms_l, std::memory_order_relaxed);
+            track_meters_[ti]->right_rms.store(track_rms_r, std::memory_order_relaxed);
             update_ancestor_folder_meters(
                 song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
@@ -706,6 +767,10 @@ void Mixer::render(float** output_channels,
     } else if (clock_->position().state == TransportState::Playing && session) {
         std::uint64_t rendered_this_block = 0;
         std::uint64_t skipped_this_block = 0;
+        // Renderer slots available to the audio thread this block (see the note
+        // in render_timeline_span).
+        const std::size_t renderer_slots =
+            static_cast<std::size_t>(std::max(0, renderer_count_.load(std::memory_order_acquire)));
         // Find the current song.
         for (const auto& song : session->songs) {
             if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
@@ -714,7 +779,7 @@ void Mixer::render(float** output_channels,
             const bool solo_active = any_solo_active_in_slots();
 
             // Render each track.
-            for (std::size_t ti = 0; ti < song.tracks.size() && ti < kMaxTracks; ++ti) {
+            for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
                 const Track& track = song.tracks[ti];
 
                 // Folder tracks are not audio sources — skip rendering them.
@@ -724,7 +789,7 @@ void Mixer::render(float** output_channels,
                 }
 
                 int slot_idx = control_index_for_track(track.id);
-                TrackControlState* control = (slot_idx >= 0) ? &controls_[static_cast<std::size_t>(slot_idx)] : nullptr;
+                TrackControlState* control = (slot_idx >= 0) ? controls_[static_cast<std::size_t>(slot_idx)].get() : nullptr;
 
                 if (!control) {
                     fallback_control_.track_id = track.id;
@@ -796,7 +861,7 @@ void Mixer::render(float** output_channels,
                 // Track per block — that copy allocated on the audio thread and
                 // contended the global heap lock with import allocations,
                 // stalling playback (LT_AUDIO_DIAG cbwork spikes).
-                renderers_[ti].render(track, timeline_frame, num_frames,
+                renderers_[ti]->render(track, timeline_frame, num_frames,
                                        mix_, 2, *sources_, bungee_voices_,
                                        clock_->sample_rate(), 0, &song,
                                        /*track_is_silent=*/settled_silent,
@@ -811,14 +876,14 @@ void Mixer::render(float** output_channels,
                     track_sum_l += static_cast<double>(mix_l_[f]) * mix_l_[f];
                     track_sum_r += static_cast<double>(mix_r_[f]) * mix_r_[f];
                 }
-                track_meters_[ti].left_peak.store(track_peak_l, std::memory_order_relaxed);
-                track_meters_[ti].right_peak.store(track_peak_r, std::memory_order_relaxed);
+                track_meters_[ti]->left_peak.store(track_peak_l, std::memory_order_relaxed);
+                track_meters_[ti]->right_peak.store(track_peak_r, std::memory_order_relaxed);
                 const float track_rms_l =
                     static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames)));
                 const float track_rms_r =
                     static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames)));
-                track_meters_[ti].left_rms.store(track_rms_l, std::memory_order_relaxed);
-                track_meters_[ti].right_rms.store(track_rms_r, std::memory_order_relaxed);
+                track_meters_[ti]->left_rms.store(track_rms_l, std::memory_order_relaxed);
+                track_meters_[ti]->right_rms.store(track_rms_r, std::memory_order_relaxed);
                 update_ancestor_folder_meters(
                     song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
@@ -947,7 +1012,8 @@ void Mixer::render(float** output_channels,
         int count = 0;
         for (const auto& song : session->songs) {
             if (timeline_frame >= song.start_frame && timeline_frame < song.end_frame) {
-                count = static_cast<int>(std::min<std::size_t>(song.tracks.size(), kMaxTracks));
+                count = static_cast<int>(std::min<std::size_t>(
+                    song.tracks.size(), track_meters_.size()));
                 break;
             }
         }
@@ -1035,8 +1101,44 @@ void Mixer::clear_session() {
 
 void Mixer::prepare_render_resources(int max_block_frames) noexcept {
     const int frames = std::clamp(max_block_frames, 1, kMaxBlockFrames);
+
+    // Grow the pool to cover the largest single song in the session. The render
+    // loops walk one song's tracks at a time, so the per-song maximum (not the
+    // session total) is what has to fit.
+    std::size_t needed = kInitialTrackCapacity;
+    if (auto session = load_session()) {
+        for (const auto& song : session->songs)
+            needed = std::max(needed, song.tracks.size());
+    }
+
+    // Allocation happens here on the CONTROL thread. Growing either vector
+    // reallocates its buffer of pointers, so the audio thread must not be
+    // indexing them meanwhile: publish 0 first (release) and it renders silence
+    // for the handful of microseconds the growth takes, then raise the count
+    // again at the end once every new renderer has its scratch buffers. The
+    // boxed slots themselves never move, so a renderer mid-render stays valid.
+    // Skip the whole dance when nothing has to grow, which is the common case
+    // (same or smaller session) and must not drop audio.
+    const bool needs_growth =
+        renderers_.size() < needed || track_meters_.size() < needed;
+    if (needs_growth) {
+        renderer_count_.store(0, std::memory_order_release);
+    }
+    try {
+        while (renderers_.size() < needed)
+            renderers_.push_back(std::make_unique<TrackRenderer>());
+        while (track_meters_.size() < needed)
+            track_meters_.push_back(std::make_unique<TrackMeterSlot>());
+    } catch (...) {
+        // Out of memory: keep whatever we already had. The render loops clamp to
+        // renderer_count_ below, so this degrades to "extra tracks stay silent"
+        // rather than a crash or an out-of-bounds write.
+    }
+
+    const std::size_t usable = std::min(renderers_.size(), track_meters_.size());
     for (auto& renderer : renderers_)
-        renderer.prepare(frames);
+        renderer->prepare(frames);
+    renderer_count_.store(static_cast<int>(usable), std::memory_order_release);
 }
 
 void Mixer::trigger_crossfade() noexcept {
@@ -1338,15 +1440,16 @@ std::vector<TrackMeterValues> Mixer::track_meters() const {
     }
     if (!active_song) return values;
 
-    int count = static_cast<int>(std::min<std::size_t>(active_song->tracks.size(), kMaxTracks));
+    int count = static_cast<int>(std::min<std::size_t>(active_song->tracks.size(),
+                                                       track_meters_.size()));
     values.reserve(static_cast<std::size_t>(count));
     for (int i = 0; i < count; ++i) {
         TrackMeterValues meter;
         meter.track_id = active_song->tracks[static_cast<std::size_t>(i)].id;
-        meter.left_peak = track_meters_[i].left_peak.load(std::memory_order_relaxed);
-        meter.right_peak = track_meters_[i].right_peak.load(std::memory_order_relaxed);
-        meter.left_rms = track_meters_[i].left_rms.load(std::memory_order_relaxed);
-        meter.right_rms = track_meters_[i].right_rms.load(std::memory_order_relaxed);
+        meter.left_peak = track_meters_[i]->left_peak.load(std::memory_order_relaxed);
+        meter.right_peak = track_meters_[i]->right_peak.load(std::memory_order_relaxed);
+        meter.left_rms = track_meters_[i]->left_rms.load(std::memory_order_relaxed);
+        meter.right_rms = track_meters_[i]->right_rms.load(std::memory_order_relaxed);
         values.push_back(std::move(meter));
     }
     return values;
@@ -1354,12 +1457,12 @@ std::vector<TrackMeterValues> Mixer::track_meters() const {
 
 void Mixer::reset_track_meters() noexcept {
     int count = track_meter_count_.load(std::memory_order_relaxed);
-    count = std::max(0, std::min(count, kMaxTracks));
+    count = std::max(0, std::min(count, static_cast<int>(track_meters_.size())));
     for (int i = 0; i < count; ++i) {
-        track_meters_[i].left_peak.store(0.f, std::memory_order_relaxed);
-        track_meters_[i].right_peak.store(0.f, std::memory_order_relaxed);
-        track_meters_[i].left_rms.store(0.f, std::memory_order_relaxed);
-        track_meters_[i].right_rms.store(0.f, std::memory_order_relaxed);
+        track_meters_[i]->left_peak.store(0.f, std::memory_order_relaxed);
+        track_meters_[i]->right_peak.store(0.f, std::memory_order_relaxed);
+        track_meters_[i]->left_rms.store(0.f, std::memory_order_relaxed);
+        track_meters_[i]->right_rms.store(0.f, std::memory_order_relaxed);
     }
 }
 
@@ -1382,10 +1485,10 @@ void Mixer::update_ancestor_folder_meters(const Song& song,
 
         const auto parent_index = static_cast<std::size_t>(
             std::distance(song.tracks.begin(), parent));
-        if (parent_index >= kMaxTracks)
+        if (parent_index >= track_meters_.size())
             break;
 
-        auto& meter = track_meters_[parent_index];
+        auto& meter = *track_meters_[parent_index];
         meter.left_peak.store(
             std::max(meter.left_peak.load(std::memory_order_relaxed), left_peak),
             std::memory_order_relaxed);
