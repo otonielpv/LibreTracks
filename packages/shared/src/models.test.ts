@@ -393,6 +393,23 @@ describe("normalizeAppSettings", () => {
     ).toBe("next_marker");
   });
 
+  it("keeps importMergeMatchingTracks on when the field is absent", () => {
+    // Settings files written before this option exists must keep the historical
+    // merge-on-import behaviour rather than flipping to separate tracks.
+    const { importMergeMatchingTracks: _omitted, ...withoutField } =
+      DEFAULT_APP_SETTINGS;
+    expect(
+      normalizeAppSettings(withoutField as AppSettings)
+        .importMergeMatchingTracks,
+    ).toBe(true);
+    expect(
+      normalizeAppSettings({
+        ...DEFAULT_APP_SETTINGS,
+        importMergeMatchingTracks: false,
+      }).importMergeMatchingTracks,
+    ).toBe(false);
+  });
+
   it("clamps pad key into [0, 11] and rounds it", () => {
     expect(
       normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, padKey: 20 }).padKey,

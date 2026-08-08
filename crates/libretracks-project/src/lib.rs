@@ -15,7 +15,7 @@ pub use importer::{
 pub use package::{
     export_region_as_package, extract_song_package, import_song_package,
     merge_extracted_song_package, ExtractedSongPackage, PackageLibraryAssetEntry,
-    SongPackageExport, SongPackageImportResult,
+    SongImportTrackMode, SongPackageExport, SongPackageImportResult,
 };
 pub use session_package::{
     export_session_as_package, extract_session_package, ExtractedSessionPackage,

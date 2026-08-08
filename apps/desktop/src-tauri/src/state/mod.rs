@@ -20,7 +20,7 @@ use libretracks_project::{
     import_song_package as import_song_package_into_project, load_global_waveform,
     load_or_generate_global_waveform, merge_extracted_song_package,
     waveform_summary_from_channel_peaks, write_global_waveform, ExtractedSongPackage,
-    ImportOperationMetrics, ProjectError, WaveformSummary, SONG_FILE_NAME,
+    ImportOperationMetrics, ProjectError, SongImportTrackMode, WaveformSummary, SONG_FILE_NAME,
 };
 use rayon::prelude::*;
 
@@ -663,6 +663,23 @@ impl WaveformGenerationQueue {
             primed: Arc::new(Mutex::new(HashSet::new())),
             audio: Arc::new(Mutex::new(None)),
         }
+    }
+}
+
+/// Read the user's "merge tracks with the same name on import" preference.
+/// Falls back to the historical merging behaviour when the settings store is
+/// unavailable (e.g. very early startup) so an import never silently changes
+/// shape because a read failed.
+pub(crate) fn song_import_track_mode(app: &AppHandle) -> SongImportTrackMode {
+    let merge = app
+        .try_state::<crate::infra::settings::AppSettingsStore>()
+        .and_then(|store| store.current().ok())
+        .map(|settings| settings.import_merge_matching_tracks)
+        .unwrap_or(true);
+    if merge {
+        SongImportTrackMode::MergeIntoExisting
+    } else {
+        SongImportTrackMode::KeepSeparate
     }
 }
 
@@ -1911,6 +1928,7 @@ impl DesktopSession {
         package_path: &str,
         insert_at_seconds: f64,
         audio: &AudioController,
+        track_mode: SongImportTrackMode,
     ) -> Result<SongPackageImportResponse, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
@@ -1923,6 +1941,7 @@ impl DesktopSession {
             &song,
             Path::new(package_path),
             insert_at_seconds,
+            track_mode,
         )?;
         // Self-contained packages carry their audio: copy it into this project's
         // audio/ folder and re-point the imported clips before anything else
@@ -1986,7 +2005,12 @@ impl DesktopSession {
         // The package is already decompressed (see `extract_song_package`, run
         // off the lock by the caller, which owns the 7..40% progress band);
         // merging it into the song is fast, so this phase owns 42..50%.
-        let mut imported = merge_extracted_song_package(&song, extracted, insert_at_seconds)?;
+        let mut imported = merge_extracted_song_package(
+            &song,
+            extracted,
+            insert_at_seconds,
+            song_import_track_mode(app),
+        )?;
         emit_project_load_progress(app, 42, "Copiando audio del paquete...".into(), 0, 0, 0, 0);
         place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
         emit_project_load_progress(

@@ -1622,7 +1622,12 @@ fn import_song_package_returns_library_assets_for_missing_audio_references() {
     let audio = crate::audio::engine::AudioController::default();
 
     let result = session
-        .import_song_package(&package_path.to_string_lossy(), 0.0, &audio)
+        .import_song_package(
+            &package_path.to_string_lossy(),
+            0.0,
+            &audio,
+            libretracks_project::SongImportTrackMode::default(),
+        )
         .expect("package import should succeed");
 
     let imported_asset = result

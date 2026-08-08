@@ -105,6 +105,10 @@ fn default_timeline_playhead_follow_mode() -> String {
     "ahead".into()
 }
 
+fn default_import_merge_matching_tracks() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MidiBinding {
@@ -242,6 +246,13 @@ pub struct AppSettings {
     pub timeline_navigation_scheme: String,
     #[serde(default = "default_timeline_playhead_follow_mode")]
     pub timeline_playhead_follow_mode: String,
+    /// When true (default), importing a `.ltpkg` whose track name and kind
+    /// already exist in the session appends its clips onto that existing track,
+    /// keeping one lane per instrument across every song. When false each
+    /// imported song brings its own tracks, even if two songs both call a track
+    /// "Bateria" — what users who order their set song by song expect.
+    #[serde(default = "default_import_merge_matching_tracks")]
+    pub import_merge_matching_tracks: bool,
     #[serde(default)]
     pub midi_mappings: HashMap<String, MidiBinding>,
     /// Custom location for the decoded-PCM cache (`.rf64` files written when a
@@ -309,6 +320,7 @@ impl Default for AppSettings {
             vamp_bars: default_vamp_bars(),
             timeline_navigation_scheme: default_timeline_navigation_scheme(),
             timeline_playhead_follow_mode: default_timeline_playhead_follow_mode(),
+            import_merge_matching_tracks: default_import_merge_matching_tracks(),
             midi_mappings: HashMap::new(),
             decoding_cache_dir: None,
             decoding_cache_max_gb: None,
@@ -438,7 +450,21 @@ mod tests {
         assert_eq!(settings.global_jump_bars, 4);
         assert_eq!(settings.vamp_mode, "section");
         assert_eq!(settings.timeline_navigation_scheme, "ableton");
+        assert!(settings.import_merge_matching_tracks);
         assert!(settings.midi_mappings.is_empty());
+    }
+
+    #[test]
+    fn import_merge_matching_tracks_defaults_to_true_for_older_settings_files() {
+        // The field postdates existing installs; a settings file without it must
+        // keep the historical merge-on-import behaviour rather than silently
+        // switching every user to separate tracks.
+        let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
+        assert!(settings.import_merge_matching_tracks);
+
+        let settings: AppSettings =
+            serde_json::from_str(r#"{ "importMergeMatchingTracks": false }"#).expect("explicit");
+        assert!(!settings.import_merge_matching_tracks);
     }
 
     #[test]

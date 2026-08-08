@@ -857,6 +857,13 @@ export type AppSettings = {
   vampBars: number;
   timelineNavigationScheme: "ableton" | "libretracks";
   timelinePlayheadFollowMode: "ahead" | "center";
+  /**
+   * When true (default) importing a song package whose track name and kind
+   * already exist in the session appends its clips onto that existing track,
+   * keeping one lane per instrument across every song. When false each imported
+   * song brings its own tracks, even if two songs both name a track "Batería".
+   */
+  importMergeMatchingTracks: boolean;
   midiMappings: Record<string, MidiBinding>;
 };
 
@@ -912,6 +919,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   vampBars: 4,
   timelineNavigationScheme: "ableton",
   timelinePlayheadFollowMode: "ahead",
+  importMergeMatchingTracks: true,
   midiMappings: {},
 };
 
@@ -1138,6 +1146,9 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     ),
     timelineNavigationScheme,
     timelinePlayheadFollowMode,
+    // Defaults to true when absent (older settings files) so existing users
+    // keep the historical merge-on-import behaviour.
+    importMergeMatchingTracks: settings.importMergeMatchingTracks ?? true,
     midiMappings,
   };
 }

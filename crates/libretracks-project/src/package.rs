@@ -426,12 +426,9 @@ fn extract_package_payload<R: Read + Seek>(
             continue;
         }
 
-        if let Some(file_name) = entry_name
-            .strip_prefix("waveforms/")
-            .filter(|file_name| {
-                !file_name.is_empty() && !file_name.contains('/') && !file_name.contains('\\')
-            })
-        {
+        if let Some(file_name) = entry_name.strip_prefix("waveforms/").filter(|file_name| {
+            !file_name.is_empty() && !file_name.contains('/') && !file_name.contains('\\')
+        }) {
             let destination_path = waveform_dir.join(file_name);
             let mut bytes = Vec::new();
             zip_file.read_to_end(&mut bytes)?;
@@ -458,14 +455,35 @@ pub struct ExtractedSongPackage {
     pub bundled_audio: std::collections::HashMap<String, Vec<u8>>,
 }
 
+/// How an import resolves a package track whose name and kind already exist in
+/// the destination session.
+///
+/// The default ([`MergeIntoExisting`](SongImportTrackMode::MergeIntoExisting))
+/// appends the imported clips onto the existing track, which keeps a session
+/// tidy when every song shares the same track layout. Users who order their set
+/// by song want the opposite: a per-song track lane, even if two songs both
+/// call a track "Bateria". `KeepSeparate` gives them that by always creating a
+/// new track. Surfaced as the `import_merge_matching_tracks` app setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SongImportTrackMode {
+    /// Reuse a destination track with the same name and kind (default).
+    #[default]
+    MergeIntoExisting,
+    /// Always create a new track, even when the name and kind already exist.
+    /// Duplicate names are kept verbatim — the track keeps the name the package
+    /// exported, so the user recognises it; only the ids differ.
+    KeepSeparate,
+}
+
 pub fn import_song_package(
     song_dir: &Path,
     song: &Song,
     package_path: &Path,
     insert_at_seconds: f64,
+    track_mode: SongImportTrackMode,
 ) -> Result<SongPackageImportResult, ProjectError> {
     let extracted = extract_song_package(song_dir, package_path, |_, _| {})?;
-    merge_extracted_song_package(song, extracted, insert_at_seconds)
+    merge_extracted_song_package(song, extracted, insert_at_seconds, track_mode)
 }
 
 /// Decompress a `.ltpkg`: validate the manifest, inflate bundled audio into
@@ -514,6 +532,7 @@ pub fn merge_extracted_song_package(
     song: &Song,
     extracted: ExtractedSongPackage,
     insert_at_seconds: f64,
+    track_mode: SongImportTrackMode,
 ) -> Result<SongPackageImportResult, ProjectError> {
     let ExtractedSongPackage {
         manifest,
@@ -561,13 +580,16 @@ pub fn merge_extracted_song_package(
     for track in &manifest.tracks {
         // Merge into a track that already existed in the destination session,
         // but only those — not tracks we created earlier in THIS loop, so two
-        // package tracks sharing a name stay separate.
-        if let Some(existing) = existing_tracks
-            .iter()
-            .find(|existing| existing.name == track.name && existing.kind == track.kind)
-        {
-            target_track_id_by_manifest_id.insert(track.id.clone(), existing.id.clone());
-            continue;
+        // package tracks sharing a name stay separate. Under `KeepSeparate` we
+        // skip the lookup entirely and always fall through to a new track.
+        if track_mode == SongImportTrackMode::MergeIntoExisting {
+            if let Some(existing) = existing_tracks
+                .iter()
+                .find(|existing| existing.name == track.name && existing.kind == track.kind)
+            {
+                target_track_id_by_manifest_id.insert(track.id.clone(), existing.id.clone());
+                continue;
+            }
         }
         let track_id = unique_id("track", &track.id, &mut used_track_ids);
         next_song.tracks.push(Track {
@@ -935,8 +957,14 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result =
-            import_song_package(song_dir, &empty, &package_path, 0.0).expect("import package");
+        let result = import_song_package(
+            song_dir,
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import package");
 
         assert_eq!(result.package_title, "Verse");
         // The drums track and its clip came across.
@@ -997,8 +1025,14 @@ mod tests {
         destination.midi_clips.clear();
         destination.regions.clear();
         destination.section_markers.clear();
-        let result = import_song_package(song_dir, &destination, &package_path, 100.0)
-            .expect("import MIDI region");
+        let result = import_song_package(
+            song_dir,
+            &destination,
+            &package_path,
+            100.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import MIDI region");
 
         assert_eq!(result.song.tracks.len(), 1);
         let imported_track = &result.song.tracks[0];
@@ -1071,8 +1105,14 @@ mod tests {
             ..song()
         };
         let target = tempdir().expect("target");
-        let result =
-            import_song_package(target.path(), &empty, &package_path, 0.0).expect("import full");
+        let result = import_song_package(
+            target.path(),
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import full");
         assert_eq!(result.bundled_audio.len(), 1);
         assert!(result.bundled_audio.contains_key("loop.wav"));
     }
@@ -1097,8 +1137,14 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result =
-            import_song_package(target.path(), &empty, &package_path, 0.0).expect("import light");
+        let result = import_song_package(
+            target.path(),
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import light");
         assert!(result.bundled_audio.is_empty());
     }
 
@@ -1118,7 +1164,14 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result = import_song_package(song_dir, &empty, &package_path, 100.0).expect("import");
+        let result = import_song_package(
+            song_dir,
+            &empty,
+            &package_path,
+            100.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import");
 
         // Original clip started at 4s within the region; inserted at 100s it
         // should now sit at 104s.
@@ -1151,8 +1204,14 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result =
-            import_song_package(song_dir, &empty, &package_path, 0.0).expect("import package");
+        let result = import_song_package(
+            song_dir,
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import package");
 
         // Both tracks survive as separate tracks...
         assert_eq!(result.song.tracks.len(), 2);
@@ -1188,8 +1247,14 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        let result =
-            import_song_package(song_dir, &existing, &package_path, 100.0).expect("import package");
+        let result = import_song_package(
+            song_dir,
+            &existing,
+            &package_path,
+            100.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import package");
 
         // No duplicate "Drums" track was created.
         assert_eq!(
@@ -1221,6 +1286,60 @@ mod tests {
     }
 
     #[test]
+    fn keep_separate_creates_a_new_track_instead_of_merging_by_name() {
+        // The opposite of the test above: with the merge setting off, a package
+        // track whose name already exists gets its own track so each song keeps
+        // its own lanes in the set. The name is kept verbatim (two "Drums").
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song(); // one "Drums" track + clip
+        let package_path = song_dir.join("verse.ltsong");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export");
+
+        let existing = Song {
+            tracks: vec![track("existing_drums", "Drums")],
+            clips: vec![clip("existing_clip", "existing_drums", 0.0, 4.0)],
+            regions: vec![region("r_dest", "Dest", 0.0, 100.0)],
+            section_markers: vec![],
+            ..song()
+        };
+        // Insert past the end of the destination region so the imported region
+        // appends after it and the song stays valid (regions may not overlap).
+        let result = import_song_package(
+            song_dir,
+            &existing,
+            &package_path,
+            100.0,
+            SongImportTrackMode::KeepSeparate,
+        )
+        .expect("import package");
+
+        let drums: Vec<_> = result
+            .song
+            .tracks
+            .iter()
+            .filter(|track| track.name == "Drums")
+            .collect();
+        assert_eq!(drums.len(), 2, "imported track merged despite KeepSeparate");
+        // Distinct ids, and one clip on each — the pre-existing clip stays put
+        // and the imported one lands on the freshly created track.
+        assert_ne!(drums[0].id, drums[1].id);
+        for drums_track in drums {
+            assert_eq!(
+                result
+                    .song
+                    .clips
+                    .iter()
+                    .filter(|clip| clip.track_id == drums_track.id)
+                    .count(),
+                1
+            );
+        }
+        validate_song(&result.song).expect("imported song must stay valid");
+    }
+
+    #[test]
     fn import_rejects_out_of_range_transpose() {
         let dir = tempdir().expect("tempdir");
         let song_dir = dir.path();
@@ -1237,7 +1356,14 @@ mod tests {
             section_markers: vec![],
             ..song()
         };
-        assert!(import_song_package(song_dir, &empty, &package_path, 0.0).is_err());
+        assert!(import_song_package(
+            song_dir,
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::default()
+        )
+        .is_err());
     }
 
     #[test]

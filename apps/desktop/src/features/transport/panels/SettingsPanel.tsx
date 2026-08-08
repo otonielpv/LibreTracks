@@ -96,6 +96,7 @@ type SettingsPanelProps = {
   onTimelinePlayheadFollowModeChange: (
     value: AppSettings["timelinePlayheadFollowMode"],
   ) => void;
+  onImportMergeMatchingTracksChange: (value: boolean) => void;
 
   midiLearnMode: string | null;
   midiLearnFeedback: MidiLearnFeedback | null;
@@ -158,6 +159,7 @@ export function SettingsPanel({
   onLocaleChange,
   onTimelineNavigationSchemeChange,
   onTimelinePlayheadFollowModeChange,
+  onImportMergeMatchingTracksChange,
   midiLearnMode,
   midiLearnFeedback,
   midiLearnFeedbackCommand,
@@ -724,6 +726,39 @@ export function SettingsPanel({
                           },
                         )}
                       </small>
+                    </label>
+
+                    <label className="lt-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.importMergeMatchingTracks}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onImportMergeMatchingTracksChange(
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      <span className="lt-settings-toggle-copy">
+                        <span>
+                          {t(
+                            "transport.settingsModal.importMergeMatchingTracks",
+                            {
+                              defaultValue:
+                                "Unir pistas con el mismo nombre al importar",
+                            },
+                          )}
+                        </span>
+                        <small>
+                          {t(
+                            "transport.settingsModal.importMergeMatchingTracksHint",
+                            {
+                              defaultValue:
+                                "Al importar una canción, sus clips se añaden a la pista existente que ya tenga ese nombre. Desactívalo para que cada canción traiga sus propias pistas.",
+                            },
+                          )}
+                        </small>
+                      </span>
                     </label>
 
                     <InterfaceZoomField />

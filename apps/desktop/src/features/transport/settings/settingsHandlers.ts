@@ -279,6 +279,15 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleImportMergeMatchingTracksChange(nextValue: boolean) {
+      persistAudioPatch(
+        { importMergeMatchingTracks: nextValue },
+        t("transport.status.importMergeMatchingTracksUpdated", {
+          defaultValue: "Import track behaviour updated.",
+        }),
+      );
+    },
+
     handleLocaleChange(nextValue: string) {
       // Locale uses a raw merge (not normalizeAppSettings) to mirror the
       // monolith, and a function message that reads the *saved* locale.

@@ -196,6 +196,9 @@ const es = {
       timelinePlayheadFollowModeCenter: "Centrado",
       timelinePlayheadFollowModeHelp:
         "Elige donde queda el cursor cuando el seguimiento esta activado en la barra del timeline.",
+      importMergeMatchingTracks: "Unir pistas con el mismo nombre al importar",
+      importMergeMatchingTracksHint:
+        "Al importar una canción, sus clips se añaden a la pista existente que ya tenga ese nombre. Desactívalo para que cada canción traiga sus propias pistas.",
       interfaceZoom: "Tamaño de la interfaz",
       interfaceZoomHelp:
         "Escala toda la interfaz. Bájalo si la app es más ancha que tu pantalla. Atajo: Cmd/Ctrl +, − y 0 para restablecer.",
@@ -546,6 +549,8 @@ const es = {
         "Navegación de la línea de tiempo actualizada.",
       timelinePlayheadFollowModeUpdated:
         "Modo de seguimiento del cursor actualizado.",
+      importMergeMatchingTracksUpdated:
+        "Comportamiento de pistas al importar actualizado.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",
       importRequiresSession:
         "Crea o abre una sesion antes de importar audio a la libreria.",

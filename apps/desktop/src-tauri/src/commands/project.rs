@@ -1710,17 +1710,19 @@ pub fn export_region_rendered_audio(
 
 #[tauri::command]
 pub fn import_song_package(
+    app: AppHandle,
     package_path: String,
     insert_at_seconds: f64,
     state: State<'_, DesktopState>,
 ) -> Result<SongPackageImportResponse, String> {
+    let track_mode = crate::state::song_import_track_mode(&app);
     let mut session = state
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .import_song_package(&package_path, insert_at_seconds, &state.audio)
+        .import_song_package(&package_path, insert_at_seconds, &state.audio, track_mode)
         .map_err(|error| crate::infra::error_log::log_command_err("import_song_package", error))
 }
 

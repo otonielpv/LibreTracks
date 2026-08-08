@@ -1999,6 +1999,7 @@ export function TransportPanelContent() {
     handleVampBarsChange,
     handleTimelineNavigationSchemeChange,
     handleTimelinePlayheadFollowModeChange,
+    handleImportMergeMatchingTracksChange,
     handleLocaleChange,
   } = settingsHandlers;
 
@@ -8192,6 +8193,9 @@ export function TransportPanelContent() {
               }
               onTimelinePlayheadFollowModeChange={
                 handleTimelinePlayheadFollowModeChange
+              }
+              onImportMergeMatchingTracksChange={
+                handleImportMergeMatchingTracksChange
               }
               midiLearnMode={midiLearnMode}
               midiLearnFeedback={midiLearnFeedback}
