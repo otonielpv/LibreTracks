@@ -1025,6 +1025,9 @@ const es = {
     monitor: "Monitor",
     extOutMono: "Out {{channel}}",
     extOutStereo: "Out {{left}}/{{right}}",
+    laneFolderEmpty: "Carpeta vacia",
+    laneFolderChildCount_one: "{{count}} track",
+    laneFolderChildCount_other: "{{count}} tracks",
   },
   importAudio: {
     title: "Importar Audio",

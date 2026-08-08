@@ -334,11 +334,75 @@ describe("drawTrackClipsLayer", () => {
     expect(ribbon).toBeDefined();
     expect(ribbon?.[0]).toBe(0);
 
-    // The child count still reaches the caption.
-    expect(
-      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
-        ([text]) => typeof text === "string" && text.includes("1 tracks"),
-      ),
-    ).toBe(true);
+    // The folder's own name leads the caption, so a collapsed folder stays
+    // identifiable without looking back at the header column.
+    const captions = (context.fillText as ReturnType<typeof vi.fn>).mock.calls
+      .map(([text]) => text)
+      .filter((text): text is string => typeof text === "string");
+    expect(captions).toContain("Banda");
+
+    // ...and the child count still reaches the caption alongside it.
+    expect(captions.some((text) => text.includes("1"))).toBe(true);
+  });
+
+  it("falls back to the child count when the folder has no name", () => {
+    let fillStyle = "";
+    const context = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      clip: vi.fn(),
+      fillText: vi.fn(),
+      stroke: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      drawImage: vi.fn(),
+      rect: vi.fn(),
+      fill: vi.fn(),
+      measureText: (text: string) => ({ width: text.length * 6 }),
+      set fillStyle(value: string) {
+        fillStyle = value;
+      },
+      get fillStyle() {
+        return fillStyle;
+      },
+      set strokeStyle(_value: string) {},
+      set lineWidth(_value: number) {},
+      set font(_value: string) {},
+      set textAlign(_value: string) {},
+      set textBaseline(_value: string) {},
+    } as unknown as CanvasRenderingContext2D;
+
+    const snapshot = createSnapshot(false);
+    const folder = {
+      id: "folder-1",
+      name: "   ",
+      kind: "folder" as const,
+      parentTrackId: null,
+      depth: 0,
+      hasChildren: false,
+      volume: 1,
+      pan: 0,
+      muted: false,
+      solo: false,
+      audioTo: "master",
+      transposeEnabled: false,
+      color: "#ff5555",
+    };
+    snapshot.visibleTracks = [folder];
+    snapshot.song.tracks = [folder];
+    snapshot.clipsByTrack = {};
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    // A blank name must not leave the row captionless.
+    const captions = (context.fillText as ReturnType<typeof vi.fn>).mock.calls
+      .map(([text]) => text)
+      .filter((text): text is string => typeof text === "string");
+    expect(captions.length).toBeGreaterThan(0);
+    expect(captions.every((text) => text.trim().length > 0)).toBe(true);
   });
 });

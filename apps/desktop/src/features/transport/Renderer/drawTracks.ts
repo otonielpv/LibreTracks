@@ -524,19 +524,79 @@ export function drawTrackClipsLayer(
         context.fillRect(0, trackTop, 3, snapshot.trackHeight);
       }
 
-      const folderLabel = childCount
-        ? `${childCount} tracks dentro de la carpeta`
-        : "Carpeta";
-      context.font = '600 10px "Space Grotesk", sans-serif';
-      context.textBaseline = "middle";
+      // The folder's own name leads the caption. The row has width to spare,
+      // and the header's name column is easy to lose track of once the timeline
+      // is scrolled: naming the row where the content is keeps a collapsed
+      // folder identifiable without looking back at the header. The child count
+      // follows as a quieter suffix so the old information is still there,
+      // subordinate to the name rather than replacing it.
       const labelCenterY = trackTop + snapshot.trackHeight / 2;
+      const countLabel = childCount
+        ? i18n.t("trackHeader.laneFolderChildCount", { count: childCount })
+        : i18n.t("trackHeader.laneFolderEmpty");
+      const folderName = track.name?.trim() ?? "";
 
       // No chip behind the caption: the band already masks the grid, so the
       // text only needs to out-contrast the band itself. The band now carries
       // the folder's colour, so the caption is near white — tinting it with the
       // colour too left it barely readable against its own background.
-      context.fillStyle = track.color ? "rgba(255, 255, 255, 0.92)" : "#bacac5";
-      context.fillText(folderLabel, 13, labelCenterY);
+      const nameColor = track.color ? "rgba(255, 255, 255, 0.92)" : "#bacac5";
+      const countColor = track.color ? "rgba(255, 255, 255, 0.62)" : "#8a9a95";
+
+      // Budget the caption against the lane, not the canvas: at low zoom the
+      // name would otherwise run the full width and read as a clip.
+      const labelStartX = 13;
+      const captionMaxWidth = Math.max(0, snapshot.width - labelStartX - 12);
+      const countGap = 8;
+
+      context.textBaseline = "middle";
+      if (folderName) {
+        // The name is heavier and a step larger than the count so the two read
+        // as label and annotation rather than one run-on string.
+        context.font = '600 11px "Space Grotesk", sans-serif';
+        const countWidth = (() => {
+          context.save();
+          context.font = '500 10px "Space Grotesk", sans-serif';
+          const width = context.measureText(countLabel).width;
+          context.restore();
+          return width;
+        })();
+
+        // Give the name the room it needs, but never let it squeeze the count
+        // out entirely — reserve the count's width up front, and only let the
+        // name spill into it when the name alone cannot fit the lane.
+        const nameBudget = Math.max(
+          captionMaxWidth * 0.5,
+          captionMaxWidth - countWidth - countGap,
+        );
+        const fittedName = fitLabel(context, folderName, nameBudget);
+        if (fittedName) {
+          context.fillStyle = nameColor;
+          context.fillText(fittedName, labelStartX, labelCenterY);
+
+          const nameWidth = context.measureText(fittedName).width;
+          const countX = labelStartX + nameWidth + countGap;
+          const countBudget = captionMaxWidth - (countX - labelStartX);
+          if (countBudget > 0) {
+            context.font = '500 10px "Space Grotesk", sans-serif';
+            const fittedCount = fitLabel(context, countLabel, countBudget);
+            if (fittedCount) {
+              context.fillStyle = countColor;
+              context.fillText(fittedCount, countX, labelCenterY);
+            }
+          }
+          continue;
+        }
+      }
+
+      // Unnamed folder, or a lane too narrow for the name: fall back to the
+      // count on its own, which is what the row showed before.
+      context.font = '600 10px "Space Grotesk", sans-serif';
+      const fittedCountOnly = fitLabel(context, countLabel, captionMaxWidth);
+      if (fittedCountOnly) {
+        context.fillStyle = nameColor;
+        context.fillText(fittedCountOnly, labelStartX, labelCenterY);
+      }
       continue;
     }
 

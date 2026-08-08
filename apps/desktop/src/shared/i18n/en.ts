@@ -995,6 +995,9 @@ const en = {
     monitor: "Monitor",
     extOutMono: "Out {{channel}}",
     extOutStereo: "Out {{left}}/{{right}}",
+    laneFolderEmpty: "Empty folder",
+    laneFolderChildCount_one: "{{count}} track",
+    laneFolderChildCount_other: "{{count}} tracks",
   },
   importAudio: {
     title: "Import Audio",
