@@ -659,4 +659,39 @@ mod region_message_tests {
 
         assert_eq!(song.regions.len(), 2);
     }
+
+    /// Regression for a session that saved fine and then refused to reopen.
+    ///
+    /// Drawing an empty region past the last clip (the "create the song now,
+    /// drop the audio in later" flow) left `duration_seconds` behind, because
+    /// `create_song_region` was the one region path that never called
+    /// `refresh_song_duration`. The engine's validator rejects any region that
+    /// reaches past the song with "Region X is outside its song", so the user
+    /// could not open their own session — and the region it named was one they
+    /// had just created by hand. An empty region is legitimate; a region
+    /// outside the song is not.
+    #[test]
+    fn an_empty_region_drawn_past_the_last_clip_stays_inside_the_song() {
+        let mut song = song_with_regions(vec![region("Cancion A", 0.0, 180.0)]);
+        song.clips = vec![clip_on("t_a1", 0.0, 180.0)];
+        crate::state::refresh_song_duration(&mut song);
+        assert!((song.duration_seconds - 180.0).abs() < 0.001);
+
+        // The user draws "Cancion 4" in empty space well past the last clip.
+        song.regions.push(region("Cancion 4", 982.97, 1183.96));
+        crate::state::refresh_song_duration(&mut song);
+
+        let max_region_end = song
+            .regions
+            .iter()
+            .map(|r| r.end_seconds)
+            .fold(0.0_f64, f64::max);
+        assert!(
+            song.duration_seconds >= max_region_end,
+            "the song must envelop every region or the session cannot be \
+             reopened: duration={} but a region ends at {}",
+            song.duration_seconds,
+            max_region_end
+        );
+    }
 }

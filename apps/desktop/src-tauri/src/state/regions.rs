@@ -187,6 +187,13 @@ impl DesktopSession {
         };
 
         replace_song_region_range(&mut song, region);
+        // The song must envelop every region or the engine's validator refuses
+        // to load the session with "Region X is outside its song". Drawing a
+        // region past the last clip left `duration_seconds` behind, so the
+        // session saved fine and then could not be reopened at all — the region
+        // it complained about was one the user had just created. Every other
+        // region path already does this; this one was the exception.
+        refresh_song_duration(&mut song);
         audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
