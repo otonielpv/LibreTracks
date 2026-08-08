@@ -17,7 +17,8 @@ export function DialogHost() {
       setRequest((current) => {
         if (current) {
           if (current.type === "prompt") current.resolve(null);
-          else current.resolve(false);
+          else if (current.type === "confirm") current.resolve(false);
+          else current.resolve();
         }
         return next;
       });
@@ -48,8 +49,10 @@ export function DialogHost() {
     setRequest(null);
     if (active.type === "prompt") {
       active.resolve(result as string | null);
-    } else {
+    } else if (active.type === "confirm") {
       active.resolve(result as boolean);
+    } else {
+      active.resolve();
     }
   };
 
@@ -58,6 +61,7 @@ export function DialogHost() {
     close(request.type === "prompt" ? value : true);
   };
 
+  // An alert has nothing to cancel — Escape just dismisses it.
   const cancel = () => close(request.type === "prompt" ? null : false);
 
   const okLabel = t("common.ok", { defaultValue: "OK" });
@@ -101,18 +105,26 @@ export function DialogHost() {
             />
           </>
         ) : (
-          <p id="lt-dialog-title" className="lt-dialog-message">
+          <p
+            id="lt-dialog-title"
+            className="lt-dialog-message"
+            // Rejection messages are multi-sentence and read far better broken
+            // across lines than as one wall of text.
+            style={{ whiteSpace: "pre-line" }}
+          >
             {request.message}
           </p>
         )}
         <div className="lt-dialog-actions">
-          <button
-            type="button"
-            onClick={cancel}
-            className="lt-dialog-button"
-          >
-            {cancelLabel}
-          </button>
+          {request.type !== "alert" ? (
+            <button
+              type="button"
+              onClick={cancel}
+              className="lt-dialog-button"
+            >
+              {cancelLabel}
+            </button>
+          ) : null}
           <button
             type="submit"
             ref={primaryButtonRef}

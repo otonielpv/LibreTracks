@@ -559,12 +559,33 @@ describe("App / drag-drop", () => {
         ),
       ).toBe(true);
     });
-    expect(await screen.findByText(/Import failed in test/i)).toBeTruthy();
+
+    // The reason must reach a modal, not just the status bar: on a wide window
+    // the status bar can sit outside the user's field of view, so a rejected
+    // drop looked like nothing had happened.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/Import failed in test/i);
+
+    // Placeholders stay on the timeline while the dialog is up …
     expect(
       useTransportStore.getState().pendingAudioImports.some(
         (item) => item.fileName === "broken.wav" && item.status === "failed",
       ),
     ).toBe(true);
+
+    // … and are dropped once it is dismissed, so the timeline stops showing
+    // tracks/clips that were never actually saved (the backend is atomic).
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /ok/i }));
+    });
+
+    await waitFor(() => {
+      expect(
+        useTransportStore.getState().pendingAudioImports.some(
+          (item) => item.fileName === "broken.wav",
+        ),
+      ).toBe(false);
+    });
   });
 
   it("rejects mixed external drops", async () => {

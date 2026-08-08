@@ -26,7 +26,13 @@ interface ConfirmRequest {
   resolve: Resolver<boolean>;
 }
 
-export type DialogRequest = PromptRequest | ConfirmRequest;
+interface AlertRequest {
+  type: "alert";
+  message: string;
+  resolve: Resolver<void>;
+}
+
+export type DialogRequest = PromptRequest | ConfirmRequest | AlertRequest;
 
 let host: ((request: DialogRequest) => void) | null = null;
 
@@ -59,5 +65,24 @@ export function confirmDialog(message: string): Promise<boolean> {
       return;
     }
     host({ type: "confirm", message, resolve });
+  });
+}
+
+/// Single-button modal for failures the user MUST see. The status bar is easy
+/// to miss (it can sit off-screen on a wide window), so a rejected drop that
+/// only wrote there read as "nothing happened" — or worse, as a broken file,
+/// because the only visible feedback was the clip's generic "Error al importar".
+///
+/// Resolves `true` when the user actually dismissed the dialog, and `false`
+/// when there was no host to show it (early startup, tests). Callers that clean
+/// up on dismissal must check: treating "never shown" as "acknowledged" would
+/// silently discard the very state the message refers to.
+export function alertDialog(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!host) {
+      resolve(false);
+      return;
+    }
+    host({ type: "alert", message, resolve: () => resolve(true) });
   });
 }
