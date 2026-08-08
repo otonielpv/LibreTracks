@@ -32,6 +32,57 @@ export function isAcceptedDroppedFileName(name: string): boolean {
   );
 }
 
+/**
+ * Layout for a library folder dropped on the timeline. A folder is a set of
+ * stems meant to play together, so it defaults to one track per asset wherever
+ * it lands — the inverse of a loose multi-asset drag, where dropping onto a
+ * track means "chain these here". Ctrl/Cmd flips it for a folder of
+ * consecutive takes.
+ */
+export function resolveFolderDropLayout(
+  ctrlKey: boolean,
+  metaKey: boolean,
+): "horizontal" | "vertical" {
+  return ctrlKey || metaKey ? "horizontal" : "vertical";
+}
+
+/**
+ * Width of the song created from a dropped folder. Stacked stems all start
+ * together so the longest one defines the end; chained takes run end to end.
+ */
+export function resolveFolderSongDurationSeconds(
+  durations: number[],
+  layout: "horizontal" | "vertical",
+): number {
+  if (layout === "horizontal") {
+    return durations.reduce((total, duration) => total + duration, 0);
+  }
+
+  return durations.reduce((longest, duration) => Math.max(longest, duration), 0);
+}
+
+/**
+ * The songs a folder drop would collide with, given the span the new song
+ * needs. Empty means the drop fits.
+ *
+ * This is a real interval-overlap test, deliberately NOT
+ * `getSongRegionAtPosition`: that helper resolves the *nearest* song (it falls
+ * back to the previous song, then to the first one), so it answers "which song
+ * does this position belong to" and never returns null once any song exists —
+ * which made every drop look like it landed inside a song.
+ *
+ * Touching edges are allowed: a song ending exactly where the new one starts
+ * does not overlap, so a folder can be dropped flush against the end of the
+ * previous song as long as the whole span is clear.
+ */
+export function findOverlappingSongs<
+  T extends { startSeconds: number; endSeconds: number },
+>(regions: readonly T[], startSeconds: number, endSeconds: number): T[] {
+  return regions.filter(
+    (region) => startSeconds < region.endSeconds && endSeconds > region.startSeconds,
+  );
+}
+
 export type ExternalDropKind =
   | "package"
   | "external"

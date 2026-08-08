@@ -11,6 +11,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { isAndroidApp, type LibraryImportProgressEvent } from "../desktopApi";
+import { DRAG_THRESHOLD_PX } from "../constants";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 
@@ -40,6 +41,9 @@ type LibrarySidebarPanelProps = {
     payload: Array<{ file_path: string; durationSeconds: number }>;
     origin: { x: number; y: number };
     current: { x: number; y: number };
+    /** Present when the drag started from a folder header: the timeline drop
+     * then creates a song named after it instead of loose clips. */
+    folderName?: string;
   }) => void;
   onLocateAsset?: (filePath: string) => void;
   onImport: () => void;
@@ -415,6 +419,64 @@ export function LibrarySidebarPanel({
     });
   };
 
+  // Drag a whole folder onto the timeline to lay down every audio it holds as
+  // one song named after the folder. The header is a <summary>, which toggles
+  // the <details> on click, so we must not hand the drag over on mousedown:
+  // we arm here and only start once the pointer has actually travelled
+  // DRAG_THRESHOLD_PX, leaving a plain click free to collapse/expand.
+  // Pending assets are excluded (they have no importable path yet); missing
+  // ones are kept, matching how they behave when dragged individually.
+  const startFolderDrag = (
+    event: ReactPointerEvent<HTMLElement> | MouseEvent<HTMLElement>,
+    folderPath: string | null,
+    groupAssets: PendingLibraryAssetSummary[],
+  ) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const folderName = folderPath ?? t("library.rootFolder");
+    const payload = groupAssets
+      .filter((asset) => !asset.isPending)
+      .map((asset) => ({
+        file_path: asset.filePath,
+        durationSeconds: asset.durationSeconds,
+      }));
+
+    const origin = { x: event.clientX, y: event.clientY };
+    let armed = true;
+
+    const disarm = () => {
+      armed = false;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", disarm);
+      window.removeEventListener("pointercancel", disarm);
+    };
+
+    function onMove(moveEvent: PointerEvent) {
+      if (!armed) {
+        return;
+      }
+      if (
+        Math.hypot(moveEvent.clientX - origin.x, moveEvent.clientY - origin.y) <
+        DRAG_THRESHOLD_PX
+      ) {
+        return;
+      }
+      disarm();
+      onPointerDragStart?.({
+        payload,
+        origin,
+        current: { x: moveEvent.clientX, y: moveEvent.clientY },
+        folderName,
+      });
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", disarm);
+    window.addEventListener("pointercancel", disarm);
+  };
+
   const renderAssetRows = (groupAssets: PendingLibraryAssetSummary[]) => {
     return groupAssets.length ? (
       <div className="lt-library-asset-list" role="list" aria-label={t("library.assetListAria")}>
@@ -547,6 +609,7 @@ export function LibrarySidebarPanel({
                 className={`lt-library-folder-summary ${dragTargetFolderPath === null ? "is-drag-target" : ""}`}
                 data-library-folder-drop-target="true"
                 data-library-folder-path=""
+                onPointerDown={(event) => startFolderDrag(event, null, rootAssets)}
                 onContextMenu={(event) => openContextMenu(event, t("library.rootFolder"), folderContextMenu(null))}
               >
                 <span className="material-symbols-outlined">home_storage</span>
@@ -574,6 +637,9 @@ export function LibrarySidebarPanel({
                   className={`lt-library-folder-summary ${dragTargetFolderPath === group.folderPath ? "is-drag-target" : ""}`}
                   data-library-folder-drop-target="true"
                   data-library-folder-path={group.folderPath}
+                  onPointerDown={(event) =>
+                    startFolderDrag(event, group.folderPath, group.assets)
+                  }
                   onContextMenu={(event) => openContextMenu(event, group.folderPath, folderContextMenu(group.folderPath))}
                 >
                   <span className="material-symbols-outlined">folder</span>

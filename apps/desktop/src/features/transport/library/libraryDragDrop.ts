@@ -38,9 +38,11 @@ import {
 } from "./pendingAudioImports";
 import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
 import { runAudioImportPipeline } from "./importPipeline";
+import { placeLibraryFolderOnTimeline } from "./libraryFolderDrop";
 import {
   buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
+  resolveFolderDropLayout,
   type DroppedFileClassification,
   type ExternalDropPreview,
   type NativeDroppedPathClassification,
@@ -228,7 +230,12 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     targetTrackId: string | null,
     ctrlKey: boolean,
     metaKey: boolean,
+    isFolderDrag = false,
   ) {
+    if (isFolderDrag) {
+      return resolveFolderDropLayout(ctrlKey, metaKey);
+    }
+
     if (payload.length <= 1) {
       return "horizontal";
     }
@@ -428,6 +435,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       hoverState.targetTrackId,
       hoverState.ctrlKey,
       hoverState.metaKey,
+      hoverState.isFolderDrag,
     );
     const timelineStartSeconds = resolveLibraryDropSecondsAtClientX(
       hoverState.clientX,
@@ -951,6 +959,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
         headersTarget.targetTrackId,
         args.ctrlKey,
         args.metaKey,
+        args.drag.folderName != null,
       );
       // Show the placement preview pinned at the timeline start instead of
       // following the cursor (the cursor is over the headers column, not a
@@ -1004,6 +1013,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       metaKey: args.metaKey,
       payload: args.drag.payload,
       targetTrackId: hit.targetTrackId,
+      isFolderDrag: args.drag.folderName != null,
     };
     deps().libraryDragHoverRef.current = hoverState;
     updateLibraryClipPreview(hoverState, targetElement);
@@ -1020,6 +1030,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
           hit.targetTrackId,
           args.ctrlKey,
           args.metaKey,
+          args.drag.folderName != null,
         ),
       },
     };
@@ -1178,6 +1189,19 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       return;
     }
 
+    if (nextDrag.folderName != null) {
+      const folderName = nextDrag.folderName;
+      void deps().runAction(async () => {
+        await dropLibraryFolder({
+          payload: nextDrag.payload,
+          folderName,
+          timelineStartSeconds: hover.dropSeconds,
+          layout: hover.layout,
+        });
+      });
+      return;
+    }
+
     void deps().runAction(async () => {
       await placeLibraryAssetsOnTimeline({
         payload: nextDrag.payload,
@@ -1192,6 +1216,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     payload: LibraryAssetDragPayload[];
     origin: { x: number; y: number };
     current: { x: number; y: number };
+    folderName?: string;
   }) {
     clearInternalLibraryPointerDrag();
 
@@ -1201,6 +1226,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
           ? crypto.randomUUID()
           : `library-pointer-drag-${Date.now()}`,
       payload: args.payload,
+      folderName: args.folderName,
       origin: args.origin,
       current: args.current,
       isDragging: true,
@@ -1409,6 +1435,28 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       assets.length === 1
         ? deps().t("transport.status.clipAdded", { name: assets[0].fileName })
         : deps().t("transport.status.clipsAdded", { count: assets.length }),
+    );
+  }
+
+  /** Binds the live deps snapshot to the folder-drop routine, which lives in
+   * its own module (see libraryFolderDrop.ts for the rules it enforces). */
+  function dropLibraryFolder(args: {
+    payload: LibraryAssetDragPayload[];
+    folderName: string;
+    timelineStartSeconds: number;
+    layout: LibraryDropLayout;
+  }) {
+    return placeLibraryFolderOnTimeline(
+      {
+        t: deps().t,
+        getSong: () => deps().song,
+        resolveAsset: resolveDraggedLibraryAsset,
+        placeAssets: placeLibraryAssetsOnTimeline,
+        applyPlaybackSnapshot: deps().applyPlaybackSnapshot,
+        refreshSongView: deps().refreshSongView,
+        setStatus: deps().setStatus,
+      },
+      args,
     );
   }
 
@@ -2194,6 +2242,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     clearInternalLibraryPointerDrag,
     startInternalLibraryPointerDrag,
     placeLibraryAssetsOnTimeline,
+    dropLibraryFolder,
     handleDroppedSongPackagePath,
     handleDroppedExternalProjectPath,
     handleDroppedAudioFiles,

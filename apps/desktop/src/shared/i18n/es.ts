@@ -439,6 +439,10 @@ const es = {
       adjustProjectTempo:
         "BPM detectado: {{bpm}}. ¿Quieres ajustar el tempo del proyecto?",
     },
+    alert: {
+      folderDropOverSong:
+        "La carpeta \"{{folder}}\" necesita {{seconds}} segundos libres y ahi no caben: se solaparia con {{song}}.\n\nUna carpeta de la biblioteca crea siempre una cancion nueva. Sueltala en un hueco lo bastante ancho, o justo al final de la ultima cancion.",
+    },
     status: {
       loadingSession: "Cargando sesion...",
       preparingAudio: "Preparando audio...",
@@ -506,6 +510,8 @@ const es = {
       tracksSelected: "{{count}} tracks seleccionados",
       regionSelected: "Region seleccionada: {{name}}.",
       clipsAdded: "{{count}} clips agregados desde la biblioteca.",
+      folderSongCreated:
+        "Cancion \"{{name}}\" creada con {{count}} pistas desde la biblioteca.",
       clipAdded: "Clip agregado: {{name}}",
       clipSplitAt: "Clip cortado en {{time}}",
       songSplitAt: "Canción partida en {{time}}.",

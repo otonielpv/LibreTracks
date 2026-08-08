@@ -421,6 +421,10 @@ const en = {
       adjustProjectTempo:
         "Detected BPM: {{bpm}}. Do you want to adjust the project tempo?",
     },
+    alert: {
+      folderDropOverSong:
+        "The folder \"{{folder}}\" needs {{seconds}} free seconds and does not fit here: it would overlap {{song}}.\n\nA library folder always creates a new song. Drop it on a wide enough gap, or right at the end of the last song.",
+    },
     status: {
       loadingSession: "Loading session...",
       preparingAudio: "Preparing audio...",
@@ -485,6 +489,8 @@ const en = {
       tracksSelected: "{{count}} tracks selected",
       regionSelected: "Region selected: {{name}}.",
       clipsAdded: "{{count}} clips added from the library.",
+      folderSongCreated:
+        "Song \"{{name}}\" created with {{count}} tracks from the library.",
       clipAdded: "Clip added: {{name}}",
       clipSplitAt: "Clip split at {{time}}",
       songSplitAt: "Song split at {{time}}.",

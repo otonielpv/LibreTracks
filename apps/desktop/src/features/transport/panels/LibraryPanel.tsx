@@ -21,6 +21,9 @@ type LibraryPanelProps = {
     payload: Array<{ file_path: string; durationSeconds: number }>;
     origin: { x: number; y: number };
     current: { x: number; y: number };
+    /** Set when dragging a whole folder header; the timeline drop then creates
+     * a song named after it. */
+    folderName?: string;
   }) => void;
   onImport: () => void;
   onCreateFolder: () => void;

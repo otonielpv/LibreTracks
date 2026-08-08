@@ -256,11 +256,22 @@ export type LibraryDragHoverState = {
   metaKey: boolean;
   payload: LibraryAssetDragPayload[];
   targetTrackId: string | null;
+  /** Mirrors InternalLibraryPointerDrag.folderName so the live preview picks
+   * the same layout the drop will actually use. */
+  isFolderDrag?: boolean;
 };
 
 export type InternalLibraryPointerDrag = {
   id: string;
   payload: LibraryAssetDragPayload[];
+  /**
+   * Set when the drag started from a library folder header rather than from
+   * individual assets. Dropping one of these on empty timeline creates a song
+   * named after the folder wrapping every asset it holds; dropping it over an
+   * existing song is rejected outright (see handleInternalLibraryPointerUp).
+   * Undefined for ordinary asset drags, which keep the old behaviour.
+   */
+  folderName?: string;
   origin: {
     x: number;
     y: number;
