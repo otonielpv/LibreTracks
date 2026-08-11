@@ -194,6 +194,11 @@ const en = {
       timelinePlayheadFollowModeCenter: "Centered",
       timelinePlayheadFollowModeHelp:
         "Choose where the cursor sits when follow is enabled in the timeline toolbar.",
+      autoSave: "Autosave",
+      autoSaveHint:
+        "Saves the open session every so often so an unexpected failure doesn't take your work with it. It only saves when something changed, and never during playback.",
+      autoSaveInterval: "Save every (minutes)",
+      autoSaveIntervalHint: "Between {{min}} and {{max}} minutes.",
       importMergeMatchingTracks: "Merge tracks with the same name on import",
       importMergeMatchingTracksHint:
         "When importing a song, its clips are added to the existing track that already has that name. Turn it off so each song brings its own tracks.",
@@ -531,6 +536,8 @@ const en = {
       timelineNavigationSchemeUpdated: "Timeline navigation scheme updated.",
       timelinePlayheadFollowModeUpdated: "Playhead follow mode updated.",
       importMergeMatchingTracksUpdated: "Import track behaviour updated.",
+      autoSaveUpdated: "Autosave updated.",
+      projectAutoSaved: "Project autosaved.",
       trackRoutingUpdated: "Track routing updated.",
       importRequiresSession:
         "Create or open a session before importing audio to the library.",

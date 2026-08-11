@@ -288,6 +288,26 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleAutoSaveEnabledChange(nextValue: boolean) {
+      persistAudioPatch(
+        { autoSaveEnabled: nextValue },
+        t("transport.status.autoSaveUpdated", {
+          defaultValue: "Autoguardado actualizado.",
+        }),
+      );
+    },
+
+    handleAutoSaveIntervalMinutesChange(nextValue: number) {
+      // normalizeAppSettings clamps to AUTO_SAVE_INTERVAL_RANGE, so a cleared
+      // or out-of-range number input can never arm a runaway timer.
+      persistAudioPatch(
+        { autoSaveIntervalMinutes: nextValue },
+        t("transport.status.autoSaveUpdated", {
+          defaultValue: "Autoguardado actualizado.",
+        }),
+      );
+    },
+
     handleLocaleChange(nextValue: string) {
       // Locale uses a raw merge (not normalizeAppSettings) to mirror the
       // monolith, and a function message that reads the *saved* locale.

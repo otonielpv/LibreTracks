@@ -864,8 +864,25 @@ export type AppSettings = {
    * song brings its own tracks, even if two songs both name a track "Batería".
    */
   importMergeMatchingTracks: boolean;
+  /**
+   * When true (default) the loaded session is saved on its own every
+   * `autoSaveIntervalMinutes`, so an unexpected crash or power cut loses at most
+   * one interval of work. The timer only fires when the project actually changed
+   * since the last save (tracked by `projectRevision`), so an idle session never
+   * touches the disk.
+   */
+  autoSaveEnabled: boolean;
+  /** Minutes between autosaves. Clamped to AUTO_SAVE_INTERVAL_RANGE. */
+  autoSaveIntervalMinutes: number;
   midiMappings: Record<string, MidiBinding>;
 };
+
+/**
+ * Bounds for `autoSaveIntervalMinutes`. The floor keeps a large session from
+ * saving so often that the writes are noticeable; the ceiling keeps "autosave
+ * on" from meaning "an hour of lost work".
+ */
+export const AUTO_SAVE_INTERVAL_RANGE = { min: 1, max: 60 } as const;
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedOutputDevice: null,
@@ -920,6 +937,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   timelineNavigationScheme: "ableton",
   timelinePlayheadFollowMode: "ahead",
   importMergeMatchingTracks: true,
+  autoSaveEnabled: true,
+  autoSaveIntervalMinutes: 5,
   midiMappings: {},
 };
 
@@ -1149,8 +1168,29 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     // Defaults to true when absent (older settings files) so existing users
     // keep the historical merge-on-import behaviour.
     importMergeMatchingTracks: settings.importMergeMatchingTracks ?? true,
+    // Absent in settings files written before autosave shipped: default to on,
+    // matching DEFAULT_APP_SETTINGS.
+    autoSaveEnabled: settings.autoSaveEnabled ?? true,
+    autoSaveIntervalMinutes: normalizeAutoSaveIntervalMinutes(
+      settings.autoSaveIntervalMinutes,
+    ),
     midiMappings,
   };
+}
+
+/**
+ * Clamp the autosave period into AUTO_SAVE_INTERVAL_RANGE, falling back to the
+ * default for NaN/absent values. Guards against a hand-edited settings.json
+ * asking for a 0-minute interval, which would autosave on every tick.
+ */
+export function normalizeAutoSaveIntervalMinutes(value: number | undefined) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_APP_SETTINGS.autoSaveIntervalMinutes;
+  }
+  return Math.min(
+    AUTO_SAVE_INTERVAL_RANGE.max,
+    Math.max(AUTO_SAVE_INTERVAL_RANGE.min, Math.round(value as number)),
+  );
 }
 
 export type AudioOutputDevices = {

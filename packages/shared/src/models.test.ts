@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUTO_SAVE_INTERVAL_RANGE,
   DEFAULT_APP_SETTINGS,
   buildSongTempoRegions,
   buildWaveformLodsFromPeaks,
@@ -408,6 +409,39 @@ describe("normalizeAppSettings", () => {
         importMergeMatchingTracks: false,
       }).importMergeMatchingTracks,
     ).toBe(false);
+  });
+
+  it("defaults autosave to on every 5 minutes for older settings files", () => {
+    const {
+      autoSaveEnabled: _enabled,
+      autoSaveIntervalMinutes: _interval,
+      ...withoutFields
+    } = DEFAULT_APP_SETTINGS;
+    const normalized = normalizeAppSettings(withoutFields as AppSettings);
+    expect(normalized.autoSaveEnabled).toBe(true);
+    expect(normalized.autoSaveIntervalMinutes).toBe(5);
+  });
+
+  it("clamps the autosave interval into its allowed range", () => {
+    // A hand-edited 0 would otherwise autosave on every tick.
+    expect(
+      normalizeAppSettings({
+        ...DEFAULT_APP_SETTINGS,
+        autoSaveIntervalMinutes: 0,
+      }).autoSaveIntervalMinutes,
+    ).toBe(AUTO_SAVE_INTERVAL_RANGE.min);
+    expect(
+      normalizeAppSettings({
+        ...DEFAULT_APP_SETTINGS,
+        autoSaveIntervalMinutes: 999,
+      }).autoSaveIntervalMinutes,
+    ).toBe(AUTO_SAVE_INTERVAL_RANGE.max);
+    expect(
+      normalizeAppSettings({
+        ...DEFAULT_APP_SETTINGS,
+        autoSaveIntervalMinutes: 7.4,
+      }).autoSaveIntervalMinutes,
+    ).toBe(7);
   });
 
   it("clamps pad key into [0, 11] and rounds it", () => {

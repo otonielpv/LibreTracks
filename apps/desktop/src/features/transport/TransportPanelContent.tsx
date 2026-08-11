@@ -413,6 +413,7 @@ import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
 import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
+import { useAutoSave } from "./hooks/useAutoSave";
 import { useDragListeners } from "./hooks/useDragListeners";
 import { useSongViewLoader } from "./hooks/useSongViewLoader";
 import { useSongStore } from "./songStore";
@@ -2000,6 +2001,8 @@ export function TransportPanelContent() {
     handleTimelineNavigationSchemeChange,
     handleTimelinePlayheadFollowModeChange,
     handleImportMergeMatchingTracksChange,
+    handleAutoSaveEnabledChange,
+    handleAutoSaveIntervalMinutesChange,
     handleLocaleChange,
   } = settingsHandlers;
 
@@ -5353,6 +5356,17 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, refreshSongView, runAction],
   );
 
+  // Periodic autosave so a crash or power cut costs at most one interval.
+  // See ./hooks/useAutoSave — it owns the timer, the skip rules and the save.
+  useAutoSave({
+    enabled: appSettings.autoSaveEnabled && isTauriApp,
+    intervalMinutes: appSettings.autoSaveIntervalMinutes,
+    applyPlaybackSnapshot,
+    setStatus,
+    formatErrorStatus,
+    t,
+  });
+
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
@@ -8196,6 +8210,10 @@ export function TransportPanelContent() {
               }
               onImportMergeMatchingTracksChange={
                 handleImportMergeMatchingTracksChange
+              }
+              onAutoSaveEnabledChange={handleAutoSaveEnabledChange}
+              onAutoSaveIntervalMinutesChange={
+                handleAutoSaveIntervalMinutesChange
               }
               midiLearnMode={midiLearnMode}
               midiLearnFeedback={midiLearnFeedback}

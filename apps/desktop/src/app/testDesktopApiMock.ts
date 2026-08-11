@@ -443,6 +443,10 @@ function buildInitialState(): DesktopApiMockState {
       timelineNavigationScheme: "ableton",
       timelinePlayheadFollowMode: "ahead",
       importMergeMatchingTracks: true,
+      // Off in the mock: tests drive saving explicitly and must not race a
+      // background autosave timer.
+      autoSaveEnabled: false,
+      autoSaveIntervalMinutes: 5,
       midiMappings: {},
     },
     audioOutputDevices: {

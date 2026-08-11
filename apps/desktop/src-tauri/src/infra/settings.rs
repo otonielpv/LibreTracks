@@ -109,6 +109,14 @@ fn default_import_merge_matching_tracks() -> bool {
     true
 }
 
+fn default_auto_save_enabled() -> bool {
+    true
+}
+
+fn default_auto_save_interval_minutes() -> u32 {
+    5
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MidiBinding {
@@ -253,6 +261,15 @@ pub struct AppSettings {
     /// "Bateria" — what users who order their set song by song expect.
     #[serde(default = "default_import_merge_matching_tracks")]
     pub import_merge_matching_tracks: bool,
+    /// When true (default) the frontend saves the loaded session on its own
+    /// every `auto_save_interval_minutes`, so a crash or power cut costs at most
+    /// one interval of work. The timer lives in the UI (it needs the project
+    /// revision to know whether anything actually changed); these two fields
+    /// only persist the user's choice.
+    #[serde(default = "default_auto_save_enabled")]
+    pub auto_save_enabled: bool,
+    #[serde(default = "default_auto_save_interval_minutes")]
+    pub auto_save_interval_minutes: u32,
     #[serde(default)]
     pub midi_mappings: HashMap<String, MidiBinding>,
     /// Custom location for the decoded-PCM cache (`.rf64` files written when a
@@ -321,6 +338,8 @@ impl Default for AppSettings {
             timeline_navigation_scheme: default_timeline_navigation_scheme(),
             timeline_playhead_follow_mode: default_timeline_playhead_follow_mode(),
             import_merge_matching_tracks: default_import_merge_matching_tracks(),
+            auto_save_enabled: default_auto_save_enabled(),
+            auto_save_interval_minutes: default_auto_save_interval_minutes(),
             midi_mappings: HashMap::new(),
             decoding_cache_dir: None,
             decoding_cache_max_gb: None,
@@ -465,6 +484,22 @@ mod tests {
         let settings: AppSettings =
             serde_json::from_str(r#"{ "importMergeMatchingTracks": false }"#).expect("explicit");
         assert!(!settings.import_merge_matching_tracks);
+    }
+
+    #[test]
+    fn auto_save_defaults_to_on_every_five_minutes_for_older_settings_files() {
+        // Autosave postdates existing installs; a settings file without the
+        // fields must still get the protection rather than silently staying off.
+        let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
+        assert!(settings.auto_save_enabled);
+        assert_eq!(settings.auto_save_interval_minutes, 5);
+
+        let settings: AppSettings = serde_json::from_str(
+            r#"{ "autoSaveEnabled": false, "autoSaveIntervalMinutes": 10 }"#,
+        )
+        .expect("explicit");
+        assert!(!settings.auto_save_enabled);
+        assert_eq!(settings.auto_save_interval_minutes, 10);
     }
 
     #[test]

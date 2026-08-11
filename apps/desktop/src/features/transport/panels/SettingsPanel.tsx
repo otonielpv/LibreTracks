@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
+import { AUTO_SAVE_INTERVAL_RANGE } from "@libretracks/shared/models";
 import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
 import {
   getDecodingCacheInfo,
@@ -97,6 +98,8 @@ type SettingsPanelProps = {
     value: AppSettings["timelinePlayheadFollowMode"],
   ) => void;
   onImportMergeMatchingTracksChange: (value: boolean) => void;
+  onAutoSaveEnabledChange: (value: boolean) => void;
+  onAutoSaveIntervalMinutesChange: (value: number) => void;
 
   midiLearnMode: string | null;
   midiLearnFeedback: MidiLearnFeedback | null;
@@ -160,6 +163,8 @@ export function SettingsPanel({
   onTimelineNavigationSchemeChange,
   onTimelinePlayheadFollowModeChange,
   onImportMergeMatchingTracksChange,
+  onAutoSaveEnabledChange,
+  onAutoSaveIntervalMinutesChange,
   midiLearnMode,
   midiLearnFeedback,
   midiLearnFeedbackCommand,
@@ -759,6 +764,60 @@ export function SettingsPanel({
                           )}
                         </small>
                       </span>
+                    </label>
+
+                    <label className="lt-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.autoSaveEnabled}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onAutoSaveEnabledChange(event.target.checked)
+                        }
+                      />
+                      <span className="lt-settings-toggle-copy">
+                        <span>
+                          {t("transport.settingsModal.autoSave", {
+                            defaultValue: "Guardar automáticamente",
+                          })}
+                        </span>
+                        <small>
+                          {t("transport.settingsModal.autoSaveHint", {
+                            defaultValue:
+                              "Guarda la sesión abierta cada cierto tiempo para que un fallo inesperado no se lleve tu trabajo. Solo guarda si has cambiado algo, y nunca durante la reproducción.",
+                          })}
+                        </small>
+                      </span>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.autoSaveInterval", {
+                          defaultValue: "Guardar cada (minutos)",
+                        })}
+                      </span>
+                      <input
+                        type="number"
+                        min={AUTO_SAVE_INTERVAL_RANGE.min}
+                        max={AUTO_SAVE_INTERVAL_RANGE.max}
+                        step={1}
+                        value={appSettings.autoSaveIntervalMinutes}
+                        disabled={
+                          isLoading || isSaving || !appSettings.autoSaveEnabled
+                        }
+                        onChange={(event) =>
+                          onAutoSaveIntervalMinutesChange(
+                            Number(event.target.value),
+                          )
+                        }
+                      />
+                      <small>
+                        {t("transport.settingsModal.autoSaveIntervalHint", {
+                          defaultValue: `Entre ${AUTO_SAVE_INTERVAL_RANGE.min} y ${AUTO_SAVE_INTERVAL_RANGE.max} minutos.`,
+                          min: AUTO_SAVE_INTERVAL_RANGE.min,
+                          max: AUTO_SAVE_INTERVAL_RANGE.max,
+                        })}
+                      </small>
                     </label>
 
                     <InterfaceZoomField />
