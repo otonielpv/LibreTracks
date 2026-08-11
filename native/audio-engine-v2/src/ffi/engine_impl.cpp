@@ -494,6 +494,18 @@ bool session_contains_source(const Session& session, const Id& source_id) {
         [&](const Source& source) { return source.id == source_id; });
 }
 
+// Whether any region needs Bungee voices at all. Sessions without warp never
+// call render_path_stretched, so they must not pay for a per-source rebuild.
+bool session_has_warp_region(const Session& session) {
+    for (const auto& song : session.songs) {
+        for (const auto& region : song.regions) {
+            if (region.warp_enabled && region.warp_source_bpm > 0.0)
+                return true;
+        }
+    }
+    return false;
+}
+
 bool session_sources_ready(const Session& session, const SourceManager& sources) {
     for (const auto& source : session.sources) {
         const DecodedSource* decoded = sources.get(source.id);
@@ -584,12 +596,25 @@ Result<void> EngineImpl::initialize() {
             return;
 
         const bool all_ready = session_sources_ready(*current_session, *source_manager_);
-        // Defer the heavy Bungee rebuild until every source is decoded —
-        // doing it per-source from a worker thread races with the control
-        // thread's session reassignments and was crashing on multi-track
-        // projects. One rebuild at the end is enough because pitched
-        // playback only kicks in after the user hits Play / seeks.
-        if (all_ready && bungee_voices_ && bungee_voices_->is_available() && clock_) {
+        // Rebuild as sources land, not only once the LAST one is decoded.
+        //
+        // This used to wait for `all_ready`, which on a big session means the
+        // whole decode. A warp clip with no Bungee voice renders silence
+        // (render_path_stretched returns 0), so every warped/transposed region
+        // stayed mute for the entire load while the metronome and voice guide —
+        // mixed after the track loop and independent of voices — kept sounding.
+        // That is the reported "everything is muted, audio only comes back at a
+        // marker with the count-in". On a 107-source / 7 GB session the wait is
+        // minutes, so in practice the region never recovered.
+        //
+        // rebuild_for_session already reuses existing voices by clip id and
+        // skips clips whose source is still decoding, so calling it repeatedly
+        // only ever ADDS the voices that just became possible. It takes
+        // build_mutex and publishes atomically, which is what makes it safe from
+        // this worker thread; the earlier crash this gate was papering over came
+        // from the non-atomic session_ copy fixed above.
+        if (bungee_voices_ && bungee_voices_->is_available() && clock_
+            && session_has_warp_region(*current_session)) {
             bungee_voices_->rebuild_for_session(
                 *current_session, *source_manager_, clock_->position().frame);
         }

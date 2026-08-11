@@ -301,3 +301,52 @@ TEST_CASE("async seek rebuild cannot overwrite a newer realtime publish") {
     }
     CHECK(mgr.voice_for("clip1") == nullptr);
 }
+
+// A warp clip whose source is already decoded must get its voice even when a
+// DIFFERENT source in the same session is still decoding.
+//
+// enumerate_voices skips clips whose source isn't loaded yet (correct: there is
+// nothing to prefeed). The hazard is upstream, in engine_impl's source_ready
+// callback, which only calls rebuild_for_session once session_sources_ready()
+// reports EVERY source decoded. On a large session that "all or nothing" gate
+// keeps warp regions voiceless for the whole decode, and render_path_stretched
+// returns silence when a warp clip has no voice — so the warped/transposed
+// tracks stay mute while the metronome and voice guide (mixed after the track
+// loop, independent of voices) keep sounding.
+//
+// This pins the manager's half of the contract: given a ready source, a voice
+// is built regardless of other sources' state.
+TEST_CASE("rebuild_for_session voices ready clips while another source decodes") {
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;  // stub build path
+
+    auto session = make_one_transposed_clip_session(/*semitones=*/-1);
+    // A second track/clip whose source is registered but NEVER decoded, the
+    // shape of a large session mid-load.
+    Source pending;
+    pending.id        = "src_pending";
+    pending.file_path = "";
+    session.sources.push_back(pending);
+    Track pending_track;
+    pending_track.id   = "trk_pending";
+    pending_track.kind = TrackKind::Audio;
+    pending_track.transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
+    pending_track.clips.push_back(
+        Clip{"clip_pending", "src_pending", /*tl*/0, /*src*/0, kSR * 4});
+    session.songs[0].tracks.push_back(pending_track);
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+    sm.register_source("src_pending", "");  // registered, still decoding
+
+    mgr.rebuild_for_session(session, sm, /*playhead=*/0);
+
+#if LT_ENGINE_HAVE_BUNGEE
+    // The decoded clip is voiced and audible...
+    BungeePitchVoice* ready = mgr.voice_for("clip1");
+    CHECK(ready != nullptr);
+    if (ready) CHECK(ready->is_ready());
+    // ...while the undecoded one is correctly skipped until its source lands.
+    CHECK(mgr.voice_for("clip_pending") == nullptr);
+#endif
+}
