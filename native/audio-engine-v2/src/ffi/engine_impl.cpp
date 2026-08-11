@@ -604,8 +604,15 @@ Result<void> EngineImpl::initialize() {
         // stayed mute for the entire load while the metronome and voice guide —
         // mixed after the track loop and independent of voices — kept sounding.
         // That is the reported "everything is muted, audio only comes back at a
-        // marker with the count-in". On a 107-source / 7 GB session the wait is
-        // minutes, so in practice the region never recovered.
+        // marker with the count-in".
+        //
+        // Playback streams from the on-disk PCM cache (a source is "loaded" as
+        // soon as it is cache_ready — only the eager head blocks live in RAM),
+        // so the wait is not proportional to total audio size. It is still long
+        // whenever any source misses try_install_native_file's
+        // `info.samplerate == engine_sample_rate` fast path and has to go
+        // through decode+resample+cache-write: on a mixed-rate session one
+        // whole group always does, and the last of them gates every warp voice.
         //
         // rebuild_for_session already reuses existing voices by clip id and
         // skips clips whose source is still decoding, so calling it repeatedly
