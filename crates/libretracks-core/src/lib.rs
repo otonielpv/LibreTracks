@@ -10,8 +10,9 @@ pub use model::{
     MIN_MIDI_CHANNEL,
 };
 pub use validation::{
-    validate_song, DomainError, MAX_TRANSPOSE_SEMITONES, MAX_WARP_SOURCE_BPM,
-    MIN_TRANSPOSE_SEMITONES, MIN_WARP_SOURCE_BPM,
+    validate_song, DomainError, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,
+    MAX_WARP_SOURCE_BPM, MIN_COMPACT_COLUMN_WIDTH_REM, MIN_TRANSPOSE_SEMITONES,
+    MIN_WARP_SOURCE_BPM,
 };
 pub use warp::{
     audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio, region_warp_ratio_in_song,
@@ -47,6 +48,7 @@ mod tests {
                 warp_source_bpm: None,
                 key: None,
                 master: SongMaster::default(),
+                compact_column_width_rem: None,
             }],
             tracks: vec![
                 Track {
@@ -131,6 +133,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: SongMaster::default(),
+            compact_column_width_rem: None,
         });
 
         assert!(validate_song(&song).is_ok());
@@ -184,6 +187,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: SongMaster::default(),
+            compact_column_width_rem: None,
         });
         // Clip starts inside region_intro [0, 240) but extends past 240.
         song.clips[0].timeline_start_seconds = 230.0;
@@ -210,6 +214,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: SongMaster::default(),
+            compact_column_width_rem: None,
         });
         song.clips[0].timeline_start_seconds = 0.0;
         song.clips[0].duration_seconds = 10.0000005;

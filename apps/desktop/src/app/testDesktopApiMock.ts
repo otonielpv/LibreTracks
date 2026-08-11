@@ -161,6 +161,7 @@ function buildInitialSong(): SongView {
         warpEnabled: false,
         warpSourceBpm: null,
         master: { gain: 1.0 },
+        compactColumnWidthRem: null,
       },
     ],
     tracks: [
@@ -531,6 +532,7 @@ function buildSongTempoRegions(
       warpEnabled: false,
       warpSourceBpm: null,
       master: { gain: 1.0 },
+      compactColumnWidthRem: null,
       bpm,
       timeSignature,
     });
@@ -549,6 +551,7 @@ function buildSongTempoRegions(
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
+    compactColumnWidthRem: null,
     bpm,
     timeSignature,
   });
@@ -760,6 +763,7 @@ function createRegionFromSelection(
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
+    compactColumnWidthRem: null,
   };
 }
 
@@ -1560,6 +1564,7 @@ export const testDesktopApiMock = {
       warpEnabled: false,
       warpSourceBpm: null,
       master: { gain: 1.0 },
+      compactColumnWidthRem: null,
     };
     replaceSong({
       ...state.song,

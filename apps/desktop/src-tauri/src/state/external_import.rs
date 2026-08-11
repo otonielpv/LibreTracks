@@ -13,11 +13,11 @@ use libretracks_core::{
 };
 
 use crate::audio::engine::{audio_debug_logging_enabled, AudioController};
-use crate::infra::error::DesktopError;
 use crate::external_project::{
     detect_external_project_kind, parse_ableton_project, parse_reaper_project, ExternalProjectKind,
     ReaperProject,
 };
+use crate::infra::error::DesktopError;
 use crate::models::SongPackageImportResponse;
 
 use super::{
@@ -483,6 +483,7 @@ impl DesktopSession {
                 warp_enabled: false,
                 warp_source_bpm: None,
                 master: libretracks_core::SongMaster::default(),
+                compact_column_width_rem: None,
             });
         } else {
             for imported_region in &project.regions {
@@ -499,6 +500,7 @@ impl DesktopSession {
                     warp_enabled: false,
                     warp_source_bpm: None,
                     master: libretracks_core::SongMaster::default(),
+                    compact_column_width_rem: None,
                 });
             }
         }

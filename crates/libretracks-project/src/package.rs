@@ -683,6 +683,7 @@ pub fn merge_extracted_song_package(
         warp_enabled: false,
         warp_source_bpm: None,
         master: libretracks_core::SongMaster::default(),
+        compact_column_width_rem: None,
     });
     next_song.regions.sort_by(|left, right| {
         left.start_seconds
@@ -857,6 +858,7 @@ mod tests {
             warp_enabled: false,
             warp_source_bpm: None,
             master: SongMaster::default(),
+            compact_column_width_rem: None,
         }
     }
 

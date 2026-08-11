@@ -1090,6 +1090,7 @@ mod tests {
                 warp_source_bpm: None,
                 key: None,
                 master: libretracks_core::SongMaster::default(),
+                compact_column_width_rem: None,
             }],
             tracks: vec![
                 Track {
@@ -1260,6 +1261,7 @@ mod tests {
                     warp_source_bpm: None,
                     key: None,
                     master: libretracks_core::SongMaster::default(),
+                    compact_column_width_rem: None,
                 },
                 SongRegion {
                     id: "region_bridge".into(),
@@ -1271,6 +1273,7 @@ mod tests {
                     warp_source_bpm: None,
                     key: None,
                     master: libretracks_core::SongMaster::default(),
+                    compact_column_width_rem: None,
                 },
                 SongRegion {
                     id: "region_outro".into(),
@@ -1282,6 +1285,7 @@ mod tests {
                     warp_source_bpm: None,
                     key: None,
                     master: libretracks_core::SongMaster::default(),
+                    compact_column_width_rem: None,
                 },
             ],
             tracks: vec![Track {

@@ -86,6 +86,13 @@ pub struct SongRegion {
     pub warp_source_bpm: Option<f64>,
     #[serde(default)]
     pub master: SongMaster,
+    /// Width, in rem, of this song's column in the compact view. Pure view
+    /// state — it has no effect on playback, the timeline, or any export.
+    /// `None` (the default, and what pre-existing sessions deserialize to)
+    /// means "use the view's default width", so a project the user never
+    /// resized keeps looking exactly as it did before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_column_width_rem: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -252,7 +259,11 @@ pub struct MidiEvent {
 // deserialize into `duration_seconds`. Same trap the AutomationActionSummary
 // enum documents in models/view.rs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "type")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
 pub enum MidiEventKind {
     /// A note held for `duration_seconds`, then released.
     Note {
@@ -519,7 +530,8 @@ impl Marker {
     /// must go through here rather than calling `kind.category()`, or a dragged
     /// marker behaves like its old category.
     pub fn category(&self) -> MarkerCategory {
-        self.category_override.unwrap_or_else(|| self.kind.category())
+        self.category_override
+            .unwrap_or_else(|| self.kind.category())
     }
 }
 
@@ -910,4 +922,3 @@ mod tests {
         assert_eq!(back, marker);
     }
 }
-

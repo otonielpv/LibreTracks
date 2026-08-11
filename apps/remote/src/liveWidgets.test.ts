@@ -18,6 +18,7 @@ function region(
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1 },
+    compactColumnWidthRem: null,
     ...overrides,
   };
 }

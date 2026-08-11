@@ -218,6 +218,24 @@ export type SongMasterSummary = {
   gain: number;
 };
 
+/** Fallback width (rem) for a compact-view song column, used only when the
+ * title cannot be measured (SSR / jsdom). Normally a column with no persisted
+ * width sizes itself to its song's name, with the "Song 1" baseline as the
+ * floor — see `autoColumnWidthRem`. Kept in sync with the
+ * `--lt-compact-column-width` fallback in styles.css. */
+export const COMPACT_COLUMN_DEFAULT_WIDTH_REM = 14;
+/** Bounds for a width the user drags to, mirroring
+ * MIN/MAX_COMPACT_COLUMN_WIDTH_REM in the Rust validation module. The backend
+ * clamps to the same range, so a value that escapes the UI (hand-edited
+ * session) still lands somewhere usable.
+ *
+ * Note this MIN is deliberately below the auto-fit baseline: the default
+ * width keeps a song's title readable, but a user who explicitly drags a
+ * column narrower is allowed to go all the way down to a play button and a
+ * truncated name. */
+export const COMPACT_COLUMN_MIN_WIDTH_REM = 5;
+export const COMPACT_COLUMN_MAX_WIDTH_REM = 48;
+
 export type SongRegionSummary = {
   id: string;
   name: string;
@@ -238,6 +256,10 @@ export type SongRegionSummary = {
   /** Per-song master fader. Defaults to `{ gain: 1.0 }` if the project
    * predates the field. */
   master: SongMasterSummary;
+  /** Width in rem of this song's column in the compact view, or `null` to
+   * use the view's default. Pure view state persisted with the project so a
+   * layout the user arranged survives reopening the session. */
+  compactColumnWidthRem: number | null;
 };
 
 export type SongTempoRegionSummary = SongRegionSummary & TimelineRegion;
@@ -1482,6 +1504,7 @@ export function buildSongTempoRegions(
       warpEnabled: false,
       warpSourceBpm: null,
       master: { gain: 1.0 },
+      compactColumnWidthRem: null,
     });
     startSeconds = marker.startSeconds;
     bpm = marker.bpm ?? bpm;
@@ -1501,6 +1524,7 @@ export function buildSongTempoRegions(
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
+    compactColumnWidthRem: null,
   });
 
   return regions;

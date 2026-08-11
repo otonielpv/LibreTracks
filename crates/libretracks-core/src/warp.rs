@@ -252,6 +252,7 @@ mod tests {
             warp_source_bpm: source_bpm,
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         }
     }
 
@@ -390,6 +391,7 @@ mod tests {
             warp_source_bpm: Some(120.0),
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         };
         s.regions.push(r.clone());
         let ratio = region_warp_ratio_in_song(&r, &s);
@@ -412,6 +414,7 @@ mod tests {
             warp_source_bpm: Some(100.0),
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         });
 
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
@@ -435,6 +438,7 @@ mod tests {
             warp_source_bpm,
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         });
         s
     }
@@ -500,6 +504,7 @@ mod tests {
             warp_source_bpm: Some(100.0), // ratio = 120/100 = 1.2 → view len 50s
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         });
 
         // Before the region: identity.
@@ -527,6 +532,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         });
 
         // Mid-region: view 12.5 = local view 2.5 → source = 10 + 2.5 * 2 = 15.
@@ -552,6 +558,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         });
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
         assert!((warp_timeline_seconds_at(&s, 20.0) - 15.0).abs() < 1e-9);
@@ -571,6 +578,7 @@ mod tests {
             warp_source_bpm: Some(120.0),
             key: None,
             master: crate::model::SongMaster::default(),
+            compact_column_width_rem: None,
         });
 
         let duration = warp_timeline_duration_seconds(&s, 0.0, 12.0);

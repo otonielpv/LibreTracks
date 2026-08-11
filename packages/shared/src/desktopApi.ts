@@ -504,6 +504,21 @@ export async function updateSongRegionKey(
   });
 }
 
+/**
+ * Persists the width (in rem) of a song's column in the compact view.
+ * Pure view state — it never affects playback. Pass `null` to restore the
+ * default width. The backend clamps the value to the supported range.
+ */
+export async function setSongRegionCompactWidth(
+  regionId: string,
+  widthRem: number | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_song_region_compact_width", {
+    regionId,
+    widthRem,
+  });
+}
+
 export async function upsertSongTempoMarker(
   startSeconds: number,
   bpm: number,

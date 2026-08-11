@@ -53,6 +53,7 @@ textarea {
   height: calc(100vh / var(--lt-ui-zoom, 1));
 }
 
+
 .material-symbols-outlined {
   /* font-family must be declared explicitly now that we self-host the
      font (Google's hosted CSS used to provide it). Without this the
@@ -6192,12 +6193,86 @@ textarea {
   align-items: stretch;
 }
 
+/* Width comes from --lt-compact-column-width, which the column ALWAYS sets
+   inline: either the width the user dragged to, or the auto-fit width for its
+   song's title (floored at the "Song 1" baseline — see autoColumnWidthRem).
+   The 14rem here is only a last-resort fallback for a column rendered before
+   React applies the variable; it matches COMPACT_COLUMN_DEFAULT_WIDTH_REM. */
 .lt-compact-song-column {
-  flex: 0 0 14rem;
+  position: relative;
+  /* flex-grow/shrink/basis are set SEPARATELY on purpose: in the `flex`
+     shorthand a custom property is not a valid <flex-basis> at parse time,
+     so `flex: 0 0 var(--lt-compact-column-width)` makes the whole
+     declaration invalid and the column ignores its width entirely. */
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: var(--lt-compact-column-width, 14rem);
+  /* A flex item's min-width defaults to `auto` = its content's intrinsic
+     width, which OVERRIDES flex-basis: without this, a column whose basis is
+     5rem still rendered ~23rem wide because a long song name held it open.
+     Setting it to 0 is what makes the dragged width authoritative; the
+     ellipsis rules on the labels then handle the overflow. */
+  min-width: 0;
+  width: var(--lt-compact-column-width, 14rem);
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   min-height: 0;
+  overflow: hidden;
+}
+
+/* Resize handle: a slim hit area straddling the column's right edge, the
+   way a spreadsheet or the Ableton session mixer does it. Invisible until
+   hovered so the strip stays calm; it only paints on hover/drag. */
+.lt-compact-column-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* Half the gap (0.5rem) sits between columns; straddle the edge so the
+     handle is grabbable without eating into the header's controls. */
+  right: -0.35rem;
+  width: 0.7rem;
+  cursor: col-resize;
+  /* Above the header/clip stack so the pointer always finds the handle. */
+  z-index: 2;
+  /* Firefox/WebKit: prevent the drag from selecting the column's text. */
+  user-select: none;
+  touch-action: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.lt-compact-column-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.lt-compact-column-resizer:hover::after,
+.lt-compact-column-resizer.is-resizing::after,
+.lt-compact-column-resizer:focus-visible::after {
+  background: rgb(87 241 219 / 0.75);
+}
+
+.lt-compact-column-resizer:focus-visible {
+  outline: none;
+}
+
+/* While a resize drag is live the whole view keeps the col-resize cursor
+   even when the pointer strays off the handle, and text selection stays
+   suppressed — otherwise a fast drag selects song names as it goes. */
+.lt-compact-view.is-resizing-column,
+.lt-compact-view.is-resizing-column * {
+  cursor: col-resize !important;
+  user-select: none;
 }
 
 /* Playhead is in this song — universal "playing" amber, painted as a
@@ -6256,6 +6331,12 @@ textarea {
   background: rgb(20 26 25 / 0.85);
   border: 1px solid rgba(186, 202, 197, 0.12);
   border-radius: 2px;
+  /* A flex item's default min-width is `auto` (its content), which would let
+     a long song name hold the header — and therefore the column — wider than
+     the width the user dragged to. Overriding it is what actually lets the
+     column shrink; the ellipsis rules below then do the truncating. */
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Header row aligns the play button next to the song name so the user
@@ -6269,7 +6350,9 @@ textarea {
 }
 
 .lt-compact-song-name {
-  flex: 1 1 auto;
+  /* Keeps a readable stub of the name at the narrowest column widths: the
+     badges shrink (and then hide) before the name gives up its last 2rem. */
+  flex: 1 1 2rem;
   min-width: 0;
   color: #e5e2e1;
   font: 600 11px/1.2 "Space Grotesk", sans-serif;
@@ -6284,8 +6367,14 @@ textarea {
    song's start_seconds — either a tempo marker placed there explicitly or
    the global project bpm by inheritance. Uppercase letters + small font
    keep it from competing with the song name for attention. */
+/* The BPM badge is the first thing to go when the column gets tight: it is
+   secondary to the song's name, and the tempo is also shown in the toolbar.
+   `min-width: 0` + hidden overflow lets it be squeezed to nothing instead of
+   forcing the row wider than the column. */
 .lt-compact-song-bpm {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   padding: 0.15rem 0.4rem;
   color: #57f1db;
   background: rgba(87, 241, 219, 0.12);
@@ -6294,6 +6383,20 @@ textarea {
   font: 600 9px/1.2 "Space Grotesk", sans-serif;
   letter-spacing: 0.06em;
   white-space: nowrap;
+}
+
+/* Below a certain width the badges stop being readable and only steal room
+   from the song's name, so they are dropped entirely rather than rendered as
+   slivers. The threshold is driven by `is-narrow` / `is-very-narrow` classes
+   the column sets from its own width — NOT by a container query, which needs
+   Safari 16 while this app still targets Safari 13 (Catalina), nor by a media
+   query, whose trigger would be the viewport rather than this one column. */
+.lt-compact-song-column.is-narrow .lt-compact-song-bpm {
+  display: none;
+}
+
+.lt-compact-song-column.is-very-narrow .lt-compact-song-key {
+  display: none;
 }
 
 /* Effective-key badge next to the BPM. Warm amber to match the region key
@@ -6346,9 +6449,13 @@ textarea {
 .lt-compact-song-master {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr;
+  /* `minmax(0, 1fr)` rather than `1fr`: a grid track's implicit `auto`
+     minimum would let the range input's intrinsic width hold the header open
+     at narrow column widths. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
   height: 1.4rem;
+  min-width: 0;
 }
 
 .lt-compact-song-master > * {
@@ -6380,6 +6487,10 @@ textarea {
 
 .lt-compact-song-fader {
   width: 100%;
+  /* An <input> carries a UA-default intrinsic width (~150px+) that acts as a
+     floor in grid/flex; without this the master fader alone would stop the
+     column from narrowing past ~10rem. */
+  min-width: 0;
   height: 1.4rem;
   margin: 0;
   padding: 0;
@@ -6423,6 +6534,9 @@ textarea {
 .lt-compact-song-clip-stack {
   flex: 1 1 auto;
   min-height: 0;
+  /* Same reason as .lt-compact-clip-entry: let the stack be narrower than the
+     widest filename it holds, so the column honours the dragged width. */
+  min-width: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -6450,6 +6564,24 @@ textarea {
   border: 1px solid rgba(186, 202, 197, 0.1);
   border-radius: 2px;
   position: relative;
+  /* Without this a long filename keeps the card (and the clip stack, and the
+     column) from ever shrinking below the text's intrinsic width — the
+     ellipsis on the labels inside only takes effect once the box is allowed
+     to be narrower than its content. */
+  min-width: 0;
+  /* Clip horizontally only. `overflow: hidden` (both axes) combined with the
+     vertical squashing below is what made cards render as bare colour bars in
+     songs with many clips. */
+  overflow-x: hidden;
+  /* The stack is a flex column, so a card's default flex-shrink of 1 lets it
+     be compressed to nothing once the song has more clips than fit — a song
+     with 100+ tracks rendered as slivers with the text clipped away. Cards
+     keep their natural height and the stack scrolls instead. */
+  flex-shrink: 0;
+  /* Floor for the whole card. Both labels plus the padding come to ~44px, so
+     this only bites if a future change shrinks the text; it stops the card
+     from ever collapsing into the colour bar users reported. */
+  min-height: 2.75rem;
 }
 
 /* Track-coloured variant. Mirrors the DAW affordance: a 3px ribbon on
@@ -6498,10 +6630,15 @@ textarea {
 
 .lt-compact-clip-name {
   color: #e5e2e1;
-  font: 500 11px/1.2 "Space Grotesk", sans-serif;
+  /* 12px: same reasoning as the track line below — the whole card is scaled
+     by the UI zoom, so the base size has to leave headroom for 0.7. */
+  font: 500 12px/1.2 "Space Grotesk", sans-serif;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* As a flex item the label's `auto` min-width is the full filename, which
+     would keep the card from ever narrowing and defeat the ellipsis. */
+  min-width: 0;
 }
 
 /* The "Track:" prefix label inside a clip entry. Slightly more muted than
@@ -6513,12 +6650,17 @@ textarea {
 
 .lt-compact-clip-track-name {
   color: rgba(186, 202, 197, 0.78);
-  font: 500 9px/1.2 "Space Grotesk", sans-serif;
+  /* 10px, not 9px: this line is painted at the UI zoom, so at the 0.7 the
+     app allows it was landing at ~7.5px — small enough that users reported
+     the cards as unreadable colour bars. The uppercase + letter-spacing
+     treatment makes it read smaller still, so it needs the extra pixel. */
+  font: 500 10px/1.2 "Space Grotesk", sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* Subtle teal glow on the stack while a drag is hovering. Pairs with the

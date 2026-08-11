@@ -42,6 +42,7 @@ function region(overrides: Partial<SongRegionSummary> = {}): SongRegionSummary {
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
+    compactColumnWidthRem: null,
     ...overrides,
   } as SongRegionSummary;
 }

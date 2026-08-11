@@ -23,18 +23,22 @@ import {
   CompactMixer,
   type CompactMixerHandlers,
 } from "./CompactMixer";
+import { CompactSongHeader } from "./CompactSongHeader";
+import { columnDensityClass, useColumnResize } from "./useColumnResize";
 import { isAndroidApp } from "../desktopApi";
 import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import {
+  COMPACT_COLUMN_MAX_WIDTH_REM,
+  COMPACT_COLUMN_MIN_WIDTH_REM,
+} from "@libretracks/shared/models";
+import {
   createEmptySong,
   regionEffectiveKey,
-  SONG_KEY_OPTIONS,
   type SongRegionSummary,
   type TrackSummary,
   type TransportSnapshot,
 } from "../desktopApi";
-import { useTransportStore } from "../store";
 
 export type CompactClipEntry = {
   id: string;
@@ -169,6 +173,11 @@ type CompactViewProps = {
    * the DAW's right-click "Exportar Cancion" uses, so the file dialog
    * and output format are identical between views. */
   onExportSong: (regionId: string) => void;
+  /** Fired when the user finishes dragging a song column's resize handle
+   * (or double-clicks it, which sends `null` to restore the default width).
+   * Fires once per gesture, on release — never during the drag, which is
+   * rendered locally. The parent persists it on the region. */
+  onSongColumnWidthChange: (regionId: string, widthRem: number | null) => void;
   /** Fired from the song-column right-click menu's "Nota" submenu. Sets the
    * song's original key (`null` clears it). Reuses the same backend command
    * (`update_song_region_key`) the DAW context menu uses, so the effective-key
@@ -247,6 +256,7 @@ function CompactViewComponent({
   onDeleteSong,
   onExportSong,
   onSetSongKey,
+  onSongColumnWidthChange,
   bpmByRegion,
   onSnapshotApplied,
   onImportSongPackageFromDialog,
@@ -260,6 +270,22 @@ function CompactViewComponent({
   compactMixerFilterActiveSong,
 }: CompactViewProps) {
   const isPackageDragOver = dragPreview?.isPackage === true;
+
+  // Which column is mid-resize, if any. Lifted here only so the view root can
+  // carry `is-resizing-column` (which pins the col-resize cursor and blocks
+  // text selection across the whole strip while the pointer roams).
+  const [resizingRegionId, setResizingRegionId] = useState<string | null>(null);
+
+  // Stable identity: the column reports its drag state from an effect, so an
+  // inline arrow here would change every render and re-fire it each time.
+  const handleColumnResizingChange = useCallback(
+    (regionId: string, active: boolean) => {
+      setResizingRegionId((current) =>
+        active ? regionId : current === regionId ? null : current,
+      );
+    },
+    [],
+  );
 
   const handleAddSong = useCallback(async () => {
     try {
@@ -332,7 +358,9 @@ function CompactViewComponent({
 
   return (
     <div
-      className={`lt-compact-view${mixerTakesFullHeight ? " is-mixer-full" : ""}`}
+      className={`lt-compact-view${mixerTakesFullHeight ? " is-mixer-full" : ""}${
+        resizingRegionId ? " is-resizing-column" : ""
+      }`}
     >
       {/* Top zone: songs + master + clip stacks. Horizontal scroll when
           the project has more songs than fit on screen. Accepts OS drag
@@ -376,6 +404,8 @@ function CompactViewComponent({
             }
             isSelected={selectedRegionId === region.id}
             onSelect={() => onSelectRegion(region.id)}
+            onWidthChange={onSongColumnWidthChange}
+            onResizingChange={handleColumnResizingChange}
           />
         ))}
         {/* Ghost column previewed while the user drags a .ltpkg over the
@@ -486,6 +516,13 @@ type CompactSongColumnProps = {
    * region so the toolbar's Transpose/Warp/Master controls bind to
    * it. */
   onSelect: () => void;
+  /** Committed at the end of a resize gesture; `null` restores the default
+   * width. Never fired mid-drag — see useColumnResize. Takes the region id
+   * so the parent can pass one stable callback to every column. */
+  onWidthChange: (regionId: string, widthRem: number | null) => void;
+  /** Reports whether this column's resize drag is active, so the view root
+   * can hold the col-resize cursor for the whole gesture. */
+  onResizingChange: (regionId: string, active: boolean) => void;
 };
 
 function CompactSongColumnComponent({
@@ -509,7 +546,36 @@ function CompactSongColumnComponent({
   placeholderCount,
   isSelected,
   onSelect,
+  onWidthChange,
+  onResizingChange,
 }: CompactSongColumnProps) {
+  const regionId = region.id;
+  const handleWidthCommit = useCallback(
+    (nextWidthRem: number | null) => onWidthChange(regionId, nextWidthRem),
+    [onWidthChange, regionId],
+  );
+  const {
+    widthRem,
+    isResizing,
+    handlePointerDown: handleResizePointerDown,
+    handleKeyDown: handleResizeKeyDown,
+    handleDoubleClick: handleResizeDoubleClick,
+  } = useColumnResize({
+    persistedWidthRem: region.compactColumnWidthRem,
+    songName: region.name,
+    // Mirrors the two badge conditions in CompactSongHeader, so the auto-fit
+    // reserves room only for badges that are actually rendered.
+    hasBadges: bpm !== undefined || Boolean(regionEffectiveKey(region)),
+    onCommit: handleWidthCommit,
+  });
+
+  // Mirror the drag state up so the view root can pin the cursor. Reported
+  // via an effect rather than from the hook's handlers so the parent state
+  // update never lands mid-render of this component.
+  useEffect(() => {
+    onResizingChange(regionId, isResizing);
+  }, [isResizing, onResizingChange, regionId]);
+
   const [contextMenu, setContextMenu] = useState<{
     clipId: string;
     x: number;
@@ -600,7 +666,9 @@ function CompactSongColumnComponent({
 
   return (
     <div
-      className={`lt-compact-song-column ${isActive ? "is-active" : ""}`}
+      className={`lt-compact-song-column ${isActive ? "is-active" : ""} ${columnDensityClass(
+        widthRem,
+      )}`}
       /* data-region-id lets the library asset pointer-drag pipeline in
          TransportPanelContent identify which song the user just dropped
          onto without having to plumb a per-column React ref through the
@@ -608,6 +676,11 @@ function CompactSongColumnComponent({
       data-region-id={region.id}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      style={
+        {
+          "--lt-compact-column-width": `${widthRem}rem`,
+        } as CSSProperties
+      }
     >
       <CompactSongHeader
         region={region}
@@ -731,361 +804,32 @@ function CompactSongColumnComponent({
           </button>
         </div>
       ) : null}
+
+      {/* Drag the right edge to widen / narrow this song's column;
+          double-click restores the default width. Rendered as a button so
+          it is focusable and the arrow-key fallback works without a
+          pointer. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Ancho de la columna ${region.name}`}
+        aria-valuenow={Math.round(widthRem)}
+        aria-valuemin={COMPACT_COLUMN_MIN_WIDTH_REM}
+        aria-valuemax={COMPACT_COLUMN_MAX_WIDTH_REM}
+        tabIndex={0}
+        title="Arrastra para cambiar el ancho · doble clic para restablecer"
+        className={
+          isResizing
+            ? "lt-compact-column-resizer is-resizing"
+            : "lt-compact-column-resizer"
+        }
+        onPointerDown={handleResizePointerDown}
+        onKeyDown={handleResizeKeyDown}
+        onDoubleClick={handleResizeDoubleClick}
+      />
     </div>
   );
 }
 
 const CompactSongColumn = memo(CompactSongColumnComponent);
 
-type CompactSongHeaderProps = {
-  region: SongRegionSummary;
-  isActive: boolean;
-  bpm: number | undefined;
-  onMasterGainChange: (gain: number) => void;
-  onMasterGainCommit: () => void;
-  onPlay: () => void;
-  onRename: () => void;
-  onSetBpm: () => void;
-  onDelete: () => void;
-  onExport: () => void;
-  onSetKey: (key: string | null) => void;
-  /** True when this region matches the project selection. Drives the
-   * `is-selected` styling so the user sees which song the toolbar's
-   * Transpose / Warp / Master controls are bound to. */
-  isSelected: boolean;
-  /** Click on the header (anywhere except the play button or fader)
-   * selects the region — same selection slot the DAW uses, so the
-   * Transposition / Warp / Master groups in the toolbar pick this up
-   * automatically. */
-  onSelect: () => void;
-};
-
-// Master fader snaps to unity (1.0) within ±3% of full range (0..2), so the
-// magnetic zone is [0.94, 1.06]. Shift bypasses, double-click resets.
-const MASTER_SNAP_TARGET = 1.0;
-const MASTER_SNAP_RANGE = 2.0;
-const MASTER_SNAP_THRESHOLD = MASTER_SNAP_RANGE * 0.03;
-
-function applyMasterSnap(value: number, bypass: boolean): number {
-  if (bypass) return value;
-  return Math.abs(value - MASTER_SNAP_TARGET) <= MASTER_SNAP_THRESHOLD
-    ? MASTER_SNAP_TARGET
-    : value;
-}
-
-function CompactSongHeaderComponent({
-  region,
-  isActive,
-  bpm,
-  onMasterGainChange,
-  onMasterGainCommit,
-  onPlay,
-  onRename,
-  onSetBpm,
-  onDelete,
-  onExport,
-  onSetKey,
-  isSelected,
-  onSelect,
-}: CompactSongHeaderProps) {
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  // When true the menu shows the 24-key picker instead of the root actions.
-  const [keyMenuOpen, setKeyMenuOpen] = useState(false);
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => {
-      setContextMenu(null);
-      setKeyMenuOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("pointerdown", close);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [contextMenu]);
-  const openMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const { x, y } = clientToZoomedCoords(event.clientX, event.clientY);
-    setContextMenu({ x, y });
-  }, []);
-  // Track Shift state via window listeners so the slider's onChange can
-  // read it; same pattern as the CompactMixerStrip volume / pan.
-  const shiftPressedRef = useRef(false);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Shift") shiftPressedRef.current = true;
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.key === "Shift") shiftPressedRef.current = false;
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, []);
-  const optimistic = useTransportStore((state) =>
-    state.optimisticRegionMaster[region.id],
-  );
-  const gain = optimistic ?? region.master?.gain ?? 1.0;
-
-  const meterFillRef = useRef<HTMLDivElement | null>(null);
-  const animationStateRef = useRef({
-    frameId: null as number | null,
-    lastFrameAt: 0,
-    currentDb: METER_MIN_DB,
-    targetDb: METER_MIN_DB,
-  });
-
-  // Same animation loop the toolbar's RegionMasterFader uses. The store
-  // update arrives via the shared useRegionMeters hook already wired in
-  // TransportPanelContent.
-  const driveAnimation = useCallback(() => {
-    const animationState = animationStateRef.current;
-    const applyFill = () => {
-      const element = meterFillRef.current;
-      if (!element) return;
-      const scale = meterDbToDisplayScale(animationState.currentDb);
-      element.style.width = `${(scale * 100).toFixed(2)}%`;
-      element.style.opacity = scale > 0 ? "1" : "0";
-    };
-    const step = (now: number) => {
-      const elapsed =
-        animationState.lastFrameAt > 0 ? now - animationState.lastFrameAt : 16.67;
-      animationState.lastFrameAt = now;
-      animationState.currentDb = stepMeterDb(
-        animationState.currentDb,
-        animationState.targetDb,
-        elapsed,
-        DEFAULT_METER_FALLOFF_DB_PER_SECOND,
-      );
-      applyFill();
-      const settled =
-        Math.abs(animationState.currentDb - animationState.targetDb) <
-        METER_ACTIVE_EPSILON_DB;
-      if (settled) {
-        animationState.currentDb = animationState.targetDb;
-        applyFill();
-        animationState.frameId = null;
-        animationState.lastFrameAt = 0;
-        return;
-      }
-      animationState.frameId = requestAnimationFrame(step);
-    };
-    if (animationState.frameId === null) {
-      animationState.frameId = requestAnimationFrame(step);
-    }
-  }, []);
-
-  useTransportStore.subscribe(
-    (state) => state.regionMeters[region.id] ?? 0,
-    (peak) => {
-      animationStateRef.current.targetDb = peakToMeterDb(peak);
-      driveAnimation();
-    },
-  );
-
-  // Click on the header (anywhere but the play button or the fader)
-  // selects the region. We listen on the root with a check that the
-  // event reached us un-stopped — the play button and master fader
-  // call stopPropagation when they handle the click, so this only
-  // fires for clicks on the header's body.
-  const handleHeaderClick = useCallback(() => {
-    onSelect();
-  }, [onSelect]);
-
-  return (
-    <div
-      className={`lt-compact-song-header ${isActive ? "is-active" : ""} ${
-        isSelected ? "is-selected" : ""
-      }`}
-      onContextMenu={openMenu}
-      onClick={handleHeaderClick}
-    >
-      <div className="lt-compact-song-name-row">
-        <button
-          type="button"
-          className="lt-compact-song-play"
-          aria-label={`Reproducir ${region.name}`}
-          title={`Reproducir ${region.name} (respeta la transición global)`}
-          onClick={(event) => {
-            // Don't bubble to the header — the play button shouldn't
-            // also select the region, only transport-jump to it.
-            event.stopPropagation();
-            onPlay();
-          }}
-        >
-          <span className="material-symbols-outlined">play_arrow</span>
-        </button>
-        <div className="lt-compact-song-name" title={region.name}>
-          {region.name}
-        </div>
-        {bpm !== undefined ? (
-          <div
-            className="lt-compact-song-bpm"
-            title={`BPM efectivo al inicio de la canción`}
-          >
-            {bpm.toFixed(bpm % 1 === 0 ? 0 : 2)} BPM
-          </div>
-        ) : null}
-        {regionEffectiveKey(region) ? (
-          <div
-            className="lt-compact-song-key"
-            title="Nota de la canción (con el cambio de tono aplicado)"
-          >
-            {regionEffectiveKey(region)}
-          </div>
-        ) : null}
-      </div>
-      {contextMenu ? (
-        <div
-          className={`lt-compact-clip-menu ${keyMenuOpen ? "is-key-picker" : ""}`}
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          {keyMenuOpen ? (
-            <>
-              <button
-                type="button"
-                className="lt-compact-clip-menu-item"
-                onClick={() => {
-                  setContextMenu(null);
-                  setKeyMenuOpen(false);
-                  onSetKey(null);
-                }}
-              >
-                {(region.key ?? null) === null ? "✓ " : ""}Sin nota
-              </button>
-              {SONG_KEY_OPTIONS.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className="lt-compact-clip-menu-item"
-                  onClick={() => {
-                    setContextMenu(null);
-                    setKeyMenuOpen(false);
-                    onSetKey(key);
-                  }}
-                >
-                  {region.key === key ? "✓ " : ""}
-                  {key}
-                </button>
-              ))}
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="lt-compact-clip-menu-item"
-                onClick={() => {
-                  setContextMenu(null);
-                  onRename();
-                }}
-              >
-                Renombrar canción
-              </button>
-              <button
-                type="button"
-                className="lt-compact-clip-menu-item"
-                onClick={() => {
-                  setContextMenu(null);
-                  onSetBpm();
-                }}
-              >
-                Cambiar BPM…
-              </button>
-              <button
-                type="button"
-                className="lt-compact-clip-menu-item"
-                onClick={(event) => {
-                  // Keep the menu open and swap to the key picker instead of
-                  // closing — mirrors the DAW's reopen-with-keys submenu.
-                  event.stopPropagation();
-                  setKeyMenuOpen(true);
-                }}
-              >
-                Nota de la canción ▸
-              </button>
-              <button
-                type="button"
-                className="lt-compact-clip-menu-item"
-                onClick={() => {
-                  setContextMenu(null);
-                  onExport();
-                }}
-              >
-                Exportar canción
-              </button>
-              <div className="lt-compact-clip-menu-divider" aria-hidden="true" />
-              <button
-                type="button"
-                className="lt-compact-clip-menu-item is-destructive"
-                onClick={() => {
-                  setContextMenu(null);
-                  onDelete();
-                }}
-              >
-                Eliminar canción
-              </button>
-            </>
-          )}
-        </div>
-      ) : null}
-      <div
-        className="lt-compact-song-master"
-        // The master fader sits inside the clickable header. Swallow
-        // clicks so dragging or double-clicking the fader doesn't
-        // re-fire the header's selection handler.
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="lt-compact-song-meter" aria-hidden="true">
-          <div className="lt-compact-song-meter-fill" ref={meterFillRef} />
-        </div>
-        <input
-          className="lt-compact-song-fader"
-          type="range"
-          min={0}
-          max={2}
-          step={0.01}
-          value={gain}
-          aria-label={`Master gain for ${region.name}`}
-          onChange={(event) => {
-            const next = Number(event.target.value) || 0;
-            onMasterGainChange(applyMasterSnap(next, shiftPressedRef.current));
-          }}
-          onDoubleClick={() => {
-            onMasterGainChange(MASTER_SNAP_TARGET);
-            onMasterGainCommit();
-          }}
-          onPointerUp={onMasterGainCommit}
-          onPointerCancel={onMasterGainCommit}
-          onKeyUp={(event) => {
-            if (
-              event.key === "ArrowUp" ||
-              event.key === "ArrowDown" ||
-              event.key === "ArrowLeft" ||
-              event.key === "ArrowRight" ||
-              event.key === "PageUp" ||
-              event.key === "PageDown" ||
-              event.key === "Home" ||
-              event.key === "End"
-            ) {
-              onMasterGainCommit();
-            }
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-const CompactSongHeader = memo(CompactSongHeaderComponent);

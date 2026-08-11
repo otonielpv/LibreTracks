@@ -278,6 +278,7 @@ pub(super) fn ensure_region_covers_clip_for_file(
         warp_enabled: false,
         warp_source_bpm: None,
         master: libretracks_core::SongMaster::default(),
+        compact_column_width_rem: None,
     });
     sort_song_regions(&mut song.regions);
     Ok(())
@@ -404,6 +405,7 @@ mod region_message_tests {
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         }
     }
 
@@ -506,14 +508,16 @@ mod region_message_tests {
         // Free space after the last song: a region is auto-created.
         let mut song = setlist_song();
         assert!(
-            ensure_region_covers_clip_for_file(&mut song, 400.0, 640.0, Some("b.wav"), None).is_ok()
+            ensure_region_covers_clip_for_file(&mut song, 400.0, 640.0, Some("b.wav"), None)
+                .is_ok()
         );
         assert_eq!(song.regions.len(), 3);
 
         // Extending the LAST song has no neighbour to collide with.
         let mut song = setlist_song();
         assert!(
-            ensure_region_covers_clip_for_file(&mut song, 380.0, 700.0, Some("c.wav"), None).is_ok()
+            ensure_region_covers_clip_for_file(&mut song, 380.0, 700.0, Some("c.wav"), None)
+                .is_ok()
         );
         assert_eq!(song.regions.len(), 2);
 
@@ -521,10 +525,14 @@ mod region_message_tests {
         // creating one per stem.
         let mut song = song_with_regions(vec![region("Song 1", 0.0, 60.0)]);
         for end in [30.0, 200.0, 120.0] {
-            assert!(
-                ensure_region_covers_clip_for_file(&mut song, 0.0, end, Some("stem.wav"), None)
-                    .is_ok()
-            );
+            assert!(ensure_region_covers_clip_for_file(
+                &mut song,
+                0.0,
+                end,
+                Some("stem.wav"),
+                None
+            )
+            .is_ok());
         }
         assert_eq!(song.regions.len(), 1, "a multitrack must stay one region");
         assert!((song.regions[0].end_seconds - 200.0).abs() < 0.001);
@@ -599,10 +607,7 @@ mod region_message_tests {
             region("Cancion A", 0.0, 180.0),
             region("Cancion B", 180.0, 400.0),
         ]);
-        song.clips = vec![
-            clip_on("t_a1", 0.0, 180.0),
-            clip_on("t_b1", 180.0, 220.0),
-        ];
+        song.clips = vec![clip_on("t_a1", 0.0, 180.0), clip_on("t_b1", 180.0, 220.0)];
 
         // Simulate delete_tracks removing every clip of "Cancion B".
         song.clips.retain(|clip| clip.track_id != "t_b1");

@@ -454,6 +454,7 @@ describe("marker / region shortcuts", () => {
         warpEnabled: false,
         warpSourceBpm: null,
         master: { gain: 1 },
+        compactColumnWidthRem: null,
       },
       {
         id: "r1",
@@ -465,6 +466,7 @@ describe("marker / region shortcuts", () => {
         warpEnabled: false,
         warpSourceBpm: null,
         master: { gain: 1 },
+        compactColumnWidthRem: null,
       },
     ];
     expect(resolveRegionShortcut(regions, 0)?.id).toBe("r1");

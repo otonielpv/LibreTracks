@@ -268,7 +268,8 @@ pub fn export_session_as_package(
 
     let file = File::create(output_path)?;
     let mut zip = ZipWriter::new(file);
-    let deflated = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let deflated =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     // Audio and waveforms are already compressed (or not worth re-deflating);
     // store them so export stays fast on large sets.
     let stored = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
@@ -331,8 +332,7 @@ pub fn export_session_as_package(
             continue;
         };
         let bytes = if include_audio && sidecar.file_name == "library.json" {
-            rewrite_library_for_package(&bytes, song_dir, &bundled_by_source_abs)
-                .unwrap_or(bytes)
+            rewrite_library_for_package(&bytes, song_dir, &bundled_by_source_abs).unwrap_or(bytes)
         } else {
             bytes
         };
@@ -377,7 +377,11 @@ pub fn export_session_as_package(
         // `file_stem` — two distinct sources sharing a stem but differing only by
         // extension (e.g. `Guide.mp3` and `Guide.wav`) would both map to
         // `Guide.waveform.ltpeaks` and collide. The guard is belt-and-braces.
-        let final_path = if include_audio { relative_path } else { clip_path };
+        let final_path = if include_audio {
+            relative_path
+        } else {
+            clip_path
+        };
         let waveform_stem = crate::waveform::waveform_cache_file_stem(Path::new(final_path));
         let waveform_entry = format!("cache/waveforms/{waveform_stem}.waveform.ltpeaks");
         if !written_waveform_entries.insert(waveform_entry.clone()) {
@@ -559,6 +563,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         }
     }
 
@@ -779,7 +784,11 @@ mod tests {
 
         // Both clips kept distinct bundled audio paths...
         let paths: HashSet<&str> = loaded.clips.iter().map(|c| c.file_path.as_str()).collect();
-        assert_eq!(paths.len(), 2, "colliding basenames collapsed onto one path");
+        assert_eq!(
+            paths.len(),
+            2,
+            "colliding basenames collapsed onto one path"
+        );
         // ...and each resolves to the ORIGINAL bytes, not a shared copy.
         let bytes: HashSet<Vec<u8>> = loaded
             .clips
@@ -838,7 +847,10 @@ mod tests {
         // Light package references audio by original (absolute) path — unchanged.
         let loaded = crate::load_song_from_file(&extracted.song_file).expect("load session");
         assert_eq!(loaded.clips.len(), 4);
-        assert!(loaded.clips.iter().all(|c| Path::new(&c.file_path).is_absolute()));
+        assert!(loaded
+            .clips
+            .iter()
+            .all(|c| Path::new(&c.file_path).is_absolute()));
     }
 
     #[test]
@@ -891,8 +903,7 @@ mod tests {
         zip.finish().expect("finish");
 
         let target = tempfile::tempdir().expect("target");
-        let result =
-            extract_session_package(&target.path().join("x"), &package_path, |_, _| {});
+        let result = extract_session_package(&target.path().join("x"), &package_path, |_, _| {});
         assert!(result.is_err());
     }
 
@@ -914,8 +925,7 @@ mod tests {
         zip.finish().expect("finish");
 
         let target = tempfile::tempdir().expect("target");
-        let result =
-            extract_session_package(&target.path().join("x"), &package_path, |_, _| {});
+        let result = extract_session_package(&target.path().join("x"), &package_path, |_, _| {});
         assert!(result.is_err());
     }
 

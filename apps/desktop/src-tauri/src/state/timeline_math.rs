@@ -595,6 +595,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
                 warp_enabled: region.warp_enabled,
                 warp_source_bpm: region.warp_source_bpm,
                 master: region.master.clone(),
+                compact_column_width_rem: region.compact_column_width_rem,
             });
         }
 
@@ -615,6 +616,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
                 warp_enabled: region.warp_enabled,
                 warp_source_bpm: region.warp_source_bpm,
                 master: region.master.clone(),
+                compact_column_width_rem: region.compact_column_width_rem,
             });
         }
     }

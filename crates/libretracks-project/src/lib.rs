@@ -69,6 +69,7 @@ mod tests {
                 warp_source_bpm: None,
                 key: None,
                 master: libretracks_core::SongMaster::default(),
+                compact_column_width_rem: None,
             }],
             tracks: vec![Track {
                 id: "track_click".into(),

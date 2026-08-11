@@ -38,6 +38,7 @@ function makeRegion(
     warpEnabled: false,
     warpSourceBpm: null,
     master: { gain: 1.0 },
+    compactColumnWidthRem: null,
     ...overrides,
   };
 }

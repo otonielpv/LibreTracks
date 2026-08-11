@@ -138,7 +138,9 @@ pub fn run() {
             apply_result.map_err(|error| std::io::Error::other(error.to_string()))?;
             #[cfg(target_os = "android")]
             if let Err(error) = apply_result {
-                eprintln!("[libretracks-audio] android: initial audio settings not applied: {error}");
+                eprintln!(
+                    "[libretracks-audio] android: initial audio settings not applied: {error}"
+                );
             }
             // If apply_settings nulled out the saved output device (because
             // the device couldn't be opened — see apply_settings_with_stream_rebuild
@@ -342,6 +344,7 @@ pub fn run() {
             commands::timeline::set_section_marker_color,
             commands::timeline::update_song_tempo,
             commands::timeline::update_song_region_key,
+            commands::timeline::set_song_region_compact_width,
             commands::timeline::upsert_song_tempo_marker,
             commands::timeline::delete_song_tempo_marker,
             commands::timeline::update_song_time_signature,

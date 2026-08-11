@@ -7,8 +7,7 @@ use libretracks_core::{
 };
 use libretracks_project::{
     create_song_folder, export_region_as_package, generate_waveform_summary, load_song, save_song,
-    save_song_to_file,
-    SONG_FILE_NAME,
+    save_song_to_file, SONG_FILE_NAME,
 };
 use tempfile::tempdir;
 
@@ -46,6 +45,7 @@ fn demo_song() -> Song {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         }],
         tracks: vec![Track {
             id: "track_1".into(),
@@ -110,6 +110,7 @@ fn demo_song_with_varispeed_region() -> Song {
         warp_source_bpm: None,
         key: None,
         master: libretracks_core::SongMaster::default(),
+        compact_column_width_rem: None,
     }];
     // Keep the clip inside the varispeed region ([5, 20]) so the song
     // satisfies the clip-inside-region invariant.
@@ -206,6 +207,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
         SongRegion {
             id: "region_2".into(),
@@ -217,6 +219,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
         SongRegion {
             id: "region_3".into(),
@@ -228,6 +231,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
     ];
     // Keep the clip inside region_1 ([0, 8]) — and small enough that it
@@ -348,6 +352,7 @@ fn hierarchy_song() -> Song {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         }],
         tracks: vec![
             Track {
@@ -890,6 +895,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         }],
         tracks: vec![
             Track {
@@ -3347,6 +3353,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
         SongRegion {
             id: "b".into(),
@@ -3358,6 +3365,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
     ];
     song.clips = vec![Clip {
@@ -3552,6 +3560,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
         SongRegion {
             id: "region_middle".into(),
@@ -3563,6 +3572,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             warp_source_bpm: Some(130.0),
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
         SongRegion {
             id: "region_following".into(),
@@ -3574,6 +3584,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             warp_source_bpm: None,
             key: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         },
     ];
     song.clips = vec![

@@ -23,6 +23,7 @@ const region = (
     startSeconds: number;
     endSeconds: number;
     key: string | null;
+    compactColumnWidthRem: number | null;
   }> = {},
 ) => ({
   id,
@@ -30,6 +31,7 @@ const region = (
   startSeconds: overrides.startSeconds ?? 0,
   endSeconds: overrides.endSeconds ?? 10,
   key: overrides.key ?? null,
+  compactColumnWidthRem: overrides.compactColumnWidthRem ?? null,
 });
 
 const asset = (
@@ -64,6 +66,7 @@ function setup(overrides: Partial<CompactSongHandlerDeps> = {}) {
     deleteClip: vi.fn(async () => snapshot(2)),
     updateSongRegion: vi.fn(async () => snapshot(3)),
     updateSongRegionKey: vi.fn(async () => snapshot(4)),
+    setSongRegionCompactWidth: vi.fn(async () => snapshot(4)),
     upsertSongTempoMarker: vi.fn(async () => snapshot(5)),
     deleteSongRegion: vi.fn(async () => snapshot(6)),
     exportRegionAsPackage: vi.fn(async () => true),
@@ -340,6 +343,48 @@ describe("createCompactSongHandlers", () => {
     });
   });
 
+  describe("compact column width", () => {
+    it("persists a resized column width", async () => {
+      const { handlers, deps } = setup();
+      handlers.handleCompactSongColumnWidthChange("r1", 22.5);
+
+      await vi.waitFor(() =>
+        expect(deps.setSongRegionCompactWidth).toHaveBeenCalledWith(
+          "r1",
+          22.5,
+        ),
+      );
+    });
+
+    it("persists null to restore the default width", async () => {
+      const { handlers, deps } = setup({
+        getSong: () =>
+          songWith([region("r1", { compactColumnWidthRem: 22.5 })]),
+      });
+      handlers.handleCompactSongColumnWidthChange("r1", null);
+
+      await vi.waitFor(() =>
+        expect(deps.setSongRegionCompactWidth).toHaveBeenCalledWith("r1", null),
+      );
+    });
+
+    it("is a no-op when the width is unchanged", () => {
+      const { handlers, deps } = setup({
+        getSong: () => songWith([region("r1", { compactColumnWidthRem: 18 })]),
+      });
+      handlers.handleCompactSongColumnWidthChange("r1", 18);
+
+      expect(deps.setSongRegionCompactWidth).not.toHaveBeenCalled();
+    });
+
+    it("treats resetting an already-default column as a no-op", () => {
+      const { handlers, deps } = setup();
+      handlers.handleCompactSongColumnWidthChange("r1", null);
+
+      expect(deps.setSongRegionCompactWidth).not.toHaveBeenCalled();
+    });
+  });
+
   it("every region-scoped handler ignores an unknown region id", async () => {
     const { handlers, deps } = setup({ getSong: () => songWith([]) });
 
@@ -348,11 +393,13 @@ describe("createCompactSongHandlers", () => {
     await handlers.handleCompactDeleteSong("nope");
     handlers.handleCompactExportSong("nope");
     handlers.handleCompactSetSongKey("nope", "C");
+    handlers.handleCompactSongColumnWidthChange("nope", 20);
 
     expect(deps.updateSongRegion).not.toHaveBeenCalled();
     expect(deps.upsertSongTempoMarker).not.toHaveBeenCalled();
     expect(deps.deleteSongRegion).not.toHaveBeenCalled();
     expect(deps.setExportSongTarget).not.toHaveBeenCalled();
     expect(deps.updateSongRegionKey).not.toHaveBeenCalled();
+    expect(deps.setSongRegionCompactWidth).not.toHaveBeenCalled();
   });
 });

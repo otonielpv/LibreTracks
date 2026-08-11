@@ -144,6 +144,7 @@ import {
   updateSongRegionTranspose,
   updateSongRegionWarp,
   updateSongRegionKey,
+  setSongRegionCompactWidth,
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
@@ -3643,6 +3644,7 @@ export function TransportPanelContent() {
     handleCompactDeleteSong,
     handleCompactExportSong,
     handleCompactSetSongKey,
+    handleCompactSongColumnWidthChange: handleCompactColumnWidth,
     handleConfirmExportSong,
   } = useMemo(
     () =>
@@ -3664,6 +3666,7 @@ export function TransportPanelContent() {
         deleteClip,
         updateSongRegion,
         updateSongRegionKey,
+        setSongRegionCompactWidth,
         upsertSongTempoMarker,
         deleteSongRegion,
         exportRegionAsPackage,
@@ -8132,6 +8135,7 @@ export function TransportPanelContent() {
                       onDeleteSong={handleCompactDeleteSong}
                       onExportSong={handleCompactExportSong}
                       onSetSongKey={handleCompactSetSongKey}
+                      onSongColumnWidthChange={handleCompactColumnWidth}
                       bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
                       onImportSongPackageFromDialog={

@@ -5,7 +5,8 @@
 
 use libretracks_core::{
     source_seconds_at_view, Marker, MarkerCategory, MarkerKind, SongRegion, TempoMarker,
-    TimeSignatureMarker, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    TimeSignatureMarker, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,
+    MIN_COMPACT_COLUMN_WIDTH_REM, MIN_TRANSPOSE_SEMITONES,
 };
 
 use crate::audio::engine::{jump_debug_logging_enabled, AudioController};
@@ -14,11 +15,11 @@ use crate::models::TransportSnapshot;
 
 use super::{
     bar_seconds_at, default_region_name, next_downbeat_after_in_song,
-    prune_auto_created_empty_tracks, realign_regions_after_warp_tempo_change, refresh_song_duration,
-    replace_song_region_range, sanitize_region_bounds, set_song_tempo_at_source_position,
-    shift_song_suffix, snap_regions_after_to_downbeats, song_has_active_warp, sort_song_regions,
-    split_clips_crossing_point, timestamp_suffix, ui_locale, validate_time_signature,
-    AudioChangeImpact, DesktopSession, TransposeHistoryTarget,
+    prune_auto_created_empty_tracks, realign_regions_after_warp_tempo_change,
+    refresh_song_duration, replace_song_region_range, sanitize_region_bounds,
+    set_song_tempo_at_source_position, shift_song_suffix, snap_regions_after_to_downbeats,
+    song_has_active_warp, sort_song_regions, split_clips_crossing_point, timestamp_suffix,
+    ui_locale, validate_time_signature, AudioChangeImpact, DesktopSession, TransposeHistoryTarget,
 };
 
 impl DesktopSession {
@@ -184,6 +185,7 @@ impl DesktopSession {
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         };
 
         replace_song_region_range(&mut song, region);
@@ -262,6 +264,7 @@ impl DesktopSession {
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         };
 
         song.regions.push(region);
@@ -339,6 +342,7 @@ impl DesktopSession {
             warp_enabled: existing_region.warp_enabled,
             warp_source_bpm: existing_region.warp_source_bpm,
             master: existing_region.master.clone(),
+            compact_column_width_rem: existing_region.compact_column_width_rem,
         };
 
         // Resizing a region NEVER moves its contents — the region is
@@ -553,6 +557,7 @@ impl DesktopSession {
             warp_enabled: existing_region.warp_enabled,
             warp_source_bpm: existing_region.warp_source_bpm,
             master: existing_region.master.clone(),
+            compact_column_width_rem: existing_region.compact_column_width_rem,
         };
 
         // Same rebuild flow as update_song_region: drop the old copy
@@ -985,6 +990,10 @@ impl DesktopSession {
             warp_enabled: region.warp_enabled,
             warp_source_bpm: region.warp_source_bpm,
             master: region.master.clone(),
+            // Both halves of a split keep the column width the user set on
+            // the song they cut — the new column showing up at a different
+            // width than the one it came from would read as a glitch.
+            compact_column_width_rem: region.compact_column_width_rem,
         };
         // Left half: shrink the original region's end to the cut.
         song.regions[region_index].end_seconds = split_seconds;
@@ -1150,6 +1159,39 @@ impl DesktopSession {
         region.key = key
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    /// Sets the width (in rem) of a song's column in the compact view.
+    /// Pure view state: it never touches audio, so the update is persisted
+    /// with `AudioChangeImpact::TransportOnly` like the key above and the
+    /// engine is left alone. `None` restores the view's default width.
+    ///
+    /// The value is clamped to the same bounds the UI enforces while
+    /// dragging, so a hand-edited session (or a future UI bug) can't
+    /// persist a column that is invisible or wider than the viewport.
+    pub fn set_song_region_compact_width(
+        &mut self,
+        region_id: &str,
+        width_rem: Option<f64>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        region.compact_column_width_rem = width_rem
+            .filter(|value| value.is_finite())
+            .map(|value| value.clamp(MIN_COMPACT_COLUMN_WIDTH_REM, MAX_COMPACT_COLUMN_WIDTH_REM));
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 

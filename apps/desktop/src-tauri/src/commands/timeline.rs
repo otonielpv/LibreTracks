@@ -791,6 +791,25 @@ pub fn update_song_region_key(
         .map_err(|error| error.to_string())
 }
 
+/// Persists the width of a song's column in the compact view. Pure view
+/// state — see `set_song_region_compact_width`. `width_rem: None` restores
+/// the default width.
+#[tauri::command]
+pub fn set_song_region_compact_width(
+    region_id: String,
+    width_rem: Option<f64>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_song_region_compact_width(&region_id, width_rem, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn upsert_song_tempo_marker(
     start_seconds: f64,

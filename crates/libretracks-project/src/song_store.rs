@@ -264,6 +264,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         }],
         tracks: document.tracks,
         clips: document.clips,
@@ -297,6 +298,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
             warp_enabled: false,
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
+            compact_column_width_rem: None,
         }],
         tracks: document.tracks,
         clips: document.clips,
@@ -454,6 +456,7 @@ fn fit_regions_to_clips(song: &mut Song) {
                     warp_enabled: false,
                     warp_source_bpm: None,
                     master: libretracks_core::SongMaster::default(),
+                    compact_column_width_rem: None,
                 });
             }
         }
@@ -496,6 +499,7 @@ fn fit_regions_to_clips(song: &mut Song) {
                 warp_enabled: false,
                 warp_source_bpm: None,
                 master: libretracks_core::SongMaster::default(),
+                compact_column_width_rem: None,
             });
         }
     }
@@ -593,6 +597,7 @@ mod tests {
             warp_enabled: false,
             warp_source_bpm: None,
             master: SongMaster::default(),
+            compact_column_width_rem: None,
         }
     }
 

@@ -297,6 +297,8 @@ pub struct SongRegionSummary {
     pub warp_enabled: bool,
     pub warp_source_bpm: Option<f64>,
     pub master: SongMasterSummary,
+    /// Persisted compact-view column width in rem; `None` = use the default.
+    pub compact_column_width_rem: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -632,11 +634,7 @@ pub(crate) fn song_to_view(
                 collapsed: track.collapsed,
             })
             .collect(),
-        automation_cues: automation_cues_to_summary(
-            song,
-            &automation.cues,
-            automation_run_counts,
-        ),
+        automation_cues: automation_cues_to_summary(song, &automation.cues, automation_run_counts),
         mix_scenes: mix_scenes_to_summary(&automation.mix_scenes),
         automation_track: if automation.track_present {
             Some(AutomationTrackSummary {
@@ -983,6 +981,7 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
         master: SongMasterSummary {
             gain: region.master.gain,
         },
+        compact_column_width_rem: region.compact_column_width_rem,
     }
 }
 
@@ -1289,6 +1288,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: SongMaster::default(),
+            compact_column_width_rem: None,
         }
     }
 

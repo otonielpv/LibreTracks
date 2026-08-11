@@ -46,6 +46,7 @@ describe("buildClipSnapAnchors", () => {
           warpEnabled: false,
           warpSourceBpm: null,
           master: { gain: 1.0 },
+          compactColumnWidthRem: null,
         },
       ],
       clips: [

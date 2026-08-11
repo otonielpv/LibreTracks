@@ -12,6 +12,17 @@ pub const MAX_TRANSPOSE_SEMITONES: i32 = 12;
 
 pub const MIN_WARP_SOURCE_BPM: f64 = 20.0;
 pub const MAX_WARP_SOURCE_BPM: f64 = 300.0;
+
+/// Bounds for a compact-view song column's persisted width, in rem. The
+/// lower bound is deliberately narrow — just room for the play button plus a
+/// truncated name — so a user can squeeze many songs on screen; everything in
+/// the column ellipsizes rather than overflowing. The upper one stops a single
+/// column from filling the whole strip. Deliberately NOT enforced by
+/// `validate_song`: this is view state, and a session that somehow carries an
+/// out-of-range width should still open — the setter clamps it instead of
+/// refusing the whole project.
+pub const MIN_COMPACT_COLUMN_WIDTH_REM: f64 = 5.0;
+pub const MAX_COMPACT_COLUMN_WIDTH_REM: f64 = 48.0;
 const CLIP_REGION_BOUNDARY_EPSILON_SECONDS: f64 = 1.0e-6;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -382,9 +393,10 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             crate::model::MarkerCategory::Cue => {
                 (&mut previous_cue_id, &mut previous_cue_start_seconds)
             }
-            crate::model::MarkerCategory::Section => {
-                (&mut previous_section_id, &mut previous_section_start_seconds)
-            }
+            crate::model::MarkerCategory::Section => (
+                &mut previous_section_id,
+                &mut previous_section_start_seconds,
+            ),
         };
 
         if let Some(prev) = *previous_start_seconds {
@@ -549,6 +561,7 @@ mod tests {
             warp_source_bpm: None,
             key: None,
             master: SongMaster::default(),
+            compact_column_width_rem: None,
         }
     }
 
@@ -965,10 +978,7 @@ mod tests {
     fn accepts_a_well_formed_midi_clip() {
         let song = song_with_midi(vec![
             note_event("e1"),
-            midi_event(
-                "e2",
-                MidiEventKind::ProgramChange { program: 5 },
-            ),
+            midi_event("e2", MidiEventKind::ProgramChange { program: 5 }),
             midi_event(
                 "e3",
                 MidiEventKind::ControlCurve {

@@ -58,6 +58,10 @@ export type CompactSongHandlerDeps = {
     regionId: string,
     key: string | null,
   ) => Promise<TransportSnapshot>;
+  setSongRegionCompactWidth: (
+    regionId: string,
+    widthRem: number | null,
+  ) => Promise<TransportSnapshot>;
   upsertSongTempoMarker: (
     startSeconds: number,
     bpm: number,
@@ -122,6 +126,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     deleteClip,
     updateSongRegion,
     updateSongRegionKey,
+    setSongRegionCompactWidth,
     upsertSongTempoMarker,
     deleteSongRegion,
     exportRegionAsPackage,
@@ -334,6 +339,25 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     });
   };
 
+  // Compact view column resize → persists the width on the region. Fired
+  // once per gesture (pointer-up / double-click), never during the drag:
+  // the live width is rendered locally by useColumnResize, so this only
+  // records the result. No status message — a column width is a layout
+  // tweak, and announcing every drag in the status bar would be noise.
+  const handleCompactSongColumnWidthChange = (
+    regionId: string,
+    widthRem: number | null,
+  ) => {
+    const currentRegion = findRegion(regionId);
+    if (!currentRegion) return;
+    const currentWidth = currentRegion.compactColumnWidthRem ?? null;
+    if (currentWidth === widthRem) return;
+    void runAction(async () => {
+      const nextSnapshot = await setSongRegionCompactWidth(regionId, widthRem);
+      applyPlaybackSnapshot(nextSnapshot);
+    });
+  };
+
   // Runs the export once the user picked a mode in the ExportSongModal.
   const handleConfirmExportSong = (regionId: string, includeAudio: boolean) => {
     const currentRegion = findRegion(regionId);
@@ -360,6 +384,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     handleCompactDeleteSong,
     handleCompactExportSong,
     handleCompactSetSongKey,
+    handleCompactSongColumnWidthChange,
     handleConfirmExportSong,
   };
 }
