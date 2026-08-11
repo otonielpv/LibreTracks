@@ -345,6 +345,16 @@ pub struct DesktopSession {
     pub(super) last_transport_runtime_sync_at: Option<Instant>,
     pub(super) last_transport_pitch_sync_at: Option<Instant>,
     pub(super) last_native_scheduled_jump_executed_count: u64,
+    /// The vamp loop currently programmed in the native scheduler, as
+    /// `(start_seconds, end_seconds)` in source time.
+    ///
+    /// `schedule_jump_at_frame` cancels every live jump before enqueuing the new
+    /// one, so re-sending an identical vamp loop on each `sync_position` tick
+    /// opened a window where the audio block containing `trigger_frame` could be
+    /// rendered while no jump was scheduled — the wrap then fell through to the
+    /// tick-resolution Rust fallback instead of the sample-exact native path.
+    /// Marker jumps never had this problem because they are scheduled once.
+    pub(super) scheduled_native_vamp_loop: Option<(f64, f64)>,
     pub(super) automation: AutomationDocument,
     pub(super) pending_automation_jump: Option<PendingAutomationJump>,
     /// In-flight jobs without a terminal jump (pure mix/scene/wait sequences).
@@ -456,6 +466,7 @@ impl Default for DesktopSession {
             last_transport_runtime_sync_at: None,
             last_transport_pitch_sync_at: None,
             last_native_scheduled_jump_executed_count: 0,
+            scheduled_native_vamp_loop: None,
             automation: AutomationDocument::default(),
             pending_automation_jump: None,
             active_automation_job: None,
@@ -1657,7 +1668,7 @@ impl DesktopSession {
         // be left silent even if something was started before a reload.
         self.panic_midi();
         self.midi_cursor_seconds = self.engine.position_seconds().max(0.0);
-        audio.cancel_scheduled_jumps()?;
+        self.cancel_native_scheduled_jumps(audio)?;
 
         Ok(self.snapshot())
     }
@@ -1702,7 +1713,7 @@ impl DesktopSession {
         self.transport_clock.seek_to(self.engine.position_seconds());
         self.pending_automation_jump = None;
         self.active_automation_job = None;
-        audio.cancel_scheduled_jumps()?;
+        self.cancel_native_scheduled_jumps(audio)?;
         self.capture_transport_drift_sample(
             audio,
             "seek",
@@ -1752,7 +1763,7 @@ impl DesktopSession {
         )?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
-            audio.cancel_scheduled_jumps()?;
+            self.cancel_native_scheduled_jumps(audio)?;
             if was_playing {
                 audio.start_master_fade(1.0, 0.0)?;
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
@@ -1786,10 +1797,10 @@ impl DesktopSession {
                 }
                 self.schedule_native_marker_jump(audio, &source_song, &pending_jump)?;
             } else {
-                audio.cancel_scheduled_jumps()?;
+                self.cancel_native_scheduled_jumps(audio)?;
             }
         } else {
-            audio.cancel_scheduled_jumps()?;
+            self.cancel_native_scheduled_jumps(audio)?;
         }
 
         Ok(self.snapshot())
@@ -1820,7 +1831,7 @@ impl DesktopSession {
         )?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
-            audio.cancel_scheduled_jumps()?;
+            self.cancel_native_scheduled_jumps(audio)?;
             if was_playing {
                 audio.start_master_fade(1.0, 0.0)?;
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
@@ -1860,7 +1871,7 @@ impl DesktopSession {
                     matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
                 )?;
             } else {
-                audio.cancel_scheduled_jumps()?;
+                self.cancel_native_scheduled_jumps(audio)?;
             }
         } else if matches!(
             transition,
@@ -1881,10 +1892,10 @@ impl DesktopSession {
                 }
                 self.schedule_native_region_jump(audio, &source_song, &pending_jump)?;
             } else {
-                audio.cancel_scheduled_jumps()?;
+                self.cancel_native_scheduled_jumps(audio)?;
             }
         } else if scheduled_jump.is_none() {
-            audio.cancel_scheduled_jumps()?;
+            self.cancel_native_scheduled_jumps(audio)?;
         }
 
         Ok(self.snapshot())
@@ -1898,7 +1909,7 @@ impl DesktopSession {
         self.engine.cancel_section_jump();
         self.pending_automation_jump = None;
         self.active_automation_job = None;
-        audio.cancel_scheduled_jumps()?;
+        self.cancel_native_scheduled_jumps(audio)?;
         Ok(self.snapshot())
     }
 
@@ -1911,13 +1922,14 @@ impl DesktopSession {
         self.engine.cancel_section_jump();
         self.pending_automation_jump = None;
         self.active_automation_job = None;
-        audio.cancel_scheduled_jumps()?;
+        self.cancel_native_scheduled_jumps(audio)?;
         self.engine.toggle_vamp(mode)?;
         if self.engine.playback_state() == PlaybackState::Playing {
-            if let (Some(source_song), Some(active_vamp)) =
-                (self.engine.song(), self.engine.active_vamp())
-            {
-                self.schedule_native_vamp_jump(audio, source_song, active_vamp)?;
+            if let (Some(source_song), Some(active_vamp)) = (
+                self.engine.song().cloned(),
+                self.engine.active_vamp().cloned(),
+            ) {
+                self.schedule_native_vamp_jump(audio, &source_song, &active_vamp)?;
             }
         }
         Ok(self.snapshot())
@@ -2392,10 +2404,15 @@ impl DesktopSession {
                 .sync_position_preserving_transport_state(runtime_source_position)?;
             self.transport_clock
                 .reanchor_playing(runtime_source_position);
-            if let (Some(source_song), Some(active_vamp)) =
-                (self.engine.song(), self.engine.active_vamp())
-            {
-                self.schedule_native_vamp_jump(audio, source_song, active_vamp)?;
+            if let (Some(source_song), Some(active_vamp)) = (
+                self.engine.song().cloned(),
+                self.engine.active_vamp().cloned(),
+            ) {
+                // Re-arm only if the loop changed (the guard inside makes this a
+                // no-op otherwise). Unconditionally rescheduling here used to
+                // cancel and re-enqueue the wrap on every tick, which is what
+                // made vamp wraps miss their sample-exact trigger frame.
+                self.schedule_native_vamp_jump(audio, &source_song, &active_vamp)?;
                 return Ok(());
             }
             if self.engine.pending_marker_jump().is_some() {
@@ -2478,6 +2495,11 @@ impl DesktopSession {
                 }
                 self.engine.seek(vamp_start_seconds)?;
                 advanced_position = vamp_start_seconds;
+                // Fallback wrap: the playhead was moved behind the native
+                // scheduler's back, so whatever is armed now points at a
+                // trigger frame we already passed. Drop the guard so the next
+                // tick re-arms the loop from the new position.
+                self.scheduled_native_vamp_loop = None;
             }
         }
 
@@ -2551,6 +2573,11 @@ impl DesktopSession {
                     runtime_source_position,
                     runtime_source_position,
                 );
+                // The wrap consumed the scheduled jump, so the loop has to be
+                // re-armed for the next pass even though its bounds are
+                // unchanged. Clear the guard first or the reschedule no-ops and
+                // the vamp only ever loops once.
+                self.scheduled_native_vamp_loop = None;
                 self.schedule_native_vamp_jump(audio, &source_song, &active_vamp)?;
                 return Ok(true);
             }

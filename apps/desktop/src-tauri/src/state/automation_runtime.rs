@@ -92,7 +92,7 @@ impl DesktopSession {
         if !enabled {
             self.pending_automation_jump = None;
             self.active_automation_job = None;
-            audio.cancel_scheduled_jumps()?;
+            self.cancel_native_scheduled_jumps(audio)?;
         }
         self.persist_automation(audio)?;
         if enabled {
@@ -154,7 +154,7 @@ impl DesktopSession {
             {
                 self.pending_automation_jump = None;
                 self.active_automation_job = None;
-                audio.cancel_scheduled_jumps()?;
+                self.cancel_native_scheduled_jumps(audio)?;
             }
             self.persist_automation(audio)?;
         }
@@ -230,17 +230,44 @@ impl DesktopSession {
         self.project_revision = self.project_revision.saturating_add(1);
         self.pending_automation_jump = None;
         self.active_automation_job = None;
-        audio.cancel_scheduled_jumps()?;
+        self.cancel_native_scheduled_jumps(audio)?;
         self.schedule_next_automation_jump(audio)?;
         Ok(())
     }
 
+    /// Cancel every live native jump and forget which vamp loop was scheduled.
+    ///
+    /// Always cancel through this rather than calling
+    /// `audio.cancel_scheduled_jumps()` directly: `scheduled_native_vamp_loop`
+    /// suppresses redundant reschedules, so a cancel that left it set would
+    /// keep the vamp from ever re-arming its wrap.
+    pub(super) fn cancel_native_scheduled_jumps(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        self.scheduled_native_vamp_loop = None;
+        audio.cancel_scheduled_jumps()
+    }
+
+    /// Program the vamp's wrap in the native scheduler, skipping the call when
+    /// this exact loop is already scheduled.
+    ///
+    /// The guard matters because `schedule_jump_at_frame` cancels all live jumps
+    /// before enqueuing. Re-sending the same loop every tick left recurring
+    /// windows with no jump armed, so a wrap whose trigger frame landed in one
+    /// of them was missed by the sample-exact native path and handled by the
+    /// coarse Rust fallback instead. Scheduling once — as marker jumps do — is
+    /// what keeps the wrap in time.
     pub(super) fn schedule_native_vamp_jump(
-        &self,
+        &mut self,
         audio: &AudioController,
         source_song: &Song,
         active_vamp: &ActiveVamp,
     ) -> Result<(), DesktopError> {
+        let loop_key = (active_vamp.start_seconds, active_vamp.end_seconds);
+        if self.scheduled_native_vamp_loop == Some(loop_key) {
+            return Ok(());
+        }
         let trigger_seconds = warp_timeline_seconds_at(source_song, active_vamp.end_seconds);
         let target_seconds = Some(warp_timeline_seconds_at(
             source_song,
@@ -265,7 +292,9 @@ impl DesktopSession {
             trigger_seconds,
             target_seconds,
             true,
-        )
+        )?;
+        self.scheduled_native_vamp_loop = Some(loop_key);
+        Ok(())
     }
 
     /// Whether the cue can still fire this session (under its `max_runs` limit).
@@ -859,7 +888,7 @@ impl DesktopSession {
             if let Some(next_pending) = scheduled.as_ref() {
                 self.schedule_native_marker_jump(audio, source_song, next_pending)?;
             } else {
-                audio.cancel_scheduled_jumps()?;
+                self.cancel_native_scheduled_jumps(audio)?;
             }
             return Ok(());
         }
@@ -878,11 +907,11 @@ impl DesktopSession {
             if let Some(next_pending) = scheduled.as_ref() {
                 self.schedule_native_region_jump(audio, source_song, next_pending)?;
             } else {
-                audio.cancel_scheduled_jumps()?;
+                self.cancel_native_scheduled_jumps(audio)?;
             }
             return Ok(());
         }
 
-        audio.cancel_scheduled_jumps()
+        self.cancel_native_scheduled_jumps(audio)
     }
 }
