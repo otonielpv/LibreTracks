@@ -32,6 +32,7 @@ export type WidgetType =
   | "deckJump"
   | "deckSong"
   | "deckRegion"
+  | "jumpToSongButton"
   | "markerGrid"
   | "mixer"
   | "mixerSongFilter"
@@ -75,6 +76,7 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "deckJump",
   "deckSong",
   "deckRegion",
+  "jumpToSongButton",
   "markerGrid",
   "mixer",
   "mixerSongFilter",
@@ -228,13 +230,29 @@ function placement(
 
 /**
  * The default layout reproduces the classic two-view remote: a "Controles" tab
- * (readouts + transport + timeline + control deck + marker grid, stacked in
- * rows) and a "Mixer" tab. No live/counter widgets by default — opt-in from the
- * palette.
+ * (readouts + transport + timeline + control deck + jump-to-song + marker grid,
+ * stacked in rows) and a "Mixer" tab. No live/counter widgets by default —
+ * opt-in from the palette.
+ *
+ * "Saltar a canción" is its own widget rather than a button inside the region
+ * deck. On a roomy screen (standard/tablet) it sits on the SAME row as the
+ * song selector, to the right of the deck, which is where it used to live and
+ * where the hand expects it; the deck gives up those columns. A phone has no
+ * width to share, so there it takes a full-width row of its own and everything
+ * below shifts down.
  */
 export function defaultLayout(profile: LayoutPresetProfile = "standard"): RemoteLayout {
   const phone = profile === "phone";
   const tablet = profile === "tablet";
+  const deckY = phone ? 13 : tablet ? 10 : 16;
+  const deckH = phone ? 8 : tablet ? 7 : 9;
+  /** Columns reserved for the jump button beside the deck (0 = its own row). */
+  const jumpW = phone ? LAYOUT_COLUMNS : 5;
+  const jumpH = phone ? 4 : deckH;
+  // Beside the deck it shares the deck's row; on a phone it opens a new one.
+  const jumpX = phone ? 0 : LAYOUT_COLUMNS - jumpW;
+  const jumpY = phone ? deckY + deckH : deckY;
+  const belowY = phone ? deckY + deckH + jumpH : deckY + deckH;
   const controls: LayoutTab = {
     id: newTabId(),
     name: "Controles",
@@ -242,8 +260,9 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
       placement("readouts", 0, 0, LAYOUT_COLUMNS, phone ? 6 : tablet ? 3 : 4),
       placement("transportButtons", 0, phone ? 6 : tablet ? 3 : 4, LAYOUT_COLUMNS, phone ? 3 : tablet ? 3 : 5),
       placement("timeline", 0, phone ? 9 : tablet ? 6 : 9, LAYOUT_COLUMNS, phone ? 4 : tablet ? 4 : 7),
-      placement("controlDeck", 0, phone ? 13 : tablet ? 10 : 16, LAYOUT_COLUMNS, phone ? 8 : tablet ? 7 : 9),
-      placement("markerGrid", 0, phone ? 21 : tablet ? 17 : 25, LAYOUT_COLUMNS, phone ? 10 : tablet ? 10 : 12),
+      placement("controlDeck", 0, deckY, phone ? LAYOUT_COLUMNS : LAYOUT_COLUMNS - jumpW, deckH),
+      placement("jumpToSongButton", jumpX, jumpY, jumpW, jumpH),
+      placement("markerGrid", 0, belowY, LAYOUT_COLUMNS, phone ? 10 : tablet ? 10 : 12),
     ],
   };
   const mixer: LayoutTab = {

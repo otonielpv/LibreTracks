@@ -666,6 +666,37 @@ button {
   vertical-align: middle;
 }
 
+/* A dynamic cue (Build, All In, ...). Never a jump target, so it must not read
+   like a section chip: square corners, a dashed frame and a diamond dot. */
+.timeline-marker-mini.is-cue {
+  border-radius: 3px;
+  border-style: dashed;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.timeline-marker-mini.is-cue::before {
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+/* A section chip carrying a cue needs room for both names before ellipsing.
+   Flagged with a class rather than :has() — old Safari (Catalina) lacks it. */
+.timeline-marker-mini.has-cue {
+  max-width: 11rem;
+}
+
+/* Cue names folded into a section chip, for markers sharing the same beat. */
+.timeline-marker-cue {
+  margin-left: 0.3rem;
+  padding-left: 0.3rem;
+  border-left: 1px solid rgb(255 255 255 / 0.28);
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-style: italic;
+  font-weight: 500;
+}
+
 .timeline-header-row {
   position: absolute;
   left: 0;
@@ -1169,10 +1200,45 @@ button {
   font-size: 0.68rem;
 }
 
-.region-jump-button {
+/* "Saltar a canción" as its own widget: it fills the placement it was given,
+   naming the song it would jump to underneath the action. Its button keeps the
+   flat `jump-cancel-button` skin — it is an action, not a transport control,
+   so it must not read as a Play/Pause pill. */
+.jump-to-song-host {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.jump-to-song-button {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
   min-height: 2.2rem;
   border-radius: 4px;
   white-space: nowrap;
+}
+
+/* The song name is content, not a label: it opts out of the button's uppercase
+   + tracked styling so a real title stays readable. */
+.jump-to-song-button .jump-to-song-target {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--accent);
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.jump-to-song-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .region-chip {
@@ -1276,6 +1342,45 @@ button {
 .marker-card.is-hidden-marker {
   /* Only visible while "show hidden" is on — dimmed so it reads as disabled. */
   opacity: 0.42;
+}
+
+/* A lone dynamic cue. Jumpable like a section, but told apart at a glance: a
+   dashed outline and a flatter background instead of the solid left bar. */
+.marker-card.is-cue-card {
+  background: linear-gradient(180deg, rgb(20 20 20 / 0.86), rgb(14 14 14 / 0.92));
+  border: 1px dashed var(--marker-color, #bacac5);
+  border-left: 6px dashed var(--marker-color, #bacac5);
+}
+
+.marker-card-jump .marker-card-cue-badge {
+  align-self: flex-start;
+  border: 1px dashed var(--marker-color, #bacac5);
+  border-radius: 3px;
+  padding: 0.08rem 0.38rem;
+  color: var(--marker-color, var(--text));
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+/* Cues riding inside a section card (both markers sit on the same beat). */
+.marker-card-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-top: 0.1rem;
+}
+
+.marker-card-cues .marker-card-cue-chip {
+  border: 1px dashed var(--cue-color, #bacac5);
+  border-radius: 3px;
+  padding: 0.02rem 0.3rem;
+  color: var(--cue-color, var(--muted));
+  font-size: 0.56rem;
+  font-style: italic;
+  line-height: 1.35;
 }
 
 .marker-card.is-next {
@@ -2050,6 +2155,10 @@ button {
     font-size: 0.56rem;
   }
 
+  .timeline-marker-mini.has-cue {
+    max-width: 7rem;
+  }
+
   .timeline-time-row {
     top: 0.22rem;
   }
@@ -2194,12 +2303,6 @@ button {
   .selected-region-actions {
     flex: 0 0 auto;
     justify-content: space-between;
-  }
-
-  .region-jump-button {
-    flex: 1 1 auto;
-    min-height: 2.2rem;
-    padding-inline: 0.5rem;
   }
 
   .marker-card {
@@ -3623,13 +3726,6 @@ button {
   font-size: calc(0.68rem * var(--deck-scale, 1));
 }
 
-.layout-widget-type-controlDeck .region-jump-button,
-.layout-widget-type-deckSong .region-jump-button {
-  min-height: calc(2.2rem * var(--deck-scale, 1));
-  padding-inline: calc(0.6rem * var(--deck-scale, 1));
-  font-size: calc(0.62rem * var(--deck-scale, 1));
-}
-
 /* Spend the complete widget rectangle on its controls. Scaling the contents
    alone still left the deck packed against the top of a tall widget; a grid
    gives every section a real share of the available height. */
@@ -3673,10 +3769,6 @@ button {
 
 .layout-widget-type-controlDeck .selected-region-transpose {
   justify-content: center;
-}
-
-.layout-widget-type-controlDeck .region-jump-button {
-  height: 100%;
 }
 
 /* Atomic deck widgets use the same fill contract. The jump widget has two
@@ -3810,11 +3902,17 @@ button {
   font-size: clamp(0.68rem, min(3cqi, 14cqh), 1.8rem);
 }
 
-.layout-widget-type-deckRegion .region-jump-button {
+/* The jump-to-song widget scales its label to whatever rectangle it was given,
+   like the other atomic widgets do. */
+.layout-widget-type-jumpToSongButton .jump-to-song-button {
   min-height: 0;
   height: 100%;
   padding-inline: clamp(0.5rem, 2cqi, 1.5rem);
-  font-size: clamp(0.62rem, min(2.2cqi, 11cqh), 1.3rem);
+  font-size: clamp(0.62rem, min(3.2cqi, 16cqh), 1.6rem);
+}
+
+.layout-widget-type-jumpToSongButton .jump-to-song-target {
+  font-size: clamp(0.5rem, min(2.2cqi, 11cqh), 1rem);
 }
 
 /* Narrow rectangles: stack the chip strip over the actions instead of letting
@@ -4318,6 +4416,10 @@ button {
   .layout-widget-type-timeline .timeline-marker-mini {
     border-width: 1px;
     max-width: 5rem;
+  }
+
+  .layout-widget-type-timeline .timeline-marker-mini.has-cue {
+    max-width: 8rem;
   }
 
   .layout-widget-type-timeline .fixed-playhead {

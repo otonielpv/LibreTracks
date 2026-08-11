@@ -23,7 +23,6 @@ import {
   formatTransposeSemitones,
   METRONOME_SOUND_PRESETS,
   markerColor,
-  markerCategory,
   regionEffectiveKey,
   type AppSettings,
   type AudioMeterLevel,
@@ -61,6 +60,7 @@ import {
   positionToGain,
 } from "@libretracks/shared/faderScale";
 import { getRemoteStrings } from "./i18n";
+import { buildMarkerCards, buildTimelineMarkerChips } from "./markerCards";
 import {
   CountdownWidget,
   CurrentKeyWidget,
@@ -1182,15 +1182,15 @@ const SharedTimeline = memo(function SharedTimeline({
       ),
     [grid.markers, renderWindowEndSeconds, renderWindowStartSeconds],
   );
+  // Sections AND dynamic cues (Build, All In, ...) both draw on the ribbon. A
+  // cue sitting on a section's beat is folded into that section's chip by
+  // buildTimelineMarkerChips, so stacked markers never overdraw each other.
   const visibleSectionMarkers = useMemo(
     () =>
-      markers.filter(
-        (marker) =>
-          // Dynamic cues (Build, All In, ...) are not navigation targets; the
-          // remote only shows sections, so the cinta stays uncluttered on stage.
-          markerCategory(marker) === "section" &&
-          marker.startSeconds >= renderWindowStartSeconds - viewportDurationSeconds * 0.25 &&
-          marker.startSeconds <= renderWindowEndSeconds + viewportDurationSeconds * 0.25,
+      buildTimelineMarkerChips(markers, markerColor).filter(
+        (chip) =>
+          chip.startSeconds >= renderWindowStartSeconds - viewportDurationSeconds * 0.25 &&
+          chip.startSeconds <= renderWindowEndSeconds + viewportDurationSeconds * 0.25,
       ),
     [markers, renderWindowEndSeconds, renderWindowStartSeconds, viewportDurationSeconds],
   );
@@ -1606,18 +1606,22 @@ const SharedTimeline = memo(function SharedTimeline({
         ) : null}
 
         <div className="timeline-markers">
-          {visibleSectionMarkers.map((marker) => (
+          {visibleSectionMarkers.map((chip) => (
             <span
-              key={`marker-${marker.id}`}
-              className={`timeline-marker timeline-marker-mini ${pendingJumpTargetId === marker.id ? "is-target" : ""}`}
+              key={`marker-${chip.id}`}
+              className={`timeline-marker timeline-marker-mini ${chip.kind === "cue" ? "is-cue" : ""} ${chip.cueNames.length > 0 ? "has-cue" : ""} ${pendingJumpTargetId === chip.id ? "is-target" : ""}`}
               style={{
-                left: `${secondsToAbsoluteX(marker.startSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px`,
+                left: `${secondsToAbsoluteX(chip.startSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px`,
                 // Tint the marker with its kind/custom colour so the remote
                 // reads the same as the desktop timeline.
-                "--marker-color": markerColor(marker),
+                "--marker-color": chip.color,
               } as CSSProperties}
+              title={[chip.label, ...chip.cueNames].join(" · ")}
             >
-              {marker.name}
+              {chip.label}
+              {chip.cueNames.length > 0 ? (
+                <em className="timeline-marker-cue">{chip.cueNames.join(" · ")}</em>
+              ) : null}
             </span>
           ))}
         </div>
@@ -1728,19 +1732,6 @@ function GuideButtonWidget() {
         {STRINGS.guide}
       </button>
     </div>
-  );
-}
-
-/**
- * Section markers navigable from the remote — dynamic cues (Build, All In, ...)
- * are spoken by the voice guide, not jump destinations, so they're excluded.
- * Keyed on the effective category, so a marker dragged into the other ruler row
- * on the desktop changes its jump-target status here too.
- */
-function useSectionMarkers() {
-  const songView = useRemoteSyncStore((state) => state.songView);
-  return (songView?.sectionMarkers ?? []).filter(
-    (marker) => markerCategory(marker) === "section",
   );
 }
 
@@ -1907,8 +1898,6 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
     useOptimisticStore.getState().setPendingJumpTarget(null);
     sendCommand({ cmd: "cancelMarkerJump" });
   };
-
-  const scheduleRegionJump = scheduleRegionJumpFromStore;
 
   const updateSelectedRegionTranspose = (delta: number) => {
     if (!selectedRegion) {
@@ -2253,6 +2242,9 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
                 </button>
               ))}
             </div>
+            {/* "Saltar a canción" used to sit here, at the end of this row.
+                It is now its own `jumpToSongButton` widget so it can be placed
+                (and sized) where the player can actually reach it. */}
             {selectedRegion ? (
               <div className="selected-region-actions">
                 <div className="selected-region-transpose">
@@ -2268,12 +2260,6 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
                     </span>
                   ) : null}
                 </div>
-                <button
-                  className="jump-cancel-button region-jump-button"
-                  onClick={() => scheduleRegionJump(selectedRegion.id)}
-                >
-                  {STRINGS.jumpToSong}
-                </button>
               </div>
             ) : null}
           </div>
@@ -2321,7 +2307,13 @@ function MarkerGrid() {
   const toggleMarkerHidden = useRemoteUiStore((state) => state.toggleMarkerHidden);
   const setRevealHiddenMarkers = useRemoteUiStore((state) => state.setRevealHiddenMarkers);
 
-  const markers = useSectionMarkers();
+  // Every marker, sections and cues alike: buildMarkerCards folds a cue that
+  // shares a section's position into that section's card and gives a lone cue
+  // its own card. Both kinds are jump targets; the kind only drives the style.
+  const markers = useMemo(
+    () => buildMarkerCards(songView?.sectionMarkers ?? []),
+    [songView?.sectionMarkers],
+  );
   const regions = songView?.regions ?? [];
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
 
@@ -2331,20 +2323,20 @@ function MarkerGrid() {
     null;
   const visibleMarkers = selectedRegion
     ? markers.filter(
-        (marker) =>
-          marker.startSeconds >= selectedRegion.startSeconds &&
-          marker.startSeconds <= selectedRegion.endSeconds,
+        (entry) =>
+          entry.marker.startSeconds >= selectedRegion.startSeconds &&
+          entry.marker.startSeconds <= selectedRegion.endSeconds,
       )
     : markers;
   // The markers hidden by the user within the current region — drives the
   // "show hidden (N)" affordance. When revealing, hidden cards render dimmed
   // with a restore button; otherwise they're filtered out entirely.
-  const hiddenVisibleMarkers = visibleMarkers.filter((marker) =>
-    hiddenMarkerIds.has(marker.id),
+  const hiddenVisibleMarkers = visibleMarkers.filter((entry) =>
+    hiddenMarkerIds.has(entry.id),
   );
   const shownMarkers = revealHiddenMarkers
     ? visibleMarkers
-    : visibleMarkers.filter((marker) => !hiddenMarkerIds.has(marker.id));
+    : visibleMarkers.filter((entry) => !hiddenMarkerIds.has(entry.id));
 
   const scheduleJump = (markerId: string) => {
     useOptimisticStore.getState().setPendingJumpTarget(markerId);
@@ -2379,32 +2371,53 @@ function MarkerGrid() {
       ) : null}
 
       <div className="marker-grid">
-        {shownMarkers.map((marker) => {
-          const isHidden = hiddenMarkerIds.has(marker.id);
-          const isNext = liveContext.nextMarkerId === marker.id;
+        {shownMarkers.map((entry) => {
+          const marker = entry.marker;
+          const isHidden = hiddenMarkerIds.has(entry.id);
+          const isNext = liveContext.nextMarkerId === entry.id;
+          // A cue is a jump destination like any section; it only READS
+          // differently (dashed frame, "cue" badge) so the player can tell the
+          // two apart at a glance on stage.
+          const isCue = entry.kind === "cue";
           return (
             <div
-              key={marker.id}
-              className={`marker-card ${isNext ? "is-next" : ""} ${pendingJumpTargetId === marker.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""}`}
+              key={entry.id}
+              className={`marker-card ${isCue ? "is-cue-card" : ""} ${isNext ? "is-next" : ""} ${pendingJumpTargetId === entry.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""}`}
               style={{ "--marker-color": markerColor(marker) } as CSSProperties}
             >
               <button
                 type="button"
                 className="marker-card-jump"
                 onClick={() => {
-                  if (pendingJump?.targetMarkerId === marker.id) {
+                  if (pendingJump?.targetMarkerId === entry.id) {
                     cancelJump();
                     return;
                   }
 
-                  scheduleJump(marker.id);
+                  scheduleJump(entry.id);
                 }}
               >
                 {isNext ? (
                   <small className="marker-card-next">{STRINGS.next}</small>
                 ) : null}
+                {isCue ? (
+                  <small className="marker-card-cue-badge">{STRINGS.cue}</small>
+                ) : null}
                 <strong>{marker.name}</strong>
                 <span>{formatTimecode(marker.startSeconds)}</span>
+                {entry.cues.length > 0 ? (
+                  <span className="marker-card-cues">
+                    {entry.cues.map((cue) => (
+                      <em
+                        key={cue.id}
+                        className="marker-card-cue-chip"
+                        style={{ "--cue-color": markerColor(cue) } as CSSProperties}
+                      >
+                        {cue.name}
+                      </em>
+                    ))}
+                  </span>
+                ) : null}
                 <em>{formatJumpModeLabel(jumpMode, jumpBars)}</em>
               </button>
               <button
@@ -2414,7 +2427,7 @@ function MarkerGrid() {
                   isHidden ? STRINGS.showMarker : STRINGS.hideMarker
                 }
                 title={isHidden ? STRINGS.showMarker : STRINGS.hideMarker}
-                onClick={() => toggleMarkerHidden(marker.id)}
+                onClick={() => toggleMarkerHidden(entry.id)}
               >
                 {isHidden ? "+" : "×"}
               </button>
@@ -3624,6 +3637,44 @@ function RegionSectionWidget() {
   return <ControlDeck section="region" />;
 }
 
+/**
+ * "Saltar a canción" on its own — it used to be pinned to the right of the
+ * region carousel inside the region deck, where it could not be enlarged or
+ * moved near the player's hand. It jumps to the song selected in the region
+ * carousel, honouring the configured song trigger + transition, and is disabled
+ * while no song is selected.
+ */
+function JumpToSongButtonWidget() {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  const selectedRegionId = useRemoteUiStore((state) => state.selectedRegionId);
+  const regions = songView?.regions ?? [];
+  const selectedRegion =
+    regions.find((region) => region.id === selectedRegionId) ?? regions[0] ?? null;
+
+  return (
+    // Deliberately NOT a `pill-button`: that is the transport family (Play,
+    // Pause, Stop) and this action is not transport. It keeps the flat,
+    // uppercase `jump-cancel-button` look it had inside the region deck.
+    <div className="jump-to-song-host">
+      <button
+        className="jump-cancel-button jump-to-song-button"
+        disabled={!selectedRegion}
+        title={selectedRegion?.name}
+        onClick={() => {
+          if (selectedRegion) {
+            scheduleRegionJumpFromStore(selectedRegion.id);
+          }
+        }}
+      >
+        {STRINGS.jumpToSong}
+        {selectedRegion ? (
+          <em className="jump-to-song-target">{selectedRegion.name}</em>
+        ) : null}
+      </button>
+    </div>
+  );
+}
+
 /** The scrolling timeline (cinta) as a standalone widget. */
 function TimelineWidget() {
   const songView = useRemoteSyncStore((state) => state.songView);
@@ -3721,6 +3772,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   deckJump: { labelKey: "widgetDeckJump", Component: JumpSectionWidget, defaultW: 8, defaultH: 4 },
   deckSong: { labelKey: "widgetDeckSong", Component: SongSectionWidget, defaultW: 8, defaultH: 4 },
   deckRegion: { labelKey: "widgetDeckRegion", Component: RegionSectionWidget, defaultW: LAYOUT_COLUMNS, defaultH: 4 },
+  jumpToSongButton: { labelKey: "widgetJumpToSong", Component: JumpToSongButtonWidget, defaultW: 6, defaultH: 4 },
   markerGrid: { labelKey: "widgetMarkers", Component: MarkerGrid, defaultW: LAYOUT_COLUMNS, defaultH: 12 },
   mixer: { labelKey: "widgetMixer", Component: MixerView, defaultW: LAYOUT_COLUMNS, defaultH: 28 },
   mixerSongFilter: { labelKey: "widgetMixerSongFilter", Component: MixerSongFilterWidget, defaultW: 8, defaultH: 4 },
@@ -3767,6 +3819,7 @@ const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
   deckJump: "live",
   deckSong: "live",
   deckRegion: "live",
+  jumpToSongButton: "live",
   markerGrid: "live",
   nextMarker: "live",
   nextSong: "live",
@@ -3813,6 +3866,8 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
         return { w: 8, h: 5 };
       case "deckVamp": case "deckJump": case "deckSong":
         return { w: 12, h: 7 };
+      case "jumpToSongButton":
+        return { w: 10, h: 5 };
       case "mixerSongFilter":
         return { w: 8, h: 4 };
       case "mixerSongMaster":
@@ -3836,6 +3891,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "deckVamp": case "deckJump": case "deckSong":
       return { w: 24, h: 7 };
     case "deckRegion": return { w: 24, h: 6 };
+    case "jumpToSongButton": return { w: 24, h: 5 };
     case "markerGrid": return { w: 24, h: 14 };
     case "mixer": return { w: 24, h: 30 };
     case "mixerSongFilter": return { w: 24, h: 4 };
@@ -4863,11 +4919,36 @@ export function App() {
   const [layout, setLayout] = useState<RemoteLayout>(() => {
     const stored = readStoredLayout();
     const controls = stored.tabs.find((tab) => tab.name === "Controles") ?? stored.tabs[0];
+    // Both the current preset and the previous one (which had no standalone
+    // jumpToSongButton row) count as "untouched", so a user who never edited
+    // their layout regenerates onto the new shape instead of silently losing
+    // the "Saltar a canción" button that used to live inside the region deck.
+    const controlsPresetShapes = [
+      ["readouts", "transportButtons", "timeline", "controlDeck", "jumpToSongButton", "markerGrid"],
+      ["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"],
+    ] as const;
     const isUntouchedControlsPreset =
       stored.customized !== true &&
-      controls?.widgets.length === 5 &&
-      (["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"] as const)
-        .every((type, index) => controls.widgets[index]?.type === type);
+      controlsPresetShapes.some(
+        (shape) =>
+          controls?.widgets.length === shape.length &&
+          shape.every((type, index) => controls.widgets[index]?.type === type),
+      );
+    // Not just "is it there" but "is it where this preset puts it": an earlier
+    // build gave the button a full-width row of its own on every profile, and
+    // an untouched layout from that build should regenerate onto the current
+    // shape (beside the deck on roomy screens) rather than keep the old row.
+    const expectedJump = defaultLayout(presetProfile).tabs[0].widgets.find(
+      (widget) => widget.type === "jumpToSongButton",
+    );
+    const storedJump = (controls?.widgets ?? []).find(
+      (widget) => widget.type === "jumpToSongButton",
+    );
+    const hasJumpToSongPreset =
+      storedJump !== undefined &&
+      expectedJump !== undefined &&
+      storedJump.x === expectedJump.x &&
+      storedJump.w === expectedJump.w;
     const presetWidgetTypes = new Set(stored.tabs.flatMap((tab) => tab.widgets.map((widget) => widget.type)));
     const storedMetronome = stored.tabs
       .flatMap((tab) => tab.widgets)
@@ -4883,7 +4964,10 @@ export function App() {
       presetWidgetTypes.has("voiceGuideSettings") &&
       storedMetronome?.h === DEFAULT_METRONOME_WIDGET_HEIGHT &&
       storedPads?.h === DEFAULT_PADS_WIDGET_HEIGHT;
-    if (isUntouchedControlsPreset && (stored.presetProfile !== presetProfile || !hasToolsPreset)) {
+    if (
+      isUntouchedControlsPreset &&
+      (stored.presetProfile !== presetProfile || !hasToolsPreset || !hasJumpToSongPreset)
+    ) {
       return defaultLayout(presetProfile);
     }
     return stored;

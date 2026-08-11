@@ -86,8 +86,39 @@ describe("remoteLayout", () => {
       ["transportButtons", 3, 3],
       ["timeline", 6, 4],
       ["controlDeck", 10, 7],
+      ["jumpToSongButton", 10, 7],
       ["markerGrid", 17, 10],
     ]);
+  });
+
+  it("puts the jump-to-song widget beside the deck on roomy presets", () => {
+    for (const profile of ["standard", "tablet"] as const) {
+      const widgets = defaultLayout(profile).tabs[0].widgets;
+      const deck = widgets.find((widget) => widget.type === "controlDeck")!;
+      const jump = widgets.find((widget) => widget.type === "jumpToSongButton")!;
+      const grid = widgets.find((widget) => widget.type === "markerGrid")!;
+      // Same row as the deck (and so as the song selector inside it), to its
+      // right, sharing the row's full height without overlapping it.
+      expect(jump.y).toBe(deck.y);
+      expect(jump.h).toBe(deck.h);
+      expect(jump.x).toBe(deck.x + deck.w);
+      expect(jump.x + jump.w).toBe(LAYOUT_COLUMNS);
+      // The markers still start straight below that shared row.
+      expect(grid.y).toBe(deck.y + deck.h);
+    }
+  });
+
+  it("gives the jump-to-song widget its own row on a phone", () => {
+    const widgets = defaultLayout("phone").tabs[0].widgets;
+    const deck = widgets.find((widget) => widget.type === "controlDeck")!;
+    const jump = widgets.find((widget) => widget.type === "jumpToSongButton")!;
+    const grid = widgets.find((widget) => widget.type === "markerGrid")!;
+    // No width to share: full-width row of its own, nothing overlapping.
+    expect(deck.w).toBe(LAYOUT_COLUMNS);
+    expect(jump.x).toBe(0);
+    expect(jump.w).toBe(LAYOUT_COLUMNS);
+    expect(jump.y).toBe(deck.y + deck.h);
+    expect(grid.y).toBe(jump.y + jump.h);
   });
 
   it("gives every default metronome enough height without overlapping phone tools", () => {
