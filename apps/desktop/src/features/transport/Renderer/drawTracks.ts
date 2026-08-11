@@ -27,6 +27,45 @@ const TRACK_BACKDROP = `rgb(${TRACK_BACKDROP_RGB[0]}, ${TRACK_BACKDROP_RGB[1]}, 
  * row read as the same red as the track below it. */
 const FOLDER_BAND_DARKEN = 0.62;
 
+/** Type scale for the folder lane caption, keyed to the row's height.
+ *
+ * Track rows span 18..148px (TRACK_HEIGHT_MIN/MAX), an 8x range, so a fixed
+ * font that reads well in a thin lane is lost in a tall one. The name grows
+ * with the row; the count grows more slowly so it stays subordinate as the gap
+ * widens.
+ *
+ * The floor is the size the caption used before it scaled at all: the smallest
+ * row must stay as readable as it is today, so the scale only ever adds size.
+ * The interpolation runs over the row heights where text has room to breathe —
+ * below `HEIGHT_AT_MIN` the lane is too thin for the glyphs to grow into
+ * anyway, and above `HEIGHT_AT_MAX` a caption that kept growing would start
+ * competing with the clips rather than labelling the row. */
+const FOLDER_CAPTION_TYPE = {
+  HEIGHT_AT_MIN: 40,
+  HEIGHT_AT_MAX: 132,
+  NAME_MIN_PX: 11,
+  NAME_MAX_PX: 19,
+  COUNT_MIN_PX: 10,
+  COUNT_MAX_PX: 13,
+} as const;
+
+/** Interpolate the caption's name/count font sizes for a row `trackHeight`.
+ * Sizes are rounded to whole pixels: canvas will happily render a 13.4px font,
+ * but fractional sizes make the caption shimmer as the row is dragged. */
+export function folderCaptionFontSizes(trackHeight: number): {
+  namePx: number;
+  countPx: number;
+} {
+  const { HEIGHT_AT_MIN, HEIGHT_AT_MAX } = FOLDER_CAPTION_TYPE;
+  const span = HEIGHT_AT_MAX - HEIGHT_AT_MIN;
+  const t = clamp((trackHeight - HEIGHT_AT_MIN) / span, 0, 1);
+  const lerp = (min: number, max: number) => Math.round(min + (max - min) * t);
+  return {
+    namePx: lerp(FOLDER_CAPTION_TYPE.NAME_MIN_PX, FOLDER_CAPTION_TYPE.NAME_MAX_PX),
+    countPx: lerp(FOLDER_CAPTION_TYPE.COUNT_MIN_PX, FOLDER_CAPTION_TYPE.COUNT_MAX_PX),
+  };
+}
+
 /** Parse `#rgb`, `#rrggbb` or `#rrggbbaa` into RGB channels; null if unparsable. */
 function parseHexRgb(hex: string): [number, number, number] | null {
   const value = hex.replace("#", "");
@@ -547,16 +586,21 @@ export function drawTrackClipsLayer(
       // name would otherwise run the full width and read as a clip.
       const labelStartX = 13;
       const captionMaxWidth = Math.max(0, snapshot.width - labelStartX - 12);
-      const countGap = 8;
+      // The gap tracks the type size so the two words keep their spacing
+      // relationship instead of colliding as the caption grows.
+      const { namePx, countPx } = folderCaptionFontSizes(snapshot.trackHeight);
+      const nameFont = `600 ${namePx}px "Space Grotesk", sans-serif`;
+      const countFont = `500 ${countPx}px "Space Grotesk", sans-serif`;
+      const countGap = Math.round(countPx * 0.8);
 
       context.textBaseline = "middle";
       if (folderName) {
         // The name is heavier and a step larger than the count so the two read
         // as label and annotation rather than one run-on string.
-        context.font = '600 11px "Space Grotesk", sans-serif';
+        context.font = nameFont;
         const countWidth = (() => {
           context.save();
-          context.font = '500 10px "Space Grotesk", sans-serif';
+          context.font = countFont;
           const width = context.measureText(countLabel).width;
           context.restore();
           return width;
@@ -578,7 +622,7 @@ export function drawTrackClipsLayer(
           const countX = labelStartX + nameWidth + countGap;
           const countBudget = captionMaxWidth - (countX - labelStartX);
           if (countBudget > 0) {
-            context.font = '500 10px "Space Grotesk", sans-serif';
+            context.font = countFont;
             const fittedCount = fitLabel(context, countLabel, countBudget);
             if (fittedCount) {
               context.fillStyle = countColor;
@@ -590,8 +634,10 @@ export function drawTrackClipsLayer(
       }
 
       // Unnamed folder, or a lane too narrow for the name: fall back to the
-      // count on its own, which is what the row showed before.
-      context.font = '600 10px "Space Grotesk", sans-serif';
+      // count on its own, which is what the row showed before. It carries the
+      // caption alone here, so it takes the name's size rather than the
+      // deliberately-subordinate count size.
+      context.font = nameFont;
       const fittedCountOnly = fitLabel(context, countLabel, captionMaxWidth);
       if (fittedCountOnly) {
         context.fillStyle = nameColor;

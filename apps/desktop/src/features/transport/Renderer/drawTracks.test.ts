@@ -22,7 +22,8 @@ vi.mock("./WaveformTileCache", () => {
 // it's initialized at startup). Assertions resolve labels through the same
 // instance so they stay language-agnostic (the test env may default to es).
 import i18n from "../../../shared/i18n";
-import { drawTrackClipsLayer } from "./drawTracks";
+import { drawTrackClipsLayer, folderCaptionFontSizes } from "./drawTracks";
+import { TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN } from "../constants";
 import type {
   TrackSceneSnapshot,
   TimelineViewportMetrics,
@@ -343,6 +344,52 @@ describe("drawTrackClipsLayer", () => {
 
     // ...and the child count still reaches the caption alongside it.
     expect(captions.some((text) => text.includes("1"))).toBe(true);
+  });
+
+  describe("folder caption type scale", () => {
+    it("never shrinks below the size the caption had before it scaled", () => {
+      // The whole point of the floor: the thinnest possible row must stay at
+      // least as readable as it is today, so the scale can only ever add size.
+      for (let height = TRACK_HEIGHT_MIN; height <= TRACK_HEIGHT_MAX; height += 1) {
+        const { namePx, countPx } = folderCaptionFontSizes(height);
+        expect(namePx).toBeGreaterThanOrEqual(11);
+        expect(countPx).toBeGreaterThanOrEqual(10);
+      }
+    });
+
+    it("grows the name as the row gets taller", () => {
+      const min = folderCaptionFontSizes(TRACK_HEIGHT_MIN);
+      const max = folderCaptionFontSizes(TRACK_HEIGHT_MAX);
+      expect(max.namePx).toBeGreaterThan(min.namePx);
+      expect(max.countPx).toBeGreaterThan(min.countPx);
+    });
+
+    it("keeps the count subordinate to the name at every row height", () => {
+      for (let height = TRACK_HEIGHT_MIN; height <= TRACK_HEIGHT_MAX; height += 1) {
+        const { namePx, countPx } = folderCaptionFontSizes(height);
+        expect(countPx).toBeLessThan(namePx);
+      }
+    });
+
+    it("never lets the caption outgrow the row it sits in", () => {
+      // A glyph taller than its band would bleed into the neighbouring lanes.
+      for (let height = TRACK_HEIGHT_MIN; height <= TRACK_HEIGHT_MAX; height += 1) {
+        const { namePx } = folderCaptionFontSizes(height);
+        expect(namePx).toBeLessThanOrEqual(height);
+      }
+    });
+
+    it("is monotonic and clamped outside the interpolation range", () => {
+      let previous = 0;
+      for (let height = 0; height <= 400; height += 1) {
+        const { namePx } = folderCaptionFontSizes(height);
+        expect(namePx).toBeGreaterThanOrEqual(previous);
+        previous = namePx;
+      }
+      // Clamped at both ends rather than extrapolating off the scale.
+      expect(folderCaptionFontSizes(0).namePx).toBe(11);
+      expect(folderCaptionFontSizes(1000).namePx).toBe(19);
+    });
   });
 
   it("falls back to the child count when the folder has no name", () => {
