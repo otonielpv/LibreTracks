@@ -1797,6 +1797,54 @@ mod tests {
         assert!((active_vamp.end_seconds - 10.0).abs() < 0.0001);
     }
 
+    /// The reported scenario: two adjacent section markers, vamp pressed from
+    /// well inside the first one. Both loop bounds must land exactly on marker
+    /// boundaries — the same grid `jump_execute_at`/`NextMarker` uses — so the
+    /// wrap is as musical as the equivalent marker jump.
+    #[test]
+    fn toggle_vamp_section_snaps_both_bounds_to_marker_boundaries() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        // Deliberately mid-section, not on the marker.
+        engine.seek(5.3).expect("seek should work");
+
+        let active_vamp = engine
+            .toggle_vamp(VampMode::Section)
+            .expect("vamp should activate")
+            .expect("vamp should exist");
+
+        // Intro starts at 0.0, Break (the next marker) at 8.0.
+        assert!((active_vamp.start_seconds - 0.0).abs() < 1e-9);
+        assert!((active_vamp.end_seconds - 8.0).abs() < 1e-9);
+    }
+
+    /// Bars mode must sit on the bar grid, not on the arbitrary press position:
+    /// pressing anywhere inside a bar yields the same loop as pressing on its
+    /// downbeat.
+    #[test]
+    fn toggle_vamp_bars_is_independent_of_where_in_the_bar_it_was_pressed() {
+        let bounds_after_seek = |position: f64| {
+            let mut engine = AudioEngine::new();
+            engine
+                .load_song(multi_region_song())
+                .expect("song should load");
+            engine.seek(position).expect("seek should work");
+            let active_vamp = engine
+                .toggle_vamp(VampMode::Bars(2))
+                .expect("vamp should activate")
+                .expect("vamp should exist");
+            (active_vamp.start_seconds, active_vamp.end_seconds)
+        };
+
+        // 6.0 is a downbeat; 7.0 and 7.9 are inside the same bar.
+        let on_downbeat = bounds_after_seek(6.0);
+        for mid_bar in [7.0, 7.9] {
+            let bounds = bounds_after_seek(mid_bar);
+            assert!((bounds.0 - on_downbeat.0).abs() < 1e-9);
+            assert!((bounds.1 - on_downbeat.1).abs() < 1e-9);
+        }
+    }
+
     #[test]
     fn toggle_vamp_again_disables_the_active_vamp() {
         let mut engine = AudioEngine::new();
