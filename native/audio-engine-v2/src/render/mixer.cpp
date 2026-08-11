@@ -273,6 +273,61 @@ int Mixer::control_index_for_track(const Id& track_id) const noexcept {
     return -1;
 }
 
+Mixer::EffectiveControls Mixer::effective_controls_from_session(
+        const Song& song, const Track& track, bool solo_active) const noexcept {
+    // Mirror of compute_effective_controls for a track that has no control
+    // slot. The chain is walked through the session (which is what still knows
+    // the parent/child structure), but each ancestor's values come from its own
+    // control slot when it has one.
+    //
+    // The previous code read only the track's own gain/pan/mute/solo, dropping
+    // everything inherited from folders. The solo case was the damaging one:
+    // solo eligibility is inherited, so a child of a soloed folder has
+    // solo=false on itself and was muted the moment any solo was active — while
+    // the metronome and voice guide, mixed after the track loop and independent
+    // of control slots, kept sounding. That is the reported symptom:
+    // "everything is muted, audio only returns at a marker with the count-in".
+    float eff_gain  = 1.0f;
+    float eff_pan   = 0.0f;
+    bool  eff_muted = false;
+    bool  eligible  = false;
+
+    const Track* current = &track;
+    int depth = 0;
+    while (current && depth < kMaxFolderDepth) {
+        // Prefer the live control slot for each ancestor: set_track_gain /
+        // _mute / _solo write the slot table, not the session, so a folder the
+        // user soloed at runtime still has solo=false in the session. Reading
+        // only the session here is what silenced children of a soloed folder.
+        const TrackControlState* slot = control_for_track(current->id);
+        if (slot) {
+            eff_gain *= slot->gain.load(std::memory_order_relaxed);
+            eff_pan   = clamp_pan(eff_pan + slot->pan.load(std::memory_order_relaxed));
+            if (slot->mute.load(std::memory_order_relaxed)) eff_muted = true;
+            if (slot->solo.load(std::memory_order_relaxed)) eligible = true;
+        } else {
+            eff_gain *= current->gain;
+            eff_pan   = clamp_pan(eff_pan + current->pan);
+            if (current->mute) eff_muted = true;
+            if (current->solo) eligible = true;
+        }
+
+        if (current->parent_track_id.empty()) break;
+        const Track* parent = nullptr;
+        for (const auto& candidate : song.tracks) {
+            if (candidate.id == current->parent_track_id) {
+                parent = &candidate;
+                break;
+            }
+        }
+        current = parent;
+        ++depth;
+    }
+
+    const float target_solo_gain = (solo_active && !eligible) ? 0.0f : 1.0f;
+    return { eff_gain, eff_pan, eff_muted, target_solo_gain };
+}
+
 bool Mixer::is_solo_eligible(int slot_index) const noexcept {
     // Walk parent chain: eligible if any ancestor or self is soloed.
     int depth = 0;
@@ -485,7 +540,9 @@ void Mixer::render_timeline_span(float** output_channels,
             int slot_idx = control_index_for_track(track.id);
             TrackControlState* control = (slot_idx >= 0) ? controls_[static_cast<std::size_t>(slot_idx)].get() : nullptr;
 
+            EffectiveControls fallback_eff{};
             if (!control) {
+                fallback_eff = effective_controls_from_session(song, track, solo_active);
                 fallback_control_.track_id = track.id;
                 fallback_control_.parent_track_id = track.parent_track_id;
                 fallback_control_.parent_control_index = -1;
@@ -494,10 +551,10 @@ void Mixer::render_timeline_span(float** output_channels,
                 fallback_control_.pan.store(std::clamp(track.pan, -1.0f, 1.0f), std::memory_order_relaxed);
                 fallback_control_.mute.store(track.mute, std::memory_order_relaxed);
                 fallback_control_.solo.store(track.solo, std::memory_order_relaxed);
-                fallback_control_.current_gain = track.gain;
-                fallback_control_.current_pan = std::clamp(track.pan, -1.0f, 1.0f);
-                fallback_control_.current_mute_gain = track.mute ? 0.0f : 1.0f;
-                fallback_control_.current_solo_gain = solo_active && !track.solo ? 0.0f : 1.0f;
+                fallback_control_.current_gain = fallback_eff.target_gain;
+                fallback_control_.current_pan = fallback_eff.target_pan;
+                fallback_control_.current_mute_gain = fallback_eff.target_muted ? 0.0f : 1.0f;
+                fallback_control_.current_solo_gain = fallback_eff.target_solo_gain;
                 fallback_control_.initialized = true;
                 control = &fallback_control_;
                 slot_idx = -1;
@@ -505,12 +562,7 @@ void Mixer::render_timeline_span(float** output_channels,
 
             const EffectiveControls eff = (slot_idx >= 0)
                 ? compute_effective_controls(slot_idx, solo_active)
-                : EffectiveControls{
-                    control->gain.load(std::memory_order_relaxed),
-                    control->pan.load(std::memory_order_relaxed),
-                    control->mute.load(std::memory_order_relaxed),
-                    (solo_active && !control->solo.load(std::memory_order_relaxed)) ? 0.0f : 1.0f
-                  };
+                : fallback_eff;
 
             const float gain = eff.target_gain;
             const float pan_target = eff.target_pan;
@@ -791,7 +843,9 @@ void Mixer::render(float** output_channels,
                 int slot_idx = control_index_for_track(track.id);
                 TrackControlState* control = (slot_idx >= 0) ? controls_[static_cast<std::size_t>(slot_idx)].get() : nullptr;
 
+                EffectiveControls fallback_eff{};
                 if (!control) {
+                    fallback_eff = effective_controls_from_session(song, track, solo_active);
                     fallback_control_.track_id = track.id;
                     fallback_control_.parent_track_id = track.parent_track_id;
                     fallback_control_.parent_control_index = -1;
@@ -800,10 +854,10 @@ void Mixer::render(float** output_channels,
                     fallback_control_.pan.store(std::clamp(track.pan, -1.0f, 1.0f), std::memory_order_relaxed);
                     fallback_control_.mute.store(track.mute, std::memory_order_relaxed);
                     fallback_control_.solo.store(track.solo, std::memory_order_relaxed);
-                    fallback_control_.current_gain = track.gain;
-                    fallback_control_.current_pan = std::clamp(track.pan, -1.0f, 1.0f);
-                    fallback_control_.current_mute_gain = track.mute ? 0.0f : 1.0f;
-                    fallback_control_.current_solo_gain = solo_active && !track.solo ? 0.0f : 1.0f;
+                    fallback_control_.current_gain = fallback_eff.target_gain;
+                    fallback_control_.current_pan = fallback_eff.target_pan;
+                    fallback_control_.current_mute_gain = fallback_eff.target_muted ? 0.0f : 1.0f;
+                    fallback_control_.current_solo_gain = fallback_eff.target_solo_gain;
                     fallback_control_.initialized = true;
                     control = &fallback_control_;
                     slot_idx = -1;
@@ -812,12 +866,7 @@ void Mixer::render(float** output_channels,
                 // Compute effective target controls including parent folder chain.
                 const EffectiveControls eff = (slot_idx >= 0)
                     ? compute_effective_controls(slot_idx, solo_active)
-                    : EffectiveControls{
-                        control->gain.load(std::memory_order_relaxed),
-                        control->pan.load(std::memory_order_relaxed),
-                        control->mute.load(std::memory_order_relaxed),
-                        (solo_active && !control->solo.load(std::memory_order_relaxed)) ? 0.0f : 1.0f
-                      };
+                    : fallback_eff;
 
                 const float gain        = eff.target_gain;
                 const float pan_target  = eff.target_pan;

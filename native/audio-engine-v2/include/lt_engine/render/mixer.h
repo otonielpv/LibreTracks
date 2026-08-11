@@ -202,6 +202,13 @@ private:
     };
     EffectiveControls compute_effective_controls(int slot_index, bool solo_active) const noexcept;
 
+    // Same computation for a track with no control slot, walking the parent
+    // chain in the session instead of the slot table. Folder gain/pan/mute and
+    // inherited solo eligibility must survive the fallback path.
+    EffectiveControls effective_controls_from_session(const Song& song,
+                                                      const Track& track,
+                                                      bool solo_active) const noexcept;
+
     // Solo eligibility: true if track or any ancestor is soloed, or no solo is active at all.
     bool is_solo_eligible(int slot_index) const noexcept;
 

@@ -357,6 +357,59 @@ TEST_CASE("folder_solo_includes_descendants") {
 }
 
 // ---------------------------------------------------------------------------
+// A child of a soloed folder must stay audible even when it has no control
+// slot and therefore renders through fallback_control_.
+//
+// Reported symptom: "everything is muted, audio only comes back at a marker
+// when the count-in/announcement plays". The metronome and voice guide are
+// mixed after the track loop and never consult control slots, so they keep
+// sounding while every track is silenced — which is exactly what this bug
+// produces.
+//
+// The fallback path decided solo from `track.solo` alone, but solo eligibility
+// is inherited: is_solo_eligible walks the parent chain, so a child of a soloed
+// folder is audible even though its own solo flag is false. Any track that
+// renders through the fallback while a folder is soloed was therefore muted.
+// ---------------------------------------------------------------------------
+TEST_CASE("folder_solo_keeps_slotless_child_audible") {
+    SourceManager sources;
+    add_source(sources, "src-0", 0.5f);
+    add_source(sources, "src-late", 0.5f);
+
+    auto shared = std::make_shared<Session>(folder_session(1));
+    TransportClock clock(kSR);
+    JumpScheduler scheduler;
+    Mixer mixer(shared, &sources, &clock, &scheduler);
+    clock.play();
+
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 10, left, right);
+    REQUIRE(rms(left) > 0.05);
+
+    mixer.set_track_solo("folder", true);
+    render_blocks(mixer, clock, 30, left, right);
+    REQUIRE(rms(left) > 0.05); // child-0 stays audible via its own slot
+
+    // Publish a session where an existing child was RENAMED, without rebuilding
+    // control slots. swap_session_atomic does exactly this, so the renamed track
+    // no longer matches any slot and must render through fallback_control_.
+    // (Renaming rather than appending keeps the track count unchanged, so this
+    // exercises the fallback and not the separate renderer-pool cap.)
+    Session renamed = *shared;
+    renamed.sources.push_back(Source{"src-late", ""});
+    renamed.songs[0].tracks[1].id = "child-late";
+    renamed.songs[0].tracks[1].clips[0].id = "clip-late";
+    mixer.swap_session_atomic(std::make_shared<Session>(renamed));
+
+    // The renamed child has no control slot, so it renders through the
+    // fallback. It is still a descendant of the soloed folder and must stay
+    // audible. Before the fix the fallback read only `track.solo` (false on the
+    // child) while solo was active, so it was silenced completely.
+    render_blocks(mixer, clock, 30, left, right);
+    CHECK(rms(left) > 0.05);
+}
+
+// ---------------------------------------------------------------------------
 // Pitched child survives gain action on track
 // ---------------------------------------------------------------------------
 TEST_CASE("resolve_pitch_render_decision_matches_effective_semitones") {
