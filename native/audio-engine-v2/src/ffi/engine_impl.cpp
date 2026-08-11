@@ -2160,6 +2160,31 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                     prearm_kind = PrearmTargetKind::SongStart;
                                 }
                                 break;
+                            case JumpTarget::Kind::Frame:
+                                // Vamp wraps arrive as raw frame targets: the
+                                // loop bounds are picked at runtime, so there is
+                                // no marker/region id to key on. Without this
+                                // case `prearm_kind` stayed empty and every wrap
+                                // fell through to the blocking
+                                // wait_jump_target_audio_ready +
+                                // build_seek_voice_map path — which is why a
+                                // vamp never sounded as clean as the equivalent
+                                // marker jump. Key on the wrap frame instead;
+                                // build_prepared_set only uses target_frame.
+                                for (const auto& song : session_->songs) {
+                                    if (target_frame >= song.start_frame
+                                        && target_frame < song.end_frame) {
+                                        song_id = song.id;
+                                        break;
+                                    }
+                                }
+                                if (!song_id.empty()) {
+                                    target_id = "__lt_vamp__:"
+                                        + std::to_string(
+                                            static_cast<long long>(target_frame));
+                                    prearm_kind = PrearmTargetKind::VampStart;
+                                }
+                                break;
                             default:
                                 break;
                         }

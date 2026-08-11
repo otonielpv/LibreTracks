@@ -58,7 +58,12 @@ enum class PrearmTargetKind {
     Marker,
     RegionStart,
     SongStart,
-    // Vamp, … — added in later phases.
+    // A vamp loop's wrap point. Unlike the other kinds this one is not a named
+    // object in the session — the loop bounds are chosen at runtime — so its
+    // `target_id` is synthesised from the wrap frame by the jump handler
+    // (see engine_impl's CmdScheduleJump). `build_prepared_set` only ever uses
+    // `target_frame`, so a synthetic id costs nothing but map identity.
+    VampStart,
 };
 
 // Identifies a prearmed target. session_revision invalidates the entire map

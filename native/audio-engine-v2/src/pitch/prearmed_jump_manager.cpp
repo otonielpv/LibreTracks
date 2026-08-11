@@ -622,6 +622,7 @@ const char* target_kind_label(PrearmTargetKind k) {
         case PrearmTargetKind::Marker:      return "marker";
         case PrearmTargetKind::RegionStart: return "region";
         case PrearmTargetKind::SongStart:   return "song";
+        case PrearmTargetKind::VampStart:   return "vamp";
     }
     return "unknown";
 }

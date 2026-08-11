@@ -135,7 +135,12 @@ Prearm build cost (paid ONCE at LoadSession, on worker thread): ~119 ms for 9 vo
 
 ## Known limitations
 
-1. **No vamps yet** (Phase 5 deferred). See "Why vamps are deferred" below.
+1. **Vamp wraps prearm synchronously only.** The wrap is a raw `Frame` target,
+   so `prepare_all_targets` (which enumerates markers / regions / song starts)
+   never builds it and `take_ready` always misses. The wrap instead goes through
+   `prepare_target_now` at *schedule* time — which happens once, well before the
+   loop end is reached, so the ~13 ms build is not paid at the wrap itself. See
+   "Vamps" below.
 2. **No priority scoring on eviction.** Spec proposes a weighted score (current vamp wrap, next region, MIDI-mapped > others); current impl is plain FIFO. Adequate for ≤8 targets per the default cap.
 3. **No per-target memory accounting.** Cap is by set count, not MB. At ~2 MB / voice × 9 voices × 8 sets = ~144 MB max.
 4. **Single combined `prearm_revision_`** rather than the spec's 5 separate revisions. Over-invalidates in edge cases (e.g. region transpose change clears unrelated song's marker sets). Acceptable since prearming is async and cheap.
@@ -149,11 +154,31 @@ Prearm build cost (paid ONCE at LoadSession, on worker thread): ~119 ms for 9 vo
 - **Phase 11: UI/remote integration** — frontend changes need Tauri running.
 - **Phase 12: Manual QA** — by definition manual.
 
-## Why vamps are deferred
+## Vamps
 
 A vamp is a *loop region*. The transport plays from `vamp_start` to `vamp_end`,
 then wraps back to `vamp_start` and plays again. The "jump" happens
 automatically on every wrap, not on user input.
+
+**Status: wired up.** Vamp wraps now take the prearm path via
+`PrearmTargetKind::VampStart`. Two things had to change:
+
+1. Rust scheduled the wrap on *every* transport tick, and
+   `schedule_jump_at_frame` cancels all live jumps before enqueuing — so there
+   were recurring windows with nothing armed, and a wrap whose trigger frame
+   landed in one was missed by the sample-exact native path. The loop is now
+   scheduled once (`DesktopSession::scheduled_native_vamp_loop`) and re-armed
+   only after it is consumed.
+2. The `CmdScheduleJump` switch that derives a `PrearmTargetKey` had no
+   `case JumpTarget::Kind::Frame`, so vamp wraps never got prearmed voices and
+   always fell through to `wait_jump_target_audio_ready` +
+   `build_seek_voice_map`. Frame targets now resolve their song by containing
+   frame and synthesise `__lt_vamp__:<frame>` as the target id;
+   `build_prepared_set` only ever reads `target_frame`, so a synthetic id is
+   enough for map identity.
+
+The historical reasoning for deferring is kept below, since the concerns it
+raises are still the right things to listen for.
 
 The MVP infrastructure (`PrearmedJumpManager`, `swap_in_prepared_voices`,
 prefeed) all transfers directly. What's NEW for vamps is the lifecycle pattern:

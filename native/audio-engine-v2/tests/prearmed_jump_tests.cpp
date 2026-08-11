@@ -615,6 +615,47 @@ TEST_CASE("PrearmedJumpManager: prepare_target_now builds one set immediately") 
     CHECK_EQ(d.take_miss_total, 1u);
 }
 
+// Vamp wraps are raw frame targets with no marker/region id, so they can never
+// hit the async cache (which only enumerates named targets). They must still
+// get prearmed voices via prepare_target_now, otherwise every wrap falls back
+// to the blocking build_seek_voice_map path and the loop sounds worse than the
+// equivalent marker jump.
+TEST_CASE("PrearmedJumpManager: VampStart target prepares from a raw frame") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-vamp", "clip-vamp", "track-vamp",
+                  "song-vamp", "marker-vamp", kMarkerFrame, /*transposed*/ true);
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+
+    // A vamp start that deliberately does NOT coincide with any marker.
+    const Frame vamp_start_frame = kMarkerFrame / 2;
+    const std::string vamp_target_id =
+        "__lt_vamp__:" + std::to_string(static_cast<long long>(vamp_start_frame));
+
+    auto prepared = prearm.prepare_target_now(
+        session, sources,
+        PrearmTargetKind::VampStart, "song-vamp", vamp_target_id,
+        vamp_start_frame, /*revision*/ 1);
+    REQUIRE(prepared);
+    CHECK(prepared->valid);
+    REQUIRE_EQ(prepared->tracks.size(), 1);
+    CHECK(prepared->tracks[0].ready);
+
+    // The prepared set must render real audio in the first post-wrap block —
+    // that is the whole point of prearming the loop.
+    BungeeVoiceManager bvm;
+    REQUIRE(bvm.prepare(kSR, kCh, kBlockFrames));
+    bvm.swap_in_prepared_voices(prepared->extract_voice_map());
+    auto first_block = render_n_blocks(session.songs[0].tracks[0],
+                                        vamp_start_frame, 1, sources,
+                                        &bvm, kSemitones);
+    const float rms = block_rms(first_block);
+    INFO("vamp-prepared first-block rms=", rms);
+    CHECK(rms > 0.05f);
+}
+
 // Phase 7: max_prepared_targets cap evicts oldest when exceeded.
 TEST_CASE("PrearmedJumpManager: max_prepared_targets evicts oldest (FIFO)") {
     SourceManager sources;
