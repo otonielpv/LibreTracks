@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUTO_SAVE_INTERVAL_PRESETS,
   AUTO_SAVE_INTERVAL_RANGE,
   DEFAULT_APP_SETTINGS,
   buildSongTempoRegions,
@@ -442,6 +443,26 @@ describe("normalizeAppSettings", () => {
         autoSaveIntervalMinutes: 7.4,
       }).autoSaveIntervalMinutes,
     ).toBe(7);
+  });
+
+  it("offers autosave presets that all survive normalization", () => {
+    // A preset outside the range would be silently clamped, so the dropdown
+    // would show a value the app does not actually use.
+    for (const minutes of AUTO_SAVE_INTERVAL_PRESETS) {
+      expect(
+        normalizeAppSettings({
+          ...DEFAULT_APP_SETTINGS,
+          autoSaveIntervalMinutes: minutes,
+        }).autoSaveIntervalMinutes,
+      ).toBe(minutes);
+    }
+  });
+
+  it("includes the default interval among the presets", () => {
+    // Otherwise a fresh install would render the "unlisted value" option.
+    expect(AUTO_SAVE_INTERVAL_PRESETS).toContain(
+      DEFAULT_APP_SETTINGS.autoSaveIntervalMinutes,
+    );
   });
 
   it("clamps pad key into [0, 11] and rounds it", () => {

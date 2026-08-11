@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
-import { AUTO_SAVE_INTERVAL_RANGE } from "@libretracks/shared/models";
+import { AUTO_SAVE_INTERVAL_PRESETS } from "@libretracks/shared/models";
 import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
 import {
   getDecodingCacheInfo,
@@ -793,14 +793,10 @@ export function SettingsPanel({
                     <label className="lt-settings-field">
                       <span className="lt-settings-field-label">
                         {t("transport.settingsModal.autoSaveInterval", {
-                          defaultValue: "Guardar cada (minutos)",
+                          defaultValue: "Guardar cada",
                         })}
                       </span>
-                      <input
-                        type="number"
-                        min={AUTO_SAVE_INTERVAL_RANGE.min}
-                        max={AUTO_SAVE_INTERVAL_RANGE.max}
-                        step={1}
+                      <select
                         value={appSettings.autoSaveIntervalMinutes}
                         disabled={
                           isLoading || isSaving || !appSettings.autoSaveEnabled
@@ -810,14 +806,29 @@ export function SettingsPanel({
                             Number(event.target.value),
                           )
                         }
-                      />
-                      <small>
-                        {t("transport.settingsModal.autoSaveIntervalHint", {
-                          defaultValue: `Entre ${AUTO_SAVE_INTERVAL_RANGE.min} y ${AUTO_SAVE_INTERVAL_RANGE.max} minutos.`,
-                          min: AUTO_SAVE_INTERVAL_RANGE.min,
-                          max: AUTO_SAVE_INTERVAL_RANGE.max,
-                        })}
-                      </small>
+                      >
+                        {/* A settings file may hold a value that is not one of
+                            the presets (hand-edited, or a preset we dropped);
+                            surface it so the select still shows the truth. */}
+                        {!AUTO_SAVE_INTERVAL_PRESETS.includes(
+                          appSettings.autoSaveIntervalMinutes,
+                        ) ? (
+                          <option value={appSettings.autoSaveIntervalMinutes}>
+                            {t("transport.settingsModal.autoSaveIntervalMinutes", {
+                              defaultValue: "{{count}} min",
+                              count: appSettings.autoSaveIntervalMinutes,
+                            })}
+                          </option>
+                        ) : null}
+                        {AUTO_SAVE_INTERVAL_PRESETS.map((minutes) => (
+                          <option key={minutes} value={minutes}>
+                            {t("transport.settingsModal.autoSaveIntervalMinutes", {
+                              defaultValue: "{{count}} min",
+                              count: minutes,
+                            })}
+                          </option>
+                        ))}
+                      </select>
                     </label>
 
                     <InterfaceZoomField />

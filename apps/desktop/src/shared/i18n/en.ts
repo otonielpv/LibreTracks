@@ -197,8 +197,8 @@ const en = {
       autoSave: "Autosave",
       autoSaveHint:
         "Saves the open session every so often so an unexpected failure doesn't take your work with it. It only saves when something changed, and never during playback.",
-      autoSaveInterval: "Save every (minutes)",
-      autoSaveIntervalHint: "Between {{min}} and {{max}} minutes.",
+      autoSaveInterval: "Save every",
+      autoSaveIntervalMinutes: "{{count}} min",
       importMergeMatchingTracks: "Merge tracks with the same name on import",
       importMergeMatchingTracksHint:
         "When importing a song, its clips are added to the existing track that already has that name. Turn it off so each song brings its own tracks.",

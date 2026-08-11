@@ -884,6 +884,16 @@ export type AppSettings = {
  */
 export const AUTO_SAVE_INTERVAL_RANGE = { min: 1, max: 60 } as const;
 
+/**
+ * Intervals offered in the Settings dropdown. A fixed list (rather than free
+ * numeric entry) keeps the field consistent with the other selects on the tab
+ * and stops anyone typing a value that only produces disk churn. Every entry
+ * must sit inside AUTO_SAVE_INTERVAL_RANGE — asserted in the tests.
+ */
+export const AUTO_SAVE_INTERVAL_PRESETS: readonly number[] = [
+  1, 2, 5, 10, 15, 30, 60,
+];
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedOutputDevice: null,
   selectedAudioBackend: null,

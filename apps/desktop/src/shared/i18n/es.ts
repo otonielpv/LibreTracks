@@ -199,8 +199,8 @@ const es = {
       autoSave: "Guardar automáticamente",
       autoSaveHint:
         "Guarda la sesión abierta cada cierto tiempo para que un fallo inesperado no se lleve tu trabajo. Solo guarda si has cambiado algo, y nunca durante la reproducción.",
-      autoSaveInterval: "Guardar cada (minutos)",
-      autoSaveIntervalHint: "Entre {{min}} y {{max}} minutos.",
+      autoSaveInterval: "Guardar cada",
+      autoSaveIntervalMinutes: "{{count}} min",
       importMergeMatchingTracks: "Unir pistas con el mismo nombre al importar",
       importMergeMatchingTracksHint:
         "Al importar una canción, sus clips se añaden a la pista existente que ya tenga ese nombre. Desactívalo para que cada canción traiga sus propias pistas.",
