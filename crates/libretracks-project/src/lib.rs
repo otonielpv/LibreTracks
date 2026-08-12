@@ -3,6 +3,7 @@
 mod importer;
 mod package;
 mod session_package;
+mod session_sample_rate;
 mod song_store;
 mod waveform;
 
@@ -20,6 +21,10 @@ pub use package::{
 pub use session_package::{
     export_session_as_package, extract_session_package, ExtractedSessionPackage,
     SessionPackageExport, SidecarFile,
+};
+pub use session_sample_rate::{
+    plan_sample_rate, profile_sample_rates, read_sample_rate, SampleRatePlan,
+    SessionSampleRateProfile,
 };
 pub use song_store::{
     create_song_folder, load_song, load_song_from_file, save_song, save_song_to_file,
