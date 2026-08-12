@@ -15,7 +15,7 @@ import { writeToneWav } from "./session/support.js";
  * so this uses two test-only backend commands that take explicit paths:
  * `export_session_package_at(writePath, includeAudio)` and
  * `import_session_package_at(packagePath, targetSongDir)`. Both run the same
- * production code (`export_session_as_package` / `import_session_package_as_new`)
+ * production code (`export_session_as_package` / `extract_session_package_off_lock`)
  * underneath; the import ends with the same `project:load-complete` event, so
  * the frontend load flow is identical to a real import.
  */

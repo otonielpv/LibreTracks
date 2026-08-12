@@ -25,7 +25,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
-    io::{Read, Write},
+    io::{self, BufWriter, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -482,9 +482,11 @@ pub fn extract_session_package(
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
-        let mut bytes = Vec::new();
-        zip_file.read_to_end(&mut bytes)?;
-        fs::write(&destination, bytes)?;
+        // Stream the entry to disk instead of materializing it in a Vec: a
+        // bundled stem can be hundreds of MB, and a full set holds dozens.
+        let mut writer = BufWriter::new(File::create(&destination)?);
+        io::copy(&mut zip_file, &mut writer)?;
+        writer.flush()?;
         on_progress(index + 1, entry_total);
     }
 

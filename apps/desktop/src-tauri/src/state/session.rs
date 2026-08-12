@@ -412,20 +412,20 @@ impl DesktopSession {
         Ok((song_dir, song, sidecars))
     }
 
-    /// Inflate a `.ltset` into a freshly created project folder and open it as a
-    /// new session, replacing whatever was loaded. This is the "create at home,
-    /// open at the venue" flow — it does NOT merge into the current session.
+    /// Slow half of the `.ltset` import: inflate the archive into a freshly
+    /// created project folder. Takes no `&self` and MUST run off the session
+    /// lock — a full set is gigabytes, and holding the lock across it wedges
+    /// every session-touching command (the UI goes unresponsive).
     ///
-    /// `target_song_dir` must not already exist (the caller picks a name/location
-    /// and we own the folder). The slow decompression runs on the calling
-    /// thread; callers run this off the session lock.
-    pub fn import_session_package_as_new(
-        &mut self,
+    /// `target_song_dir` must not already exist (the caller picks a
+    /// name/location and we own the folder). Pair with
+    /// [`Self::open_extracted_session_package`], which is the fast,
+    /// session-bound half.
+    pub fn extract_session_package_off_lock(
         app: &AppHandle,
-        audio: &AudioController,
         package_path: &Path,
         target_song_dir: &Path,
-    ) -> Result<TransportSnapshot, DesktopError> {
+    ) -> Result<ExtractedSessionPackage, DesktopError> {
         if target_song_dir.exists() {
             return Err(DesktopError::AudioCommand(format!(
                 "ya existe una carpeta llamada \"{}\" en esa ubicacion. Elige otro nombre.",
@@ -437,11 +437,15 @@ impl DesktopSession {
         }
 
         emit_project_load_progress(app, 8, "Descomprimiendo sesion...".into(), 0, 0, 0, 0);
-        let extracted: ExtractedSessionPackage =
-            extract_session_package(target_song_dir, package_path, |done, total| {
-                if total > 0 {
-                    // Decompression occupies the 8–40% band; audio prep takes over after.
-                    let percent = (8 + ((done as f64 / total as f64) * 32.0) as u32).min(40) as u8;
+        // Decompression occupies the 8–40% band; audio prep takes over after.
+        // Emit only when the whole-number percent actually changes: a full set
+        // has thousands of entries and one IPC event each floods the WebView.
+        let mut last_percent = 8u8;
+        extract_session_package(target_song_dir, package_path, |done, total| {
+            if total > 0 {
+                let percent = (8 + ((done as f64 / total as f64) * 32.0) as u32).min(40) as u8;
+                if percent != last_percent {
+                    last_percent = percent;
                     emit_project_load_progress(
                         app,
                         percent,
@@ -452,9 +456,20 @@ impl DesktopSession {
                         0,
                     );
                 }
-            })
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+            }
+        })
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+    }
 
+    /// Fast half of the `.ltset` import: open the already-inflated folder as a
+    /// new session, replacing whatever was loaded. This is the "create at home,
+    /// open at the venue" flow — it does NOT merge into the current session.
+    pub fn open_extracted_session_package(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+        extracted: ExtractedSessionPackage,
+    ) -> Result<TransportSnapshot, DesktopError> {
         self.begin_open_project_from_path(app, audio, extracted.song_file)?;
         Ok(self.snapshot())
     }

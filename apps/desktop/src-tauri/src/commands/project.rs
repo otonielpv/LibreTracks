@@ -1877,7 +1877,7 @@ pub async fn export_session_package_at(
 /// Import a `.ltset` as a new session under an explicit target folder,
 /// bypassing both native dialogs. Mirrors the desktop branch of
 /// `start_import_session_package_from_dialog`: it runs the same
-/// `import_session_package_as_new` on a worker thread and ends with the same
+/// off-lock extract + locked open on a worker thread and ends with the same
 /// `project:load-complete` event, so the frontend load flow runs identically.
 /// Used by the E2E automation seam. Not wired into any UI.
 #[tauri::command]
@@ -1893,18 +1893,21 @@ pub fn import_session_package_at(
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
         let result = (|| -> Result<TransportSnapshot, String> {
+            // Decompress WITHOUT the session lock — a full set is gigabytes and
+            // holding the lock across it freezes the UI.
+            let extracted = DesktopSession::extract_session_package_off_lock(
+                &worker_app,
+                &package_file,
+                &target_song_dir,
+            )
+            .map_err(|error| error.to_string())?;
             {
                 let mut session = state
                     .session
                     .lock()
                     .map_err(|_| DesktopError::StatePoisoned.to_string())?;
                 session
-                    .import_session_package_as_new(
-                        &worker_app,
-                        &state.audio,
-                        &package_file,
-                        &target_song_dir,
-                    )
+                    .open_extracted_session_package(&worker_app, &state.audio, extracted)
                     .map_err(|error| error.to_string())?;
             }
             DesktopSession::wait_for_project_audio_preparation_unlocked(
@@ -2054,24 +2057,29 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
             let (package_file, staged_cleanup): (std::path::PathBuf, Option<std::path::PathBuf>) =
                 (package_source, None);
 
-            let import_result = {
+            // Decompress WITHOUT the session lock — a full set is gigabytes and
+            // holding the lock across it freezes the UI. The staged temp file
+            // (Android) must outlive this, so clean it up only afterwards.
+            let extract_result = DesktopSession::extract_session_package_off_lock(
+                &worker_app,
+                &package_file,
+                &target_song_dir,
+            )
+            .map_err(|error| error.to_string());
+            if let Some(staged) = staged_cleanup {
+                let _ = std::fs::remove_file(staged);
+            }
+            let extracted = extract_result?;
+
+            {
                 let mut session = state
                     .session
                     .lock()
                     .map_err(|_| DesktopError::StatePoisoned.to_string())?;
                 session
-                    .import_session_package_as_new(
-                        &worker_app,
-                        &state.audio,
-                        &package_file,
-                        &target_song_dir,
-                    )
-                    .map_err(|error| error.to_string())
-            };
-            if let Some(staged) = staged_cleanup {
-                let _ = std::fs::remove_file(staged);
+                    .open_extracted_session_package(&worker_app, &state.audio, extracted)
+                    .map_err(|error| error.to_string())?;
             }
-            import_result?;
             let snapshot = DesktopSession::wait_for_project_audio_preparation_unlocked(
                 &worker_app,
                 &state,
