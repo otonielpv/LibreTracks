@@ -504,6 +504,19 @@ pub fn extract_session_package(
     fs::create_dir_all(target_song_dir.join("audio"))?;
     fs::create_dir_all(target_song_dir.join("cache").join("waveforms"))?;
 
+    // The archive always carries the session under the canonical `session.ltsession`
+    // entry, but on disk a project names its document after its folder (see
+    // `create_song_at_path` / `save_project_as_to_path`). Inflate it under the
+    // folder's name so an imported set is indistinguishable from one created
+    // here; fall back to the canonical name if the folder has no usable name.
+    let session_file_name = target_song_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| format!("{name}.ltsession"))
+        .unwrap_or_else(|| SONG_FILE_NAME.to_string());
+
     let entry_total = archive.len();
     let mut found_session = false;
     for index in 0..entry_total {
@@ -527,7 +540,7 @@ pub fn extract_session_package(
         // Map the archive path to its destination inside the new song dir.
         let destination = if entry_name == SONG_FILE_NAME {
             found_session = true;
-            target_song_dir.join(SONG_FILE_NAME)
+            target_song_dir.join(&session_file_name)
         } else if let Some(name) = entry_name.strip_prefix("sidecars/") {
             target_song_dir.join(name)
         } else if let Some(name) = entry_name.strip_prefix("audio/") {
@@ -558,7 +571,7 @@ pub fn extract_session_package(
         ));
     }
 
-    let song_file = target_song_dir.join(SONG_FILE_NAME);
+    let song_file = target_song_dir.join(&session_file_name);
     // Validate the session document loads before we report success — a corrupt
     // set should fail here, not halfway through opening.
     let song = crate::load_song_from_file(&song_file)?;
@@ -1083,6 +1096,43 @@ mod tests {
         assert!(!dest_dir.join("audio").join("one.wav").exists());
         // Sidecars still travel in a light package.
         assert!(dest_dir.join("library.json").exists());
+    }
+
+    #[test]
+    fn extract_names_the_session_file_after_the_destination_folder() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+        let package_path = song_dir.join("set.ltset");
+
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &session(),
+            &sidecars(),
+            &package_path,
+            false,
+            |_, _| {},
+        )
+        .expect("export light");
+
+        let target = tempfile::tempdir().expect("target");
+        let dest_dir = target.path().join("Mi Set");
+        let extracted =
+            extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
+
+        // An imported set must look like a project created here: the document is
+        // named after its folder, NOT left as the archive's canonical entry name.
+        assert_eq!(
+            extracted.song_file,
+            dest_dir.join("Mi Set.ltsession"),
+            "the inflated session must be named after the destination folder"
+        );
+        assert!(extracted.song_file.exists());
+        assert!(
+            !dest_dir.join(SONG_FILE_NAME).exists(),
+            "the canonical archive name must not be left on disk"
+        );
     }
 
     #[test]
