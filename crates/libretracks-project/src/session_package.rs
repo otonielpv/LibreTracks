@@ -143,34 +143,87 @@ fn allocate_audio_relative_path(reserved_lower: &mut HashSet<String>, file_name:
     }
 }
 
-/// Plan how each distinct clip audio maps to a unique relative path inside the
+/// Plan how each distinct audio source maps to a unique relative path inside the
 /// package. Distinct sources with the same basename (common in a whole-session
 /// set: several songs each with their own `Bass_1.mp3`) get suffixed so they
 /// stay separate rather than colliding on one zip entry / one bundled file.
-fn plan_audio_sources(song_dir: &Path, song: &Song) -> Vec<PlannedAudioSource> {
+///
+/// Covers the session's clips AND `library_paths` — library assets the user
+/// imported but has not placed on the timeline yet. Those used to be skipped
+/// (only clip audio was bundled), so a full package kept their ORIGINAL
+/// absolute path and they read as missing on any other machine. Seen in the
+/// field: a set built on Linux arrived on Windows with two assets still
+/// pointing at `/var/home/bazzite/Descargas/...`. A "complete" package that
+/// silently drops part of the library is not complete.
+fn plan_audio_sources(
+    song_dir: &Path,
+    song: &Song,
+    library_paths: &[String],
+) -> Vec<PlannedAudioSource> {
     let mut seen = HashSet::new();
     let mut reserved_lower = HashSet::new();
     let mut planned = Vec::new();
-    for clip in &song.clips {
-        if !seen.insert(clip.file_path.clone()) {
+
+    // Clips first so their bundled names stay stable regardless of the library.
+    let clip_paths = song.clips.iter().map(|clip| clip.file_path.clone());
+    for stored_path in clip_paths.chain(library_paths.iter().cloned()) {
+        if !seen.insert(stored_path.clone()) {
             continue;
         }
-        let source_abs = if Path::new(&clip.file_path).is_absolute() {
-            PathBuf::from(&clip.file_path)
+        let source_abs = if Path::new(&stored_path).is_absolute() {
+            PathBuf::from(&stored_path)
         } else {
-            song_dir.join(&clip.file_path)
+            song_dir.join(&stored_path)
         };
         let Some(file_name) = source_abs.file_name().and_then(|value| value.to_str()) else {
             continue;
         };
         let relative_path = allocate_audio_relative_path(&mut reserved_lower, file_name);
         planned.push(PlannedAudioSource {
-            clip_path: clip.file_path.clone(),
+            clip_path: stored_path,
             source_abs,
             relative_path,
         });
     }
     planned
+}
+
+/// The audio paths a session's `library.json` references, in file order.
+///
+/// Reads both shapes the sidecar has used: the current
+/// `assets: [{ filePath, … }]` and the legacy `filePaths: ["…"]`. Best-effort —
+/// a missing or unparseable sidecar yields an empty list, so the export falls
+/// back to bundling clip audio only rather than failing.
+fn library_audio_paths(song_dir: &Path) -> Vec<String> {
+    // The desktop crate owns LIBRARY_MANIFEST_FILE_NAME; the same name is used
+    // verbatim below when the sidecar is bundled, so keep the two in step.
+    let Ok(bytes) = fs::read(song_dir.join("library.json")) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return Vec::new();
+    };
+    let mut paths = Vec::new();
+    let mut push = |path: &str| {
+        if !path.is_empty() {
+            paths.push(path.to_string());
+        }
+    };
+    if let Some(assets) = value.get("assets").and_then(|a| a.as_array()) {
+        for asset in assets {
+            if let Some(path) = asset.get("filePath").and_then(|v| v.as_str()) {
+                push(path);
+            }
+        }
+    }
+    if let Some(file_paths) = value.get("filePaths").and_then(|a| a.as_array()) {
+        for entry in file_paths {
+            if let Some(path) = entry.as_str() {
+                push(path);
+            }
+        }
+    }
+    paths
 }
 
 /// A comparable key for a source path: forward slashes, `\\?\`/`//?/` long-path
@@ -283,7 +336,16 @@ pub fn export_session_as_package(
     // file_path to these relative paths so the set opens portably on any machine
     // — the audio is shipped under the same names. A LIGHT package keeps the
     // original (often absolute) paths and bundles no audio.
-    let planned = plan_audio_sources(song_dir, song);
+    // A FULL package must carry the library too, not just clip audio: an asset
+    // the user imported but hasn't placed yet would otherwise keep its original
+    // absolute path and read as missing on the target machine. A light package
+    // bundles nothing, so there is no point planning library paths for it.
+    let library_paths = if include_audio {
+        library_audio_paths(song_dir)
+    } else {
+        Vec::new()
+    };
+    let planned = plan_audio_sources(song_dir, song, &library_paths);
     let relative_by_clip_path: HashMap<String, String> = planned
         .iter()
         .map(|source| (source.clip_path.clone(), source.relative_path.clone()))
@@ -613,6 +675,77 @@ mod tests {
                 file_name: "automation.ltautomation".into(),
             },
         ]
+    }
+
+    /// A full package must bundle library assets that NO clip uses, and rewrite
+    /// their paths — otherwise they keep the exporter's absolute path and read
+    /// as missing on any other machine.
+    ///
+    /// Reproduces a real report: a set exported on Linux arrived on Windows with
+    /// two library assets still pointing at
+    /// `/var/home/bazzite/Descargas/MULTITRACKS/...`. Only clip audio was
+    /// planned for bundling, so a library file the user had imported but not yet
+    /// placed on the timeline was silently left out of a package the UI calls
+    /// "Complete".
+    #[test]
+    fn full_export_bundles_library_assets_no_clip_uses() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+
+        // A library asset OUTSIDE the session folder, referenced by an absolute
+        // path and used by no clip — exactly the shape that went missing.
+        let outside = tempfile::tempdir().expect("outside");
+        let orphan = outside.path().join("Alto.mp3");
+        fs::write(&orphan, b"ID3....alto").expect("orphan asset");
+        let orphan_abs = orphan.to_string_lossy().replace('\\', "/");
+        fs::write(
+            song_dir.join("library.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "assets": [{ "filePath": orphan_abs, "folderPath": "Reckless" }],
+                "filePaths": [orphan_abs],
+            }))
+            .expect("library json"),
+        )
+        .expect("library");
+
+        let song = session();
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &song,
+            &sidecars(),
+            &package_path,
+            true,
+            |_, _| {},
+        )
+        .expect("export full");
+
+        let target = tempfile::tempdir().expect("target");
+        let dest_dir = target.path().join("Imported");
+        extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
+
+        // The asset travelled...
+        let bundled = dest_dir.join("audio").join("Alto.mp3");
+        assert!(
+            bundled.exists(),
+            "a library asset no clip uses must still be bundled in a full package"
+        );
+
+        // ...and library.json points at the bundled copy, not the exporter's
+        // absolute path (which does not exist on the target machine).
+        let library: serde_json::Value =
+            serde_json::from_slice(&fs::read(dest_dir.join("library.json")).expect("library"))
+                .expect("library json");
+        let asset_path = library["assets"][0]["filePath"]
+            .as_str()
+            .expect("asset path");
+        assert_eq!(asset_path, "audio/Alto.mp3");
+        assert_eq!(
+            library["filePaths"][0].as_str().expect("legacy path"),
+            "audio/Alto.mp3"
+        );
     }
 
     /// Extraction must stay usable from a worker thread while another thread
