@@ -1,5 +1,8 @@
 @import "tailwindcss";
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
+/* Self-hosted — NOT fonts.googleapis.com. The Remote runs on the desktop's
+   WiFi, which usually has no internet at a venue; a remote @import fails
+   there and the fallback face overflows the fixed-height widgets. */
+@import "./fonts.css";
 
 :root {
   color-scheme: dark;
@@ -4093,7 +4096,9 @@ button {
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 42%, var(--outline));
   font-size: clamp(0.78rem, min(7cqi, 34cqh), 2rem);
   line-height: 1.05;
-  font-weight: 850;
+  /* 800, not 850: we only ship real 400-800 faces, and a weight we don't
+     serve gets synthesised (fake-bolded) into wider glyphs. */
+  font-weight: 800;
 }
 
 .layout-design-note {
@@ -4288,7 +4293,8 @@ button {
   gap: 0.35rem;
   color: var(--muted);
   font-size: 0.72rem;
-  font-weight: 750;
+  /* 700, not 750 — see .layout-design-title on synthesised weights. */
+  font-weight: 700;
   text-transform: uppercase;
 }
 
