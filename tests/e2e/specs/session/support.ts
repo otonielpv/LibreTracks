@@ -186,16 +186,26 @@ export async function zoomTimelineWithWheel(
 }
 
 /**
- * Select the region and set its transpose to an absolute semitone value by
+ * Select a region and set its transpose to an absolute semitone value by
  * stepping the toolbar's +/- buttons (more reliable in this WebView than the
  * number input, which has the same clearValue caveat). Re-selecting the region
  * matters because playback/seek can drop the selection and collapse the stepper.
+ *
+ * `regionIndex` is an index into the MODEL's `song.regions`, and the hotspot is
+ * matched to that region by id — not by DOM order. Getting this wrong is subtle
+ * and was a real bug here: the helper used to click `hotspots[0]` while reading
+ * `regions[0]`, two orderings that only agree while a session has ONE region.
+ * Once `session.e2e.ts` had accumulated two (17-19 s and 25-30 s), it stepped
+ * one region and asserted on the other, so the transposed audio was never the
+ * audio being measured and the pitch test read an unshifted 440 Hz.
  */
-export async function setRegionTranspose(semitones: number) {
-  const hotspots = await $$(".lt-region-hotspot").getElements();
-  if (hotspots.length) {
-    await hotspots[0].click();
+export async function setRegionTranspose(semitones: number, regionIndex = 0) {
+  const targetId = (await AppPage.songView())?.regions[regionIndex]?.id;
+  if (!targetId) {
+    throw new Error(`No region at index ${regionIndex} to transpose`);
   }
+
+  await (await regionHotspot(targetId, regionIndex)).click();
 
   const trigger = await $(
     'button[aria-label="Transposicion de Region settings"]',
@@ -213,8 +223,14 @@ export async function setRegionTranspose(semitones: number) {
   );
   await up.waitForDisplayed({ timeout: 15_000 });
 
+  // Track the region by ID: a transpose resizes it (varispeed halves the
+  // duration at +12), which can reorder `song.regions`.
   const current = () =>
-    AppPage.songView().then((song) => song?.regions[0]?.transposeSemitones ?? 0);
+    AppPage.songView().then(
+      (song) =>
+        song?.regions.find((region) => region.id === targetId)
+          ?.transposeSemitones ?? 0,
+    );
   for (let guard = 0; guard < 30; guard += 1) {
     const value = await current();
     if (value === semitones) {
@@ -278,11 +294,12 @@ export async function measureRenderedPitch(trackId: string): Promise<number> {
  * regardless of its per-track "T"; the per-track transpose-enable flag only has
  * an effect when warp is on. Re-selects the region first (playback can drop it).
  */
-export async function setRegionWarp(enabled: boolean) {
-  const hotspots = await $$(".lt-region-hotspot").getElements();
-  if (hotspots.length) {
-    await hotspots[0].click();
+export async function setRegionWarp(enabled: boolean, regionIndex = 0) {
+  const targetId = (await AppPage.songView())?.regions[regionIndex]?.id;
+  if (!targetId) {
+    throw new Error(`No region at index ${regionIndex} to warp`);
   }
+  await (await regionHotspot(targetId, regionIndex)).click();
 
   const trigger = await $('button[aria-label="Warp de Region settings"]');
   await trigger.waitForClickable({ timeout: 15_000 });
@@ -299,7 +316,8 @@ export async function setRegionWarp(enabled: boolean) {
   }
   await browser.waitUntil(
     async () =>
-      ((await AppPage.songView())?.regions[0]?.warpEnabled ?? false) === enabled,
+      ((await AppPage.songView())?.regions.find((r) => r.id === targetId)
+        ?.warpEnabled ?? false) === enabled,
     {
       timeout: 30_000,
       timeoutMsg: `Region warp did not become ${enabled} in the model`,
@@ -308,17 +326,40 @@ export async function setRegionWarp(enabled: boolean) {
 }
 
 /**
+ * The hotspot for a specific region, addressed by id.
+ *
+ * Region hotspots render in VISUAL order while `song.regions` is a separate
+ * list — clicking `hotspots[i]` to act on `regions[i]` only works while there
+ * is exactly one region, and silently targets the wrong one after that. Every
+ * region helper goes through here so that class of bug stays fixed.
+ */
+async function regionHotspot(regionId: string, fallbackIndex: number) {
+  const hotspots = await $$(".lt-region-hotspot").getElements();
+  for (const hotspot of hotspots) {
+    if ((await hotspot.getAttribute("data-region-id")) === regionId) {
+      return hotspot;
+    }
+  }
+  const fallback = hotspots[fallbackIndex] ?? hotspots[0];
+  if (!fallback) {
+    throw new Error("No region hotspot rendered");
+  }
+  return fallback;
+}
+
+/**
  * Set the selected region's warp source BPM via its context menu ("Cambiar BPM
  * original"), which opens a prompt dialog. The warp ratio is (timeline BPM /
  * source BPM), so a source of 60 against the default 120 BPM timeline stretches
  * the audio 2×. Region must have warp enabled for this to affect playback.
  */
-export async function setRegionWarpSourceBpm(bpm: number) {
-  const hotspots = await $$(".lt-region-hotspot").getElements();
-  if (!hotspots.length) {
-    throw new Error("No region hotspot to set warp source BPM on");
+export async function setRegionWarpSourceBpm(bpm: number, regionIndex = 0) {
+  const targetId = (await AppPage.songView())?.regions[regionIndex]?.id;
+  if (!targetId) {
+    throw new Error(`No region at index ${regionIndex} to set warp BPM on`);
   }
-  await hotspots[0].click({ button: "right" });
+  const hotspot = await regionHotspot(targetId, regionIndex);
+  await hotspot.click({ button: "right" });
   const menu = await $(".lt-context-menu");
   await menu.waitForDisplayed();
   const entry = await menu.$("button*=Cambiar BPM original");
@@ -336,7 +377,8 @@ export async function setRegionWarpSourceBpm(bpm: number) {
   await browser.waitUntil(
     async () =>
       Math.abs(
-        ((await AppPage.songView())?.regions[0]?.warpSourceBpm ?? 0) - bpm,
+        ((await AppPage.songView())?.regions.find((r) => r.id === targetId)
+          ?.warpSourceBpm ?? 0) - bpm,
       ) < 0.5,
     {
       timeout: 30_000,
@@ -359,4 +401,39 @@ export async function toggleTrackTranspose(trackId: string) {
   const tButton = await header.$("button=T");
   await tButton.waitForClickable({ timeout: 15_000 });
   await tButton.click();
+}
+
+/**
+ * Return one track to a neutral mix: solo off, mute off, unity volume, centre
+ * pan. Drives the same header controls a user would (double-click resets a
+ * fader to its default), so it exercises production paths rather than poking
+ * the model.
+ *
+ * Flows that measure the output bus with an FFT depend on every OTHER track
+ * being neutral — a soloed or hard-panned leftover corrupts the capture and
+ * the failure appears in an unrelated test later on.
+ */
+export async function resetTrackMix(trackId: string) {
+  const header = await $(`.lt-track-header-row[data-track-id="${trackId}"]`);
+  const state = () =>
+    AppPage.songView().then((song) =>
+      song?.tracks.find((track) => track.id === trackId),
+    );
+
+  if ((await state())?.solo) {
+    await toggleTrackSolo(trackId);
+  }
+  if ((await state())?.muted) {
+    const muteButton = await header.$("button=M");
+    await muteButton.waitForClickable({ timeout: 15_000 });
+    await muteButton.click();
+  }
+  if ((await state())?.volume !== 1) {
+    const volume = await header.$(".lt-track-volume input");
+    await volume.doubleClick();
+  }
+  if ((await state())?.pan !== 0) {
+    const pan = await header.$(".lt-track-pan input");
+    await pan.doubleClick();
+  }
 }

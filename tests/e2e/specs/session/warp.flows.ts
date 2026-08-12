@@ -33,18 +33,31 @@ export function registerSessionWarpFlows() {
       throw new Error("E2E Audio Track has no clip to warp");
     }
 
-    // Select the region and make sure transpose is neutral: this test is about
-    // warp's time/pitch decoupling, not pitch shifting.
-    const hotspots = await $$(".lt-region-hotspot").getElements();
-    expect(hotspots.length).toBeGreaterThan(0);
-    await hotspots[0].click();
-    await setRegionTranspose(0);
+    // Act on the region that actually CONTAINS this track's clip. Addressing
+    // regions positionally (hotspots[0] / regions[0]) only works while there is
+    // one region and quietly targets the wrong one afterwards.
+    const clip = song?.clips.find((c) => c.trackId === track.id);
+    const regionIndex = (song?.regions ?? []).findIndex(
+      (region) =>
+        clip !== undefined &&
+        clip.timelineStartSeconds >= region.startSeconds &&
+        clip.timelineStartSeconds < region.endSeconds,
+    );
+    if (regionIndex < 0) {
+      throw new Error("No region contains the warped track's clip");
+    }
+    const regionId = song!.regions[regionIndex]!.id;
+
+    // Make sure transpose is neutral: this test is about warp's time/pitch
+    // decoupling, not pitch shifting.
+    await setRegionTranspose(0, regionIndex);
 
     // Enable warp and force a 2× stretch (source 60 vs timeline 120).
-    await setRegionWarp(true);
-    await setRegionWarpSourceBpm(60);
+    await setRegionWarp(true, regionIndex);
+    await setRegionWarpSourceBpm(60, regionIndex);
     expect(
-      (await AppPage.songView())?.regions[0]?.warpEnabled,
+      (await AppPage.songView())?.regions.find((r) => r.id === regionId)
+        ?.warpEnabled,
     ).toBe(true);
 
     // The pitch must stay at the fixture's ~440 Hz despite the 2× time stretch —
@@ -54,7 +67,10 @@ export function registerSessionWarpFlows() {
     expect(Math.abs(warpedHz - TONE_FREQUENCY_HZ)).toBeLessThan(60);
     expect(warpedHz).toBeGreaterThan(320);
 
-    // Restore neutral warp for later flows.
-    await setRegionWarp(false);
+    // Restore neutral warp for later flows. Re-resolve the index: warping can
+    // resize the region and reorder `song.regions`.
+    const regionsAfter = (await AppPage.songView())?.regions ?? [];
+    const resetIndex = regionsAfter.findIndex((r) => r.id === regionId);
+    await setRegionWarp(false, resetIndex >= 0 ? resetIndex : 0);
   });
 }

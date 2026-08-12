@@ -1,10 +1,11 @@
-import { browser, expect, $$ } from "@wdio/globals";
+import { browser, expect } from "@wdio/globals";
 import AppPage from "../../pageobjects/app.page.js";
 import {
   AUDIO_FILE_NAME,
   TONE_FREQUENCY_HZ,
   measureRenderedPitch,
   setRegionTranspose,
+  toggleTrackSolo,
 } from "./support.js";
 
 /**
@@ -22,37 +23,79 @@ export function registerSessionTransposeFlows() {
     // 1. Ensure a track with the 440 Hz tone clip exists, inside a region.
     const track = await ensureAudioTrackWithClip();
 
-    // 2. Select the region so the toolbar transpose control enables.
-    const hotspots = await $$(".lt-region-hotspot").getElements();
-    expect(hotspots.length).toBeGreaterThan(0);
-    await hotspots[0].click();
+    // 2. Isolate this track. `measureRenderedPitch` captures the whole output
+    // BUS, so any other sounding track lands in the same FFT. By this point
+    // mix.flows.ts has added "E2E Solo Peer" with its own 440 Hz clip and never
+    // removes it — without solo the peer's untransposed 440 Hz dominates the
+    // spectrum and the measurement reads 440 even though this track really is
+    // shifted to 880. (Verified in isolation: 439.95 Hz -> 880.04 Hz.)
+    await toggleTrackSolo(track.id);
+    await browser.waitUntil(
+      async () =>
+        (await AppPage.songView())?.tracks.find((t) => t.id === track.id)
+          ?.solo === true,
+      { timeout: 30_000, timeoutMsg: "Solo never reached the model" },
+    );
 
-    // 3. Measure the rendered pitch BEFORE transposing (baseline ~440 Hz).
+    // 3. Find the region that actually CONTAINS this track's clip. Earlier
+    // flows leave several regions behind, and neither "the first hotspot" nor
+    // "regions[0]" is reliably the one holding the clip we measure — targeting
+    // the wrong one transposes audio nobody is listening to, which is exactly
+    // how this test used to read an unshifted 440 Hz while the feature worked.
+    const songBefore = await AppPage.songView();
+    const clip = songBefore?.clips.find((c) => c.trackId === track.id);
+    if (!clip) {
+      throw new Error("The measured track lost its clip before transposing");
+    }
+    const regionIndex = (songBefore?.regions ?? []).findIndex(
+      (region) =>
+        clip.timelineStartSeconds >= region.startSeconds &&
+        clip.timelineStartSeconds < region.endSeconds,
+    );
+    if (regionIndex < 0) {
+      throw new Error(
+        `No region contains the clip at ${clip.timelineStartSeconds}s`,
+      );
+    }
+    const regionId = songBefore!.regions[regionIndex]!.id;
+
+    // 4. Measure the rendered pitch BEFORE transposing (baseline ~440 Hz).
     const baseHz = await measureRenderedPitch(track.id);
     expect(Math.abs(baseHz - TONE_FREQUENCY_HZ)).toBeLessThan(30);
 
-    // 4. Set +12 semitones via the toolbar stepper input.
-    await setRegionTranspose(12);
+    // 5. Set +12 semitones on THAT region via the toolbar stepper.
+    await setRegionTranspose(12, regionIndex);
     await browser.waitUntil(
       async () =>
-        (await AppPage.songView())?.regions.some(
-          (region) => region.transposeSemitones === 12,
-        ) === true,
+        (await AppPage.songView())?.regions.find(
+          (region) => region.id === regionId,
+        )?.transposeSemitones === 12,
       {
         timeout: 30_000,
-        timeoutMsg: "Transpose +12 never reached the backend song model",
+        timeoutMsg: "Transpose +12 never reached the clip's region",
       },
     );
 
-    // 5. Measure again: +12 semitones is one octave, so ~880 Hz. Allow a wide
+    // 6. Measure again: +12 semitones is one octave, so ~880 Hz. Allow a wide
     // tolerance — the pitch backend is not a perfect resampler, but an octave is
     // unmistakable versus the 440 Hz baseline.
     const shiftedHz = await measureRenderedPitch(track.id);
     expect(shiftedHz).toBeGreaterThan(700);
     expect(shiftedHz).toBeLessThan(1050);
 
-    // Reset transpose so later flows start from a neutral region.
-    await setRegionTranspose(0);
+    // Reset transpose AND solo so later flows start from a neutral session.
+    // Re-resolve the index: transposing resized the region, which can reorder
+    // `song.regions`.
+    const regionsAfter = (await AppPage.songView())?.regions ?? [];
+    const resetIndex = regionsAfter.findIndex((r) => r.id === regionId);
+    await setRegionTranspose(0, resetIndex >= 0 ? resetIndex : 0);
+    await toggleTrackSolo(track.id);
+    await browser.waitUntil(
+      async () =>
+        (await AppPage.songView())?.tracks.find((t) => t.id === track.id)
+          ?.solo === false,
+      { timeout: 30_000, timeoutMsg: "Solo never cleared after transpose" },
+    );
   });
 }
 

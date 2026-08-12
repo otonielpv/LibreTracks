@@ -1,6 +1,10 @@
 import { browser, expect } from "@wdio/globals";
 import AppPage from "../../pageobjects/app.page.js";
-import { dominantFrequency, type SessionFixture } from "./support.js";
+import {
+  dominantFrequency,
+  toggleTrackSolo,
+  type SessionFixture,
+} from "./support.js";
 
 /**
  * Ambient pads normally need a downloaded pack (not present in E2E), so this
@@ -20,6 +24,27 @@ export function registerSessionPadFlows(fixture: SessionFixture) {
       await browser.waitUntil(
         async () =>
           (await AppPage.transportSnapshot()).playbackState === "stopped",
+      );
+    }
+
+    // Clear any solo left behind. The pad is not a track, so a soloed track
+    // silences it and this test then fails for a reason that has nothing to do
+    // with pads. Earlier flows solo tracks to isolate them and restore it at
+    // the END of the test — which never runs if that test fails, making this
+    // one fail in cascade. Don't depend on someone else's cleanup.
+    const soloed = ((await AppPage.songView())?.tracks ?? []).filter(
+      (track) => track.solo,
+    );
+    for (const track of soloed) {
+      await toggleTrackSolo(track.id);
+    }
+    if (soloed.length > 0) {
+      await browser.waitUntil(
+        async () =>
+          ((await AppPage.songView())?.tracks ?? []).every(
+            (track) => !track.solo,
+          ),
+        { timeout: 30_000, timeoutMsg: "Could not clear a leftover solo" },
       );
     }
 

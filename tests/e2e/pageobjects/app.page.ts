@@ -241,9 +241,18 @@ class AppPage {
   // (canImport = false) its import/folder actions are disabled and the meta row
   // shows the "open or create a session" hint.
 
-  /** The Library panel container (aria-label "Library panel"). */
+  /**
+   * The Library panel container.
+   *
+   * The aria-label is i18n'd and the app runs in Spanish, so this must match
+   * `library.panelAria` from `es.ts` ("Panel de biblioteca"), NOT the English
+   * string. It was written against `en.ts` and silently broke when 91dcadbf
+   * translated the label — the panel opened fine, the locator just never found
+   * it, and 13 session tests failed in a cascade behind `openLibrary()`.
+   * Matching on the class as well keeps it working if the wording changes again.
+   */
   get libraryPanel() {
-    return $('aside[aria-label="Library panel"]');
+    return $("aside.lt-library-panel");
   }
 
   /** "Importar audio" button inside the Library panel. */

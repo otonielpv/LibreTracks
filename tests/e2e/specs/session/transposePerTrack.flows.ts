@@ -5,6 +5,7 @@ import {
   measureRenderedPitch,
   setRegionTranspose,
   setRegionWarp,
+  setRegionWarpSourceBpm,
   toggleTrackSolo,
   toggleTrackTranspose,
 } from "./support.js";
@@ -37,8 +38,55 @@ export function registerSessionTransposePerTrackFlows() {
       }
     }
 
-    // Warp on is the precondition for per-track transpose to mean anything.
-    await setRegionWarp(true);
+    // Both clips must sit in the SAME region for the comparison to mean
+    // anything — the region is what carries the transpose, and addressing it
+    // positionally targets the wrong one once earlier flows have left several
+    // behind (see setRegionTranspose's note).
+    const obeyingClip = song?.clips.find((c) => c.trackId === obeying.id);
+    const regionIndex = (song?.regions ?? []).findIndex(
+      (region) =>
+        obeyingClip !== undefined &&
+        obeyingClip.timelineStartSeconds >= region.startSeconds &&
+        obeyingClip.timelineStartSeconds < region.endSeconds,
+    );
+    if (regionIndex < 0) {
+      throw new Error("No region contains the measured track's clip");
+    }
+    const regionId = song!.regions[regionIndex]!.id;
+    const ignoringClip = song?.clips.find((c) => c.trackId === ignoring.id);
+    const sameRegion =
+      ignoringClip !== undefined &&
+      ignoringClip.timelineStartSeconds >=
+        song!.regions[regionIndex]!.startSeconds &&
+      ignoringClip.timelineStartSeconds < song!.regions[regionIndex]!.endSeconds;
+    if (!sameRegion) {
+      throw new Error(
+        "The two tracks' clips are in different regions — the per-track " +
+          "transpose comparison requires them to share one",
+      );
+    }
+
+    // Warp on is the precondition for per-track transpose to mean anything —
+    // but enabling the flag is NOT enough. The engine only lets a track opt out
+    // of the region transpose when warp is genuinely active, which it checks as
+    // `warp_enabled && warp_source_bpm > 0` (pitch_resolution.cpp). A region
+    // with warp on and no source BPM has nothing to stretch against, so every
+    // track transposes and the "ignoring" track comes out at 880 Hz like the
+    // other one. Set the source BPM as warp.flows.ts does.
+    await setRegionWarp(true, regionIndex);
+    await setRegionWarpSourceBpm(60, regionIndex);
+    await browser.waitUntil(
+      async () => {
+        const region = (await AppPage.songView())?.regions.find(
+          (r) => r.id === regionId,
+        );
+        return region?.warpEnabled === true && (region?.warpSourceBpm ?? 0) > 0;
+      },
+      {
+        timeout: 30_000,
+        timeoutMsg: "Warp never became active (needs both flag and source BPM)",
+      },
+    );
 
     // Disable transpose on the "ignoring" track (default on → one click), then
     // transpose the region up an octave.
@@ -52,13 +100,15 @@ export function registerSessionTransposePerTrackFlows() {
         timeoutMsg: "Disabling per-track transpose never reached the model",
       },
     );
-    await setRegionTranspose(12);
+    await setRegionTranspose(12, regionIndex);
     await browser.waitUntil(
       async () =>
-        (await AppPage.songView())?.regions.some(
-          (region) => region.transposeSemitones === 12,
-        ) === true,
-      { timeout: 30_000, timeoutMsg: "Transpose +12 never reached the model" },
+        (await AppPage.songView())?.regions.find((r) => r.id === regionId)
+          ?.transposeSemitones === 12,
+      {
+        timeout: 30_000,
+        timeoutMsg: "Transpose +12 never reached the clips' region",
+      },
     );
     // Sanity: the obeying track still follows the region transpose.
     expect(
@@ -82,9 +132,13 @@ export function registerSessionTransposePerTrackFlows() {
     expect(Math.abs(ignoringHz - TONE_FREQUENCY_HZ)).toBeLessThan(60);
     expect(obeyingHz).toBeGreaterThan(ignoringHz * 1.5);
 
-    // Restore neutral state.
+    // Restore neutral state. Re-resolve the index: the transpose resized the
+    // region, which can reorder `song.regions`.
     await toggleTrackTranspose(ignoring.id);
-    await setRegionTranspose(0);
-    await setRegionWarp(false);
+    const regionsAfter = (await AppPage.songView())?.regions ?? [];
+    const resetIndex = regionsAfter.findIndex((r) => r.id === regionId);
+    const safeIndex = resetIndex >= 0 ? resetIndex : 0;
+    await setRegionTranspose(0, safeIndex);
+    await setRegionWarp(false, safeIndex);
   });
 }

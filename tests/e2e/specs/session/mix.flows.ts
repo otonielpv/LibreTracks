@@ -7,7 +7,7 @@ import {
   waitForOutputSilence,
   waitForStereoDirection,
 } from "./mix.support.js";
-import type { SessionFixture } from "./support.js";
+import { resetTrackMix, type SessionFixture } from "./support.js";
 
 export function registerSessionMixFlows(fixture: SessionFixture) {
   it("applies solo, volume and pan to the real post-mix signal", async () => {
@@ -149,6 +149,31 @@ export function registerSessionMixFlows(fixture: SessionFixture) {
           solo: false,
         }),
       ]),
+    );
+
+    // Leave EVERY track neutral, not just the anchor. This flow creates the
+    // "E2E Solo Peer" track and drives solo/volume/pan across the mixer; later
+    // flows measure the output bus with an FFT, so a track left soloed, muted,
+    // silent or hard-panned silently corrupts their measurement — and the
+    // failure surfaces over there, far from the cause. Restoring here is much
+    // cheaper than every later flow defending itself.
+    const dirty = ((await AppPage.songView())?.tracks ?? []).filter(
+      (track) =>
+        track.solo || track.muted || track.volume !== 1 || track.pan !== 0,
+    );
+    for (const track of dirty) {
+      await resetTrackMix(track.id);
+    }
+    await browser.waitUntil(
+      async () =>
+        ((await AppPage.songView())?.tracks ?? []).every(
+          (track) =>
+            !track.solo && !track.muted && track.volume === 1 && track.pan === 0,
+        ),
+      {
+        timeout: 30_000,
+        timeoutMsg: "Could not restore every track to a neutral mix state",
+      },
     );
 
     if (fixture.initialMetronomeEnabled) {

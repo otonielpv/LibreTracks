@@ -1170,14 +1170,13 @@ export function TimelineCanvasPane({
               return (
                 <button
                   key={region.id}
+                  data-region-id={region.id}
                   type="button"
                   className={[
                     "lt-region-hotspot",
                     selectedRegionId === region.id ? "is-selected" : "",
                     region.warpEnabled ? "is-warped" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
+                  ].filter(Boolean).join(" ")}
                   aria-label={regionDescription}
                   title={regionDescription}
                   style={{

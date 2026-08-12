@@ -394,6 +394,16 @@ export function useE2ETestHooks(
           padKey: 0,
           padFollowSongKey: false,
           padVolume: 1,
+          // Pin every setting the "pads sound without playback" premise depends
+          // on, instead of inheriting whatever the saved settings happen to
+          // hold. padStopWithTransport in particular makes the pad follow the
+          // transport, so with playback stopped the pad is CORRECTLY silent —
+          // the E2E box had it saved as true and the pad test failed with "never
+          // produced output signal", looking like a pad bug when the engine was
+          // doing exactly what it was told.
+          padStopWithTransport: false,
+          padFadeInSeconds: 0,
+          padFadeOutSeconds: 0,
         };
         // load_pad_key decodes + swaps the key in; set_pad_config_realtime
         // enables it. Both mirror the production PadsPopover path.
