@@ -97,21 +97,35 @@ pub fn read_sample_rate(path: impl AsRef<Path>) -> Option<u32> {
 }
 
 /// Build the sample-rate profile for a set of source audio files.
-pub fn profile_sample_rates<P: AsRef<Path>>(
+///
+/// Probing runs in parallel: this sits on the session-open path (under the
+/// session lock), and a multitrack can be dozens of files. Each probe is a
+/// couple of header reads, so the work is I/O-bound and parallelises cleanly.
+pub fn profile_sample_rates<P: AsRef<Path> + Sync>(
     audio_files: impl IntoIterator<Item = P>,
 ) -> SessionSampleRateProfile {
+    use rayon::prelude::*;
+
+    let paths: Vec<P> = audio_files.into_iter().collect();
+    let probed: Vec<Option<(u32, u64)>> = paths
+        .par_iter()
+        .map(|path| {
+            let path = path.as_ref();
+            let rate = read_sample_rate(path)?;
+            // Size stands in for "how much work converting this costs". A file
+            // we can read the header of but not stat is still worth counting,
+            // so fall back to a nominal 1 byte rather than dropping it.
+            let bytes = std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(1);
+            Some((rate, bytes))
+        })
+        .collect();
+
     let mut profile = SessionSampleRateProfile::default();
-    for path in audio_files {
-        let path = path.as_ref();
-        let Some(rate) = read_sample_rate(path) else {
-            profile.unreadable_files += 1;
-            continue;
-        };
-        // Size stands in for "how much work converting this costs". A file we
-        // can read the header of but not stat is still worth counting, so fall
-        // back to a nominal 1 byte rather than dropping it entirely.
-        let bytes = std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(1);
-        *profile.bytes_by_rate.entry(rate).or_insert(0) += bytes;
+    for entry in probed {
+        match entry {
+            Some((rate, bytes)) => *profile.bytes_by_rate.entry(rate).or_insert(0) += bytes,
+            None => profile.unreadable_files += 1,
+        }
     }
     profile
 }

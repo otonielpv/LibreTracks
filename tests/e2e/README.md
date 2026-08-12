@@ -208,6 +208,17 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     taking no `&self`, so calling it while holding the lock cannot compile.
     Complements `session-package.e2e.ts`, which proves the DATA survives but
     passed even while the app was frozen.
+  - `sample-rate-alignment.e2e.ts` — opening a session should make the engine
+    run at the session's sample rate, in its own clean session. The engine has
+    ONE working rate and every file that mismatches is decoded + resampled +
+    cached first (measured: 2 ms vs 13.9 s and 3.6 GB over 25 real 44.1k stems),
+    and Windows commonly parks devices at 48k while live multitracks are 44.1k.
+    Builds an all-44.1k session and reads `getAudioOutputCapture().sampleRate`
+    — the rate the C++ mixer actually rendered at, not a setting echoed back.
+    **Hardware-dependent by design**: if the device cannot do 44.1k, converting
+    is the correct outcome, so the spec accepts either and fails only on a rate
+    matching neither. It always asserts the device-independent invariants —
+    playback produces real signal and the model survives the device reopen.
   - `missing-file.e2e.ts` — the "locate a missing audio file" flow, in its own
     clean session. Creates a clip pointing at a real WAV, deletes that WAV from
     disk (so `getSongView` recomputes `isMissing = true` on the clip), writes a

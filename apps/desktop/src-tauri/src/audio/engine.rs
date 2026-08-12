@@ -1921,6 +1921,42 @@ impl AudioController {
         })
     }
 
+    /// What the engine currently runs at, and what the open device can do.
+    ///
+    /// The supported list is empty whenever we couldn't ask — only the OPEN
+    /// device reports its rates, and rate-lying backends report none — so
+    /// callers must read empty as "unknown", never "supports nothing".
+    pub fn current_sample_rate_capabilities(&self) -> (u32, Vec<u32>) {
+        let Ok(snapshot) = self.engine_snapshot() else {
+            return (0, Vec::new());
+        };
+        let engine_rate = snapshot.device.sample_rate.max(0) as u32;
+        let supported = snapshot
+            .device
+            .supported_sample_rates
+            .iter()
+            .filter(|rate| **rate > 0)
+            .map(|rate| *rate as u32)
+            .collect();
+        (engine_rate, supported)
+    }
+
+    /// Reopen the device at `sample_rate`.
+    ///
+    /// Used when a session's audio is at a rate the engine isn't running at:
+    /// matching the device to the audio turns a decode+resample+cache of every
+    /// file into plain native streaming. Best-effort — a driver may refuse, in
+    /// which case the engine keeps its current rate and the caller falls back
+    /// to converting.
+    pub fn set_output_sample_rate(&self, sample_rate: u32) -> Result<(), DesktopError> {
+        self.with_engine_state("set_output_sample_rate", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetSampleRate {
+                sample_rate: sample_rate as i32,
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn engine_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {
         // Defense in depth: retry a few times before giving up with "state
         // locked". The root cause of long lock holds is fixed (waits no longer

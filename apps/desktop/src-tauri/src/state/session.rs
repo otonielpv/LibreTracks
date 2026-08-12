@@ -519,8 +519,20 @@ impl DesktopSession {
         let song = load_song_from_file(&song_file)?;
 
         emit_project_load_progress(app, 10, "Proyecto leido.".into(), 0, 0, 0, 0);
+        // Align the engine rate with this session's audio BEFORE registering
+        // any source: sources are baked to the engine rate, so this is the last
+        // moment the choice is free. Never fails the load.
+        let user_pinned_rate = audio
+            .current_settings()
+            .ok()
+            .and_then(|settings| settings.output_sample_rate);
+        let sample_rate_notice =
+            self.align_engine_sample_rate_to_session(app, audio, &song, &song_dir, user_pinned_rate);
         emit_project_load_progress(app, 14, "Cargando sesion de audio...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
+        if let Some(notice) = sample_rate_notice {
+            emit_project_load_progress(app, 16, notice, 0, 0, 0, 0);
+        }
         emit_project_load_progress(
             app,
             18,

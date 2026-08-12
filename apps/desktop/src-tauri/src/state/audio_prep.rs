@@ -20,6 +20,89 @@ use crate::models::TransportSnapshot;
 use super::{emit_project_load_progress, unique_waveform_keys, DesktopSession, DesktopState};
 
 impl DesktopSession {
+    /// Match the engine's sample rate to the session's audio before any source
+    /// is registered, and report what that means for the user.
+    ///
+    /// The engine runs at ONE rate; every file that doesn't match it is
+    /// decoded, resampled and written to a PCM cache before it can play.
+    /// Measured over 25 real 44.1k stems: 2 ms when the engine matched, 13.9 s
+    /// and 3.6 GB written when it didn't. Windows commonly parks devices at
+    /// 48k while live multitracks are 44.1k, so the expensive path is the
+    /// DEFAULT for most users — this flips that.
+    ///
+    /// Must run BEFORE `load_song_from_path`: once sources are registered they
+    /// are baked to the engine rate, and changing it afterwards invalidates
+    /// the block cache and the frame-baked timeline.
+    ///
+    /// Returns the message to surface, if any. Never fails the load: aligning
+    /// the rate is an optimisation, and a driver that refuses just means we
+    /// convert like before.
+    pub(super) fn align_engine_sample_rate_to_session(
+        &self,
+        app: &AppHandle,
+        audio: &AudioController,
+        song: &Song,
+        song_dir: &std::path::Path,
+        user_pinned_rate: Option<u32>,
+    ) -> Option<String> {
+        use libretracks_project::{plan_sample_rate, profile_sample_rates, SampleRatePlan};
+
+        let (engine_rate, supported) = audio.current_sample_rate_capabilities();
+        if engine_rate == 0 {
+            return None;
+        }
+
+        let paths: Vec<PathBuf> = unique_waveform_keys(song)
+            .iter()
+            .map(|key| super::resolve_audio_file_path(song_dir, key))
+            .collect();
+        if paths.is_empty() {
+            return None;
+        }
+
+        emit_project_load_progress(app, 12, "Comprobando frecuencia...".into(), 0, 0, 0, 0);
+        let profile = profile_sample_rates(&paths);
+        match plan_sample_rate(&profile, engine_rate, &supported, user_pinned_rate) {
+            SampleRatePlan::KeepCurrent => None,
+            SampleRatePlan::SwitchDevice {
+                target_rate,
+                bytes_saved,
+            } => match audio.set_output_sample_rate(target_rate) {
+                Ok(()) => {
+                    let saved_mb = bytes_saved / (1024 * 1024);
+                    Some(format!(
+                        "Frecuencia ajustada a {} Hz para coincidir con el audio \
+                         de la sesion (evita convertir {} MB).",
+                        target_rate, saved_mb
+                    ))
+                }
+                Err(error) => {
+                    // The driver refused. Not fatal — we simply convert, which
+                    // is what would have happened anyway.
+                    crate::infra::error_log::write_error(&format!(
+                        "could not switch to {target_rate} Hz for this session: {error}"
+                    ));
+                    Some(format!(
+                        "El dispositivo no admite {} Hz; se preparara una copia \
+                         del audio (puede tardar).",
+                        target_rate
+                    ))
+                }
+            },
+            SampleRatePlan::ConvertUnavoidable {
+                preferred_rate,
+                bytes_to_convert,
+            } => {
+                let convert_mb = bytes_to_convert / (1024 * 1024);
+                Some(format!(
+                    "El audio de esta sesion es de {} Hz y la salida va a {} Hz: \
+                     se preparara una copia de {} MB (puede tardar la primera vez).",
+                    preferred_rate, engine_rate, convert_mb
+                ))
+            }
+        }
+    }
+
     #[allow(dead_code)]
     fn load_imported_song(
         &mut self,
