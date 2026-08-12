@@ -68,3 +68,9 @@ __pycache__/
 /logs/
 tests/e2e/drivers/
 tests/e2e/.wdio-*/
+# Promo material: posters, app screenshots and the Facebook post copy. Kept
+# out of the repo because it is throwaway output rather than source — the
+# screenshots alone run to several MB per round and get retaken for every
+# release. Regenerate with tests/e2e/specs/marketing-shots.e2e.ts.
+marketing/
+tests/e2e/specs/marketing-shots.e2e.ts
