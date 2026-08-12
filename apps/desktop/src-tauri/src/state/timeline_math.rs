@@ -100,55 +100,86 @@ pub(super) struct ViewTempoBoundary<'a> {
     time_signature: Option<&'a str>,
 }
 
-/// Snap every region positioned AFTER `moved_region_id` so its start
-/// lands on the next downbeat after the previous region's end. Used
-/// by `move_song_region` to guarantee that each follower ends up on
-/// its own bar.1 even when the cascade-push displaced it by a
-/// non-bar amount. Iterates in order so that fixing region N feeds
-/// the correct end_seconds into the fix for region N+1.
+/// Resolve overlaps that `moved_region_id` itself introduced, by
+/// pushing only the regions it actually lands on top of and snapping
+/// each pushed region's start to a downbeat.
+///
+/// A song's position on the timeline is user layout, so a region is
+/// moved here for exactly one reason: the region the user dragged now
+/// overlaps it. Regions the drag merely flew *over* — it was dropped
+/// past them, into free space — keep their exact position. That makes
+/// "drop song 3 beyond song 4" leave song 4 untouched.
+///
+/// The scan is anchored to the moved region's POSITION rather than to
+/// its index in `song.regions`: a long drag re-sorts the list, so the
+/// moved region can end up last with untouched regions sitting before
+/// it. Walking by index would treat those as followers to reflow and
+/// drag them along behind the moved song.
 pub(super) fn snap_regions_after_to_downbeats(song: &mut Song, moved_region_id: &str) {
-    let ordered_ids: Vec<String> = song
+    // Matches the EDGE_EPS in move_song_region: back-to-back regions
+    // (end == start) are touching, not overlapping, and must not be
+    // treated as a collision.
+    const EDGE_EPS: f64 = 1e-4;
+
+    let Some((mut pusher_end, mut pusher_start)) = song
         .regions
         .iter()
-        .map(|region| region.id.clone())
-        .collect();
-    let Some(moved_idx) = ordered_ids.iter().position(|id| id == moved_region_id) else {
+        .find(|region| region.id == moved_region_id)
+        .map(|region| (region.end_seconds, region.start_seconds))
+    else {
         return;
     };
-    if moved_idx + 1 >= ordered_ids.len() {
-        return;
-    }
 
-    let followers: Vec<String> = ordered_ids.iter().skip(moved_idx + 1).cloned().collect();
-    let mut predecessor_id = moved_region_id.to_string();
-    for follower_id in followers {
-        let Some(predecessor_end) = song
+    // Cascade in timeline order: the moved region may push a region
+    // that, once displaced, overlaps the next one along. Each step
+    // only fires on a genuine overlap, so the cascade stops as soon
+    // as a region clears its pusher.
+    let mut pusher_id = moved_region_id.to_string();
+    loop {
+        // The next victim is the earliest-starting region that both
+        // begins after the pusher and still overlaps it.
+        let victim = song
             .regions
             .iter()
-            .find(|region| region.id == predecessor_id)
-            .map(|region| region.end_seconds)
-        else {
-            predecessor_id = follower_id;
-            continue;
-        };
-        let Some(current_start) = song
-            .regions
-            .iter()
-            .find(|region| region.id == follower_id)
-            .map(|region| region.start_seconds)
-        else {
-            predecessor_id = follower_id;
-            continue;
+            .filter(|region| region.id != pusher_id)
+            .filter(|region| region.start_seconds > pusher_start)
+            .filter(|region| region.start_seconds < pusher_end - EDGE_EPS)
+            .min_by(|left, right| {
+                left.start_seconds
+                    .partial_cmp(&right.start_seconds)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|region| (region.id.clone(), region.start_seconds));
+
+        let Some((victim_id, victim_start)) = victim else {
+            break;
         };
 
-        let predecessor_view_end = warp_timeline_seconds_at(song, predecessor_end);
-        let desired_view_start = next_downbeat_after_in_view_timeline(song, predecessor_view_end);
-        let desired_source_start = source_seconds_at_view(song, desired_view_start);
-        let delta = desired_source_start - current_start;
-        if delta.abs() > 0.00001 {
-            shift_song_suffix(song, current_start, delta);
+        let pusher_view_end = warp_timeline_seconds_at(song, pusher_end);
+        let desired_view_start = next_downbeat_after_in_view_timeline(song, pusher_view_end);
+        // While the regions still overlap, view↔source is not a clean
+        // round-trip (the overlapped span is counted once in view time
+        // but twice in source time), so source_seconds_at_view can map
+        // the correct downbeat back to a point still INSIDE the
+        // pusher. Clamp to the pusher's end so the push always clears
+        // the collision it exists to resolve.
+        let desired_source_start =
+            source_seconds_at_view(song, desired_view_start).max(pusher_end);
+        let delta = desired_source_start - victim_start;
+        if delta <= 0.00001 {
+            break;
         }
-        predecessor_id = follower_id;
+        // shift_song_suffix translates the victim AND everything after
+        // it by the same delta, so the spacing the user arranged
+        // between the trailing songs survives the push.
+        shift_song_suffix(song, victim_start, delta);
+
+        let Some(victim_region) = song.regions.iter().find(|region| region.id == victim_id) else {
+            break;
+        };
+        pusher_end = victim_region.end_seconds;
+        pusher_start = victim_region.start_seconds;
+        pusher_id = victim_id;
     }
 }
 
@@ -739,4 +770,137 @@ pub(super) fn reconcile_regions_and_clips(song: &mut Song) {
     }
 
     refresh_song_duration(song);
+}
+
+#[cfg(test)]
+mod snap_regions_after_to_downbeats_tests {
+    use super::*;
+    use libretracks_core::SongMaster;
+
+    fn region(id: &str, start: f64, end: f64) -> SongRegion {
+        SongRegion {
+            id: id.into(),
+            name: id.into(),
+            start_seconds: start,
+            end_seconds: end,
+            transpose_semitones: 0,
+            key: None,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: SongMaster::default(),
+            compact_column_width_rem: None,
+        }
+    }
+
+    /// 120 BPM, 4/4 → one bar is exactly 2 seconds, so every downbeat
+    /// lands on an even second. Keeps the expected values readable.
+    fn song_with(regions: Vec<SongRegion>) -> Song {
+        Song {
+            id: "song".into(),
+            title: "song".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 0.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions,
+            tracks: vec![],
+            clips: vec![],
+            midi_clips: vec![],
+            section_markers: vec![],
+        }
+    }
+
+    #[test]
+    fn leaves_non_overlapping_followers_exactly_where_they_are() {
+        // The reported bug: two songs separated by a wide gap. Moving
+        // the first one must not drag the second one up against it.
+        let mut song = song_with(vec![region("a", 0.0, 10.0), region("b", 40.0, 50.0)]);
+
+        snap_regions_after_to_downbeats(&mut song, "a");
+
+        let b = song.regions.iter().find(|r| r.id == "b").unwrap();
+        assert_eq!(b.start_seconds, 40.0, "the gap the user left must survive");
+        assert_eq!(b.end_seconds, 50.0);
+    }
+
+    #[test]
+    fn ignores_regions_that_sit_before_the_moved_one_after_a_long_drag() {
+        // Song 3 was dragged far past song 4, so after sorting it is
+        // LAST in the list and song 4 sits before it. Anchoring the
+        // scan to list position instead of timeline position used to
+        // treat song 4 as a follower and drag it along behind song 3.
+        let mut song = song_with(vec![
+            region("s1", 0.0, 10.0),
+            region("s2", 10.0, 20.0),
+            region("s4", 30.0, 40.0),
+            region("s3", 50.0, 60.0),
+        ]);
+
+        snap_regions_after_to_downbeats(&mut song, "s3");
+
+        let s4 = song.regions.iter().find(|r| r.id == "s4").unwrap();
+        assert_eq!(s4.start_seconds, 30.0, "s4 must not chase s3");
+        assert_eq!(s4.end_seconds, 40.0);
+    }
+
+    #[test]
+    fn pushes_the_overlapping_follower_clear_of_its_predecessor() {
+        // "a" ends at 11.0, overlapping "b" which starts at 9.0, so
+        // "b" has to move. While the two still overlap the view↔source
+        // round-trip maps the target downbeat back inside "a", so the
+        // clamp to the predecessor's end is what decides the result.
+        let mut song = song_with(vec![region("a", 0.0, 11.0), region("b", 9.0, 19.0)]);
+
+        snap_regions_after_to_downbeats(&mut song, "a");
+
+        let b = song.regions.iter().find(|r| r.id == "b").unwrap();
+        assert_eq!(b.start_seconds, 11.0, "must clear the overlap");
+        assert_eq!(b.end_seconds, 21.0, "length is preserved");
+    }
+
+    #[test]
+    fn preserves_relative_spacing_of_regions_behind_the_pushed_one() {
+        // "b" overlaps and gets pushed 9.0 → 11.0 (+2.0). "c" sat 10s
+        // after b's end; it must still sit 10s after b's new end
+        // rather than being re-snapped flush against it.
+        let mut song = song_with(vec![
+            region("a", 0.0, 11.0),
+            region("b", 9.0, 19.0),
+            region("c", 29.0, 39.0),
+        ]);
+
+        snap_regions_after_to_downbeats(&mut song, "a");
+
+        let b = song.regions.iter().find(|r| r.id == "b").unwrap();
+        let c = song.regions.iter().find(|r| r.id == "c").unwrap();
+        assert_eq!(b.end_seconds, 21.0);
+        assert_eq!(
+            c.start_seconds - b.end_seconds,
+            10.0,
+            "spacing between followers is layout, not slack to collapse"
+        );
+    }
+
+    #[test]
+    fn treats_back_to_back_regions_as_touching_not_overlapping() {
+        let mut song = song_with(vec![region("a", 0.0, 10.0), region("b", 10.0, 20.0)]);
+
+        snap_regions_after_to_downbeats(&mut song, "a");
+
+        let b = song.regions.iter().find(|r| r.id == "b").unwrap();
+        assert_eq!(b.start_seconds, 10.0, "end == start must not trigger a push");
+    }
+
+    #[test]
+    fn is_a_noop_when_the_moved_region_is_last() {
+        let mut song = song_with(vec![region("a", 0.0, 10.0), region("b", 40.0, 50.0)]);
+
+        snap_regions_after_to_downbeats(&mut song, "b");
+
+        let a = song.regions.iter().find(|r| r.id == "a").unwrap();
+        assert_eq!(a.start_seconds, 0.0);
+    }
 }
