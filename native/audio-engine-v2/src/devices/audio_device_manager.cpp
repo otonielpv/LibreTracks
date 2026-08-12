@@ -968,6 +968,10 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.buffer_size = impl_->buffer_size;
     info.output_channel_count = impl_->output_channel_count;
     info.output_channel_names = impl_->output_channel_names;
+    // What the OPEN device can run at. This is the channel the engine snapshot
+    // uses, so callers deciding whether to align the engine rate with a
+    // session's audio read it from here rather than re-enumerating devices.
+    info.supported_sample_rates = impl_->supported_sample_rates;
     info.last_error  = impl_->last_error;
     if (impl_->adaptor && impl_->adaptor->has_error())
         info.last_error = impl_->adaptor->last_error();

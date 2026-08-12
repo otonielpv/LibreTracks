@@ -10,6 +10,7 @@ import type {
 import {
   getLibraryAssets,
   getLibraryFolders,
+  getAudioOutputDevices,
   getAudioOutputMeter,
   getAudioOutputCapture,
   getSettings,
@@ -100,6 +101,13 @@ export interface E2ETestHooks {
   getAudioOutputMeter: () => Promise<AudioOutputMeterLevel>;
   /** Capture the most recent final stereo output for spectral (FFT) analysis. */
   getAudioOutputCapture: () => Promise<AudioOutputCapture>;
+  /**
+   * Sample rates the CURRENTLY OPEN output device advertises. Empty means
+   * "unknown" (only an open device reports them, and rate-lying backends
+   * report none) — never "supports nothing". Lets a test tell "the engine
+   * failed to follow the session rate" apart from "this device can't do it".
+   */
+  getSupportedSampleRates: () => Promise<number[]>;
   getLibraryState: () => Promise<{
     assets: LibraryAssetSummary[];
     folders: string[];
@@ -358,6 +366,15 @@ export function useE2ETestHooks(
       getTrackMeters: () => useTransportStore.getState().meters,
       getAudioOutputMeter,
       getAudioOutputCapture,
+      getSupportedSampleRates: async () => {
+        // force: true so we read the live device, not a cached enumeration
+        // from before a session-open reopened it at another rate.
+        const devices = await getAudioOutputDevices({ force: true });
+        const current = devices.deviceDescriptors?.find(
+          (descriptor) => descriptor.name === devices.defaultDevice,
+        );
+        return current?.supportedSampleRates ?? [];
+      },
       getLibraryState: async () => {
         const [assets, folders] = await Promise.all([
           getLibraryAssets(),

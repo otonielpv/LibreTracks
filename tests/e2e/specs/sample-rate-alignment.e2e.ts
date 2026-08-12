@@ -69,13 +69,7 @@ describe("Sample rate alignment (isolated session)", () => {
 
     // Play briefly so the mixer fills the capture ring buffer; the capture's
     // sampleRate is the rate the engine genuinely rendered at.
-    await (await AppPage.playButton).click();
-    await browser.waitUntil(
-      async () => (await AppPage.audioOutputCapture()).sampleRate > 0,
-      { timeout: 30_000, timeoutMsg: "The engine never reported a render rate" },
-    );
-    const capture = await AppPage.audioOutputCapture();
-    await (await AppPage.stopButton).click();
+    const capture = await AppPage.audioOutputCaptureAfterBriefPlayback();
 
     const engineRate = capture.sampleRate;
     // Whatever happened, the engine must be at a real, sane audio rate — this
@@ -83,16 +77,15 @@ describe("Sample rate alignment (isolated session)", () => {
     expect(engineRate).toBeGreaterThanOrEqual(8_000);
     expect(engineRate).toBeLessThanOrEqual(768_000);
 
-    // Either we aligned to the session (the win) or the device could not do
-    // 44.1k and we're converting (still correct). Both are acceptable; what
-    // would be wrong is silence or a broken stream, asserted below.
-    if (engineRate !== SESSION_RATE) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[LT_SR] engine at ${engineRate} Hz, session is ${SESSION_RATE} Hz — ` +
-          `this device cannot do the session rate, so conversion is expected.`,
-      );
-    }
+    // Always report what happened: whether this run exercised the interesting
+    // path depends on the machine's device, and a silent pass would hide that.
+    // If the device was ALREADY at 44.1k the alignment had nothing to do, and
+    // the run proves less than it looks like it does.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[LT_SR] engine=${engineRate}Hz session=${SESSION_RATE}Hz ` +
+        `aligned=${engineRate === SESSION_RATE}`,
+    );
 
     // The invariant that holds on ANY device: the audio still plays and is not
     // silence. A rate switch that broke the stream would show up here.
@@ -103,5 +96,59 @@ describe("Sample rate alignment (isolated session)", () => {
     const song = await AppPage.songView();
     expect(song?.clips.length ?? 0).toBe(1);
     expect(song?.clips[0]?.isMissing).toBe(false);
+  });
+
+  it("tracks the session rate when a second session uses a different one", async () => {
+    // The first case can pass trivially if the device already sat at 44.1k.
+    // This one opens a session at the OTHER common rate, so whatever the
+    // device started at, one of the two sessions forces a real change — and
+    // the engine must follow the session, not stay where it was.
+    const first = await AppPage.audioOutputCaptureAfterBriefPlayback();
+
+    const OTHER_RATE = 48_000;
+    const otherAudio = path.join(workDir, "tone-48000.wav");
+    writeToneWav(otherAudio, 5, OTHER_RATE);
+    await AppPage.createSession("E2E SR Session 48k", workDir);
+    await AppPage.createAudioTracksWithClips([
+      { trackName: "E2E SR 48k", filePath: otherAudio, timelineStartSeconds: 0 },
+    ]);
+    await browser.waitUntil(
+      async () => ((await AppPage.songView())?.clips.length ?? 0) === 1,
+      { timeout: 30_000, timeoutMsg: "The 48k session was not built" },
+    );
+
+    const second = await AppPage.audioOutputCaptureAfterBriefPlayback();
+    // eslint-disable-next-line no-console
+    console.log(
+      `[LT_SR] first=${first.sampleRate}Hz second=${second.sampleRate}Hz ` +
+        `(sessions were 44100Hz then ${OTHER_RATE}Hz)`,
+    );
+
+    // Both must be sane rates and both must produce signal — the invariants
+    // that hold regardless of what the device supports.
+    for (const capture of [first, second]) {
+      expect(capture.sampleRate).toBeGreaterThanOrEqual(8_000);
+      expect(capture.left.some((sample) => Math.abs(sample) > 1e-4)).toBe(true);
+    }
+
+    // The engine must have FOLLOWED each session's rate. This assertion caught
+    // a real bug: `supported_sample_rates` reached the FFI device LIST but was
+    // never copied into `device_info()`, so the engine snapshot always carried
+    // an empty list, the planner read that as "unknown" and refused to switch.
+    // Both captures came back 44100 and a conditional assertion had let it pass.
+    //
+    // Guarded, not skipped, so a device that genuinely supports only one rate
+    // does not fail the suite — but the guard is the DEVICE's capability, read
+    // from the engine, not "the rates happened to differ" (which is what the
+    // bug looked like).
+    const supported = await AppPage.supportedSampleRates();
+    const deviceDoesBoth =
+      supported.includes(44_100) && supported.includes(OTHER_RATE);
+    // eslint-disable-next-line no-console
+    console.log(`[LT_SR] device supports: ${supported.join(",") || "(unknown)"}`);
+    if (deviceDoesBoth) {
+      expect(first.sampleRate).toBe(44_100);
+      expect(second.sampleRate).toBe(OTHER_RATE);
+    }
   });
 });

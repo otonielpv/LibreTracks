@@ -31,6 +31,10 @@ struct DeviceInfo {
     int         buffer_size  = 0;
     int         output_channel_count = 2;
     std::vector<std::string> output_channel_names;
+    // Sample rates the OPEN device advertises. Empty means "unknown" (we only
+    // learn them when a device is open, and rate-lying backends report none),
+    // never "supports nothing".
+    std::vector<int> supported_sample_rates;
     std::string last_error;
     // True while audio is being driven by the internal fallback clock instead
     // of a hardware stream (device died / never opened). The transport keeps

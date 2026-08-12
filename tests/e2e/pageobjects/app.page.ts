@@ -1369,6 +1369,45 @@ class AppPage {
     );
   }
 
+  /**
+   * Sample rates the currently open output device advertises. Empty means
+   * "unknown", never "supports nothing" — see the seam's doc comment.
+   */
+  async supportedSampleRates(): Promise<number[]> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: { getSupportedSampleRates: () => Promise<number[]> };
+          }
+        ).__ltE2E.getSupportedSampleRates(),
+    );
+  }
+
+  /**
+   * Play briefly, capture the rendered output, then stop.
+   *
+   * The mixer's capture ring buffer only fills while audio renders, so a test
+   * that wants the engine's REAL sample rate (rather than a setting echoed
+   * back) has to run the transport for a moment first.
+   */
+  async audioOutputCaptureAfterBriefPlayback(
+    timeout = 30_000,
+  ): Promise<E2EAudioOutputCapture> {
+    await (await this.playButton).click();
+    await browser.waitUntil(
+      async () => (await this.audioOutputCapture()).sampleRate > 0,
+      { timeout, timeoutMsg: "The engine never reported a render rate" },
+    );
+    const capture = await this.audioOutputCapture();
+    await (await this.stopButton).click();
+    await browser.waitUntil(
+      async () => (await this.transportSnapshot()).playbackState === "stopped",
+      { timeout, timeoutMsg: "The engine did not stop after capturing" },
+    );
+    return capture;
+  }
+
   /** Create a user pad from `sourcePath`, assign it to key C, and enable it. */
   async activatePadWithTone(sourcePath: string): Promise<string> {
     return browser.execute(
