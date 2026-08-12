@@ -188,6 +188,26 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     `export_session_package_at` / `import_session_package_at` commands (explicit
     paths, no dialogs); the import ends with the same `project:load-complete`
     event as a real import.
+  - `import-responsiveness.e2e.ts` — a large `.ltset` import must not wedge the
+    app, in its own clean session. A user's 2.17 GB set froze LibreTracks
+    completely on import (decompression ran holding the session lock, so every
+    session-touching command queued behind it) and they had to reboot. Builds a
+    24-clip / ~635 MB session, exports it, fires the import WITHOUT awaiting it
+    (the seam is fire-and-forget, ending on `project:load-complete`) and polls
+    `transportSnapshot()` — which goes through the real command layer and takes
+    the same lock — until the new session opens.
+    **Know what this does and does not prove.** It was run against a build with
+    the lock bug deliberately re-introduced and still PASSED: a WebDriver round
+    trip costs ~600 ms, and on an SSD the entire 635 MB import completes inside
+    a single probe (measured: `totalImport=784ms`, one probe). So it cannot
+    distinguish lock-held from off-lock extraction on fast hardware, and the
+    30 s bound is a gross-regression guard (an import that wedges the app for
+    minutes), not a tight one. The precise "extraction must not hold the session
+    lock" property is enforced at the TYPE level instead:
+    `DesktopSession::extract_session_package_off_lock` is an associated function
+    taking no `&self`, so calling it while holding the lock cannot compile.
+    Complements `session-package.e2e.ts`, which proves the DATA survives but
+    passed even while the app was frozen.
   - `missing-file.e2e.ts` — the "locate a missing audio file" flow, in its own
     clean session. Creates a clip pointing at a real WAV, deletes that WAV from
     disk (so `getSongView` recomputes `isMissing = true` on the clip), writes a

@@ -615,6 +615,72 @@ mod tests {
         ]
     }
 
+    /// Extraction must stay usable from a worker thread while another thread
+    /// holds unrelated shared state — i.e. it must not need the session lock
+    /// itself. A 2.17 GB `.ltset` once froze the app because decompression ran
+    /// with `state.session.lock()` held, so every UI command queued behind it.
+    ///
+    /// This is the layer where that property can actually be measured: the
+    /// equivalent E2E spec cannot tell the two designs apart, because a
+    /// WebDriver round trip (~600 ms) is longer than the whole extraction on an
+    /// SSD. Here a reader thread polls a mutex the extraction has no business
+    /// touching, and we assert it kept getting served throughout.
+    #[test]
+    fn extraction_does_not_block_a_concurrent_lock_holder() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{Arc, Mutex};
+
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+        let song = session();
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &song,
+            &sidecars(),
+            &package_path,
+            true,
+            |_, _| {},
+        )
+        .expect("export full");
+
+        // Stands in for the session state a UI command would lock. Extraction
+        // takes no `&self` and never sees it — that is exactly the point.
+        let shared_state = Arc::new(Mutex::new(0_u64));
+        let extraction_done = Arc::new(AtomicBool::new(false));
+
+        let reader_state = Arc::clone(&shared_state);
+        let reader_done = Arc::clone(&extraction_done);
+        let reader = std::thread::spawn(move || {
+            let mut acquisitions = 0_u64;
+            while !reader_done.load(Ordering::Relaxed) {
+                let mut guard = reader_state.lock().expect("reader lock");
+                *guard += 1;
+                acquisitions += 1;
+                drop(guard);
+                std::thread::yield_now();
+            }
+            acquisitions
+        });
+
+        let target = tempfile::tempdir().expect("target");
+        let dest_dir = target.path().join("Mi Set");
+        let extracted =
+            extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
+        extraction_done.store(true, Ordering::Relaxed);
+        let acquisitions = reader.join().expect("reader thread");
+
+        // The extraction succeeded AND the concurrent lock holder kept running.
+        assert!(extracted.bundled_audio);
+        assert!(
+            acquisitions > 0,
+            "the concurrent lock holder never got scheduled — extraction is \
+             serialising against it"
+        );
+    }
+
     #[test]
     fn full_export_round_trips_into_a_new_session_dir() {
         let src = tempfile::tempdir().expect("src");

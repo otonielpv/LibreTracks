@@ -19,9 +19,17 @@ export type SessionFixture = {
 /** Fundamental frequency of the WAV fixture written by writeToneWav. */
 export const TONE_FREQUENCY_HZ = 440;
 
-/** Write a small PCM WAV fixture that the real native decoder can import. */
-export function writeToneWav(filePath: string, durationSeconds = 5) {
-  const sampleRate = 44_100;
+/**
+ * Write a small PCM WAV fixture that the real native decoder can import.
+ *
+ * `sampleRate` defaults to 44.1k (what every existing fixture assumes); pass
+ * something else to build a session whose audio does not match the engine rate.
+ */
+export function writeToneWav(
+  filePath: string,
+  durationSeconds = 5,
+  sampleRate = 44_100,
+) {
   const sampleCount = sampleRate * durationSeconds;
   const dataSize = sampleCount * 2;
   const wav = Buffer.alloc(44 + dataSize);
