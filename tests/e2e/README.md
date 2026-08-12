@@ -215,10 +215,18 @@ seconds — timeouts are set generously (`startTimeout` 90 s, per-test 120 s).
     and Windows commonly parks devices at 48k while live multitracks are 44.1k.
     Builds an all-44.1k session and reads `getAudioOutputCapture().sampleRate`
     — the rate the C++ mixer actually rendered at, not a setting echoed back.
-    **Hardware-dependent by design**: if the device cannot do 44.1k, converting
-    is the correct outcome, so the spec accepts either and fails only on a rate
-    matching neither. It always asserts the device-independent invariants —
-    playback produces real signal and the model survives the device reopen.
+    **Hardware-dependent by design**: the strict assertion is guarded by the
+    device's REAL advertised rates (`supportedSampleRates()` from the engine),
+    never by "the two captures differed" — that guard is false exactly when the
+    feature is broken, and an earlier version of this spec passed green against
+    a build where alignment never fired (`supported_sample_rates` reached the
+    FFI device list but not `device_info()`, so the snapshot was always empty
+    and the planner read "unknown"). On a device advertising a single rate the
+    switch path is NOT exercised; the run still proves rates reach the snapshot
+    and that the engine behaves when a switch is impossible, and the decision
+    itself is unit-tested in `session_sample_rate.rs`.
+    It always asserts the device-independent invariants — playback produces real
+    signal and the model survives the device reopen.
   - `missing-file.e2e.ts` — the "locate a missing audio file" flow, in its own
     clean session. Creates a clip pointing at a real WAV, deletes that WAV from
     disk (so `getSongView` recomputes `isMissing = true` on the clip), writes a

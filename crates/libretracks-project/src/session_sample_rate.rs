@@ -332,6 +332,24 @@ mod tests {
     }
 
     #[test]
+    fn a_device_locked_to_one_rate_reports_conversion_rather_than_switching() {
+        // The real shape of the dev machine this was verified on: the output
+        // device advertises 44100 ONLY. A 48k session cannot be aligned, so the
+        // correct answer is to tell the user what the conversion costs instead
+        // of silently doing nothing (which is what an empty/unknown rate list
+        // produces, and is indistinguishable to the user).
+        let session = profile(&[(48_000, 7_000)]);
+        let plan = plan_sample_rate(&session, 44_100, &[44_100], None);
+        assert_eq!(
+            plan,
+            SampleRatePlan::ConvertUnavoidable {
+                preferred_rate: 48_000,
+                bytes_to_convert: 7_000,
+            }
+        );
+    }
+
+    #[test]
     fn an_empty_session_asks_for_nothing() {
         assert_eq!(
             plan_sample_rate(&SessionSampleRateProfile::default(), 48_000, &[44_100], None),

@@ -19,13 +19,21 @@ import { writeToneWav } from "./session/support.js";
  * engine's real rate, not a setting we echo back, so it cannot pass by
  * construction.
  *
- * NOTE ON HARDWARE DEPENDENCE: what this can assert depends on the machine's
- * audio device. If the device cannot do the session's rate, aligning is
- * impossible and the correct behaviour is to convert instead — so the test
- * accepts either outcome and only fails on a THIRD, wrong one: an engine rate
- * that matches neither the session nor a plausible device rate. It also asserts
- * the invariant that always holds regardless of device: whatever rate the
- * engine picks, playback works and the audio is intact.
+ * NOTE ON HARDWARE DEPENDENCE — read before trusting a green run. What this can
+ * assert depends on the machine's audio device. If the device cannot do the
+ * session's rate, aligning is impossible and converting is correct, so the
+ * strict assertion is guarded by the device's REAL advertised capability (read
+ * from the engine via `supportedSampleRates()`), never by "the rates came out
+ * different" — that guard would be false precisely when the feature is broken,
+ * which is how an earlier version of this spec passed against a build where
+ * alignment never fired at all.
+ *
+ * On the dev machine this was written on the device advertises 44100 ONLY, so
+ * the switch path was NOT exercised end to end here; the run confirmed rates
+ * now reach the snapshot and that the engine behaves correctly when a switch is
+ * impossible. The switch decision itself is covered by unit tests in
+ * `session_sample_rate.rs`. A machine with a multi-rate interface will exercise
+ * the strict branch.
  */
 describe("Sample rate alignment (isolated session)", () => {
   let workDir = "";
