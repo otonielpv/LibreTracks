@@ -6336,6 +6336,12 @@ textarea {
      the width the user dragged to. Overriding it is what actually lets the
      column shrink; the ellipsis rules below then do the truncating. */
   min-width: 0;
+  /* The header is a fixed-size item in the column's vertical flex: the clip
+     stack below it is `flex: 1 1 auto` and takes the leftover space. Without
+     this, a song with enough clips to overflow squeezes the header instead —
+     it loses height from the bottom and the master fader is clipped. Shrink
+     is the clip stack's job, never the header's. */
+  flex-shrink: 0;
   overflow: hidden;
 }
 
