@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -178,6 +179,11 @@ struct AudioDeviceManager::Impl {
     int          output_latency_samples = 0;
     int          output_channel_count = 2;
     std::vector<std::string> output_channel_names;
+    // Sample rates the OPEN device advertises. Captured in open_device from the
+    // already-created juce::AudioIODevice, so it costs nothing: probing this in
+    // list_devices would mean a createDevice per device (~2.5s each on some ASIO
+    // drivers) and would resurrect the startup freeze fixed in 812d795.
+    std::vector<int> supported_sample_rates;
     std::string  last_error;
 
     // Channel-layout cache for probed backends (ASIO/JACK/CoreAudio).
@@ -641,6 +647,13 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
                 d.output_channel_count = resolved.count;
                 d.output_channel_names = std::move(resolved.names);
             }
+            // Only the open device can report its rates for free (open_device
+            // captured them from the live juce::AudioIODevice). Probing the
+            // others would need a createDevice each — seconds per ASIO driver,
+            // the startup freeze fixed in 812d795. Everyone else stays empty =
+            // "unknown".
+            if (device_name == impl_->device_name && backend == impl_->backend)
+                d.supported_sample_rates = impl_->supported_sample_rates;
             result.push_back(std::move(d));
         }
     }
@@ -876,6 +889,27 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
             impl_->output_channel_count, std::move(impl_->output_channel_names));
         impl_->output_channel_count = resolved.count;
         impl_->output_channel_names = std::move(resolved.names);
+    }
+
+    // Record what this device can actually run at, so callers can align the
+    // engine rate with the session's audio instead of forcing a decode+resample
+    // of every mismatched file. Backends that lie about their rate (DirectSound
+    // / MME: virtual endpoints that accept anything and resample underneath)
+    // advertise a full list they don't honour, so we expose nothing for them
+    // rather than an answer that would drive a wrong decision.
+    impl_->supported_sample_rates.clear();
+    if (!backend_lies_about_sample_rate(impl_->backend)) {
+        for (const double rate : dev->getAvailableSampleRates()) {
+            const int rounded = static_cast<int>(std::lround(rate));
+            if (rounded > 0)
+                impl_->supported_sample_rates.push_back(rounded);
+        }
+        std::sort(impl_->supported_sample_rates.begin(),
+                  impl_->supported_sample_rates.end());
+        impl_->supported_sample_rates.erase(
+            std::unique(impl_->supported_sample_rates.begin(),
+                        impl_->supported_sample_rates.end()),
+            impl_->supported_sample_rates.end());
     }
 
     // The hardware stream is about to go live: retire the pump first so the

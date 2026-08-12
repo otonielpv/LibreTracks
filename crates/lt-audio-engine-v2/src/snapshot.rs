@@ -109,6 +109,12 @@ pub struct DeviceInfo {
     pub output_channel_count: i32,
     #[serde(default)]
     pub output_channel_names: Vec<String>,
+    /// Sample rates the device advertises. Only populated for the device that
+    /// is currently open (enumerating the rest would cost a `createDevice`
+    /// each) and left empty for backends that lie about their rate, so an
+    /// empty vec means "unknown" — never "supports nothing".
+    #[serde(default)]
+    pub supported_sample_rates: Vec<i32>,
     pub last_error: String,
     /// True while the engine renders through its internal fallback clock (no
     /// working hardware stream): the transport keeps running silently and the

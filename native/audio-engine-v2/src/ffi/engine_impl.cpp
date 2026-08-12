@@ -1416,6 +1416,11 @@ std::string EngineImpl::list_devices(bool force_rescan) const {
             {"backend",     d.backend},
             {"output_channel_count", d.output_channel_count},
             {"output_channel_names", d.output_channel_names},
+            // Empty unless this device is the one currently open (enumeration
+            // must not pay a createDevice per device) or the backend lies about
+            // its rate. Consumers treat empty as "unknown", not as "supports
+            // nothing".
+            {"supported_sample_rates", d.supported_sample_rates},
             {"sample_rate", 0},
             {"buffer_size", 0},
             {"last_error",  ""},

@@ -77,6 +77,7 @@ fn device_info_round_trips() {
         buffer_size: 256,
         output_channel_count: 2,
         output_channel_names: vec!["Out 1".into(), "Out 2".into()],
+        supported_sample_rates: vec![44100, 48000, 96000],
         last_error: String::new(),
         fallback_active: true,
     };
@@ -85,7 +86,28 @@ fn device_info_round_trips() {
     assert_eq!(rt.device.sample_rate, 48000);
     assert_eq!(rt.device.buffer_size, 256);
     assert_eq!(rt.device.output_channel_count, 2);
+    assert_eq!(rt.device.supported_sample_rates, vec![44100, 48000, 96000]);
     assert!(rt.device.fallback_active);
+}
+
+#[test]
+fn device_info_without_supported_sample_rates_still_parses() {
+    // The engine only reports rates for the device it has open, and older
+    // engine builds omit the key entirely. Either way the payload must still
+    // deserialize, with an empty vec meaning "unknown".
+    let json = r#"{
+        "device_id": "speakers-1",
+        "device_name": "Speakers",
+        "backend": "WASAPI",
+        "sample_rate": 48000,
+        "buffer_size": 256,
+        "output_channel_count": 2,
+        "output_channel_names": ["Out 1", "Out 2"],
+        "last_error": ""
+    }"#;
+    let device: DeviceInfo = serde_json::from_str(json).expect("device info should parse");
+    assert!(device.supported_sample_rates.is_empty());
+    assert_eq!(device.sample_rate, 48000);
 }
 
 #[test]

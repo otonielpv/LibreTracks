@@ -3175,7 +3175,18 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
             is_default: index == 0,
             max_output_channels: output_channels,
             default_sample_rate: (device.sample_rate > 0).then_some(device.sample_rate as u32),
-            supported_sample_rates: if device.sample_rate > 0 {
+            // Prefer what the device actually advertises (only known for the
+            // open device — see DeviceInfo::supported_sample_rates). Fall back
+            // to its current rate, then to the common pair, so a device whose
+            // rates we can't probe still offers something selectable.
+            supported_sample_rates: if !device.supported_sample_rates.is_empty() {
+                device
+                    .supported_sample_rates
+                    .iter()
+                    .filter(|rate| **rate > 0)
+                    .map(|rate| *rate as u32)
+                    .collect()
+            } else if device.sample_rate > 0 {
                 vec![device.sample_rate as u32]
             } else {
                 vec![44100, 48000]
