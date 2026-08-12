@@ -1073,22 +1073,27 @@ fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
             .parent()
             .and_then(|folder| crate::platform::macos_bookmarks::acquire_folder(&worker_app, folder));
 
+        // Open the session as soon as the MODEL is ready and let the audio
+        // decode finish in the background — the "deferred preparation" model
+        // the .ltpkg import already uses.
+        //
+        // Waiting for every source before showing anything meant a big session
+        // (39 stems / ~2 GB in the report that motivated this) left the user
+        // staring at a frozen-looking screen for minutes. Now the timeline
+        // appears immediately and the existing non-modal "Preparando audio…"
+        // indicator (driven by the transport snapshot's SourceReadinessSummary,
+        // see sourcesPrepare.ts) reports real progress until every source is
+        // ready — so it is always visible that the audio is NOT ready yet.
+        //
+        // Playback is progressive: decoded blocks sound, the rest is silent.
         let result = (|| -> Result<TransportSnapshot, String> {
-            {
-                let mut session = state
-                    .session
-                    .lock()
-                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-                session
-                    .begin_open_project_from_path(&worker_app, &state.audio, song_file)
-                    .map_err(|error| error.to_string())?;
-            }
-            let snapshot = DesktopSession::wait_for_project_audio_preparation_unlocked(
-                &worker_app,
-                &state,
-                &state.audio,
-            )
-            .map_err(|error| error.to_string())?;
+            let mut session = state
+                .session
+                .lock()
+                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+            let snapshot = session
+                .begin_open_project_from_path(&worker_app, &state.audio, song_file)
+                .map_err(|error| error.to_string())?;
             Ok(snapshot)
         })();
 
@@ -1102,6 +1107,20 @@ fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
                         error: None,
                     },
                 );
+                // The session is open and interactive; keep draining source
+                // readiness on THIS worker thread so the loading progress
+                // events (and the "Preparando audio…" indicator they feed)
+                // keep flowing until every source is decoded. Nothing waits on
+                // it — the result is only used to log a failure.
+                if let Err(error) = DesktopSession::wait_for_project_audio_preparation_unlocked(
+                    &worker_app,
+                    &state,
+                    &state.audio,
+                ) {
+                    crate::infra::error_log::write_error(&format!(
+                        "background audio preparation failed: {error}"
+                    ));
+                }
             }
             Err(error) => {
                 crate::infra::error_log::write_error(&format!("project load/save failed: {error}"));
@@ -1901,21 +1920,17 @@ pub fn import_session_package_at(
                 &target_song_dir,
             )
             .map_err(|error| error.to_string())?;
-            {
-                let mut session = state
-                    .session
-                    .lock()
-                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-                session
-                    .open_extracted_session_package(&worker_app, &state.audio, extracted)
-                    .map_err(|error| error.to_string())?;
-            }
-            DesktopSession::wait_for_project_audio_preparation_unlocked(
-                &worker_app,
-                &state,
-                &state.audio,
-            )
-            .map_err(|error| error.to_string())
+            // Open as soon as the model is ready; the audio decode continues in
+            // the background (see start_open_project_from_path for the full
+            // rationale). A freshly imported set is the worst case for waiting:
+            // nothing is cached, so every source has to decode.
+            let mut session = state
+                .session
+                .lock()
+                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+            session
+                .open_extracted_session_package(&worker_app, &state.audio, extracted)
+                .map_err(|error| error.to_string())
         })();
 
         match result {
@@ -1928,6 +1943,17 @@ pub fn import_session_package_at(
                         error: None,
                     },
                 );
+                // Keep feeding the "Preparando audio…" indicator until the
+                // decode finishes. Nothing waits on this.
+                if let Err(error) = DesktopSession::wait_for_project_audio_preparation_unlocked(
+                    &worker_app,
+                    &state,
+                    &state.audio,
+                ) {
+                    crate::infra::error_log::write_error(&format!(
+                        "background audio preparation failed: {error}"
+                    ));
+                }
             }
             Err(error) => {
                 crate::infra::error_log::write_error(&format!("session import failed: {error}"));
@@ -2071,21 +2097,15 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
             }
             let extracted = extract_result?;
 
-            {
-                let mut session = state
-                    .session
-                    .lock()
-                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-                session
-                    .open_extracted_session_package(&worker_app, &state.audio, extracted)
-                    .map_err(|error| error.to_string())?;
-            }
-            let snapshot = DesktopSession::wait_for_project_audio_preparation_unlocked(
-                &worker_app,
-                &state,
-                &state.audio,
-            )
-            .map_err(|error| error.to_string())?;
+            // Open as soon as the model is ready; the decode continues in the
+            // background (see start_open_project_from_path for the rationale).
+            let mut session = state
+                .session
+                .lock()
+                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+            let snapshot = session
+                .open_extracted_session_package(&worker_app, &state.audio, extracted)
+                .map_err(|error| error.to_string())?;
             Ok(snapshot)
         })();
 
@@ -2099,6 +2119,17 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
                         error: None,
                     },
                 );
+                // Keep feeding the "Preparando audio…" indicator until the
+                // decode finishes. Nothing waits on this.
+                if let Err(error) = DesktopSession::wait_for_project_audio_preparation_unlocked(
+                    &worker_app,
+                    &state,
+                    &state.audio,
+                ) {
+                    crate::infra::error_log::write_error(&format!(
+                        "background audio preparation failed: {error}"
+                    ));
+                }
             }
             Err(error) => {
                 crate::infra::error_log::write_error(&format!("session import failed: {error}"));

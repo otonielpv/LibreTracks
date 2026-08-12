@@ -256,3 +256,38 @@ decodes the moment a file is known, independent of the timeline.
   time. Add: cache file size assertion, time-to-first-playable, and a re-decode
   counter (must stay at the import count, not 2×).
 - 218 C++ DSP tests; the streaming equivalence test (retune tolerance for int16).
+
+---
+
+## Session open: deferred preparation (2026-08-12)
+
+Opening a session no longer waits for every source to decode before showing the
+timeline. `spawn_open_project_worker` (and both `.ltset` import workers) now
+emit `project:load-complete` as soon as the MODEL is loaded, then keep draining
+`wait_for_project_audio_preparation_unlocked` on the same worker thread so the
+progress events continue to flow.
+
+**Why.** A user's session (39 stems, ~2 GB, all 44.1 kHz) left the app looking
+frozen for minutes on a modest PC: the timeline only appeared after every source
+had decoded. The `.ltpkg` import already used the deferred model
+(`import_song_from_extracted` merges "WITHOUT blocking on source decode"), so
+this makes session open behave the same way.
+
+**Why it is safe.** `AudioController::play` never waited for sources either — it
+starts immediately and the mixer renders silence for any track still decoding,
+with each source becoming audible the moment it is published. Deferring the open
+does not create a new "play too early" failure mode; it stops hiding one behind
+a wait.
+
+**The condition attached to it (user's requirement).** A fast open is only
+honest if the user can see the audio is not ready. The non-modal "Preparando
+audio…" indicator (`sourcesPrepare.ts`, fed by the transport snapshot's
+`SourceReadinessSummary`) is what makes it visible, and it renders exactly while
+`sourcesTotal > 0 && !sourcesReady`. `deferred-audio-prep.e2e.ts` asserts BOTH
+halves — timeline mounted while preparing, AND the indicator visible during that
+window — because asserting only the fast open would let a silent, misleading
+version pass.
+
+**Still open (R5/F above):** per-track progressive waveform paint. Today the
+indicator is global ("N/M tracks ready"); Ableton shows readiness per track,
+which is more useful when deciding whether you can start playing.
