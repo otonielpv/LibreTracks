@@ -118,7 +118,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
             &crate::platform::mobile_files::picked_file_name(&picked),
             "paquete.ltpkg",
         );
-        spawn_project_work(&app, move |worker_app, state| {
+        spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
             let staged =
                 crate::platform::mobile_files::stage_picked_file_to_temp(worker_app, &picked, &picked_name)?;
             let insert_at = {
@@ -146,7 +146,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
             return Ok(false);
         };
 
-        spawn_project_work(&app, move |worker_app, state| {
+        spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
             // The file-menu import inserts at the current playhead. Read it under a
             // brief lock, then do the heavy decompression unlocked.
             let insert_at = {
@@ -176,7 +176,7 @@ pub fn start_import_song_package_from_path(
     insert_at_seconds: f64,
 ) -> Result<bool, String> {
     let package_file = std::path::PathBuf::from(package_path);
-    spawn_project_work(&app, move |worker_app, state| {
+    spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
         import_package_off_lock(worker_app, state, package_file, insert_at_seconds)
     });
 
@@ -245,7 +245,7 @@ pub fn start_import_external_project_from_path(
     project_path: String,
     insert_at_seconds: f64,
 ) -> Result<bool, String> {
-    spawn_project_work(&app, move |worker_app, state| {
+    spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
         import_external_project_off_lock(worker_app, state, &project_path, insert_at_seconds)
     });
 
@@ -278,10 +278,11 @@ fn import_external_project_off_lock(
     let response = session
         .import_external_project_at(project_path, insert_at_seconds, true, &state.audio)
         .map_err(|error| error.to_string())?;
-    session
-        .finalize_project_audio_preparation(app, &state.audio)
-        .map_err(|error| error.to_string())?;
-
+    // Return as soon as the model is ready; `spawn_project_work` emits
+    // project:load-complete and THEN drains the decode in the background (see
+    // its doc comment). Waiting here would also hold the session lock for the
+    // whole decode — `session` is still borrowed — so a big Reaper/Ableton
+    // project froze the UI exactly the way the .ltset import used to.
     Ok(response.snapshot)
 }
 
@@ -442,6 +443,33 @@ fn spawn_project_work<F>(app: &AppHandle, work: F)
 where
     F: FnOnce(&AppHandle, &DesktopState) -> Result<TransportSnapshot, String> + Send + 'static,
 {
+    spawn_project_work_inner(app, work, false);
+}
+
+/// Like [`spawn_project_work`], but after publishing the result it keeps
+/// draining `wait_for_project_audio_preparation_unlocked` in the background so
+/// the loading progress events — and the "Preparando audio…" indicator they
+/// feed — flow until every source is decoded. For flows that BRING IN AUDIO
+/// (imports) and return as soon as the model is ready.
+///
+/// Deliberately NOT the default: that drain ends in
+/// `finish_project_audio_preparation`, which takes the session lock and does
+/// real waveform/prearm work. Running it after every project command (create,
+/// save-as, from-template — flows with no new audio) put that work in the
+/// background of whatever the user did next. Measured: it broke 6 tests in
+/// `session.e2e.ts`, starting with a wheel-scroll that could no longer align
+/// the camera. Only attach it where new audio actually needs decoding.
+fn spawn_project_work_with_audio_prep<F>(app: &AppHandle, work: F)
+where
+    F: FnOnce(&AppHandle, &DesktopState) -> Result<TransportSnapshot, String> + Send + 'static,
+{
+    spawn_project_work_inner(app, work, true);
+}
+
+fn spawn_project_work_inner<F>(app: &AppHandle, work: F, drain_audio_prep: bool)
+where
+    F: FnOnce(&AppHandle, &DesktopState) -> Result<TransportSnapshot, String> + Send + 'static,
+{
     let worker_app = app.clone();
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
@@ -457,6 +485,17 @@ where
                         error: None,
                     },
                 );
+                if drain_audio_prep {
+                    if let Err(error) = DesktopSession::wait_for_project_audio_preparation_unlocked(
+                        &worker_app,
+                        &state,
+                        &state.audio,
+                    ) {
+                        crate::infra::error_log::write_error(&format!(
+                            "background audio preparation failed: {error}"
+                        ));
+                    }
+                }
             }
             Err(error) => {
                 crate::infra::error_log::write_error(&format!("project load/save failed: {error}"));
