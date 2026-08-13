@@ -339,7 +339,7 @@ Jobs and what each one gates (as of v1.10.0):
 | Job | Blocks the release? |
 |-----|---------------------|
 | `test` | Yes — unit suites (JS + Rust + native ctest) on all three OSes. |
-| `e2e-windows` | Yes — drives the real compiled app via tauri-driver. |
+| `e2e-windows` | **Not yet** — see below. |
 | `build-release-assets` | Yes, except the `macos-15-intel` leg (`publish: false`). |
 | `build-android` | Yes — signed APK. |
 | `publish-release` | Needs all of the above green. |
@@ -351,8 +351,29 @@ fails looking for PkgConfig, and the E2E never actually gated anything. The
 standalone job replicates the release setup (vcpkg + ASIO SDK + Bungee
 runtime), so the binary under test is the one users get. It only needs `test`,
 so it runs in parallel with `build-release-assets` and does not lengthen the
-path to the bundles. On failure it uploads `e2e-windows-logs` (the app's
-`lt_*.log`) — grab that artifact before theorising.
+path to the bundles. It uploads `e2e-windows-logs` (the app's `lt_*.log`) with
+`if: always()` — grab that artifact before theorising. (`always()`, not
+`failure()`: a job killed by `timeout-minutes` counts as cancelled, and the
+first hang lost its logs to exactly that.)
+
+**Current status (v1.10.0): builds fine, cannot run.** The 12 setup steps pass
+— the engine compiles with FFmpeg ON, so the vcpkg problem is solved — but the
+suite never gets a WebView session on the runner:
+
+```
+session not created: DevToolsActivePort file doesn't exist
+```
+
+Every spec retries 3× at 60s and moves on, so the step burns ~45 minutes and
+runs zero tests. Ruled out: version skew (the service downloads a matching
+msedgedriver — WebView2 150.0.4078.105 both sides) and the
+`Binary Permissions: 666` diagnostic, which is a POSIX check the service prints
+on Windows where it does not apply. It is therefore **out of
+`publish-release`'s `needs` and marked `continue-on-error`** so it cannot block
+a release it is not yet able to validate. Diagnosis continues on
+`ci/e2e-runner-debug` (workflow_dispatch, one spec, native logs) because
+iterating through release tags costs ~45 min a try. Restore both the `needs`
+entry and drop `continue-on-error` together once it is green.
 
 Triage before "fixing": some jobs are `continue-on-error: true` (e.g. the
 `macos-15-intel` Intel validation build, `publish: false`) — those fail
