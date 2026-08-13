@@ -70,6 +70,19 @@ export const config: WebdriverIO.Config = {
       "tauri:options": {
         application: appBinaryPath,
       },
+      // Escape hatch for CI, where the suite currently cannot get a session
+      // ("DevToolsActivePort file doesn't exist"). A GitHub runner step is a
+      // non-interactive session, and the usual remedies for that are WebView2
+      // flags like --no-sandbox / --disable-gpu. Left empty locally so a
+      // developer run is untouched; set LT_E2E_BROWSER_ARGS to experiment
+      // (the e2e-debug workflow exposes it as an input).
+      ...(process.env.LT_E2E_BROWSER_ARGS
+        ? {
+            "ms:edgeOptions": {
+              args: process.env.LT_E2E_BROWSER_ARGS.split(" ").filter(Boolean),
+            },
+          }
+        : {}),
     } as WebdriverIO.Capabilities,
   ],
 
