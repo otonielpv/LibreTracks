@@ -766,14 +766,25 @@ mod tests {
     /// itself. A 2.17 GB `.ltset` once froze the app because decompression ran
     /// with `state.session.lock()` held, so every UI command queued behind it.
     ///
-    /// This is the layer where that property can actually be measured: the
-    /// equivalent E2E spec cannot tell the two designs apart, because a
-    /// WebDriver round trip (~600 ms) is longer than the whole extraction on an
-    /// SSD. Here a reader thread polls a mutex the extraction has no business
-    /// touching, and we assert it kept getting served throughout.
+    /// WHAT ACTUALLY GUARANTEES THE PROPERTY IS THE TYPE, NOT THIS TEST.
+    /// `SessionState::extract_session_package_off_lock` is an associated
+    /// function with no `&self`, so calling it while holding the lock does not
+    /// compile. This test covers the layer below: that extraction completes
+    /// correctly while another thread is actively using unrelated shared state,
+    /// and never touches that state itself.
+    ///
+    /// Deliberately NOT asserted: how many times the reader got scheduled
+    /// during the extraction window. Two earlier versions of this test tried
+    /// exactly that and both were flaky on CI — this fixture extracts in
+    /// microseconds, so on a loaded/low-core runner the reader can legitimately
+    /// not be scheduled inside the window even with zero contention. It failed
+    /// on macOS, and the "fix" (counting only in-window acquisitions) then
+    /// failed on Ubuntu too. A wall-clock race against a microsecond operation
+    /// cannot be made reliable; asserting it buys nothing the compiler is not
+    /// already enforcing, and costs a red release pipeline.
     #[test]
     fn extraction_does_not_block_a_concurrent_lock_holder() {
-        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::{Arc, Mutex};
 
         let src = tempfile::tempdir().expect("src");
@@ -797,66 +808,40 @@ mod tests {
         let shared_state = Arc::new(Mutex::new(0_u64));
         let extraction_done = Arc::new(AtomicBool::new(false));
 
-        // The reader must be provably running BEFORE extraction starts, and we
-        // must count only the acquisitions that happen WHILE it runs.
-        //
-        // Both parts are load-bearing, and the earlier version of this test had
-        // neither:
-        //   - Without the start handshake it fails spuriously — on a loaded
-        //     runner (seen on macOS CI) the extraction of this small fixture can
-        //     finish before the spawned thread is ever scheduled, so the total
-        //     was 0 for reasons unrelated to lock contention.
-        //   - Counting the TOTAL cannot tell the two designs apart: the reader
-        //     racks up acquisitions before and after the extraction window, so
-        //     the count stays > 0 even if extraction serialises completely.
-        //     Verified by injecting the bug (holding `shared_state` across the
-        //     extraction): with a total-based assertion the test still passed.
-        let reader_started = Arc::new(AtomicBool::new(false));
-        let extraction_running = Arc::new(AtomicBool::new(false));
-        let during_extraction = Arc::new(AtomicU64::new(0));
-
-        let reader_state = Arc::clone(&shared_state);
-        let reader_done = Arc::clone(&extraction_done);
-        let started_flag = Arc::clone(&reader_started);
-        let running_flag = Arc::clone(&extraction_running);
-        let during_counter = Arc::clone(&during_extraction);
-        let reader = std::thread::spawn(move || {
-            loop {
-                let mut guard = reader_state.lock().expect("reader lock");
-                *guard += 1;
-                drop(guard);
-                if running_flag.load(Ordering::Acquire) {
-                    during_counter.fetch_add(1, Ordering::Relaxed);
-                }
-                started_flag.store(true, Ordering::Release);
-                if reader_done.load(Ordering::Relaxed) {
-                    break;
-                }
+        // Hold the shared state for the WHOLE extraction, from another thread.
+        // If extraction ever needed that state it would deadlock here (the test
+        // would hang and time out) instead of quietly serialising. This is
+        // deterministic: it does not depend on the scheduler interleaving them.
+        let holder_state = Arc::clone(&shared_state);
+        let release_holder = Arc::clone(&extraction_done);
+        let holder_ready = Arc::new(AtomicBool::new(false));
+        let ready_flag = Arc::clone(&holder_ready);
+        let holder = std::thread::spawn(move || {
+            let mut guard = holder_state.lock().expect("holder lock");
+            *guard += 1;
+            ready_flag.store(true, Ordering::Release);
+            while !release_holder.load(Ordering::Acquire) {
                 std::thread::yield_now();
             }
+            drop(guard);
         });
 
-        while !reader_started.load(Ordering::Acquire) {
+        while !holder_ready.load(Ordering::Acquire) {
             std::thread::yield_now();
         }
 
         let target = tempfile::tempdir().expect("target");
         let dest_dir = target.path().join("Mi Set");
-        extraction_running.store(true, Ordering::Release);
         let extracted =
             extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
-        extraction_running.store(false, Ordering::Release);
-        extraction_done.store(true, Ordering::Relaxed);
-        reader.join().expect("reader thread");
+        extraction_done.store(true, Ordering::Release);
+        holder.join().expect("holder thread");
 
-        // The extraction succeeded AND the concurrent lock holder kept being
-        // served for the whole time the extraction was running.
+        // Extraction ran to completion with the unrelated lock held throughout,
+        // and left that state exactly as the holder set it — it never took it.
         assert!(extracted.bundled_audio);
-        assert!(
-            during_extraction.load(Ordering::Relaxed) > 0,
-            "the concurrent lock holder was never served while extraction ran — \
-             extraction is serialising against it"
-        );
+        assert!(extracted.song_file.is_file());
+        assert_eq!(*shared_state.lock().expect("final state"), 1);
     }
 
     #[test]
