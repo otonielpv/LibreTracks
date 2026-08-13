@@ -339,7 +339,7 @@ Jobs and what each one gates (as of v1.10.0):
 | Job | Blocks the release? |
 |-----|---------------------|
 | `test` | Yes — unit suites (JS + Rust + native ctest) on all three OSes. |
-| `e2e-windows` | **Not yet** — see below. |
+| `e2e-windows` | **Disabled** (`if: false`) — see below. |
 | `build-release-assets` | Yes, except the `macos-15-intel` leg (`publish: false`). |
 | `build-android` | Yes — signed APK. |
 | `publish-release` | Needs all of the above green. |
@@ -365,15 +365,32 @@ session not created: DevToolsActivePort file doesn't exist
 ```
 
 Every spec retries 3× at 60s and moves on, so the step burns ~45 minutes and
-runs zero tests. Ruled out: version skew (the service downloads a matching
-msedgedriver — WebView2 150.0.4078.105 both sides) and the
-`Binary Permissions: 666` diagnostic, which is a POSIX check the service prints
-on Windows where it does not apply. It is therefore **out of
-`publish-release`'s `needs` and marked `continue-on-error`** so it cannot block
-a release it is not yet able to validate. Diagnosis continues on
-`ci/e2e-runner-debug` (workflow_dispatch, one spec, native logs) because
-iterating through release tags costs ~45 min a try. Restore both the `needs`
-entry and drop `continue-on-error` together once it is green.
+runs zero tests.
+
+**Ruled out, with evidence** (from `e2e-debug.yml`, run 31683837921):
+
+- *Not the app, and not a headless runner.* Launching the binary directly with
+  `Start-Process` prints `Still running after 25s — process survives`, and
+  `[Environment]::UserInteractive` is `True`.
+- *Not version skew.* The service downloads a matching msedgedriver; WebView2
+  is 150.0.4078.105 on both sides.
+- *Not `Binary Permissions: 666`.* That red line is a POSIX check the service
+  prints on Windows, where it does not apply ("run chmod +x on Unix systems").
+
+By elimination the fault is in the `tauri-driver` → `msedgedriver` → WebView2
+attach, not in LibreTracks. Next hypothesis is WebView2 flags
+(`--no-sandbox`, `--disable-gpu`), already wired as the debug workflow's
+`extra_browser_args` input → `LT_E2E_BROWSER_ARGS` → `ms:edgeOptions.args`.
+
+The job is therefore **disabled on release runs (`if: false`)**, not merely
+non-blocking. Leaving it to run cost ~45 runner-minutes per release to validate
+nothing, and — because a job killed by `timeout-minutes` counts as *cancelled*
+— it marked the entire run red: v1.10.0 published all nine assets correctly and
+still shows as cancelled in the run list.
+
+To re-enable, **all three changes go together**: `if:` back to
+`startsWith(github.ref, 'refs/tags/v')`, delete `continue-on-error`, and put
+`e2e-windows` back in `publish-release`'s `needs`.
 
 Triage before "fixing": some jobs are `continue-on-error: true` (e.g. the
 `macos-15-intel` Intel validation build, `publish: false`) — those fail

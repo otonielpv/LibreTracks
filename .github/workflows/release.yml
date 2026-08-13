@@ -106,11 +106,22 @@ jobs:
   e2e-windows:
     name: E2E tests (Windows)
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    # DISABLED on release runs until the suite can actually start on CI.
+    #
+    # It is not merely failing, it is useless here: the app never gets a
+    # WebView session, so every spec burns its retries, the job hits
+    # timeout-minutes, and a CANCELLED job marks the whole run red — a v1.10.0
+    # release that published all nine assets correctly still shows up as
+    # cancelled in the run list. Paying ~45 runner-minutes per release to
+    # validate nothing and mislabel the result is worse than not running it.
+    #
+    # The investigation lives in .github/workflows/e2e-debug.yml
+    # (workflow_dispatch, one spec, ~20 min). To re-enable, all three go
+    # together: this condition back to `startsWith(github.ref, 'refs/tags/v')`,
+    # the `continue-on-error` below deleted, and `e2e-windows` restored to
+    # publish-release's `needs`.
+    if: false
     runs-on: windows-latest
-    # Temporary, paired with its absence from publish-release's `needs` above:
-    # the suite cannot start a WebView session on the runner yet. Drop this
-    # line and restore the `needs` entry together, once it passes on CI.
     continue-on-error: true
     # Without this a hung suite runs until GitHub's 6-hour ceiling. The specs
     # take seconds locally; the engine build before them is what costs real
