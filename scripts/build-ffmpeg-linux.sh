@@ -30,6 +30,20 @@ set -euo pipefail
 FFMPEG_VERSION="${FFMPEG_VERSION:-7.1.1}"
 FFMPEG_SHA256="${FFMPEG_SHA256:-733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1}"
 
+# Fetch the pinned tarball with retries. Same rationale as the macOS script:
+# ffmpeg.org reset the connection on GitHub runners twice during the v1.10.0
+# release (`curl: (35) ... Connection reset by peer` a second in), and here it
+# took down a publishing job, not just the Intel validation one.
+#
+# `--retry-all-errors` is the load-bearing flag: plain `--retry` does not cover
+# a connection reset, which is exactly the failure seen.
+download_ffmpeg_tarball() {
+  local out="$1"
+  curl -fSL --retry 5 --retry-delay 3 --retry-all-errors \
+    --connect-timeout 20 \
+    "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" -o "$out"
+}
+
 if [[ "$(uname)" != "Linux" ]]; then
   echo "build-ffmpeg-linux: not Linux, nothing to do."
   exit 0
@@ -57,7 +71,7 @@ TARBALL="$WORK/ffmpeg-$FFMPEG_VERSION.tar.xz"
 if [[ ! -d "$SRC" ]]; then
   if [[ ! -f "$TARBALL" ]]; then
     echo "build-ffmpeg-linux: downloading FFmpeg $FFMPEG_VERSION"
-    curl -fSL "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" -o "$TARBALL"
+    download_ffmpeg_tarball "$TARBALL"
   fi
   echo "$FFMPEG_SHA256  $TARBALL" | sha256sum -c -
   tar -xJf "$TARBALL" -C "$WORK"

@@ -216,12 +216,37 @@ Rules learned the hard way — a bad screenshot is worse than none:
 # From apps/desktop:
 npx tsc -p tsconfig.json --noEmit
 npx vitest run
+
+# From the repo root — the EXACT command the `test` job runs. Running the
+# crates piecemeal is not the same check and has missed real breakage.
+cargo test --locked -p libretracks-core -p libretracks-project \
+  -p libretracks-audio -p lt-audio-engine-v2 --features lt-audio-engine-v2/no-link
+cargo check --all-targets
 ```
 
 Don't block the release on a known flaky test — the
 `timeline-tracks › pans the timeline by dragging over an empty lane`
 test is flaky under parallelism but passes in isolation. Re-run it alone
 to confirm it's not a real regression.
+
+### The Android compile trap (bit v1.10.0)
+
+`cargo check --all-targets` on desktop does **not** compile anything behind
+`#[cfg(target_os = "android")]` (`platform/android_audio_devices.rs`,
+`platform/mobile_files.rs`), and `build-android` only runs on a tag push. So an
+Android-only compile error is invisible until you are mid-release.
+
+v1.10.0 hit exactly this: a field added to `DeviceInfo` was wired into the JUCE
+path but not into the Android enumeration that builds the struct by hand →
+`error[E0063]` after the tag was already pushed. **If a release touches a shared
+struct or an FFI/snapshot type, grep for the other constructors before tagging:**
+
+```bash
+grep -rn "DeviceInfo {" --include=*.rs apps crates   # or whatever type changed
+```
+
+With the Android NDK installed you can check it properly; otherwise compare the
+struct's fields against each hand-written initializer, field by field.
 
 ## 7. Commit and tag
 
@@ -337,6 +362,18 @@ download step reads as a code error but isn't ours). Prefer a structural
 fix that removes the flaky work over a blind retry — e.g. the Intel runner
 was pulling the arm64 Rust std it never compiles with; scoping the target
 install per-runner deleted the download that flaked.
+
+Known, still open (seen twice in v1.10.0): `macos-15-intel` dies within a
+second of `scripts/build-ffmpeg-universal.sh` starting, with
+`curl: (35) Recv failure: Connection reset by peer` fetching
+`https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz`. The `macos-latest` leg runs
+the same script over the same URL and is fine, so it looks specific to the
+Intel runner's route to ffmpeg.org rather than to our code. It is
+`continue-on-error` + `publish: false`, so it does NOT block publishing —
+do not move the tag for it mid-release. If it becomes worth fixing, diagnose
+before adding `curl --retry`: a blind retry would paper over whatever the
+runner is actually hitting (rate limiting vs. no route), and the download is
+cheap to mirror or cache instead.
 
 Re-trigger after a fix: commit the fix, then MOVE the tag to the new
 commit and force-push it (the pipeline keys on the tag). The release-create

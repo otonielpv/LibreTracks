@@ -29,6 +29,30 @@ set -euo pipefail
 FFMPEG_VERSION="${FFMPEG_VERSION:-7.1.1}"
 FFMPEG_SHA256="${FFMPEG_SHA256:-733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1}"
 
+# Fetch the pinned tarball with retries.
+#
+# ffmpeg.org resets the connection on GitHub runners often enough to have
+# failed the v1.10.0 release twice in a row — `curl: (35) ... Connection reset
+# by peer` within a second of starting, first on the Intel mac (validation
+# only) and then on Linux, which DOES block publishing. A single unguarded
+# fetch makes the whole pipeline a coin flip on someone else's server.
+#
+# `--retry-all-errors` is the load-bearing flag: without it curl does not retry
+# a connection reset (it only retries transient HTTP codes and timeouts), which
+# is exactly the failure seen.
+#
+# No third-party mirror is listed on purpose. A mirror would have to serve the
+# byte-identical release tarball to pass FFMPEG_SHA256, and adding a host that
+# has not been verified to do so just trades one unknown for another. If this
+# still flakes, the right fix is caching the tarball in the workflow (keyed by
+# version) so it is fetched once, not once per job.
+download_ffmpeg_tarball() {
+  local out="$1"
+  curl -fSL --retry 5 --retry-delay 3 --retry-all-errors \
+    --connect-timeout 20 \
+    "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" -o "$out"
+}
+
 if [[ "$(uname)" != "Darwin" ]]; then
   echo "build-ffmpeg-universal: not macOS, nothing to do."
   exit 0
@@ -59,7 +83,7 @@ TARBALL="$WORK/ffmpeg-$FFMPEG_VERSION.tar.xz"
 if [[ ! -d "$SRC" ]]; then
   if [[ ! -f "$TARBALL" ]]; then
     echo "build-ffmpeg-universal: downloading FFmpeg $FFMPEG_VERSION"
-    curl -fSL "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" -o "$TARBALL"
+    download_ffmpeg_tarball "$TARBALL"
   fi
   echo "$FFMPEG_SHA256  $TARBALL" | shasum -a 256 -c -
   tar -xJf "$TARBALL" -C "$WORK"
