@@ -65,6 +65,13 @@ pub fn enumerate_output_devices() -> Vec<DeviceInfo> {
                 buffer_size: 0,
                 output_channel_count: d.channel_count.max(1),
                 output_channel_names: Vec::new(),
+                // Empty means "unknown", never "supports nothing" — the rate
+                // planner reads it that way and leaves the device alone. This
+                // enumeration walks AudioManager without opening anything, and
+                // the rates are only knowable from an open device, so unknown
+                // is the honest answer. Same contract as the JUCE path, which
+                // fills this in `open_device` and leaves the rest empty.
+                supported_sample_rates: Vec::new(),
                 last_error: String::new(),
                 fallback_active: false,
             })
