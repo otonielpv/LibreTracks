@@ -1,0 +1,164 @@
+name: E2E runner debug
+
+# Manual-only. This exists to diagnose why the E2E suite cannot start a WebView
+# session on a GitHub Windows runner:
+#
+#   session not created: DevToolsActivePort file doesn't exist
+#
+# Iterating on that through release tags costs ~45 minutes a try and drags the
+# five bundle builds along with it, so the investigation lives here instead:
+# one spec, verbose logs, and every artifact we can grab. Delete this workflow
+# once e2e-windows is green and back in publish-release's `needs`.
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: "Spec to run (path under tests/e2e/specs)"
+        default: "app-launch.e2e.ts"
+      extra_browser_args:
+        description: "Extra WebView2 args, space separated (e.g. --no-sandbox --disable-gpu)"
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  BUNGEE_VERSION: v2.4.24
+  BUNGEE_ARCHIVE: https://github.com/bungee-audio-stretch/bungee/releases/download/v2.4.24/bungee-v2.4.24.tgz
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
+  SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+
+jobs:
+  debug:
+    runs-on: windows-latest
+    # One spec that cannot start still burns 4 minutes of retries; the engine
+    # build dominates. Well under the release job's 45.
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Configure Windows vcpkg
+        shell: pwsh
+        run: |
+          "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_DEFAULT_TRIPLET=x64-windows-release" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_OVERLAY_TRIPLETS=$PWD\native\audio-engine-v2\vcpkg-triplets" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # Shares the release job's cache namespace on purpose: this builds the
+      # same engine with the same flags, so it should hit, not rebuild.
+      - name: Cache Windows vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: e2e-windows-vcpkg-${{ env.BUNGEE_VERSION }}-${{ hashFiles('native/audio-engine-v2/CMakeLists.txt', 'native/audio-engine-v2/cmake/**/*.cmake', 'native/audio-engine-v2/vcpkg-triplets/*.cmake') }}
+          restore-keys: |
+            e2e-windows-vcpkg-${{ env.BUNGEE_VERSION }}-
+
+      - name: Download Bungee runtime
+        shell: bash
+        run: |
+          mkdir -p vendor/bungee
+          curl -L "$BUNGEE_ARCHIVE" | tar -xz -C vendor/bungee include windows-x86_64
+          echo "LT_BUNGEE_DIR=$PWD/vendor/bungee" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download ASIO SDK
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/audiosdk/asio.git "$PWD/vendor/asiosdk"
+          "LT_ASIO_SDK_DIR=$PWD/vendor/asiosdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build desktop app for E2E
+        env:
+          LIBRETRACKS_ENGINE_E2E_CAPTURE: "1"
+        run: npm run build:desktop:native
+
+      # ── Diagnosis starts here ────────────────────────────────────────────
+      # What we know: WebView2 runtime and msedgedriver are matched
+      # (150.0.4078.105 both sides), and the `Binary Permissions: 666` error
+      # the service prints is a POSIX check that does not apply on Windows.
+      # So the question is why the app process cannot bring up a webview.
+
+      - name: Environment facts
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Host "--- session / desktop ---"
+          # A runner step is a non-interactive service session. That is the
+          # prime suspect for a GUI process failing to create a window.
+          Write-Host "UserName        : $env:USERNAME"
+          Write-Host "SessionName     : $env:SESSIONNAME"
+          Write-Host "Interactive     : $([Environment]::UserInteractive)"
+          Write-Host "--- WebView2 runtime ---"
+          $keys = @(
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+            "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+          )
+          foreach ($k in $keys) {
+            if (Test-Path $k) { Write-Host "$k -> $((Get-ItemProperty $k).pv)" }
+          }
+          Write-Host "--- the binary under test ---"
+          $exe = "target-desktop-native\release\libretracks-desktop.exe"
+          if (Test-Path $exe) { Get-Item $exe | Format-List Name, Length, LastWriteTime }
+          else { Write-Host "MISSING: $exe" }
+
+      # Does the binary run at all outside WebDriver? If this also fails to
+      # show a window, the problem is the app/runner, not tauri-driver.
+      - name: Launch the app directly
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = "$PWD\target-desktop-native\release\libretracks-desktop.exe"
+          Write-Host "Starting $exe"
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 25
+          if ($p.HasExited) {
+            Write-Host "EXITED EARLY with code $($p.ExitCode)"
+          } else {
+            Write-Host "Still running after 25s (pid $($p.Id)) — process survives"
+            try { Stop-Process -Id $p.Id -Force } catch {}
+          }
+
+      - name: Run one spec (verbose)
+        continue-on-error: true
+        env:
+          # Surfaced as an input so a hypothesis can be tried without editing
+          # the workflow. --no-sandbox / --disable-gpu are the usual fixes for
+          # DevToolsActivePort on CI.
+          LT_E2E_BROWSER_ARGS: ${{ inputs.extra_browser_args }}
+        run: >
+          npx wdio run tests/e2e/wdio.conf.ts
+          --spec tests/e2e/specs/${{ inputs.spec }}
+          --logLevel debug
+
+      - name: Upload everything
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-debug-logs
+          path: |
+            target-desktop-native/release/lt_*.log
+            logs/**
+            *.log
+          if-no-files-found: ignore
+          retention-days: 7
