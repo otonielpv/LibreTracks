@@ -163,6 +163,53 @@ users perceive the app (new always-visible features, important behavior
 changes). Skip pure refactors, internal perf, or features that aren't
 user-discoverable yet.
 
+Go through the release's user-facing commits one by one — it is easy to
+document the headline feature and miss the four smaller ones. Both language
+files must stay mirrored.
+
+### Screenshots
+
+Images live in `apps/website/public/screenshots/` and are committed. Capture
+them from the REAL app with the harness at `tests/e2e/specs/doc-shots.e2e.ts`
+(the docs sibling of the gitignored marketing-shots harness):
+
+```bash
+npm run build:desktop:native          # the harness drives the compiled binary
+# Point it at a COPY of a real multi-song session — the bundled demo is one
+# song and cannot show per-song columns or cue markers.
+export LT_SHOTS_SESSION="/path/to/copy/song.ltsession"
+LT_DOCSHOTS=1 npx wdio run tests/e2e/wdio.conf.ts \
+  --spec tests/e2e/specs/doc-shots.e2e.ts
+```
+
+If the run dies in the `before` hook with `invalid session id`, the app did not
+start: a previous run left an orphaned `libretracks-desktop` holding the
+Remote's port 3030, and the real panic (`os error 10048`) is in
+`%APPDATA%\com.libretracks.desktop\logs\errors.log`. Kill it and re-run:
+
+```powershell
+Get-Process libretracks-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+It is opt-in (`LT_DOCSHOTS=1`) so a normal suite run skips it. Add a capture
+when a release lands a feature the docs describe but cannot show, and name
+files after the FEATURE, not the release, so a re-shoot overwrites the same
+filename and every page referencing it stays current.
+
+Rules learned the hard way — a bad screenshot is worse than none:
+
+- **Look at every image before committing it.** Several failure modes only
+  show up visually: a settings control below the fold, a Remote layout
+  clipping its columns at phone width, a session that reset between tests so
+  the shot is of an empty app.
+- **Never fabricate content for the shot.** Adding empty song regions to
+  demo "resizable columns" photographs as an unfinished session, not a
+  feature. If the local fixture cannot show the feature honestly, get a real
+  session (`LT_SHOTS_SESSION=<a COPY of a .ltsession>`) or skip the image.
+- **Watch for personal data.** The Settings panel shows the audio cache path,
+  which contains the machine's account name. Check the frame before it ships.
+- The harness writes to whatever session it opens — always point it at a copy.
+
 ## 6. Run sanity checks
 
 ```bash
@@ -262,6 +309,26 @@ serves a completed job's log even while sibling jobs still run:
 gh api repos/otonielpv/LibreTracks/actions/jobs/<job-id>/logs | grep -iE 'error|##\[error\]'
 ```
 
+Jobs and what each one gates (as of v1.10.0):
+
+| Job | Blocks the release? |
+|-----|---------------------|
+| `test` | Yes — unit suites (JS + Rust + native ctest) on all three OSes. |
+| `e2e-windows` | Yes — drives the real compiled app via tauri-driver. |
+| `build-release-assets` | Yes, except the `macos-15-intel` leg (`publish: false`). |
+| `build-android` | Yes — signed APK. |
+| `publish-release` | Needs all of the above green. |
+
+`e2e-windows` is a **separate job on purpose**. It used to be two steps at the
+end of `test`, both pinned behind `continue-on-error` because that job has no
+vcpkg: `build:desktop:native` configures the engine with FFmpeg ON, CMake then
+fails looking for PkgConfig, and the E2E never actually gated anything. The
+standalone job replicates the release setup (vcpkg + ASIO SDK + Bungee
+runtime), so the binary under test is the one users get. It only needs `test`,
+so it runs in parallel with `build-release-assets` and does not lengthen the
+path to the bundles. On failure it uploads `e2e-windows-logs` (the app's
+`lt_*.log`) — grab that artifact before theorising.
+
 Triage before "fixing": some jobs are `continue-on-error: true` (e.g. the
 `macos-15-intel` Intel validation build, `publish: false`) — those fail
 red but DO NOT block the release, which still publishes. Also separate a
@@ -303,17 +370,21 @@ Use this exact template (matches the channel's voice):
 ```
 Hola @todos!!
 Hemos sacado una nueva versión v<NEW> estos han sido los cambios:
-- <bullet 1 — most relatable improvement first>
-- <bullet 2>
-- <bullet 3>
-- <bullet 4>
-- <bullet 5 — optional, max ~5 bullets>
+- <emoji> <bullet 1 — most relatable improvement first>
+- <emoji> <bullet 2>
+- <emoji> <bullet 3>
+- <emoji> <bullet 4>
+- <emoji> <bullet 5 — optional, max ~5 bullets>
 
 Puedes descargar la nueva versión aqui:
 https://libretracks.pages.dev/es/download/
 ```
 
 Notes:
+- **Every bullet leads with an emoji.** Reuse the one the same item already
+  carries in the Spanish section of `docs/releases/v<NEW>.md` so the post and
+  the in-app modal stay visually consistent. This applies to the bullets only —
+  the greeting, the closing line and the URL stay plain.
 - Bullets are user-facing benefits, lifted from the Spanish section of
   `docs/releases/v<NEW>.md` but rewritten for a conversational tone.
 - Keep accents on key words ("rápida", "más", "directo"), but it's OK to

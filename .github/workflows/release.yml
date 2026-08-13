@@ -88,38 +88,103 @@ jobs:
       - name: Run native engine tests
         run: ctest --test-dir build/engine-ci-tests -C Debug --output-on-failure
 
-      # End-to-end tests drive the real compiled desktop app through Tauri's
-      # WebDriver bridge. Windows-only: tauri-driver has no macOS WKWebView
-      # support, and Linux would need a headed X server + WebKitGTK, so this
-      # step is gated to the Windows runner. It builds the native binary (the
-      # E2E seam lives in the frontend bundle) then runs the deterministic,
-      # isolated specs — session.e2e.ts is intentionally excluded here because
-      # its drag-and-drop / native-signal timing is flaky under load.
-      #
-      # continue-on-error keeps a first-time environment issue (headless
-      # WebView2 / audio device availability on the runner) from blocking
-      # releases. Once it's proven green on CI hardware, drop this line to make
-      # E2E failures gate the release.
-      #
-      # The build carries the same continue-on-error for the same reason: this
-      # job has no vcpkg (that setup lives in build-release-assets), so
-      # build:desktop:native configures with LT_ENGINE_USE_FFMPEG=ON and no
-      # toolchain file, and CMake fails looking for PkgConfig — which does not
-      # exist on the Windows runner. Everything this job actually gates on (the
-      # unit suites and the native engine tests, which build with FFmpeg OFF)
-      # has already run by this point, so a failure here must not sink the
-      # release. Wiring vcpkg into this job to get real E2E coverage is tracked
-      # separately; if that lands, drop both of these lines together.
+  # End-to-end tests drive the real compiled desktop app through Tauri's
+  # WebDriver bridge. Windows-only: tauri-driver has no macOS WKWebView support,
+  # and Linux would need a headed X server + WebKitGTK.
+  #
+  # This lives in its own job rather than inside `test` because the E2E binary
+  # is a full release build of the engine: build:desktop:native configures with
+  # LT_ENGINE_USE_FFMPEG=ON, which needs the vcpkg toolchain, the ASIO SDK and
+  # the Bungee runtime — none of which the `test` job sets up (it builds the
+  # engine with FFmpeg/JUCE/Bungee OFF for the ctest suite). Running it there
+  # made CMake fail looking for PkgConfig, so the whole thing was pinned behind
+  # continue-on-error and never actually gated anything.
+  #
+  # It runs in parallel with build-release-assets (both only need `test`), so it
+  # does not lengthen the critical path to the bundles. No continue-on-error:
+  # from here on an E2E failure blocks the release.
+  e2e-windows:
+    name: E2E tests (Windows)
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Configure Windows vcpkg
+        shell: pwsh
+        run: |
+          "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_DEFAULT_TRIPLET=x64-windows-release" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_OVERLAY_TRIPLETS=$PWD\native\audio-engine-v2\vcpkg-triplets" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # Same cache key shape as build-release-assets, but a separate namespace:
+      # this job's engine is configured by scripts/desktop-native.ps1 (E2E
+      # capture ON), so it must not fight the release job over one entry.
+      - name: Cache Windows vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: e2e-windows-vcpkg-${{ env.BUNGEE_VERSION }}-${{ hashFiles('native/audio-engine-v2/CMakeLists.txt', 'native/audio-engine-v2/cmake/**/*.cmake', 'native/audio-engine-v2/vcpkg-triplets/*.cmake') }}
+          restore-keys: |
+            e2e-windows-vcpkg-${{ env.BUNGEE_VERSION }}-
+
+      # Without the Bungee runtime the engine silently configures with
+      # USE_BUNGEE=OFF and warp/pitch go mute — the specs would drive a
+      # different engine than the one we ship. Extract only the Windows slice
+      # (the apple-mac/ entries are symlinks bsdtar cannot create here).
+      - name: Download Bungee runtime
+        shell: bash
+        run: |
+          mkdir -p vendor/bungee
+          curl -L "$BUNGEE_ARCHIVE" | tar -xz -C vendor/bungee include windows-x86_64
+          echo "LT_BUNGEE_DIR=$PWD/vendor/bungee" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download ASIO SDK
+        shell: pwsh
+        run: |
+          # Mirrors the release job: JUCE compiles its ASIO device type only when
+          # the SDK is present, and settings.e2e.ts inspects the device list.
+          git clone --depth 1 https://github.com/audiosdk/asio.git "$PWD/vendor/asiosdk"
+          if (-not (Test-Path "$PWD/vendor/asiosdk/common/iasiodrv.h")) {
+            Write-Error "ASIO SDK clone did not produce common/iasiodrv.h"
+            exit 1
+          }
+          "LT_ASIO_SDK_DIR=$PWD/vendor/asiosdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Build desktop app for E2E
-        if: runner.os == 'Windows'
-        continue-on-error: true
         env:
           LIBRETRACKS_ENGINE_E2E_CAPTURE: "1"
         run: npm run build:desktop:native
 
-      - name: Run E2E tests (Windows)
-        if: runner.os == 'Windows'
-        continue-on-error: true
+      # Excluded on purpose:
+      #   session.e2e.ts            drag-and-drop / native-signal timing is
+      #                             flaky under CI load.
+      #   import-responsiveness     builds a ~635 MB fixture; too slow here, and
+      #                             the spec itself documents that it cannot
+      #                             actually prove the property it targets.
+      #   marketing-shots           not a test; skips unless LT_SHOTS=1.
+      - name: Run E2E tests
         run: >
           npx wdio run tests/e2e/wdio.conf.ts
           --spec tests/e2e/specs/app-launch.e2e.ts
@@ -136,6 +201,21 @@ jobs:
           --spec tests/e2e/specs/session-package.e2e.ts
           --spec tests/e2e/specs/track-structure.e2e.ts
           --spec tests/e2e/specs/persistence-full.e2e.ts
+          --spec tests/e2e/specs/deferred-audio-prep.e2e.ts
+          --spec tests/e2e/specs/sample-rate-alignment.e2e.ts
+
+      # The app writes lt_*.log next to the binary; on a red run that is the
+      # only window into what the native side did.
+      - name: Upload E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-windows-logs
+          path: |
+            target-desktop-native/release/lt_*.log
+            logs/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   build-release-assets:
     needs: test
@@ -869,7 +949,7 @@ jobs:
   publish-release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-release-assets, build-android]
+    needs: [build-release-assets, build-android, e2e-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
