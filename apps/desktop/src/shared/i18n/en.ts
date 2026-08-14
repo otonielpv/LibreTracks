@@ -488,6 +488,8 @@ const en = {
       trackRenamed: "Track renamed: {{name}}",
       trackDeleted: "Track deleted: {{name}}",
       trackTransposeUpdated: "Track transpose preference updated for {{name}}.",
+      tracksTransposeUpdated:
+        "Transpose preference updated on {{count}} tracks.",
       trackMovedIntoFolder: "Track moved into {{name}}",
       trackRemovedFromFolder: "Track removed from folder: {{name}}",
       trackSelected: "Track selected: {{name}}",
@@ -539,6 +541,7 @@ const en = {
       autoSaveUpdated: "Autosave updated.",
       projectAutoSaved: "Project autosaved.",
       trackRoutingUpdated: "Track routing updated.",
+      tracksRoutingUpdated: "Routing updated on {{count}} tracks.",
       importRequiresSession:
         "Create or open a session before importing audio to the library.",
       libraryUpdated: "Library updated with {{count}} assets.",

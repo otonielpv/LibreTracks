@@ -3,6 +3,11 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 
 import type { OptimisticMixState } from "../store";
 import type { TrackDragState } from "../types";
+import {
+  offsetGainByDb,
+  resolveEditTargets,
+  volumeDeltaDb,
+} from "./multiTrackEdit";
 
 /**
  * Dependencies for the track-header handlers extracted from
@@ -43,6 +48,11 @@ export type TrackHeaderHandlerDeps = {
     trackId: string,
     keys: Array<keyof OptimisticMixState>,
   ) => Promise<void>;
+  /** Persists a single track's mix change; used here for the output routing. */
+  commitTrackMixChange: (args: {
+    trackId: string;
+    audioTo?: string;
+  }) => Promise<TransportSnapshot>;
   runAction: (action: () => Promise<void>) => Promise<void>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   optimisticallyAppliedRevisionsRef: { current: Set<number> };
@@ -91,6 +101,7 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     patchTrackOptimisticMix,
     queueTrackMixLiveUpdate,
     persistTrackMix,
+    commitTrackMixChange,
     runAction,
     applyPlaybackSnapshot,
     optimisticallyAppliedRevisionsRef,
@@ -248,20 +259,49 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     });
   };
 
+  /**
+   * The tracks an edit on `trackId` fans out to. A track inside a
+   * multi-selection edits the whole selection; anything else edits itself only.
+   */
+  const editTargets = (trackId: string) =>
+    resolveEditTargets(trackId, getSelectedTrackIds());
+
+  /**
+   * Apply an absolute mix value to every target that still exists, then stream
+   * it live and persist it. Used by the toggles, where the whole group takes
+   * the same value as the clicked track.
+   */
+  const applyAbsoluteMix = (
+    trackIds: string[],
+    key: "muted" | "solo",
+    value: boolean,
+  ) => {
+    const applied = trackIds.filter((id) => findTrack(id) !== null);
+    if (!applied.length) {
+      return;
+    }
+
+    for (const id of applied) {
+      patchTrackOptimisticMix(id, { [key]: value });
+      queueTrackMixLiveUpdate(id, [key]);
+    }
+
+    void runAction(async () => {
+      await Promise.all(applied.map((id) => persistTrackMix(id, [key])));
+    });
+  };
+
   const handleTrackHeaderMuteToggle = (trackId: string) => {
     const track = findTrack(trackId);
     if (!track) {
       return;
     }
 
-    patchTrackOptimisticMix(trackId, {
-      muted: !resolveTrackMix(track, trackId).muted,
-    });
-    queueTrackMixLiveUpdate(trackId, ["muted"]);
-
-    void runAction(async () => {
-      await persistTrackMix(trackId, ["muted"]);
-    });
+    applyAbsoluteMix(
+      editTargets(trackId),
+      "muted",
+      !resolveTrackMix(track, trackId).muted,
+    );
   };
 
   const handleTrackHeaderSoloToggle = (trackId: string) => {
@@ -270,42 +310,104 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
       return;
     }
 
-    patchTrackOptimisticMix(trackId, {
-      solo: !resolveTrackMix(track, trackId).solo,
-    });
-    queueTrackMixLiveUpdate(trackId, ["solo"]);
-
-    void runAction(async () => {
-      await persistTrackMix(trackId, ["solo"]);
-    });
+    applyAbsoluteMix(
+      editTargets(trackId),
+      "solo",
+      !resolveTrackMix(track, trackId).solo,
+    );
   };
 
   const handleTrackHeaderVolumeChange = (
     trackId: string,
     nextVolume: number,
   ) => {
-    patchTrackOptimisticMix(trackId, {
-      volume: clamp(nextVolume, 0, maxTrackGain),
-    });
+    const clampedVolume = clamp(nextVolume, 0, maxTrackGain);
+    const targets = editTargets(trackId);
+    const draggedTrack = findTrack(trackId);
+
+    // The dB step the dragged fader just took; null when it started from or
+    // landed on silence, where there is no ratio to hand the rest of the group.
+    const deltaDb =
+      targets.length > 1 && draggedTrack
+        ? volumeDeltaDb(
+            resolveTrackMix(draggedTrack, trackId).volume,
+            clampedVolume,
+          )
+        : null;
+
+    patchTrackOptimisticMix(trackId, { volume: clampedVolume });
     queueTrackMixLiveUpdate(trackId, ["volume"]);
+
+    if (deltaDb === null) {
+      return;
+    }
+
+    // Relative move: every other selected track shifts by the same dB, so the
+    // balance between them survives the drag.
+    for (const id of targets) {
+      if (id === trackId) {
+        continue;
+      }
+      const track = findTrack(id);
+      if (!track) {
+        continue;
+      }
+      patchTrackOptimisticMix(id, {
+        volume: offsetGainByDb(
+          resolveTrackMix(track, id).volume,
+          deltaDb,
+          maxTrackGain,
+        ),
+      });
+      queueTrackMixLiveUpdate(id, ["volume"]);
+    }
   };
 
   const handleTrackHeaderVolumeCommit = (trackId: string) => {
+    const targets = editTargets(trackId);
     void runAction(async () => {
-      await persistTrackMix(trackId, ["volume"]);
+      await Promise.all(targets.map((id) => persistTrackMix(id, ["volume"])));
     });
   };
 
   const handleTrackHeaderPanChange = (trackId: string, nextPan: number) => {
-    patchTrackOptimisticMix(trackId, {
-      pan: clamp(nextPan, -1, 1),
-    });
+    const clampedPan = clamp(nextPan, -1, 1);
+    const targets = editTargets(trackId);
+    const draggedTrack = findTrack(trackId);
+
+    // Pan is already linear in its own [-1, 1] space, so the offset is a plain
+    // difference — no dB detour.
+    const deltaPan =
+      targets.length > 1 && draggedTrack
+        ? clampedPan - resolveTrackMix(draggedTrack, trackId).pan
+        : 0;
+
+    patchTrackOptimisticMix(trackId, { pan: clampedPan });
     queueTrackMixLiveUpdate(trackId, ["pan"]);
+
+    if (deltaPan === 0) {
+      return;
+    }
+
+    for (const id of targets) {
+      if (id === trackId) {
+        continue;
+      }
+      const track = findTrack(id);
+      if (!track) {
+        continue;
+      }
+      patchTrackOptimisticMix(id, {
+        pan: clamp(resolveTrackMix(track, id).pan + deltaPan, -1, 1),
+      });
+      queueTrackMixLiveUpdate(id, ["pan"]);
+    }
   };
 
   const handleTrackHeaderPanCommit = (trackId: string) => {
+    const targets = editTargets(trackId);
     void runAction(async () => {
-      await persistTrackMix(trackId, ["pan"]);
+      await Promise.all(targets.map((id) => persistTrackMix(id, ["pan"])));
     });
   };
 
@@ -316,35 +418,104 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     }
 
     const nextTransposeEnabled = !track.transposeEnabled;
-    void runAction(async () => {
+    // Every target takes the clicked track's new state, and only those that
+    // aren't already there need an IPC round-trip.
+    const targets = editTargets(trackId).filter((id) => {
+      const target = findTrack(id);
+      return target !== null && target.transposeEnabled !== nextTransposeEnabled;
+    });
+    if (!targets.length) {
+      return;
+    }
+
+    // Returned (not fire-and-forget) so callers can await the whole batch; the
+    // UI path ignores it exactly as before.
+    return runAction(async () => {
       setPitchPrepareUiState({
         active: true,
         message: "Aplicando cambio de tono...",
         startedAt: Date.now(),
       });
-      const nextSnapshot = await updateTrackTransposeEnabled({
-        trackId,
-        transposeEnabled: nextTransposeEnabled,
-      });
-      // Optimistic local mutation: see handleSelectedRegionTransposeChange.
-      optimisticallyAppliedRevisionsRef.current.add(
-        nextSnapshot.projectRevision,
-      );
+      // Sequential, not parallel: each toggle rebuilds pitch voices in the
+      // engine, and overlapping rebuilds is exactly what the prepare overlay
+      // exists to avoid.
+      let lastSnapshot: TransportSnapshot | null = null;
+      for (const id of targets) {
+        lastSnapshot = await updateTrackTransposeEnabled({
+          trackId: id,
+          transposeEnabled: nextTransposeEnabled,
+        });
+        // Optimistic local mutation: see handleSelectedRegionTransposeChange.
+        optimisticallyAppliedRevisionsRef.current.add(
+          lastSnapshot.projectRevision,
+        );
+      }
+      if (!lastSnapshot) {
+        return;
+      }
+
+      const toggled = new Set(targets);
+      const snapshotRevision = lastSnapshot.projectRevision;
       setSong((previous) => {
         if (!previous) return previous;
         return {
           ...previous,
-          projectRevision: nextSnapshot.projectRevision,
+          projectRevision: snapshotRevision,
           tracks: previous.tracks.map((t) =>
-            t.id === trackId
+            toggled.has(t.id)
               ? { ...t, transposeEnabled: nextTransposeEnabled }
               : t,
           ),
         };
       });
-      applyPlaybackSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(lastSnapshot);
       setStatus(
-        t("transport.status.trackTransposeUpdated", { name: track.name }),
+        targets.length > 1
+          ? t("transport.status.tracksTransposeUpdated", {
+              count: targets.length,
+            })
+          : t("transport.status.trackTransposeUpdated", { name: track.name }),
+      );
+    });
+  };
+
+  const handleTrackHeaderAudioToChange = (
+    trackId: string,
+    nextAudioTo: string,
+  ) => {
+    // Routing is absolute: a track inside a multi-selection re-routes the whole
+    // selection to the same output.
+    const targets = editTargets(trackId).filter((id) => {
+      // "inherit" only exists for tracks inside a folder; applying it to a
+      // top-level track would be rejected, so skip those instead of failing
+      // the whole batch.
+      if (nextAudioTo !== "inherit") {
+        return findTrack(id) !== null;
+      }
+      return Boolean(findTrack(id)?.parentTrackId);
+    });
+    if (!targets.length) {
+      return;
+    }
+
+    return runAction(async () => {
+      let lastSnapshot: TransportSnapshot | null = null;
+      for (const id of targets) {
+        lastSnapshot = await commitTrackMixChange({
+          trackId: id,
+          audioTo: nextAudioTo,
+        });
+      }
+      applyPlaybackSnapshot(lastSnapshot);
+      setStatus(
+        targets.length > 1
+          ? t("transport.status.tracksRoutingUpdated", {
+              count: targets.length,
+              defaultValue: "Routing updated on {{count}} tracks.",
+            })
+          : t("transport.status.trackRoutingUpdated", {
+              defaultValue: "Track routing updated.",
+            }),
       );
     });
   };
@@ -360,6 +531,7 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     handleTrackHeaderPanChange,
     handleTrackHeaderPanCommit,
     handleTrackHeaderTransposeToggle,
+    handleTrackHeaderAudioToChange,
   };
 }
 

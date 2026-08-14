@@ -5997,6 +5997,7 @@ export function TransportPanelContent() {
     handleTrackHeaderPanChange,
     handleTrackHeaderPanCommit,
     handleTrackHeaderTransposeToggle,
+    handleTrackHeaderAudioToChange,
   } = useMemo(
     () =>
       createTrackHeaderHandlers({
@@ -6010,6 +6011,7 @@ export function TransportPanelContent() {
         patchTrackOptimisticMix,
         queueTrackMixLiveUpdate,
         persistTrackMix,
+        commitTrackMixChange,
         runAction,
         applyPlaybackSnapshot,
         optimisticallyAppliedRevisionsRef,
@@ -6390,21 +6392,6 @@ export function TransportPanelContent() {
   function handleRemoteButtonClick() {
     setIsSettingsModalOpen(false);
     setIsRemoteModalOpen((current) => !current);
-  }
-
-  function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
-    void runAction(async () => {
-      const nextSnapshot = await commitTrackMixChange({
-        trackId,
-        audioTo: nextAudioTo,
-      });
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(
-        t("transport.status.trackRoutingUpdated", {
-          defaultValue: "Track routing updated.",
-        }),
-      );
-    });
   }
 
   function handleDismissMissingMidiDeviceWarning() {
@@ -7515,7 +7502,7 @@ export function TransportPanelContent() {
                           onPanChange={handleTrackHeaderPanChange}
                           onCommitPan={handleTrackHeaderPanCommit}
                           audioRoutingOptions={audioRoutingOptions}
-                          onAudioToChange={handleTrackAudioToChange}
+                          onAudioToChange={handleTrackHeaderAudioToChange}
                           midiLanes={midiHandlers.laneControls(song?.automationTrack?.enabled)}
                         />
 
@@ -8118,7 +8105,7 @@ export function TransportPanelContent() {
                         onCommitVolume: handleTrackHeaderVolumeCommit,
                         onPanChange: handleTrackHeaderPanChange,
                         onCommitPan: handleTrackHeaderPanCommit,
-                        onAudioToChange: handleTrackAudioToChange,
+                        onAudioToChange: handleTrackHeaderAudioToChange,
                       }}
                       onTrackContextMenu={handleTrackHeaderContextMenu}
                       onMasterGainChange={handleCompactMasterGainChange}

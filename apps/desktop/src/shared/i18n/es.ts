@@ -509,6 +509,8 @@ const es = {
       trackDeleted: "Track borrado: {{name}}",
       trackTransposeUpdated:
         "Preferencia de transposicion del track actualizada para {{name}}.",
+      tracksTransposeUpdated:
+        "Preferencia de transposicion actualizada en {{count}} tracks.",
       trackMovedIntoFolder: "Track movido dentro de {{name}}",
       trackRemovedFromFolder: "Track sacado de la carpeta: {{name}}",
       trackSelected: "Track seleccionado: {{name}}",
@@ -565,6 +567,7 @@ const es = {
       autoSaveUpdated: "Autoguardado actualizado.",
       projectAutoSaved: "Proyecto guardado automáticamente.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",
+      tracksRoutingUpdated: "Ruteo actualizado en {{count}} pistas.",
       importRequiresSession:
         "Crea o abre una sesion antes de importar audio a la libreria.",
       libraryUpdated: "Libreria actualizada con {{count}} assets.",

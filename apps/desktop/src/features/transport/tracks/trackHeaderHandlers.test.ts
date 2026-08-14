@@ -77,6 +77,7 @@ function setup(overrides: Partial<TrackHeaderHandlerDeps> = {}) {
     patchTrackOptimisticMix: vi.fn(),
     queueTrackMixLiveUpdate: vi.fn(),
     persistTrackMix: vi.fn(async () => {}),
+    commitTrackMixChange: vi.fn(async () => snapshot(17)),
     runAction: vi.fn(async (action) => {
       await action();
     }),
@@ -329,6 +330,216 @@ describe("createTrackHeaderHandlers", () => {
         "volume",
       ]);
       expect(deps.persistTrackMix).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("multi-track edits", () => {
+    /** Selects t1..t3 up front so every control edits the whole group. */
+    const multiSetup = (overrides: Partial<TrackHeaderHandlerDeps> = {}) => {
+      let selected = ["t1", "t2", "t3"];
+      return setup({
+        getSelectedTrackIds: () => selected,
+        selectTrack: vi.fn((ids: string[]) => {
+          selected = ids;
+        }),
+        ...overrides,
+      });
+    };
+
+    it("mute sets the whole selection to the clicked track's new state", async () => {
+      const { handlers, deps } = multiSetup({
+        // t2 is already muted; it must stay muted rather than toggle off.
+        findTrack: (id) =>
+          id === "t2" ? track("t2", { muted: true }) : track(id),
+      });
+      handlers.handleTrackHeaderMuteToggle("t1");
+
+      for (const id of ["t1", "t2", "t3"]) {
+        expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith(id, {
+          muted: true,
+        });
+        expect(deps.persistTrackMix).toHaveBeenCalledWith(id, ["muted"]);
+      }
+    });
+
+    it("solo sets the whole selection to the clicked track's new state", () => {
+      const { handlers, deps } = multiSetup();
+      handlers.handleTrackHeaderSoloToggle("t1");
+
+      for (const id of ["t1", "t2", "t3"]) {
+        expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith(id, {
+          solo: true,
+        });
+      }
+    });
+
+    it("volume moves the group by the dragged track's dB delta", () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) =>
+          id === "t2" ? track("t2", { volume: 0.5 }) : track(id, { volume: 1 }),
+      });
+      // t1: 1.0 -> 0.5 is -6.02 dB, so t2 (0.5) halves to 0.25.
+      handlers.handleTrackHeaderVolumeChange("t1", 0.5);
+
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith("t1", {
+        volume: 0.5,
+      });
+      const t2Call = vi
+        .mocked(deps.patchTrackOptimisticMix)
+        .mock.calls.find(([id]) => id === "t2");
+      expect(t2Call?.[1].volume).toBeCloseTo(0.25, 4);
+    });
+
+    it("volume from silence only moves the dragged track", () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) => track(id, { volume: id === "t1" ? 0 : 1 }),
+      });
+      handlers.handleTrackHeaderVolumeChange("t1", 0.5);
+
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledTimes(1);
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith("t1", {
+        volume: 0.5,
+      });
+    });
+
+    it("pan moves the group by the dragged track's offset", () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) =>
+          track(id, { pan: id === "t2" ? -0.5 : 0 }),
+      });
+      // t1: 0 -> 0.25 is +0.25, so t2 goes -0.5 -> -0.25.
+      handlers.handleTrackHeaderPanChange("t1", 0.25);
+
+      const t2Call = vi
+        .mocked(deps.patchTrackOptimisticMix)
+        .mock.calls.find(([id]) => id === "t2");
+      expect(t2Call?.[1].pan).toBeCloseTo(-0.25, 4);
+    });
+
+    it("pan clamps each track to its own range without dragging the rest", () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) => track(id, { pan: id === "t2" ? 0.9 : 0 }),
+      });
+      handlers.handleTrackHeaderPanChange("t1", 0.5);
+
+      const t2Call = vi
+        .mocked(deps.patchTrackOptimisticMix)
+        .mock.calls.find(([id]) => id === "t2");
+      expect(t2Call?.[1].pan).toBe(1);
+    });
+
+    it("commits persist every selected track", async () => {
+      const { handlers, deps } = multiSetup();
+      handlers.handleTrackHeaderVolumeCommit("t1");
+      handlers.handleTrackHeaderPanCommit("t1");
+
+      for (const id of ["t1", "t2", "t3"]) {
+        expect(deps.persistTrackMix).toHaveBeenCalledWith(id, ["volume"]);
+        expect(deps.persistTrackMix).toHaveBeenCalledWith(id, ["pan"]);
+      }
+    });
+
+    it("transpose toggles every selected track that isn't already there", async () => {
+      const { handlers, deps, getSongPatch } = multiSetup({
+        // t3 is already enabled, so it needs no round-trip.
+        findTrack: (id) =>
+          track(id, { transposeEnabled: id === "t3" }),
+      });
+      await handlers.handleTrackHeaderTransposeToggle("t1");
+
+      expect(deps.updateTrackTransposeEnabled).toHaveBeenCalledTimes(2);
+      expect(deps.updateTrackTransposeEnabled).toHaveBeenCalledWith({
+        trackId: "t1",
+        transposeEnabled: true,
+      });
+      expect(deps.updateTrackTransposeEnabled).toHaveBeenCalledWith({
+        trackId: "t2",
+        transposeEnabled: true,
+      });
+
+      const patched = getSongPatch()?.({
+        tracks: [track("t1"), track("t2"), track("t3")],
+      } as unknown as SongView);
+      expect(patched?.tracks[0].transposeEnabled).toBe(true);
+      expect(patched?.tracks[1].transposeEnabled).toBe(true);
+    });
+
+    it("transpose turns the whole selection off together", async () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) => track(id, { transposeEnabled: true }),
+      });
+      // Every track is enabled, so clicking t1 turns all three off.
+      await handlers.handleTrackHeaderTransposeToggle("t1");
+
+      expect(deps.updateTrackTransposeEnabled).toHaveBeenCalledTimes(3);
+      for (const id of ["t1", "t2", "t3"]) {
+        expect(deps.updateTrackTransposeEnabled).toHaveBeenCalledWith({
+          trackId: id,
+          transposeEnabled: false,
+        });
+      }
+    });
+
+    it("a control on a track outside the selection edits only that track", () => {
+      const { handlers, deps } = multiSetup({
+        getSelectedTrackIds: () => ["t1", "t2"],
+      });
+      handlers.handleTrackHeaderMuteToggle("t3");
+
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledTimes(1);
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith("t3", {
+        muted: true,
+      });
+    });
+
+    it("routing re-routes every selected track to the same output", async () => {
+      const { handlers, deps } = multiSetup();
+      await handlers.handleTrackHeaderAudioToChange("t1", "ext:2-3");
+
+      expect(deps.commitTrackMixChange).toHaveBeenCalledTimes(3);
+      for (const id of ["t1", "t2", "t3"]) {
+        expect(deps.commitTrackMixChange).toHaveBeenCalledWith({
+          trackId: id,
+          audioTo: "ext:2-3",
+        });
+      }
+      expect(deps.applyPlaybackSnapshot).toHaveBeenCalledWith(snapshot(17));
+    });
+
+    it("routing to 'inherit' skips tracks that have no parent folder", async () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) =>
+          track(id, { parentTrackId: id === "t2" ? "f1" : null }),
+      });
+      await handlers.handleTrackHeaderAudioToChange("t1", "inherit");
+
+      // Only t2 lives in a folder, so it is the only valid target.
+      expect(deps.commitTrackMixChange).toHaveBeenCalledTimes(1);
+      expect(deps.commitTrackMixChange).toHaveBeenCalledWith({
+        trackId: "t2",
+        audioTo: "inherit",
+      });
+    });
+
+    it("routing to 'inherit' with no foldered track is a no-op", async () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) => track(id, { parentTrackId: null }),
+      });
+      await handlers.handleTrackHeaderAudioToChange("t1", "inherit");
+
+      expect(deps.commitTrackMixChange).not.toHaveBeenCalled();
+    });
+
+    it("skips targets that no longer exist in the song", () => {
+      const { handlers, deps } = multiSetup({
+        findTrack: (id) => (id === "t2" ? null : track(id)),
+      });
+      handlers.handleTrackHeaderMuteToggle("t1");
+
+      const touched = vi
+        .mocked(deps.patchTrackOptimisticMix)
+        .mock.calls.map(([id]) => id);
+      expect(touched).toEqual(["t1", "t3"]);
     });
   });
 

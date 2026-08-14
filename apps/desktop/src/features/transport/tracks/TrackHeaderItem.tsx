@@ -17,6 +17,19 @@ import { useTransportStore } from "../store";
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
 
+/**
+ * Interactive controls inside the header that own their own pointer gestures:
+ * the mute/solo/transpose buttons, the volume and pan faders, and the routing
+ * combobox. Neither the track drag nor the track selection may fire when a
+ * gesture starts (or ends) on one of these.
+ */
+const OWN_CONTROL_SELECTOR =
+  "button, input, label, textarea, select, .lt-track-toggle-group, .lt-folder-toggle, .lt-track-volume, .lt-track-pan";
+
+function isOwnControlTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(OWN_CONTROL_SELECTOR) !== null;
+}
+
 /** The stored volume is a linear gain (1.0 = unity); the fader is an
  * Ableton-style dB scale. Show the dB readout (0 dB = unity, +10 dB = top). */
 function formatVolumeValue(volume: number): string {
@@ -127,17 +140,23 @@ function TrackHeaderItemComponent({
   });
   const panFill = `${(((effectivePanValue + 1) * 0.5) * 100).toFixed(2)}%`;
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
-    const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest(
-        'button, input, label, textarea, select, .lt-track-toggle-group, .lt-folder-toggle, .lt-track-volume, .lt-track-pan',
-      )
-    ) {
+    if (isOwnControlTarget(event.target)) {
       return;
     }
 
     onStartTrackDrag(event, trackId);
+  };
+
+  // The controls have their own handlers, so a gesture that starts on one must
+  // not also select the track: releasing a fader fires a click that bubbles up
+  // to the header, which would otherwise collapse a multi-selection down to
+  // this one track mid-drag.
+  const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (isOwnControlTarget(event.target)) {
+      return;
+    }
+
+    onSelectTrack(trackId, trackName, event);
   };
 
   const metaLabel = trackKind === "folder" ? t("trackHeader.childrenCount", { count: childCount }) : null;
@@ -165,7 +184,7 @@ function TrackHeaderItemComponent({
       role="button"
       tabIndex={0}
       onMouseDown={handleMouseDown}
-      onClick={(event) => onSelectTrack(trackId, trackName, event)}
+      onClick={handleClick}
       onContextMenu={(event) => onOpenContextMenu(event, trackId)}
     >
       <div className="lt-track-header-body">

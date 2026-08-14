@@ -305,6 +305,36 @@ describe("App / timeline-tracks", () => {
     expect(buttons[0].textContent).toContain("Seleccionar color...");
   });
 
+  it("keeps multi-track selection when a fader inside it is moved", async () => {
+    const { container } = await renderApp();
+    const rhythmHeader = getTrackHeader(container, "Rhythm");
+    const keysHeader = getTrackHeader(container, "Keys");
+
+    await act(async () => {
+      fireEvent.click(rhythmHeader);
+      fireEvent.click(keysHeader, { ctrlKey: true });
+    });
+    expect(rhythmHeader.className).toContain("is-selected");
+    expect(keysHeader.className).toContain("is-selected");
+
+    // Releasing a fader fires a click that bubbles to the header. It must not
+    // collapse the selection down to the dragged track, or the group edit the
+    // user is in the middle of would silently apply to one track only.
+    const rhythmVolume = within(rhythmHeader).getByRole("slider", {
+      name: textMatcher(
+        interpolate(en.trackHeader.volumeAria, { name: "Rhythm" }),
+      ),
+    });
+    await act(async () => {
+      fireEvent.change(rhythmVolume, { target: { value: "0.5" } });
+      fireEvent.mouseUp(rhythmVolume);
+      fireEvent.click(rhythmVolume);
+    });
+
+    expect(rhythmHeader.className).toContain("is-selected");
+    expect(keysHeader.className).toContain("is-selected");
+  });
+
   it("uses a native color input for custom track colors", async () => {
     const { container } = await renderApp();
     const keysHeader = getTrackHeader(container, "Keys");
