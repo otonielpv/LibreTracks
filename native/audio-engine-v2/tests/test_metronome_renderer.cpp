@@ -140,9 +140,35 @@ TEST_CASE("metronome volume above unity boosts click output") {
 
 TEST_CASE("metronome volume clamps to boosted maximum") {
     MetronomeRenderer renderer;
-    renderer.set_config({true, 3.0f, "master", true});
+    renderer.set_config({true, kMaxAuxGain + 5.0f, "master", true});
 
-    CHECK(renderer.diagnostics().volume == doctest::Approx(2.5f));
+    CHECK(renderer.diagnostics().volume == doctest::Approx(kMaxAuxGain));
+}
+
+// The ceiling must reach the top of the UI fader, or the upper part of the
+// travel is silently inert. This is the +20 dB aux fader (AUX_FADER_SCALE in
+// packages/shared/src/faderScale.ts): a 2.5f ceiling here used to flatten
+// everything above ~+8 dB, so 0 dB and +20 dB sounded identical.
+TEST_CASE("metronome volume honours the whole +20 dB fader range") {
+    MetronomeRenderer unity;
+    MetronomeRenderer boosted;
+    auto session = make_session();
+    unity.set_config({true, 1.0f, "master", true});
+    boosted.set_config({true, kMaxAuxGain, "master", true});
+
+    // The full fader top (+20 dB) must survive the clamp untouched...
+    CHECK(boosted.diagnostics().volume == doctest::Approx(kMaxAuxGain));
+
+    std::vector<float> unity_left(2048, 0.0f), unity_right(2048, 0.0f);
+    std::vector<float> boosted_left(2048, 0.0f), boosted_right(2048, 0.0f);
+    float* unity_out[] = { unity_left.data(), unity_right.data() };
+    float* boosted_out[] = { boosted_left.data(), boosted_right.data() };
+
+    unity.render(unity_out, 2, 2048, 48000.0, 0, &session);
+    boosted.render(boosted_out, 2, 2048, 48000.0, 0, &session);
+
+    // ...and actually reach the output, well past the old 2.5f ceiling.
+    CHECK(peak(boosted_left) > peak(unity_left) * 5.0f);
 }
 
 TEST_CASE("accent click is louder than normal beat") {

@@ -392,7 +392,7 @@ void VoiceGuideRenderer::set_enabled(bool enabled) {
 }
 
 void VoiceGuideRenderer::set_volume(float volume) {
-    volume_.store(std::clamp(volume, 0.0f, 4.0f), std::memory_order_release);
+    volume_.store(std::clamp(volume, 0.0f, kMaxAuxGain), std::memory_order_release);
 }
 
 VoiceGuideConfig VoiceGuideRenderer::config() const {

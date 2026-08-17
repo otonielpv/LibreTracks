@@ -287,7 +287,10 @@ async fn run_remote_command_bridge(
                 }
 
                 if let Some(volume) = volume {
-                    next_settings.metronome_volume = volume.clamp(0.0, 1.0);
+                    // Linear gain on the same +20 dB scale the remote's own
+                    // fader uses (AUX_FADER_SCALE), not a 0..1 slider position:
+                    // clamping to 1.0 here capped the remote's click at 0 dB.
+                    next_settings.metronome_volume = volume.clamp(0.0, 10.0);
                 }
 
                 let result = session.update_audio_settings(next_settings.clone(), &state.audio);

@@ -9,9 +9,16 @@ use crate::audio::engine::{
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 
+/// Linear gain, like every other aux voice. `2.0` (≈ +6 dB) is what the click
+/// has always actually played at: the old model saved `0.8` and multiplied it
+/// by a fixed 2.5 on the way to the engine. Keeping the audible level identical
+/// across that change is the point — see `migrate_legacy_metronome_volume`.
 fn default_metronome_volume() -> f64 {
-    0.8
+    2.0
 }
+
+/// Fixed boost the click used to get between the saved setting and the engine.
+pub(crate) const LEGACY_METRONOME_OUTPUT_GAIN: f64 = 2.5;
 
 fn default_metronome_accent_enabled() -> bool {
     true
@@ -395,6 +402,29 @@ pub fn apply_decoding_cache_env(app: &AppHandle, settings: &AppSettings) {
     }
 }
 
+impl AppSettings {
+    /// Convert a click volume saved under the old model into a linear gain.
+    ///
+    /// Until the click fader became a dB scale, the saved value was a 0..1
+    /// slider position that the engine path multiplied by a fixed 2.5. The
+    /// setting now IS the gain, so a stored `0.8` has to become `2.0` or every
+    /// existing user's click would suddenly drop by ~8 dB on upgrade.
+    ///
+    /// `<= 1.0` is the tell: the old path clamped to 1.0 before scaling, so no
+    /// legacy file can hold more than that, while any value the dB fader writes
+    /// above unity is already a real gain. The one ambiguous case is exactly
+    /// `1.0` (legacy maximum, or 0 dB written by the new fader) — it is treated
+    /// as legacy, preserving the audible level for the many upgrading users at
+    /// the cost of nudging a deliberate 0 dB up to +8 dB for the few who set it
+    /// during 1.10, who can simply pull the fader back down.
+    pub(crate) fn migrate_legacy_metronome_volume(&mut self) {
+        if self.metronome_volume <= 1.0 {
+            self.metronome_volume =
+                (self.metronome_volume * LEGACY_METRONOME_OUTPUT_GAIN).clamp(0.0, 10.0);
+        }
+    }
+}
+
 pub struct AppSettingsStore {
     settings: Mutex<AppSettings>,
 }
@@ -430,7 +460,10 @@ pub fn load_app_settings(app: &AppHandle) -> Result<AppSettings, io::Error> {
     }
 
     let contents = fs::read_to_string(settings_path)?;
-    serde_json::from_str(&contents).map_err(|error| io::Error::other(error.to_string()))
+    let mut settings: AppSettings =
+        serde_json::from_str(&contents).map_err(|error| io::Error::other(error.to_string()))?;
+    settings.migrate_legacy_metronome_volume();
+    Ok(settings)
 }
 
 pub fn save_app_settings(app: &AppHandle, settings: &AppSettings) -> Result<PathBuf, io::Error> {
@@ -457,11 +490,60 @@ fn settings_file_path(app: &AppHandle) -> Result<PathBuf, io::Error> {
 mod tests {
     use super::*;
 
+    /// Upgrading must not change how loud the click actually is: a legacy `0.8`
+    /// played at `0.8 * 2.5 = 2.0`, so it has to land on exactly `2.0` now.
+    #[test]
+    fn legacy_metronome_volume_keeps_the_same_audible_level() {
+        let mut settings = AppSettings {
+            metronome_volume: 0.8,
+            ..AppSettings::default()
+        };
+        settings.migrate_legacy_metronome_volume();
+        assert_eq!(settings.metronome_volume, 2.0);
+
+        let mut silent = AppSettings {
+            metronome_volume: 0.0,
+            ..AppSettings::default()
+        };
+        silent.migrate_legacy_metronome_volume();
+        assert_eq!(silent.metronome_volume, 0.0);
+    }
+
+    /// Values the dB fader wrote above unity are already real gains and must be
+    /// left exactly as they are — double-scaling them would be a loud surprise.
+    #[test]
+    fn migration_leaves_new_model_gains_untouched() {
+        for gain in [1.5, 2.0, 5.0, 10.0] {
+            let mut settings = AppSettings {
+                metronome_volume: gain,
+                ..AppSettings::default()
+            };
+            settings.migrate_legacy_metronome_volume();
+            assert_eq!(settings.metronome_volume, gain);
+        }
+    }
+
+    /// Running the migration twice must not compound (a settings file is loaded
+    /// once per launch, but the guard is what makes that safe).
+    #[test]
+    fn migration_is_idempotent() {
+        let mut settings = AppSettings {
+            metronome_volume: 0.8,
+            ..AppSettings::default()
+        };
+        settings.migrate_legacy_metronome_volume();
+        let once = settings.metronome_volume;
+        settings.migrate_legacy_metronome_volume();
+        assert_eq!(settings.metronome_volume, once);
+    }
+
     #[test]
     fn default_settings_match_the_documented_values() {
         let settings = AppSettings::default();
         assert!(!settings.metronome_enabled);
-        assert_eq!(settings.metronome_volume, 0.8);
+        // Linear gain now, not a 0..1 slider scaled by 2.5 on the way out.
+        // 2.0 is the same audible level the old `0.8` produced.
+        assert_eq!(settings.metronome_volume, 2.0);
         assert_eq!(settings.metronome_output, "master");
         assert_eq!(settings.voice_guide_output, "monitor");
         assert_eq!(settings.enabled_output_channels, vec![0, 1]);
@@ -517,7 +599,7 @@ mod tests {
         assert!(settings.metronome_enabled);
         assert_eq!(settings.global_jump_bars, 8);
         // Untouched fields stay at their defaults.
-        assert_eq!(settings.metronome_volume, 0.8);
+        assert_eq!(settings.metronome_volume, 2.0);
         assert_eq!(settings.vamp_bars, 4);
     }
 
@@ -582,7 +664,7 @@ mod tests {
     #[test]
     fn settings_store_reads_back_what_was_set() {
         let store = AppSettingsStore::new(AppSettings::default());
-        assert_eq!(store.current().unwrap().metronome_volume, 0.8);
+        assert_eq!(store.current().unwrap().metronome_volume, 2.0);
 
         let mut next = AppSettings::default();
         next.metronome_volume = 0.1;

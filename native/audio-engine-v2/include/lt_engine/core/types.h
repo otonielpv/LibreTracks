@@ -16,7 +16,18 @@ using Id = std::string;
 // Semitone offset clamped to [-12, +12].
 using Semitones = int32_t;
 
-// Gain in linear scale [0.0, ~4.0].  0.0 is silence, 1.0 is unity.
+// Gain in linear scale [0.0, ~10.0].  0.0 is silence, 1.0 is unity.
 using Gain = float;
+
+// Headroom ceiling for the aux voices the user drives with a "+20 dB" fader:
+// metronome, voice guide and ambient pads.  Their faders are an Ableton-style
+// dB scale topping out at +20 dB, i.e. a linear gain of 10^(20/20) = 10.
+//
+// Keep in sync with AUX_FADER_SCALE in packages/shared/src/faderScale.ts.
+// Clamping below the fader's own maximum is silently destructive: the top of
+// the travel stops doing anything, and the user reads that as a dead fader
+// (0 dB and +20 dB sounding identical, which is what a 2.5f ceiling here did
+// to the metronome — everything above ~+8 dB was flattened).
+constexpr Gain kMaxAuxGain = 10.0f;
 
 } // namespace lt

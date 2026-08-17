@@ -11,7 +11,7 @@ namespace lt {
 namespace {
 
 constexpr double kTwoPi = 6.28318530717958647692;
-constexpr float kMaxMetronomeVolume = 2.5f;
+constexpr float kMaxMetronomeVolume = kMaxAuxGain;
 
 void copy_text(std::array<char, 64>& dst, const std::string& text) noexcept {
     std::fill(dst.begin(), dst.end(), '\0');
@@ -146,7 +146,11 @@ void MetronomeRenderer::set_config(const MetronomeConfig& config) {
     subdivision_preset_.store(clamp_preset(config.subdivision_preset), std::memory_order_release);
     subdivision_pitch_.store(std::clamp(config.subdivision_pitch, -24.0f, 24.0f),
                              std::memory_order_release);
-    subdivision_gain_.store(std::clamp(config.subdivision_gain, 0.0f, 1.0f),
+    // Relative to the beat click (see the 0.65f factor at the render site), but
+    // driven by the same +20 dB aux fader as the other voices — so it clamps to
+    // the same ceiling. A 1.0f cap here pinned it at 0 dB and made the whole
+    // positive half of the fader inert.
+    subdivision_gain_.store(std::clamp(config.subdivision_gain, 0.0f, kMaxAuxGain),
                             std::memory_order_release);
 
     std::string route = normalize_route(config.output_route.empty() ? "master" : config.output_route);

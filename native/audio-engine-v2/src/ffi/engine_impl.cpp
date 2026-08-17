@@ -40,7 +40,7 @@ using json = nlohmann::json;
 
 namespace {
 
-constexpr float kMaxMetronomeVolume = 2.5f;
+constexpr float kMaxMetronomeVolume = kMaxAuxGain;
 
 #if defined(_WIN32)
 // Raise the process working-set MINIMUM so Windows stops trimming our resident
@@ -1778,7 +1778,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetVoiceGuideConfig>) {
             voice_guide_config_.enabled = c.enabled;
-            voice_guide_config_.volume = std::clamp(c.volume, 0.0f, 4.0f);
+            voice_guide_config_.volume = std::clamp(c.volume, 0.0f, kMaxAuxGain);
             voice_guide_config_.output_route = c.route.empty() ? std::string("monitor") : c.route;
             voice_guide_config_.lead_bars = std::clamp(c.lead_bars, 1, 4);
             voice_guide_config_.count_in_enabled = c.count_in_enabled;
@@ -1803,7 +1803,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetPadConfig>) {
             pad_config_.enabled = c.enabled;
-            pad_config_.volume = std::clamp(c.volume, 0.0f, 4.0f);
+            pad_config_.volume = std::clamp(c.volume, 0.0f, kMaxAuxGain);
             pad_config_.output_route = c.route.empty() ? std::string("master") : c.route;
             pad_config_.key = std::clamp(c.key, 0, 11);
             pad_config_.pad_id = c.pad_id;

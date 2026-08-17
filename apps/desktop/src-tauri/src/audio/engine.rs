@@ -29,11 +29,25 @@ use crate::{infra::error::DesktopError, infra::settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
 const ENGINE_V2_FALLBACK_OUTPUT_CHANNELS: usize = 2;
-const METRONOME_OUTPUT_GAIN: f64 = 2.5;
 pub(crate) const ENGINE_WAVEFORM_RESOLUTION_FRAMES: usize = 256;
 
+/// Linear gain ceiling for the click, matching the +20 dB top of its fader
+/// (`AUX_FADER_SCALE` in packages/shared/src/faderScale.ts) and the engine's
+/// own `kMaxAuxGain`.
+const MAX_METRONOME_GAIN: f64 = 10.0;
+
+/// The saved setting IS the linear gain the engine should apply — same contract
+/// as the voice guide and the pads, which pass their volume straight through.
+///
+/// This used to be `volume.clamp(0.0, 1.0) * 2.5`: a leftover from when the
+/// click fader was a 0..1 slider that needed a fixed boost to be audible. Once
+/// the fader became a dB scale reaching +20 dB (linear gain 10), that clamp
+/// silently flattened everything above 1.0 — so 0 dB and +20 dB sounded
+/// identical no matter how high the engine's own ceiling was raised. Values
+/// saved under the old model are migrated once on load (see
+/// `AppSettings::migrate_legacy_metronome_volume`).
 fn metronome_engine_volume(settings_volume: f64) -> f32 {
-    (settings_volume.clamp(0.0, 1.0) * METRONOME_OUTPUT_GAIN) as f32
+    settings_volume.clamp(0.0, MAX_METRONOME_GAIN) as f32
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -3075,11 +3089,21 @@ mod tests {
     }
 
     #[test]
-    fn metronome_engine_volume_boosts_saved_setting_range() {
+    fn metronome_engine_volume_passes_saved_gain_through() {
         assert_eq!(metronome_engine_volume(0.0), 0.0);
-        assert_eq!(metronome_engine_volume(0.5), 1.25);
-        assert_eq!(metronome_engine_volume(1.0), 2.5);
-        assert_eq!(metronome_engine_volume(2.0), 2.5);
+        assert_eq!(metronome_engine_volume(1.0), 1.0);
+        assert_eq!(metronome_engine_volume(2.0), 2.0);
+    }
+
+    /// The whole point of the fix: the top of the +20 dB fader has to reach the
+    /// engine intact. The old `clamp(0.0, 1.0) * 2.5` flattened everything above
+    /// 1.0 to 2.5, which is why 0 dB and +20 dB sounded identical.
+    #[test]
+    fn metronome_engine_volume_reaches_the_top_of_the_fader() {
+        assert_eq!(metronome_engine_volume(10.0), 10.0);
+        assert!(metronome_engine_volume(10.0) > metronome_engine_volume(1.0) * 5.0);
+        // Still bounded, so a corrupt setting cannot blow up the output.
+        assert_eq!(metronome_engine_volume(99.0), 10.0);
     }
 
     fn source_state(status: &str) -> lt_audio_engine_v2::SourcePreparationInfo {

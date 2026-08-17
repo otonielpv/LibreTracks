@@ -186,7 +186,7 @@ void PadRenderer::set_transport_gate(bool open) {
 }
 
 void PadRenderer::set_volume(float volume) {
-    volume_.store(std::clamp(volume, 0.0f, 4.0f), std::memory_order_release);
+    volume_.store(std::clamp(volume, 0.0f, kMaxAuxGain), std::memory_order_release);
 }
 
 void PadRenderer::set_fade_in_seconds(float seconds) {

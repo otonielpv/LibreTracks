@@ -677,7 +677,12 @@ fn dispatch_midi_parameter(
 
     match binding_key {
         "param:metronome_volume" => {
-            let next_volume = f64::from(message.data2) / 127.0;
+            // The setting is a linear gain on a fader that runs to +20 dB, so a
+            // raw `data2 / 127` (the old 0..1 slider mapping) pinned the knob's
+            // whole travel at or below 0 dB. Map the CC across the fader's dB
+            // range instead: fully down is silence, ~3/4 up is unity, top is
+            // +20 dB — the same places they sit on the on-screen fader.
+            let next_volume = metronome_volume_from_cc(message.data2);
             if (next_settings.metronome_volume - next_volume).abs() > f64::EPSILON {
                 next_settings.metronome_volume = next_volume;
                 changed = true;
@@ -883,6 +888,36 @@ fn parse_midi_message(message: &[u8]) -> Option<MidiMessage> {
         data1,
         data2,
     })
+}
+
+/// Map a CC value (0-127) onto the click fader's travel, as a linear gain.
+///
+/// Mirrors the shape of `AUX_FADER_SCALE` (packages/shared/src/faderScale.ts)
+/// at its two anchors: unity sits ~3/4 of the way up and the top is +20 dB.
+/// Below unity the real fader uses a piecewise taper; replicating it here would
+/// duplicate a curve that can drift out of sync, so this interpolates linearly
+/// in dB down to the -60 dB floor — close enough for a knob, and the fader
+/// itself remains the single source of truth for the on-screen shape.
+fn metronome_volume_from_cc(value: u8) -> f64 {
+    /// Fader position that means unity gain / 0 dB.
+    const UNITY_POSITION: f64 = 0.75;
+    const MAX_DB: f64 = 20.0;
+    const FLOOR_DB: f64 = -60.0;
+
+    let position = f64::from(value) / 127.0;
+    if position <= 0.0 {
+        return 0.0;
+    }
+
+    let db = if position >= UNITY_POSITION {
+        let t = (position - UNITY_POSITION) / (1.0 - UNITY_POSITION);
+        t * MAX_DB
+    } else {
+        let t = position / UNITY_POSITION;
+        FLOOR_DB + t * -FLOOR_DB
+    };
+
+    10f64.powf(db / 20.0).clamp(0.0, 10.0)
 }
 
 fn map_cc_to_range(value: u8, min: u32, max: u32) -> u32 {

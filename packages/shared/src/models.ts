@@ -937,7 +937,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   enabledOutputChannels: [0, 1],
   locale: null,
   metronomeEnabled: false,
-  metronomeVolume: 1.0,
+  // Linear gain (~+6 dB), matching `default_metronome_volume` in
+  // apps/desktop/src-tauri/src/infra/settings.rs. This is the level the click
+  // has always played at: the old model saved 0.8 and applied a fixed 2.5x
+  // boost before the engine.
+  metronomeVolume: 2.0,
   metronomeOutput: "master",
   metronomeAccentEnabled: true,
   metronomeAccentPreset: 0,
