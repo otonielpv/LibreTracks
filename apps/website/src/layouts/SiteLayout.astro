@@ -33,6 +33,7 @@ if (isSpanish) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     {noIndex && <meta name="robots" content="noindex, nofollow, noarchive" />}
+    {noIndex && <meta name="referrer" content="no-referrer" />}
     <link rel="icon" href="/icon.svg" />
     <title>{title}</title>
   </head>

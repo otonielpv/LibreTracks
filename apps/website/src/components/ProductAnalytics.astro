@@ -84,15 +84,24 @@ const copy = es
     };
 ---
 
+<script is:inline>
+  (() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("token")) return;
+    url.searchParams.delete("token");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  })();
+</script>
+
 <section class="product-analytics" data-product-analytics data-lang={lang} data-copy={JSON.stringify(copy)}>
-  <form class="analytics-login" data-analytics-login>
+  <div class="analytics-login" data-analytics-login>
     <h3>{copy.access}</h3>
     <label>
       <span>{copy.token}</span>
-      <input type="password" name="token" autocomplete="current-password" minlength="15" required />
+      <input type="password" data-analytics-token autocomplete="current-password" minlength="15" required />
     </label>
-    <button class="button-link" type="submit">{copy.enter}</button>
-  </form>
+    <button class="button-link" type="button" data-analytics-submit>{copy.enter}</button>
+  </div>
   <div class="analytics-toolbar" data-analytics-toolbar hidden>
     <div class="analytics-window" role="group" aria-label="Time window">
       <button type="button" data-days="7">7d</button>
@@ -163,7 +172,9 @@ const copy = es
   };
 
   const root = document.querySelector<HTMLElement>("[data-product-analytics]");
-  const form = root?.querySelector<HTMLFormElement>("[data-analytics-login]");
+  const form = root?.querySelector<HTMLElement>("[data-analytics-login]");
+  const tokenInput = root?.querySelector<HTMLInputElement>("[data-analytics-token]");
+  const submit = root?.querySelector<HTMLButtonElement>("[data-analytics-submit]");
   const toolbar = root?.querySelector<HTMLElement>("[data-analytics-toolbar]");
   const status = root?.querySelector<HTMLElement>("[data-analytics-status]");
   const content = root?.querySelector<HTMLElement>("[data-analytics-content]");
@@ -538,10 +549,13 @@ const copy = es
     }
   }
 
-  form?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const token = new FormData(form).get("token");
-    if (typeof token === "string") void load(token);
+  const submitToken = () => {
+    if (!tokenInput?.reportValidity()) return;
+    void load(tokenInput.value);
+  };
+  submit?.addEventListener("click", submitToken);
+  tokenInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submitToken();
   });
   root?.querySelectorAll<HTMLButtonElement>("[data-days]").forEach((button) => {
     button.addEventListener("click", () => {

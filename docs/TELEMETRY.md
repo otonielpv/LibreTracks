@@ -49,7 +49,8 @@ does not collect or expose cities, coordinates or IP addresses.
 5. Redeploy the website, then verify `GET /api/telemetry/stats` returns JSON.
 6. Add a production Pages secret named `ANALYTICS_ADMIN_TOKEN` containing at
    least 15 random characters. Open `/es/admin/analytics/`, enter that token,
-   and verify the 7/30/90-day views. The token stays in browser session storage.
+   and verify the 7/30/90-day views. The token stays in browser session storage
+   and is sent only in the HTTPS `Authorization` header, never in the URL.
 7. As defence in depth, protect `/admin/*`, `/es/admin/*` and
    `/api/telemetry/product-stats*` with a Cloudflare Access self-hosted
    application restricted to the maintainer identity.
