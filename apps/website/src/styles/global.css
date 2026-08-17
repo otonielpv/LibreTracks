@@ -633,28 +633,15 @@ h1 {
   align-items: center;
 }
 
-.analytics-map-layout svg {
+.analytics-map-visual {
   width: 100%;
-  min-height: 18rem;
+  height: 25rem;
   border: 1px solid color-mix(in srgb, var(--lt-muted) 10%, transparent);
   border-radius: 3px;
   background:
     radial-gradient(circle at 50% 50%, rgb(87 241 219 / 0.035), transparent 62%),
     repeating-linear-gradient(to right, transparent 0 9.9%, rgb(186 202 197 / 0.035) 10%),
     #111;
-}
-
-.analytics-map-land {
-  fill: #2a3331;
-  stroke: #45534f;
-  stroke-width: 2;
-}
-
-.analytics-map-marker {
-  fill: rgb(87 241 219 / 0.62);
-  stroke: #b9fff5;
-  stroke-width: 2;
-  filter: drop-shadow(0 0 8px rgb(87 241 219 / 0.45));
 }
 
 .analytics-map-layout ol {
@@ -774,8 +761,8 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .analytics-map-layout svg {
-    min-height: 12rem;
+  .analytics-map-visual {
+    height: 18rem;
   }
 
   .analytics-echart,

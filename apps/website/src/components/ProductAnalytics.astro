@@ -107,14 +107,19 @@ const copy = es
 
 <script>
   import * as echarts from "echarts/core";
-  import { BarChart, FunnelChart, LineChart, PieChart } from "echarts/charts";
+  import { BarChart, FunnelChart, LineChart, MapChart } from "echarts/charts";
   import {
     AriaComponent,
     GridComponent,
     LegendComponent,
     TooltipComponent,
+    VisualMapComponent,
   } from "echarts/components";
   import { SVGRenderer } from "echarts/renderers";
+  import { feature } from "topojson-client";
+  import type { Topology } from "topojson-specification";
+  import * as countryLookup from "country-code-lookup";
+  import worldTopology from "world-atlas/countries-110m.json";
 
   echarts.use([
     AriaComponent,
@@ -123,9 +128,10 @@ const copy = es
     GridComponent,
     LegendComponent,
     LineChart,
-    PieChart,
+    MapChart,
     SVGRenderer,
     TooltipComponent,
+    VisualMapComponent,
   ]);
 
   type Metric = { key: string; devices: number; rate: number };
@@ -228,16 +234,13 @@ const copy = es
   };
   const label = (key: string) => names[locale]?.[key] ?? key;
   const regionNames = new Intl.DisplayNames([locale], { type: "region" });
-  const countryCentroids: Record<string, [number, number]> = {
-    AR: [-64, -34], AU: [134, -25], BR: [-52, -10], CA: [-106, 56], CH: [8, 47],
-    CL: [-71, -33], CN: [104, 35], CO: [-74, 4], DE: [10, 51], DK: [10, 56],
-    ES: [-4, 40], FI: [26, 64], FR: [2, 46], GB: [-2, 54], GR: [22, 39],
-    IE: [-8, 53], IL: [35, 31], IN: [79, 22], IT: [12, 42], JP: [138, 37],
-    KR: [128, 36], MX: [-102, 23], NL: [5, 52], NO: [8, 61], NZ: [174, -41],
-    PE: [-76, -10], PL: [20, 52], PT: [-8, 39], RO: [25, 46], RU: [90, 60],
-    SE: [15, 62], TR: [35, 39], UA: [32, 49], US: [-100, 39], ZA: [24, -29],
-  };
   const chartInstances: Array<ReturnType<typeof echarts.init>> = [];
+  const worldGeoJson = feature(worldTopology as unknown as Topology, "countries");
+  worldGeoJson.features.forEach((country) => {
+    const iso = countryLookup.byIso(country.id ?? "")?.iso2;
+    country.properties = { ...country.properties, name: iso ?? `_${country.id}` };
+  });
+  echarts.registerMap("libretracks-world", worldGeoJson);
 
   function heading(title: string): HTMLHeadingElement {
     const element = document.createElement("h3");
@@ -330,28 +333,9 @@ const copy = es
     card.append(header, note);
     const layout = document.createElement("div");
     layout.className = "analytics-map-layout";
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 1000 460");
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", copy.geography);
-    const land = document.createElementNS(svg.namespaceURI, "path");
-    land.setAttribute("class", "analytics-map-land");
-    land.setAttribute("d", "M48 98L103 55 216 58 276 104 239 154 183 168 149 228 93 199 68 147ZM245 238L304 247 330 302 299 404 267 346ZM442 83L515 68 557 95 630 73 742 83 851 126 810 178 722 166 668 207 604 194 570 152 522 155 483 126ZM485 166L553 174 598 239 566 346 508 374 468 285ZM776 289L852 282 914 327 870 374 794 357Z");
-    svg.append(land);
-    const known = rows.filter((row) => countryCentroids[row.label]);
-    const max = Math.max(1, ...known.map((row) => row.devices));
-    known.forEach((row) => {
-      const [longitude, latitude] = countryCentroids[row.label];
-      const marker = document.createElementNS(svg.namespaceURI, "circle");
-      marker.setAttribute("cx", String(((longitude + 180) / 360) * 1000));
-      marker.setAttribute("cy", String(((90 - latitude) / 180) * 460));
-      marker.setAttribute("r", String(5 + Math.sqrt(row.devices / max) * 17));
-      marker.setAttribute("class", "analytics-map-marker");
-      const tooltip = document.createElementNS(svg.namespaceURI, "title");
-      tooltip.textContent = `${regionNames.of(row.label) ?? row.label}: ${row.devices}`;
-      marker.append(tooltip);
-      svg.append(marker);
-    });
+    const map = document.createElement("div");
+    map.className = "analytics-echart analytics-map-visual";
+    map.dataset.chart = "countries";
     const ranking = document.createElement("ol");
     rows.filter((row) => row.label !== "XX").slice(0, 8).forEach((row) => {
       const item = document.createElement("li");
@@ -362,7 +346,7 @@ const copy = es
       item.append(name, value);
       ranking.append(item);
     });
-    layout.append(svg, ranking);
+    layout.append(map, ranking);
     card.append(layout);
     return card;
   }
@@ -430,6 +414,43 @@ const copy = es
       yAxis: { ...axis, type: "category", inverse: true, data: data.features.map((item) => label(item.key)), splitLine: { show: false } },
       series: [{ name: copy.adoption, type: "bar", barMaxWidth: 16, data: data.features.map((item) => item.adoptionRate), itemStyle: { borderRadius: [0, 3, 3, 0] } }],
     });
+    const countries = root?.querySelector<HTMLElement>('[data-chart="countries"]');
+    if (countries) {
+      const countryRows = data.breakdown.countries.filter((row) => row.label !== "XX");
+      const maximum = Math.max(1, ...countryRows.map((row) => row.devices));
+      createChart(countries, {
+        aria: { enabled: true },
+        tooltip: {
+          trigger: "item",
+          backgroundColor: "#111",
+          borderColor: chartTheme.grid,
+          textStyle: { color: "#e5e2e1" },
+          formatter: (item: { name: string; value?: number }) =>
+            `${regionNames.of(item.name) ?? item.name}: ${numbers.format(item.value ?? 0)}`,
+        },
+        visualMap: {
+          min: 0,
+          max: maximum,
+          left: "center",
+          bottom: 4,
+          orient: "horizontal",
+          calculable: false,
+          text: [numbers.format(maximum), "0"],
+          textStyle: { color: chartTheme.text },
+          inRange: { color: ["#263330", "#287f73", chartTheme.teal] },
+        },
+        series: [{
+          type: "map",
+          map: "libretracks-world",
+          roam: true,
+          scaleLimit: { min: 1, max: 8 },
+          selectedMode: false,
+          itemStyle: { areaColor: "#242b29", borderColor: "#53615d", borderWidth: 0.7 },
+          emphasis: { label: { show: false }, itemStyle: { areaColor: chartTheme.amber } },
+          data: countryRows.map((row) => ({ name: row.label, value: row.devices })),
+        }],
+      });
+    }
   }
 
   function render(data: ProductStats): void {

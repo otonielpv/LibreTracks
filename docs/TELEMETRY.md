@@ -29,7 +29,7 @@ are computed locally and sent only as broad buckets.
 The private product dashboard uses Apache ECharts with SVG rendering for
 interactive daily trends, UTC hourly activity, activation funnel and feature
 adoption. It also shows comparisons with the preceding period, versions,
-operating systems, device classes and a country-level bubble map. Geography is
+operating systems, device classes and a country-level choropleth map. Geography is
 always aggregated from the existing two-letter edge country code; the dashboard
 does not collect or expose cities, coordinates or IP addresses.
 
