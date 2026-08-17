@@ -1,4 +1,4 @@
-# LibreTracks anonymous usage statistics
+# LibreTracks privacy-preserving usage statistics
 
 The client, Cloudflare Pages Functions and public dashboard are implemented in:
 
@@ -8,13 +8,24 @@ The client, Cloudflare Pages Functions and public dashboard are implemented in:
 
 No event is sent until the user explicitly opts in. The only event currently
 implemented is `app_started`. The installation secret remains in local storage;
-the server receives a SHA-256 derivative that rotates each UTC day.
+the server receives a SHA-256 derivative that rotates each UTC day. Cloudflare
+derives a two-letter country code from the network request at the edge; neither
+the IP address nor a more precise location is written to the telemetry database.
+Country is stored only when the event includes consent version 2. Older clients
+remain compatible but are recorded with country `XX`, because their original
+consent disclosure did not include country-level analytics.
+
+The public dashboard provides rolling 24-hour, 7-day and 30-day totals, hourly
+and daily UTC trends, and 30-day country/version/platform breakdowns. Timeline
+buckets and breakdowns with fewer than five devices are suppressed.
 
 ## Cloudflare setup
 
 1. Create a D1 database named `libretracks-telemetry`.
-2. Apply `apps/website/migrations/0001_telemetry.sql` in the D1 SQL console (or
-   with Wrangler's `d1 execute --remote --file` command).
+2. Apply the SQL files in `apps/website/migrations` in numeric order in the D1
+   SQL console (or with Wrangler's `d1 execute --remote --file` command). An
+   existing installation that already applied `0001` only needs to run
+   `0002_telemetry_country.sql`.
 3. In the LibreTracks Pages project, add a D1 binding named exactly
    `TELEMETRY_DB` and select that database for both production and preview.
 4. Confirm the Pages project root is `apps/website`. Pages Functions must live
@@ -32,6 +43,8 @@ add a monthly scheduled Worker that runs the same deletion query.
 - Keep `libretracks.app@gmail.com` monitored as the private contact address for
   privacy questions and data-protection requests.
 - Keep Cloudflare's data-processing terms and transfer settings documented.
+- Keep country inference limited to Cloudflare's two-letter edge country code;
+  do not add regions, cities or coordinates.
 - Do not add project names, paths, audio/MIDI device names, precise OS versions,
   IP addresses, full User-Agent strings or persistent identifiers.
 - If a new event or field is added, update both privacy pages and request fresh

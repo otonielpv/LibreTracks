@@ -1031,16 +1031,16 @@ const en = {
   telemetry: {
     eyebrow: "Privacy",
     title: "Help improve LibreTracks",
-    description:
-      "Allow optional, minimal usage statistics: app version, operating system, architecture and one app-start event. LibreTracks never sends projects, audio, file names, paths or connected hardware.",
+      description:
+        "Allow optional usage statistics: app starts and their UTC time, app version, broad device platform and country inferred by Cloudflare from the network connection. LibreTracks never sends precise location, projects, audio, file names, paths or connected hardware.",
     detail:
       "A random secret stays on this device. Only a token that changes every day is sent, so it cannot build a long-term device history.",
     allow: "Allow usage statistics",
     decline: "No, thanks",
     policy: "Read privacy policy",
     setting: "Optional usage statistics",
-    settingHint:
-      "Share app starts, version and broad device platform. No project, audio or hardware information is sent.",
+      settingHint:
+        "Share app starts, UTC time, version, broad device platform and country. No precise location, project, audio or hardware information is sent.",
   },
   update: {
     eyebrow: "Update available",

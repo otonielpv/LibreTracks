@@ -3,14 +3,14 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 import UsageStats from "../components/UsageStats.astro";
 ---
 
-<SiteLayout title="LibreTracks Usage Statistics" description="Anonymous, aggregated LibreTracks usage statistics." lang="en">
+<SiteLayout title="LibreTracks Usage Statistics" description="Aggregated LibreTracks usage metrics." lang="en">
   <main class="site-shell band">
     <div class="section-heading">
       <p class="eyebrow">Open statistics</p>
       <h2>How LibreTracks is being used.</h2>
-      <p>Aggregated app starts, versions and broad device platforms from people who voluntarily enable minimal usage statistics. No projects, audio, file names, paths or connected hardware are collected.</p>
+      <p>Aggregated activity, country, version and broad-platform metrics from people who voluntarily enable usage statistics. No projects, audio, file names, paths, connected hardware or precise location are collected.</p>
     </div>
     <UsageStats lang="en" />
-    <p class="usage-privacy-note">Active devices are approximate because the anonymous device token changes every UTC day. Breakdowns with fewer than five devices are not published. <a href="/privacy/">Privacy details</a>.</p>
+    <p class="usage-privacy-note">Active-device counts are approximate. Multi-day periods use device-days because the pseudonymous token changes every UTC day. Countries, breakdowns and time buckets with fewer than five devices are not published. <a href="/privacy/">Privacy details</a>.</p>
   </main>
 </SiteLayout>

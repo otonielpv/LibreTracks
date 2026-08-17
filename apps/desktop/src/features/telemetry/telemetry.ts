@@ -10,6 +10,7 @@ type TelemetryState = {
 
 const TELEMETRY_ENDPOINT =
   "https://libretracks.pages.dev/api/telemetry/events";
+const TELEMETRY_CONSENT_VERSION = 2;
 const INSTALL_SECRET_KEY = "libretracks.telemetry.install-secret.v1";
 let submittedThisSession = false;
 
@@ -26,6 +27,13 @@ export const useTelemetryStore = create<TelemetryState>()(
     }),
     {
       name: "libretracks.telemetry.preference.v1",
+      version: TELEMETRY_CONSENT_VERSION,
+      migrate: (persistedState) => ({
+        ...(persistedState as Partial<TelemetryState>),
+        // Country-level analytics expands the originally described dataset.
+        // Ask every existing participant for fresh, informed consent.
+        preference: "undecided",
+      }),
     },
   ),
 );
@@ -125,6 +133,7 @@ export async function submitAppSession(version: string): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         event: "app_started",
+        consentVersion: TELEMETRY_CONSENT_VERSION,
         version,
         dailyDeviceToken: token,
         ...platform,

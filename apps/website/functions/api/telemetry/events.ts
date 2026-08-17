@@ -6,6 +6,7 @@ interface Env {
 
 type TelemetryEvent = {
   event: string;
+  consentVersion?: number;
   version: string;
   dailyDeviceToken: string;
   os: string;
@@ -45,6 +46,7 @@ function isValidEvent(value: unknown): value is TelemetryEvent {
   const event = value as Record<string, unknown>;
   return (
     event.event === "app_started" &&
+    (event.consentVersion === undefined || event.consentVersion === 2) &&
     typeof event.version === "string" &&
     /^[0-9A-Za-z.+_-]{1,32}$/.test(event.version) &&
     typeof event.dailyDeviceToken === "string" &&
@@ -77,6 +79,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const now = Date.now();
   const utcDay = new Date(now).toISOString().slice(0, 10);
+  const edgeCountry = request.cf?.country;
+  const countryCode =
+    payload.consentVersion === 2 &&
+    typeof edgeCountry === "string" &&
+    /^[A-Z]{2}$/.test(edgeCountry)
+      ? edgeCountry
+      : "XX";
 
   // A broken client must not flood the table. This deliberately uses only the
   // rotating token; IP addresses and full User-Agent headers are never stored.
@@ -95,8 +104,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.TELEMETRY_DB.prepare(
       `INSERT INTO telemetry_events
         (received_at, utc_day, event_name, daily_device_token,
-         app_version, os, arch, device_class)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+         app_version, os, arch, device_class, country_code)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
     ).bind(
       now,
       utcDay,
@@ -106,6 +115,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       payload.os,
       payload.arch,
       payload.deviceClass,
+      countryCode,
     ),
     // Opportunistic retention enforcement. Aggregates older than 90 days are
     // intentionally not kept in this MVP; a scheduled aggregate can be added

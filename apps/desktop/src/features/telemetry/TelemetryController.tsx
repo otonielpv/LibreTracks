@@ -44,7 +44,7 @@ export function TelemetryController({ version }: Props) {
         <p>
           {t("telemetry.description", {
             defaultValue:
-              "Allow optional, minimal usage statistics: app version, operating system, architecture and one app-start event. LibreTracks never sends projects, audio, file names, paths or connected hardware.",
+              "Allow optional usage statistics: app starts and their UTC time, app version, broad device platform and country inferred by Cloudflare from the network connection. LibreTracks never sends precise location, projects, audio, file names, paths or connected hardware.",
           })}
         </p>
         <p className="lt-telemetry-detail">
@@ -102,7 +102,7 @@ export function TelemetrySettingsField() {
         <small>
           {t("telemetry.settingHint", {
             defaultValue:
-              "Share app starts, version and broad device platform. No project, audio or hardware information is sent.",
+              "Share app starts, UTC time, version, broad device platform and country. No precise location, project, audio or hardware information is sent.",
           })}
         </small>
       </span>

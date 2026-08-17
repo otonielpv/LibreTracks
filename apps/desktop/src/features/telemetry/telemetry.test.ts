@@ -53,7 +53,22 @@ describe("privacy-preserving telemetry", () => {
 
     const request = fetchMock.mock.calls[0]?.[1];
     const body = JSON.parse(String(request?.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ event: "app_started", version: "1.10.0" });
+    expect(body).toMatchObject({
+      event: "app_started",
+      consentVersion: 2,
+      version: "1.10.0",
+    });
     expect(body.dailyDeviceToken).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("requires fresh consent when the stored disclosure version is old", async () => {
+    localStorage.setItem(
+      "libretracks.telemetry.preference.v1",
+      JSON.stringify({ state: { preference: "enabled" }, version: 0 }),
+    );
+
+    await useTelemetryStore.persist.rehydrate();
+
+    expect(useTelemetryStore.getState().preference).toBe("undecided");
   });
 });

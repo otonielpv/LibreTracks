@@ -251,11 +251,12 @@ h1 {
 
 .usage-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
   gap: 0.75rem;
 }
 
 .usage-summary article,
+.usage-chart-card,
 .usage-breakdown-card,
 .legal-page section {
   border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
@@ -267,13 +268,158 @@ h1 {
 .usage-summary strong {
   display: block;
   color: var(--lt-primary);
-  font: 800 clamp(2rem, 5vw, 3.5rem)/1 "Space Grotesk", sans-serif;
+  font: 800 clamp(1.75rem, 4vw, 2.75rem)/1 "Space Grotesk", sans-serif;
 }
 
-.usage-summary span,
+.usage-summary-period,
+.usage-summary-values span,
 .stats-muted,
 .usage-privacy-note {
   color: color-mix(in srgb, var(--lt-text) 68%, transparent);
+}
+
+.usage-summary-period {
+  display: block;
+  margin-bottom: 1rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.usage-summary-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.usage-summary-values span {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.usage-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  gap: 0.75rem;
+}
+
+.usage-chart-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.usage-chart-card h3,
+.usage-breakdown-card h3 {
+  margin: 0;
+  color: #f3f0ef;
+}
+
+.usage-chart-card header p,
+.usage-breakdown-card > p:first-of-type {
+  margin: 0.25rem 0 0;
+  color: color-mix(in srgb, var(--lt-text) 58%, transparent);
+  font-size: 0.78rem;
+}
+
+.usage-chart-legend {
+  display: flex;
+  gap: 0.75rem;
+  color: color-mix(in srgb, var(--lt-text) 68%, transparent);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.usage-chart-legend span {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.usage-chart-legend i {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+}
+
+.usage-chart-legend .starts,
+.usage-chart-bars .starts {
+  background: var(--lt-primary);
+}
+
+.usage-chart-legend .devices,
+.usage-chart-bars .devices {
+  background: #78a9ff;
+}
+
+.usage-chart-scroll {
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+}
+
+.usage-chart-plot {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(1rem, 1fr));
+  gap: 0.2rem;
+  min-width: 31rem;
+  height: 13rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--lt-muted) 25%, transparent);
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--lt-muted) 8%, transparent) 0 1px,
+    transparent 1px 25%
+  );
+}
+
+.usage-chart-day {
+  grid-template-columns: repeat(30, minmax(0.8rem, 1fr));
+  min-width: 39rem;
+}
+
+.usage-chart-column {
+  display: grid;
+  grid-template-rows: 1fr 1.4rem;
+  min-width: 0;
+}
+
+.usage-chart-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
+  min-height: 0;
+}
+
+.usage-chart-bars i {
+  display: block;
+  width: 42%;
+  min-height: 0;
+  border-radius: 2px 2px 0 0;
+  transition: opacity 120ms ease;
+}
+
+.usage-chart-column:hover .usage-chart-bars i {
+  opacity: 0.72;
+}
+
+.usage-chart-column.suppressed .usage-chart-bars::after {
+  width: 55%;
+  height: 2px;
+  content: "";
+  background: color-mix(in srgb, var(--lt-muted) 38%, transparent);
+}
+
+.usage-chart-column > span {
+  overflow: visible;
+  color: color-mix(in srgb, var(--lt-text) 48%, transparent);
+  font-size: 0.62rem;
+  white-space: nowrap;
+  transform: translateY(0.35rem);
 }
 
 .usage-breakdowns {
@@ -284,8 +430,11 @@ h1 {
 
 .usage-breakdown-card h3,
 .legal-page h3 {
-  margin: 0 0 0.9rem;
   color: #f3f0ef;
+}
+
+.usage-breakdown-card > .stats-muted {
+  margin-top: 1rem;
 }
 
 .usage-breakdown-row {
@@ -294,6 +443,13 @@ h1 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.75rem;
   padding: 0.55rem 0 0.8rem;
+  font-size: 0.85rem;
+}
+
+.usage-breakdown-row strong {
+  color: color-mix(in srgb, var(--lt-text) 78%, transparent);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .usage-breakdown-row i {
