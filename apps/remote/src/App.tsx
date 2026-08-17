@@ -61,6 +61,7 @@ import {
 } from "@libretracks/shared/faderScale";
 import { getRemoteStrings } from "./i18n";
 import { buildMarkerCards, buildTimelineMarkerChips } from "./markerCards";
+import { resolveMarkerAutoScrollTop } from "./markerAutoScroll";
 import {
   CountdownWidget,
   CurrentKeyWidget,
@@ -2288,6 +2289,21 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
   );
 }
 
+/** How long a manual scroll of the marker grid suppresses the auto-scroll. Long
+ * enough to read ahead a few rows, short enough that the grid is following the
+ * song again by the next section. */
+const MARKER_MANUAL_SCROLL_GRACE_MS = 6000;
+
+/** Window in which scroll events are attributed to our own smooth scroll
+ * rather than to the player's thumb. */
+const MARKER_AUTO_SCROLL_SETTLE_MS = 700;
+
+/** A position change larger than this between two snapshots is a SEEK (a marker
+ * jump, a tap on the timeline), not the playhead advancing. Snapshots arrive
+ * several times a second, so ordinary playback moves far less than this even
+ * with a stalled connection; a jump between sections moves many seconds. */
+const MARKER_SEEK_DETECTION_SECONDS = 1.5;
+
 /**
  * The jump grid: one card per section marker in the selected region, plus the
  * "show hidden" affordance. Schedules/cancels marker jumps and toggles
@@ -2339,6 +2355,102 @@ function MarkerGrid() {
     ? visibleMarkers
     : visibleMarkers.filter((entry) => !hiddenMarkerIds.has(entry.id));
 
+  // Keep the row holding the NEXT marker on screen. On a phone the grid shows
+  // barely two rows, so without this the upcoming jump target scrolls out of
+  // sight mid-song and has to be hunted for by hand.
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const nextCardRef = useRef<HTMLDivElement | null>(null);
+  const nextMarkerId = liveContext.nextMarkerId;
+  // A manual scroll wins for a few seconds: the player may be looking ahead at
+  // the end of the song, and yanking the grid back under their thumb is worse
+  // than a momentarily off-screen "next".
+  //
+  // Only a real DRAG or wheel counts. A tap must not arm the grace period:
+  // tapping a card IS a jump, and after a jump following the new "next" is
+  // exactly what the player wants — that tap used to suppress the very scroll
+  // it should have triggered.
+  const manualScrollUntilRef = useRef(0);
+  const autoScrollingRef = useRef(false);
+
+  const noteManualScroll = () => {
+    if (autoScrollingRef.current) {
+      return;
+    }
+    manualScrollUntilRef.current =
+      performance.now() + MARKER_MANUAL_SCROLL_GRACE_MS;
+  };
+
+  const noteManualDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    // `buttons` is non-zero only while the pointer is down, so this fires for a
+    // finger dragging the list but never for a hover or a stationary tap.
+    if (event.buttons !== 0) {
+      noteManualScroll();
+    }
+  };
+
+  // A seek — a marker jump landing, a tap on the timeline ribbon — clears the
+  // manual-scroll grace. The player just told the transport where to go, so the
+  // grid should follow them there immediately instead of sitting out the rest
+  // of a grace period armed by an earlier scroll.
+  const livePosition = snapshot?.positionSeconds ?? 0;
+  const lastPositionRef = useRef(livePosition);
+  // Bumped on every detected seek, and used as an effect dependency so the
+  // scroll re-runs even when the seek lands somewhere with the SAME next marker
+  // (jumping backwards inside the current section, say) — the row can still be
+  // off screen, and "next did not change" must not mean "do not follow".
+  const [seekTick, setSeekTick] = useState(0);
+  useEffect(() => {
+    const previous = lastPositionRef.current;
+    lastPositionRef.current = livePosition;
+    if (Math.abs(livePosition - previous) >= MARKER_SEEK_DETECTION_SECONDS) {
+      manualScrollUntilRef.current = 0;
+      setSeekTick((tick) => tick + 1);
+    }
+  }, [livePosition]);
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    const card = nextCardRef.current;
+    if (!grid || !card || !nextMarkerId) {
+      return;
+    }
+    if (performance.now() < manualScrollUntilRef.current) {
+      return;
+    }
+
+    // Measured with rects rather than offsetTop: the grid is not a positioned
+    // element, so the card's offsetParent is some ancestor and its offsetTop
+    // would not be relative to the scroller. Adding scrollTop converts the
+    // viewport-relative rect back into a content-relative offset.
+    const gridRect = grid.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const target = resolveMarkerAutoScrollTop({
+      scrollTop: grid.scrollTop,
+      viewportHeight: grid.clientHeight,
+      contentHeight: grid.scrollHeight,
+      cardTop: cardRect.top - gridRect.top + grid.scrollTop,
+      cardHeight: cardRect.height,
+    });
+    if (target === null) {
+      return;
+    }
+
+    // The programmatic scroll fires `onScroll` too; flag it so it is not
+    // mistaken for the player dragging the grid.
+    autoScrollingRef.current = true;
+    grid.scrollTo({ top: target, behavior: "smooth" });
+    const release = window.setTimeout(() => {
+      autoScrollingRef.current = false;
+    }, MARKER_AUTO_SCROLL_SETTLE_MS);
+    return () => {
+      window.clearTimeout(release);
+      autoScrollingRef.current = false;
+    };
+    // Re-runs when the next marker changes, after every seek, and when the set
+    // of rendered cards changes underneath it (hiding a marker or switching
+    // region reflows the grid, so offsets from the previous run are stale).
+  }, [nextMarkerId, seekTick, shownMarkers.length, selectedRegion?.id]);
+
   const scheduleJump = (markerId: string) => {
     useOptimisticStore.getState().setPendingJumpTarget(markerId);
     sendCommand({
@@ -2371,7 +2483,12 @@ function MarkerGrid() {
         </div>
       ) : null}
 
-      <div className="marker-grid">
+      <div
+        className="marker-grid"
+        ref={gridRef}
+        onPointerMove={noteManualDrag}
+        onWheel={noteManualScroll}
+      >
         {shownMarkers.map((entry) => {
           const marker = entry.marker;
           const isHidden = hiddenMarkerIds.has(entry.id);
@@ -2383,6 +2500,7 @@ function MarkerGrid() {
           return (
             <div
               key={entry.id}
+              ref={isNext ? nextCardRef : undefined}
               className={`marker-card ${isCue ? "is-cue-card" : ""} ${isNext ? "is-next" : ""} ${pendingJumpTargetId === entry.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""}`}
               style={{ "--marker-color": markerColor(marker) } as CSSProperties}
             >

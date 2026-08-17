@@ -54,7 +54,8 @@ function makeSong(): SongView {
     ],
     sectionMarkers: [
       marker({ id: "chorus-a", name: "Chorus", startSeconds: 8, kind: "chorus" }),
-      // A dynamic cue that must be ignored by the section-only widgets.
+      // A lone dynamic cue: its own point on the timeline, and its own card in
+      // the jump grid, so it is a "next marker" like any section.
       marker({ id: "build", name: "Build", startSeconds: 12, kind: "build" }),
       marker({ id: "verse-b", name: "Verse", startSeconds: 24, kind: "verse" }),
     ],
@@ -72,22 +73,38 @@ describe("deriveLiveMusicalContext", () => {
     expect(context.currentKey).toBe("C");
   });
 
-  it("finds the next section marker, skipping dynamic cues", () => {
+  it("finds the next marker ahead of the playhead", () => {
     const song = makeSong();
-    // At 4s the next section marker is the chorus at 8s — NOT a cue in between.
+    // At 4s the next point is the chorus at 8s.
     const context = deriveLiveMusicalContext(song, 4);
     expect(context.nextMarkerId).toBe("chorus-a");
     expect(context.nextMarkerName).toBe("Chorus");
     expect(context.secondsToMarker).toBeCloseTo(4, 5);
   });
 
-  it("skips the cue marker even when the playhead is right before it", () => {
+  it("counts a lone cue as the next marker", () => {
     const song = makeSong();
-    // At 10s the only markers ahead are the cue (12s) and verse-b (24s); the
-    // cue must be ignored, so the next section is the verse in song B.
+    // At 10s the nearest point ahead is the Build cue at 12s. It has its own
+    // card in the jump grid, so the widgets must count down to it rather than
+    // skipping ahead to the next section.
     const context = deriveLiveMusicalContext(song, 10);
-    expect(context.nextMarkerId).toBe("verse-b");
-    expect(context.nextMarkerName).toBe("Verse");
+    expect(context.nextMarkerId).toBe("build");
+    expect(context.nextMarkerName).toBe("Build");
+    expect(context.secondsToMarker).toBeCloseTo(2, 5);
+  });
+
+  it("reports the section, not the cue, when the two share a position", () => {
+    // A cue stacked on a section is drawn INSIDE that section's card, so the
+    // section owns the point. Naming the cue would highlight a card that does
+    // not exist and leave the grid unable to scroll to it.
+    const song = makeSong();
+    song.sectionMarkers = [
+      marker({ id: "chorus-a", name: "Chorus", startSeconds: 8, kind: "chorus" }),
+      marker({ id: "all-in", name: "All In", startSeconds: 8, kind: "build" }),
+    ];
+    const context = deriveLiveMusicalContext(song, 4);
+    expect(context.nextMarkerId).toBe("chorus-a");
+    expect(context.nextMarkerName).toBe("Chorus");
   });
 
   it("computes bars remaining to the next section using the tempo map", () => {

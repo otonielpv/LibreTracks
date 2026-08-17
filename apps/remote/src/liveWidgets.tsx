@@ -5,7 +5,6 @@ import {
   getSongBaseBpm,
   getSongBaseTimeSignature,
   markerColor,
-  markerCategory,
   regionEffectiveKey,
   type SongRegionSummary,
   type SongView,
@@ -15,6 +14,7 @@ import { getCumulativeMusicalPosition } from "@libretracks/shared/timelineMath";
 import type { CSSProperties } from "react";
 
 import { getRemoteStrings } from "./i18n";
+import { buildMarkerCards } from "./markerCards";
 
 const STRINGS = getRemoteStrings();
 
@@ -24,12 +24,24 @@ const STRINGS = getRemoteStrings();
 // bar). This keeps a stack of countdowns/progress bars cheap on stage tablets.
 const WIDGET_MIN_UPDATE_INTERVAL_MS = 1000 / 15;
 
-/** Section markers only — dynamic cues are spoken, not navigation targets.
- * Uses the marker's effective category, so one dragged to the other ruler row
- * on the desktop appears/disappears here to match. */
-function sectionMarkersOf(songView: SongView | null) {
-  return (songView?.sectionMarkers ?? []).filter(
-    (marker) => markerCategory(marker) === "section",
+/**
+ * The points the "next marker" widgets count down to, in timeline order.
+ *
+ * This is the SAME set the jump grid draws, via the same pairing rule: one
+ * entry per point on the timeline, with a cue that shares a section's position
+ * folded into that section. Cues used to be filtered out here on the grounds
+ * that the voice guide speaks them — but the grid already treats a lone cue as
+ * a first-class card and jump target, and a "next" that skipped cues meant the
+ * countdown, the widget name and the highlighted card all pointed past an
+ * announcement the player was about to hit.
+ *
+ * Folding matters for the highlight: a cue stacked on a section is drawn
+ * INSIDE that section's card, so returning the cue would leave `nextMarkerId`
+ * naming a card that does not exist, and nothing would light up or scroll.
+ */
+function nextMarkerCandidates(songView: SongView | null) {
+  return buildMarkerCards(songView?.sectionMarkers ?? []).map(
+    (entry) => entry.marker,
   );
 }
 
@@ -118,7 +130,7 @@ export function deriveLiveMusicalContext(
   position: number,
 ): LiveMusicalContext {
   const regions = songView?.regions ?? [];
-  const markers = sectionMarkersOf(songView);
+  const markers = nextMarkerCandidates(songView);
   const tempoRegions = buildSongTempoRegions(songView);
   const baseBpm = getSongBaseBpm(songView);
   const baseSignature = getSongBaseTimeSignature(songView);
