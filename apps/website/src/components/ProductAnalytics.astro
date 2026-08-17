@@ -235,9 +235,21 @@ const copy = es
   const label = (key: string) => names[locale]?.[key] ?? key;
   const regionNames = new Intl.DisplayNames([locale], { type: "region" });
   const chartInstances: Array<ReturnType<typeof echarts.init>> = [];
+  const isoByNumericCode = new Map(
+    countryLookup.countries
+      .filter((country) => country.isoNo)
+      .map((country) => [Number(country.isoNo), country.iso2]),
+  );
   const worldGeoJson = feature(worldTopology as unknown as Topology, "countries");
   worldGeoJson.features.forEach((country) => {
-    const iso = countryLookup.byIso(country.id ?? "")?.iso2;
+    const rawId = country.id;
+    const numericId =
+      typeof rawId === "number"
+        ? rawId
+        : typeof rawId === "string" && /^\d{1,3}$/.test(rawId)
+          ? Number(rawId)
+          : null;
+    const iso = numericId === null ? undefined : isoByNumericCode.get(numericId);
     country.properties = { ...country.properties, name: iso ?? `_${country.id}` };
   });
   echarts.registerMap("libretracks-world", worldGeoJson);
