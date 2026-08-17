@@ -2310,7 +2310,9 @@ button {
 
   .marker-card {
     min-height: 3.4rem;
-    padding: 0.52rem 0.58rem;
+    /* No padding here: the card is just a frame around .marker-card-jump, which
+       carries its own. Padding on both boxes narrows the text column twice over
+       on the tightest screens, which is where the labels wrapped and clipped. */
   }
 
   .marker-card,
@@ -3499,6 +3501,39 @@ button {
   text-align: center;
 }
 
+/* Where the device screen ends while editing. Sits BEHIND the widgets (they are
+   z-index 1) and takes no pointer events, so it is pure annotation: it can never
+   swallow a drag or a drop. Drawn as a line across the full canvas width at the
+   first row that needs scrolling to reach. */
+.layout-fold-marker {
+  position: relative;
+  z-index: 0;
+  pointer-events: none;
+  align-self: start;
+  min-width: 0;
+  height: 0;
+  border-top: 2px dashed rgb(255 176 32 / 0.85);
+}
+
+.layout-fold-marker span {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgb(38 26 8 / 0.95);
+  border: 1px solid rgb(255 176 32 / 0.55);
+  padding: 0.1rem 0.5rem;
+  color: rgb(255 196 92);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .layout-widget-body {
   position: relative;
   z-index: 1;
@@ -3531,17 +3566,97 @@ button {
     auto-fit,
     minmax(min(8.25rem, 100%), 1fr)
   ) !important;
-  grid-auto-rows: minmax(4.25rem, max-content);
+  /* Floor sized for the TALLEST card shape, not the shortest: badge + title +
+     timecode + cue-chip line + jump-mode label. Rows still grow past it via
+     max-content; the floor only stops short and tall cards in the same grid
+     from making the row heights jump around. */
+  grid-auto-rows: minmax(6.25rem, max-content);
   padding-bottom: 0.35rem;
   overscroll-behavior-y: contain;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
 }
 
-.layout-widget-type-markerGrid .marker-card,
-.layout-widget-type-markerGrid .marker-card-jump {
+/* Cards must FILL their grid row, not each pick their own height. Rows are
+   sized to max-content, and since the cue change a card's content height
+   varies within a row: a section hosting cue chips renders an extra
+   .marker-card-cues line, and a lone cue renders the badge. Without stretch
+   the short cards stay at min-height while the row grew for the tall one, so
+   heights and text baselines go ragged across the row. */
+.layout-widget-type-markerGrid .marker-card {
   min-height: 4.25rem;
-  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  /* Lets the labels below respond to the CARD's width. The column width comes
+     from auto-fit inside the widget rectangle, so it has no fixed relationship
+     to the viewport and a media query cannot see it. */
+  container-type: inline-size;
+}
+
+.layout-widget-type-markerGrid .marker-card-jump {
+  /* Fills the stretched card so the border/background cover the whole row and
+     the jump target is the entire card, not just its content box. */
+  flex: 1 1 auto;
+  /* height, not min-height: the row is already sized to content, and a
+     min-height here would fight the stretch on short rows. */
+  min-height: 0;
+  justify-content: flex-start;
+}
+
+/* The jump button is a column flex container, so its children shrink to fit by
+   default. Once a card gained a cue-chip line or an AVISO badge the natural
+   content grew past the row height and the labels were squeezed and clipped
+   ("SIGUIENTE MARCA" cut off, the timecode riding the bottom border). Nothing
+   inside a card may shrink; the row grows instead. */
+.layout-widget-type-markerGrid .marker-card-jump > * {
+  flex: 0 0 auto;
+}
+
+/* Narrow cards: the shared card typography is uppercase with 0.12em tracking,
+   which makes "SIGUIENTE MARCA" wide enough to wrap to two lines in a ~150px
+   phone column — the cramped, colliding look. Below 11rem the labels drop the
+   tracking and shrink slightly so they fit on one line; the marker NAME keeps
+   its size, since that is what the player reads on stage. */
+@container (max-width: 11rem) {
+  /* Direct children only, so the nested cue chips keep their own sizing. */
+  .marker-card-jump > em,
+  .marker-card-jump > span,
+  .marker-card-jump > small {
+    letter-spacing: 0.02em;
+    font-size: 0.56rem;
+  }
+
+  .marker-card-jump .marker-card-next,
+  .marker-card-jump .marker-card-cue-badge {
+    letter-spacing: 0.04em;
+    padding: 0.06rem 0.28rem;
+  }
+
+  .marker-card-cues .marker-card-cue-chip {
+    font-size: 0.52rem;
+  }
+
+  /* Leaves less room for the hide button, which shrinks to match below. */
+  .marker-card-jump {
+    padding-right: 1.35rem;
+  }
+}
+
+/* Very narrow (a marker widget squeezed to a sliver, or a phone in a 3-column
+   layout): the jump-mode label is the least load-bearing line — the mode is
+   already shown in JUMP CONFIG — so it goes rather than wrap. */
+@container (max-width: 8rem) {
+  /* Direct child only: the cue chips are also <em>, nested in
+     .marker-card-cues, and hiding those would throw away the cue names. */
+  .marker-card-jump > em {
+    display: none;
+  }
+
+  .marker-card-hide {
+    width: 1.15rem;
+    height: 1.15rem;
+    font-size: 0.8rem;
+  }
 }
 
 /* Interface scaling also needs to change grid density. Larger text/padding in
@@ -3552,7 +3667,7 @@ button {
     auto-fit,
     minmax(min(9.25rem, 100%), 1fr)
   ) !important;
-  grid-auto-rows: minmax(5rem, max-content);
+  grid-auto-rows: minmax(7rem, max-content);
 }
 
 .remote-shell.remote-size-2 .layout-widget-type-markerGrid .marker-grid {
@@ -3560,7 +3675,7 @@ button {
     auto-fit,
     minmax(min(10.5rem, 100%), 1fr)
   ) !important;
-  grid-auto-rows: minmax(5.7rem, max-content);
+  grid-auto-rows: minmax(7.9rem, max-content);
 }
 
 .remote-shell.remote-size-3 .layout-widget-type-markerGrid .marker-grid {
@@ -3568,7 +3683,7 @@ button {
     auto-fit,
     minmax(min(12rem, 100%), 1fr)
   ) !important;
-  grid-auto-rows: minmax(6.5rem, max-content);
+  grid-auto-rows: minmax(9rem, max-content);
   gap: 0.5rem;
 }
 
@@ -3810,13 +3925,52 @@ button {
 }
 
 @container widget (max-width: 28rem) {
+  /* Single column on a phone: five stacked children (three summary cards, the
+     cancel button, the song/transpose row). Equal `1fr` rows starved the last
+     one — the songs carousel and TRANSPONER need a real minimum (the transpose
+     block alone is a ~7.6rem-wide control with its own button row), and with
+     `overflow: hidden` above they were clipped rather than shrunk. Giving every
+     row a floor makes the deck taller than a short widget, so it scrolls. */
   .layout-widget-type-controlDeck .transport-control-deck {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: repeat(5, minmax(0, 1fr));
+    /* Last row is `auto` and taller: the song row stacks the carousel above the
+       transpose block at this width (see below), so it needs both lines. */
+    grid-template-rows: repeat(4, minmax(2.4rem, 1fr)) minmax(5.4rem, auto);
+    overflow-y: auto;
   }
 
   .layout-widget-type-deckJump .transport-control-deck {
     grid-template: repeat(2, minmax(0, 1fr)) / minmax(0, 1fr);
+  }
+
+  /* The song row is the one child with two independent controls side by side.
+     In a phone-width column the carousel and the transpose block fit only by
+     giving each its own line, otherwise the carousel is squeezed to a sliver
+     and reads as "no songs". */
+  .layout-widget-type-controlDeck .region-actions-row {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .layout-widget-type-controlDeck .region-carousel {
+    flex: 1 1 100%;
+    align-items: center;
+  }
+
+  .layout-widget-type-controlDeck .selected-region-actions {
+    flex: 1 1 100%;
+  }
+
+  .layout-widget-type-controlDeck .selected-region-transpose {
+    /* Fills the line it now owns instead of sitting at its 7.6rem minimum. */
+    width: 100%;
+  }
+
+  /* Chips keep a real tap height instead of stretching to the row box. */
+  .layout-widget-type-controlDeck .region-chip {
+    min-height: 2.2rem;
+    flex: 0 0 auto;
   }
 }
 
@@ -4008,7 +4162,7 @@ button {
   .layout-canvas.is-classic-mobile-controls:not(.is-editing)
     .layout-widget-type-markerGrid .marker-grid {
     overflow-y: auto;
-    grid-auto-rows: minmax(4.25rem, max-content);
+    grid-auto-rows: minmax(6.25rem, max-content);
   }
 
   /* The untouched phone preset is a one-screen dashboard. Control settings
@@ -4500,12 +4654,35 @@ button {
 .layout-tabbar {
   --tab-height: 1.9rem;
   display: flex;
-  flex-wrap: wrap;
+  /* One line always. Wrapping made the strip grow downward as tabs were added,
+     pushing the whole layout down and changing the height every widget below it
+     had to fit in. Overflowing tabs are reached by scrolling sideways instead,
+     so the strip's height never depends on the tab count. */
+  flex-wrap: nowrap;
   align-items: stretch;
   gap: 0.3rem;
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--outline);
   margin-bottom: 0.5rem;
+  /* The strip is a flex ITEM of .layout-canvas-wrap, and adding overflow below
+     turns it into a scroll container — which drops its automatic min-height to 0.
+     The canvas beside it is `flex: 1 0 auto` while editing, so it then claimed
+     everything and squashed the tabs to a few pixels. Both declarations are
+     needed: never shrink, and keep a real height of your own. */
+  flex: 0 0 auto;
+  min-height: calc(var(--tab-height) + 0.4rem);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  /* Vertical pans belong to the canvas below, horizontal ones to this strip. */
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Tabs keep their intrinsic width instead of being squeezed by the flex line. */
+.layout-tabbar > * {
+  flex: 0 0 auto;
 }
 
 .layout-tab {

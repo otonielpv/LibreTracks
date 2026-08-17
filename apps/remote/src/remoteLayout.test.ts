@@ -8,6 +8,7 @@ import {
   DEFAULT_METRONOME_WIDGET_HEIGHT,
   DEFAULT_PADS_WIDGET_HEIGHT,
   clearStoredLayout,
+  computeFoldRow,
   containingGroupId,
   defaultLayout,
   layoutExportFilename,
@@ -717,5 +718,63 @@ describe("pushWidgetsDown", () => {
       "a",
     );
     expect(result.find((w) => w.id === "b")?.y).toBeLessThanOrEqual(LAYOUT_MAX_ROWS - 1);
+  });
+});
+
+describe("computeFoldRow", () => {
+  // A phone: 800px shell, 44px header, 30px tab strip, 28px scroller padding,
+  // 20px rows => floor((800-44-30-28)/20) = 34 visible rows.
+  const phone = {
+    shellHeight: 800,
+    headerHeight: 44,
+    toolbarHeight: 0,
+    otherHeaderHeight: 44,
+    tabbarHeight: 30,
+    scrollerPadding: 28,
+    rowHeight: 20,
+  };
+
+  it("returns null when the layout fits on the screen", () => {
+    expect(computeFoldRow(phone, 34)).toBeNull();
+    expect(computeFoldRow(phone, 10)).toBeNull();
+  });
+
+  it("returns the last visible row when the layout overflows", () => {
+    expect(computeFoldRow(phone, 35)).toBe(34);
+    expect(computeFoldRow(phone, 100)).toBe(34);
+  });
+
+  // The regression this whole calculation exists for: opening the editor injects
+  // a toolbar that wraps onto extra lines inside the header, shrinking the
+  // scroller. The fold must NOT move, because the player's view is unchanged.
+  it("ignores the edit toolbar's extra height", () => {
+    const editing = {
+      ...phone,
+      // Toolbar wrapped to 3 lines (96px) and grew the header with it.
+      headerHeight: 96,
+      toolbarHeight: 96,
+      otherHeaderHeight: 44,
+    };
+    expect(computeFoldRow(editing, 35)).toBe(computeFoldRow(phone, 35));
+    expect(computeFoldRow(editing, 35)).toBe(34);
+    // And it still reports no fold for a layout that fits the real view, even
+    // though the editor's own scroller is 52px shorter.
+    expect(computeFoldRow(editing, 34)).toBeNull();
+  });
+
+  it("counts a toolbar that is shorter than the header as no extra height", () => {
+    const shortToolbar = { ...phone, toolbarHeight: 30, otherHeaderHeight: 44 };
+    expect(computeFoldRow(shortToolbar, 35)).toBe(34);
+  });
+
+  it("counts the tab strip against the available rows", () => {
+    // Taller tabs (the tab-height stepper) leave fewer rows for widgets.
+    const tallTabs = { ...phone, tabbarHeight: 90 };
+    expect(computeFoldRow(tallTabs, 34)).toBe(31);
+  });
+
+  it("returns null for a degenerate row height or an unmeasured shell", () => {
+    expect(computeFoldRow({ ...phone, rowHeight: 0 }, 50)).toBeNull();
+    expect(computeFoldRow({ ...phone, shellHeight: 0 }, 50)).toBeNull();
   });
 });

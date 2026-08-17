@@ -79,6 +79,7 @@ import {
   TAB_HEIGHT_MIN_REM,
   clampTabHeight,
   clearStoredLayout,
+  computeFoldRow,
   containingGroupId,
   defaultLayout,
   layoutExportFilename,
@@ -4406,6 +4407,10 @@ function LayoutCanvas({
 
   /** Rows the layout actually occupies: the bottom edge of its lowest widget. */
   const usedRows = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
+  // Read inside the ResizeObserver callback, which outlives the render that
+  // created it, so a captured value would go stale mid-drag.
+  const usedRowsRef = useRef(usedRows);
+  usedRowsRef.current = usedRows;
 
   // Measure the column width from the grid so pointer coordinates map to cells,
   // and the row at which the visible viewport ends (the scroll fold).
@@ -4417,29 +4422,53 @@ function LayoutCanvas({
 
       // Where the device screen ends, in grid rows.
       //
-      // The fold must describe the layout as the PLAYER sees it, not the editor.
-      // In edit mode the scroll container also holds the tab bar and the widget
-      // palette above the grid; measuring the grid's offset inside the scroller
-      // subtracts that chrome and puts the line far too high — it claimed a fold
-      // where the phone has no scroll at all.
+      // This must describe the layout as the PLAYER sees it, so every piece of
+      // chrome that exists ONLY while editing has to be added back. Measuring the
+      // scroller's clientHeight directly is wrong on a phone: the edit toolbar is
+      // injected into the header, the header is a flex sibling of .remote-content,
+      // and .remote-content is `flex: 1` — so a toolbar that wraps onto several
+      // lines shrinks the scroller and the fold creeps upward, claiming a fold
+      // where the real view has no scroll.
       //
-      // So the reference is the scroller's own visible height, taken as the space
-      // the grid gets when the editor chrome is gone. Rows are fixed-height, so
-      // the fold is simply how many fit.
+      // Reconstruct the real height instead: the shell minus the chrome that
+      // survives leaving edit mode (the header WITHOUT the toolbar, and the tab
+      // strip, which the player does see).
       const scroller = el.closest(".layout-canvas-wrap") as HTMLElement | null;
-      if (!scroller) {
+      const shell = el.closest(".remote-shell") as HTMLElement | null;
+      if (!scroller || !shell) {
         setFoldRow(null);
         return;
       }
-      const rowHeight = rowHeightRef.current;
-      const visibleRows = Math.floor(scroller.clientHeight / rowHeight);
-      const usedRows = widgetsRef.current.reduce(
-        (max, widget) => Math.max(max, widget.y + widget.h),
-        0,
+
+      const header = shell.querySelector(".remote-header") as HTMLElement | null;
+      const toolbar = header?.querySelector(".layout-edit-toolbar") as HTMLElement | null;
+      // The tab strip IS part of the real view, so it costs the grid height. The
+      // palette is editor-only and excluded by measuring from the shell rather
+      // than from the grid.
+      const tabbar = scroller.querySelector(".layout-tabbar") as HTMLElement | null;
+      const scrollerStyle = getComputedStyle(scroller);
+
+      setFoldRow(
+        computeFoldRow(
+          {
+            shellHeight: shell.getBoundingClientRect().height,
+            headerHeight: header?.getBoundingClientRect().height ?? 0,
+            toolbarHeight: toolbar?.getBoundingClientRect().height ?? 0,
+            otherHeaderHeight: Array.from(header?.children ?? [])
+              .filter((child) => child !== toolbar)
+              .reduce(
+                (max, child) => Math.max(max, child.getBoundingClientRect().height),
+                0,
+              ),
+            tabbarHeight: tabbar?.getBoundingClientRect().height ?? 0,
+            scrollerPadding:
+              parseFloat(scrollerStyle.paddingTop || "0") +
+              parseFloat(scrollerStyle.paddingBottom || "0"),
+            rowHeight: rowHeightRef.current,
+          },
+          usedRowsRef.current,
+        ),
       );
-      // Only meaningful when the layout actually reaches past the screen. On a
-      // phone whose widgets all fit, there is no fold to draw.
-      setFoldRow(visibleRows > 0 && usedRows > visibleRows ? visibleRows : null);
     };
     measure();
     if (typeof ResizeObserver === "undefined" || !gridRef.current) {
@@ -4450,6 +4479,15 @@ function LayoutCanvas({
     observer.observe(gridRef.current);
     const scroller = gridRef.current.closest(".layout-canvas-wrap");
     if (scroller) observer.observe(scroller);
+    // The header changes height when the edit toolbar wraps to another line, and
+    // the shell when the browser chrome (Safari's URL bar) grows or collapses.
+    // Both feed the reconstructed height, so both must retrigger the measure.
+    const shell = gridRef.current.closest(".remote-shell");
+    const header = shell?.querySelector(".remote-header");
+    if (header) observer.observe(header);
+    if (shell) observer.observe(shell);
+    const tabbar = scroller?.querySelector(".layout-tabbar");
+    if (tabbar) observer.observe(tabbar);
     return () => observer.disconnect();
     // `usedRows` (not the widget array) is what the fold depends on: dragging a
     // widget within the rows that already exist leaves the grid's height — and

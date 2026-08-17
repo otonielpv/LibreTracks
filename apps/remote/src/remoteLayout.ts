@@ -806,3 +806,53 @@ export function layoutExportFilename(): string {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   return `libretracks-remote-layout-${stamp}.json`;
 }
+
+/** Pixel heights the fold calculation needs, all measured from the live DOM. */
+export type FoldMetrics = {
+  /** Height of the whole remote shell (the device viewport it occupies). */
+  shellHeight: number;
+  /** Full current height of the header, INCLUDING the edit toolbar if present. */
+  headerHeight: number;
+  /** Height of the edit toolbar, or 0 when not editing. */
+  toolbarHeight: number;
+  /** Tallest header child that is not the toolbar (the toolbar shares the
+   * header's row, so only its excess over this adds height). */
+  otherHeaderHeight: number;
+  /** The tab strip: part of the real view, so it costs the grid height. */
+  tabbarHeight: number;
+  /** Vertical padding of the scroll container, safe-area inset included. */
+  scrollerPadding: number;
+  /** Height of one grid row including its gap. */
+  rowHeight: number;
+};
+
+/**
+ * The grid row where the player's screen ends, or null when the layout fits.
+ *
+ * Computed from the REAL view, never from the editor's: the edit toolbar is
+ * injected into the header, the header is a flex sibling of the scroll
+ * container's parent, and that parent is `flex: 1` — so a toolbar wrapping onto
+ * several lines shrinks the scroller. Reading the scroller's height directly
+ * therefore drifts the fold upward and reports scrolling on a phone that has
+ * none. Only the toolbar's EXCESS over the rest of the header row counts as
+ * editor-only chrome, because it occupies the header's flexible middle column.
+ */
+export function computeFoldRow(
+  metrics: FoldMetrics,
+  usedRows: number,
+): number | null {
+  const toolbarExcess = Math.max(
+    0,
+    metrics.toolbarHeight - metrics.otherHeaderHeight,
+  );
+  const realHeaderHeight = metrics.headerHeight - toolbarExcess;
+  const realGridHeight =
+    metrics.shellHeight -
+    realHeaderHeight -
+    metrics.tabbarHeight -
+    metrics.scrollerPadding;
+  if (metrics.rowHeight <= 0) return null;
+  const visibleRows = Math.floor(realGridHeight / metrics.rowHeight);
+  if (visibleRows <= 0) return null;
+  return usedRows > visibleRows ? visibleRows : null;
+}
