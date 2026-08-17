@@ -99,6 +99,43 @@ describe("privacy-preserving telemetry", () => {
     expect(body).not.toHaveProperty("installationAgeBucket");
   });
 
+  it("serializes telemetry requests instead of creating concurrent bursts", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 202 }));
+    useTelemetryStore.getState().setPreference("enabled");
+    await submitAppSession("1.10.0");
+
+    let finishFirstProduct!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(
+      () => new Promise<Response>((resolve) => { finishFirstProduct = resolve; }),
+    );
+    recordProductEvent("feature_metronome");
+    recordProductEvent("feature_compact_view");
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    finishFirstProduct(new Response(null, { status: 202 }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  });
+
+  it("reuses the daily SHA-256 token across queued events", async () => {
+    const digest = vi.spyOn(globalThis.crypto.subtle, "digest");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 202 }));
+    useTelemetryStore.getState().setPreference("enabled");
+
+    await submitAppSession("1.10.0");
+    recordProductEvent("feature_metronome");
+    recordProductEvent("feature_compact_view");
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(digest).toHaveBeenCalledTimes(1);
+  });
+
   it("requires fresh consent when the stored disclosure version is old", async () => {
     localStorage.setItem(
       "libretracks.telemetry.preference.v1",

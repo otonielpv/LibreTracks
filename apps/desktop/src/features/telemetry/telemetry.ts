@@ -17,6 +17,13 @@ let submittedThisSession = false;
 let configuredVersion = "";
 let platformThisSession: Promise<TelemetryPlatform> | null = null;
 const submittedProductEvents = new Set<ProductEventName>();
+let cachedDailyToken: {
+  utcDay: string;
+  installSecret: string;
+  token: Promise<string>;
+} | null = null;
+let submissionQueue: Promise<void> = Promise.resolve();
+const REQUEST_TIMEOUT_MS = 8_000;
 
 export const PRODUCT_EVENT_NAMES = [
   "project_created",
@@ -151,6 +158,20 @@ export async function dailyDeviceToken(
   ).join("");
 }
 
+function sessionDailyDeviceToken(installSecret: string): Promise<string> {
+  const now = new Date();
+  const utcDay = now.toISOString().slice(0, 10);
+  if (
+    cachedDailyToken?.utcDay === utcDay &&
+    cachedDailyToken.installSecret === installSecret
+  ) {
+    return cachedDailyToken.token;
+  }
+  const token = dailyDeviceToken(installSecret, now);
+  cachedDailyToken = { utcDay, installSecret, token };
+  return token;
+}
+
 function dayNumber(utcDay: string): number {
   return Math.floor(Date.parse(`${utcDay}T00:00:00Z`) / 86_400_000);
 }
@@ -219,15 +240,18 @@ async function submitTelemetryEvent(
   if (!configuredVersion || useTelemetryStore.getState().preference !== "enabled") return false;
   const [platform, token] = await Promise.all([
     sessionPlatform(),
-    dailyDeviceToken(getInstallSecret()),
+    sessionDailyDeviceToken(getInstallSecret()),
   ]);
 
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(TELEMETRY_ENDPOINT, {
       method: "POST",
       mode: "cors",
       cache: "no-store",
       keepalive: true,
+      signal: controller.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         event,
@@ -242,6 +266,8 @@ async function submitTelemetryEvent(
   } catch {
     // Best effort only. Never log telemetry failures into the user's error log.
     return false;
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -258,6 +284,15 @@ async function submitWithRetry(
   }
 }
 
+function enqueueTelemetryEvent(
+  event: "app_started" | ProductEventName,
+  profile?: InstallationProfile,
+): Promise<void> {
+  const submission = submissionQueue.then(() => submitWithRetry(event, profile));
+  submissionQueue = submission.catch(() => undefined);
+  return submission;
+}
+
 /**
  * Records one app start after explicit opt-in. The random installation secret
  * never leaves this device; only its one-day derivative is sent. Failures are
@@ -269,7 +304,7 @@ export async function submitAppSession(version: string): Promise<void> {
   }
   submittedThisSession = true;
   configuredVersion = version;
-  await submitWithRetry("app_started", updateInstallationProfile());
+  await enqueueTelemetryEvent("app_started", updateInstallationProfile());
 }
 
 /** Records adoption, outcomes and engagement once per app process and event. */
@@ -282,7 +317,7 @@ export function recordProductEvent(event: ProductEventName): void {
     return;
   }
   submittedProductEvents.add(event);
-  void submitWithRetry(event);
+  void enqueueTelemetryEvent(event);
 }
 
 export function recordPlaybackTransition(
@@ -319,5 +354,7 @@ export function resetTelemetrySessionForTest(): void {
   submittedThisSession = false;
   configuredVersion = "";
   platformThisSession = null;
+  cachedDailyToken = null;
+  submissionQueue = Promise.resolve();
   submittedProductEvents.clear();
 }
