@@ -8,6 +8,7 @@ import {
   formatGainDb,
   positionToGain,
 } from "@libretracks/shared/faderScale";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 /**
  * Dependencies for the metronome / audio-device / MIDI-input settings handlers.
@@ -211,6 +212,7 @@ export function createMetronomeDeviceHandlers(
         const savedSettings = normalizeAppSettings(
           await saveSettings(nextSettings),
         );
+        if (nextValue) recordProductEvent("feature_metronome");
         appSettingsRef.current = savedSettings;
         setAppSettings(savedSettings);
         setStatus(
@@ -233,6 +235,7 @@ export function createMetronomeDeviceHandlers(
           const savedSettings = normalizeAppSettings(
             await setVoiceGuideConfigRealtime(nextSettings),
           );
+          if (nextValue) recordProductEvent("feature_voice_guide");
           appSettingsRef.current = savedSettings;
           setAppSettings(savedSettings);
           setStatus(
@@ -265,6 +268,7 @@ export function createMetronomeDeviceHandlers(
           );
           appSettingsRef.current = savedSettings;
           setAppSettings(savedSettings);
+          if (keyChanged) recordProductEvent("feature_ambient_pads");
         } catch (error) {
           setStatus(formatErrorStatus(error));
         }
@@ -290,6 +294,7 @@ export function createMetronomeDeviceHandlers(
           );
           appSettingsRef.current = savedSettings;
           setAppSettings(savedSettings);
+          if (nextValue) recordProductEvent("feature_ambient_pads");
           setStatus(
             nextValue
               ? t("transport.status.padEnabled", { defaultValue: "Pad on." })

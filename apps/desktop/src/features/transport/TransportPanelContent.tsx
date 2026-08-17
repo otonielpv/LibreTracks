@@ -167,6 +167,7 @@ import {
 } from "./desktopApi";
 import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
+import { recordPlaybackTransition, recordProductEvent } from "../telemetry/telemetry";
 import {
   markerColor,
   markerKindCategory,
@@ -2189,6 +2190,7 @@ export function TransportPanelContent() {
 
   const applyPlaybackSnapshot = useCallback(
     (nextSnapshot: TransportSnapshot | null) => {
+      recordPlaybackTransition(snapshotRef.current?.playbackState, nextSnapshot?.playbackState);
       useTransportStore.getState().setPlaybackState(nextSnapshot);
       snapshotRef.current = nextSnapshot;
       applyPitchPrepareSnapshot(nextSnapshot?.pitch);
@@ -3403,6 +3405,7 @@ export function TransportPanelContent() {
           nextEnabled,
           sourceBpm,
         );
+        if (nextEnabled) recordProductEvent("feature_warp");
         // Refetch the SongView: toggling warp can flip overlapping clips
         // between Bungee (warp-on) and Varispeed (warp-off + pitch), and
         // both paths produce different audible durations than Direct. The
@@ -5787,6 +5790,7 @@ export function TransportPanelContent() {
           maxRuns: result.maxRuns,
           actions: result.actions,
         });
+        recordProductEvent("feature_automation");
         applyPlaybackSnapshot(nextSnapshot);
         await refreshSongView({ includeWaveforms: false, sync: true });
         setStatus(

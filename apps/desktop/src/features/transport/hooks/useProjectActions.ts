@@ -25,6 +25,10 @@ import {
 import { nextPaint } from "../library/pendingAudioImports";
 import { pushRecentSession } from "../recentSessions";
 import type { SidebarTab } from "../types";
+import {
+  recordProductEvent,
+  type ProductEventName,
+} from "../../telemetry/telemetry";
 
 type UseProjectActionsProps = {
   runAction: (
@@ -121,6 +125,7 @@ export function useProjectActions({
           pushRecentSession(nextSnapshot.songFilePath);
         }
         applyPlaybackSnapshot(nextSnapshot);
+        recordProductEvent("project_created");
         setActiveSidebarTab(null);
         setStatus(
           nextSnapshot.songFilePath
@@ -142,6 +147,7 @@ export function useProjectActions({
   function runProjectLoadFlow(
     loader: () => Promise<TransportSnapshot | null>,
     loadingMessage: string,
+    successEvent: Extract<ProductEventName, "project_created" | "project_opened">,
   ) {
     void runAction(
       async () => {
@@ -170,6 +176,7 @@ export function useProjectActions({
           }
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
+          recordProductEvent(successEvent);
           setActiveSidebarTab(null);
           setBusyFeedback({
             message: t("transport.shell.projectReady", {
@@ -184,6 +191,9 @@ export function useProjectActions({
           await nextPaint();
           setProjectViewHydrating(false);
         } catch (error) {
+          if (successEvent === "project_opened") {
+            recordProductEvent("project_open_failed");
+          }
           setProjectViewHydrating(false);
           setBusyFeedback(null);
           throw error;
@@ -202,6 +212,7 @@ export function useProjectActions({
       t("transport.shell.loadingProject", {
         defaultValue: "Opening project...",
       }),
+      "project_opened",
     );
   }
 
@@ -219,6 +230,7 @@ export function useProjectActions({
           pushRecentSession(nextSnapshot.songFilePath);
         }
         applyPlaybackSnapshot(nextSnapshot);
+        recordProductEvent("project_created");
         setActiveSidebarTab(null);
         setStatus(
           nextSnapshot.songFilePath
@@ -238,6 +250,7 @@ export function useProjectActions({
       t("transport.shell.loadingProject", {
         defaultValue: "Opening project...",
       }),
+      "project_opened",
     );
   }
 
@@ -251,6 +264,7 @@ export function useProjectActions({
       t("transport.shell.importingSession", {
         defaultValue: "Importando sesión...",
       }),
+      "project_opened",
     );
   }
 
@@ -300,6 +314,7 @@ export function useProjectActions({
           return;
         }
         await finished;
+        recordProductEvent("session_exported");
         setStatus(
           t("transport.status.sessionExported", {
             defaultValue: "Sesión exportada.",
@@ -310,6 +325,7 @@ export function useProjectActions({
           setSessionExportUiState({ active: false, percent: 0, message: "" });
         }, 1200);
       } catch (error) {
+        recordProductEvent("session_export_failed");
         setSessionExportUiState({ active: false, percent: 0, message: "" });
         throw error;
       } finally {
@@ -469,6 +485,7 @@ export function useProjectActions({
     void runAction(
       async () => {
         const nextSnapshot = await saveProject();
+        recordProductEvent("project_saved");
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
@@ -493,6 +510,7 @@ export function useProjectActions({
         if (nextSnapshot.songFilePath) {
           pushRecentSession(nextSnapshot.songFilePath);
         }
+        recordProductEvent("project_saved");
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
@@ -538,6 +556,7 @@ export function useProjectActions({
       t("transport.shell.creatingFromTemplate", {
         defaultValue: "Creando sesión desde plantilla...",
       }),
+      "project_created",
     );
   }
 
@@ -551,6 +570,7 @@ export function useProjectActions({
       t("transport.shell.creatingFromTemplate", {
         defaultValue: "Creando sesión desde plantilla...",
       }),
+      "project_created",
     );
   }
 

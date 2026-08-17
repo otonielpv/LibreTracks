@@ -1,0 +1,15 @@
+---
+import SiteLayout from "../../../layouts/SiteLayout.astro";
+import ProductAnalytics from "../../../components/ProductAnalytics.astro";
+---
+
+<SiteLayout title="Metricas de producto de LibreTracks" description="Panel privado de telemetria de producto de LibreTracks." lang="es" noIndex>
+  <main class="site-shell band" data-pagefind-ignore>
+    <div class="section-heading">
+      <p class="eyebrow">Panel privado</p>
+      <h2>Decisiones de producto basadas en uso real.</h2>
+      <p>Activacion, adopcion de funcionalidades, fiabilidad y profundidad de uso. Los valores representan datos agregados de quienes han dado su consentimiento.</p>
+    </div>
+    <ProductAnalytics lang="es" />
+  </main>
+</SiteLayout>

@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   classifyPlatform,
   dailyDeviceToken,
+  recordProductEvent,
   resetTelemetrySessionForTest,
   submitAppSession,
+  updateInstallationProfile,
   useTelemetryStore,
 } from "./telemetry";
 
@@ -55,16 +57,52 @@ describe("privacy-preserving telemetry", () => {
     const body = JSON.parse(String(request?.body)) as Record<string, unknown>;
     expect(body).toMatchObject({
       event: "app_started",
-      consentVersion: 2,
+      consentVersion: 3,
       version: "1.10.0",
+      installationAgeBucket: "day_0",
+      activeDaysBucket: "1",
     });
     expect(body.dailyDeviceToken).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("reports only coarse installation maturity buckets", () => {
+    expect(updateInstallationProfile(new Date("2026-08-01T12:00:00Z"))).toEqual({
+      installationAgeBucket: "day_0",
+      activeDaysBucket: "1",
+    });
+    expect(updateInstallationProfile(new Date("2026-08-02T12:00:00Z"))).toEqual({
+      installationAgeBucket: "days_1_7",
+      activeDaysBucket: "2_3",
+    });
+    expect(updateInstallationProfile(new Date("2026-09-15T12:00:00Z"))).toEqual({
+      installationAgeBucket: "days_31_90",
+      activeDaysBucket: "2_3",
+    });
+  });
+
+  it("sends each allowlisted product signal at most once per app session", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 202 }));
+    useTelemetryStore.getState().setPreference("enabled");
+    await submitAppSession("1.10.0");
+
+    recordProductEvent("feature_metronome");
+    recordProductEvent("feature_metronome");
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const body = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      event: "feature_metronome",
+      consentVersion: 3,
+    });
+    expect(body).not.toHaveProperty("installationAgeBucket");
   });
 
   it("requires fresh consent when the stored disclosure version is old", async () => {
     localStorage.setItem(
       "libretracks.telemetry.preference.v1",
-      JSON.stringify({ state: { preference: "enabled" }, version: 0 }),
+      JSON.stringify({ state: { preference: "enabled" }, version: 2 }),
     );
 
     await useTelemetryStore.persist.rehydrate();

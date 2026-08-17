@@ -1,17 +1,17 @@
 # LibreTracks privacy-preserving usage statistics
 
-The client, Cloudflare Pages Functions and public dashboard are implemented in:
+The client, Cloudflare Pages Functions and dashboards are implemented in:
 
 - `apps/desktop/src/features/telemetry/`
 - `apps/website/functions/api/telemetry/`
 - `apps/website/src/pages/usage.astro` and `apps/website/src/pages/es/usage.astro`
+- `apps/website/src/pages/admin/analytics.astro` and its Spanish equivalent
 
-No event is sent until the user explicitly opts in. The only event currently
-implemented is `app_started`. The installation secret remains in local storage;
+No event is sent until the user explicitly opts in. The installation secret remains in local storage;
 the server receives a SHA-256 derivative that rotates each UTC day. Cloudflare
 derives a two-letter country code from the network request at the edge; neither
 the IP address nor a more precise location is written to the telemetry database.
-Country is stored only when the event includes consent version 2. Older clients
+Country is stored only when the event includes consent version 2 or later. Older clients
 remain compatible but are recorded with country `XX`, because their original
 consent disclosure did not include country-level analytics.
 
@@ -19,13 +19,20 @@ The public dashboard provides rolling 24-hour, 7-day and 30-day totals, hourly
 and daily UTC trends, and 30-day country/version/platform breakdowns. Timeline
 buckets and breakdowns with fewer than five devices are suppressed.
 
+Consent version 3 enables the closed product-event taxonomy defined by
+`PRODUCT_EVENT_NAMES`. It covers activation, feature adoption, selected action
+outcomes and 5/15/30/60-minute active-session milestones. Every product event
+is emitted at most once per app process. No event accepts names, paths, error
+messages or arbitrary properties. Installation age and cumulative active days
+are computed locally and sent only as broad buckets.
+
 ## Cloudflare setup
 
 1. Create a D1 database named `libretracks-telemetry`.
 2. Apply the SQL files in `apps/website/migrations` in numeric order in the D1
    SQL console (or with Wrangler's `d1 execute --remote --file` command). An
-   existing installation that already applied `0001` only needs to run
-   `0002_telemetry_country.sql`.
+   existing installation must run only the numbered files it has not yet
+   applied. Product metrics require `0003_product_telemetry.sql`.
 3. In the LibreTracks Pages project, add a D1 binding named exactly
    `TELEMETRY_DB` and select that database for both production and preview.
 4. Confirm the Pages project root is `apps/website`. Pages Functions must live
@@ -33,6 +40,12 @@ buckets and breakdowns with fewer than five devices are suppressed.
    repository root, move/copy `apps/website/functions` to root `functions` or
    change the Pages root before deploying.
 5. Redeploy the website, then verify `GET /api/telemetry/stats` returns JSON.
+6. Add a production Pages secret named `ANALYTICS_ADMIN_TOKEN` containing at
+   least 24 random characters. Open `/es/admin/analytics/`, enter that token,
+   and verify the 7/30/90-day views. The token stays in browser session storage.
+7. As defence in depth, protect `/admin/*`, `/es/admin/*` and
+   `/api/telemetry/product-stats*` with a Cloudflare Access self-hosted
+   application restricted to the maintainer identity.
 
 The endpoint enforces a 90-day event retention window opportunistically on
 writes. For guaranteed deletion even during a 90-day period with no traffic,

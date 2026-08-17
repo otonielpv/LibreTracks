@@ -1,0 +1,15 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+import ProductAnalytics from "../../components/ProductAnalytics.astro";
+---
+
+<SiteLayout title="LibreTracks Product Metrics" description="Private LibreTracks product analytics dashboard." lang="en" noIndex>
+  <main class="site-shell band" data-pagefind-ignore>
+    <div class="section-heading">
+      <p class="eyebrow">Private dashboard</p>
+      <h2>Product decisions grounded in real usage.</h2>
+      <p>Activation, feature adoption, reliability and usage depth. Values represent aggregated data from people who opted in.</p>
+    </div>
+    <ProductAnalytics lang="en" />
+  </main>
+</SiteLayout>

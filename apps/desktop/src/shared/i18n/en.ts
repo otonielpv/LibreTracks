@@ -1032,7 +1032,7 @@ const en = {
     eyebrow: "Privacy",
     title: "Help improve LibreTracks",
       description:
-        "Allow optional usage statistics: app starts and their UTC time, app version, broad device platform and country inferred by Cloudflare from the network connection. LibreTracks never sends precise location, projects, audio, file names, paths or connected hardware.",
+        "Allow optional product statistics: app starts and UTC time, broad platform and country, feature adoption, completed or failed actions, coarse installation maturity and active-session milestones. LibreTracks never sends precise location, project content, audio, names, paths or connected hardware.",
     detail:
       "A random secret stays on this device. Only a token that changes every day is sent, so it cannot build a long-term device history.",
     allow: "Allow usage statistics",
@@ -1040,7 +1040,7 @@ const en = {
     policy: "Read privacy policy",
     setting: "Optional usage statistics",
       settingHint:
-        "Share app starts, UTC time, version, broad device platform and country. No precise location, project, audio or hardware information is sent.",
+        "Share aggregated activation, feature adoption, reliability and session-depth signals. No precise location, project content, audio, names, paths or hardware information is sent.",
   },
   update: {
     eyebrow: "Update available",

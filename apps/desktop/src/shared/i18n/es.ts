@@ -1062,7 +1062,7 @@ const es = {
     eyebrow: "Privacidad",
     title: "Ayuda a mejorar LibreTracks",
       description:
-        "Permite estadisticas opcionales de uso: inicios y su hora UTC, version, plataforma general y pais inferido por Cloudflare a partir de la conexion de red. LibreTracks nunca envia ubicacion precisa, proyectos, audio, nombres de archivo, rutas ni hardware conectado.",
+        "Permite estadisticas opcionales de producto: inicios y hora UTC, plataforma general y pais, adopcion de funciones, acciones completadas o fallidas, madurez aproximada de la instalacion e hitos de sesion activa. LibreTracks nunca envia ubicacion precisa, contenido de proyectos, audio, nombres, rutas ni hardware conectado.",
     detail:
       "Un secreto aleatorio permanece en este dispositivo. Solo se envia un token que cambia cada dia, por lo que no permite crear un historial del equipo a largo plazo.",
     allow: "Permitir estadisticas de uso",
@@ -1070,7 +1070,7 @@ const es = {
     policy: "Leer la politica de privacidad",
     setting: "Estadisticas opcionales de uso",
       settingHint:
-        "Comparte inicios, hora UTC, version, plataforma general y pais. No se envia ubicacion precisa ni informacion de proyectos, audio o hardware.",
+        "Comparte señales agregadas de activacion, adopcion, fiabilidad y profundidad de sesion. No se envia ubicacion precisa, contenido de proyectos, audio, nombres, rutas ni hardware.",
   },
   update: {
     eyebrow: "Nueva version disponible",

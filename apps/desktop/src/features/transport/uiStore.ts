@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
+import { recordProductEvent } from "../telemetry/telemetry";
 
 export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
 export type SongJumpTrigger =
@@ -69,12 +70,15 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     midiLearnMode: null,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
+      if (viewMode === "compact") recordProductEvent("feature_compact_view");
       set({ viewMode });
     },
     toggleViewMode: () => {
-      set((state) => ({
-        viewMode: state.viewMode === "daw" ? "compact" : "daw",
-      }));
+      set((state) => {
+        const viewMode = state.viewMode === "daw" ? "compact" : "daw";
+        if (viewMode === "compact") recordProductEvent("feature_compact_view");
+        return { viewMode };
+      });
     },
     setCameraX: (cameraX) => {
       set({ cameraX: Number.isFinite(cameraX) ? Math.max(0, cameraX) : 0 });

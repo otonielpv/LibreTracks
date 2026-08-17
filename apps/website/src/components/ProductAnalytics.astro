@@ -1,0 +1,302 @@
+---
+interface Props {
+  lang?: "en" | "es";
+}
+
+const { lang = "es" } = Astro.props;
+const es = lang === "es";
+const copy = es
+  ? {
+      access: "Acceso al panel",
+      token: "Token de administracion",
+      enter: "Abrir metricas",
+      exit: "Salir",
+      loading: "Calculando metricas...",
+      unauthorized: "Token incorrecto o sesion no autorizada.",
+      notConfigured: "Configura ANALYTICS_ADMIN_TOKEN en Cloudflare Pages.",
+      unavailable: "No se pudieron cargar las metricas.",
+      starts: "Inicios",
+      devices: "Dispositivos-día activos",
+      activation: "Señales de activacion",
+      features: "Adopcion de funcionalidades",
+      quality: "Fiabilidad de acciones",
+      engagement: "Profundidad de sesion",
+      maturity: "Madurez de usuarios",
+      installationAge: "Antigüedad de instalacion",
+      activeDays: "Dias activos acumulados",
+      trend: "Actividad diaria",
+      adoption: "Adopcion",
+      successes: "exitos",
+      failures: "fallos",
+      updated: "Actualizado",
+    }
+  : {
+      access: "Dashboard access",
+      token: "Administration token",
+      enter: "Open metrics",
+      exit: "Sign out",
+      loading: "Calculating metrics...",
+      unauthorized: "Invalid token or unauthorized session.",
+      notConfigured: "Configure ANALYTICS_ADMIN_TOKEN in Cloudflare Pages.",
+      unavailable: "Metrics could not be loaded.",
+      starts: "App starts",
+      devices: "Active device-days",
+      activation: "Activation signals",
+      features: "Feature adoption",
+      quality: "Action reliability",
+      engagement: "Session depth",
+      maturity: "User maturity",
+      installationAge: "Installation age",
+      activeDays: "Cumulative active days",
+      trend: "Daily activity",
+      adoption: "Adoption",
+      successes: "successes",
+      failures: "failures",
+      updated: "Updated",
+    };
+---
+
+<section class="product-analytics" data-product-analytics data-lang={lang} data-copy={JSON.stringify(copy)}>
+  <form class="analytics-login" data-analytics-login>
+    <h3>{copy.access}</h3>
+    <label>
+      <span>{copy.token}</span>
+      <input type="password" name="token" autocomplete="current-password" minlength="24" required />
+    </label>
+    <button class="button-link" type="submit">{copy.enter}</button>
+  </form>
+  <div class="analytics-toolbar" data-analytics-toolbar hidden>
+    <div class="analytics-window" role="group" aria-label="Time window">
+      <button type="button" data-days="7">7d</button>
+      <button type="button" data-days="30" class="is-active">30d</button>
+      <button type="button" data-days="90">90d</button>
+    </div>
+    <button type="button" class="analytics-lock" data-analytics-lock>{copy.exit}</button>
+  </div>
+  <p class="stats-muted" data-analytics-status></p>
+  <div data-analytics-content></div>
+</section>
+
+<script>
+  type Metric = { key: string; devices: number; rate: number };
+  type Feature = { key: string; devices: number; events: number; adoptionRate: number };
+  type Quality = { key: string; successes: number; failures: number; successRate: number };
+  type Bucket = { label: string; devices: number };
+  type Daily = { day: string; activeDevices: number; activatedDevices: number; featureDevices: number };
+  type ProductStats = {
+    generatedAt: string;
+    windowDays: number;
+    appStarts: number;
+    activeDeviceDays: number;
+    activation: Metric[];
+    features: Feature[];
+    quality: Quality[];
+    engagement: Array<{ minutes: number; devices: number; rate: number }>;
+    maturity: { installationAge: Bucket[]; activeDays: Bucket[] };
+    daily: Daily[];
+  };
+
+  const root = document.querySelector<HTMLElement>("[data-product-analytics]");
+  const form = root?.querySelector<HTMLFormElement>("[data-analytics-login]");
+  const toolbar = root?.querySelector<HTMLElement>("[data-analytics-toolbar]");
+  const status = root?.querySelector<HTMLElement>("[data-analytics-status]");
+  const content = root?.querySelector<HTMLElement>("[data-analytics-content]");
+  const lock = root?.querySelector<HTMLButtonElement>("[data-analytics-lock]");
+  const copy = JSON.parse(root?.dataset.copy ?? "{}") as Record<string, string>;
+  const locale = root?.dataset.lang ?? "es";
+  const numbers = new Intl.NumberFormat(locale);
+  const TOKEN_KEY = "libretracks.analytics.admin-token";
+  let selectedDays = 30;
+
+  const names: Record<string, Record<string, string>> = {
+    es: {
+      app_started: "Aplicacion iniciada",
+      project_ready: "Proyecto creado o abierto",
+      audio_imported: "Audio importado",
+      playback_started: "Reproduccion iniciada",
+      work_completed: "Proyecto guardado o exportado",
+      feature_compact_view: "Vista compacta",
+      feature_metronome: "Metronomo",
+      feature_voice_guide: "Guia de voz",
+      feature_ambient_pads: "Pads ambientales",
+      feature_automation: "Automatizaciones",
+      feature_warp: "Warp",
+      feature_midi: "MIDI",
+      feature_remote_panel: "Control remoto",
+      audio_import: "Importacion de audio",
+      project_open: "Apertura de proyecto",
+      session_export: "Exportacion de sesion",
+      day_0: "Primer dia",
+      days_1_7: "1–7 dias",
+      days_8_30: "8–30 dias",
+      days_31_90: "31–90 dias",
+      days_91_plus: "91+ dias",
+      "1": "1 dia",
+      "2_3": "2–3 dias",
+      "4_7": "4–7 dias",
+      "8_30": "8–30 dias",
+      "31_plus": "31+ dias",
+    },
+    en: {
+      app_started: "App started",
+      project_ready: "Project created or opened",
+      audio_imported: "Audio imported",
+      playback_started: "Playback started",
+      work_completed: "Project saved or exported",
+      feature_compact_view: "Compact view",
+      feature_metronome: "Metronome",
+      feature_voice_guide: "Voice guide",
+      feature_ambient_pads: "Ambient pads",
+      feature_automation: "Automation",
+      feature_warp: "Warp",
+      feature_midi: "MIDI",
+      feature_remote_panel: "Remote control",
+      audio_import: "Audio import",
+      project_open: "Project open",
+      session_export: "Session export",
+      day_0: "First day",
+      days_1_7: "1–7 days",
+      days_8_30: "8–30 days",
+      days_31_90: "31–90 days",
+      days_91_plus: "91+ days",
+      "1": "1 day",
+      "2_3": "2–3 days",
+      "4_7": "4–7 days",
+      "8_30": "8–30 days",
+      "31_plus": "31+ days",
+    },
+  };
+  const label = (key: string) => names[locale]?.[key] ?? key;
+
+  function heading(title: string): HTMLHeadingElement {
+    const element = document.createElement("h3");
+    element.textContent = title;
+    return element;
+  }
+
+  function ranked(title: string, rows: Array<{ key: string; devices: number; rate: number }>): HTMLElement {
+    const card = document.createElement("article");
+    card.className = "analytics-card analytics-ranked";
+    card.append(heading(title));
+    const max = Math.max(1, ...rows.map((row) => row.devices));
+    rows.forEach((row) => {
+      const line = document.createElement("div");
+      line.className = "analytics-ranked-row";
+      line.innerHTML = `<span>${label(row.key)}</span><strong>${numbers.format(row.devices)} · ${row.rate.toFixed(1)}%</strong><i style="width:${(row.devices / max) * 100}%"></i>`;
+      card.append(line);
+    });
+    return card;
+  }
+
+  function maturity(title: string, rows: Bucket[]): HTMLElement {
+    const total = rows.reduce((sum, row) => sum + row.devices, 0);
+    return ranked(
+      title,
+      rows.map((row) => ({ key: row.label, devices: row.devices, rate: total ? (row.devices / total) * 100 : 0 })),
+    );
+  }
+
+  function trend(rows: Daily[]): HTMLElement {
+    const card = document.createElement("article");
+    card.className = "analytics-card analytics-trend";
+    card.append(heading(copy.trend));
+    const plot = document.createElement("div");
+    plot.className = "analytics-trend-plot";
+    const max = Math.max(1, ...rows.map((row) => row.activeDevices));
+    rows.forEach((row) => {
+      const column = document.createElement("div");
+      column.title = `${row.day}: ${row.activeDevices} active, ${row.activatedDevices} activated, ${row.featureDevices} features`;
+      column.innerHTML = `<i class="active" style="height:${(row.activeDevices / max) * 100}%"></i><i class="activated" style="height:${(row.activatedDevices / max) * 100}%"></i><i class="features" style="height:${(row.featureDevices / max) * 100}%"></i>`;
+      plot.append(column);
+    });
+    card.append(plot);
+    return card;
+  }
+
+  function render(data: ProductStats): void {
+    if (!content) return;
+    content.replaceChildren();
+    const summary = document.createElement("div");
+    summary.className = "analytics-summary";
+    [[data.appStarts, copy.starts], [data.activeDeviceDays, copy.devices]].forEach(([value, text]) => {
+      const card = document.createElement("article");
+      card.innerHTML = `<strong>${numbers.format(value as number)}</strong><span>${text}</span>`;
+      summary.append(card);
+    });
+
+    const grid = document.createElement("div");
+    grid.className = "analytics-grid";
+    grid.append(
+      ranked(copy.activation, data.activation),
+      ranked(copy.features, data.features.map((item) => ({ ...item, rate: item.adoptionRate }))),
+    );
+
+    const quality = document.createElement("article");
+    quality.className = "analytics-card";
+    quality.append(heading(copy.quality));
+    data.quality.forEach((row) => {
+      const line = document.createElement("p");
+      line.className = "analytics-quality-row";
+      line.innerHTML = `<span>${label(row.key)}</span><strong>${row.successRate.toFixed(1)}%</strong><small>${row.successes} ${copy.successes} · ${row.failures} ${copy.failures}</small>`;
+      quality.append(line);
+    });
+    grid.append(quality);
+
+    grid.append(
+      ranked(copy.engagement, data.engagement.map((row) => ({ key: `active_${row.minutes}m`, devices: row.devices, rate: row.rate })).map((row) => ({ ...row, key: `${row.key.replace("active_", "≥ ").replace("m", " min")}` }))),
+      maturity(copy.installationAge, data.maturity.installationAge),
+      maturity(copy.activeDays, data.maturity.activeDays),
+      trend(data.daily),
+    );
+    content.append(summary, grid);
+  }
+
+  async function load(token: string): Promise<void> {
+    if (status) status.textContent = copy.loading;
+    try {
+      const response = await fetch(`/api/telemetry/product-stats?days=${selectedDays}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (response.status === 401) throw new Error("unauthorized");
+      if (response.status === 503) throw new Error("notConfigured");
+      if (!response.ok) throw new Error("unavailable");
+      const data = (await response.json()) as ProductStats;
+      sessionStorage.setItem(TOKEN_KEY, token);
+      if (form) form.hidden = true;
+      if (toolbar) toolbar.hidden = false;
+      render(data);
+      if (status) {
+        const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt));
+        status.textContent = `${copy.updated}: ${date}`;
+      }
+    } catch (error) {
+      const key = error instanceof Error ? error.message : "unavailable";
+      if (status) status.textContent = copy[key] ?? copy.unavailable;
+      if (key === "unauthorized") sessionStorage.removeItem(TOKEN_KEY);
+    }
+  }
+
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const token = new FormData(form).get("token");
+    if (typeof token === "string") void load(token);
+  });
+  root?.querySelectorAll<HTMLButtonElement>("[data-days]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedDays = Number(button.dataset.days);
+      root.querySelectorAll("[data-days]").forEach((item) => item.classList.toggle("is-active", item === button));
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (token) void load(token);
+    });
+  });
+  lock?.addEventListener("click", () => {
+    sessionStorage.removeItem(TOKEN_KEY);
+    content?.replaceChildren();
+    if (form) form.hidden = false;
+    if (toolbar) toolbar.hidden = true;
+    if (status) status.textContent = "";
+  });
+  const savedToken = sessionStorage.getItem(TOKEN_KEY);
+  if (savedToken) void load(savedToken);
+</script>

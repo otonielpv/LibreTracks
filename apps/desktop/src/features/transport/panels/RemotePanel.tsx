@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { RemoteServerInfo } from "@libretracks/shared/models";
 import { RemoteAccessCard } from "./RemoteAccessCard";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 type RemotePanelProps = {
   isOpen: boolean;
@@ -10,6 +12,10 @@ type RemotePanelProps = {
 
 export function RemotePanel({ isOpen, onClose, remoteServerInfo }: RemotePanelProps) {
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (isOpen) recordProductEvent("feature_remote_panel");
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;

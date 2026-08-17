@@ -1,5 +1,6 @@
 import type { LibraryAssetSummary } from "@libretracks/shared/models";
 import { alertDialog } from "../../../shared/dialog/dialogService";
+import { recordProductEvent } from "../../telemetry/telemetry";
 import { forgetLibraryAssets } from "../desktopApi";
 import { useTransportStore } from "../store";
 
@@ -102,8 +103,10 @@ export async function runAudioImportPipeline({
     }
 
     store.removePendingAudioImports(pendingIds);
+    recordProductEvent("audio_imported");
     setStatus(successMessage(importedAssets));
   } catch (error) {
+    recordProductEvent("audio_import_failed");
     const message = importErrorMessage(error);
     store.markPendingAudioImportsFailed(pendingIds, message);
     setStatus(message);

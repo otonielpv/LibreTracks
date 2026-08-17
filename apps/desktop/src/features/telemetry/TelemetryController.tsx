@@ -3,7 +3,11 @@ import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { isTauriApp } from "../transport/desktopApi";
-import { submitAppSession, useTelemetryStore } from "./telemetry";
+import {
+  startEngagementTracking,
+  submitAppSession,
+  useTelemetryStore,
+} from "./telemetry";
 
 type Props = {
   version: string;
@@ -23,6 +27,7 @@ export function TelemetryController({ version }: Props) {
   useEffect(() => {
     if (!activeInThisBuild || preference !== "enabled") return;
     void submitAppSession(version);
+    return startEngagementTracking();
   }, [activeInThisBuild, preference, version]);
 
   if (!activeInThisBuild || preference !== "undecided") return null;
@@ -44,7 +49,7 @@ export function TelemetryController({ version }: Props) {
         <p>
           {t("telemetry.description", {
             defaultValue:
-              "Allow optional usage statistics: app starts and their UTC time, app version, broad device platform and country inferred by Cloudflare from the network connection. LibreTracks never sends precise location, projects, audio, file names, paths or connected hardware.",
+              "Allow optional product statistics: app starts and UTC time, broad platform and country, feature adoption, completed or failed actions, coarse installation maturity and active-session milestones. LibreTracks never sends precise location, project content, audio, names, paths or connected hardware.",
           })}
         </p>
         <p className="lt-telemetry-detail">
@@ -102,7 +107,7 @@ export function TelemetrySettingsField() {
         <small>
           {t("telemetry.settingHint", {
             defaultValue:
-              "Share app starts, UTC time, version, broad device platform and country. No precise location, project, audio or hardware information is sent.",
+              "Share aggregated activation, feature adoption, reliability and session-depth signals. No precise location, project content, audio, names, paths or hardware information is sent.",
           })}
         </small>
       </span>

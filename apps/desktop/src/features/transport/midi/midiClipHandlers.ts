@@ -11,6 +11,7 @@ import {
   type TransportSnapshot,
 } from "../desktopApi";
 import type { MidiRouteDraft } from "../panels/MidiRouteModal";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 /**
  * Handlers for creating, editing, moving and deleting MIDI clips.
@@ -74,6 +75,7 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
         events: input.events,
         color: input.color ?? null,
       });
+      recordProductEvent("feature_midi");
       applyPlaybackSnapshot(snapshot);
       setStatus(
         translate(
