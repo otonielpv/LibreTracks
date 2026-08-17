@@ -20,7 +20,8 @@ enum class SoundPreset : int {
     Rimshot = 4,    // noisy bright transient
     Cowbell = 5,    // two inharmonic partials
     Clave = 6,      // dry wooden clave / clapperboard "tock"
-    Count = 7,      // sentinel (number of presets)
+    ClickTrack = 7, // low wooden click of a rendered click track
+    Count = 8,      // sentinel (number of presets)
 };
 
 struct MetronomeConfig {

@@ -285,6 +285,21 @@ MetronomeRenderer::VoiceSpec MetronomeRenderer::make_voice_spec(int preset,
             spec.partial2_mix = 0.35f;
             spec.noise_mix = 0.06f;       // tiny attack tick only
             break;
+        case SoundPreset::ClickTrack:
+            // Low wooden click of a pre-rendered click track: measured from a
+            // reference file as a ~30 ms hit with a ~775 Hz fundamental and a
+            // strong inharmonic partial near 1.67x (~1292 Hz), fast decay and
+            // only a trace of noise on the attack. Darker and rounder than the
+            // Woodblock, shorter and less ringy than the Cowbell.
+            spec.base_freq = 775.0 * ratio;
+            spec.duration_sec = 0.030;
+            spec.decay_rate = 12.0f;
+            spec.gain = gain * 1.8f;
+            spec.partial2_ratio = 1.67f;
+            spec.partial2_mix = 0.45f;
+            spec.noise_mix = 0.08f;
+            spec.noise_coeff = 0.35f;  // dark, woody attack tick
+            break;
         case SoundPreset::Sine:
         default:
             spec.base_freq = 1100.0 * ratio;

@@ -3615,6 +3615,13 @@ function ReadoutSongWidget() {
   const readout = useTransportReadout();
   return <ReadoutTile label={STRINGS.region} value={readout.regionName} />;
 }
+/** Name of the loaded project — the session folder, not the song under the
+ * playhead (that is ReadoutSongWidget). Older desktops don't send it. */
+function ReadoutSessionWidget() {
+  const sessionName = useRemoteSyncStore((state) => state.songView?.sessionName);
+  const trimmed = sessionName?.trim();
+  return <ReadoutTile label={STRINGS.session} value={trimmed || "--"} />;
+}
 
 /** The whole control deck as a widget (registry needs a zero-arg component). */
 function DeckWidget() {
@@ -3760,6 +3767,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   readoutBpm: { labelKey: "widgetReadoutBpm", Component: ReadoutBpmWidget, defaultW: 8, defaultH: 4 },
   readoutSignature: { labelKey: "widgetReadoutSignature", Component: ReadoutSignatureWidget, defaultW: 8, defaultH: 4 },
   readoutSong: { labelKey: "widgetReadoutSong", Component: ReadoutSongWidget, defaultW: 8, defaultH: 4 },
+  readoutSession: { labelKey: "widgetReadoutSession", Component: ReadoutSessionWidget, defaultW: 8, defaultH: 4 },
   transportButtons: { labelKey: "widgetTransport", Component: TransportControlButtons, defaultW: LAYOUT_COLUMNS, defaultH: 5 },
   playButton: { labelKey: "play", Component: PlayButtonWidget, defaultW: 4, defaultH: 4 },
   pauseButton: { labelKey: "pause", Component: PauseButtonWidget, defaultW: 4, defaultH: 4 },
@@ -3807,6 +3815,7 @@ const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
   readoutBpm: "information",
   readoutSignature: "information",
   readoutSong: "information",
+  readoutSession: "information",
   transportButtons: "transport",
   playButton: "transport",
   pauseButton: "transport",
@@ -3859,7 +3868,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
   if (!isPhone) {
     switch (type) {
       case "readoutTime": case "readoutBar": case "readoutBpm":
-      case "readoutSignature": case "readoutSong":
+      case "readoutSignature": case "readoutSong": case "readoutSession":
       case "nextMarker": case "nextSong": case "currentKey":
       case "progressMarker": case "progressSong":
       case "countdownMarkerBars": case "countdownSongTime":
@@ -3880,7 +3889,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
   switch (type) {
     case "readouts": return { w: 24, h: 8 };
     case "readoutTime": case "readoutBar": case "readoutBpm":
-    case "readoutSignature": case "readoutSong":
+    case "readoutSignature": case "readoutSong": case "readoutSession":
       return { w: 12, h: 5 };
     case "transportButtons": return { w: 24, h: 6 };
     case "playButton": case "pauseButton": case "stopButton":
@@ -4381,6 +4390,10 @@ function LayoutCanvas({
   const gridRef = useRef<HTMLDivElement | null>(null);
   const cellWidthRef = useRef(0);
   const rowHeightRef = useRef(ROW_HEIGHT_PX + GRID_GAP_PX);
+  // Grid row where the device viewport ends: everything from here down needs
+  // scrolling to reach. Null when the layout fits on one screen. Editing only —
+  // it is what tells the user, while placing, what falls below the fold.
+  const [foldRow, setFoldRow] = useState<number | null>(null);
 
   const placementMode: LayoutPlacementMode = layout.placementMode ?? "free";
   const tabHeightRem = clampTabHeight(layout.tabHeightRem);
@@ -4391,12 +4404,42 @@ function LayoutCanvas({
   const widgetsRef = useRef(widgets);
   widgetsRef.current = widgets;
 
-  // Measure the column width from the grid so pointer coordinates map to cells.
+  /** Rows the layout actually occupies: the bottom edge of its lowest widget. */
+  const usedRows = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
+
+  // Measure the column width from the grid so pointer coordinates map to cells,
+  // and the row at which the visible viewport ends (the scroll fold).
   useEffect(() => {
     const measure = () => {
       const el = gridRef.current;
       if (!el) return;
       cellWidthRef.current = Math.max(1, (el.clientWidth + GRID_GAP_PX) / LAYOUT_COLUMNS);
+
+      // Where the device screen ends, in grid rows.
+      //
+      // The fold must describe the layout as the PLAYER sees it, not the editor.
+      // In edit mode the scroll container also holds the tab bar and the widget
+      // palette above the grid; measuring the grid's offset inside the scroller
+      // subtracts that chrome and puts the line far too high — it claimed a fold
+      // where the phone has no scroll at all.
+      //
+      // So the reference is the scroller's own visible height, taken as the space
+      // the grid gets when the editor chrome is gone. Rows are fixed-height, so
+      // the fold is simply how many fit.
+      const scroller = el.closest(".layout-canvas-wrap") as HTMLElement | null;
+      if (!scroller) {
+        setFoldRow(null);
+        return;
+      }
+      const rowHeight = rowHeightRef.current;
+      const visibleRows = Math.floor(scroller.clientHeight / rowHeight);
+      const usedRows = widgetsRef.current.reduce(
+        (max, widget) => Math.max(max, widget.y + widget.h),
+        0,
+      );
+      // Only meaningful when the layout actually reaches past the screen. On a
+      // phone whose widgets all fit, there is no fold to draw.
+      setFoldRow(visibleRows > 0 && usedRows > visibleRows ? visibleRows : null);
     };
     measure();
     if (typeof ResizeObserver === "undefined" || !gridRef.current) {
@@ -4405,8 +4448,14 @@ function LayoutCanvas({
     }
     const observer = new ResizeObserver(measure);
     observer.observe(gridRef.current);
+    const scroller = gridRef.current.closest(".layout-canvas-wrap");
+    if (scroller) observer.observe(scroller);
     return () => observer.disconnect();
-  }, [activeTab?.id]);
+    // `usedRows` (not the widget array) is what the fold depends on: dragging a
+    // widget within the rows that already exist leaves the grid's height — and
+    // so the ResizeObserver — untouched, but it does change whether anything
+    // reaches past the screen.
+  }, [activeTab?.id, editing, usedRows]);
 
   // Replace the active tab's widgets, keeping every other tab untouched.
   const commit = (nextWidgets: WidgetPlacement[]) => {
@@ -4799,7 +4848,7 @@ function LayoutCanvas({
   // The grid needs enough rows to show every widget + a little slack to drop into.
   const gridRows = Math.max(
     6,
-    widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0) + 2,
+    usedRows + 2,
     dropPreview ? dropPreview.y + dropPreview.h + 2 : 0,
   );
   const singleFullHeightMixer = widgets.length === 1 && widgets[0]?.type === "mixer";
@@ -4852,6 +4901,18 @@ function LayoutCanvas({
           {widgets.length === 0 && editing ? (
             <div className="layout-canvas-empty layout-canvas-empty-inline">
               {pendingAddType ? STRINGS.dropHere : STRINGS.emptyTab}
+            </div>
+          ) : null}
+          {/* The fold: anything placed below this line needs scrolling on the
+              device. Editing-only, and drawn behind the widgets so it never
+              intercepts a drag. */}
+          {editing && foldRow !== null && foldRow < gridRows ? (
+            <div
+              className="layout-fold-marker"
+              style={{ gridRow: `${foldRow + 1}`, gridColumn: "1 / -1" }}
+              aria-hidden="true"
+            >
+              <span>{STRINGS.foldMarker}</span>
             </div>
           ) : null}
           {editing && dropPreview ? (

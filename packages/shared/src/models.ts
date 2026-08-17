@@ -520,6 +520,9 @@ export type SongView = {
   mixScenes?: MixSceneSummary[];
   automationTrack?: AutomationTrackSummary | null;
   waveforms?: WaveformSummaryDto[];
+  /** Name of the loaded session folder. Absent on snapshots from before the
+   * session name was surfaced, or when no session is loaded from disk. */
+  sessionName?: string | null;
   projectRevision: number;
 };
 
@@ -802,6 +805,7 @@ export const METRONOME_SOUND_PRESETS = [
   "rimshot",
   "cowbell",
   "clave",
+  "clickTrack",
 ] as const;
 
 export type MetronomeSoundPreset = (typeof METRONOME_SOUND_PRESETS)[number];

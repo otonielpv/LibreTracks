@@ -230,6 +230,7 @@ const en = {
         rimshot: "Rimshot",
         cowbell: "Cowbell",
         clave: "Clave",
+        clickTrack: "Click Track",
       },
       metronomeSubdivisionOption: {
         "1": "Off",

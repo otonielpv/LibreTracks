@@ -20,6 +20,7 @@ export type WidgetType =
   | "readoutBpm"
   | "readoutSignature"
   | "readoutSong"
+  | "readoutSession"
   | "transportButtons"
   | "playButton"
   | "pauseButton"
@@ -64,6 +65,7 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "readoutBpm",
   "readoutSignature",
   "readoutSong",
+  "readoutSession",
   "transportButtons",
   "playButton",
   "pauseButton",

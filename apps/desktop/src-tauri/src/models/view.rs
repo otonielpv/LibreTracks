@@ -132,6 +132,11 @@ pub struct SongView {
     /// the timeline. The track is a synthetic UI lane, not a real `Track`.
     pub automation_track: Option<AutomationTrackSummary>,
     pub waveforms: Vec<WaveformSummaryDto>,
+    /// Name of the loaded session (the `.ltsession` folder name), surfaced to
+    /// the window title and to the remote. `None` when nothing is loaded from
+    /// disk yet — a session always lives in a folder, so the folder name is
+    /// the user-facing project name.
+    pub session_name: Option<String>,
     pub project_revision: u64,
 }
 
@@ -645,6 +650,9 @@ pub(crate) fn song_to_view(
             None
         },
         waveforms,
+        session_name: song_dir
+            .and_then(|dir| dir.file_name())
+            .map(|name| name.to_string_lossy().into_owned()),
         project_revision,
     }
 }
@@ -1486,6 +1494,37 @@ mod tests {
         assert_eq!(view.clips.len(), 1);
         assert_eq!(view.regions.len(), 1);
         assert_eq!(view.section_markers.len(), 1);
+    }
+
+    #[test]
+    fn song_to_view_derives_session_name_from_the_song_dir() {
+        let song = base_song();
+        let cache = WaveformMemoryCache::default();
+        let view_with_dir = song_to_view(
+            &song,
+            &AutomationDocument::default(),
+            &std::collections::HashMap::new(),
+            &cache,
+            1,
+            Some(std::path::Path::new("/sessions/Fallos en Cantos")),
+            false,
+        );
+        assert_eq!(
+            view_with_dir.session_name.as_deref(),
+            Some("Fallos en Cantos")
+        );
+
+        // No session on disk yet (landing screen) -> no name to show.
+        let view_without_dir = song_to_view(
+            &song,
+            &AutomationDocument::default(),
+            &std::collections::HashMap::new(),
+            &cache,
+            1,
+            None,
+            false,
+        );
+        assert_eq!(view_without_dir.session_name, None);
     }
 
     #[test]

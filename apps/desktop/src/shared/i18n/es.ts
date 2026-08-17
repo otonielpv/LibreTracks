@@ -242,6 +242,7 @@ const es = {
         rimshot: "Rimshot",
         cowbell: "Cencerro",
         clave: "Claqueta",
+        clickTrack: "Click Track",
       },
       metronomeSubdivisionOption: {
         "1": "Desactivada",
