@@ -26,8 +26,10 @@ const FEATURE_EVENTS = [
   "feature_remote_panel",
 ] as const;
 
+const MIN_ADMIN_TOKEN_LENGTH = 15;
+
 function tokenMatches(request: Request, expected?: string): boolean {
-  if (!expected || expected.length < 24) return false;
+  if (!expected || expected.length < MIN_ADMIN_TOKEN_LENGTH) return false;
   const supplied = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   if (supplied.length !== expected.length) return false;
   let difference = 0;
@@ -42,7 +44,10 @@ function rate(value: number, total: number): number {
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
-  if (!env.ANALYTICS_ADMIN_TOKEN || env.ANALYTICS_ADMIN_TOKEN.length < 24) {
+  if (
+    !env.ANALYTICS_ADMIN_TOKEN ||
+    env.ANALYTICS_ADMIN_TOKEN.length < MIN_ADMIN_TOKEN_LENGTH
+  ) {
     return Response.json({ error: "admin_token_not_configured" }, { status: 503 });
   }
   if (!tokenMatches(request, env.ANALYTICS_ADMIN_TOKEN)) {

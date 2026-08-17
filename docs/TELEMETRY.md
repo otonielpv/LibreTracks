@@ -41,7 +41,7 @@ are computed locally and sent only as broad buckets.
    change the Pages root before deploying.
 5. Redeploy the website, then verify `GET /api/telemetry/stats` returns JSON.
 6. Add a production Pages secret named `ANALYTICS_ADMIN_TOKEN` containing at
-   least 24 random characters. Open `/es/admin/analytics/`, enter that token,
+   least 15 random characters. Open `/es/admin/analytics/`, enter that token,
    and verify the 7/30/90-day views. The token stays in browser session storage.
 7. As defence in depth, protect `/admin/*`, `/es/admin/*` and
    `/api/telemetry/product-stats*` with a Cloudflare Access self-hosted
