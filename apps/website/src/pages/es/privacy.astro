@@ -1,0 +1,25 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+---
+
+<SiteLayout title="Privacidad de LibreTracks" description="Informacion de privacidad sobre las estadisticas anonimas de LibreTracks." lang="es">
+  <main class="site-shell band legal-page">
+    <div class="section-heading">
+      <p class="eyebrow">Privacidad</p>
+      <h2>Estadisticas opcionales y minimas de uso.</h2>
+      <p>LibreTracks no envia datos de uso hasta que lo permites expresamente en la aplicacion.</p>
+    </div>
+    <section>
+      <h3>Que se recopila</h3>
+      <p>Un evento al iniciar la aplicacion, la version de LibreTracks, la familia general del sistema operativo, la arquitectura de CPU y la clase de dispositivo. Un secreto aleatorio permanece exclusivamente en el dispositivo; la aplicacion envia un token seudonimo derivado que cambia cada dia UTC.</p>
+      <h3>Que no se recopila nunca</h3>
+      <p>Proyectos, sesiones, audio, nombres de canciones o archivos, rutas, hardware MIDI o de audio, cuentas, identificadores publicitarios, numeros de serie ni ubicacion precisa.</p>
+      <h3>Finalidad, base juridica y decisiones</h3>
+      <p>La unica finalidad es medir la adopcion, las versiones activas y la compatibilidad general de plataformas. El tratamiento se basa en el consentimiento. Rechazarlo no afecta a LibreTracks y puede retirarse en cualquier momento en Configuracion → General. Al desactivarlo tambien se elimina el secreto aleatorio local.</p>
+      <h3>Conservacion, publicacion y proveedor</h3>
+      <p>Los eventos se eliminan en un maximo de 90 dias. El panel publico contiene solo agregados y oculta los desgloses que representan menos de cinco dispositivos. Cloudflare presta alojamiento, red y base de datos y necesariamente trata de forma transitoria informacion de red como la direccion IP para la entrega y la seguridad; LibreTracks no guarda esa direccion ni el User-Agent completo en su base de telemetria.</p>
+      <h3>Derechos y contacto</h3>
+      <p>Como no existe una cuenta y el token cambia diariamente, LibreTracks normalmente no puede asociar una fila guardada con una persona. Puedes detener cualquier envio futuro desde la aplicacion. Para consultas o ejercicio de derechos, escribe a <a href="mailto:libretracks.app@gmail.com">libretracks.app@gmail.com</a>. Tambien puedes reclamar ante la Agencia Española de Proteccion de Datos u otra autoridad de control competente.</p>
+    </section>
+  </main>
+</SiteLayout>

@@ -1,0 +1,25 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout title="LibreTracks Privacy" description="Privacy information for LibreTracks anonymous usage statistics." lang="en">
+  <main class="site-shell band legal-page">
+    <div class="section-heading">
+      <p class="eyebrow">Privacy</p>
+      <h2>Optional, minimal usage statistics.</h2>
+      <p>LibreTracks does not send usage data unless you explicitly allow it in the application.</p>
+    </div>
+    <section>
+      <h3>What is collected</h3>
+      <p>One event when the application starts, the LibreTracks version, broad operating-system family, CPU architecture and device class. A random secret remains only on the device; the app sends a pseudonymous derived token that changes each UTC day.</p>
+      <h3>What is never collected</h3>
+      <p>Projects, sessions, audio, song or file names, file paths, MIDI or audio hardware, account information, advertising identifiers, serial numbers and precise location.</p>
+      <h3>Purpose, legal basis and choices</h3>
+      <p>The sole purpose is measuring adoption, active versions and broad platform compatibility. Processing is based on consent. Refusing has no effect on LibreTracks, and consent can be withdrawn at any time under Settings → General. Disabling statistics also removes the random local secret.</p>
+      <h3>Storage, publication and processor</h3>
+      <p>Event rows are deleted after at most 90 days. The public dashboard contains only aggregates and hides breakdowns representing fewer than five devices. Cloudflare provides hosting, networking and database processing and necessarily handles network information such as an IP address transiently for delivery and security; LibreTracks does not write that address or the full User-Agent into its telemetry database.</p>
+      <h3>Your rights and contact</h3>
+      <p>Because there is no account and the token changes daily, LibreTracks cannot normally associate a stored row with a person. You can stop future collection in the app. For privacy questions or rights requests, contact <a href="mailto:libretracks.app@gmail.com">libretracks.app@gmail.com</a>. You may also lodge a complaint with your local data-protection authority.</p>
+    </section>
+  </main>
+</SiteLayout>

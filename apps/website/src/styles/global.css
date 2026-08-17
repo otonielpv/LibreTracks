@@ -244,6 +244,90 @@ h1 {
   line-height: 1.55;
 }
 
+.usage-stats {
+  display: grid;
+  gap: 1rem;
+}
+
+.usage-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+
+.usage-summary article,
+.usage-breakdown-card,
+.legal-page section {
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #201f1f, #161515);
+  padding: 1rem;
+}
+
+.usage-summary strong {
+  display: block;
+  color: var(--lt-primary);
+  font: 800 clamp(2rem, 5vw, 3.5rem)/1 "Space Grotesk", sans-serif;
+}
+
+.usage-summary span,
+.stats-muted,
+.usage-privacy-note {
+  color: color-mix(in srgb, var(--lt-text) 68%, transparent);
+}
+
+.usage-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.75rem;
+}
+
+.usage-breakdown-card h3,
+.legal-page h3 {
+  margin: 0 0 0.9rem;
+  color: #f3f0ef;
+}
+
+.usage-breakdown-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  padding: 0.55rem 0 0.8rem;
+}
+
+.usage-breakdown-row i {
+  position: absolute;
+  left: 0;
+  bottom: 0.25rem;
+  height: 2px;
+  max-width: 100%;
+  background: var(--lt-primary-container);
+}
+
+.usage-privacy-note {
+  margin-top: 1.25rem;
+  line-height: 1.6;
+}
+
+.usage-privacy-note a,
+.legal-page a {
+  color: var(--lt-primary);
+}
+
+.legal-page section {
+  max-width: 54rem;
+}
+
+.legal-page section p {
+  color: color-mix(in srgb, var(--lt-text) 78%, transparent);
+  line-height: 1.7;
+}
+
+.legal-page section h3:not(:first-child) {
+  margin-top: 1.6rem;
+}
+
 .workflow-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));

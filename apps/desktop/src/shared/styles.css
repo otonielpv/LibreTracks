@@ -9068,3 +9068,70 @@ textarea {
   cursor: grabbing;
   z-index: 6;
 }
+
+/* Optional first-run analytics consent. Kept outside TransportPanelContent so
+   privacy state and network work never enter the realtime-oriented UI path. */
+.lt-telemetry-backdrop {
+  z-index: 90;
+}
+
+.lt-telemetry-consent {
+  width: min(34rem, 100%);
+  border: 1px solid rgb(87 241 219 / 0.22);
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at top left, rgb(87 241 219 / 0.12), transparent 45%),
+    linear-gradient(180deg, rgb(22 25 26 / 0.99), rgb(13 15 16 / 0.99));
+  box-shadow: 0 28px 80px rgb(0 0 0 / 0.55);
+  padding: 1.35rem;
+}
+
+.lt-telemetry-consent h2 {
+  margin: 0.35rem 0 0.75rem;
+  color: #f3f0ef;
+  font: 800 1.55rem/1.1 "Space Grotesk", sans-serif;
+}
+
+.lt-telemetry-consent p {
+  margin: 0;
+  color: rgb(229 226 225 / 0.78);
+  font: 500 0.92rem/1.55 "Space Grotesk", sans-serif;
+}
+
+.lt-telemetry-consent .lt-telemetry-detail {
+  margin-top: 0.75rem;
+  color: rgb(186 202 197 / 0.7);
+  font-size: 0.8rem;
+}
+
+.lt-telemetry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1.2rem;
+}
+
+.lt-telemetry-actions button {
+  min-height: 2.5rem;
+  border: 1px solid rgb(87 241 219 / 0.22);
+  border-radius: 2px;
+  padding: 0.65rem 0.85rem;
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.lt-telemetry-actions .lt-primary-button {
+  background: linear-gradient(180deg, #57f1db, #2dd4bf);
+  color: #003731;
+}
+
+.lt-telemetry-actions .lt-secondary-button,
+.lt-telemetry-policy-link {
+  background: rgb(255 255 255 / 0.04);
+  color: #e5e2e1;
+}
+
+.lt-telemetry-policy-link {
+  margin-left: auto;
+}

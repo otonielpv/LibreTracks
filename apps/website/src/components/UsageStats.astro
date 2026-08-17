@@ -1,0 +1,136 @@
+---
+interface Props {
+  lang?: "en" | "es";
+}
+
+const { lang = "en" } = Astro.props;
+const isSpanish = lang === "es";
+const labels = isSpanish
+  ? {
+      loading: "Cargando estadisticas de las ultimas 24 horas...",
+      unavailable: "Las estadisticas no estan disponibles en este momento.",
+      sessions: "Inicios de la aplicacion",
+      devices: "Dispositivos activos aproximados",
+      versions: "Versiones",
+      operatingSystems: "Sistemas operativos",
+      architectures: "Arquitecturas",
+      deviceClasses: "Tipos de dispositivo",
+      empty: "Aun no hay suficientes datos para mostrar este desglose.",
+      updated: "Actualizado",
+    }
+  : {
+      loading: "Loading statistics for the last 24 hours...",
+      unavailable: "Usage statistics are currently unavailable.",
+      sessions: "App starts",
+      devices: "Approximate active devices",
+      versions: "Versions",
+      operatingSystems: "Operating systems",
+      architectures: "Architectures",
+      deviceClasses: "Device types",
+      empty: "There is not enough data to show this breakdown yet.",
+      updated: "Updated",
+    };
+---
+
+<section
+  class="usage-stats"
+  data-usage-stats
+  data-lang={lang}
+  data-labels={JSON.stringify(labels)}
+  aria-busy="true"
+>
+  <p class="stats-muted" data-usage-status>{labels.loading}</p>
+  <div class="usage-summary" data-usage-summary aria-live="polite"></div>
+  <div class="usage-breakdowns" data-usage-breakdowns></div>
+</section>
+
+<script>
+  type Row = { label: string; sessions: number; devices: number };
+  type Stats = {
+    generatedAt: string;
+    sessions: number;
+    approximateDevices: number;
+    minimumPublicCohort: number;
+    breakdown: Record<string, Row[]>;
+  };
+
+  const root = document.querySelector<HTMLElement>("[data-usage-stats]");
+  const status = root?.querySelector<HTMLElement>("[data-usage-status]");
+  const summary = root?.querySelector<HTMLElement>("[data-usage-summary]");
+  const breakdowns = root?.querySelector<HTMLElement>("[data-usage-breakdowns]");
+  const labels = JSON.parse(root?.dataset.labels ?? "{}") as Record<string, string>;
+  const formatter = new Intl.NumberFormat(root?.dataset.lang ?? "en");
+
+  function metric(value: number, label: string): HTMLElement {
+    const card = document.createElement("article");
+    const strong = document.createElement("strong");
+    const span = document.createElement("span");
+    strong.textContent = formatter.format(value);
+    span.textContent = label;
+    card.append(strong, span);
+    return card;
+  }
+
+  function breakdown(title: string, rows: Row[]): HTMLElement {
+    const card = document.createElement("article");
+    card.className = "usage-breakdown-card";
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    card.append(heading);
+
+    if (rows.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "stats-muted";
+      empty.textContent = labels.empty;
+      card.append(empty);
+      return card;
+    }
+
+    const total = rows.reduce((sum, row) => sum + row.devices, 0);
+    rows.forEach((row) => {
+      const line = document.createElement("div");
+      line.className = "usage-breakdown-row";
+      const name = document.createElement("span");
+      const value = document.createElement("strong");
+      const bar = document.createElement("i");
+      name.textContent = row.label;
+      value.textContent = formatter.format(row.devices);
+      bar.style.width = `${Math.max(3, (row.devices / Math.max(1, total)) * 100)}%`;
+      line.append(name, value, bar);
+      card.append(line);
+    });
+    return card;
+  }
+
+  async function loadUsageStats(): Promise<void> {
+    try {
+      const response = await fetch("/api/telemetry/stats", { cache: "no-store" });
+      if (!response.ok) throw new Error(String(response.status));
+      const data = (await response.json()) as Stats;
+
+      summary?.append(
+        metric(data.sessions, labels.sessions),
+        metric(data.approximateDevices, labels.devices),
+      );
+      breakdowns?.append(
+        breakdown(labels.versions, data.breakdown.versions ?? []),
+        breakdown(labels.operatingSystems, data.breakdown.operatingSystems ?? []),
+        breakdown(labels.architectures, data.breakdown.architectures ?? []),
+        breakdown(labels.deviceClasses, data.breakdown.deviceClasses ?? []),
+      );
+      if (status) {
+        const date = new Intl.DateTimeFormat(root?.dataset.lang ?? "en", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(new Date(data.generatedAt));
+        status.textContent = `${labels.updated}: ${date}`;
+      }
+    } catch {
+      if (status) status.textContent = labels.unavailable;
+    } finally {
+      root?.setAttribute("aria-busy", "false");
+    }
+  }
+
+  void loadUsageStats();
+</script>

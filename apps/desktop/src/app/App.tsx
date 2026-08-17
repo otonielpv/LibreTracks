@@ -5,6 +5,7 @@ import { isTauriApp } from "../features/transport/desktopApi";
 import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
+import { TelemetryController } from "../features/telemetry/TelemetryController";
 import { DialogHost } from "../shared/dialog/DialogHost";
 import {
   dispatchUiZoomStatus,
@@ -138,6 +139,7 @@ export function App() {
         />
       ) : null}
       <DialogHost />
+      <TelemetryController version={currentVersion} />
     </main>
   );
 }

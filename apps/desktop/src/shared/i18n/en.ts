@@ -1028,6 +1028,20 @@ const en = {
     hostnameUrl: "Hostname URL (.local)",
     qrAlt: "QR code for LibreTracks Remote",
   },
+  telemetry: {
+    eyebrow: "Privacy",
+    title: "Help improve LibreTracks",
+    description:
+      "Allow optional, minimal usage statistics: app version, operating system, architecture and one app-start event. LibreTracks never sends projects, audio, file names, paths or connected hardware.",
+    detail:
+      "A random secret stays on this device. Only a token that changes every day is sent, so it cannot build a long-term device history.",
+    allow: "Allow usage statistics",
+    decline: "No, thanks",
+    policy: "Read privacy policy",
+    setting: "Optional usage statistics",
+    settingHint:
+      "Share app starts, version and broad device platform. No project, audio or hardware information is sent.",
+  },
   update: {
     eyebrow: "Update available",
     title: "LibreTracks {{version}} is available",

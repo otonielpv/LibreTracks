@@ -20,16 +20,9 @@ import type {
   SettingsTab,
 } from "../types";
 import { formatMidiBinding } from "../helpers";
-import {
-  isNewerVersion,
-  normalizeVersion,
-} from "../../../shared/updateCheck";
-import {
-  openUpdateModal,
-  runUpdateCheck,
-  useUpdateCheckStore,
-} from "../../updates/updateCheckStore";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
+import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
+import { UpdateCheckField } from "./UpdateCheckField";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import {
   MidiSettingsTab,
@@ -836,6 +829,8 @@ export function SettingsPanel({
                     <DecodingCacheField />
 
                     <UpdateCheckField />
+
+                    <TelemetrySettingsField />
                   </div>
                 </section>
               ) : null}
@@ -1343,69 +1338,6 @@ function DecodingCacheField() {
           {error}
         </small>
       ) : null}
-    </div>
-  );
-}
-
-function UpdateCheckField() {
-  const { t } = useTranslation();
-  const { release, error, isChecking, hasCheckedOnce } = useUpdateCheckStore();
-
-  // Android distributes updates as APKs, not the desktop installers the
-  // update flow downloads — hide the whole check.
-  if (isAndroidApp) {
-    return null;
-  }
-  const current = normalizeVersion(
-    typeof window !== "undefined"
-      ? (window as { __LT_APP_VERSION__?: string }).__LT_APP_VERSION__ ?? ""
-      : "",
-  );
-  const remoteIsNewer =
-    release && current ? isNewerVersion(release.version, current) : false;
-
-  let statusLine: ReactNode = null;
-  if (error) {
-    statusLine = (
-      <small className="lt-update-check-status lt-update-check-status--error">
-        {t("update.checkError", { message: error })}
-      </small>
-    );
-  } else if (release && remoteIsNewer) {
-    statusLine = (
-      <small className="lt-update-check-status lt-update-check-status--new">
-        {t("update.available", { version: release.version })}{" "}
-        <button
-          type="button"
-          className="lt-update-check-link"
-          onClick={openUpdateModal}
-        >
-          {t("update.viewDetails")}
-        </button>
-      </small>
-    );
-  } else if (hasCheckedOnce && current) {
-    statusLine = (
-      <small className="lt-update-check-status">
-        {t("update.upToDate", { version: current })}
-      </small>
-    );
-  }
-
-  return (
-    <div className="lt-settings-field">
-      <span className="lt-settings-field-label">{t("update.checkNow")}</span>
-      <button
-        type="button"
-        className="lt-secondary-button"
-        disabled={isChecking}
-        onClick={() => {
-          void runUpdateCheck({ force: true });
-        }}
-      >
-        {isChecking ? t("update.checking") : t("update.checkNow")}
-      </button>
-      {statusLine}
     </div>
   );
 }

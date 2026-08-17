@@ -1,0 +1,16 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+import UsageStats from "../../components/UsageStats.astro";
+---
+
+<SiteLayout title="Estadisticas de uso de LibreTracks" description="Estadisticas anonimas y agregadas de uso de LibreTracks." lang="es">
+  <main class="site-shell band">
+    <div class="section-heading">
+      <p class="eyebrow">Estadisticas abiertas</p>
+      <h2>Como se esta utilizando LibreTracks.</h2>
+      <p>Inicios, versiones y plataformas generales agregadas de las personas que activan voluntariamente las estadisticas minimas de uso. No se recopilan proyectos, audio, nombres de archivo, rutas ni hardware conectado.</p>
+    </div>
+    <UsageStats lang="es" />
+    <p class="usage-privacy-note">Los dispositivos activos son aproximados porque el token anonimo cambia cada dia UTC. No se publican desgloses con menos de cinco dispositivos. <a href="/es/privacy/">Detalles de privacidad</a>.</p>
+  </main>
+</SiteLayout>

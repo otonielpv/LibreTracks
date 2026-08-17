@@ -29,6 +29,52 @@ pub fn is_debug_build() -> bool {
     cfg!(debug_assertions)
 }
 
+/// Broad, non-identifying build platform used only after analytics opt-in.
+/// Compile-time values avoid unreliable User-Agent architecture detection and
+/// deliberately expose no model, hostname, OS version or hardware details.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryPlatform {
+    pub os: &'static str,
+    pub arch: &'static str,
+    pub device_class: &'static str,
+}
+
+#[tauri::command]
+pub fn get_telemetry_platform() -> TelemetryPlatform {
+    let os = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "android") {
+        "android"
+    } else if cfg!(target_os = "ios") {
+        "ios"
+    } else {
+        "unknown"
+    };
+    let arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "unknown"
+    };
+    let device_class = if cfg!(target_os = "android") || cfg!(target_os = "ios") {
+        "mobile"
+    } else {
+        "desktop"
+    };
+
+    TelemetryPlatform {
+        os,
+        arch,
+        device_class,
+    }
+}
+
 /// Combined diagnostic snapshot for the audio runtime ownership contract.
 ///
 /// Surfaces both the Rust-side realtime command counters (Category A vs legacy sync) and

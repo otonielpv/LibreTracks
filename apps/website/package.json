@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "check:functions": "tsc -p tsconfig.functions.json"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.37.0",
@@ -17,6 +18,7 @@
     "tailwindcss": "^3.4.17"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260817.1",
     "typescript": "^5.7.0"
   }
 }
