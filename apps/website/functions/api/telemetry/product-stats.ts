@@ -8,6 +8,8 @@ interface Env {
 type EventRow = { event: string; events: number; devices: number };
 type SignalRow = { signal: string; devices: number };
 type BucketRow = { label: string; devices: number };
+type BreakdownRow = { label: string; sessions: number; devices: number };
+type HourlyRow = { hour: string; sessions: number; devices: number };
 type DailyRow = {
   day: string;
   activeDevices: number;
@@ -27,6 +29,26 @@ const FEATURE_EVENTS = [
 ] as const;
 
 const MIN_ADMIN_TOKEN_LENGTH = 15;
+
+async function breakdown(
+  db: D1Database,
+  column: "app_version" | "os" | "device_class" | "country_code",
+  since: number,
+): Promise<BreakdownRow[]> {
+  const result = await db
+    .prepare(
+      `SELECT ${column} AS label, COUNT(*) AS sessions,
+              COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
+         FROM telemetry_events
+        WHERE received_at >= ?1
+        GROUP BY ${column}
+        ORDER BY devices DESC, sessions DESC
+        LIMIT 20`,
+    )
+    .bind(since)
+    .all<BreakdownRow>();
+  return result.results;
+}
 
 function tokenMatches(request: Request, expected?: string): boolean {
   if (!expected || expected.length < MIN_ADMIN_TOKEN_LENGTH) return false;
@@ -61,8 +83,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const windowDays = requestedDays === 7 || requestedDays === 90 ? requestedDays : 30;
   const generatedAt = Date.now();
   const since = generatedAt - windowDays * 86_400_000;
+  const previousSince = since - windowDays * 86_400_000;
 
-  const [totals, eventsResult, signalsResult, ageResult, activeDaysResult, dailyResult] =
+  const [
+    totals,
+    previousTotals,
+    eventsResult,
+    signalsResult,
+    ageResult,
+    activeDaysResult,
+    dailyResult,
+    hourlyResult,
+    countries,
+    versions,
+    operatingSystems,
+    deviceClasses,
+  ] =
     await Promise.all([
       env.TELEMETRY_DB.prepare(
         `SELECT COUNT(*) AS appStarts,
@@ -72,6 +108,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       )
         .bind(since)
         .first<{ appStarts: number; devices: number }>(),
+      windowDays === 90
+        ? Promise.resolve(null)
+        : env.TELEMETRY_DB.prepare(
+            `SELECT COUNT(*) AS appStarts,
+                    COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
+               FROM telemetry_events
+              WHERE received_at >= ?1 AND received_at < ?2`,
+          )
+            .bind(previousSince, since)
+            .first<{ appStarts: number; devices: number }>(),
       env.TELEMETRY_DB.prepare(
         `SELECT event_name AS event, COUNT(*) AS events,
                 COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
@@ -144,6 +190,20 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       )
         .bind(since)
         .all<DailyRow>(),
+      env.TELEMETRY_DB.prepare(
+        `SELECT strftime('%H', received_at / 1000, 'unixepoch') AS hour,
+                COUNT(*) AS sessions,
+                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
+           FROM telemetry_events
+          WHERE received_at >= ?1
+          GROUP BY hour ORDER BY hour`,
+      )
+        .bind(since)
+        .all<HourlyRow>(),
+      breakdown(env.TELEMETRY_DB, "country_code", since),
+      breakdown(env.TELEMETRY_DB, "app_version", since),
+      breakdown(env.TELEMETRY_DB, "os", since),
+      breakdown(env.TELEMETRY_DB, "device_class", since),
     ]);
 
   const activeDeviceDays = totals?.devices ?? 0;
@@ -168,6 +228,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       windowDays,
       appStarts: totals?.appStarts ?? 0,
       activeDeviceDays,
+      comparison: previousTotals
+        ? {
+            appStarts: previousTotals.appStarts,
+            activeDeviceDays: previousTotals.devices,
+          }
+        : null,
       activation: signalKeys.map((key) => {
         const devices = bySignal.get(key) ?? 0;
         return { key, devices, rate: rate(devices, activeDeviceDays) };
@@ -200,6 +266,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
         activeDays: activeDaysResult.results,
       },
       daily: dailyResult.results,
+      hourly: Array.from({ length: 24 }, (_, hour) => {
+        const key = String(hour).padStart(2, "0");
+        return (
+          hourlyResult.results.find((row) => row.hour === key) ?? {
+            hour: key,
+            sessions: 0,
+            devices: 0,
+          }
+        );
+      }),
+      breakdown: { countries, versions, operatingSystems, deviceClasses },
     },
     { headers: { "Cache-Control": "private, no-store" } },
   );

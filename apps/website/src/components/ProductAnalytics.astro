@@ -29,6 +29,20 @@ const copy = es
       successes: "exitos",
       failures: "fallos",
       updated: "Actualizado",
+      overview: "Resumen ejecutivo",
+      activationRate: "Tasa de activacion",
+      deepSessions: "Sesiones de 30+ min",
+      previousPeriod: "frente al periodo anterior",
+      dailyTrend: "Evolucion diaria",
+      utcActivity: "Actividad por hora UTC",
+      geography: "Uso por pais",
+      geographyNote: "Pais aproximado inferido en el edge; nunca ubicacion precisa.",
+      versions: "Versiones instaladas",
+      platforms: "Sistemas operativos",
+      devicesTitle: "Tipos de dispositivo",
+      noData: "Todavia no hay datos para este periodo.",
+      sessions: "inicios",
+      active: "activos",
     }
   : {
       access: "Dashboard access",
@@ -53,6 +67,20 @@ const copy = es
       successes: "successes",
       failures: "failures",
       updated: "Updated",
+      overview: "Executive overview",
+      activationRate: "Activation rate",
+      deepSessions: "30+ min sessions",
+      previousPeriod: "versus previous period",
+      dailyTrend: "Daily trend",
+      utcActivity: "Activity by UTC hour",
+      geography: "Usage by country",
+      geographyNote: "Approximate country inferred at the edge; never precise location.",
+      versions: "Installed versions",
+      platforms: "Operating systems",
+      devicesTitle: "Device types",
+      noData: "No data for this period yet.",
+      sessions: "starts",
+      active: "active",
     };
 ---
 
@@ -78,22 +106,54 @@ const copy = es
 </section>
 
 <script>
+  import * as echarts from "echarts/core";
+  import { BarChart, FunnelChart, LineChart, PieChart } from "echarts/charts";
+  import {
+    AriaComponent,
+    GridComponent,
+    LegendComponent,
+    TooltipComponent,
+  } from "echarts/components";
+  import { SVGRenderer } from "echarts/renderers";
+
+  echarts.use([
+    AriaComponent,
+    BarChart,
+    FunnelChart,
+    GridComponent,
+    LegendComponent,
+    LineChart,
+    PieChart,
+    SVGRenderer,
+    TooltipComponent,
+  ]);
+
   type Metric = { key: string; devices: number; rate: number };
   type Feature = { key: string; devices: number; events: number; adoptionRate: number };
   type Quality = { key: string; successes: number; failures: number; successRate: number };
   type Bucket = { label: string; devices: number };
   type Daily = { day: string; activeDevices: number; activatedDevices: number; featureDevices: number };
+  type Breakdown = { label: string; sessions: number; devices: number };
+  type Hourly = { hour: string; sessions: number; devices: number };
   type ProductStats = {
     generatedAt: string;
     windowDays: number;
     appStarts: number;
     activeDeviceDays: number;
+    comparison: { appStarts: number; activeDeviceDays: number } | null;
     activation: Metric[];
     features: Feature[];
     quality: Quality[];
     engagement: Array<{ minutes: number; devices: number; rate: number }>;
     maturity: { installationAge: Bucket[]; activeDays: Bucket[] };
     daily: Daily[];
+    hourly: Hourly[];
+    breakdown: {
+      countries: Breakdown[];
+      versions: Breakdown[];
+      operatingSystems: Breakdown[];
+      deviceClasses: Breakdown[];
+    };
   };
 
   const root = document.querySelector<HTMLElement>("[data-product-analytics]");
@@ -167,6 +227,17 @@ const copy = es
     },
   };
   const label = (key: string) => names[locale]?.[key] ?? key;
+  const regionNames = new Intl.DisplayNames([locale], { type: "region" });
+  const countryCentroids: Record<string, [number, number]> = {
+    AR: [-64, -34], AU: [134, -25], BR: [-52, -10], CA: [-106, 56], CH: [8, 47],
+    CL: [-71, -33], CN: [104, 35], CO: [-74, 4], DE: [10, 51], DK: [10, 56],
+    ES: [-4, 40], FI: [26, 64], FR: [2, 46], GB: [-2, 54], GR: [22, 39],
+    IE: [-8, 53], IL: [35, 31], IN: [79, 22], IT: [12, 42], JP: [138, 37],
+    KR: [128, 36], MX: [-102, 23], NL: [5, 52], NO: [8, 61], NZ: [174, -41],
+    PE: [-76, -10], PL: [20, 52], PT: [-8, 39], RO: [25, 46], RU: [90, 60],
+    SE: [15, 62], TR: [35, 39], UA: [32, 49], US: [-100, 39], ZA: [24, -29],
+  };
+  const chartInstances: Array<ReturnType<typeof echarts.init>> = [];
 
   function heading(title: string): HTMLHeadingElement {
     const element = document.createElement("h3");
@@ -196,39 +267,196 @@ const copy = es
     );
   }
 
-  function trend(rows: Daily[]): HTMLElement {
+  function trend(_rows: Daily[]): HTMLElement {
     const card = document.createElement("article");
-    card.className = "analytics-card analytics-trend";
-    card.append(heading(copy.trend));
+    card.className = "analytics-card analytics-chart-card analytics-wide";
+    card.append(heading(copy.dailyTrend));
     const plot = document.createElement("div");
-    plot.className = "analytics-trend-plot";
-    const max = Math.max(1, ...rows.map((row) => row.activeDevices));
-    rows.forEach((row) => {
-      const column = document.createElement("div");
-      column.title = `${row.day}: ${row.activeDevices} active, ${row.activatedDevices} activated, ${row.featureDevices} features`;
-      column.innerHTML = `<i class="active" style="height:${(row.activeDevices / max) * 100}%"></i><i class="activated" style="height:${(row.activatedDevices / max) * 100}%"></i><i class="features" style="height:${(row.featureDevices / max) * 100}%"></i>`;
-      plot.append(column);
-    });
+    plot.className = "analytics-echart analytics-echart-wide";
+    plot.dataset.chart = "daily";
     card.append(plot);
     return card;
+  }
+
+  function chartCard(title: string, chart: string, wide = false): HTMLElement {
+    const card = document.createElement("article");
+    card.className = `analytics-card analytics-chart-card${wide ? " analytics-wide" : ""}`;
+    card.append(heading(title));
+    const plot = document.createElement("div");
+    plot.className = "analytics-echart";
+    plot.dataset.chart = chart;
+    card.append(plot);
+    return card;
+  }
+
+  function comparison(current: number, previous: number): string {
+    if (!previous) return current ? "NEW" : "—";
+    const value = ((current - previous) / previous) * 100;
+    return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+  }
+
+  function metric(value: string, title: string, change?: string): HTMLElement {
+    const card = document.createElement("article");
+    const number = document.createElement("strong");
+    number.textContent = value;
+    const text = document.createElement("span");
+    text.textContent = title;
+    card.append(number, text);
+    if (change) {
+      const detail = document.createElement("small");
+      detail.className = change.startsWith("-") ? "is-negative" : "is-positive";
+      detail.textContent = `${change} ${copy.previousPeriod}`;
+      card.append(detail);
+    }
+    return card;
+  }
+
+  function dimension(title: string, rows: Breakdown[]): HTMLElement {
+    const total = rows.reduce((sum, row) => sum + row.devices, 0);
+    return ranked(title, rows.slice(0, 8).map((row) => ({
+      key: row.label,
+      devices: row.devices,
+      rate: total ? (row.devices / total) * 100 : 0,
+    })));
+  }
+
+  function countryMap(rows: Breakdown[]): HTMLElement {
+    const card = document.createElement("article");
+    card.className = "analytics-card analytics-map-card analytics-wide";
+    const header = heading(copy.geography);
+    const note = document.createElement("p");
+    note.className = "stats-muted";
+    note.textContent = copy.geographyNote;
+    card.append(header, note);
+    const layout = document.createElement("div");
+    layout.className = "analytics-map-layout";
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 1000 460");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", copy.geography);
+    const land = document.createElementNS(svg.namespaceURI, "path");
+    land.setAttribute("class", "analytics-map-land");
+    land.setAttribute("d", "M48 98L103 55 216 58 276 104 239 154 183 168 149 228 93 199 68 147ZM245 238L304 247 330 302 299 404 267 346ZM442 83L515 68 557 95 630 73 742 83 851 126 810 178 722 166 668 207 604 194 570 152 522 155 483 126ZM485 166L553 174 598 239 566 346 508 374 468 285ZM776 289L852 282 914 327 870 374 794 357Z");
+    svg.append(land);
+    const known = rows.filter((row) => countryCentroids[row.label]);
+    const max = Math.max(1, ...known.map((row) => row.devices));
+    known.forEach((row) => {
+      const [longitude, latitude] = countryCentroids[row.label];
+      const marker = document.createElementNS(svg.namespaceURI, "circle");
+      marker.setAttribute("cx", String(((longitude + 180) / 360) * 1000));
+      marker.setAttribute("cy", String(((90 - latitude) / 180) * 460));
+      marker.setAttribute("r", String(5 + Math.sqrt(row.devices / max) * 17));
+      marker.setAttribute("class", "analytics-map-marker");
+      const tooltip = document.createElementNS(svg.namespaceURI, "title");
+      tooltip.textContent = `${regionNames.of(row.label) ?? row.label}: ${row.devices}`;
+      marker.append(tooltip);
+      svg.append(marker);
+    });
+    const ranking = document.createElement("ol");
+    rows.filter((row) => row.label !== "XX").slice(0, 8).forEach((row) => {
+      const item = document.createElement("li");
+      const name = document.createElement("span");
+      name.textContent = regionNames.of(row.label) ?? row.label;
+      const value = document.createElement("strong");
+      value.textContent = numbers.format(row.devices);
+      item.append(name, value);
+      ranking.append(item);
+    });
+    layout.append(svg, ranking);
+    card.append(layout);
+    return card;
+  }
+
+  const chartTheme = {
+    text: "#bacac5",
+    grid: "rgba(186, 202, 197, 0.10)",
+    teal: "#57f1db",
+    blue: "#78a9ff",
+    green: "#72d6a5",
+    amber: "#ffe2ab",
+  };
+
+  function createChart(element: HTMLElement, option: Parameters<ReturnType<typeof echarts.init>["setOption"]>[0]): void {
+    const chart = echarts.init(element, undefined, { renderer: "svg" });
+    chart.setOption(option);
+    chartInstances.push(chart);
+  }
+
+  function renderCharts(data: ProductStats): void {
+    chartInstances.splice(0).forEach((chart) => chart.dispose());
+    const axis = {
+      axisLine: { lineStyle: { color: chartTheme.grid } },
+      axisTick: { show: false },
+      axisLabel: { color: chartTheme.text, fontSize: 10 },
+      splitLine: { lineStyle: { color: chartTheme.grid } },
+    };
+    const tooltip = { trigger: "axis" as const, backgroundColor: "#111", borderColor: chartTheme.grid, textStyle: { color: "#e5e2e1" } };
+    const daily = root?.querySelector<HTMLElement>('[data-chart="daily"]');
+    if (daily) createChart(daily, {
+      aria: { enabled: true },
+      color: [chartTheme.teal, chartTheme.blue, chartTheme.green],
+      tooltip,
+      legend: { bottom: 0, textStyle: { color: chartTheme.text } },
+      grid: { left: 42, right: 18, top: 20, bottom: 54 },
+      xAxis: { ...axis, type: "category", data: data.daily.map((row) => row.day.slice(5)), boundaryGap: false },
+      yAxis: { ...axis, type: "value", minInterval: 1 },
+      series: [
+        { name: copy.devices, type: "line", smooth: 0.25, showSymbol: false, areaStyle: { opacity: 0.08 }, data: data.daily.map((row) => row.activeDevices) },
+        { name: copy.activation, type: "line", smooth: 0.25, showSymbol: false, data: data.daily.map((row) => row.activatedDevices) },
+        { name: copy.features, type: "line", smooth: 0.25, showSymbol: false, data: data.daily.map((row) => row.featureDevices) },
+      ],
+    });
+    const hourly = root?.querySelector<HTMLElement>('[data-chart="hourly"]');
+    if (hourly) createChart(hourly, {
+      aria: { enabled: true }, color: [chartTheme.teal], tooltip,
+      grid: { left: 42, right: 14, top: 16, bottom: 34 },
+      xAxis: { ...axis, type: "category", data: data.hourly.map((row) => row.hour) },
+      yAxis: { ...axis, type: "value", minInterval: 1 },
+      series: [{ name: copy.starts, type: "bar", barMaxWidth: 20, data: data.hourly.map((row) => row.sessions), itemStyle: { borderRadius: [3, 3, 0, 0] } }],
+    });
+    const funnel = root?.querySelector<HTMLElement>('[data-chart="funnel"]');
+    if (funnel) createChart(funnel, {
+      aria: { enabled: true }, color: [chartTheme.teal, chartTheme.blue, chartTheme.green, chartTheme.amber, "#ad8cff"],
+      tooltip: { trigger: "item", formatter: "{b}: {c}%" },
+      series: [{ type: "funnel", left: "8%", right: "8%", top: 10, bottom: 10, minSize: "18%", maxSize: "100%", sort: "none", gap: 3,
+        label: { color: "#e5e2e1", formatter: "{b}  {c}%" },
+        data: data.activation.map((item) => ({ name: label(item.key), value: item.rate })) }],
+    });
+    const features = root?.querySelector<HTMLElement>('[data-chart="features"]');
+    if (features) createChart(features, {
+      aria: { enabled: true }, color: [chartTheme.blue], tooltip,
+      grid: { left: 132, right: 34, top: 12, bottom: 24 },
+      xAxis: { ...axis, type: "value", axisLabel: { ...axis.axisLabel, formatter: "{value}%" } },
+      yAxis: { ...axis, type: "category", inverse: true, data: data.features.map((item) => label(item.key)), splitLine: { show: false } },
+      series: [{ name: copy.adoption, type: "bar", barMaxWidth: 16, data: data.features.map((item) => item.adoptionRate), itemStyle: { borderRadius: [0, 3, 3, 0] } }],
+    });
   }
 
   function render(data: ProductStats): void {
     if (!content) return;
     content.replaceChildren();
-    const summary = document.createElement("div");
+    const summary = document.createElement("section");
     summary.className = "analytics-summary";
-    [[data.appStarts, copy.starts], [data.activeDeviceDays, copy.devices]].forEach(([value, text]) => {
-      const card = document.createElement("article");
-      card.innerHTML = `<strong>${numbers.format(value as number)}</strong><span>${text}</span>`;
-      summary.append(card);
-    });
+    const activationRate = data.activation.find((item) => item.key === "project_ready")?.rate ?? 0;
+    const deepSessionRate = data.engagement.find((item) => item.minutes === 30)?.rate ?? 0;
+    summary.append(
+      metric(numbers.format(data.appStarts), copy.starts, data.comparison ? comparison(data.appStarts, data.comparison.appStarts) : undefined),
+      metric(numbers.format(data.activeDeviceDays), copy.devices, data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined),
+      metric(`${activationRate.toFixed(1)}%`, copy.activationRate),
+      metric(`${deepSessionRate.toFixed(1)}%`, copy.deepSessions),
+    );
 
     const grid = document.createElement("div");
     grid.className = "analytics-grid";
     grid.append(
-      ranked(copy.activation, data.activation),
-      ranked(copy.features, data.features.map((item) => ({ ...item, rate: item.adoptionRate }))),
+      trend(data.daily),
+      chartCard(copy.utcActivity, "hourly"),
+      chartCard(copy.activation, "funnel"),
+      countryMap(data.breakdown.countries),
+      dimension(copy.versions, data.breakdown.versions),
+      dimension(copy.platforms, data.breakdown.operatingSystems),
+      dimension(copy.devicesTitle, data.breakdown.deviceClasses),
+      chartCard(copy.features, "features"),
     );
 
     const quality = document.createElement("article");
@@ -243,12 +471,12 @@ const copy = es
     grid.append(quality);
 
     grid.append(
-      ranked(copy.engagement, data.engagement.map((row) => ({ key: `active_${row.minutes}m`, devices: row.devices, rate: row.rate })).map((row) => ({ ...row, key: `${row.key.replace("active_", "≥ ").replace("m", " min")}` }))),
+      ranked(copy.engagement, data.engagement.map((row) => ({ key: `≥ ${row.minutes} min`, devices: row.devices, rate: row.rate }))),
       maturity(copy.installationAge, data.maturity.installationAge),
       maturity(copy.activeDays, data.maturity.activeDays),
-      trend(data.daily),
     );
     content.append(summary, grid);
+    renderCharts(data);
   }
 
   async function load(token: string): Promise<void> {
@@ -297,6 +525,7 @@ const copy = es
     if (toolbar) toolbar.hidden = true;
     if (status) status.textContent = "";
   });
+  window.addEventListener("resize", () => chartInstances.forEach((chart) => chart.resize()));
   const savedToken = sessionStorage.getItem(TOKEN_KEY);
   if (savedToken) void load(savedToken);
 </script>
