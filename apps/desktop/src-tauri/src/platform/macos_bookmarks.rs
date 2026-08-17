@@ -29,8 +29,17 @@ use std::path::Path;
 
 /// A live security-scoped access grant. Dropping it calls
 /// `stopAccessingSecurityScopedResource`, so hold it for as long as the session
-/// (and its audio files) must stay readable — typically for the lifetime of the
-/// open session. On non-macOS targets this is a zero-sized placeholder.
+/// (and its audio files) must stay readable — which is the **whole time the
+/// session is open**, not just while it loads.
+///
+/// That distinction is the bug this type exists to prevent: playback streams
+/// audio off disk on demand (the block cache reads as the playhead advances),
+/// so dropping the guard once the initial load finishes puts every later read
+/// back under TCC — which is what made 1.10 prompt for file access *in the
+/// middle of playback*. The guard therefore lives in `DesktopSession`, and is
+/// only released when another session replaces it.
+///
+/// On non-macOS targets this is a zero-sized placeholder.
 #[cfg(target_os = "macos")]
 pub struct ScopedAccess {
     url: objc2::rc::Retained<objc2_foundation::NSURL>,
@@ -38,6 +47,13 @@ pub struct ScopedAccess {
 
 #[cfg(not(target_os = "macos"))]
 pub struct ScopedAccess;
+
+// `NSURL` is an immutable, thread-safe Foundation object, and the only thing we
+// ever do with this one is call the balancing `stop…` on drop. The session it
+// is stored in lives behind a `Mutex` shared across the loader and command
+// threads, so the guard must cross threads with it.
+#[cfg(target_os = "macos")]
+unsafe impl Send for ScopedAccess {}
 
 #[cfg(target_os = "macos")]
 impl Drop for ScopedAccess {

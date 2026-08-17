@@ -515,6 +515,22 @@ impl DesktopSession {
             .ok_or_else(|| {
                 DesktopError::AudioCommand("session.ltsession must live inside a folder".into())
             })?;
+
+        // Take macOS folder access for the session we are about to open. Every
+        // open path funnels through here, so this covers the file dialog, the
+        // landing screen's recent sessions, `.ltset` import and templates alike.
+        //
+        // Acquired into a local for now and only moved into `self` once the new
+        // session is actually loaded: the load first flushes and closes the
+        // *previous* session (save_current_session_before_close writes into its
+        // folder), so the outgoing grant must stay live until that is done.
+        //
+        // Re-bookmarking on each open keeps the stored grant fresh and records
+        // one for sessions first opened through a path that never saw a dialog.
+        // No-ops off macOS.
+        crate::platform::macos_bookmarks::remember_folder(app, &song_dir);
+        let folder_access = crate::platform::macos_bookmarks::acquire_folder(app, &song_dir);
+
         emit_project_load_progress(app, 5, "Leyendo archivo de proyecto...".into(), 0, 0, 0, 0);
         let song = load_song_from_file(&song_file)?;
 
@@ -530,6 +546,15 @@ impl DesktopSession {
             self.align_engine_sample_rate_to_session(app, audio, &song, &song_dir, user_pinned_rate);
         emit_project_load_progress(app, 14, "Cargando sesion de audio...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
+
+        // The previous session is now flushed and closed, so its grant can go.
+        // This one has to outlive the load: playback streams audio off disk as
+        // the playhead advances, so releasing the grant once loading finished
+        // (as 1.10 did, by holding it in a local on the loader thread) put every
+        // later read back under TCC and made macOS prompt for file access in the
+        // middle of playback.
+        self.folder_access = folder_access;
+
         if let Some(notice) = sample_rate_notice {
             emit_project_load_progress(app, 16, notice, 0, 0, 0, 0);
         }

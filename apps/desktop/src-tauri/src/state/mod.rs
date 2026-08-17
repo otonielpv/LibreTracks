@@ -384,6 +384,15 @@ pub struct DesktopSession {
     pub(super) transpose_history_group: Option<TransposeHistoryGroup>,
     pub(super) waveform_cache: WaveformMemoryCache,
     pub(super) perf_metrics: DesktopPerformanceMetrics,
+    /// macOS security-scoped access to the open session's folder, held for as
+    /// long as that session is loaded.
+    ///
+    /// Playback streams audio off disk as the playhead advances, so folder
+    /// access must outlive the *load*, not end with it — otherwise every later
+    /// read trips TCC and macOS prompts mid-playback. Replaced (and the old one
+    /// dropped, releasing the grant) when another session is opened. `None` on
+    /// every non-macOS target, where nothing gates folder reads.
+    pub(super) folder_access: Option<crate::platform::macos_bookmarks::ScopedAccess>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -483,6 +492,7 @@ impl Default for DesktopSession {
             transpose_history_group: None,
             waveform_cache: WaveformMemoryCache::default(),
             perf_metrics: DesktopPerformanceMetrics::default(),
+            folder_access: None,
         }
     }
 }

@@ -1073,6 +1073,10 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
     // The native panel just granted access to the picked `.ltsession`; capture
     // a security-scoped bookmark of its containing folder now, while the grant
     // is fresh, so future reopens (and the audio reads inside) don't prompt.
+    //
+    // `begin_open_project_from_path` also bookmarks the folder, but only this
+    // call site runs with the panel's grant still in hand — the deciding moment
+    // for a folder the app has never been given access to before.
     if let Some(folder) = song_file.parent() {
         crate::platform::macos_bookmarks::remember_folder(&app, folder);
     }
@@ -1103,14 +1107,11 @@ fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
 
-        // Re-acquire folder access from the stored bookmark before touching any
-        // file. This is the reopen-a-saved-session path: without a fresh open
-        // panel, macOS would otherwise prompt once per audio file. Held for the
-        // whole load (including background audio decode) via `_scoped`; a
-        // missing bookmark yields None and we proceed as before.
-        let _scoped = song_file
-            .parent()
-            .and_then(|folder| crate::platform::macos_bookmarks::acquire_folder(&worker_app, folder));
+        // macOS folder access is acquired inside `begin_open_project_from_path`
+        // and held by the session itself, not by this worker: it has to survive
+        // past the load so the streaming reads during playback stay clear of
+        // TCC. Holding it in a local here would release it the moment this
+        // thread ends, which is the mid-playback prompt bug from 1.10.
 
         // Open the session as soon as the MODEL is ready and let the audio
         // decode finish in the background — the "deferred preparation" model
