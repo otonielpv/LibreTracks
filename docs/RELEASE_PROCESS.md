@@ -433,12 +433,83 @@ graphify update .
 (AST-only, no API cost. Per the project CLAUDE.md, run this after touching
 code so future sessions stay in sync.)
 
-## 11. Hand back a Facebook announcement draft
+## 11. Make the release poster (mandatory, one per release)
+
+Every release gets its own 1080x1080 announcement image, generated with the
+poster tool and handed back together with the Facebook draft (step 12).
+
+```bash
+mkdir -p marketing/poster-<NEW>
+cp <a real screenshot> marketing/poster-<NEW>/shot.png
+# write marketing/poster-<NEW>/poster.json (see below), then:
+node scripts/poster/make-poster.mjs --spec marketing/poster-<NEW>/poster.json
+```
+
+`marketing/` is gitignored, so the PNGs stay out of the repo; the generator
+under `scripts/poster/` is versioned, so any release can be re-rendered.
+
+### Every poster must look different
+
+This is the point of the tool, not a nice-to-have: a feed of identical posters
+stops being read. `scripts/poster/themes.mjs` holds five themes, each with its
+own palette, background motif AND layout (`spotlight`, `bleed-right`, `split`,
+`tilt`, `list`). `pickTheme()` derives one from the version number — weighted so
+consecutive releases never land on the same theme — so the default already
+varies release to release and re-running for the same version reproduces the
+same poster.
+
+- Let the version pick the theme. Override with `--theme <id>` only when a
+  release deserves a specific look (`--list-themes` shows them all).
+- When the five start feeling familiar, **add a sixth theme** rather than
+  re-using one. A new theme is a palette + a motif + a layout block in
+  `render.mjs`; adding one is what keeps this from going stale.
+
+### The copy file
+
+`poster.json` is the only thing written per release:
+
+```json
+{
+  "version": "1.10.1",
+  "badge": "GRATIS Y OPEN SOURCE",
+  "headline": "Mezcla varias
+pistas a la vez",
+  "headlineAccent": ".",
+  "sub": "Selecciona, ajusta una, y todas te siguen.",
+  "shot": "shot.png",
+  "features": [{ "title": "Mezcla en grupo", "body": "volumen, pan, mute, solo" }]
+}
+```
+
+- `headline`: the release's ONE headline change, 2 short lines. `
+` is a
+  deliberate break — poster headlines are typeset by hand, not left to wrap.
+- `features`: exactly 4, drawn from the Spanish bullets of
+  `docs/releases/v<NEW>.md`. Keep each `body` to ~4 words so the four columns
+  stay on one line; a 2-line wrap in one column and not the others looks broken.
+- Spanish, same voice as the Facebook post. Check the accents.
+
+### Look at the PNG before shipping it
+
+Same rule as the docs screenshots, for the same reason — and the poster is the
+more public of the two:
+
+- **Open the image.** Layout bugs only show up visually: a headline overlapping
+  the screenshot, the app cropped at its top edge, a column wrapping to 2 lines.
+- **Never fabricate content.** Use a real session, like the docs shots do.
+- **Watch for personal data** in the screenshot (paths with the account name).
+
+The intermediate `.html` is kept next to the PNG on purpose: when a frame comes
+out wrong, open it in a browser and fix the CSS rather than guessing.
+
+## 12. Hand back a Facebook announcement draft
 
 End-user audience, natural language, minimal emojis, no version-bump
 jargon. Lead with the most relatable improvement (loading speed, new
 in-app behavior), not internals. Spanish by default unless told otherwise.
-Do NOT post it anywhere; just hand back the text.
+Do NOT post it anywhere; just hand back the text. Hand it back together
+with the poster from step 11 — the post and the image go out as one piece,
+so the poster's headline and the post's first bullet should agree.
 
 Use this exact template (matches the channel's voice):
 
@@ -480,6 +551,12 @@ Notes:
   the in-app modal shows these to end users.
 - Pushing the tag before the user confirms — the release pipeline is
   not idempotent for the version slot.
+- Shipping a poster that repeats the previous release's look — the whole
+  point of the theme rotation is that each announcement looks new. If the
+  themes start feeling used up, add one (step 11).
+- Publishing a poster without opening the PNG. Overlapping text, a cropped
+  app window and a wrapped feature column all render fine and only show up
+  when you look.
 
 ---
 

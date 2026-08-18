@@ -49,6 +49,8 @@ La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+cli
 
 Las folder tracks tambien pueden actuar como dueñas del routing: las pistas hijas pueden dejar su salida en `Inherited (Folder)` para seguir automaticamente el bus de la carpeta, manteniendo la misma agrupacion visual en el timeline desktop y en el mixer remote.
 
+La mezcla tambien admite multi-seleccion al estilo Ableton: con varias pistas seleccionadas, actuar sobre cualquiera de ellas aplica el cambio a todas. Silencio, solo, transpose y ruteo se igualan al estado de la pista pulsada, mientras que volumen y panorama se mueven de forma relativa (el delta de volumen en dB), conservando el balance de la mezcla. Actuar sobre una pista fuera de la seleccion sigue siendo una edicion individual.
+
 La barra superior muestra un medidor de recursos en vivo con el uso actual de CPU y memoria, asi puedes ver de un vistazo cuando una sesion grande empieza a exigir mas al equipo.
 
 LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, mostrando las novedades en el idioma de la app y un acceso directo a la pagina de descargas. La comprobacion tambien se puede lanzar manualmente desde `Configuracion - General`.
