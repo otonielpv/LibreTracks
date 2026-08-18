@@ -346,11 +346,14 @@ function LivePerformanceViewComponent({
                   {isNext && selectedPlayback.secondsToNextGroup !== null ? (
                     <span className="lt-live-cue-countdown">{t("liveView.nextIn", { time: formatLiveClock(selectedPlayback.secondsToNextGroup) })}</span>
                   ) : null}
-                  {isActive ? (
-                    <span className="lt-live-cue-progress" role="progressbar" aria-valuenow={Math.round(markerProgress * 100)}>
-                      <span ref={markerProgressFillRef} />
-                    </span>
-                  ) : null}
+                  <span
+                    className={`lt-live-cue-progress${isActive ? " is-active" : ""}`}
+                    role={isActive ? "progressbar" : undefined}
+                    aria-valuenow={isActive ? Math.round(markerProgress * 100) : undefined}
+                    aria-hidden={!isActive}
+                  >
+                    <span ref={isActive ? markerProgressFillRef : undefined} />
+                  </span>
                 </span>
                 <time>{formatLiveClock(group.startSeconds - (selectedRegion?.startSeconds ?? 0))}</time>
                 <span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span>

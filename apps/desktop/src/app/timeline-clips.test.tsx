@@ -44,6 +44,67 @@ import {
 import { useTimelineUIStore } from "../features/transport/uiStore";
 
 describe("App / timeline-clips", () => {
+  it("selects a timeline range by dragging the ruler with a touch pointer", async () => {
+    class TestPointerEvent extends MouseEvent {
+      readonly pointerId: number;
+      readonly pointerType: string;
+      readonly isPrimary: boolean;
+
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+        this.pointerType = init.pointerType ?? "mouse";
+        this.isPrimary = init.isPrimary ?? true;
+      }
+    }
+    Object.defineProperty(window, "PointerEvent", {
+      configurable: true,
+      value: TestPointerEvent,
+    });
+
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    const rulerSurface = container.querySelector(
+      ".lt-ruler-canvas-overlay",
+    ) as HTMLElement | null;
+    expect(rulerSurface).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.pointerDown(rulerSurface as HTMLElement, {
+        button: 0,
+        clientX: 300,
+        pointerId: 7,
+        pointerType: "touch",
+        isPrimary: true,
+      });
+      fireEvent.pointerMove(window, {
+        button: 0,
+        clientX: 600,
+        pointerId: 7,
+        pointerType: "touch",
+        isPrimary: true,
+      });
+      fireEvent.pointerUp(window, {
+        button: 0,
+        clientX: 600,
+        pointerId: 7,
+        pointerType: "touch",
+        isPrimary: true,
+      });
+    });
+
+    expect(container.querySelector(".lt-ruler-range-selection")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        textMatcher(
+          en.transport.status.rangeSelected.split("{{start}}")[0].trim(),
+        ),
+      ),
+    ).toBeTruthy();
+  });
+
   it("keeps timeline click seeks aligned after toggling compact view", async () => {
     const desktopApi = await import("../features/transport/desktopApi");
     const seekSpy = vi.mocked(desktopApi.seekTransport);
@@ -58,11 +119,11 @@ describe("App / timeline-clips", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /cambiar a vista compacta/i }));
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.liveView.openCompact) }));
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /cambiar a vista daw/i }));
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.liveView.openDaw) }));
     });
 
     await waitFor(() => {

@@ -113,6 +113,8 @@ describe("LivePerformanceView", () => {
     expect(screen.queryByText("Estrofa")).toBeNull();
     expect(screen.getByText("Estribillo")).toBeTruthy();
     expect(onSongAction).not.toHaveBeenCalled();
+    expect(container.querySelector(".lt-live-cue-progress")).toBeTruthy();
+    expect(container.querySelector(".lt-live-cue-progress.is-active")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Play Segunda" }));
     expect(onSongAction).toHaveBeenCalledWith(song.regions[1]);

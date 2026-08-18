@@ -278,6 +278,7 @@ import { useProjectActions } from "./hooks/useProjectActions";
 import { useE2ETestHooks } from "./hooks/useE2ETestHooks";
 import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
 import { useTimelineActions } from "./timeline/useTimelineActions";
+import { useTimelineRangeSelection } from "./timeline/useTimelineRangeSelection";
 import { useTimelineKeyboardShortcuts } from "./timeline/TimelineKeyboardShortcuts";
 import { useShortcutHint } from "./keyboard/shortcutHint";
 import {
@@ -330,7 +331,6 @@ import {
   DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
   HARDWARE_OUTPUT_CHANNEL_COUNT,
   HEADER_WIDTH,
-  LIBRARY_DRAG_EDGE_BUFFER_PX,
   LIBRARY_DRAG_MAX_SCROLL_SPEED_PX,
   LIVE_TRACK_MIX_MIN_INTERVAL_MS,
   LIVE_ZOOM_COMMIT_DEBOUNCE_MS,
@@ -6516,6 +6516,42 @@ export function TransportPanelContent() {
     handleDomExternalDropPreviewChange,
   } = libraryDragDrop;
 
+  const handleRulerPointerDown = useTimelineRangeSelection({
+    enabled: Boolean(song),
+    seekLocked: rulerSeekLocked,
+    isAndroid: isAndroidApp,
+    rulerTrackRef,
+    contextMenuOpenedAtRef,
+    getCameraX: () => cameraXRef.current,
+    getSnappedSeconds: (clientX) =>
+      snappedRulerSecondsAtClientX(clientX, workspaceDurationSeconds),
+    getPointerScaleX: (element) =>
+      getElementScaleX(element.getBoundingClientRect(), element.offsetWidth),
+    resolveAutoScrollVelocity: resolveLibraryAutoScrollVelocity,
+    previewCameraX: (nextCameraX) =>
+      updateCameraX(nextCameraX, { commitToStore: false }),
+    prewarmPosition: prewarmTimelinePosition,
+    clearTimelineSelection: () => {
+      clearSelection();
+      setSelectedRegionId(null);
+      setContextMenu(null);
+    },
+    setRange: setSelectedTimelineRange,
+    seek: (seconds) => {
+      void runAction(async () => {
+        await performSeek(seconds);
+      });
+    },
+    announceRange: (range) => {
+      setStatus(
+        t("transport.status.rangeSelected", {
+          start: formatClock(range.startSeconds),
+          end: formatClock(range.endSeconds),
+        }),
+      );
+    },
+  });
+
   // E2E-only seam under WebDriver; explicit paths skip only the native picker.
   useE2ETestHooks(handleCreateSongNamed, handleOpenProjectFromPath, handleImportLibraryFromPaths);
 
@@ -7492,224 +7528,7 @@ export function TransportPanelContent() {
                             clipDragSnapIndicatorSeconds
                           }
                           onSeekIntent={prewarmTimelinePosition}
-                          onRulerMouseDown={(event) => {
-                            if (
-                              !song ||
-                              event.button !== 0 ||
-                              !rulerTrackRef.current ||
-                              // Android seek lock: plain ruler taps neither
-                              // seek nor range-select; marker/region flags
-                              // are separate overlays and keep working.
-                              rulerSeekLocked ||
-                              // Android long-press: releasing the finger after
-                              // the context menu opened fires a synthesized
-                              // mousedown HERE, which seeked ("cursor moved")
-                              // and closed the fresh menu. Same grace window
-                              // as the global outside-click closer.
-                              (isAndroidApp &&
-                                Date.now() - contextMenuOpenedAtRef.current <
-                                  600)
-                            ) {
-                              return;
-                            }
-
-                            event.preventDefault();
-                            const seekStartSeconds = snappedRulerSeconds(
-                              event,
-                              workspaceDurationSeconds,
-                            );
-                            prewarmTimelinePosition(seekStartSeconds);
-                            const startSeconds = snappedRulerSeconds(
-                              event,
-                              workspaceDurationSeconds,
-                            );
-                            clearSelection();
-                            setSelectedRegionId(null);
-                            setContextMenu(null);
-                            setSelectedTimelineRange({
-                              startSeconds,
-                              endSeconds: startSeconds,
-                            });
-
-                            const startClientX = event.clientX;
-                            const pressStartedAt = Date.now();
-                            const pointerScaleX = getElementScaleX(
-                              event.currentTarget.getBoundingClientRect(),
-                              event.currentTarget.offsetWidth,
-                            );
-                            let hasMoved = false;
-                            let autoScrollFrameId: number | null = null;
-                            let autoScrollVelocity = 0;
-                            let latestClientX = startClientX;
-
-                            const stopRangeAutoScroll = () => {
-                              autoScrollVelocity = 0;
-                              if (autoScrollFrameId !== null) {
-                                window.cancelAnimationFrame(autoScrollFrameId);
-                                autoScrollFrameId = null;
-                              }
-                            };
-
-                            const updateRangeSelection = (clientX: number) => {
-                              const currentSeconds =
-                                snappedRulerSecondsAtClientX(
-                                  clientX,
-                                  workspaceDurationSeconds,
-                                );
-                              setSelectedTimelineRange({
-                                startSeconds: Math.min(
-                                  startSeconds,
-                                  currentSeconds,
-                                ),
-                                endSeconds: Math.max(
-                                  startSeconds,
-                                  currentSeconds,
-                                ),
-                              });
-                            };
-
-                            const tickRangeAutoScroll = () => {
-                              if (!autoScrollVelocity) {
-                                autoScrollFrameId = null;
-                                return;
-                              }
-
-                              updateCameraX(
-                                cameraXRef.current + autoScrollVelocity,
-                                {
-                                  commitToStore: false,
-                                },
-                              );
-                              updateRangeSelection(latestClientX);
-                              autoScrollFrameId =
-                                window.requestAnimationFrame(
-                                  tickRangeAutoScroll,
-                                );
-                            };
-
-                            const updateRangeAutoScroll = (clientX: number) => {
-                              const bounds =
-                                rulerTrackRef.current?.getBoundingClientRect();
-                              if (!bounds) {
-                                stopRangeAutoScroll();
-                                return;
-                              }
-
-                              const distanceToLeft = clientX - bounds.left;
-                              const distanceToRight = bounds.right - clientX;
-                              if (
-                                distanceToLeft < LIBRARY_DRAG_EDGE_BUFFER_PX
-                              ) {
-                                autoScrollVelocity =
-                                  -resolveLibraryAutoScrollVelocity(
-                                    distanceToLeft,
-                                  );
-                              } else if (
-                                distanceToRight < LIBRARY_DRAG_EDGE_BUFFER_PX
-                              ) {
-                                autoScrollVelocity =
-                                  resolveLibraryAutoScrollVelocity(
-                                    distanceToRight,
-                                  );
-                              } else {
-                                autoScrollVelocity = 0;
-                              }
-
-                              if (!autoScrollVelocity) {
-                                stopRangeAutoScroll();
-                                return;
-                              }
-
-                              if (autoScrollFrameId === null) {
-                                autoScrollFrameId =
-                                  window.requestAnimationFrame(
-                                    tickRangeAutoScroll,
-                                  );
-                              }
-                            };
-
-                            const onMouseMove = (windowEvent: MouseEvent) => {
-                              const exceededThreshold =
-                                Math.abs(
-                                  (windowEvent.clientX - startClientX) /
-                                    pointerScaleX,
-                                ) > DRAG_THRESHOLD_PX;
-                              if (!hasMoved && !exceededThreshold) {
-                                return;
-                              }
-
-                              hasMoved = true;
-                              latestClientX = windowEvent.clientX;
-                              prewarmTimelinePosition(
-                                snappedRulerSecondsAtClientX(
-                                  windowEvent.clientX,
-                                  workspaceDurationSeconds,
-                                ),
-                              );
-                              updateRangeSelection(windowEvent.clientX);
-                              updateRangeAutoScroll(windowEvent.clientX);
-                            };
-
-                            const onMouseUp = (windowEvent: MouseEvent) => {
-                              if (windowEvent.button !== 0) {
-                                return;
-                              }
-
-                              window.removeEventListener(
-                                "mousemove",
-                                onMouseMove,
-                              );
-                              window.removeEventListener("mouseup", onMouseUp);
-                              stopRangeAutoScroll();
-
-                              // Android long-press: the context menu opened
-                              // DURING this very press (mousedown fires when
-                              // the finger lands, the menu ~600 ms later).
-                              // Releasing the finger must neither seek away
-                              // ("cursor moved") nor disturb the fresh menu.
-                              if (
-                                isAndroidApp &&
-                                contextMenuOpenedAtRef.current >= pressStartedAt
-                              ) {
-                                setSelectedTimelineRange(null);
-                                return;
-                              }
-
-                              if (!hasMoved) {
-                                setSelectedTimelineRange(null);
-                                void runAction(async () => {
-                                  await performSeek(seekStartSeconds);
-                                });
-                                return;
-                              }
-
-                              const endSeconds = snappedRulerSeconds(
-                                windowEvent,
-                                workspaceDurationSeconds,
-                              );
-                              const normalizedStartSeconds = Math.min(
-                                startSeconds,
-                                endSeconds,
-                              );
-                              const normalizedEndSeconds = Math.max(
-                                startSeconds,
-                                endSeconds,
-                              );
-                              setSelectedTimelineRange({
-                                startSeconds: normalizedStartSeconds,
-                                endSeconds: normalizedEndSeconds,
-                              });
-                              setStatus(
-                                t("transport.status.rangeSelected", {
-                                  start: formatClock(normalizedStartSeconds),
-                                  end: formatClock(normalizedEndSeconds),
-                                }),
-                              );
-                            };
-
-                            window.addEventListener("mousemove", onMouseMove);
-                            window.addEventListener("mouseup", onMouseUp);
-                          }}
+                          onRulerPointerDown={handleRulerPointerDown}
                           onRulerContextMenu={(event) => {
                             if (!song || !rulerTrackRef.current) {
                               return;

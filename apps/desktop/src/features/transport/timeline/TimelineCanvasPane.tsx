@@ -5,8 +5,8 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
-  type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
+  type MutableRefObject,
   type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -239,7 +239,7 @@ type TimelineCanvasPaneProps = {
   ) => number;
   resolveLibraryGhostLeft: (seconds: number) => number;
   clipDragSnapIndicatorSeconds: number | null;
-  onRulerMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  onRulerPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onMarkerPrimaryAction: (sectionId: string) => void;
   onMarkerContextMenu: (
@@ -422,7 +422,7 @@ export function TimelineCanvasPane({
   normalizePositionSeconds,
   resolveLibraryGhostLeft,
   clipDragSnapIndicatorSeconds,
-  onRulerMouseDown,
+  onRulerPointerDown,
   onRulerContextMenu,
   onMarkerPrimaryAction,
   onMarkerContextMenu,
@@ -1118,7 +1118,8 @@ export function TimelineCanvasPane({
       <div
         className="lt-ruler-track"
         ref={rulerTrackRef}
-        onMouseDown={onRulerMouseDown}
+        onPointerDown={onRulerPointerDown}
+        onMouseDown={(event) => onRulerPointerDown(event as unknown as ReactPointerEvent<HTMLDivElement>)}
         onContextMenu={onRulerContextMenu}
       >
         <div className="lt-ruler-content" style={{ width: laneViewportWidth }}>
