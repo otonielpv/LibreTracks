@@ -1456,6 +1456,8 @@ Frame SourceManager::total_cache_miss_frames() const noexcept {
 
 void SourceManager::clear() {
     std::lock_guard lock(write_mutex_);
+    // Invalidate every fill worker's cached file handle (see FillReader).
+    fill_generation_.fetch_add(1, std::memory_order_release);
     publish_locked(EntryMap{});
     {
         std::lock_guard fill_lock(fill_mtx_);
@@ -1463,12 +1465,85 @@ void SourceManager::clear() {
         fill_queue_.swap(empty);
         queued_blocks_.clear();
     }
+    // Wake every fill worker so it releases its cache-file handle, and wait
+    // until none is held. Callers clear() precisely because they are about to
+    // delete or rewrite these files (purge_source_cache, a re-decode at a new
+    // sample rate); returning while a worker still has one open would make the
+    // unlink fail on Windows. Workers block only on fill_mtx_ and lock-free
+    // entry loads, never on write_mutex_, so waiting here cannot deadlock.
+    {
+        std::unique_lock fill_lock(fill_mtx_);
+        fill_cv_.notify_all();
+        fill_idle_cv_.wait_for(fill_lock, std::chrono::seconds(2), [this] {
+            return fill_readers_open_.load(std::memory_order_acquire) == 0;
+        });
+    }
+
     // Drop all decoded PCM blocks too. They are keyed by source_id+block_index
     // only (NOT by sample rate), so after a device SR change re-decodes the
     // sources, the audio thread would otherwise keep serving stale blocks from
     // the OLD rate for any region already buffered — heard as a sudden pitch /
     // speed jump partway through playback. Clearing entries alone is not enough.
     block_cache_.clear();
+}
+
+// --- FillReader: one long-lived cache-file handle per fill worker -----------
+
+SourceManager::FillReader::~FillReader() {
+    close();
+}
+
+void SourceManager::FillReader::close() noexcept {
+    if (!handle)
+        return;
+#if LT_ENGINE_USE_LIBSNDFILE
+    sf_close(static_cast<SNDFILE*>(handle));
+#else
+    delete static_cast<std::ifstream*>(handle);
+#endif
+    handle = nullptr;
+    if (open_counter)
+        open_counter->fetch_sub(1, std::memory_order_release);
+    source_id.clear();
+    path.clear();
+    channel_count = 0;
+}
+
+bool SourceManager::FillReader::open_for(const Id& id,
+                                         const std::string& file_path,
+                                         int channels) {
+    // Same source AND same file → reuse. The path is compared too because a
+    // source re-decoded at a new sample rate writes a different cache file
+    // under the same id; reusing the stale handle would serve old-rate audio.
+    if (handle && source_id == id && path == file_path && channel_count == channels)
+        return true;
+
+    const uint64_t gen = generation;
+    close();
+    generation = gen;
+
+#if LT_ENGINE_USE_LIBSNDFILE
+    SF_INFO info{};
+    SNDFILE* sf = lt_sf_open(file_path, SFM_READ, &info);
+    if (!sf)
+        return false;
+    if (info.channels != channels) {
+        sf_close(sf);
+        return false;
+    }
+    handle = sf;
+#else
+    auto in = std::make_unique<std::ifstream>(file_path, std::ios::binary);
+    if (!in || !*in)
+        return false;
+    handle = in.release();
+#endif
+    source_id = id;
+    path = file_path;
+    channel_count = channels;
+    if (open_counter)
+        open_counter->fetch_add(1, std::memory_order_release);
+    return true;
 }
 
 void SourceManager::fill_worker_loop() const {
@@ -1478,14 +1553,37 @@ void SourceManager::fill_worker_loop() const {
     // of a freshly-imported source can't preempt the live stream's disk reads.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 #endif
+    // Owned by this thread only — see FillReader's comment.
+    FillReader reader;
+    reader.open_counter = &fill_readers_open_;
     while (true) {
         CacheKey key;
         std::vector<int> block_batch;
         {
             std::unique_lock lock(fill_mtx_);
-            fill_cv_.wait(lock, [this] { return fill_stop_ || !fill_queue_.empty(); });
-            if (fill_stop_ && fill_queue_.empty())
+            fill_cv_.wait(lock, [this, &reader] {
+                return fill_stop_ || !fill_queue_.empty()
+                    || reader.generation !=
+                           fill_generation_.load(std::memory_order_acquire);
+            });
+            if (fill_stop_ && fill_queue_.empty()) {
+                reader.close();
                 return;
+            }
+            // Sources were invalidated (clear()): drop the handle NOW, while we
+            // are awake, rather than on the next batch. Callers that clear in
+            // order to delete or rewrite the cache files (purge_source_cache,
+            // a re-decode at a new sample rate) need the file released
+            // promptly — on Windows an open handle blocks the unlink outright.
+            const uint64_t generation =
+                fill_generation_.load(std::memory_order_acquire);
+            if (reader.generation != generation) {
+                reader.close();
+                reader.generation = generation;
+                fill_idle_cv_.notify_all();
+                if (fill_queue_.empty())
+                    continue;
+            }
             key = fill_queue_.front();
             fill_queue_.pop();
             queued_blocks_.erase(key);
@@ -1503,12 +1601,13 @@ void SourceManager::fill_worker_loop() const {
                 fill_queue_.pop();
             }
         }
-        fill_blocks_from_disk(key.source_id, block_batch);
+        fill_blocks_from_disk(key.source_id, block_batch, reader);
     }
 }
 
 void SourceManager::fill_blocks_from_disk(const Id& source_id,
-                                          const std::vector<int>& block_indices) const {
+                                          const std::vector<int>& block_indices,
+                                          FillReader& reader) const {
     if (block_indices.empty())
         return;
 
@@ -1529,6 +1628,13 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
     if (entry.cache_file_path.empty() || entry.channel_count <= 0)
         return;
 
+    // Sources were invalidated since this handle was opened — release it before
+    // touching disk so the stale cache file can be deleted/replaced.
+    const uint64_t generation = fill_generation_.load(std::memory_order_acquire);
+    if (reader.handle && reader.generation != generation)
+        reader.close();
+    reader.generation = generation;
+
     // R5: never read past the frames actually written so far. While a streaming
     // decode is in flight the WAV's data-chunk size isn't finalized, so reading
     // beyond `decoded_frames` would return garbage/short reads. Blocks past it
@@ -1536,6 +1642,12 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
     const Frame readable_frames = entry.decoded_frames
         ? entry.decoded_frames->load(std::memory_order_acquire)
         : entry.duration_frames;
+
+    // One open per BATCH (and reused across batches on the same file) instead of
+    // one per contiguous run. This is the disk-I/O spike on seeks: a jump can
+    // queue dozens of runs, and each used to pay a full file open + close.
+    if (!reader.open_for(source_id, entry.cache_file_path, entry.channel_count))
+        return;
 
     const int block_frames = block_cache_.block_frames();
     std::size_t cursor_index = 0;
@@ -1570,31 +1682,32 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
         std::vector<float> data(
             static_cast<std::size_t>(frames) * entry.channel_count, 0.f);
         int frames_read = 0;
+        // Reopen if a failed read above dropped the handle mid-batch.
+        if (!reader.handle
+            && !reader.open_for(source_id, entry.cache_file_path, entry.channel_count))
+            continue;
 #if LT_ENGINE_USE_LIBSNDFILE
-        SF_INFO info{};
-        SNDFILE* sf = lt_sf_open(entry.cache_file_path, SFM_READ, &info);
-        if (!sf)
-            continue;
-        if (info.channels != entry.channel_count) {
-            sf_close(sf);
-            continue;
-        }
+        SNDFILE* sf = static_cast<SNDFILE*>(reader.handle);
         if (sf_seek(sf, static_cast<sf_count_t>(start), SEEK_SET) >= 0) {
             frames_read = static_cast<int>(
                 sf_readf_float(sf, data.data(), static_cast<sf_count_t>(frames)));
         }
-        sf_close(sf);
+        // A failed read can leave the handle's position undefined; drop it so
+        // the next batch starts from a clean open rather than a bad offset.
+        if (frames_read <= 0)
+            reader.close();
 #else
-        std::ifstream in(entry.cache_file_path, std::ios::binary);
-        if (!in)
-            continue;
+        auto& in = *static_cast<std::ifstream*>(reader.handle);
         const std::streamoff byte_offset =
             static_cast<std::streamoff>(start * entry.channel_count * sizeof(float));
+        in.clear();
         in.seekg(byte_offset, std::ios::beg);
         in.read(reinterpret_cast<char*>(data.data()),
                 static_cast<std::streamsize>(data.size() * sizeof(float)));
         frames_read = static_cast<int>(
             static_cast<std::size_t>(in.gcount()) / (sizeof(float) * entry.channel_count));
+        if (frames_read <= 0)
+            reader.close();
 #endif
         if (frames_read <= 0)
             continue;

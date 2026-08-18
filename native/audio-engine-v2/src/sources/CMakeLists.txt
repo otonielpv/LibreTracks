@@ -9,7 +9,6 @@ target_sources(lt_audio_engine_v2 PRIVATE
     io_throttle.cpp
     original_source_cache.cpp
     streaming_source.cpp
-    prebuffer_worker.cpp
 )
 
 if(LT_ENGINE_USE_FFMPEG)

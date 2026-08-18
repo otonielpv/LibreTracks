@@ -905,6 +905,58 @@ TEST_CASE("request_range prepares a multi-block streaming window") {
     require_audio_equal(read_planar(*source, start, kReadFrames), expected);
 }
 
+TEST_CASE("fill workers release cache-file handles after clear()") {
+    // The fill workers keep the PCM cache file open across batches (one handle
+    // per worker) instead of sf_open/sf_close per batch — reopening it for
+    // every contiguous run was a large share of the disk I/O spike on jumps.
+    //
+    // The risk that buys: on Windows a file held open without FILE_SHARE_DELETE
+    // cannot be unlinked, so a retained handle would silently break "Clear
+    // cache" and any re-decode that rewrites the file. clear() bumps
+    // fill_generation_ so workers drop their handles; this asserts the files
+    // really become deletable afterwards.
+    ScopedCacheDir scope("fill_reader_releases_handles");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 8;
+
+    // Without this the whole file lands in the RAM cache eagerly, no worker
+    // ever touches disk, and the test cannot observe a retained handle at all.
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+
+    SourceManager manager;
+    const Id source_id = "fill-reader-source";
+    manager.register_source(source_id, "fill-reader-source.wav");
+    REQUIRE(manager.store_decoded_source(
+        source_id, make_reference_audio(kFrames, kChannels),
+        kChannels, kSampleRate, kFrames).is_ok());
+
+    // Force real fill work so a worker actually opens the file and keeps it.
+    constexpr Frame kStart = kDefaultBlockFrames * 5;
+    constexpr int kReadFrames = kDefaultBlockFrames * 2;
+    manager.request_range(source_id, kStart, kReadFrames);
+    const auto source = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(source));
+    for (int spin = 0; spin < 500 && !source->is_range_ready(kStart, kReadFrames); ++spin)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    REQUIRE(source->is_range_ready(kStart, kReadFrames));
+
+    const std::string cache_sub =
+        scope.path() + std::string(1, kTestPathSep) + "source-cache";
+    REQUIRE(stat_cache_dir(cache_sub).file_count == 1);
+
+    manager.clear();
+
+    // clear() must not return until the workers have let go, so a purge right
+    // after it deletes everything — no retry loop, no sleep. (Polling here
+    // would hide exactly the bug this guards: a handle released "eventually".)
+    unsigned int failed = 0;
+    const unsigned long long freed = purge_source_cache(&failed);
+    CHECK(failed == 0);
+    CHECK(freed > 0);
+    CHECK(stat_cache_dir(cache_sub).file_count == 0);
+}
+
 TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
     constexpr int kChannels = 2;
     constexpr int kSampleRate = 48000;

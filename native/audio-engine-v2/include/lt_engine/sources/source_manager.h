@@ -217,7 +217,44 @@ private:
     std::shared_ptr<const EntryMap> load_entries() const noexcept;
     void store_entries(std::shared_ptr<const EntryMap> entries) noexcept;
     void fill_worker_loop() const;
-    void fill_blocks_from_disk(const Id& source_id, const std::vector<int>& block_indices) const;
+
+    // Per-worker reader handle kept open across fill batches.
+    //
+    // Every batch used to sf_open()/sf_close() the RF64 cache file, so a burst
+    // of block requests (a seek, or the read-ahead after one) turned into one
+    // file open per contiguous run — a large share of the disk I/O spike seen
+    // on jumps. The handle is owned by ONE worker thread and never shared:
+    // libsndfile offers no thread-safety for concurrent use of a single
+    // SNDFILE*, and seeking is per-handle state.
+    struct FillReader {
+        Id          source_id;
+        std::string path;
+        int         channel_count = 0;
+        void*       handle = nullptr;   // SNDFILE* / std::ifstream*
+        // Value of fill_generation_ this handle was opened under. clear() bumps
+        // the counter so workers drop handles to cache files that are about to
+        // be deleted or rewritten — on Windows an open handle without
+        // FILE_SHARE_DELETE makes the file unlinkable (see purge_source_cache).
+        uint64_t    generation = 0;
+        // Counts handles currently open across all workers; owned by the
+        // SourceManager so clear() can wait for them to reach zero.
+        std::atomic<unsigned>* open_counter = nullptr;
+        ~FillReader();
+        void close() noexcept;
+        // Rebind to `entry`, reusing the handle when the file is unchanged.
+        bool open_for(const Id& id, const std::string& file_path, int channels);
+    };
+
+    // Bumped whenever cached sources are invalidated wholesale.
+    mutable std::atomic<uint64_t> fill_generation_{0};
+    // Workers signal here once they have dropped a stale handle, so clear()
+    // can return knowing no cache file is still held open.
+    mutable std::condition_variable fill_idle_cv_;
+    mutable std::atomic<unsigned>   fill_readers_open_{0};
+
+    void fill_blocks_from_disk(const Id& source_id,
+                               const std::vector<int>& block_indices,
+                               FillReader& reader) const;
     std::string cache_file_for(const Id& source_id, const std::string& file_path, int sample_rate) const;
 };
 

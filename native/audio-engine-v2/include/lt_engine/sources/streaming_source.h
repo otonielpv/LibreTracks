@@ -4,8 +4,8 @@
 // StreamingSource — AudioSource backed by the BlockCache.
 //
 // Audio thread reads from cache (fast path, no I/O).
-// On cache miss it returns silence and emits a starvation signal that the
-// PrebufferWorker watches to schedule a fill job.
+// On cache miss it returns silence and emits a starvation signal that
+// SourceManager's fill worker pool watches to schedule a fill job.
 // ---------------------------------------------------------------------------
 
 #include <lt_engine/sources/audio_source.h>

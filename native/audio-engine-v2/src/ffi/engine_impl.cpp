@@ -315,7 +315,9 @@ void wait_jump_target_audio_ready(SourceManager& sources,
     while (std::chrono::steady_clock::now() < deadline) {
         if (jump_target_audio_ready(sources, session, target_frame, window_frames))
             return;
-        request_jump_target_audio(sources, session, target_frame, window_frames);
+        // See wait_playback_audio_window_ready: the blocks are already queued
+        // and de-duplicated, so re-requesting each millisecond only contends
+        // for the fill queue's lock.
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
@@ -331,17 +333,49 @@ void wait_jump_target_audio_ready(SourceManager& sources,
     }
 }
 
+// How long a stopped/paused seek may BLOCK the command thread waiting for the
+// destination audio to reach RAM. Kept in the same order of magnitude as the
+// live-jump budget (seek_source_wait_ms, 750ms): a paused seek has no less
+// urgency than a live one — the user is waiting on it with the transport idle,
+// which is precisely when a stall is most visible. The blocking wait only has
+// to cover the FIRST blocks; `prefetch` below keeps filling the rest while the
+// clock already runs.
 int playback_prepare_wait_ms() {
     static const int value = [] {
         const char* v = std::getenv("LIBRETRACKS_PLAYBACK_PREPARE_WAIT_MS");
-        if (!v) return 5000;
+        if (!v) return 750;
         const int parsed = std::atoi(v);
-        return parsed >= 0 && parsed <= 120000 ? parsed : 5000;
+        return parsed >= 0 && parsed <= 120000 ? parsed : 750;
     }();
     return value;
 }
 
+// Audio that must be resident BEFORE a paused seek releases the transport.
+//
+// This used to be 20s, which made "pause → jump → play" feel far slower than
+// the same jump taken while playing, even though a paused engine has the disk
+// to itself. The cost is not the disk, it is the policy: 20s x every track x
+// every song overlapping the window is ~100x the live-jump request, and the
+// caller blocks on ALL of it before the clock is allowed to move.
+//
+// The gate only needs to cover the audio consumed until the fill workers catch
+// up, so it is now sized like the live jump. The wider read-ahead still
+// happens — see playback_prefetch_window_frames — it just no longer blocks.
 int playback_prepare_window_frames(int sample_rate) {
+    const int sr = sample_rate > 0 ? sample_rate : 48000;
+    int ms = 400;
+    if (const char* v = std::getenv("LIBRETRACKS_PLAYBACK_PREPARE_MS")) {
+        const int parsed = std::atoi(v);
+        if (parsed >= 10 && parsed <= 120000)
+            ms = parsed;
+    }
+    return std::max(4096, static_cast<int>(
+        static_cast<long long>(sr) * ms / 1000));
+}
+
+// Non-blocking read-ahead issued alongside the (small) blocking gate. This is
+// what the old 20s window was really useful for; it just must not be waited on.
+int playback_prefetch_window_frames(int sample_rate) {
     const int sr = sample_rate > 0 ? sample_rate : 48000;
     int seconds = 20;
     if (const char* v = std::getenv("LIBRETRACKS_PLAYBACK_PREPARE_SECONDS")) {
@@ -360,7 +394,12 @@ void request_playback_audio_window(SourceManager& sources,
         return;
     const Frame end_frame = start_frame + static_cast<Frame>(window_frames);
     for (const auto& song : session.songs) {
-        if (end_frame <= song.start_frame || start_frame >= song.end_frame)
+        // Only the song that CONTAINS the start frame is urgent. A wide window
+        // spills into the next song(s), and pulling their clips in makes the
+        // caller pay for audio the user has not asked to hear yet — the live
+        // jump path (request_jump_target_audio) deliberately stops at one song
+        // for the same reason.
+        if (start_frame < song.start_frame || start_frame >= song.end_frame)
             continue;
         for (const auto& track : song.tracks) {
             if (track.kind != TrackKind::Audio)
@@ -378,6 +417,7 @@ void request_playback_audio_window(SourceManager& sources,
                 sources.request_range(clip.source_id, source_frame, frames);
             }
         }
+        return;
     }
 }
 
@@ -389,7 +429,10 @@ bool playback_audio_window_ready(SourceManager& sources,
         return true;
     const Frame end_frame = start_frame + static_cast<Frame>(window_frames);
     for (const auto& song : session.songs) {
-        if (end_frame <= song.start_frame || start_frame >= song.end_frame)
+        // Must mirror request_playback_audio_window's song filter exactly.
+        // If this scanned songs the request path never enqueues, the wait loop
+        // would spin until its deadline on blocks nobody asked for.
+        if (start_frame < song.start_frame || start_frame >= song.end_frame)
             continue;
         for (const auto& track : song.tracks) {
             if (track.kind != TrackKind::Audio)
@@ -420,6 +463,7 @@ bool playback_audio_window_ready(SourceManager& sources,
                     return false;
             }
         }
+        break;
     }
     return true;
 }
@@ -441,7 +485,11 @@ void wait_playback_audio_window_ready(SourceManager& sources,
     while (std::chrono::steady_clock::now() < deadline) {
         if (playback_audio_window_ready(sources, session, start_frame, window_frames))
             return;
-        request_playback_audio_window(sources, session, start_frame, window_frames);
+        // Deliberately NOT re-requesting the window here. request_range() already
+        // enqueued every missing block and de-duplicates against queued_blocks_,
+        // so re-issuing it every 1ms only re-walked all clips and re-locked the
+        // fill queue hundreds of times, stealing the very lock the fill workers
+        // need to drain it.
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
@@ -1626,10 +1674,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // publish any transposed voices before the clock is allowed to run.
             if (c.frame == from) {
                 if (pos.state != TransportState::Playing && source_manager_ && session_) {
-                    const int prepare_window = playback_prepare_window_frames(
-                        clock_ ? clock_->sample_rate() : 48000);
+                    const int sr = clock_ ? clock_->sample_rate() : 48000;
                     wait_playback_audio_window_ready(
-                        *source_manager_, *session_, c.frame, prepare_window);
+                        *source_manager_, *session_, c.frame,
+                        playback_prepare_window_frames(sr));
+                    // Read-ahead past the gate, issued only AFTER the short
+                    // blocking wait so it never delays the first sample.
+                    request_playback_audio_window(
+                        *source_manager_, *session_, c.frame,
+                        playback_prefetch_window_frames(sr));
                     if (bungee_voices_ && bungee_voices_->is_available()) {
                         auto seek_voice_map = bungee_voices_->build_seek_voice_map(
                             c.frame, *session_, *source_manager_);
@@ -1665,6 +1718,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (preparing_stopped_playback) {
                     wait_playback_audio_window_ready(
                         *source_manager_, *session_, c.frame, seek_window);
+                    // Wider read-ahead, after the gate so it costs no latency.
+                    request_playback_audio_window(
+                        *source_manager_, *session_, c.frame,
+                        playback_prefetch_window_frames(
+                            clock_ ? clock_->sample_rate() : 48000));
                 } else {
                     wait_jump_target_audio_ready(
                         *source_manager_, *session_, c.frame, seek_window);
@@ -2330,7 +2388,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     const Frame frame = clock_->position().frame;
                     request_playback_audio_window(
                         *source_manager_, *next_session, frame,
-                        playback_prepare_window_frames(clock_->sample_rate()));
+                        playback_prefetch_window_frames(clock_->sample_rate()));
                     prepared_voice_map = bungee_voices_->build_seek_voice_map(
                         frame, *next_session, *source_manager_);
                     if (prepared_voice_map)
@@ -2364,7 +2422,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     const Frame frame = clock_->position().frame;
                     request_playback_audio_window(
                         *source_manager_, *next_session, frame,
-                        playback_prepare_window_frames(clock_->sample_rate()));
+                        playback_prefetch_window_frames(clock_->sample_rate()));
                     prepared_voice_map = bungee_voices_->build_seek_voice_map(
                         frame, *next_session, *source_manager_);
                     if (prepared_voice_map)
@@ -2417,7 +2475,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     const Frame frame = clock_->position().frame;
                     request_playback_audio_window(
                         *source_manager_, *next_session, frame,
-                        playback_prepare_window_frames(clock_->sample_rate()));
+                        playback_prefetch_window_frames(clock_->sample_rate()));
                     bungee_voices_->retime_existing_for_session(
                         *next_session, *source_manager_, frame,
                         /*live=*/false);
