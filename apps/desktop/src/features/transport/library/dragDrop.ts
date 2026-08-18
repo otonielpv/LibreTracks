@@ -1,5 +1,3 @@
-import type { DragEvent as ReactDragEvent } from "react";
-
 import {
   clamp,
   clientXToLocalX,
@@ -432,8 +430,4 @@ export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassifi
     kind: "unsupported",
     paths,
   };
-}
-
-export function classifyDroppedFilesFromEvent(event: ReactDragEvent<HTMLElement>) {
-  return classifyDroppedFiles(getDroppedFiles(event.dataTransfer));
 }

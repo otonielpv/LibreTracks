@@ -16,7 +16,6 @@ import type {
 import {
   getCumulativeMusicalPosition,
   clientXToLocalX,
-  clientXToTimelineSeconds,
   clientYToLocalY,
   screenXToSeconds,
   secondsToScreenX,
@@ -795,25 +794,6 @@ export function resolveCompactTrackDropState(
     targetTrackId,
     mode,
   };
-}
-
-export function rulerPointerToSeconds(
-  event: MouseEvent | { clientX: number },
-  element: HTMLElement,
-  scrollContainerElement: HTMLElement | null,
-  durationSeconds: number,
-  pixelsPerSecond: number,
-) {
-  return clamp(
-    clientXToTimelineSeconds(
-      event.clientX,
-      element,
-      scrollContainerElement,
-      pixelsPerSecond,
-    ),
-    0,
-    Math.max(0, durationSeconds),
-  );
 }
 
 export function rulerClientXToSeconds(

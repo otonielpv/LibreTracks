@@ -878,53 +878,6 @@ impl AudioController {
         })
     }
 
-    pub fn update_live_song_clips(&self, song: &Song) -> Result<(), DesktopError> {
-        self.with_engine_state("set_song_clips", None, |engine, state| {
-            let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
-            let runtime_song = song_with_warped_timeline(&resolved_song);
-            let clips = runtime_song
-                .clips
-                .iter()
-                .map(|clip| ClipUpdate {
-                    id: clip.id.clone(),
-                    track_id: clip.track_id.clone(),
-                    source_id: clip.file_path.clone(),
-                    timeline_start_frame: seconds_to_frame_for_engine(
-                        engine,
-                        clip.timeline_start_seconds,
-                    ),
-                    source_start_frame: seconds_to_frame_for_engine(
-                        engine,
-                        clip.source_start_seconds,
-                    ),
-                    length_frames: seconds_to_frame_for_engine(engine, clip.duration_seconds),
-                    gain: clip.gain as f32,
-                    fade_in_frames: seconds_to_frame_for_engine(
-                        engine,
-                        clip.fade_in_seconds.unwrap_or(0.0),
-                    ),
-                    fade_out_frames: seconds_to_frame_for_engine(
-                        engine,
-                        clip.fade_out_seconds.unwrap_or(0.0),
-                    ),
-                    semitones: 0,
-                })
-                .collect();
-            engine.send_command(&EngineCommand::SetSongClips {
-                song_id: song.id.clone(),
-                clips,
-            })?;
-            state.last_sync = Some(AudioOperationSummary {
-                reason: Some("set_song_clips".into()),
-                elapsed_ms: 0.0,
-                scheduled_clips: song.clips.len(),
-                active_sinks: song.tracks.len(),
-                opened_files: 0,
-            });
-            Ok(())
-        })
-    }
-
     pub fn update_live_section_markers(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_markers", None, |engine, state| {
             let runtime_song = song_with_warped_timeline(song);

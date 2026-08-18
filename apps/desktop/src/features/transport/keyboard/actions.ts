@@ -241,13 +241,3 @@ export const SHORTCUT_GROUP_ORDER: ShortcutGroup[] = [
 export function shortcutGroupLabelKey(group: ShortcutGroup): string {
   return `shortcuts.group.${group}`;
 }
-
-const ACTION_BY_ID = new Map<ShortcutActionId, ShortcutActionDef>(
-  SHORTCUT_ACTIONS.map((action) => [action.id, action]),
-);
-
-export function getShortcutAction(
-  id: ShortcutActionId,
-): ShortcutActionDef | undefined {
-  return ACTION_BY_ID.get(id);
-}

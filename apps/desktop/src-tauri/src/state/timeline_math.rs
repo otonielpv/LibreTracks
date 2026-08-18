@@ -56,26 +56,17 @@ pub(super) fn next_downbeat_after_in_song(song: &Song, position_seconds: f64) ->
         .filter(|n| *n > 0)
         .unwrap_or(4) as f64;
 
-    // Walk segments in order, accumulating bar count at each segment
-    // boundary. The current segment is the one whose start_seconds is the
-    // greatest <= position_seconds (or the implicit "before-any-marker"
-    // segment anchored at 0 with the song's base BPM).
+    // Walk segments in order to find the one containing position_seconds: the
+    // segment whose start_seconds is the greatest <= position_seconds (or the
+    // implicit "before-any-marker" segment anchored at 0 with the song's base
+    // BPM). Only that segment's start and BPM matter for the result below.
     let mut segment_start_seconds = 0.0_f64;
-    let mut segment_start_bars = 0.0_f64;
     let mut segment_bpm = song.bpm.max(1.0);
 
     for marker in &markers {
         if marker.start_seconds > position_seconds {
             break;
         }
-        let span = marker.start_seconds - segment_start_seconds;
-        let bar_seconds = (beats_per_bar * 60.0) / segment_bpm.max(1.0);
-        let span_bars = if bar_seconds > 0.0 {
-            span / bar_seconds
-        } else {
-            0.0
-        };
-        segment_start_bars += span_bars;
         segment_start_seconds = marker.start_seconds;
         segment_bpm = marker.bpm.max(1.0);
     }
