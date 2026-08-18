@@ -55,7 +55,13 @@ struct ManifestPad {
     #[serde(default)]
     size_bytes: u64,
     download_url: String,
+    /// Declared in the manifest schema but NOT verified: nothing downstream
+    /// hashes the downloaded zip, and the example manifest ships this empty.
+    /// Kept so the field keeps round-tripping (and documents the intent) —
+    /// wiring up real integrity checking means hashing the zip in
+    /// download_and_install_pad before extracting and failing on mismatch.
     #[serde(default)]
+    #[allow(dead_code)]
     sha256: Option<String>,
 }
 

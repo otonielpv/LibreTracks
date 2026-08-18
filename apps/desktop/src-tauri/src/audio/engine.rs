@@ -176,7 +176,6 @@ pub enum PlaybackStartReason {
     ResumePlay,
     Seek,
     ImmediateJump,
-    StructureRebuild,
     TransportResync,
 }
 
@@ -3145,7 +3144,6 @@ fn playback_reason_label(reason: PlaybackStartReason) -> &'static str {
         PlaybackStartReason::ResumePlay => "resume_play",
         PlaybackStartReason::Seek => "seek",
         PlaybackStartReason::ImmediateJump => "immediate_jump",
-        PlaybackStartReason::StructureRebuild => "structure_rebuild",
         PlaybackStartReason::TransportResync => "transport_resync",
     }
 }

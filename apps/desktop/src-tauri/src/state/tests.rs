@@ -4324,6 +4324,57 @@ fn commit_mix_increments_commit_mix_command_count() {
     );
 }
 
+/// update_song_region_transpose must increment commit_pitch_command_count. The
+/// counter is surfaced in the realtime-control diagnostics panel, so a pitch
+/// commit that does not record leaves the panel reporting a flat zero.
+#[test]
+fn region_transpose_increments_commit_pitch_command_count() {
+    let mut session = session_with_song_dir("region-transpose-count-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    assert_eq!(
+        audio
+            .realtime_control_diagnostics()
+            .commit_pitch_command_count,
+        0
+    );
+
+    session
+        .update_song_region_transpose("region_1", 2, &audio)
+        .expect("region transpose should succeed");
+
+    let diag = audio.realtime_control_diagnostics();
+    assert_eq!(
+        diag.commit_pitch_command_count, 1,
+        "update_song_region_transpose must increment commit_pitch_command_count"
+    );
+    assert_eq!(
+        diag.commit_mix_command_count, 0,
+        "region transpose must not increment commit_mix_command_count"
+    );
+}
+
+/// update_track_transpose_enabled must increment commit_pitch_command_count.
+#[test]
+fn track_transpose_enabled_increments_commit_pitch_command_count() {
+    let mut session = session_with_song_dir("track-transpose-count-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    session
+        .update_track_transpose_enabled("track_1", true, &audio)
+        .expect("track transpose toggle should succeed");
+
+    let diag = audio.realtime_control_diagnostics();
+    assert_eq!(
+        diag.commit_pitch_command_count, 1,
+        "update_track_transpose_enabled must increment commit_pitch_command_count"
+    );
+    assert_eq!(
+        diag.commit_model_only_count, 0,
+        "track transpose must not increment commit_model_only_count"
+    );
+}
+
 /// update_track_metadata must increment commit_model_only_count and send no audio command.
 #[test]
 fn metadata_commit_increments_commit_model_only_count() {

@@ -826,6 +826,7 @@ impl DesktopSession {
                 true,
             )?;
         }
+        audio.record_commit_pitch();
         self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
         self.last_source_readiness = Some(audio.source_readiness_summary());
 
@@ -888,6 +889,7 @@ impl DesktopSession {
         // rebuild via CmdSetTrackTransposeEnabled. MixerOnly skips the LoadSession path
         // so we don't trigger a redundant full session reload on top.
         audio.set_track_transpose_enabled_realtime(track_id, transpose_enabled)?;
+        audio.record_commit_pitch();
         self.persist_song_update_internal(
             song,
             audio,
