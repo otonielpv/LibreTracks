@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  calculatePopoverAnchor,
+  type PopoverAnchor,
+} from "./popoverPosition";
 
 type Props = {
   open: boolean;
@@ -10,9 +14,8 @@ type Props = {
 };
 
 /**
- * A portalled panel anchored under a topbar button. Shared by the metronome,
- * voice-guide and pads popovers so the anchor/outside-click/Escape/reposition
- * plumbing lives in one place. Mirrors the behaviour PadsPopover established.
+ * A portalled panel anchored above or below its trigger according to the
+ * available viewport space. Shared by metronome and voice-guide popovers.
  */
 export function PopoverShell({
   open,
@@ -22,9 +25,7 @@ export function PopoverShell({
   children,
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(
-    null,
-  );
+  const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
 
   const updateAnchor = useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();
@@ -33,12 +34,22 @@ export function PopoverShell({
     // but if that would overflow the right edge, shift left so the panel's right
     // edge lines up with the viewport margin. Buttons near the right edge (the
     // pads trigger sits far right) otherwise get clipped.
-    const margin = 12;
     const width = panelRef.current?.offsetWidth ?? 300;
-    const maxLeft = window.innerWidth - width - margin;
-    const left = Math.max(margin, Math.min(rect.left, maxLeft));
-    setAnchor({ top: rect.bottom + 6, left });
+    const height = panelRef.current?.scrollHeight ?? 420;
+    setAnchor(
+      calculatePopoverAnchor(
+        rect,
+        width,
+        height,
+        window.innerWidth,
+        window.innerHeight,
+      ),
+    );
   }, [anchorRef]);
+
+  useLayoutEffect(() => {
+    if (open && anchor) updateAnchor();
+  }, [open, anchor?.placement, updateAnchor]);
 
   useEffect(() => {
     if (!open) return;
@@ -90,7 +101,13 @@ export function PopoverShell({
       className="lt-pads-popover"
       role="dialog"
       aria-label={ariaLabel}
-      style={{ position: "fixed", top: `${anchor.top}px`, left: `${anchor.left}px` }}
+      data-placement={anchor.placement}
+      style={{
+        position: "fixed",
+        top: `${anchor.top}px`,
+        left: `${anchor.left}px`,
+        maxHeight: `${anchor.maxHeight}px`,
+      }}
       onClick={(event) => event.stopPropagation()}
     >
       {children}

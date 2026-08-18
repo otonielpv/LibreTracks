@@ -86,6 +86,9 @@ type CompactViewProps = {
    * playhead never re-renders this view. Drives both the active-song
    * highlight and the mixer's "solo cancion activa" filter. */
   activeRegionId: string | null;
+  /** Id of the song that has an armed jump. Section-marker jumps do not
+   * match a region id, so no song column is highlighted for those. */
+  pendingRegionId: string | null;
   /** region_id → flat list of clips inside that song, in the same vertical
    * order tracks appear in the DAW header pane. Each entry carries the clip
    * filename and its track's name so the cell can label both without a
@@ -240,6 +243,7 @@ function CompactViewComponent({
   regions,
   tracks,
   activeRegionId,
+  pendingRegionId,
   clipsByRegion,
   audioRoutingOptions,
   mixerHandlers,
@@ -380,6 +384,7 @@ function CompactViewComponent({
             clips={clipsByRegion[region.id] ?? []}
             moveTargets={moveTargets}
             isActive={region.id === activeRegionId}
+            isQueued={region.id === pendingRegionId}
             onMasterGainChange={(gain) => onMasterGainChange(region.id, gain)}
             onMasterGainCommit={() => onMasterGainCommit(region.id)}
             onDropOsFiles={(files) => onDropOsFilesIntoSong(region.id, files)}
@@ -489,6 +494,7 @@ type CompactSongColumnProps = {
   clips: CompactClipEntry[];
   moveTargets: Array<{ id: string; name: string }>;
   isActive: boolean;
+  isQueued: boolean;
   onMasterGainChange: (gain: number) => void;
   onMasterGainCommit: () => void;
   onDropOsFiles: (files: File[]) => void;
@@ -530,6 +536,7 @@ function CompactSongColumnComponent({
   clips,
   moveTargets,
   isActive,
+  isQueued,
   onMasterGainChange,
   onMasterGainCommit,
   onDropOsFiles,
@@ -666,7 +673,7 @@ function CompactSongColumnComponent({
 
   return (
     <div
-      className={`lt-compact-song-column ${isActive ? "is-active" : ""} ${columnDensityClass(
+      className={`lt-compact-song-column ${isActive ? "is-active" : ""} ${isQueued ? "is-queued" : ""} ${columnDensityClass(
         widthRem,
       )}`}
       /* data-region-id lets the library asset pointer-drag pipeline in
@@ -685,6 +692,7 @@ function CompactSongColumnComponent({
       <CompactSongHeader
         region={region}
         isActive={isActive}
+        isQueued={isQueued}
         bpm={bpm}
         onMasterGainChange={onMasterGainChange}
         onMasterGainCommit={onMasterGainCommit}

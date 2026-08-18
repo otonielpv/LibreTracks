@@ -180,6 +180,9 @@ import { TimelineCanvasPane } from "./timeline/TimelineCanvasPane";
 import { HorizontalScrollbar } from "./timeline/HorizontalScrollbar";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./compact/CompactView";
+import { LivePerformanceView } from "./live/LivePerformanceView";
+import { BusyOverlay } from "./shell/BusyOverlay";
+import { MissingMidiWarningModal } from "./shell/MissingMidiWarningModal";
 import { TimelineToolbar } from "./timeline/TimelineToolbar";
 import { TimelineTopbar } from "./timeline/TimelineTopbar";
 import { PadsPopover } from "./panels/PadsPopover";
@@ -1159,6 +1162,7 @@ export function TransportPanelContent() {
   );
   const midiLearnMode = useTimelineUIStore((state) => state.midiLearnMode);
   const viewMode = useTimelineUIStore((state) => state.viewMode);
+  const setViewMode = useTimelineUIStore((state) => state.setViewMode);
   const toggleViewMode = useTimelineUIStore((state) => state.toggleViewMode);
   const midiLearnCommandRows = useMemo(
     () =>
@@ -6704,89 +6708,8 @@ export function TransportPanelContent() {
         ref={panelRef}
         onContextMenu={(event) => event.preventDefault()}
       >
-        {isShellBusy ? (
-          <div className="busy-overlay" aria-live="polite">
-            <div className="busy-overlay-card">
-              <div className="busy-overlay-heading">
-                <span className="busy-overlay-spinner" aria-hidden="true" />
-                <strong>{t("transport.shell.busyTitle")}</strong>
-                {typeof displayPercent === "number" ? (
-                  <span className="busy-overlay-percent">
-                    {Math.max(0, Math.min(100, Math.round(displayPercent)))}%
-                  </span>
-                ) : null}
-              </div>
-              <p>
-                {busyFeedback?.message ?? t("transport.shell.busyDescription")}
-              </p>
-              {typeof displayPercent === "number" ? (
-                <div
-                  className="busy-overlay-progress"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(displayPercent)}
-                  aria-valuetext={busyFeedback?.message}
-                >
-                  <span
-                    style={{
-                      width: `${Math.max(0, Math.min(100, displayPercent))}%`,
-                    }}
-                  />
-                </div>
-              ) : null}
-              {busyFeedback?.detail ? (
-                <small>{busyFeedback.detail}</small>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {missingMidiDeviceWarning ? (
-          <div className="lt-modal-backdrop">
-            <section
-              className="lt-settings-modal lt-settings-modal--compact"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="lt-missing-midi-warning-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="lt-settings-modal-header">
-                <div>
-                  <span className="lt-settings-modal-eyebrow">
-                    {t("transport.midiWarning.eyebrow")}
-                  </span>
-                  <h2 id="lt-missing-midi-warning-title">
-                    {t("transport.midiWarning.title")}
-                  </h2>
-                  <p>{t("transport.midiWarning.description")}</p>
-                  <p>
-                    {t("transport.midiWarning.detail", {
-                      name: missingMidiDeviceWarning,
-                    })}
-                  </p>
-                </div>
-              </header>
-              <div className="lt-settings-modal-body">
-                <div className="lt-inline-actions">
-                  <button
-                    type="button"
-                    onClick={handleDismissMissingMidiDeviceWarning}
-                  >
-                    {t("transport.midiWarning.dismiss")}
-                  </button>
-                  <button
-                    type="button"
-                    className="is-primary"
-                    onClick={handleHideMissingMidiDeviceWarning}
-                  >
-                    {t("transport.midiWarning.dontShowAgain")}
-                  </button>
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : null}
+        <BusyOverlay visible={isShellBusy} feedback={busyFeedback} displayPercent={displayPercent} />
+        <MissingMidiWarningModal deviceName={missingMidiDeviceWarning} onDismiss={handleDismissMissingMidiDeviceWarning} onDontShowAgain={handleHideMissingMidiDeviceWarning} />
 
         <TimelineTopbar
           openTopMenu={openTopMenu}
@@ -7272,6 +7195,7 @@ export function TransportPanelContent() {
                 )
               ) : (
                 <section className="lt-main-stage">
+                  {viewMode !== "live" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}
                     subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
@@ -7332,7 +7256,7 @@ export function TransportPanelContent() {
                       handleSelectedRegionMasterGainCommit
                     }
                     viewMode={viewMode}
-                    onToggleViewMode={toggleViewMode}
+                    onViewModeChange={setViewMode}
                     compactMixerFilterActiveSong={compactMixerFilterActiveSong}
                     onToggleCompactMixerFilterActiveSong={
                       toggleCompactMixerFilterActiveSong
@@ -7341,6 +7265,7 @@ export function TransportPanelContent() {
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}
                   />
+                  ) : null}
 
                   {viewMode === "daw" ? (
                   <div
@@ -8101,6 +8026,7 @@ export function TransportPanelContent() {
                       regions={song.regions}
                       tracks={song.tracks}
                       activeRegionId={activeSongRegionId || null}
+                      pendingRegionId={pendingMarkerJump?.targetMarkerId ?? null}
                       clipsByRegion={clipsByRegion}
                       audioRoutingOptions={audioRoutingOptions}
                       mixerHandlers={{
@@ -8146,6 +8072,33 @@ export function TransportPanelContent() {
                       compactMixerFilterActiveSong={
                         compactMixerFilterActiveSong
                       }
+                    />
+                  ) : null}
+
+                  {viewMode === "live" && song ? (
+                    <LivePerformanceView
+                      song={song}
+                      positionSecondsRef={displayPositionSecondsRef}
+                      settings={appSettings}
+                      pendingMarkerId={pendingMarkerJump?.targetMarkerId ?? null}
+                      pendingMarkerName={pendingMarkerJump?.targetMarkerName ?? null}
+                      isVampActive={Boolean(activeVamp)}
+                      onViewModeChange={setViewMode}
+                      onMarkerAction={(marker) => void runAction(() => handleMarkerPrimaryAction(marker))}
+                      onSongAction={(region) => handleCompactPlaySong(region.id, region.name)}
+                      onToggleVamp={() => void runAction(async () => {
+                        await toggleTimelineVamp();
+                      })}
+                      onCancelPendingJump={() => void runAction(async () => {
+                        applyPlaybackSnapshot(await cancelMarkerJump());
+                        setStatus(t("transport.status.jumpCancelled"));
+                      })}
+                      onGlobalJumpModeChange={handleGlobalJumpModeChange}
+                      onGlobalJumpBarsChange={handleGlobalJumpBarsChange}
+                      onSongJumpTriggerChange={handleSongJumpTriggerChange}
+                      onSongJumpBarsChange={handleSongJumpBarsChange}
+                      onVampModeChange={handleVampModeChange}
+                      onVampBarsChange={handleVampBarsChange}
                     />
                   ) : null}
                 </section>

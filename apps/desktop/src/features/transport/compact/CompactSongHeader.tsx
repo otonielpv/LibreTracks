@@ -6,6 +6,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   meterDbToDisplayScale,
@@ -27,6 +28,7 @@ import { useTransportStore } from "../store";
 type CompactSongHeaderProps = {
   region: SongRegionSummary;
   isActive: boolean;
+  isQueued: boolean;
   bpm: number | undefined;
   onMasterGainChange: (gain: number) => void;
   onMasterGainCommit: () => void;
@@ -60,9 +62,10 @@ function applyMasterSnap(value: number, bypass: boolean): number {
     : value;
 }
 
-function CompactSongHeaderComponent({
+export function CompactSongHeaderComponent({
   region,
   isActive,
+  isQueued,
   bpm,
   onMasterGainChange,
   onMasterGainCommit,
@@ -75,6 +78,7 @@ function CompactSongHeaderComponent({
   isSelected,
   onSelect,
 }: CompactSongHeaderProps) {
+  const { t } = useTranslation();
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -193,6 +197,8 @@ function CompactSongHeaderComponent({
   return (
     <div
       className={`lt-compact-song-header ${isActive ? "is-active" : ""} ${
+        isQueued ? "is-queued" : ""
+      } ${
         isSelected ? "is-selected" : ""
       }`}
       onContextMenu={openMenu}
@@ -216,6 +222,9 @@ function CompactSongHeaderComponent({
         <div className="lt-compact-song-name" title={region.name}>
           {region.name}
         </div>
+        {isQueued ? (
+          <div className="lt-compact-song-queued">{t("liveView.queued")}</div>
+        ) : null}
         {bpm !== undefined ? (
           <div
             className="lt-compact-song-bpm"

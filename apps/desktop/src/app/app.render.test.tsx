@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+
 import {
   act,
   fireEvent,
@@ -52,6 +54,32 @@ describe("App / app.render", () => {
     expect(screen.getByRole("button", { name: textMatcher(en.timelineToolbar.enableFollowPlayhead) })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /browser/i })).toBeNull();
     expect(screen.queryByLabelText(textMatcher(en.library.panelAria))).toBeNull();
+    expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
+  });
+
+  it("opens Live View from the timeline toolbar and returns to the DAW", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const { container } = await renderApp();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: textMatcher(en.liveView.open) }),
+      );
+    });
+
+    expect(screen.getByRole("main", { name: textMatcher(en.liveView.title) })).toBeTruthy();
+    expect(container.querySelectorAll(".lt-live-cue-row")).toHaveLength(4);
+    expect(container.querySelector(".lt-ruler-canvas-layer")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: textMatcher(en.liveView.openDaw) }),
+      );
+    });
+
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });
 

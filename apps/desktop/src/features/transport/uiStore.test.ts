@@ -43,13 +43,17 @@ describe("useTimelineUIStore", () => {
   });
 
   describe("view mode", () => {
-    it("sets and toggles between daw and compact", () => {
+    it("sets every mode and keeps the keyboard toggle between editor views", () => {
       get().setViewMode("compact");
       expect(get().viewMode).toBe("compact");
       get().toggleViewMode();
       expect(get().viewMode).toBe("daw");
       get().toggleViewMode();
       expect(get().viewMode).toBe("compact");
+      get().setViewMode("live");
+      expect(get().viewMode).toBe("live");
+      get().toggleViewMode();
+      expect(get().viewMode).toBe("daw");
     });
   });
 

@@ -5041,6 +5041,12 @@ textarea {
   justify-content: center;
 }
 
+.lt-view-mode-switcher {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 0.2rem;
+}
+
 .lt-compact-action {
   height: 1.9rem;
   display: inline-flex;
@@ -6323,6 +6329,16 @@ textarea {
   background: rgb(24 31 30 / 0.95);
 }
 
+/* Armed song jump. Unlike the narrow pulsing ribbon used for the song that is
+   currently playing, the destination gets a full warm outline and a label. */
+.lt-compact-song-column.is-queued .lt-compact-song-header {
+  border-color: rgb(244 201 93 / 0.78);
+  background: rgb(70 54 13 / 0.42);
+  box-shadow:
+    inset 0 0 0 2px rgb(244 201 93 / 0.3),
+    0 0 8px rgb(244 201 93 / 0.12);
+}
+
 .lt-compact-song-header {
   display: flex;
   flex-direction: column;
@@ -6367,6 +6383,19 @@ textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.lt-compact-song-queued {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.35rem;
+  color: #f4c95d;
+  background: rgb(244 201 93 / 0.1);
+  border: 1px solid rgb(244 201 93 / 0.42);
+  border-radius: 2px;
+  font: 700 8px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* Compact BPM badge next to the song name. Reads the effective BPM at the
@@ -8160,10 +8189,8 @@ textarea {
   z-index: 70;
   width: 300px;
   max-width: calc(100vw - 24px);
-  /* Anchored just below the topbar (~top: 92px). Cap the height to the space
-     left down to the viewport bottom so tall popovers (e.g. the full metronome
-     panel, or any popover on a short/Android-sized window) scroll internally
-     instead of running off-screen. */
+  /* JS supplies a tighter per-anchor max-height. This remains the safe
+     fallback for the first layout and for older callers. */
   max-height: calc(100vh - 104px);
   overflow-y: auto;
   overscroll-behavior: contain;

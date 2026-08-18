@@ -2,11 +2,16 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  calculatePopoverAnchor,
+  type PopoverAnchor,
+} from "./popoverPosition";
 import { useTranslation } from "react-i18next";
 
 import type { AppSettings, PadCatalogEntry } from "@libretracks/shared/models";
@@ -62,9 +67,7 @@ function PadsPopoverImpl({
 }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(
-    null,
-  );
+  const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
   const [catalog, setCatalog] = useState<PadCatalogEntry[] | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -109,12 +112,22 @@ function PadsPopoverImpl({
   const updateAnchor = useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const margin = 12;
     const width = panelRef.current?.offsetWidth ?? 300;
-    const maxLeft = window.innerWidth - width - margin;
-    const left = Math.max(margin, Math.min(rect.left, maxLeft));
-    setAnchor({ top: rect.bottom + 6, left });
+    const height = panelRef.current?.scrollHeight ?? 520;
+    setAnchor(
+      calculatePopoverAnchor(
+        rect,
+        width,
+        height,
+        window.innerWidth,
+        window.innerHeight,
+      ),
+    );
   }, [anchorRef]);
+
+  useLayoutEffect(() => {
+    if (open && anchor) updateAnchor();
+  }, [open, anchor?.placement, updateAnchor]);
 
   useEffect(() => {
     if (!open) return;
@@ -185,7 +198,13 @@ function PadsPopoverImpl({
       className="lt-pads-popover"
       role="dialog"
       aria-label={t("pads.title", { defaultValue: "Ambient pads" })}
-      style={{ position: "fixed", top: `${anchor.top}px`, left: `${anchor.left}px` }}
+      data-placement={anchor.placement}
+      style={{
+        position: "fixed",
+        top: `${anchor.top}px`,
+        left: `${anchor.left}px`,
+        maxHeight: `${anchor.maxHeight}px`,
+      }}
       onClick={(event) => event.stopPropagation()}
     >
       <header className="lt-pads-popover-header">

@@ -11,9 +11,8 @@ export type SongJumpTrigger =
 export type SongTransitionMode = "instant" | "fade_out";
 export type VampMode = "section" | "bars";
 
-/** Top-level view mode. The DAW view is the linear timeline; Compact is the
- * Ableton-Session-style grid where every column is a song. */
-export type ViewMode = "daw" | "compact";
+/** Top-level view mode: linear DAW, song-grid Compact, or stage-ready Live. */
+export type ViewMode = "daw" | "compact" | "live";
 
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 76;

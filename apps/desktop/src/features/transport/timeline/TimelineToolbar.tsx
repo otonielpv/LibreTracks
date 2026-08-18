@@ -22,7 +22,9 @@ import type {
   SongJumpTrigger,
   SongTransitionMode,
   VampMode,
+  ViewMode,
 } from "../uiStore";
+import { ViewModeSwitcher } from "./ViewModeSwitcher";
 
 type RegionMasterFaderProps = {
   regionId: string;
@@ -234,8 +236,8 @@ type TimelineToolbarProps = {
   onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
   onSelectedRegionMasterGainChange: (nextMasterGain: number) => void;
   onSelectedRegionMasterGainCommit: () => void;
-  viewMode: "daw" | "compact";
-  onToggleViewMode: () => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
   /** Only meaningful in compact view: the compact mixer hides tracks
    * that don't have a clip in the active song when this is on.
    * Lifted to the toolbar so the toggle button has somewhere natural
@@ -348,7 +350,7 @@ export function TimelineToolbar({
   onSelectedRegionMasterGainChange,
   onSelectedRegionMasterGainCommit,
   viewMode,
-  onToggleViewMode,
+  onViewModeChange,
   compactMixerFilterActiveSong,
   onToggleCompactMixerFilterActiveSong,
   compactMixerFilterAvailable,
@@ -453,26 +455,7 @@ export function TimelineToolbar({
     <div className="lt-timeline-topline" ref={toolbarRootRef}>
       <div className="lt-timeline-meta">
         <div className="lt-timeline-controls lt-bottom-controls">
-          <button
-            type="button"
-            className={`lt-icon-button ${viewMode === "compact" ? "is-active" : ""}`}
-            aria-label={
-              viewMode === "compact"
-                ? "Cambiar a vista DAW"
-                : "Cambiar a vista compacta"
-            }
-            aria-pressed={viewMode === "compact"}
-            title={
-              viewMode === "compact"
-                ? "Vista compacta (pulsa Tab para volver a DAW)"
-                : "Vista DAW (pulsa Tab para cambiar a compacta)"
-            }
-            onClick={onToggleViewMode}
-          >
-            <span className="material-symbols-outlined">
-              {viewMode === "compact" ? "view_timeline" : "view_module"}
-            </span>
-          </button>
+          <ViewModeSwitcher value={viewMode} onChange={onViewModeChange} />
 
           {viewMode === "compact" ? (
             <button
