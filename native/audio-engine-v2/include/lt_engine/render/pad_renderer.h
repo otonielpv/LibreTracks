@@ -109,7 +109,9 @@ public:
     void render(float** output_channels,
                 int num_channels,
                 int num_frames,
-                double sample_rate) noexcept;
+                double sample_rate,
+                const int* active_output_channels = nullptr,
+                int active_output_channel_count = 0) noexcept;
 
     PadDiagnostics diagnostics() const;
 

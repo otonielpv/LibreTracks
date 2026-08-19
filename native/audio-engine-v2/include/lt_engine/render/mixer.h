@@ -40,6 +40,7 @@ public:
           JumpScheduler* scheduler);
 
     // Called by the JUCE audio thread.
+    void set_active_output_channels(const std::vector<int>& channels) noexcept override;
     void render(float** output_channels,
                 int     num_channels,
                 int     num_frames,
@@ -145,6 +146,16 @@ private:
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
     class BungeeVoiceManager* bungee_voices_ = nullptr;
+
+    // Physical device channel for each dense callback slot. JUCE/ASIO packs
+    // enabled outputs, so {12,13,14,15} arrives at render() as four buffers.
+    // The control side publishes atoms; the audio thread snapshots them once
+    // per block without allocating or locking.
+    static constexpr int kMaxOutputChannels = 64;
+    std::array<std::atomic<int>, kMaxOutputChannels> active_output_channels_{};
+    std::atomic<int> active_output_channel_count_{0};
+    std::array<int, kMaxOutputChannels> render_output_channels_{};
+    int render_output_channel_count_ = 0;
 
     // Per-track renderer pool (one per track). Grown on the CONTROL thread only
     // (prepare_render_resources, called from set_session and the constructor),

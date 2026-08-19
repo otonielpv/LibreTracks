@@ -1,4 +1,5 @@
 #include <lt_engine/render/mixer.h>
+#include <lt_engine/devices/device_channel_layout.h>
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/pitch_resolution.h>
@@ -125,7 +126,10 @@ std::string resolve_effective_audio_route(const Track& track, const Song& song) 
     return "master";
 }
 
-std::vector<int> route_channels(const std::string& audio_to, int available_channels) {
+std::vector<int> route_channels(const std::string& audio_to,
+                                int available_channels,
+                                const int* active_output_channels,
+                                int active_output_channel_count) {
     const int channels = std::max(1, available_channels);
     std::string normalized = normalize_audio_route(audio_to);
 
@@ -155,9 +159,11 @@ std::vector<int> route_channels(const std::string& audio_to, int available_chann
     }), normalized.end());
     std::vector<int> result;
     auto add_channel = [&](int parsed) {
-        int zero_based = ext_zero_based ? parsed : parsed - 1;
-        if (zero_based >= 0 && zero_based < channels)
-            result.push_back(zero_based);
+        const int physical = ext_zero_based ? parsed : parsed - 1;
+        const int callback_slot = device_layout::callback_channel_for_physical(
+            physical, active_output_channels, active_output_channel_count, channels);
+        if (callback_slot >= 0)
+            result.push_back(callback_slot);
     };
 
     auto dash = normalized.find('-');
@@ -210,6 +216,19 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
 {
     rebuild_control_slots(load_session(), false);
     prepare_render_resources(kMaxBlockFrames);
+}
+
+void Mixer::set_active_output_channels(const std::vector<int>& channels) noexcept {
+    const int count = std::min(static_cast<int>(channels.size()), kMaxOutputChannels);
+    // Publish the count as zero while replacing the slots. A concurrent audio
+    // block then safely uses identity routing for that one block rather than a
+    // half-old map; the release store publishes the complete new map.
+    active_output_channel_count_.store(0, std::memory_order_release);
+    for (int slot = 0; slot < count; ++slot) {
+        active_output_channels_[static_cast<std::size_t>(slot)].store(
+            channels[static_cast<std::size_t>(slot)], std::memory_order_relaxed);
+    }
+    active_output_channel_count_.store(count, std::memory_order_release);
 }
 
 std::shared_ptr<const Session> Mixer::load_session() const noexcept {
@@ -625,7 +644,9 @@ void Mixer::render_timeline_span(float** output_channels,
             update_ancestor_folder_meters(
                 song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
-            auto route = route_channels(resolve_effective_audio_route(track, song), num_channels);
+            auto route = route_channels(resolve_effective_audio_route(track, song), num_channels,
+                                        render_output_channels_.data(),
+                                        render_output_channel_count_);
             const int left_channel = route.empty() ? 0 : route[0];
             const int right_channel = route.size() > 1 ? route[1] : -1;
             const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
@@ -679,10 +700,12 @@ void Mixer::render_timeline_span(float** output_channels,
         metronome_channels = shifted_channels.data();
     }
     metronome_.render(metronome_channels, num_channels, num_frames,
-                      clock_->sample_rate(), timeline_frame, session.get());
+                      clock_->sample_rate(), timeline_frame, session.get(),
+                      render_output_channels_.data(), render_output_channel_count_);
     voice_guide_.render(metronome_channels, num_channels, num_frames,
                         clock_->sample_rate(), timeline_frame, session.get(),
-                        announceable_jump_target(session.get()));
+                        announceable_jump_target(session.get()),
+                        render_output_channels_.data(), render_output_channel_count_);
     // The pad is NOT rendered here: render() drives it once per callback on the
     // full block after this span returns. A due_jump splits the block into two
     // render_timeline_span calls, so rendering the pad here would advance its
@@ -700,6 +723,15 @@ void Mixer::render(float** output_channels,
                    double  /*sample_rate*/) noexcept {
     auto t0 = std::chrono::steady_clock::now();
     callback_count_.fetch_add(1, std::memory_order_relaxed);
+
+    render_output_channel_count_ = std::clamp(
+        active_output_channel_count_.load(std::memory_order_acquire), 0,
+        std::min(num_channels, kMaxOutputChannels));
+    for (int slot = 0; slot < render_output_channel_count_; ++slot) {
+        render_output_channels_[static_cast<std::size_t>(slot)] =
+            active_output_channels_[static_cast<std::size_t>(slot)].load(
+                std::memory_order_relaxed);
+    }
 
     // Phase timing (diagnostic). diag_phases_ is read once at construction.
     const bool diag = diag_phases_;
@@ -936,7 +968,9 @@ void Mixer::render(float** output_channels,
                 update_ancestor_folder_meters(
                     song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
-                auto route = route_channels(resolve_effective_audio_route(track, song), num_channels);
+                auto route = route_channels(resolve_effective_audio_route(track, song), num_channels,
+                                            render_output_channels_.data(),
+                                            render_output_channel_count_);
                 const int left_channel = route.empty() ? 0 : route[0];
                 const int right_channel = route.size() > 1 ? route[1] : -1;
                 const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
@@ -983,10 +1017,12 @@ void Mixer::render(float** output_channels,
                                            /*output_offset=*/0, session.get(), timeline_frame);
 
         metronome_.render(output_channels, num_channels, num_frames,
-                          clock_->sample_rate(), timeline_frame, session.get());
+                          clock_->sample_rate(), timeline_frame, session.get(),
+                          render_output_channels_.data(), render_output_channel_count_);
         voice_guide_.render(output_channels, num_channels, num_frames,
                             clock_->sample_rate(), timeline_frame, session.get(),
-                            announceable_jump_target(session.get()));
+                            announceable_jump_target(session.get()),
+                            render_output_channels_.data(), render_output_channel_count_);
 
         const bool was_pending_start = clock_->pending_start();
         if (was_pending_start)
@@ -1007,7 +1043,8 @@ void Mixer::render(float** output_channels,
     // fades out on stop/pause and returns on play with the switch still on.
     pad_.set_transport_gate(!pad_.stop_with_transport() ||
                             clock_->position().state == TransportState::Playing);
-    pad_.render(output_channels, num_channels, num_frames, clock_->sample_rate());
+    pad_.render(output_channels, num_channels, num_frames, clock_->sample_rate(),
+                render_output_channels_.data(), render_output_channel_count_);
 
     phase_mark(phase_t, phase_tracks_us_);  // track render loop (+ jump split)
 

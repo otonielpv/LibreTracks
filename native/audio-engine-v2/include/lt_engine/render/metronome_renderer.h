@@ -69,7 +69,9 @@ public:
                 int num_frames,
                 double sample_rate,
                 Frame timeline_frame,
-                const Session* session) noexcept;
+                const Session* session,
+                const int* active_output_channels = nullptr,
+                int active_output_channel_count = 0) noexcept;
 
     MetronomeDiagnostics diagnostics() const;
 

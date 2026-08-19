@@ -134,7 +134,9 @@ public:
                 double sample_rate,
                 Frame timeline_frame,
                 const Session* session,
-                const VoiceGuideTarget& jump_target = {}) noexcept;
+                const VoiceGuideTarget& jump_target = {},
+                const int* active_output_channels = nullptr,
+                int active_output_channel_count = 0) noexcept;
 
     VoiceGuideDiagnostics diagnostics() const;
 

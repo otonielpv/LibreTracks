@@ -98,5 +98,25 @@ inline std::vector<int> clamp_active_channels(const std::vector<int>& requested,
     return out;
 }
 
+// Translate a physical device-channel index used by persisted `ext:N` routes
+// to the dense callback slot JUCE exposes for the enabled channel set. With
+// physical outputs {12,13,14,15}, for example, channel 14 maps to slot 2.
+// A missing map means the callback is already in physical/identity order.
+inline int callback_channel_for_physical(int physical_channel,
+                                         const int* active_channels,
+                                         int active_channel_count,
+                                         int callback_channel_count) noexcept {
+    if (physical_channel < 0 || callback_channel_count <= 0)
+        return -1;
+    if (active_channels == nullptr || active_channel_count <= 0)
+        return physical_channel < callback_channel_count ? physical_channel : -1;
+    const int limit = std::min(active_channel_count, callback_channel_count);
+    for (int slot = 0; slot < limit; ++slot) {
+        if (active_channels[slot] == physical_channel)
+            return slot;
+    }
+    return -1;
+}
+
 } // namespace device_layout
 } // namespace lt

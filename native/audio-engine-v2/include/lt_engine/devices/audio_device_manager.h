@@ -51,6 +51,11 @@ struct DeviceOpenRequest {
 class AudioRenderCallback {
 public:
     virtual ~AudioRenderCallback() = default;
+    // JUCE presents only enabled hardware outputs to render(), packed into a
+    // dense 0..N-1 array. Publish the corresponding physical (device) channel
+    // indices so explicit routes such as ext:14-15 can be translated back to
+    // callback slots 2-3 when channels 12-15 are enabled.
+    virtual void set_active_output_channels(const std::vector<int>& /*channels*/) noexcept {}
     virtual void render(float** output_channels,
                         int     num_channels,
                         int     num_frames,

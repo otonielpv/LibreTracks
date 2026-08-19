@@ -85,6 +85,31 @@ JumpTarget frame_target(Frame frame) {
 
 } // namespace
 
+TEST_CASE("sparse ASIO channel selection preserves physical external routes") {
+    SourceManager sources;
+    add_source(sources, "source");
+    auto session = std::make_shared<Session>(one_track_session());
+    // UI route Out 15/16 uses zero-based physical indices 14/15.
+    session->songs[0].tracks[0].audio_to = "ext:14-15";
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    // JUCE compacts enabled physical outputs 13-16 into callback slots 0-3.
+    mixer.set_active_output_channels({12, 13, 14, 15});
+    clock.play();
+    clock.clear_pending_start();
+
+    std::vector<float> out_13(kBlock), out_14(kBlock), out_15(kBlock), out_16(kBlock);
+    float* out[4] = {out_13.data(), out_14.data(), out_15.data(), out_16.data()};
+    mixer.render(out, 4, kBlock, clock.sample_rate());
+
+    CHECK(peak(out_13) < 1.0e-7f);
+    CHECK(peak(out_14) < 1.0e-7f);
+    CHECK(peak(out_15) > 0.01f);
+    CHECK(peak(out_16) > 0.01f);
+}
+
 #if LT_ENGINE_HAVE_BUNGEE
 TEST_CASE("scheduled jump without prepared voices clears stale Bungee voice and latches repair target") {
     constexpr Frame kDuration = 48000 * 90;

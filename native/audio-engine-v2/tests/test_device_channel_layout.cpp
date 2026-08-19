@@ -106,3 +106,12 @@ TEST_CASE("active channel clamping against the real device width") {
     // A device with no outputs yields nothing to activate.
     CHECK(clamp_active_channels({0, 1}, 0).empty());
 }
+
+TEST_CASE("physical ASIO outputs translate to dense callback slots") {
+    const int active[] = {12, 13, 14, 15};
+    CHECK(callback_channel_for_physical(12, active, 4, 4) == 0);
+    CHECK(callback_channel_for_physical(13, active, 4, 4) == 1);
+    CHECK(callback_channel_for_physical(14, active, 4, 4) == 2);
+    CHECK(callback_channel_for_physical(15, active, 4, 4) == 3);
+    CHECK(callback_channel_for_physical(11, active, 4, 4) == -1);
+}

@@ -133,6 +133,16 @@ public:
 
     void audioDeviceAboutToStart(juce::AudioIODevice* device) override {
         device_sample_rate_.store(device->getCurrentSampleRate(), std::memory_order_relaxed);
+        if (render_cb_) {
+            const auto active = device->getActiveOutputChannels();
+            std::vector<int> physical_channels;
+            physical_channels.reserve(static_cast<std::size_t>(active.countNumberOfSetBits()));
+            for (int channel = active.findNextSetBit(0); channel >= 0;
+                 channel = active.findNextSetBit(channel + 1)) {
+                physical_channels.push_back(channel);
+            }
+            render_cb_->set_active_output_channels(physical_channels);
+        }
     }
 
     void audioDeviceStopped() override {}

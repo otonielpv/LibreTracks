@@ -1,4 +1,5 @@
 #include <lt_engine/render/metronome_renderer.h>
+#include <lt_engine/devices/device_channel_layout.h>
 
 #include <algorithm>
 #include <array>
@@ -350,7 +351,9 @@ void MetronomeRenderer::render(float** output_channels,
                                int num_frames,
                                double sample_rate,
                                Frame timeline_frame,
-                               const Session* session) noexcept {
+                               const Session* session,
+                               const int* active_output_channels,
+                               int active_output_channel_count) noexcept {
     if (num_channels <= 0 || num_frames <= 0 || sample_rate <= 0.0) return;
 
     if (last_render_end_ >= 0 && timeline_frame != last_render_end_)
@@ -386,9 +389,19 @@ void MetronomeRenderer::render(float** output_channels,
             copy_text(route_resolved_, "monitor_fallback_master");
         }
     } else if (mode == static_cast<int>(RouteMode::Ext)) {
-        left = std::clamp(route_start_.load(std::memory_order_acquire), 0, num_channels - 1);
-        right = std::clamp(route_end_.load(std::memory_order_acquire), 0, num_channels - 1);
-        copy_text(route_resolved_, "ext");
+        const int mapped_left = device_layout::callback_channel_for_physical(
+            route_start_.load(std::memory_order_acquire), active_output_channels,
+            active_output_channel_count, num_channels);
+        const int mapped_right = device_layout::callback_channel_for_physical(
+            route_end_.load(std::memory_order_acquire), active_output_channels,
+            active_output_channel_count, num_channels);
+        if (mapped_left >= 0 && mapped_right >= 0) {
+            left = mapped_left;
+            right = mapped_right;
+            copy_text(route_resolved_, "ext");
+        } else {
+            copy_text(route_resolved_, "ext_fallback_master");
+        }
     } else {
         copy_text(route_resolved_, "master");
     }
