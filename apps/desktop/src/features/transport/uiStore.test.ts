@@ -50,17 +50,28 @@ describe("useTimelineUIStore", () => {
   });
 
   describe("view mode", () => {
-    it("sets every mode and keeps the keyboard toggle between editor views", () => {
-      get().setViewMode("compact");
-      expect(get().viewMode).toBe("compact");
-      get().toggleViewMode();
-      expect(get().viewMode).toBe("daw");
+    it("cycles the keyboard toggle through DAW, Compact and Live", () => {
       get().toggleViewMode();
       expect(get().viewMode).toBe("compact");
-      get().setViewMode("live");
+      get().toggleViewMode();
       expect(get().viewMode).toBe("live");
       get().toggleViewMode();
       expect(get().viewMode).toBe("daw");
+
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
+    });
+
+    it("cycles backward through DAW, Live and Compact", () => {
+      get().toggleViewModeBackward();
+      expect(get().viewMode).toBe("live");
+      get().toggleViewModeBackward();
+      expect(get().viewMode).toBe("compact");
+      get().toggleViewModeBackward();
+      expect(get().viewMode).toBe("daw");
+
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
     });
 
     it("records use of the live performance view", () => {

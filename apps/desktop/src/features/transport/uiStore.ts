@@ -34,6 +34,7 @@ type TimelineUIState = {
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
+  toggleViewModeBackward: () => void;
   setCameraX: (cameraX: number) => void;
   setZoomLevel: (zoomLevel: number | ((currentZoomLevel: number) => number)) => void;
   setTrackHeight: (trackHeight: number | ((currentTrackHeight: number) => number)) => void;
@@ -75,8 +76,27 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     toggleViewMode: () => {
       set((state) => {
-        const viewMode = state.viewMode === "daw" ? "compact" : "daw";
+        const viewMode: ViewMode =
+          state.viewMode === "daw"
+            ? "compact"
+            : state.viewMode === "compact"
+              ? "live"
+              : "daw";
         if (viewMode === "compact") recordProductEvent("feature_compact_view");
+        if (viewMode === "live") recordProductEvent("feature_live_view");
+        return { viewMode };
+      });
+    },
+    toggleViewModeBackward: () => {
+      set((state) => {
+        const viewMode: ViewMode =
+          state.viewMode === "daw"
+            ? "live"
+            : state.viewMode === "live"
+              ? "compact"
+              : "daw";
+        if (viewMode === "compact") recordProductEvent("feature_compact_view");
+        if (viewMode === "live") recordProductEvent("feature_live_view");
         return { viewMode };
       });
     },

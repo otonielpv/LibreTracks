@@ -80,6 +80,7 @@ type TimelineKeyboardShortcutsProps = {
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   toggleViewMode: () => void;
+  toggleViewModeBackward: () => void;
 };
 
 export function useTimelineKeyboardShortcuts({
@@ -112,6 +113,7 @@ export function useTimelineKeyboardShortcuts({
   setStatus,
   t,
   toggleViewMode,
+  toggleViewModeBackward,
 }: TimelineKeyboardShortcutsProps) {
   // Subscribe to the user's binding overrides so a remap in the shortcuts
   // panel takes effect immediately (the effect re-runs when this changes).
@@ -317,6 +319,10 @@ export function useTimelineKeyboardShortcuts({
         event.preventDefault();
         toggleViewMode();
       },
+      "view.toggleViewModeBackward": (event) => {
+        event.preventDefault();
+        toggleViewModeBackward();
+      },
       "nav.cancelOrClear": (event) => {
         event.preventDefault();
         if (openTopMenu) {
@@ -351,15 +357,14 @@ export function useTimelineKeyboardShortcuts({
       const isSelectTarget =
         (event.target as HTMLElement | null)?.tagName === "SELECT";
 
-      // Tab toggles DAW/Compact view, Ableton-style. We keep the original
-      // guard: only the unmodified Tab, and never while typing (so focus
-      // traversal still works in inputs). Ctrl/Shift/Alt+Tab fall through to
-      // the browser/OS.
-      if (binding === "Tab") {
+      // Tab cycles DAW/Compact/Live forward and Shift+Tab cycles backward.
+      // Neither shortcut runs while typing, so focus traversal still works in
+      // inputs. Ctrl/Alt/Meta variants fall through to the browser/OS.
+      if (binding === "Tab" || binding === "Shift+Tab") {
         if (typingTarget) {
           return;
         }
-        const action = bindingToAction.get("Tab");
+        const action = bindingToAction.get(binding);
         if (action) {
           handlers[action](event);
         }
@@ -483,5 +488,6 @@ export function useTimelineKeyboardShortcuts({
     snapshotRef,
     t,
     toggleViewMode,
+    toggleViewModeBackward,
   ]);
 }

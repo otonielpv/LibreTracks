@@ -1165,6 +1165,9 @@ export function TransportPanelContent() {
   const viewMode = useTimelineUIStore((state) => state.viewMode);
   const setViewMode = useTimelineUIStore((state) => state.setViewMode);
   const toggleViewMode = useTimelineUIStore((state) => state.toggleViewMode);
+  const toggleViewModeBackward = useTimelineUIStore(
+    (state) => state.toggleViewModeBackward,
+  );
   const midiLearnCommandRows = useMemo(
     () =>
       MIDI_LEARN_COMMANDS.map((command) => ({
@@ -4751,6 +4754,7 @@ export function TransportPanelContent() {
     setStatus,
     t,
     toggleViewMode,
+    toggleViewModeBackward,
   });
 
   // Teardown: clear any leftover track-drag visuals.

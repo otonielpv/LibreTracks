@@ -46,6 +46,7 @@ export type ShortcutActionId =
   | "project.saveAs"
   // view
   | "view.toggleViewMode"
+  | "view.toggleViewModeBackward"
   | "view.zoomIn"
   | "view.zoomOut"
   | "view.zoomReset"
@@ -195,6 +196,12 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     group: "view",
     labelKey: "shortcuts.action.toggleViewMode",
     defaultBinding: "Tab",
+  },
+  {
+    id: "view.toggleViewModeBackward",
+    group: "view",
+    labelKey: "shortcuts.action.toggleViewModeBackward",
+    defaultBinding: "Shift+Tab",
   },
   {
     // Owned by the app-level handler in App.tsx (accepts Ctrl + "="/"+"),

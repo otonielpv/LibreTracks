@@ -75,6 +75,15 @@ describe("eventToBinding", () => {
     );
   });
 
+  it("distinguishes Tab from Shift+Tab", () => {
+    expect(eventToBinding(keyEvent({ key: "Tab", code: "Tab" }))).toBe("Tab");
+    expect(
+      eventToBinding(
+        keyEvent({ key: "Tab", code: "Tab", shiftKey: true }),
+      ),
+    ).toBe("Shift+Tab");
+  });
+
   it("returns null for a modifier-only press", () => {
     expect(eventToBinding(keyEvent({ key: "Shift", code: "ShiftLeft" }))).toBeNull();
   });
