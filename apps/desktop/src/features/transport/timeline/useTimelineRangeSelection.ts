@@ -15,6 +15,7 @@ type TimelineRangeSelectionDeps = {
   enabled: boolean;
   seekLocked: boolean;
   isAndroid: boolean;
+  currentRange: TimelineRangeSelection | null;
   rulerTrackRef: RefObject<HTMLDivElement | null>;
   contextMenuOpenedAtRef: RefObject<number>;
   getCameraX: () => number;
@@ -81,14 +82,17 @@ export function useTimelineRangeSelection(
     const pressStartedAt = Date.now();
     const pointerScaleX = d.getPointerScaleX(event.currentTarget);
     const startSeconds = d.getSnappedSeconds(startClientX);
+    const pressedInsideCurrentRange = Boolean(
+      d.currentRange &&
+        startSeconds >= d.currentRange.startSeconds &&
+        startSeconds <= d.currentRange.endSeconds,
+    );
     let hasMoved = false;
     let autoScrollFrameId: number | null = null;
     let autoScrollVelocity = 0;
     let latestClientX = startClientX;
 
     d.prewarmPosition(startSeconds);
-    d.clearTimelineSelection();
-    d.setRange({ startSeconds, endSeconds: startSeconds });
 
     const stopAutoScroll = () => {
       autoScrollVelocity = 0;
@@ -166,7 +170,10 @@ export function useTimelineRangeSelection(
         RANGE_DRAG_THRESHOLD_PX;
       if (!hasMoved && !exceededThreshold) return;
 
-      hasMoved = true;
+      if (!hasMoved) {
+        hasMoved = true;
+        d.clearTimelineSelection();
+      }
       latestClientX = windowEvent.clientX;
       d.prewarmPosition(d.getSnappedSeconds(windowEvent.clientX));
       updateRange(windowEvent.clientX);
@@ -178,16 +185,34 @@ export function useTimelineRangeSelection(
       if (!belongsToGesture(windowEvent)) return;
       cleanup();
 
+      if (rawEvent.type === "pointercancel") {
+        if (hasMoved) d.setRange(null);
+        return;
+      }
+
+      // A native Android long-press has already opened the existing context
+      // menu. Do not erase the range when the same finger is released.
       if (
-        rawEvent.type === "pointercancel" ||
-        (d.isAndroid &&
-          d.contextMenuOpenedAtRef.current >= pressStartedAt)
+        d.isAndroid &&
+        d.contextMenuOpenedAtRef.current >= pressStartedAt
       ) {
-        d.setRange(null);
         return;
       }
 
       if (!hasMoved) {
+        if (pressedInsideCurrentRange) {
+          d.rulerTrackRef.current?.dispatchEvent(
+            new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: windowEvent.clientX,
+              clientY: windowEvent.clientY,
+            }),
+          );
+          return;
+        }
+
+        d.clearTimelineSelection();
         d.setRange(null);
         if (!d.seekLocked) d.seek(startSeconds);
         return;

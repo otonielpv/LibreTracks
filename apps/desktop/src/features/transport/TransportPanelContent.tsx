@@ -6520,6 +6520,7 @@ export function TransportPanelContent() {
     enabled: Boolean(song),
     seekLocked: rulerSeekLocked,
     isAndroid: isAndroidApp,
+    currentRange: selectedTimelineRange,
     rulerTrackRef,
     contextMenuOpenedAtRef,
     getCameraX: () => cameraXRef.current,

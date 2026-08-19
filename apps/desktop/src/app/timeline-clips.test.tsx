@@ -45,6 +45,8 @@ import { useTimelineUIStore } from "../features/transport/uiStore";
 
 describe("App / timeline-clips", () => {
   it("selects a timeline range by dragging the ruler with a touch pointer", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const createSongRegionSpy = vi.mocked(desktopApi.createSongRegion);
     class TestPointerEvent extends MouseEvent {
       readonly pointerId: number;
       readonly pointerType: string;
@@ -103,6 +105,40 @@ describe("App / timeline-clips", () => {
         ),
       ),
     ).toBeTruthy();
+
+    // A tap inside the completed selection must keep that range and expose
+    // its actions. Previously pointerdown replaced it with a 2 px range, so
+    // the context menu could only offer "Create Marker".
+    await act(async () => {
+      fireEvent.pointerDown(rulerSurface as HTMLElement, {
+        button: 0,
+        clientX: 450,
+        clientY: 60,
+        pointerId: 8,
+        pointerType: "touch",
+        isPrimary: true,
+      });
+    });
+    expect(container.querySelector(".lt-ruler-range-selection")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.pointerUp(window, {
+        button: 0,
+        clientX: 450,
+        clientY: 60,
+        pointerId: 8,
+        pointerType: "touch",
+        isPrimary: true,
+      });
+    });
+
+    const createSongAction = await screen.findByRole("button", {
+      name: textMatcher(en.transport.menu.createSongRegionFromSelection),
+    });
+    await act(async () => {
+      fireEvent.click(createSongAction);
+    });
+    expect(createSongRegionSpy).toHaveBeenCalledTimes(1);
   });
 
   it("keeps timeline click seeks aligned after toggling compact view", async () => {
