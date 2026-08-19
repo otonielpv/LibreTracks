@@ -11,14 +11,16 @@ describe("telemetry contract", () => {
       resolve(repository, "apps/website/functions/api/telemetry/events.ts"),
       "utf8",
     );
-    const migration = readFileSync(
-      resolve(repository, "apps/website/migrations/0003_product_telemetry.sql"),
-      "utf8",
-    );
+    const migrations = [
+      "0003_product_telemetry.sql",
+      "0004_live_view_telemetry.sql",
+    ].map((file) =>
+      readFileSync(resolve(repository, "apps/website/migrations", file), "utf8"),
+    ).join("\n");
 
     for (const event of PRODUCT_EVENT_NAMES) {
       expect(api, `${event} missing from API allowlist`).toContain(`"${event}"`);
-      expect(migration, `${event} missing from D1 CHECK constraint`).toContain(
+      expect(migrations, `${event} missing from D1 CHECK constraint`).toContain(
         `'${event}'`,
       );
     }

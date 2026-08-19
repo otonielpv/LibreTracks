@@ -36,6 +36,7 @@ export const PRODUCT_EVENT_NAMES = [
   "session_export_failed",
   "project_open_failed",
   "feature_compact_view",
+  "feature_live_view",
   "feature_metronome",
   "feature_voice_guide",
   "feature_ambient_pads",

@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { recordProductEvent } from "../telemetry/telemetry";
 
 import {
   DEFAULT_VIEW_MODE,
@@ -9,9 +11,14 @@ import {
   useTimelineUIStore,
 } from "./uiStore";
 
+vi.mock("../telemetry/telemetry", () => ({
+  recordProductEvent: vi.fn(),
+}));
+
 const initial = useTimelineUIStore.getState();
 
 function reset() {
+  vi.mocked(recordProductEvent).mockClear();
   useTimelineUIStore.setState({
     cameraX: 0,
     zoomLevel: TIMELINE_DEFAULT_ZOOM_LEVEL,
@@ -54,6 +61,12 @@ describe("useTimelineUIStore", () => {
       expect(get().viewMode).toBe("live");
       get().toggleViewMode();
       expect(get().viewMode).toBe("daw");
+    });
+
+    it("records use of the live performance view", () => {
+      get().setViewMode("live");
+
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
     });
   });
 

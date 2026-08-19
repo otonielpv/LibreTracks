@@ -70,6 +70,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
       if (viewMode === "compact") recordProductEvent("feature_compact_view");
+      if (viewMode === "live") recordProductEvent("feature_live_view");
       set({ viewMode });
     },
     toggleViewMode: () => {
