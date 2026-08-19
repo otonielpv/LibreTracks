@@ -438,6 +438,13 @@ jobs:
             # Windows release builds without ASIO device support.
             $configureArgs += "-DLT_ASIO_SDK_DIR=$env:LT_ASIO_SDK_DIR"
           }
+          if ("${{ matrix.platform }}" -ne "windows") {
+            # Ninja/Unix Makefiles are single-config generators: unlike Visual
+            # Studio, `cmake --build --config Release` does not select compiler
+            # optimisation for them. Without this, the Linux/macOS release
+            # engine is compiled with an empty CMAKE_BUILD_TYPE.
+            $configureArgs += "-DCMAKE_BUILD_TYPE=Release"
+          }
           if ("${{ matrix.platform }}" -eq "macos") {
             $env:MACOSX_DEPLOYMENT_TARGET = "10.15"
             # macos-latest (arm64) ships the real universal artifact;
@@ -450,6 +457,13 @@ jobs:
             $configureArgs += "-DCMAKE_DISABLE_FIND_PACKAGE_SndFile=ON"
           }
           cmake @configureArgs
+          if ("${{ matrix.platform }}" -ne "windows") {
+            $releaseBuildType = Select-String -Path "build/engine-release/CMakeCache.txt" -Pattern '^CMAKE_BUILD_TYPE:STRING=Release$'
+            if (-not $releaseBuildType) {
+              Write-Error "Native release engine was not configured with CMAKE_BUILD_TYPE=Release."
+              exit 1
+            }
+          }
           cmake --build build/engine-release --config Release --target lt_audio_engine_v2 --parallel
 
           $libDir = if ("${{ matrix.platform }}" -eq "windows") { "$PWD/build/engine-release/Release" } else { "$PWD/build/engine-release" }

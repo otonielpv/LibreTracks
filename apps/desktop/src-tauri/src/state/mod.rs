@@ -627,9 +627,10 @@ impl Default for WaveformGenerationQueue {
                         song_dir,
                         song,
                     } => {
-                        if let Some(audio) = audio.as_deref() {
-                            prime_waveforms_from_engine_peaks(&song_dir, &song, audio);
-                        }
+                        let ready = audio
+                            .as_deref()
+                            .map(|audio| prime_waveforms_from_engine_peaks(&song_dir, &song, audio))
+                            .unwrap_or_default();
                         let key = prime_job_key(&song_dir);
                         // Mark done BEFORE clearing in_flight: needs_prime()
                         // checks in_flight first, so this ordering leaves no
@@ -641,9 +642,12 @@ impl Default for WaveformGenerationQueue {
                         if let Ok(mut in_flight) = worker_in_flight.lock() {
                             in_flight.remove(&key);
                         }
-                        // Tell the frontend to re-request: its poll would get
-                        // there eventually, but the waveforms are ready now.
-                        let _ = app.emit("waveform:ready", ());
+                        // Publish typed payloads. The old `()` invalidation was
+                        // serialized as null, but the frontend listener expects
+                        // WaveformReadyEvent and immediately reads `songDir`.
+                        for payload in ready {
+                            let _ = app.emit(WAVEFORM_READY_EVENT, payload);
+                        }
                     }
                 }
             }
@@ -760,7 +764,11 @@ fn generate_native_waveform(
 /// (which owns the engine). Best-effort per file: a miss just leaves the normal
 /// background waveform job to generate it. This is what removes the second
 /// full decode that was contending with playback during import.
-fn prime_waveforms_from_engine_peaks(song_dir: &Path, song: &Song, audio: &AudioController) {
+fn prime_waveforms_from_engine_peaks(
+    song_dir: &Path,
+    song: &Song,
+    audio: &AudioController,
+) -> Vec<WaveformReadyEvent> {
     use crate::infra::waveform_diag as diag;
 
     let cache_root = decoding_cache_root();
@@ -776,6 +784,7 @@ fn prime_waveforms_from_engine_peaks(song_dir: &Path, song: &Song, audio: &Audio
     let mut cache_hits = 0usize;
     let mut no_peaks = 0usize;
     let mut primed = 0usize;
+    let mut ready = Vec::new();
 
     for key in keys {
         // The source id the engine knows is the resolved audio file path.
@@ -814,6 +823,11 @@ fn prime_waveforms_from_engine_peaks(song_dir: &Path, song: &Song, audio: &Audio
             continue;
         };
         let _ = write_global_waveform(&cache_root, &source_path, &summary);
+        ready.push(WaveformReadyEvent {
+            song_dir: song_dir.to_string_lossy().replace('\\', "/"),
+            waveform_key: key.clone(),
+            summary: waveform_summary_to_dto(&key, &summary),
+        });
     }
 
     if diag::is_enabled() {
@@ -822,6 +836,7 @@ fn prime_waveforms_from_engine_peaks(song_dir: &Path, song: &Song, audio: &Audio
              {no_peaks} without peaks"
         ));
     }
+    ready
 }
 
 /// Build a waveform summary for one source from the engine's same-pass peaks

@@ -175,6 +175,12 @@ const ensureEngineV2 = (normalizedEnv) => {
     `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
     `-DLT_ENGINE_ENABLE_E2E_CAPTURE=${useE2ECapture}`,
   ];
+  // Visual Studio is multi-config and honours `--config` at build time.
+  // Ninja/Unix Makefiles need CMAKE_BUILD_TYPE during configure or a nominal
+  // "Release" build is actually left unoptimised.
+  if (process.platform !== "win32") {
+    configureArgs.push(`-DCMAKE_BUILD_TYPE=${buildConfig}`);
+  }
   if (useBungee === "ON") {
     configureArgs.push(`-DLT_BUNGEE_DIR=${bungeeDir}`);
   }

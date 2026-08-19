@@ -97,13 +97,12 @@ impl ResourceMonitor {
             .system
             .refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
 
-        // Refresh every process: we need the full list to build the parent →
-        // child links that let us find our WebView2 descendants. Don't remove
-        // dead processes — we never enumerate stale ones, and keeping them
-        // avoids re-allocating the map each tick.
+        // Refresh every process to build the parent/child links for our WebView
+        // descendants. Remove dead entries: retaining their last CPU/RSS sample
+        // can make the app-family totals grow after those children have exited.
         inner.system.refresh_processes_specifics(
             ProcessesToUpdate::All,
-            false,
+            true,
             ProcessRefreshKind::nothing()
                 .with_cpu()
                 .with_memory()
@@ -139,6 +138,15 @@ impl ResourceMonitor {
             }
         }
         let process_cpu_percent = process_cpu_raw / core_count;
+
+        // Linux WebKitGTK splits the app into processes that share many mapped
+        // pages. Summed RSS counts those pages once per process; PSS apportions
+        // them and is the meaningful aggregate footprint. Keep sysinfo RSS as
+        // the fallback when /proc is restricted or lacks smaps_rollup.
+        #[cfg(target_os = "linux")]
+        if let Some(pss_bytes) = family.as_ref().and_then(linux_family_pss_bytes) {
+            process_memory_bytes = pss_bytes;
+        }
 
         // Guard against over-counting the family's memory. `Process::memory()`
         // reports each process's RSS, and on Linux the WebKitGTK process model
@@ -229,4 +237,43 @@ fn collect_family(system: &System, root: Pid) -> HashSet<Pid> {
     }
 
     family
+}
+
+#[cfg(target_os = "linux")]
+fn linux_family_pss_bytes(family: &HashSet<Pid>) -> Option<u64> {
+    let mut total = 0_u64;
+    let mut measured = 0_usize;
+    for pid in family {
+        let path = format!("/proc/{}/smaps_rollup", pid.as_u32());
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let Some(bytes) = parse_smaps_rollup_pss_bytes(&contents) else {
+            continue;
+        };
+        total = total.saturating_add(bytes);
+        measured += 1;
+    }
+    (measured == family.len() && measured > 0).then_some(total)
+}
+
+#[cfg(target_os = "linux")]
+fn parse_smaps_rollup_pss_bytes(contents: &str) -> Option<u64> {
+    let kilobytes = contents.lines().find_map(|line| {
+        let value = line.strip_prefix("Pss:")?.trim();
+        value.split_whitespace().next()?.parse::<u64>().ok()
+    })?;
+    kilobytes.checked_mul(1024)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::parse_smaps_rollup_pss_bytes;
+
+    #[test]
+    fn parses_pss_from_smaps_rollup() {
+        let sample =
+            "Rss:               2048 kB\nPss:               1536 kB\nPss_Dirty:          128 kB\n";
+        assert_eq!(parse_smaps_rollup_pss_bytes(sample), Some(1536 * 1024));
+    }
 }
