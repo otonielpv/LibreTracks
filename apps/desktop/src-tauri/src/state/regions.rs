@@ -800,6 +800,29 @@ impl DesktopSession {
                         marker.start_seconds = (marker.start_seconds + delta).max(0.0);
                     }
                 }
+
+                // A varispeed expansion can move the following song backwards
+                // in source time. When songs were placed edge-to-edge, that
+                // would violate the non-overlapping-region invariant. Detect it
+                // here so the UI receives a stable, actionable domain error
+                // instead of the engine's low-level validation message with
+                // opaque region ids.
+                if let Some(edited_region) = song
+                    .regions
+                    .iter()
+                    .find(|region| region.id == edited_region_id)
+                {
+                    if let Some(blocking_region) = song.regions.iter().find(|region| {
+                        region.id != edited_region.id
+                            && edited_region.start_seconds < region.end_seconds - 1e-6
+                            && edited_region.end_seconds > region.start_seconds + 1e-6
+                    }) {
+                        return Err(DesktopError::RegionDurationOverlap {
+                            region_id: edited_region.id.clone(),
+                            blocking_region_id: blocking_region.id.clone(),
+                        });
+                    }
+                }
                 sort_song_regions(&mut song.regions);
                 refresh_song_duration(&mut song);
             }

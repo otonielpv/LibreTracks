@@ -449,9 +449,132 @@ const es = {
       folderDropOverSong:
         "La carpeta \"{{folder}}\" necesita {{seconds}} segundos libres y ahi no caben: se solaparia con {{song}}.\n\nUna carpeta de la biblioteca crea siempre una cancion nueva. Sueltala en un hueco lo bastante ancho, o justo al final de la ultima cancion.",
     },
+    errors: {
+      regionDurationOverlap:
+        "No se puede aplicar el cambio de tono a «{{song}}» sin Warp porque al cambiar su duración se solaparía con «{{blockingSong}}». Deja espacio entre las canciones o activa Warp para conservar la duración.",
+      regionsOverlap:
+        "La operación haría que «{{firstSong}}» se solapara con «{{secondSong}}». Mueve una de las canciones para dejar espacio suficiente y vuelve a intentarlo.",
+      unknownSong: "otra canción",
+      noSongLoaded: "No hay ninguna sesión cargada para realizar esta operación.",
+      stateUnavailable:
+        "La sesión no está disponible temporalmente. Espera un momento y vuelve a intentarlo.",
+      invalidClipRange:
+        "El clip tendría una duración o posición no válida. Ajusta sus bordes y vuelve a intentarlo.",
+      invalidTrackParent:
+        "No se puede colocar el track ahí. Elige una carpeta de tracks válida y vuelve a intentarlo.",
+      invalidSplitPoint:
+        "No se puede dividir el clip en esa posición. Coloca el cursor dentro del clip y vuelve a intentarlo.",
+      songMoveOverlap:
+        "No se puede mover la canción ahí porque se solaparía con «{{blockingSong}}». Deja espacio suficiente entre ambas canciones y vuelve a intentarlo.",
+      songBeforeProjectStart:
+        "No se puede mover la canción antes del inicio del proyecto.",
+      regionResizeLeavesClipsOutside:
+        "No se puede acortar la canción porque uno o varios clips quedarían fuera. Mueve o elimina esos clips primero.",
+      invalidRegionBounds:
+        "La canción debe tener un inicio válido y un final posterior al inicio.",
+      invalidColor: "Ese color no es válido. Elige otro y vuelve a intentarlo.",
+      emptySongName: "Escribe un nombre para la canción.",
+      emptySectionName: "Escribe un nombre para la sección.",
+      emptyTrackName: "Escribe un nombre para el track.",
+      invalidWarpBpm:
+        "Introduce un BPM original entre 20 y 300 antes de activar Warp.",
+      invalidTranspose: "El cambio de tono debe estar entre −12 y +12 semitonos.",
+      invalidBpm: "El BPM debe estar entre 20 y 300.",
+      invalidTimeSignature:
+        "Introduce un compás válido, por ejemplo 4/4 o 6/8.",
+      invalidGain:
+        "El valor de volumen no es válido. Restablécelo y vuelve a intentarlo.",
+      clipCannotUseFolderTrack:
+        "No se puede colocar un clip en una carpeta de tracks. Elige un track de audio o MIDI.",
+      invalidClipDuration: "Un clip debe tener una duración mayor que cero.",
+      clipDoesNotFit:
+        "El clip no cabe en ese hueco. Suéltalo dentro de una canción o deja más espacio entre las canciones cercanas.",
+      libraryAssetInUse:
+        "No se puede eliminar este audio porque se está usando en el timeline. Elimina primero sus clips.",
+      libraryAssetNotFound:
+        "Ese archivo ya no existe en la biblioteca. Actualiza la biblioteca y vuelve a intentarlo.",
+      libraryFolderNotFound:
+        "Esa carpeta ya no existe en la biblioteca. Actualiza la biblioteca y vuelve a intentarlo.",
+      invalidLibraryFolder:
+        "La ubicación de la carpeta no es válida. Una carpeta no puede moverse dentro de sí misma ni de una de sus subcarpetas.",
+      invalidAudioImportFile:
+        "No se puede importar el archivo seleccionado como audio. Comprueba su nombre y formato y vuelve a intentarlo.",
+      noAudioFilesSelected: "Selecciona al menos un archivo de audio para importar.",
+      stagedImportMissing:
+        "El archivo temporal de importación ya no está disponible. Selecciona de nuevo el archivo original.",
+      midiTrackRequired:
+        "Esta operación necesita un track MIDI. Selecciona o crea uno y vuelve a intentarlo.",
+      invalidMidiChannel: "El canal MIDI debe estar entre 1 y 16.",
+      mixSceneUnavailable:
+        "La escena de mezcla no está disponible. Selecciona una escena existente y vuelve a intentarlo.",
+      destinationFolderUnavailable:
+        "LibreTracks no pudo determinar dónde crear el proyecto. Elige una carpeta de destino y vuelve a intentarlo.",
+      invalidProjectName:
+        "El nombre del proyecto no es válido. Usa un nombre que sea válido para una carpeta.",
+      projectFolderExists:
+        "Ya existe una carpeta llamada «{{name}}» en esa ubicación. Elige otro nombre para el proyecto.",
+      emptyPadName: "Escribe un nombre para el pad.",
+      officialPadReadOnly:
+        "Los pads oficiales no se pueden editar. Crea un pad de usuario para asignar tus propios audios.",
+      sourceAudioNotFound:
+        "El archivo de audio seleccionado ya no existe. Selecciónalo de nuevo.",
+      invalidPadArchive:
+        "El pad descargado no contiene ninguna nota reconocida.",
+      padDownloadFailed:
+        "No se pudo descargar el pad. Comprueba la conexión a Internet y vuelve a intentarlo.",
+      padFileOperationFailed:
+        "No se pudieron guardar los archivos del pad. Comprueba el espacio disponible y los permisos de la carpeta.",
+      audioStateUnavailable:
+        "El motor de audio está ocupado temporalmente. Espera un momento y vuelve a intentarlo.",
+      invalidSongStructure:
+        "La canción tiene límites o una duración no válidos. Comprueba su posición y longitud y vuelve a intentarlo.",
+      invalidTrackStructure:
+        "La organización de tracks no es coherente. Actualiza la sesión o deshaz el último cambio de tracks.",
+      clipOutsideSong:
+        "Un clip quedaría fuera de todas las canciones. Muévelo dentro de una canción o amplía sus límites.",
+      clipCrossesSongs:
+        "Un clip no puede atravesar el límite entre dos canciones. Acórtalo o muévelo primero.",
+      invalidMarker:
+        "Una marca tiene una posición o un atajo no válidos. Muévela a una posición válida y vuelve a intentarlo.",
+      invalidMidiData:
+        "El clip MIDI contiene un canal, una nota o una posición no válidos. Revisa sus eventos y vuelve a intentarlo.",
+      unsupportedProjectVersion:
+        "El proyecto se creó con una versión de LibreTracks no compatible. Actualiza la aplicación y vuelve a intentarlo.",
+      unsupportedAudioFormat:
+        "Este formato de audio no es compatible. Convierte el archivo a WAV, FLAC, MP3, OGG, M4A o AAC.",
+      audioDecodeFailed:
+        "LibreTracks no pudo decodificar este audio. Puede estar dañado o usar un códec no compatible.",
+      invalidPlaybackPosition:
+        "Esa posición de reproducción no es válida. Coloca el cursor dentro del timeline y vuelve a intentarlo.",
+      invalidVampRange:
+        "No se puede activar Vamp en ese rango. Selecciona una sección completa o unos compases válidos.",
+      audioDeviceFailed:
+        "No se pudo abrir el dispositivo de audio. Comprueba que esté conectado y que otra aplicación no lo esté usando.",
+      networkUnavailable:
+        "LibreTracks no pudo conectar con el servidor. Comprueba la conexión a Internet y vuelve a intentarlo.",
+      markerNotFound:
+        "Esa marca ya no existe. Actualiza la sesión y vuelve a intentarlo.",
+      fileOperationFailed:
+        "LibreTracks no pudo leer o escribir el archivo necesario. Comprueba la ubicación y los permisos. Detalles: {{message}}",
+      audioEngineFailed:
+        "El motor de audio no pudo completar la operación. Detalles: {{message}}",
+      operationFailed:
+        "No se pudo completar la operación. Detalles: {{message}}",
+      itemNotFound:
+        "El elemento seleccionado ({{item}}) ya no existe. Actualiza la sesión y vuelve a intentarlo.",
+      item: {
+        clip: "clip",
+        track: "track",
+        region: "canción",
+        section: "sección",
+      },
+    },
     status: {
       loadingSession: "Cargando sesion...",
       preparingAudio: "Preparando audio...",
+      applyingPitchChange: "Aplicando cambio de tono...",
+      preparingTransposedAudio: "Preparando audio transpuesto...",
+      transposedAudioPrepareFailed: "No se pudo preparar el audio transpuesto",
       unpackingPackage: "Descomprimiendo paquete...",
       tracksReady: "{{ready}}/{{total}} pistas listas",
       sourcesFailed: "{{count}} pista(s) no se pudieron cargar",

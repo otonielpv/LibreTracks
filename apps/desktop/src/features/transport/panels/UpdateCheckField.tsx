@@ -8,6 +8,7 @@ import {
   runUpdateCheck,
   useUpdateCheckStore,
 } from "../../updates/updateCheckStore";
+import { formatUserFacingError } from "../errors/formatTransportError";
 
 /** Self-contained manual update control used by Settings -> General. */
 export function UpdateCheckField() {
@@ -27,7 +28,9 @@ export function UpdateCheckField() {
   if (error) {
     statusLine = (
       <small className="lt-update-check-status lt-update-check-status--error">
-        {t("update.checkError", { message: error })}
+        {t("update.checkError", {
+          message: formatUserFacingError(error, t),
+        })}
       </small>
     );
   } else if (release && remoteIsNewer) {

@@ -167,6 +167,7 @@ import {
 } from "./desktopApi";
 import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
+import { formatTransportError } from "./errors/formatTransportError";
 import { recordPlaybackTransition, recordProductEvent } from "../telemetry/telemetry";
 import {
   markerColor,
@@ -1117,7 +1118,7 @@ export function TransportPanelContent() {
       // status banner auto-hides. The status banner truncates long
       // engine error messages; the console keeps them in full.
       console.error("[lt] action error:", error);
-      return t("transport.status.error", { message: String(error) });
+      return formatTransportError(error, t, songRef.current);
     },
     [t],
   );
@@ -2132,7 +2133,7 @@ export function TransportPanelContent() {
       if (pitch.pitchPrepareStatus === "failed") {
         setPitchPrepareUiState({
           active: true,
-          message: "No se pudo preparar el audio transpuesto",
+          message: t("transport.status.transposedAudioPrepareFailed"),
           error: pitch.lastPitchProxyError || pitch.pitchPrepareMessage,
           startedAt: Date.now(),
         });
@@ -2145,14 +2146,14 @@ export function TransportPanelContent() {
       if (pitch.pitchPrepareActive) {
         setPitchPrepareUiState({
           active: true,
-          message: "Preparando audio transpuesto...",
+          message: t("transport.status.preparingTransposedAudio"),
           startedAt: Date.now(),
         });
         return;
       }
       setPitchPrepareUiState({ active: false, message: "" });
     },
-    [],
+    [t],
   );
 
   const applySourcesSnapshot = useCallback(
@@ -3360,28 +3361,37 @@ export function TransportPanelContent() {
       void runAction(async () => {
         setPitchPrepareUiState({
           active: true,
-          message: "Aplicando cambio de tono...",
+          message: t("transport.status.applyingPitchChange"),
           startedAt: Date.now(),
         });
-        const nextSnapshot = await updateSongRegionTranspose(
-          targetRegionId,
-          clampedTransposeSemitones,
-        );
-        // Refetch the SongView: under the Ableton-style semantics, a region
-        // transpose change with warp OFF resizes every overlapping clip
-        // (varispeed shrinks/expands duration by 2^(st/12)). The old
-        // optimistic patch only touched the region's transposeSemitones and
-        // left clip durations stale, so the UI showed the wrong clip width
-        // until the next structural mutation. Skipping waveforms keeps this
-        // cheap (~50ms IPC).
-        await refreshSongView({ includeWaveforms: false, sync: true });
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(
-          t("transport.status.regionTransposeUpdated", {
-            name: targetRegionName,
-            transpose: formatTransposeSemitones(clampedTransposeSemitones),
-          }),
-        );
+        try {
+          const nextSnapshot = await updateSongRegionTranspose(
+            targetRegionId,
+            clampedTransposeSemitones,
+          );
+          // Refetch the SongView: under the Ableton-style semantics, a region
+          // transpose change with warp OFF resizes every overlapping clip
+          // (varispeed shrinks/expands duration by 2^(st/12)). The old
+          // optimistic patch only touched the region's transposeSemitones and
+          // left clip durations stale, so the UI showed the wrong clip width
+          // until the next structural mutation. Skipping waveforms keeps this
+          // cheap (~50ms IPC).
+          await refreshSongView({ includeWaveforms: false, sync: true });
+          applyPlaybackSnapshot(nextSnapshot);
+          setStatus(
+            t("transport.status.regionTransposeUpdated", {
+              name: targetRegionName,
+              transpose: formatTransposeSemitones(clampedTransposeSemitones),
+            }),
+          );
+        } catch (error) {
+          // The pitch-preparation overlay has priority over the normal status
+          // banner. Clear it before runAction formats the error, otherwise an
+          // early validation failure would leave "Applying..." visible and
+          // hide the actionable overlap message.
+          setPitchPrepareUiState({ active: false, message: "" });
+          throw error;
+        }
       });
     },
     [applyPlaybackSnapshot, runAction, selectedRegion, setStatus, t],

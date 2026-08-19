@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import type { PadCatalogEntry } from "@libretracks/shared/models";
@@ -15,6 +16,7 @@ import {
   renameUserPad,
   type PadDownloadProgressEvent,
 } from "../desktopApi";
+import { formatUserFacingError } from "../errors/formatTransportError";
 
 type Props = {
   open: boolean;
@@ -53,6 +55,10 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
   const [busyGlobal, setBusyGlobal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const formatError = useCallback(
+    (value: unknown) => formatUserFacingError(value, t),
+    [t],
+  );
   // Which flow is shown. Tabs keep the modal a fixed height as the official
   // catalog grows, instead of stacking two ever-taller lists.
   const [tab, setTab] = useState<"official" | "user">("official");
@@ -161,12 +167,12 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
         await deletePad(padId);
         await refresh();
       } catch (e) {
-        setError(String(e));
+        setError(formatError(e));
       } finally {
         setBusyGlobal(false);
       }
     },
-    [refresh],
+    [formatError, refresh],
   );
 
   const handleCreate = useCallback(async () => {
@@ -180,11 +186,11 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
       await refresh();
       setSelectedId(created.id);
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setBusyGlobal(false);
     }
-  }, [newName, refresh]);
+  }, [formatError, newName, refresh]);
 
   const handleRename = useCallback(async () => {
     if (!selected) return;
@@ -196,11 +202,11 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
       await renameUserPad(selected.id, name);
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setBusyGlobal(false);
     }
-  }, [selected, renameValue, refresh]);
+  }, [formatError, selected, renameValue, refresh]);
 
   const handleDelete = useCallback(async () => {
     if (!selected) return;
@@ -217,11 +223,11 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
       await deletePad(selected.id);
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(formatError(e));
     } finally {
       setBusyGlobal(false);
     }
-  }, [selected, refresh, t]);
+  }, [formatError, selected, refresh, t]);
 
   const handleAssign = useCallback(
     async (keyIndex: number) => {
@@ -244,12 +250,12 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
         await assignPadKey(selected.id, keyIndex, path);
         await refresh();
       } catch (e) {
-        setError(String(e));
+        setError(formatError(e));
       } finally {
         setBusyKey(null);
       }
     },
-    [selected, refresh, t],
+    [formatError, selected, refresh, t],
   );
 
   const handleClear = useCallback(
@@ -261,12 +267,12 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
         await clearPadKey(selected.id, keyIndex);
         await refresh();
       } catch (e) {
-        setError(String(e));
+        setError(formatError(e));
       } finally {
         setBusyKey(null);
       }
     },
-    [selected, refresh],
+    [formatError, selected, refresh],
   );
 
   if (!isOpen) return null;
@@ -565,7 +571,7 @@ function PadPackRow({
   busy: boolean;
   onDownload: () => void;
   onDelete: () => void;
-  t: (key: string, options?: Record<string, unknown>) => string;
+  t: TFunction;
 }) {
   const downloading = Boolean(progress) && !progress?.done;
   const failed = Boolean(progress?.done && progress?.error);
@@ -635,7 +641,9 @@ function PadPackRow({
         </div>
       )}
       {failed && (
-        <span className="lt-pad-manager-pack-error">{progress?.error}</span>
+        <span className="lt-pad-manager-pack-error">
+          {formatUserFacingError(progress?.error, t)}
+        </span>
       )}
     </li>
   );

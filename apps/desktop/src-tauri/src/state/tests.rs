@@ -1369,6 +1369,46 @@ fn repeated_region_transpose_changes_group_into_one_undo_entry() {
 }
 
 #[test]
+fn varispeed_expansion_next_to_another_song_returns_descriptive_overlap_error() {
+    let mut song = demo_song();
+    song.duration_seconds = 24.0;
+    song.regions[0].name = "Pueblos todos".into();
+    song.regions.push(SongRegion {
+        id: "region_2".into(),
+        name: "Santo por siempre".into(),
+        start_seconds: 12.0,
+        end_seconds: 24.0,
+        transpose_semitones: 0,
+        warp_enabled: false,
+        warp_source_bpm: None,
+        key: None,
+        master: libretracks_core::SongMaster::default(),
+        compact_column_width_rem: None,
+    });
+    let mut session = session_with_song_dir("transpose-overlap-demo", song);
+    let audio = crate::audio::engine::AudioController::default();
+
+    let error = session
+        .update_song_region_transpose("region_1", -2, &audio)
+        .expect_err("an expanding edge-to-edge varispeed song must be rejected");
+
+    assert_eq!(
+        error.to_string(),
+        "region duration change would overlap: region_1 with region_2"
+    );
+    assert_eq!(
+        session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should remain loaded")
+            .regions[0]
+            .transpose_semitones,
+        0,
+        "the rejected edit must not mutate the loaded session"
+    );
+}
+
+#[test]
 fn live_clip_move_commit_undoes_in_single_step() {
     let mut session = session_with_song_dir("live-clip-move-demo", demo_song());
     let audio = crate::audio::engine::AudioController::default();

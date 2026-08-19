@@ -20,6 +20,7 @@ import type {
   SettingsTab,
 } from "../types";
 import { formatMidiBinding } from "../helpers";
+import { formatUserFacingError } from "../errors/formatTransportError";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
 import { UpdateCheckField } from "./UpdateCheckField";
@@ -1160,9 +1161,9 @@ function DecodingCacheField() {
 
   useEffect(() => {
     void refresh().catch((err) =>
-      setError(err instanceof Error ? err.message : String(err)),
+      setError(formatUserFacingError(err, t)),
     );
-  }, [refresh]);
+  }, [refresh, t]);
 
   const run = useCallback(
     async (action: () => Promise<unknown>) => {
@@ -1172,12 +1173,12 @@ function DecodingCacheField() {
         await action();
         await refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(formatUserFacingError(err, t));
       } finally {
         setBusy(false);
       }
     },
-    [refresh],
+    [refresh, t],
   );
 
   const handleChangeFolder = () =>
@@ -1349,8 +1350,8 @@ function DiagnosticsTabPanel() {
   const handleReveal = () => {
     void revealErrorLog().catch((error) => {
       setStatus(
-        <small className="lt-update-check-status lt-update-check-status--error">
-          {error instanceof Error ? error.message : String(error)}
+          <small className="lt-update-check-status lt-update-check-status--error">
+          {formatUserFacingError(error, t)}
         </small>,
       );
     });
@@ -1381,7 +1382,7 @@ function DiagnosticsTabPanel() {
       } catch (error) {
         setStatus(
           <small className="lt-update-check-status lt-update-check-status--error">
-            {error instanceof Error ? error.message : String(error)}
+            {formatUserFacingError(error, t)}
           </small>,
         );
       }

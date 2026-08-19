@@ -14,6 +14,7 @@ import { isAndroidApp, type LibraryImportProgressEvent } from "../desktopApi";
 import { DRAG_THRESHOLD_PX } from "../constants";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
+import { formatUserFacingError } from "../errors/formatTransportError";
 
 type ContextMenuAction = {
   label: string;
@@ -519,7 +520,11 @@ export function LibrarySidebarPanel({
                   // aqui: solo hay 0:12 libres antes de 'Song 5'"). Surface it
                   // on hover — the status label alone only says "Error al
                   // importar", which reads as if the file were corrupt.
-                  title={asset.pendingError ?? undefined}
+                  title={
+                    asset.pendingError
+                      ? formatUserFacingError(asset.pendingError, t)
+                      : undefined
+                  }
                 >
                   {isPending ? getPendingClipLabel(asset.pendingStatus ?? "queued", t) : formatAssetDuration(asset.durationSeconds)}
                 </span>

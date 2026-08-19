@@ -431,9 +431,131 @@ const en = {
       folderDropOverSong:
         "The folder \"{{folder}}\" needs {{seconds}} free seconds and does not fit here: it would overlap {{song}}.\n\nA library folder always creates a new song. Drop it on a wide enough gap, or right at the end of the last song.",
     },
+    errors: {
+      regionDurationOverlap:
+        "The pitch change cannot be applied to “{{song}}” without Warp because changing its duration would overlap “{{blockingSong}}”. Leave space between the songs or enable Warp to preserve the duration.",
+      regionsOverlap:
+        "The operation would make “{{firstSong}}” overlap “{{secondSong}}”. Move one of the songs to leave enough space and try again.",
+      unknownSong: "another song",
+      noSongLoaded: "There is no session loaded to perform this operation.",
+      stateUnavailable:
+        "The session is temporarily unavailable. Wait a moment and try again.",
+      invalidClipRange:
+        "The clip would have an invalid duration or position. Adjust its edges and try again.",
+      invalidTrackParent:
+        "That track cannot be placed there. Choose a valid folder track and try again.",
+      invalidSplitPoint:
+        "The clip cannot be split at that position. Move the cursor inside the clip and try again.",
+      songMoveOverlap:
+        "The song cannot be moved there because it would overlap “{{blockingSong}}”. Leave enough space between both songs and try again.",
+      songBeforeProjectStart:
+        "The song cannot be moved before the start of the project.",
+      regionResizeLeavesClipsOutside:
+        "The song cannot be shortened because one or more clips would be left outside it. Move or delete those clips first.",
+      invalidRegionBounds:
+        "The song must have a valid start and an end after its start.",
+      invalidColor: "That color is invalid. Choose a color and try again.",
+      emptySongName: "Enter a name for the song.",
+      emptySectionName: "Enter a name for the section.",
+      emptyTrackName: "Enter a name for the track.",
+      invalidWarpBpm:
+        "Enter an original BPM between 20 and 300 before enabling Warp.",
+      invalidTranspose: "The pitch change must be between −12 and +12 semitones.",
+      invalidBpm: "The BPM must be between 20 and 300.",
+      invalidTimeSignature:
+        "Enter a valid time signature, for example 4/4 or 6/8.",
+      invalidGain: "The volume value is invalid. Restore it and try again.",
+      clipCannotUseFolderTrack:
+        "A clip cannot be placed on a folder track. Choose an audio or MIDI track.",
+      invalidClipDuration: "A clip must have a duration greater than zero.",
+      clipDoesNotFit:
+        "The clip does not fit in that gap. Drop it inside a song or make more room between the surrounding songs.",
+      libraryAssetInUse:
+        "This audio file cannot be deleted because it is used on the timeline. Remove its clips first.",
+      libraryAssetNotFound:
+        "That library file no longer exists. Refresh the library and try again.",
+      libraryFolderNotFound:
+        "That library folder no longer exists. Refresh the library and try again.",
+      invalidLibraryFolder:
+        "That folder location is invalid. A folder cannot be moved into itself or one of its subfolders.",
+      invalidAudioImportFile:
+        "The selected file cannot be imported as audio. Check its name and format and try again.",
+      noAudioFilesSelected: "Select at least one audio file to import.",
+      stagedImportMissing:
+        "The temporary import file is no longer available. Select the original file again.",
+      midiTrackRequired:
+        "This operation requires a MIDI track. Select or create a MIDI track and try again.",
+      invalidMidiChannel: "The MIDI channel must be between 1 and 16.",
+      mixSceneUnavailable:
+        "The mix scene is unavailable. Select an existing scene and try again.",
+      destinationFolderUnavailable:
+        "LibreTracks could not determine where to create the project. Choose a destination folder and try again.",
+      invalidProjectName:
+        "The project name is invalid. Use a name that is valid for a folder.",
+      projectFolderExists:
+        "A folder named “{{name}}” already exists in that location. Choose another project name.",
+      emptyPadName: "Enter a name for the pad.",
+      officialPadReadOnly:
+        "Official pads cannot be edited. Create a user pad to assign your own audio.",
+      sourceAudioNotFound:
+        "The selected audio file no longer exists. Select it again.",
+      invalidPadArchive:
+        "The downloaded pad does not contain any recognized notes.",
+      padDownloadFailed:
+        "The pad could not be downloaded. Check your internet connection and try again.",
+      padFileOperationFailed:
+        "The pad files could not be saved. Check the available disk space and folder permissions.",
+      audioStateUnavailable:
+        "The audio engine is temporarily busy. Wait a moment and try again.",
+      invalidSongStructure:
+        "The song has invalid boundaries or duration. Check its position and length and try again.",
+      invalidTrackStructure:
+        "The track arrangement is inconsistent. Refresh the session or undo the last track change.",
+      clipOutsideSong:
+        "A clip would be left outside every song. Move it inside a song or extend the song boundaries.",
+      clipCrossesSongs:
+        "A clip cannot cross from one song into the next. Shorten or move the clip first.",
+      invalidMarker:
+        "A marker has an invalid position or shortcut. Move it to a valid position and try again.",
+      invalidMidiData:
+        "The MIDI clip contains an invalid channel, note or position. Review its events and try again.",
+      unsupportedProjectVersion:
+        "This project was created with an unsupported LibreTracks version. Update the app and try again.",
+      unsupportedAudioFormat:
+        "This audio format is not supported. Convert the file to WAV, FLAC, MP3, OGG, M4A or AAC.",
+      audioDecodeFailed:
+        "LibreTracks could not decode this audio file. The file may be damaged or use an unsupported codec.",
+      invalidPlaybackPosition:
+        "That playback position is invalid. Move the cursor inside the timeline and try again.",
+      invalidVampRange:
+        "Vamp cannot be enabled for that range. Select a complete section or valid bars.",
+      audioDeviceFailed:
+        "The audio device could not be opened. Check that it is connected and not in use by another application.",
+      networkUnavailable:
+        "LibreTracks could not connect to the server. Check your internet connection and try again.",
+      markerNotFound:
+        "That marker no longer exists. Refresh the session and try again.",
+      fileOperationFailed:
+        "LibreTracks could not read or write the required file. Check the location and permissions. Details: {{message}}",
+      audioEngineFailed:
+        "The audio engine could not complete the operation. Details: {{message}}",
+      operationFailed:
+        "The operation could not be completed. Details: {{message}}",
+      itemNotFound:
+        "The selected {{item}} no longer exists. Refresh the session and try again.",
+      item: {
+        clip: "clip",
+        track: "track",
+        region: "song",
+        section: "section",
+      },
+    },
     status: {
       loadingSession: "Loading session...",
       preparingAudio: "Preparing audio...",
+      applyingPitchChange: "Applying pitch change...",
+      preparingTransposedAudio: "Preparing transposed audio...",
+      transposedAudioPrepareFailed: "Could not prepare transposed audio",
       unpackingPackage: "Unpacking package...",
       tracksReady: "{{ready}}/{{total}} tracks ready",
       sourcesFailed: "{{count}} track(s) failed to load",

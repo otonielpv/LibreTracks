@@ -21,6 +21,13 @@ pub enum DesktopError {
     TrackNotFound(String),
     #[error("region not found: {0}")]
     RegionNotFound(String),
+    #[error(
+        "region duration change would overlap: {region_id} with {blocking_region_id}"
+    )]
+    RegionDurationOverlap {
+        region_id: String,
+        blocking_region_id: String,
+    },
     #[error("section not found: {0}")]
     SectionNotFound(String),
     #[error("clip range is invalid")]
