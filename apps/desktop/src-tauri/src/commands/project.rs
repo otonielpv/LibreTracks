@@ -1815,7 +1815,7 @@ pub fn export_session_package(
         "Exportar sesion",
         "LibreTracks Set",
         &["ltset"],
-        &format!("{}.ltset", crate::state::slugify(&song.title)),
+        &format!("{}.ltset", default_session_package_name(&song_dir, &song.title)),
     )?
     else {
         return Ok(false);
@@ -1897,6 +1897,24 @@ pub fn export_session_package(
 
 /// Export the whole session as a `.ltset` to an explicit path, bypassing the
 /// native save dialog and the progress-event choreography. Mirrors
+/// Default file name for an exported `.ltset`.
+///
+/// The project FOLDER, not `song.title`. The title is an internal field that a
+/// session created from a template or a package often never gets renamed from,
+/// so a project the user knows as "WhatAGod-Reckless" would offer to save
+/// itself as "nueva-cancion.ltset". The folder name is what they see and picked.
+/// Falls back to the title, then to a generic name, when there is no usable
+/// folder name.
+fn default_session_package_name(song_dir: &std::path::Path, title: &str) -> String {
+    song_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(crate::state::slugify)
+        .filter(|slug| !slug.is_empty())
+        .or_else(|| Some(crate::state::slugify(title)).filter(|slug| !slug.is_empty()))
+        .unwrap_or_else(|| "sesion".to_string())
+}
+
 /// Resolve the export mode from what the frontend sent.
 ///
 /// `prepared` is optional so every existing caller (and any saved automation)
@@ -2305,4 +2323,40 @@ pub fn import_external_project(
     session
         .import_external_project(&project_path, insert_at_seconds, &state.audio)
         .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod export_naming_tests {
+    use super::default_session_package_name;
+    use std::path::Path;
+
+    #[test]
+    fn the_default_ltset_name_comes_from_the_project_folder() {
+        // The user's real case: a session whose internal title was never
+        // renamed from the template's "Nueva Cancion", inside a folder they
+        // named themselves. The folder is what they recognise.
+        assert_eq!(
+            default_session_package_name(
+                Path::new("C:/Users/otoni/Desktop/TestsLibreTracks/WhatAGod-Reckless"),
+                "Nueva Cancion",
+            ),
+            "whatagod-reckless"
+        );
+    }
+
+    #[test]
+    fn the_title_is_only_a_fallback() {
+        // No usable folder name (a root path): fall back rather than offering
+        // an empty file name.
+        let name = default_session_package_name(Path::new("/"), "Mi Set");
+        assert_eq!(name, "mi-set");
+    }
+
+    #[test]
+    fn there_is_always_a_usable_name() {
+        // Neither folder nor title usable: never hand the save dialog "".
+        // `slugify` already guarantees a non-empty result, so this is a guard
+        // against that changing under us.
+        assert!(!default_session_package_name(Path::new("/"), "").is_empty());
+    }
 }

@@ -353,6 +353,7 @@ fn plan_audio_sources(
     song_dir: &Path,
     song: &Song,
     library_paths: &[String],
+    audio_mode: SessionPackageAudio,
 ) -> Vec<PlannedAudioSource> {
     let mut seen = HashSet::new();
     let mut reserved_lower = HashSet::new();
@@ -371,6 +372,20 @@ fn plan_audio_sources(
         };
         let Some(file_name) = source_abs.file_name().and_then(|value| value.to_str()) else {
             continue;
+        };
+        // In a Prepared package the payload is PCM, so the entry must end in
+        // .wav — and the rename has to happen BEFORE the collision resolver
+        // reserves the name, not after. A session holding both `Bass.mp3` and
+        // `Bass.wav` (the mixed-format sets this app encourages) otherwise
+        // renames the first onto the second and the zip rejects the duplicate,
+        // surfacing as "could not decode this audio". This is the same
+        // stem-across-extensions clash that already bit the waveform entries.
+        let owned_name;
+        let file_name = if matches!(audio_mode, SessionPackageAudio::Prepared) {
+            owned_name = crate::prepared_audio::prepared_relative_path(file_name);
+            owned_name.as_str()
+        } else {
+            file_name
         };
         let relative_path = allocate_audio_relative_path(&mut reserved_lower, file_name);
         planned.push(PlannedAudioSource {
@@ -564,16 +579,7 @@ pub fn export_session_as_package_with_audio(
     } else {
         Vec::new()
     };
-    let mut planned = plan_audio_sources(song_dir, song, &library_paths);
-    if matches!(audio_mode, SessionPackageAudio::Prepared) {
-        // The payload is PCM now, whatever the source was, so the entry names
-        // must say so — a "Bass.mp3" holding WAV bytes would be decoded by
-        // extension and fail. Collision suffixes live in the stem, so renaming
-        // the extension cannot reintroduce a clash.
-        for source in &mut planned {
-            source.relative_path = crate::prepared_audio::prepared_relative_path(&source.relative_path);
-        }
-    }
+    let planned = plan_audio_sources(song_dir, song, &library_paths, audio_mode);
     let relative_by_clip_path: HashMap<String, String> = planned
         .iter()
         .map(|source| (source.clip_path.clone(), source.relative_path.clone()))
@@ -1392,6 +1398,84 @@ mod tests {
                 clip.file_path
             );
         }
+    }
+
+    /// The user's real session: 39 audio files including eight `X.mp3` +
+    /// `X.wav` pairs. Renaming every prepared entry to `.wav` AFTER the
+    /// collision resolver had run made `Bass.mp3` land on the already-taken
+    /// `Bass.wav`, the zip writer rejected the duplicate, and the app reported
+    /// "could not decode this audio". Same stem-across-extensions clash that
+    /// already bit the waveform entries once.
+    #[test]
+    fn optimized_export_survives_sources_sharing_a_stem_across_extensions() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
+
+        // Both members of the pair are real, decodable audio at the same rate.
+        for name in ["Bass.wav", "Bass.mp3", "Guide.wav", "Guide.mp3"] {
+            let spec = hound::WavSpec {
+                channels: 2,
+                sample_rate: 44_100,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            };
+            let mut writer =
+                hound::WavWriter::create(song_dir.join("audio").join(name), spec).expect("wav");
+            for frame in 0..128 {
+                writer.write_sample((frame % 400) as i16).expect("l");
+                writer.write_sample((frame % 200) as i16).expect("r");
+            }
+            writer.finalize().expect("finalize");
+        }
+        fs::write(song_dir.join("library.json"), br#"{"assets":[]}"#).expect("library");
+
+        let mut song = session();
+        song.clips = vec![
+            clip("c1", "t1", "audio/Bass.wav", 0.0, 1.0),
+            clip("c2", "t1", "audio/Bass.mp3", 1.0, 1.0),
+            clip("c3", "t1", "audio/Guide.wav", 2.0, 1.0),
+            clip("c4", "t1", "audio/Guide.mp3", 3.0, 1.0),
+        ];
+
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package_with_audio(
+            song_dir,
+            song_dir,
+            &song,
+            &[],
+            &package_path,
+            SessionPackageAudio::Prepared,
+            |_, _| {},
+        )
+        .expect("export must not fail on a stem collision");
+
+        // Every clip resolves to its OWN file, and no two clips share one.
+        let target = tempfile::tempdir().expect("target");
+        let extracted =
+            extract_session_package(&target.path().join("Set"), &package_path, |_, _| {})
+                .expect("extract");
+        let loaded = crate::load_song_from_file(&extracted.song_file).expect("load");
+
+        let mut seen = HashSet::new();
+        for clip in &loaded.clips {
+            assert!(
+                clip.file_path.ends_with(".wav"),
+                "prepared clip {} must be named as PCM",
+                clip.file_path
+            );
+            assert!(
+                seen.insert(clip.file_path.clone()),
+                "two clips collapsed onto {}",
+                clip.file_path
+            );
+            assert!(
+                extracted.song_dir.join(&clip.file_path).is_file(),
+                "clip {} is missing from the package",
+                clip.file_path
+            );
+        }
+        assert_eq!(seen.len(), 4, "all four distinct sources must survive");
     }
 
     #[test]
