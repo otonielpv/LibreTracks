@@ -102,3 +102,53 @@ See [`testing-engine-v2.md`](testing-engine-v2.md) for engine-specific notes.
   update-check store) isolate state with `vi.resetModules()` + dynamic import.
 - Rust filesystem tests use `tempfile::tempdir()`; audio tests synthesize WAVs
   with `hound` rather than committing fixtures.
+
+## Android device bench (manual)
+
+`scripts/android-bench.mjs` measures what the low-end Android plan
+(`docs/plans/android-low-end/`) claims to improve: process memory, system
+memory, disk consumed, and process kills from memory pressure. It is **run by
+hand** with a phone on USB — never in CI (no device on the runner, and this repo
+has a history of timing-dependent tests taking down releases).
+
+```
+node ./scripts/android-bench.mjs --list
+node ./scripts/android-bench.mjs --scenario import-full --out baseline.json
+```
+
+The scenarios that drive the phone's UI print the exact steps to perform and
+wait for you to press Enter at the start and end. The SAF file picker is a
+system dialog and is deliberately **not** automated.
+
+Useful flags: `--interval <ms>` (sampling period), `--max-seconds <s>` (auto-stop
+so a crash doesn't hang the run), `--device <serial>`, `--adb <path>`,
+`--outcome <text>` (force the recorded outcome, e.g. `system_restart`).
+
+### Reading the output
+
+| Field | Meaning |
+| --- | --- |
+| `memory.rss_peak_kb` | Highest sampled RSS |
+| `memory.hwm_peak_kb` | `VmHWM` — the kernel's own peak, independent of sampling rate |
+| `memory.available_min_kb` | Lowest system `MemAvailable` seen |
+| `disk.consumed_kb` | `/data` used before vs after |
+| `kills.libretracks` | Times the app itself was killed — **non-zero is a failure** |
+| `kills.total` | System-wide kills; a cascade (>20) is the memory-pressure signature |
+| `engine_logs.starvation_count` | `[LT_STARVATION]` events — likely audio dropouts |
+| `ui.janky_percent` | Share of frames that missed their deadline (`dumpsys gfxinfo`) |
+| `ui.p99_ms` | 99th-percentile frame time — the visible stutters |
+
+Two caveats about how the numbers are obtained:
+
+- `/proc/<pid>/io` is **not readable without root** on Android 10 (verified on
+  the CPH1931), so written bytes are approximated by the `df` delta on `/data`.
+  That measures net space consumed — what the user feels — but not overwritten
+  writes or other apps' traffic.
+- A full system restart cannot be observed from the script (it loses the
+  device). Record it yourself with `--outcome system_restart`.
+
+UI smoothness is measured separately from audio: an import can finish with
+`starvation_count: 0` and still leave the app unusable. The baseline run on the
+CPH1931 did exactly that — it completed, killed no LibreTracks process, and
+still hit 53% janky frames with a p99 of 1950 ms. Frame counters are reset at
+the start of each run, so the numbers cover the measured window only.

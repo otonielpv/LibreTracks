@@ -55,3 +55,19 @@ in-app y las pautas del anuncio de Facebook.
 - `npm run lint` es typecheck (`tsc --noEmit`) en desktop, remote y shared.
 - Los crates nativos van aparte: `npm run test:native` (el FFI no compila sin el
   engine).
+
+## Plan Android para dispositivos modestos
+
+Hay un plan de 9 pasos en `docs/plans/android-low-end/` para que LibreTracks
+funcione en móviles de gama baja (lo motivó un Oppo CPH1931 de 2,58 GB de RAM
+que reinició el sistema al importar un `.ltset` de 2 GB).
+
+Si te piden trabajar como **BUILDER** o **REVIEWER** de un paso numerado de ese
+plan, tus instrucciones completas están en:
+
+- BUILDER → `.claude/skills/builder/SKILL.md`
+- REVIEWER → `.claude/skills/reviewer/SKILL.md`
+
+Léelas enteras antes de tocar nada. El contexto compartido es
+`docs/plans/android-low-end/00-DIAGNOSTICO.md` y la memoria entre vueltas es
+`docs/plans/android-low-end/state/NN.md`.

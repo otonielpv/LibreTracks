@@ -1,3 +1,7 @@
 {
-    "cmake.sourceDirectory": "D:/Repos/LibreTracks/native/audio-engine-v2"
+    "cmake.sourceDirectory": "D:/Repos/LibreTracks/native/audio-engine-v2",
+    "chat.promptFiles": true,
+    "chat.promptFilesLocations": {
+        ".github/prompts": true
+    }
 }
