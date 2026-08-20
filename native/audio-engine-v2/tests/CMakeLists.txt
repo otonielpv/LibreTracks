@@ -13,6 +13,7 @@ add_executable(lt_engine_tests
     main.cpp
     test_session_validation.cpp
     test_device_channel_layout.cpp
+    test_device_profile.cpp
     test_transport_clock.cpp
     test_jump_scheduler.cpp
     test_command_json.cpp

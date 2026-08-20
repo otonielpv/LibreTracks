@@ -81,15 +81,18 @@ inline std::uint64_t lt_physical_ram_bytes() {
 #endif
 }
 
-// Recommend a background worker count for `role`, scaled to this machine.
-inline int lt_recommend_worker_threads(WorkerRole role) {
-    const unsigned hw = std::thread::hardware_concurrency();
-    const int cores = hw > 0 ? static_cast<int>(hw) : 4;
+// Same policy, but over explicitly supplied machine facts instead of querying
+// the host. Exists so the rules can be tested at every RAM/core tier without
+// the test being at the mercy of the machine it runs on (and so device_profile.h
+// can reuse them rather than restating them, which would let the two drift).
+// `cores` <= 0 and `ram_bytes` == 0 mean "unknown" and take the same fallbacks
+// the querying version has always taken.
+inline int lt_recommend_worker_threads_for(WorkerRole role, int cores_in, std::uint64_t ram) {
+    const int cores = cores_in > 0 ? cores_in : 4;
 
     // Leave one core for the audio callback + UI; never go below 1.
     const int spare = std::max(1, cores - 1);
 
-    const std::uint64_t ram = lt_physical_ram_bytes();
     const double ram_gb = ram > 0 ? static_cast<double>(ram) / (1024.0 * 1024.0 * 1024.0)
                                   : 8.0;  // assume a middling 8GB when unknown
 
@@ -122,6 +125,13 @@ inline int lt_recommend_worker_threads(WorkerRole role) {
     int cap = 4;
     if (low_core || ram_gb <= 4.5) cap = 2;
     return std::clamp(std::min(spare, cap), 1, 4);
+}
+
+// Recommend a background worker count for `role`, scaled to this machine.
+inline int lt_recommend_worker_threads(WorkerRole role) {
+    const unsigned hw = std::thread::hardware_concurrency();
+    return lt_recommend_worker_threads_for(role, hw > 0 ? static_cast<int>(hw) : 0,
+                                           lt_physical_ram_bytes());
 }
 
 } // namespace lt

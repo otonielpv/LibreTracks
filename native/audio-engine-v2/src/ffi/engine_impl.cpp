@@ -1,4 +1,5 @@
 #include <lt_engine/engine_impl.h>
+#include <lt_engine/core/device_profile.h>
 #include <lt_engine/core/engine_core.h>
 #include <lt_engine/core/events.h>
 #include <lt_engine/debug/logging.h>
@@ -630,6 +631,23 @@ Result<void> EngineImpl::initialize() {
     // making it possible to separate one session's dropouts from another's.
     lt_debug_log("[LT_SESSION] engine initialize at %s\n",
                  lt_debug_datetime().c_str());
+
+    // What this machine lets us spend. Printed next to the session banner so a
+    // log from a user's phone answers "which budgets was it running with?"
+    // without a debug build — the question that took a USB cable to answer when
+    // a 2 GB .ltset took an Oppo CPH1931 down.
+    {
+        const auto& device = lt_device_profile();
+        lt_debug_log(
+            "[LT_DEVICE] class=%s ram=%.2fGB available=%.2fGB budget=%lluMB "
+            "cores=%d decode=%d fill=%d cache=%zuMB\n",
+            lt_device_class_name(device.device_class),
+            device.physical_ram_bytes / (1024.0 * 1024.0 * 1024.0),
+            device.available_ram_bytes / (1024.0 * 1024.0 * 1024.0),
+            static_cast<unsigned long long>(device.usable_budget_bytes / (1024 * 1024)),
+            device.cores, device.decode_threads, device.fill_threads,
+            device.source_cache_mb);
+    }
 
     clock_          = std::make_unique<TransportClock>(48000);
     scheduler_      = std::make_unique<JumpScheduler>();
