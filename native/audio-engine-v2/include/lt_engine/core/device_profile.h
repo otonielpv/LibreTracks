@@ -112,10 +112,15 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
                                       : 256ull * 1024 * 1024;
         profile.usable_budget_bytes = std::min(quarter, cap);
 
-        // One decoder. On the CPH1931 (8 cores, but 4 slow A73 + 4 A53) the
-        // bottleneck is the eMMC, not the CPU: a second decoder doubles peak
-        // RSS without finishing sooner, and peak RSS is what summons the
-        // low-memory killer.
+        // Decode threads: this is preparation work (decode + resample + write
+        // the PCM cache), and it is the ONE place where parallelism pays on a
+        // phone. Cutting it to a single worker looked prudent — each job holds
+        // a decode buffer, and peak RSS is what summons the low-memory killer
+        // — but on the CPH1931 it meant a 36-stem session needed ~36 MINUTES
+        // to prepare, so playback was simply silence for the tracks that had
+        // not got there yet. Two workers cost one extra decode buffer and halve
+        // that. The fill pool stays at one: it is pure disk I/O, and a second
+        // reader only queues behind the first on one eMMC.
         //
         // Playback streams from disk, so the cache is not "the song in RAM":
         // it is the read-ahead window that keeps the audio thread from waiting
@@ -133,12 +138,12 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
         // triples how many tracks fit in the same memory. The budget below is
         // then sized to hold several sessions' worth of those windows.
         if (profile.device_class == DeviceClass::Constrained) {
-            profile.decode_threads = 1;
+            profile.decode_threads = 2;
             profile.fill_threads = 1;
             profile.source_cache_mb = 128;
             profile.protected_blocks_per_source = 16;  // ~1.5 s
         } else {
-            profile.decode_threads = 2;
+            profile.decode_threads = 3;
             profile.fill_threads = 2;
             profile.source_cache_mb = 192;
             profile.protected_blocks_per_source = 24;  // ~2.2 s

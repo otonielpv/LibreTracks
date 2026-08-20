@@ -379,6 +379,12 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.buffer_size = impl_->buffer_size;
     info.output_channel_count = kOutputChannels;
     info.output_channel_names = {"Out 1", "Out 2"};
+    // Without this the host reads "unknown" and gives up on matching the device
+    // to the session, so a 44.1 kHz set on a device AAudio opened at 48 kHz got
+    // every source decoded, resampled and written to the PCM cache — 36 stems
+    // of pointless work on the slowest storage we run on. AAudio resamples any
+    // rate internally, and both of these are safe to request.
+    info.supported_sample_rates = {44100, 48000};
     info.last_error  = impl_->last_error;
     if (impl_->adaptor && impl_->adaptor->has_error())
         info.last_error = impl_->adaptor->last_error();

@@ -89,7 +89,10 @@ TEST_CASE("the Oppo CPH1931 classifies as Constrained") {
         lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8));
 
     CHECK(profile.device_class == DeviceClass::Constrained);
-    CHECK(profile.decode_threads == 1);
+    // Two decoders, not one: preparation is the one phase where parallelism
+    // pays, and a single worker left a 36-stem session ~36 minutes from being
+    // playable. Fill stays at one — it is disk I/O on a single eMMC.
+    CHECK(profile.decode_threads == 2);
     CHECK(profile.fill_threads == 1);
     // Sized so a 36-stem set's protected read-ahead windows still fit; see
     // the measurement in device_profile.h.
@@ -104,7 +107,7 @@ TEST_CASE("a roomier handheld is not treated as Constrained") {
     const auto profile = lt_device_profile_for(handheld_probe(6 * kGb, 3 * kGb, 8));
 
     CHECK(profile.device_class == DeviceClass::Handheld);
-    CHECK(profile.decode_threads == 2);
+    CHECK(profile.decode_threads == 3);
     CHECK(profile.fill_threads == 2);
     CHECK(profile.source_cache_mb == 192);
     CHECK(profile.usable_budget_bytes == 256 * kMb);  // quarter of 3 GB, capped
@@ -188,11 +191,11 @@ TEST_CASE("a handheld's decode pool is smaller than the desktop policy would pic
     const auto oppo =
         lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8));
 
-    CHECK(oppo.decode_threads == 1);
-    // The old policy sees 2.58 GB of RAM and 8 cores and says 2.
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Decode, 8, 2706168ull * 1024) == 2);
-    CHECK(oppo.decode_threads < lt_recommend_worker_threads_for(
-                                    WorkerRole::Decode, 8, 2706168ull * 1024));
+    // The fill pool is where the handheld profile diverges: one reader, not
+    // the two the RAM-only policy picks, because a second only queues behind
+    // the first on a single eMMC.
+    CHECK(oppo.fill_threads == 1);
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Fill, 8, 2706168ull * 1024) == 2);
 }
 
 TEST_CASE("the cached profile is resolved once and stays stable") {
