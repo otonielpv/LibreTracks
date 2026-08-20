@@ -1,3 +1,4 @@
+import type { SessionExportMode } from "../panels/ExportSessionModal";
 import type {
   LibraryAssetSummary,
   ProjectLoadProgressEvent,
@@ -274,7 +275,9 @@ export function useProjectActions({
   // via the session:export-progress event into a non-modal indicator, so a large
   // full export shows real percent (and the user keeps using the UI). We resolve
   // on the terminal `done` event.
-  function handleExportSessionConfirm(includeAudio: boolean) {
+  function handleExportSessionConfirm(mode: SessionExportMode) {
+    const includeAudio = mode !== "light";
+    const prepared = mode === "optimized";
     void runAction(async () => {
       // Register the progress listener BEFORE invoking the command so we don't
       // miss early events. `finished` resolves on the terminal `done` event.
@@ -307,7 +310,7 @@ export function useProjectActions({
             defaultValue: "Exportando sesión...",
           }),
         });
-        const started = await exportSessionPackage(includeAudio);
+        const started = await exportSessionPackage(includeAudio, prepared);
         if (!started) {
           // User cancelled the save dialog: no terminal event will arrive.
           setSessionExportUiState({ active: false, percent: 0, message: "" });

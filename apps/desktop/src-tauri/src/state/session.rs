@@ -504,6 +504,23 @@ impl DesktopSession {
         audio: &AudioController,
         extracted: ExtractedSessionPackage,
     ) -> Result<TransportSnapshot, DesktopError> {
+        // An Optimized package ships PCM baked at one rate. Match the device to
+        // it BEFORE any source is registered, or the whole point is lost: the
+        // engine would decode and resample every prepared file back to whatever
+        // the driver happened to open at — the exact work this package exists to
+        // have already done. Best-effort, like the session-wide alignment: a
+        // driver that refuses just means we convert, as before.
+        if let Some(rate) = extracted.prepared_sample_rate {
+            let (engine_rate, supported) = audio.current_sample_rate_capabilities();
+            if engine_rate != rate && (supported.is_empty() || supported.contains(&rate)) {
+                if let Err(error) = audio.set_output_sample_rate(rate) {
+                    crate::infra::error_log::write_error(&format!(
+                        "could not switch to {rate} Hz for a prepared package: {error}"
+                    ));
+                }
+            }
+        }
+
         self.begin_open_project_from_path(app, audio, extracted.song_file)?;
         Ok(self.snapshot())
     }

@@ -345,6 +345,9 @@ const es = {
       fullTitle: "Completo (para llevártelo)",
       fullDescription:
         "Incluye los audios usados y las ondas. Autocontenido: se abre en otro dispositivo sin los archivos originales.",
+      optimizedTitle: "Optimizado (para móviles y equipos lentos)",
+      optimizedDescription:
+        "Incluye los audios ya preparados, así que la sesión abre al instante sin esperar a \"Preparando audio\". El archivo ocupa más.",
       lightTitle: "Ligero",
       lightDescription:
         "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",

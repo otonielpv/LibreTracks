@@ -21,6 +21,7 @@ pub use package::{
 };
 pub use prepared_audio::{prepare_audio_to_wav, prepared_relative_path, PreparedAudioInfo};
 pub use session_package::{
+    export_session_as_package_with_audio, SessionPackageAudio,
     export_session_as_package, extract_session_package, extract_session_package_from_reader,
     ExtractedSessionPackage,
     SessionPackageExport, SidecarFile,

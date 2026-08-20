@@ -197,6 +197,29 @@ pub fn export_region_as_package(
     output_path: &Path,
     include_audio: bool,
 ) -> Result<SongPackageExport, ProjectError> {
+    let audio_mode = if include_audio {
+        crate::SessionPackageAudio::Original
+    } else {
+        crate::SessionPackageAudio::Referenced
+    };
+    export_region_as_package_with_audio(
+        cache_root, song_dir, song, region_id, output_path, audio_mode,
+    )
+}
+
+/// Export one song choosing how its audio travels. Same three modes as a whole
+/// session — sharing a single song is the commonest case, so Optimized has to
+/// work here too or the feature only helps whole-set transfers.
+pub fn export_region_as_package_with_audio(
+    cache_root: &Path,
+    song_dir: &Path,
+    song: &Song,
+    region_id: &str,
+    output_path: &Path,
+    audio_mode: crate::SessionPackageAudio,
+) -> Result<SongPackageExport, ProjectError> {
+    let include_audio = !matches!(audio_mode, crate::SessionPackageAudio::Referenced);
+    let mut prepared_sample_rate: Option<u32> = None;
     let region = song
         .regions
         .iter()
@@ -345,10 +368,38 @@ pub fn export_region_as_package(
         // for peaks should still ship its audio.
         if include_audio {
             if let Some(file_name) = source_abs.file_name().and_then(|value| value.to_str()) {
-                if let Ok(audio_bytes) = fs::read(&source_abs) {
-                    zip.start_file(format!("audio/{file_name}"), waveform_options)
-                        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-                    zip.write_all(&audio_bytes)?;
+                match audio_mode {
+                    crate::SessionPackageAudio::Referenced => {}
+                    crate::SessionPackageAudio::Original => {
+                        if let Ok(audio_bytes) = fs::read(&source_abs) {
+                            zip.start_file(format!("audio/{file_name}"), waveform_options)
+                                .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                            zip.write_all(&audio_bytes)?;
+                        }
+                    }
+                    crate::SessionPackageAudio::Prepared => {
+                        // Decode once here so the receiving device does not have
+                        // to. Entry renamed to .wav: the engine picks its decoder
+                        // by extension, and PCM inside a ".mp3" fails to open.
+                        let staging = std::env::temp_dir().join(format!(
+                            "libretracks-prepare-song-{}-{file_name}.wav",
+                            std::process::id()
+                        ));
+                        if let Ok(info) =
+                            crate::prepare_audio_to_wav(&source_abs, &staging)
+                        {
+                            prepared_sample_rate.get_or_insert(info.sample_rate);
+                            if let Ok(prepared_bytes) = fs::read(&staging) {
+                                let entry = crate::prepared_relative_path(file_name);
+                                zip.start_file(format!("audio/{entry}"), waveform_options)
+                                    .map_err(|error| {
+                                        ProjectError::AudioDecode(error.to_string())
+                                    })?;
+                                zip.write_all(&prepared_bytes)?;
+                            }
+                        }
+                        let _ = fs::remove_file(&staging);
+                    }
                 }
             }
         }

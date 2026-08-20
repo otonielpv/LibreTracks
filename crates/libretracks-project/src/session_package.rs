@@ -111,6 +111,12 @@ pub struct ExtractedSessionPackage {
     pub song_file: PathBuf,
     pub session_title: String,
     pub bundled_audio: bool,
+    /// Set when the package carries audio already decoded to PCM (an Optimized
+    /// export). The opener matches the engine to this rate, which is what turns
+    /// "decode and resample every source" into "open and play". `None` for
+    /// Light and Full packages, and for anything written before the mode
+    /// existed.
+    pub prepared_sample_rate: Option<u32>,
 }
 
 fn normalize_zip_path(file_path: &str) -> String {
@@ -907,6 +913,13 @@ fn extract_session_package_inner<R: Read + io::Seek>(
             manifest.session_title
         },
         bundled_audio: manifest.bundled_audio,
+        // Only honour the declared rate when the package actually says it
+        // carries PCM: a rate without a format is a package we do not
+        // understand, and guessing would cost the user a needless conversion.
+        prepared_sample_rate: match manifest.prepared_format.as_deref() {
+            Some("pcm_s16") => manifest.prepared_sample_rate,
+            _ => None,
+        },
     })
 }
 

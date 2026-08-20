@@ -327,6 +327,9 @@ const en = {
       fullTitle: "Full (to take with you)",
       fullDescription:
         "Includes the used audio files and waveforms. Self-contained: opens on another device without the original files.",
+      optimizedTitle: "Optimized (for phones and slow machines)",
+      optimizedDescription:
+        "Includes the audio already prepared, so the session opens straight away with no \"Preparing audio\" wait. The file is larger.",
       lightTitle: "Light",
       lightDescription:
         "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",

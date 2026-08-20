@@ -1797,6 +1797,7 @@ pub fn import_song_package(
 pub fn export_session_package(
     app: AppHandle,
     include_audio: bool,
+    prepared: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<bool, String> {
     let (song_dir, song, sidecars) = {
@@ -1823,6 +1824,7 @@ pub fn export_session_package(
 
     let cache_root = crate::state::decoding_cache_root();
     let worker_app = app.clone();
+    let audio_mode = session_audio_mode(include_audio, prepared);
     thread::spawn(move || {
         crate::state::emit_session_export_progress(
             &worker_app,
@@ -1831,13 +1833,13 @@ pub fn export_session_package(
             false,
             None,
         );
-        let result = libretracks_project::export_session_as_package(
+        let result = libretracks_project::export_session_as_package_with_audio(
             &cache_root,
             &song_dir,
             &song,
             &sidecars,
             &path,
-            include_audio,
+            audio_mode,
             |done, total| {
                 if total > 0 {
                     // Per-source work is the bulk of the export (audio + waveform
@@ -1895,12 +1897,29 @@ pub fn export_session_package(
 
 /// Export the whole session as a `.ltset` to an explicit path, bypassing the
 /// native save dialog and the progress-event choreography. Mirrors
+/// Resolve the export mode from what the frontend sent.
+///
+/// `prepared` is optional so every existing caller (and any saved automation)
+/// keeps working untouched: absent or false means the old two-mode behaviour.
+fn session_audio_mode(
+    include_audio: bool,
+    prepared: Option<bool>,
+) -> libretracks_project::SessionPackageAudio {
+    use libretracks_project::SessionPackageAudio;
+    match (include_audio, prepared.unwrap_or(false)) {
+        (true, true) => SessionPackageAudio::Prepared,
+        (true, false) => SessionPackageAudio::Original,
+        (false, _) => SessionPackageAudio::Referenced,
+    }
+}
+
 /// `export_session_package` but writes straight to `write_path` — used by the
 /// E2E automation seam, which cannot pilot the dialog. Not wired into any UI.
 #[tauri::command]
 pub async fn export_session_package_at(
     write_path: String,
     include_audio: bool,
+    prepared: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<bool, String> {
     let (song_dir, song, sidecars) = {
@@ -1915,14 +1934,15 @@ pub async fn export_session_package_at(
 
     let cache_root = crate::state::decoding_cache_root();
     let path = std::path::PathBuf::from(write_path);
+    let audio_mode = session_audio_mode(include_audio, prepared);
     tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_session_as_package(
+        libretracks_project::export_session_as_package_with_audio(
             &cache_root,
             &song_dir,
             &song,
             &sidecars,
             &path,
-            include_audio,
+            audio_mode,
             |_done, _total| {},
         )
         .map_err(|error| error.to_string())

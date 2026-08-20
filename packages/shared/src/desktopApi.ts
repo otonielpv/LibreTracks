@@ -804,8 +804,12 @@ export async function exportRegionRenderedAudio(regionId: string): Promise<boole
 // caller registers that listener before awaiting this.
 export async function exportSessionPackage(
   includeAudio: boolean,
+  prepared = false,
 ): Promise<boolean> {
-  return invokeCommand<boolean>("export_session_package", { includeAudio });
+  return invokeCommand<boolean>("export_session_package", {
+    includeAudio,
+    prepared,
+  });
 }
 
 /**
@@ -820,6 +824,7 @@ export async function exportSessionPackageAt(
   return invokeCommand<boolean>("export_session_package_at", {
     writePath,
     includeAudio,
+    prepared: false,
   });
 }
 
