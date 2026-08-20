@@ -107,18 +107,32 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
                                       : 256ull * 1024 * 1024;
         profile.usable_budget_bytes = std::min(quarter, cap);
 
-        // Deliberately tiny. On the CPH1931 (8 cores, but 4 slow A73 + 4 A53)
-        // the bottleneck is the eMMC, not the CPU: a second decoder doubles
-        // peak RSS without finishing sooner, and peak RSS is what summons the
+        // One decoder. On the CPH1931 (8 cores, but 4 slow A73 + 4 A53) the
+        // bottleneck is the eMMC, not the CPU: a second decoder doubles peak
+        // RSS without finishing sooner, and peak RSS is what summons the
         // low-memory killer.
+        //
+        // The cache is a different story, and getting it wrong is worse than
+        // not shrinking it at all. BlockCache refuses to evict each source's
+        // 48 most recent blocks (its read-ahead window, ~4.5 s at 44.1 kHz,
+        // 1.5 MB), so a session's protected working set is
+        // sources x 1.5 MB — 54 MB for a 36-stem set. Budget below that and
+        // the cache cannot even hold what it has promised not to evict: it
+        // thrashes, the audio thread asks for blocks that never arrive, and
+        // playback goes silent.
+        //
+        // Measured on the CPH1931 with a 36-source set: 48 MB produced 43.5
+        // MILLION silenced frames (~15 minutes of silence) and 98
+        // [LT_STARVATION] events. 128 MB leaves ~2.4x the protected window,
+        // and is still a quarter of the desktop budget.
         if (profile.device_class == DeviceClass::Constrained) {
             profile.decode_threads = 1;
             profile.fill_threads = 1;
-            profile.source_cache_mb = 48;
+            profile.source_cache_mb = 128;
         } else {
             profile.decode_threads = 2;
             profile.fill_threads = 2;
-            profile.source_cache_mb = 96;
+            profile.source_cache_mb = 192;
         }
         return profile;
     }

@@ -91,7 +91,9 @@ TEST_CASE("the Oppo CPH1931 classifies as Constrained") {
     CHECK(profile.device_class == DeviceClass::Constrained);
     CHECK(profile.decode_threads == 1);
     CHECK(profile.fill_threads == 1);
-    CHECK(profile.source_cache_mb == 48);
+    // Sized so a 36-stem set's protected read-ahead windows still fit; see
+    // the measurement in device_profile.h.
+    CHECK(profile.source_cache_mb == 128);
     // A quarter of ~1.07 GB is ~274 MB, so the 128 MB cap is what binds.
     CHECK(profile.usable_budget_bytes == 128 * kMb);
 }
@@ -104,7 +106,7 @@ TEST_CASE("a roomier handheld is not treated as Constrained") {
     CHECK(profile.device_class == DeviceClass::Handheld);
     CHECK(profile.decode_threads == 2);
     CHECK(profile.fill_threads == 2);
-    CHECK(profile.source_cache_mb == 96);
+    CHECK(profile.source_cache_mb == 192);
     CHECK(profile.usable_budget_bytes == 256 * kMb);  // quarter of 3 GB, capped
 }
 
@@ -127,7 +129,7 @@ TEST_CASE("a handheld with unknown available memory falls back to a quarter of p
     const auto profile = lt_device_profile_for(handheld_probe(2 * kGb, 0, 8));
 
     CHECK(profile.device_class == DeviceClass::Constrained);  // 512 MB < 1.5 GB
-    CHECK(profile.source_cache_mb == 48);
+    CHECK(profile.source_cache_mb == 128);
 }
 
 TEST_CASE("unknown core count does not produce a zero-thread pool") {
@@ -135,6 +137,30 @@ TEST_CASE("unknown core count does not produce a zero-thread pool") {
     CHECK(lt_device_profile_for(desktop_probe(8 * kGb, 0)).decode_threads >= 1);
     CHECK(lt_device_profile_for(desktop_probe(8 * kGb, 0)).fill_threads >= 1);
     CHECK(lt_device_profile_for(handheld_probe(2 * kGb, 1 * kGb, 0)).decode_threads >= 1);
+}
+
+TEST_CASE("a handheld cache still fits a real session's protected working set") {
+    // The regression this pins, measured on the device: BlockCache never evicts
+    // each source's 48 most recent blocks. Below sources x 48 blocks the cache
+    // cannot hold what it has promised to keep, so it thrashes and the audio
+    // thread is served silence. A 48 MB budget did exactly that to a 36-stem
+    // set: 43.5 million silenced frames, 98 [LT_STARVATION] events.
+    constexpr std::size_t kBlockBytes = 4096 * sizeof(float) * 2;  // 32 KiB
+    constexpr std::size_t kProtectedBlocksPerSource = 48;
+    constexpr std::size_t kRealisticSources = 36;  // the user's WhatAGod set
+
+    const std::size_t protected_bytes =
+        kRealisticSources * kProtectedBlocksPerSource * kBlockBytes;
+
+    for (const auto& profile :
+         {lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8)),
+          lt_device_profile_for(handheld_probe(6 * kGb, 3 * kGb, 8))}) {
+        const std::size_t budget_bytes = profile.source_cache_mb * 1024 * 1024;
+        CHECK(budget_bytes > protected_bytes);
+        // ...with real headroom, not a hair over: a cache exactly the size of
+        // its protected set has nowhere to put the blocks it is fetching.
+        CHECK(budget_bytes >= protected_bytes * 2);
+    }
 }
 
 TEST_CASE("a handheld's decode pool is smaller than the desktop policy would pick") {
