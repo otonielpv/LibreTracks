@@ -41,6 +41,40 @@ class MainActivity : TauriActivity() {
     installVoiceGuideAssets()
   }
 
+  // Android warns before it kills. Ignoring that warning is how importing a
+  // 2 GB .ltset ended with the system killing ~40 other processes and
+  // restarting system_server; see docs/plans/android-low-end/.
+  //
+  // Straight to native rather than through the WebView: under real pressure the
+  // WebView process is itself a kill candidate, so a warning that has to travel
+  // through it is a warning we may never receive. The native side keeps each
+  // playing source's read-ahead window, so this never silences a performance.
+  override fun onTrimMemory(level: Int) {
+    super.onTrimMemory(level)
+    notifyNativeMemoryPressure(level)
+  }
+
+  override fun onLowMemory() {
+    super.onLowMemory()
+    notifyNativeMemoryPressure(TRIM_MEMORY_COMPLETE)
+  }
+
+  private fun notifyNativeMemoryPressure(level: Int) {
+    try {
+      val freed = nativeOnTrimMemory(level)
+      Log.i("LTMemory", "onTrimMemory(level=$level) released $freed bytes")
+    } catch (error: UnsatisfiedLinkError) {
+      // The Rust library may not be loaded yet (very early in startup) — there
+      // is nothing cached to release in that case anyway.
+      Log.w("LTMemory", "memory pressure before the native library: ${error.message}")
+    }
+  }
+
+  // Whether the transport is running is decided on the native side, which owns
+  // the answer; asking Kotlin would mean keeping a second copy of that state in
+  // sync for no benefit.
+  private external fun nativeOnTrimMemory(level: Int): Long
+
   // The voice-guide WAV bank ships as Android assets (assets/voices/), but the
   // native decoder needs fopen-able paths and Tauri's resource bundler doesn't
   // ship `resources` on Android. Copy the bank to filesDir/voices when the

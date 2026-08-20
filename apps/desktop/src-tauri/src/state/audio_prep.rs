@@ -333,6 +333,11 @@ impl DesktopSession {
         state: &DesktopState,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        // A session is being opened, so whatever memory warning made us hold
+        // off has passed its moment: the user is asking for this audio now.
+        #[cfg(target_os = "android")]
+        crate::platform::android_memory::resume_preparation_after_pressure();
+
         const TIMEOUT: Duration = Duration::from_secs(120);
         const POLL_INTERVAL: Duration = Duration::from_millis(50);
         const SOURCES_BASE: u8 = 18;

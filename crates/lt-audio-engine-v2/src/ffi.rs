@@ -74,6 +74,10 @@ extern "C" {
     pub fn lt_audio_engine_source_cache_size_bytes() -> u64;
     pub fn lt_audio_engine_purge_source_cache() -> u64;
     pub fn lt_audio_engine_purge_source_cache_ex(out_failed: *mut u32) -> u64;
+    pub fn lt_audio_engine_release_cached_audio(
+        engine: *mut LtEngine,
+        keep_per_source: u32,
+    ) -> u64;
 }
 
 // ── Stubs (no-link feature — tests only) ───────────────────────────────────
@@ -257,5 +261,15 @@ pub unsafe fn lt_audio_engine_purge_source_cache_ex(out_failed: *mut u32) -> u64
     if !out_failed.is_null() {
         *out_failed = 0;
     }
+    0
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_release_cached_audio(
+    _engine: *mut LtEngine,
+    _keep_per_source: u32,
+) -> u64 {
     0
 }

@@ -438,6 +438,52 @@ pub struct RealtimeControlDiagnostics {
     pub last_session_rebuild_reason: String,
 }
 
+/// The live controller, for callers that arrive without an `AppHandle`.
+///
+/// Android's `onTrimMemory` is delivered by the JVM straight to a JNI function
+/// with no Tauri context, and routing it through the WebView is not an option:
+/// under real memory pressure the WebView process is itself a kill candidate.
+#[cfg(target_os = "android")]
+static GLOBAL_CONTROLLER: std::sync::OnceLock<std::sync::Weak<AudioController>> =
+    std::sync::OnceLock::new();
+
+/// Publish the controller for JNI callbacks. Called once during setup.
+/// Held weakly so this never keeps the controller alive past shutdown.
+#[cfg(target_os = "android")]
+pub fn register_global_controller(controller: &std::sync::Arc<AudioController>) {
+    let _ = GLOBAL_CONTROLLER.set(std::sync::Arc::downgrade(controller));
+}
+
+/// Whether the transport is currently running, for callers without an
+/// `AppHandle`. `None` when the controller is unreachable or busy.
+#[cfg(target_os = "android")]
+pub fn transport_is_running_global() -> Option<bool> {
+    let controller = GLOBAL_CONTROLLER.get().and_then(std::sync::Weak::upgrade)?;
+    let state = controller.state.try_lock().ok()?;
+    Some(state.running)
+}
+
+/// Release cached audio in response to system memory pressure. Returns bytes
+/// freed, or 0 if the engine is busy or absent.
+///
+/// Uses `try_lock`: this runs on Android's UI thread, and blocking it behind a
+/// session load would be a worse failure than not freeing memory this time —
+/// the system sends more warnings.
+#[cfg(target_os = "android")]
+pub fn release_cached_audio_global(keep_per_source: u32) -> u64 {
+    let Some(controller) = GLOBAL_CONTROLLER.get().and_then(std::sync::Weak::upgrade) else {
+        return 0;
+    };
+    let Ok(state) = controller.state.try_lock() else {
+        return 0;
+    };
+    state
+        .engine
+        .as_ref()
+        .map(|engine| engine.release_cached_audio(keep_per_source))
+        .unwrap_or(0)
+}
+
 impl AudioController {
     pub fn new() -> Self {
         let (sender, _receiver) = mpsc::channel();

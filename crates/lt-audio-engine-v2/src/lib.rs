@@ -153,6 +153,16 @@ impl Engine {
         lt_result_to_rust(rc)
     }
 
+    /// Hand cached audio memory back when the OS reports pressure (Android's
+    /// `onTrimMemory`). Returns bytes freed.
+    ///
+    /// `keep_per_source` blocks of each source survive, so a performance in
+    /// progress keeps its read-ahead window — it may glitch, it will not go
+    /// silent. Pass 0 only when nothing is playing.
+    pub fn release_cached_audio(&self, keep_per_source: u32) -> u64 {
+        unsafe { lt_audio_engine_release_cached_audio(self.handle, keep_per_source) }
+    }
+
     pub fn version(&self) -> String {
         let ptr = unsafe { lt_audio_engine_get_version(self.handle) };
         if ptr.is_null() {

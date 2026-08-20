@@ -667,6 +667,11 @@ impl WaveformGenerationQueue {
     /// (source_peaks) instead of re-decoding. Called once after DesktopState
     /// builds the shared AudioController.
     pub fn set_audio(&self, audio: Arc<AudioController>) {
+        // Android's onTrimMemory arrives over JNI with no Tauri context, so the
+        // controller has to be reachable without an AppHandle.
+        #[cfg(target_os = "android")]
+        crate::audio::engine::register_global_controller(&audio);
+
         if let Ok(mut slot) = self.audio.lock() {
             *slot = Some(audio);
         }

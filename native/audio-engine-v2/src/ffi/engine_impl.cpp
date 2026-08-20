@@ -795,6 +795,12 @@ Result<void> EngineImpl::initialize() {
     return Result<void>::ok();
 }
 
+std::size_t EngineImpl::release_cached_audio_under_pressure(std::size_t keep_per_source) {
+    if (!source_manager_)
+        return 0;
+    return source_manager_->release_cached_blocks_under_pressure(keep_per_source);
+}
+
 Result<void> EngineImpl::shutdown() {
     if (state_ != State::Initialized)
         return Result<void>::ok();  // idempotent

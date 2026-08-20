@@ -38,6 +38,11 @@ public:
     Result<void> initialize();
     Result<void> shutdown();
 
+    /// Hand cached audio memory back when the OS says it is short (Android's
+    /// onTrimMemory). Keeps each source's freshest blocks, so playback in
+    /// progress survives. Returns bytes freed. Safe off the audio thread.
+    std::size_t release_cached_audio_under_pressure(std::size_t keep_per_source);
+
     std::string  version()      const;
     std::string  diagnostics()  const;
 

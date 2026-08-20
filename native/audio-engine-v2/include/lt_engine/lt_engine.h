@@ -154,6 +154,15 @@ LT_API uint64_t lt_audio_engine_source_cache_size_bytes(void);
 /** Delete all on-disk decoded-PCM cache files. Returns bytes freed. */
 LT_API uint64_t lt_audio_engine_purge_source_cache(void);
 
+/**
+ * Release cached audio blocks from RAM when the OS reports memory pressure
+ * (Android's onTrimMemory). Keeps `keep_per_source` freshest blocks per source
+ * so playback in progress survives — pass 0 to drop everything. Returns bytes
+ * freed. Unlike purge_source_cache this touches memory, not the disk cache.
+ */
+LT_API uint64_t lt_audio_engine_release_cached_audio(LtEngine* engine,
+                                                     uint32_t keep_per_source);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

@@ -271,3 +271,34 @@ dispositivo).
 4. **iOS**: ampliar los `cfg(target_os = "android")` a `mobile`/iOS, generar
    `gen/apple` con `tauri ios init` (requiere macOS), y revisar `rfd`/`midir`
    allí (CoreMIDI sí existe en iOS).
+
+## Modificaciones manuales en `gen/android`
+
+`gen/android` lo genera Tauri (`npx tauri android init`) y una regeneración
+**sobrescribe** estos cambios. Si eso ocurre, hay que reaplicarlos:
+
+### `app/src/main/java/com/libretracks/desktop/MainActivity.kt`
+
+| Qué | Por qué |
+| --- | --- |
+| `hideSystemBars()` + `onWindowFocusChanged` | ColorOS pierde el modo inmersivo al recuperar el foco y la barra de estado se come los taps de la barra superior |
+| `FLAG_KEEP_SCREEN_ON` | No dormir a mitad de una actuación |
+| `startForegroundService(AudioPlaybackService)` | Que la reproducción sobreviva a la pantalla apagada |
+| `requestStorageAccessOnce()` | Abrir sesiones in situ necesita leer carpetas, no URIs sueltas |
+| `installVoiceGuideAssets()` | El decoder nativo necesita rutas `fopen`-ables |
+| **`onTrimMemory` / `onLowMemory` → `nativeOnTrimMemory`** | Android avisa antes de matar; ignorarlo reinició el sistema del Oppo al importar 2 GB. Ver `docs/plans/android-low-end/03-presion-de-memoria.md` |
+
+El puente de memoria es JNI directo (`private external fun nativeOnTrimMemory`),
+resuelto por nombre contra
+`Java_com_libretracks_desktop_MainActivity_nativeOnTrimMemory` en
+`src/platform/android_memory.rs`. **Si se renombra la clase o el paquete Kotlin,
+hay que renombrar también esa función de Rust** o el enlace falla en tiempo de
+ejecución con `UnsatisfiedLinkError` (capturado y registrado, no fatal).
+
+No pasa por el WebView a propósito: bajo presión real el proceso de la WebView
+es él mismo candidato a que lo maten, así que un aviso que tenga que atravesarlo
+es un aviso que podemos no recibir nunca.
+
+### `app/src/main/java/com/libretracks/desktop/AudioPlaybackService.kt`
+
+Servicio en primer plano + foco de audio. Fichero entero añadido a mano.

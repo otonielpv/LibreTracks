@@ -192,6 +192,19 @@ LT_API uint64_t lt_audio_engine_source_cache_size_bytes(void) {
     }
 }
 
+LT_API uint64_t lt_audio_engine_release_cached_audio(LtEngine* engine,
+                                                     uint32_t keep_per_source) {
+    try {
+        auto* impl = as_impl(engine);
+        if (!impl)
+            return 0;
+        return static_cast<uint64_t>(
+            impl->release_cached_audio_under_pressure(keep_per_source));
+    } catch (...) {
+        return 0;
+    }
+}
+
 LT_API uint64_t lt_audio_engine_purge_source_cache(void) {
     try {
         return static_cast<uint64_t>(lt::purge_source_cache());
