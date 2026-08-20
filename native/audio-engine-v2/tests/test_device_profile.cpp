@@ -137,6 +137,21 @@ TEST_CASE("unknown core count does not produce a zero-thread pool") {
     CHECK(lt_device_profile_for(handheld_probe(2 * kGb, 1 * kGb, 0)).decode_threads >= 1);
 }
 
+TEST_CASE("a handheld's decode pool is smaller than the desktop policy would pick") {
+    // Regression: the decode pool kept calling lt_recommend_worker_threads()
+    // (physical-RAM only) after the rest of step 02 moved to the profile, so a
+    // real CPH1931 logged "decode pool: 2 worker(s)" while its profile said 1.
+    // Caught on the device, not by a test — hence this one.
+    const auto oppo =
+        lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8));
+
+    CHECK(oppo.decode_threads == 1);
+    // The old policy sees 2.58 GB of RAM and 8 cores and says 2.
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Decode, 8, 2706168ull * 1024) == 2);
+    CHECK(oppo.decode_threads < lt_recommend_worker_threads_for(
+                                    WorkerRole::Decode, 8, 2706168ull * 1024));
+}
+
 TEST_CASE("the cached profile is resolved once and stays stable") {
     const DeviceProfile& first = lt_device_profile();
     const DeviceProfile& second = lt_device_profile();

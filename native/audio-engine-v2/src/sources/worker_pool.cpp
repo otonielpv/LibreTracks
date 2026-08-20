@@ -1,6 +1,7 @@
 #include <lt_engine/sources/worker_pool.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
+#include <lt_engine/core/device_profile.h>
 #include <lt_engine/core/thread_policy.h>
 #include <lt_engine/debug/logging.h>
 
@@ -220,11 +221,12 @@ DecodeWorkerPool::DecodeWorkerPool(int num_threads)
                 num_threads = parsed;
         }
         if (num_threads <= 0) {
-            // Scale with the machine (cores AND RAM) via the shared policy, so
-            // decode runs N files in parallel (Ableton-style) on capable boxes
-            // but stays tiny on a modest / low-RAM PC where too many concurrent
-            // decoders would page-thrash. See thread_policy.h.
-            num_threads = lt_recommend_worker_threads(WorkerRole::Decode);
+            // Scale with the machine via the shared device profile, so decode
+            // runs N files in parallel (Ableton-style) on capable boxes but
+            // stays tiny where too many concurrent decoders would page-thrash:
+            // a modest PC, or a phone, where the profile also accounts for the
+            // memory that is actually AVAILABLE. See device_profile.h.
+            num_threads = lt_device_profile().decode_threads;
         }
     }
     lt_debug_log(
