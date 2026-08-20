@@ -313,10 +313,10 @@ const en = {
       description: "{{name}}",
       fullTitle: "Full (for sharing)",
       fullDescription:
-        "Includes the used audio files and waveforms. Self-contained: opens on another device without the original files.",
+        "Includes your ORIGINAL audio files, untouched. Self-contained: opens on another machine without needing the files.",
       lightTitle: "Light",
       lightDescription:
-        "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
+        "Carries no audio: references your files by path. The smallest, but it only opens on this machine, where the files still are.",
       cancel: "Cancel",
       confirm: "Export",
     },
@@ -326,13 +326,13 @@ const en = {
       description: "{{name}}",
       fullTitle: "Full (to take with you)",
       fullDescription:
-        "Includes the used audio files and waveforms. Self-contained: opens on another device without the original files.",
+        "Includes your ORIGINAL audio files, untouched (MP3 stays MP3, WAV stays WAV). Self-contained: opens on another machine without needing the files. Opening it has to prepare the audio, which is slow on phones and older machines.",
       optimizedTitle: "Optimized (for phones and slow machines)",
       optimizedDescription:
-        "Includes the audio already prepared, so the session opens straight away with no \"Preparing audio\" wait. The file is larger.",
+        "Does NOT carry your original files: it carries a copy already prepared for playback. The session opens straight away, with no \"Preparing audio\" wait. The file is larger, and it cannot be used to recover the originals.",
       lightTitle: "Light",
       lightDescription:
-        "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
+        "Carries no audio: references your files by path. The smallest, but it only opens on this machine, where the files still are.",
       cancel: "Cancel",
       confirm: "Export",
     },

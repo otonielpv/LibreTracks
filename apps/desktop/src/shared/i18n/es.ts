@@ -331,10 +331,10 @@ const es = {
       description: "{{name}}",
       fullTitle: "Completo (para compartir)",
       fullDescription:
-        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro dispositivo sin los archivos originales.",
+        "Incluye tus archivos de audio ORIGINALES, tal cual. Autocontenido: se abre en otro equipo sin necesitar los archivos.",
       lightTitle: "Ligero",
       lightDescription:
-        "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
+        "No lleva audio: referencia tus archivos por su ruta. El más pequeño, pero solo se abre en este equipo, donde los archivos siguen estando.",
       cancel: "Cancelar",
       confirm: "Exportar",
     },
@@ -344,13 +344,13 @@ const es = {
       description: "{{name}}",
       fullTitle: "Completo (para llevártelo)",
       fullDescription:
-        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro dispositivo sin los archivos originales.",
+        "Incluye tus archivos de audio ORIGINALES, tal cual (MP3 sigue MP3, WAV sigue WAV). Autocontenido: se abre en otro equipo sin necesitar los archivos. Al abrirlo hay que preparar el audio, que en móviles y equipos lentos tarda.",
       optimizedTitle: "Optimizado (para móviles y equipos lentos)",
       optimizedDescription:
-        "Incluye los audios ya preparados, así que la sesión abre al instante sin esperar a \"Preparando audio\". El archivo ocupa más.",
+        "NO lleva tus archivos originales: lleva una copia ya preparada para reproducir. La sesión abre al instante, sin esperar a \"Preparando audio\". El archivo ocupa más y no sirve para recuperar los originales.",
       lightTitle: "Ligero",
       lightDescription:
-        "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
+        "No lleva audio: referencia tus archivos por su ruta. El más pequeño, pero solo se abre en este equipo, donde los archivos siguen estando.",
       cancel: "Cancelar",
       confirm: "Exportar",
     },

@@ -16,13 +16,15 @@ type ExportSessionModalProps = {
  * Ableton-style "Collect All and Save" chooser shown before exporting the WHOLE
  * session as a `.ltset`. Sibling of {@link ExportSongModal} but at session
  * granularity (every region/song, the library, automation). Three modes:
- *   - Full: bundles the audio used by clips — self-contained and portable to the
- *     PC you play live on.
- *   - Optimized: bundles that audio already decoded, so the target opens without
- *     preparing anything. Bigger file, far faster to open on a phone or an old
- *     laptop.
- *   - Light: project + waveforms only (references audio by path) — smaller, for
- *     reuse on this same machine.
+ *   - Full: bundles the ORIGINAL files byte for byte — self-contained, and the
+ *     only mode you can recover your masters from.
+ *   - Optimized: bundles a decoded COPY instead, so the target plays it without
+ *     preparing anything. Bigger file, opens instantly, not a backup.
+ *   - Light: project + waveforms only (references audio by path) — smallest,
+ *     and only opens on this same machine.
+ *
+ * The copy that matters most is "original vs prepared copy": someone reaching
+ * for a portable archive must not pick Optimized by mistake.
  */
 export function ExportSessionModal({
   isOpen,
@@ -84,7 +86,7 @@ export function ExportSessionModal({
               <small>
                 {t("transport.exportSessionModal.fullDescription", {
                   defaultValue:
-                    "Incluye los audios usados y las ondas. Autocontenido: se abre en otro PC sin los archivos originales.",
+                    "Incluye tus archivos de audio ORIGINALES, tal cual (MP3 sigue MP3, WAV sigue WAV). Autocontenido: se abre en otro equipo sin necesitar los archivos. Al abrirlo hay que preparar el audio, que en móviles y equipos lentos tarda.",
                 })}
               </small>
             </span>
@@ -106,7 +108,7 @@ export function ExportSessionModal({
               <small>
                 {t("transport.exportSessionModal.optimizedDescription", {
                   defaultValue:
-                    "Incluye los audios ya preparados, así que la sesión abre al instante sin esperar a \"Preparando audio\". El archivo ocupa más.",
+                    "NO lleva tus archivos originales: lleva una copia ya preparada para reproducir. La sesión abre al instante, sin esperar a \"Preparando audio\". El archivo ocupa más y no sirve para recuperar los originales.",
                 })}
               </small>
             </span>
@@ -128,7 +130,7 @@ export function ExportSessionModal({
               <small>
                 {t("transport.exportSessionModal.lightDescription", {
                   defaultValue:
-                    "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
+                    "No lleva audio: referencia tus archivos por su ruta. El más pequeño, pero solo se abre en este equipo, donde los archivos siguen estando.",
                 })}
               </small>
             </span>

@@ -78,7 +78,7 @@ export function ExportSongModal({
               <small>
                 {t("transport.exportModal.fullDescription", {
                   defaultValue:
-                    "Incluye los audios usados y las ondas. Autocontenido: se abre en otro PC sin los archivos originales.",
+                    "Incluye tus archivos de audio ORIGINALES, tal cual. Autocontenido: se abre en otro equipo sin necesitar los archivos.",
                 })}
               </small>
             </span>
@@ -100,7 +100,7 @@ export function ExportSongModal({
               <small>
                 {t("transport.exportModal.lightDescription", {
                   defaultValue:
-                    "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
+                    "No lleva audio: referencia tus archivos por su ruta. El más pequeño, pero solo se abre en este equipo, donde los archivos siguen estando.",
                 })}
               </small>
             </span>
