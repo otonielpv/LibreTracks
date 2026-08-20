@@ -426,6 +426,36 @@ impl DesktopSession {
         package_path: &Path,
         target_song_dir: &Path,
     ) -> Result<ExtractedSessionPackage, DesktopError> {
+        Self::reject_existing_target_dir(target_song_dir)?;
+
+        let progress = Self::extraction_progress_reporter(app);
+        extract_session_package(target_song_dir, package_path, progress)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+    }
+
+    /// Same as [`Self::extract_session_package_off_lock`], but reading the
+    /// package from an open handle instead of a path.
+    ///
+    /// Android's import uses this: the SAF gives us a descriptor, not a
+    /// filesystem path, and copying the whole archive into private storage just
+    /// to get a path cost 2.02 GiB of writes on a real set.
+    /// See docs/plans/android-low-end/04-import-sin-staging.md.
+    // Only the Android import calls this, and a desktop `cargo check` does not
+    // compile that branch — so it looks dead here while being load-bearing there.
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub fn extract_session_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
+        app: &AppHandle,
+        reader: R,
+        target_song_dir: &Path,
+    ) -> Result<ExtractedSessionPackage, DesktopError> {
+        Self::reject_existing_target_dir(target_song_dir)?;
+
+        let progress = Self::extraction_progress_reporter(app);
+        libretracks_project::extract_session_package_from_reader(target_song_dir, reader, progress)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+    }
+
+    fn reject_existing_target_dir(target_song_dir: &Path) -> Result<(), DesktopError> {
         if target_song_dir.exists() {
             return Err(DesktopError::AudioCommand(format!(
                 "ya existe una carpeta llamada \"{}\" en esa ubicacion. Elige otro nombre.",
@@ -435,13 +465,18 @@ impl DesktopSession {
                     .unwrap_or("proyecto")
             )));
         }
+        Ok(())
+    }
 
+    /// Progress callback shared by both extraction routes.
+    ///
+    /// Decompression occupies the 8–40% band; audio prep takes over after.
+    /// Emits only when the whole-number percent actually changes: a full set
+    /// has thousands of entries and one IPC event each floods the WebView.
+    fn extraction_progress_reporter(app: &AppHandle) -> impl FnMut(usize, usize) + '_ {
         emit_project_load_progress(app, 8, "Descomprimiendo sesion...".into(), 0, 0, 0, 0);
-        // Decompression occupies the 8–40% band; audio prep takes over after.
-        // Emit only when the whole-number percent actually changes: a full set
-        // has thousands of entries and one IPC event each floods the WebView.
         let mut last_percent = 8u8;
-        extract_session_package(target_song_dir, package_path, |done, total| {
+        move |done, total| {
             if total > 0 {
                 let percent = (8 + ((done as f64 / total as f64) * 32.0) as u32).min(40) as u8;
                 if percent != last_percent {
@@ -457,8 +492,7 @@ impl DesktopSession {
                     );
                 }
             }
-        })
-        .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        }
     }
 
     /// Fast half of the `.ltset` import: open the already-inflated folder as a

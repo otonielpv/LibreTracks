@@ -19,7 +19,8 @@ pub use package::{
     SongImportTrackMode, SongPackageExport, SongPackageImportResult,
 };
 pub use session_package::{
-    export_session_as_package, extract_session_package, ExtractedSessionPackage,
+    export_session_as_package, extract_session_package, extract_session_package_from_reader,
+    ExtractedSessionPackage,
     SessionPackageExport, SidecarFile,
 };
 pub use session_sample_rate::{

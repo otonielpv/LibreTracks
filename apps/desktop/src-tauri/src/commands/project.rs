@@ -2107,35 +2107,43 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
         let result = (|| -> Result<TransportSnapshot, String> {
-            // Android: materialize the content:// pick into a private temp
-            // file the zip reader can open; desktop already has a real path.
-            #[cfg(target_os = "android")]
-            let (package_file, staged_cleanup) = {
-                let (picked, picked_name) = &package_source;
-                let staged = crate::platform::mobile_files::stage_picked_file_to_temp(
-                    &worker_app,
-                    picked,
-                    picked_name,
-                )?;
-                (staged.clone(), Some(staged))
-            };
             #[cfg(not(target_os = "android"))]
-            let (package_file, staged_cleanup): (std::path::PathBuf, Option<std::path::PathBuf>) =
-                (package_source, None);
+            let package_file: std::path::PathBuf = package_source;
 
             // Decompress WITHOUT the session lock — a full set is gigabytes and
-            // holding the lock across it freezes the UI. The staged temp file
-            // (Android) must outlive this, so clean it up only afterwards.
-            let extract_result = DesktopSession::extract_session_package_off_lock(
+            // holding the lock across it freezes the UI.
+            //
+            // Android reads straight from the SAF handle. tauri-plugin-fs hands
+            // back a real std::fs::File wrapping the content:// descriptor, and
+            // a file descriptor is seekable, so the zip reader can work on it
+            // directly. Copying it to private storage first (as this used to)
+            // wrote 2.02 GiB for the set that prompted this work — half the
+            // I/O of the whole import, and it also kept a ParcelFileDescriptor
+            // alive for minutes, whose finalizer then timed out and took the
+            // process down.
+            #[cfg(target_os = "android")]
+            let extracted = {
+                let (picked, _) = &package_source;
+                let handle =
+                    crate::platform::mobile_files::open_picked_file_for_read(&worker_app, picked)?;
+                let result = DesktopSession::extract_session_package_from_reader_off_lock(
+                    &worker_app,
+                    handle,
+                    &target_song_dir,
+                )
+                .map_err(|error| error.to_string());
+                // Close the descriptor now rather than leaving it to the JVM's
+                // finalizer, which is what timed out in the crash we're fixing.
+                result?
+            };
+
+            #[cfg(not(target_os = "android"))]
+            let extracted = DesktopSession::extract_session_package_off_lock(
                 &worker_app,
                 &package_file,
                 &target_song_dir,
             )
-            .map_err(|error| error.to_string());
-            if let Some(staged) = staged_cleanup {
-                let _ = std::fs::remove_file(staged);
-            }
-            let extracted = extract_result?;
+            .map_err(|error| error.to_string())?;
 
             // Open as soon as the model is ready; the decode continues in the
             // background (see start_open_project_from_path for the rationale).

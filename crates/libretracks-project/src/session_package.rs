@@ -482,11 +482,27 @@ pub fn export_session_as_package(
 pub fn extract_session_package(
     target_song_dir: &Path,
     package_path: &Path,
-    mut on_progress: impl FnMut(usize, usize),
+    on_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSessionPackage, ProjectError> {
     let file = File::open(package_path)?;
+    extract_session_package_from_reader(target_song_dir, file, on_progress)
+}
+
+/// Same extraction, from any seekable reader rather than a path.
+///
+/// Android hands us a `content://` URI, not a filesystem path, and the only
+/// reason the import used to copy the whole `.ltset` into private storage first
+/// was to produce something `File::open` would accept. For the set that
+/// prompted this work that copy was 2.02 GiB written before extraction had
+/// even started — half the I/O of the entire import, spent purely to satisfy an
+/// argument type. See docs/plans/android-low-end/04-import-sin-staging.md.
+pub fn extract_session_package_from_reader<R: Read + io::Seek>(
+    target_song_dir: &Path,
+    reader: R,
+    mut on_progress: impl FnMut(usize, usize),
+) -> Result<ExtractedSessionPackage, ProjectError> {
     let mut archive =
-        ZipArchive::new(file).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        ZipArchive::new(reader).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
 
     let mut manifest_json = String::new();
     archive
@@ -842,6 +858,70 @@ mod tests {
         assert!(extracted.bundled_audio);
         assert!(extracted.song_file.is_file());
         assert_eq!(*shared_state.lock().expect("final state"), 1);
+    }
+
+    /// Extraction works from a reader that is not a file, which is what lets
+    /// the Android import read the SAF handle directly instead of copying the
+    /// whole package into private storage first (2 GB of pure waste for a real
+    /// set). Same package, same bytes, no `File` anywhere.
+    #[test]
+    fn extraction_from_a_reader_matches_extraction_from_a_path() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+        let song = session();
+        let package_path = song_dir.join("set.ltset");
+
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &song,
+            &sidecars(),
+            &package_path,
+            true,
+            |_, _| {},
+        )
+        .expect("export full");
+
+        let from_path_dir = tempfile::tempdir().expect("from path");
+        let from_path = extract_session_package(
+            &from_path_dir.path().join("Set"),
+            &package_path,
+            |_, _| {},
+        )
+        .expect("extract from path");
+
+        // The same archive, held entirely in memory: no filesystem path exists
+        // for this reader, so nothing here can fall back to opening one.
+        let bytes = fs::read(&package_path).expect("read package");
+        let reader_dir = tempfile::tempdir().expect("from reader");
+        let from_reader = extract_session_package_from_reader(
+            &reader_dir.path().join("Set"),
+            std::io::Cursor::new(bytes),
+            |_, _| {},
+        )
+        .expect("extract from reader");
+
+        assert_eq!(from_reader.session_title, from_path.session_title);
+        assert_eq!(from_reader.bundled_audio, from_path.bundled_audio);
+
+        // ...and the extracted trees are byte-identical, not merely both valid.
+        let loaded_path = crate::load_song_from_file(&from_path.song_file).expect("load path");
+        let loaded_reader =
+            crate::load_song_from_file(&from_reader.song_file).expect("load reader");
+        assert_eq!(loaded_reader.tracks.len(), loaded_path.tracks.len());
+
+        for clip in loaded_reader.clips.iter() {
+            let reader_file = from_reader.song_dir.join(&clip.file_path);
+            let path_file = from_path.song_dir.join(&clip.file_path);
+            assert!(reader_file.is_file(), "missing {}", clip.file_path);
+            assert_eq!(
+                fs::read(&reader_file).expect("reader bytes"),
+                fs::read(&path_file).expect("path bytes"),
+                "clip {} differs between the two extraction routes",
+                clip.file_path
+            );
+        }
     }
 
     #[test]

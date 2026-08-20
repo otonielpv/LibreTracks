@@ -48,9 +48,35 @@ pub fn save_file(app: &AppHandle, title: &str, suggested_name: &str) -> Option<F
     rx.recv().ok().flatten()
 }
 
+/// Open a picked `content://` document for reading, without copying it.
+///
+/// The plugin resolves the URI through the content resolver and hands back a
+/// real `std::fs::File` wrapping the descriptor, so it is seekable — which is
+/// all a zip reader needs. Prefer this over [`stage_picked_file_to_temp`] for
+/// anything large: staging a 2 GiB `.ltset` wrote the whole archive to private
+/// storage before extraction had even begun, doubling the I/O of an import that
+/// was already the heaviest thing the app does on a phone.
+///
+/// The returned handle owns the descriptor and closes it on drop. Drop it as
+/// soon as the read finishes: leaving it to the JVM finalizer is what produced
+/// the `ParcelFileDescriptor.finalize() timed out` crash.
+pub fn open_picked_file_for_read(
+    app: &AppHandle,
+    picked: &FilePath,
+) -> Result<std::fs::File, String> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    app.fs()
+        .open(picked.clone(), options)
+        .map_err(|error| format!("No se pudo abrir el archivo seleccionado: {error}"))
+}
+
 /// Copy a picked source (usually a `content://` URI) into a private staging
 /// file so import code that expects a real `std::fs` path can work on it.
 /// The caller owns the returned file and should delete it when done.
+///
+/// Prefer [`open_picked_file_for_read`] when the consumer can work from a
+/// handle: this writes a second copy of the whole file.
 pub fn stage_picked_file_to_temp(
     app: &AppHandle,
     picked: &FilePath,
