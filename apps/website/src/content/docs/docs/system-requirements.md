@@ -15,6 +15,45 @@ LibreTracks is a lightweight native app (Rust + Tauri) rather than a heavyweight
 
 > **Why macOS 10.15+?** The desktop UI runs inside the operating system's WebView. LibreTracks ships CSS down‑levelled for the WebKit in Catalina's Safari 13, and the audio engine bundles its own FFmpeg/codec libraries inside the app, so it launches without any system‑wide dependencies. Older macOS releases ship a WebKit too old to render the interface and miss symbols the app needs at launch.
 
+## Android
+
+Android support is newer than the desktop builds, and phones are where the
+limits bite first — usually on storage and patience rather than on memory.
+
+| | Minimum | Comfortable | Notes |
+| --- | --- | --- | --- |
+| **Android** | 8.0 (API 26) | 10 or newer | 64-bit ARM (`arm64-v8a`) |
+| **RAM** | 2 GB | 3 GB+ | LibreTracks sizes its buffers to the device |
+| **Free storage** | 2x your session size | 3x | Importing unpacks the session and prepares its audio |
+
+Playback streams from storage rather than loading songs into memory, so track
+count is limited far more by how fast the phone reads and decodes than by how
+much RAM it has. A 2.5 GB phone runs a 36-track session; what it cannot do is
+import one quickly.
+
+### Space during import
+
+Importing a `.ltset` needs room for more than the file itself: the package is
+unpacked, and its audio is prepared for playback. Budget roughly **twice the
+package size**, and leave a gigabyte spare. A 2 GB set wants around 5 GB free.
+
+LibreTracks refuses an import that clearly will not fit rather than filling the
+device and failing halfway through.
+
+### Making a big session load faster
+
+Importing a large set on a modest phone takes minutes, and that is storage
+speed, not a bug. To cut it down, export from the desktop in a lighter form:
+
+- **Optimized** export ships audio already prepared for playback, so the phone
+  skips decoding entirely — the session opens without a preparation step and
+  writes nothing to the audio cache. The package is larger to transfer, and it
+  does not change how many tracks play at once; it changes how long you wait.
+- **Light** export leaves the audio behind altogether, for when the files are
+  already on the device.
+- **Splitting a set into shorter songs** keeps each import small, which is the
+  most reliable option on an older phone.
+
 ## Audio Formats
 
 The audio engine bundles FFmpeg on **all three platforms**, so the same formats load everywhere — WAV, AIFF, FLAC, MP3, and AAC/M4A among them. There is no separate codec install: on macOS the codec libraries travel inside the `.app`, and on Windows and Linux they ship alongside the app.

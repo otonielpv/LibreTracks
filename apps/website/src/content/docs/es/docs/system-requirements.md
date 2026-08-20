@@ -15,6 +15,49 @@ LibreTracks es una app nativa ligera (Rust + Tauri), no un DAW de estudio pesado
 
 > **¿Por qué macOS 10.15+?** La UI de escritorio corre dentro del WebView del sistema operativo. LibreTracks distribuye su CSS adaptado al WebKit del Safari 13 de Catalina, y el motor de audio incluye sus propias librerías de FFmpeg/códecs dentro de la app, así que arranca sin depender de nada instalado en el sistema. Las versiones anteriores de macOS traen un WebKit demasiado antiguo para renderizar la interfaz y carecen de símbolos que la app necesita al arrancar.
 
+## Android
+
+El soporte de Android es más reciente que las versiones de escritorio, y es en
+los móviles donde primero se notan los límites — casi siempre en almacenamiento
+y en paciencia, más que en memoria.
+
+| | Mínimo | Cómodo | Notas |
+| --- | --- | --- | --- |
+| **Android** | 8.0 (API 26) | 10 o posterior | ARM de 64 bits (`arm64-v8a`) |
+| **RAM** | 2 GB | 3 GB+ | LibreTracks ajusta sus búferes al dispositivo |
+| **Espacio libre** | 2x el tamaño de tu sesión | 3x | Importar descomprime la sesión y prepara su audio |
+
+La reproducción va por streaming desde el almacenamiento, no cargando las
+canciones en memoria, así que el número de pistas lo limita mucho más la
+velocidad a la que el móvil lee y decodifica que la RAM que tenga. Un móvil de
+2,5 GB mueve una sesión de 36 pistas; lo que no puede es importarla deprisa.
+
+### Espacio durante la importación
+
+Importar un `.ltset` necesita sitio para más que el propio archivo: el paquete
+se descomprime y su audio se prepara para reproducirse. Cuenta con **el doble
+del tamaño del paquete**, y deja un gigabyte de margen. Un set de 2 GB quiere
+unos 5 GB libres.
+
+LibreTracks rechaza una importación que claramente no cabe, en vez de llenar el
+dispositivo y fallar a mitad.
+
+### Cómo cargar antes una sesión grande
+
+Importar un set grande en un móvil modesto tarda minutos, y eso es la velocidad
+del almacenamiento, no un fallo. Para reducirlo, exporta desde el escritorio en
+un formato más ligero:
+
+- **Optimizado** lleva el audio ya preparado para reproducir, así que el móvil
+  se salta la decodificación por completo: la sesión abre sin fase de
+  preparación y no escribe nada en la caché de audio. El paquete pesa más al
+  transferirlo, y no cambia cuántas pistas suenan a la vez; cambia cuánto
+  esperas.
+- **Ligero** deja el audio fuera, para cuando los archivos ya están en el
+  dispositivo.
+- **Dividir un set en canciones más cortas** mantiene pequeña cada importación,
+  que es la opción más fiable en un móvil antiguo.
+
 ## Formatos de audio
 
 El motor de audio incluye FFmpeg en **las tres plataformas**, así que los mismos formatos cargan en todas partes — entre ellos WAV, AIFF, FLAC, MP3 y AAC/M4A. No hay que instalar códecs aparte: en macOS las librerías de códecs viajan dentro del `.app`, y en Windows y Linux se distribuyen junto a la app.
