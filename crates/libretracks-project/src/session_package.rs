@@ -83,6 +83,160 @@ fn normalize_zip_path(file_path: &str) -> String {
     file_path.replace('\\', "/")
 }
 
+/// Headroom demanded on top of the package's uncompressed size before we start
+/// writing. Extraction is not the last thing that touches this disk — the
+/// engine's PCM cache lands here too — so filling the volume to the brim counts
+/// as a failure even when the extraction itself would fit.
+const EXTRACTION_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// Refuse an extraction that cannot fit, BEFORE the first byte is written.
+///
+/// Previously the import discovered this halfway through and left a corrupt
+/// half-extracted project behind. A real 2 GB set on a phone with 10 GB free
+/// also consumed 4.91 GB once the audio cache followed, so "it fits" has to
+/// mean "it fits with room to spare".
+///
+/// Pure function of its inputs so the policy is testable without a filesystem.
+fn check_space_for_extraction(needed_bytes: u64, free_bytes: u64) -> Result<(), ProjectError> {
+    let required = needed_bytes.saturating_add(EXTRACTION_HEADROOM_BYTES);
+    if free_bytes >= required {
+        return Ok(());
+    }
+    let gb = |bytes: u64| (bytes as f64) / (1024.0 * 1024.0 * 1024.0);
+    Err(ProjectError::AudioDecode(format!(
+        "esta sesion necesita {:.1} GB y solo quedan {:.1} GB libres. \
+         Libera espacio o importa la sesion en formato Ligero.",
+        gb(needed_bytes),
+        gb(free_bytes)
+    )))
+}
+
+/// Free bytes on the volume that will hold `path`, or `None` when we cannot
+/// tell (in which case the caller proceeds — refusing on a failed stat would
+/// block imports on filesystems we simply cannot measure).
+///
+/// Walks up to the nearest existing ancestor: the destination dir itself does
+/// not exist yet when extraction starts.
+fn free_space_bytes(path: &Path) -> Option<u64> {
+    let mut probe = path;
+    loop {
+        if probe.exists() {
+            return free_space_of_existing_dir(probe);
+        }
+        probe = probe.parent()?;
+    }
+}
+
+#[cfg(windows)]
+fn free_space_of_existing_dir(dir: &Path) -> Option<u64> {
+    use std::os::windows::ffi::OsStrExt;
+
+    extern "system" {
+        fn GetDiskFreeSpaceExW(
+            lpDirectoryName: *const u16,
+            lpFreeBytesAvailableToCaller: *mut u64,
+            lpTotalNumberOfBytes: *mut u64,
+            lpTotalNumberOfFreeBytes: *mut u64,
+        ) -> i32;
+    }
+
+    let wide: Vec<u16> = dir
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut available: u64 = 0;
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut available,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    (ok != 0).then_some(available)
+}
+
+#[cfg(unix)]
+fn free_space_of_existing_dir(dir: &Path) -> Option<u64> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = CString::new(dir.as_os_str().as_bytes()).ok()?;
+    // SAFETY: statvfs only reads through the borrowed C string, and the buffer
+    // is fully initialised by the call before we read it.
+    unsafe {
+        let mut stat: libc::statvfs = std::mem::zeroed();
+        if libc::statvfs(path.as_ptr(), &mut stat) != 0 {
+            return None;
+        }
+        Some(stat.f_bavail as u64 * stat.f_frsize as u64)
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn free_space_of_existing_dir(_dir: &Path) -> Option<u64> {
+    None
+}
+
+fn report_progress(on_progress: &mut impl FnMut(usize, usize), done: u64, total: u64) {
+    // The callback signature is (done, total) in usize; report bytes scaled to
+    // KiB so a multi-GB set cannot overflow usize on a 32-bit target.
+    const SCALE: u64 = 1024;
+    on_progress((done / SCALE) as usize, (total / SCALE).max(1) as usize);
+}
+
+/// Copy one archive entry, yielding the disk periodically on handhelds.
+///
+/// A straight `io::copy` writes as fast as the device accepts, which on a
+/// low-end eMMC saturates the I/O queue for minutes. During the import that
+/// prompted this work the SYSTEM's own SQLite commit took 44 seconds, because
+/// we had the disk. Yielding costs extraction time and buys the device staying
+/// responsive — the difference between "this takes a while" and "the phone
+/// rebooted".
+///
+/// Desktop keeps the straight `io::copy`: there the queue is not the problem.
+fn copy_entry_yielding<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> io::Result<u64> {
+    #[cfg(not(target_os = "android"))]
+    {
+        io::copy(reader, writer)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        const CHUNK: usize = 256 * 1024;
+        // Yield roughly every 8 MB: often enough that the queue drains, rarely
+        // enough that the sleeps don't dominate the extraction.
+        const YIELD_EVERY_BYTES: u64 = 8 * 1024 * 1024;
+
+        let mut buffer = vec![0_u8; CHUNK];
+        let mut total: u64 = 0;
+        let mut since_yield: u64 = 0;
+        loop {
+            let read = reader.read(&mut buffer)?;
+            if read == 0 {
+                return Ok(total);
+            }
+            writer.write_all(&buffer[..read])?;
+            total += read as u64;
+            since_yield += read as u64;
+            if since_yield >= YIELD_EVERY_BYTES {
+                since_yield = 0;
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }
+    }
+}
+
+/// Remove a destination dir we created and then failed to fill.
+///
+/// Only ever called for a dir that did not exist before this extraction (the
+/// caller rejects pre-existing destinations up front), so this cannot delete a
+/// user's own folder. Failures are ignored: we are already returning an error.
+fn discard_failed_extraction(target_song_dir: &Path) {
+    let _ = fs::remove_dir_all(target_song_dir);
+}
+
 /// Reject zip entry names that try to escape the destination dir (absolute
 /// paths, `..` traversal, drive letters). A `.ltset` may come from another
 /// machine or person, so the inflater must not trust entry names blindly.
@@ -499,6 +653,23 @@ pub fn extract_session_package(
 pub fn extract_session_package_from_reader<R: Read + io::Seek>(
     target_song_dir: &Path,
     reader: R,
+    on_progress: impl FnMut(usize, usize),
+) -> Result<ExtractedSessionPackage, ProjectError> {
+    // The destination is created by this call, so on failure it is ours to
+    // remove: a half-extracted project is worse than none, because the user can
+    // try to open it. `extract_session_package_off_lock` rejects a destination
+    // that already exists, so nothing here can delete a folder of the user's.
+    let existed_before = target_song_dir.exists();
+    let result = extract_session_package_inner(target_song_dir, reader, on_progress);
+    if result.is_err() && !existed_before {
+        discard_failed_extraction(target_song_dir);
+    }
+    result
+}
+
+fn extract_session_package_inner<R: Read + io::Seek>(
+    target_song_dir: &Path,
+    reader: R,
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSessionPackage, ProjectError> {
     let mut archive =
@@ -533,17 +704,38 @@ pub fn extract_session_package_from_reader<R: Read + io::Seek>(
         .map(|name| format!("{name}.ltsession"))
         .unwrap_or_else(|| SONG_FILE_NAME.to_string());
 
+    // Total uncompressed size, from the central directory — no decompression.
+    // Checked against free space BEFORE the first byte is written: a set that
+    // does not fit used to be discovered halfway through, leaving a corrupt
+    // half-extracted project behind.
+    let mut uncompressed_total: u64 = 0;
+    for index in 0..archive.len() {
+        if let Ok(entry) = archive.by_index_raw(index) {
+            uncompressed_total += entry.size();
+        }
+    }
+    if let Some(free_bytes) = free_space_bytes(target_song_dir) {
+        check_space_for_extraction(uncompressed_total, free_bytes)?;
+    }
+
     let entry_total = archive.len();
     let mut found_session = false;
+    // Progress is reported in BYTES, not entries: a set with 24 stems of 76 MB
+    // and 30 sidecars of 1.4 MB makes an entry-counted percentage jump around
+    // uselessly.
+    let mut bytes_done: u64 = 0;
     for index in 0..entry_total {
         let mut zip_file = archive
             .by_index(index)
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
         let entry_name = normalize_zip_path(zip_file.name());
 
+        let entry_size = zip_file.size();
+
         // The manifest is already consumed; skip directory entries.
         if entry_name == "manifest.json" || entry_name.ends_with('/') {
-            on_progress(index + 1, entry_total);
+            bytes_done += entry_size;
+            report_progress(&mut on_progress, bytes_done, uncompressed_total);
             continue;
         }
 
@@ -566,7 +758,8 @@ pub fn extract_session_package_from_reader<R: Read + io::Seek>(
         } else {
             // Unknown top-level entry from a future/foreign writer — ignore it
             // rather than scattering files into the project root.
-            on_progress(index + 1, entry_total);
+            bytes_done += entry_size;
+            report_progress(&mut on_progress, bytes_done, uncompressed_total);
             continue;
         };
 
@@ -576,9 +769,10 @@ pub fn extract_session_package_from_reader<R: Read + io::Seek>(
         // Stream the entry to disk instead of materializing it in a Vec: a
         // bundled stem can be hundreds of MB, and a full set holds dozens.
         let mut writer = BufWriter::new(File::create(&destination)?);
-        io::copy(&mut zip_file, &mut writer)?;
+        copy_entry_yielding(&mut zip_file, &mut writer)?;
         writer.flush()?;
-        on_progress(index + 1, entry_total);
+        bytes_done += entry_size;
+        report_progress(&mut on_progress, bytes_done, uncompressed_total);
     }
 
     if !found_session {
@@ -858,6 +1052,133 @@ mod tests {
         assert!(extracted.bundled_audio);
         assert!(extracted.song_file.is_file());
         assert_eq!(*shared_state.lock().expect("final state"), 1);
+    }
+
+    #[test]
+    fn space_check_refuses_a_package_that_does_not_fit() {
+        const GB: u64 = 1024 * 1024 * 1024;
+
+        // Fits with room to spare.
+        assert!(check_space_for_extraction(2 * GB, 10 * GB).is_ok());
+        // Exactly the package plus the headroom is still fine.
+        assert!(check_space_for_extraction(2 * GB, 3 * GB).is_ok());
+
+        // The package alone fits, but leaves no headroom for the audio cache
+        // that follows — the real 2 GB set consumed 4.91 GB in total.
+        let error = check_space_for_extraction(2 * GB, 2 * GB + 1).expect_err("should refuse");
+        let message = error.to_string();
+        // The message must name both figures, or the user cannot act on it.
+        assert!(message.contains("2.0 GB"), "missing required size: {message}");
+        assert!(message.contains("libres"), "missing free space: {message}");
+        assert!(
+            message.contains("Ligero"),
+            "an actionable error should point at a way out: {message}"
+        );
+    }
+
+    #[test]
+    fn extraction_reports_progress_by_bytes_and_reaches_the_end() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+        let song = session();
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &song,
+            &sidecars(),
+            &package_path,
+            true,
+            |_, _| {},
+        )
+        .expect("export full");
+
+        let target = tempfile::tempdir().expect("target");
+        let mut samples: Vec<(usize, usize)> = Vec::new();
+        extract_session_package(&target.path().join("Set"), &package_path, |done, total| {
+            samples.push((done, total));
+        })
+        .expect("extract");
+
+        assert!(!samples.is_empty(), "no progress was reported");
+        // Monotonic: a progress bar must never go backwards.
+        for pair in samples.windows(2) {
+            assert!(
+                pair[1].0 >= pair[0].0,
+                "progress went backwards: {:?} -> {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+        let (done, total) = *samples.last().expect("last sample");
+        assert!(total > 0, "total should be known up front");
+        assert_eq!(done, total, "progress should finish at 100%");
+    }
+
+    #[test]
+    fn a_failed_extraction_leaves_no_half_written_project() {
+        // The failure has to happen AFTER files start landing on disk, or the
+        // test proves nothing about cleanup. A zip whose central directory is
+        // intact but which carries no session document gets all the way to the
+        // final validation — directories created, entries written — and only
+        // then fails.
+        let target = tempfile::tempdir().expect("target");
+        let dest = target.path().join("Set");
+
+        let mut buffer = std::io::Cursor::new(Vec::<u8>::new());
+        {
+            let mut writer = ZipWriter::new(&mut buffer);
+            let options = SimpleFileOptions::default();
+            let manifest = serde_json::to_vec(&SessionPackageManifest {
+                format_version: SESSION_PACKAGE_FORMAT_VERSION,
+                session_title: "Sin sesion".into(),
+                bundled_audio: true,
+            })
+            .expect("manifest");
+            writer.start_file("manifest.json", options).expect("start");
+            writer.write_all(&manifest).expect("write manifest");
+            // Real payload, so the destination genuinely gets written into...
+            writer.start_file("audio/stem.wav", options).expect("start");
+            writer.write_all(&vec![0_u8; 4096]).expect("write audio");
+            // ...but no session.ltsession, so extraction fails at the end.
+            writer.finish().expect("finish");
+        }
+
+        let result = extract_session_package_from_reader(
+            &dest,
+            std::io::Cursor::new(buffer.into_inner()),
+            |_, _| {},
+        );
+
+        assert!(result.is_err(), "a package without a session must not extract");
+        assert!(
+            !dest.exists(),
+            "a failed extraction must not leave a half-written project behind"
+        );
+    }
+
+    #[test]
+    fn a_failed_extraction_never_deletes_a_preexisting_folder() {
+        // The destination already exists and holds the user's own file. Even
+        // when extraction fails, that folder must survive: deleting a user's
+        // data to tidy up after ourselves is never acceptable.
+        let target = tempfile::tempdir().expect("target");
+        let dest = target.path().join("Existing");
+        fs::create_dir_all(&dest).expect("create dest");
+        let precious = dest.join("no-me-borres.txt");
+        fs::write(&precious, b"user data").expect("write precious");
+
+        let result =
+            extract_session_package_from_reader(&dest, std::io::Cursor::new(vec![0_u8; 64]), |_, _| {});
+
+        assert!(result.is_err(), "garbage should not extract");
+        assert!(dest.exists(), "a pre-existing folder must survive");
+        assert_eq!(
+            fs::read(&precious).expect("precious survives"),
+            b"user data",
+            "pre-existing contents must be untouched"
+        );
     }
 
     /// Extraction works from a reader that is not a file, which is what lets
