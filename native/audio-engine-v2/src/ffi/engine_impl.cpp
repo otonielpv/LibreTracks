@@ -640,13 +640,13 @@ Result<void> EngineImpl::initialize() {
         const auto& device = lt_device_profile();
         lt_debug_log(
             "[LT_DEVICE] class=%s ram=%.2fGB available=%.2fGB budget=%lluMB "
-            "cores=%d decode=%d fill=%d cache=%zuMB\n",
+            "cores=%d decode=%d fill=%d cache=%zuMB readahead=%zublocks\n",
             lt_device_class_name(device.device_class),
             device.physical_ram_bytes / (1024.0 * 1024.0 * 1024.0),
             device.available_ram_bytes / (1024.0 * 1024.0 * 1024.0),
             static_cast<unsigned long long>(device.usable_budget_bytes / (1024 * 1024)),
             device.cores, device.decode_threads, device.fill_threads,
-            device.source_cache_mb);
+            device.source_cache_mb, device.protected_blocks_per_source);
     }
 
     clock_          = std::make_unique<TransportClock>(48000);

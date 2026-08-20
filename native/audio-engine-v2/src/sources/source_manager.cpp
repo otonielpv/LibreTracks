@@ -633,7 +633,14 @@ static unsigned fill_thread_count_from_env() {
 
 SourceManager::SourceManager()
     : entries_(std::make_shared<EntryMap>())
-    , block_cache_(kDefaultBlockFrames, source_cache_blocks_from_env())
+    , block_cache_(kDefaultBlockFrames,
+                   source_cache_blocks_from_env(),
+                   // Read-ahead window per source. Streaming playback spends
+                   // its memory here — window x playing tracks — so on a phone
+                   // this, not the total budget, is what decides how many
+                   // tracks fit. Flash storage needs far less lead than the
+                   // desktop default assumes.
+                   lt::lt_device_profile().protected_blocks_per_source)
 {
     const unsigned count = fill_thread_count_from_env();
     lt_debug_log(

@@ -60,6 +60,11 @@ struct DeviceProfile {
     int decode_threads = 0;
     int fill_threads = 0;
     std::size_t source_cache_mb = 0;
+    // Blocks per source that eviction must never take: the read-ahead window
+    // that keeps the audio thread from waiting on the disk. This is what a
+    // streaming engine actually spends RAM on, and it is per PLAYING track, so
+    // it decides how many tracks a device can carry at once.
+    std::size_t protected_blocks_per_source = 0;
 };
 
 // Inputs the policy needs, so tests can supply them instead of the real machine.
@@ -112,27 +117,31 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
         // RSS without finishing sooner, and peak RSS is what summons the
         // low-memory killer.
         //
-        // The cache is a different story, and getting it wrong is worse than
-        // not shrinking it at all. BlockCache refuses to evict each source's
-        // 48 most recent blocks (its read-ahead window, ~4.5 s at 44.1 kHz,
-        // 1.5 MB), so a session's protected working set is
-        // sources x 1.5 MB — 54 MB for a 36-stem set. Budget below that and
-        // the cache cannot even hold what it has promised not to evict: it
-        // thrashes, the audio thread asks for blocks that never arrive, and
-        // playback goes silent.
+        // Playback streams from disk, so the cache is not "the song in RAM":
+        // it is the read-ahead window that keeps the audio thread from waiting
+        // on a seek. What costs memory is that window x the number of PLAYING
+        // tracks, and BlockCache's desktop default reserves 48 blocks per
+        // source — 4.5 s, 1.5 MB each. Thirty-six stems therefore pin 54 MB
+        // before a single byte of slack, which is what a 48 MB budget could
+        // not hold: it thrashed, and the audio thread was served 43.5 MILLION
+        // silenced frames (~15 min) across 98 [LT_STARVATION] events on the
+        // CPH1931.
         //
-        // Measured on the CPH1931 with a 36-source set: 48 MB produced 43.5
-        // MILLION silenced frames (~15 minutes of silence) and 98
-        // [LT_STARVATION] events. 128 MB leaves ~2.4x the protected window,
-        // and is still a quarter of the desktop budget.
+        // The fix is to shorten the window rather than to buy it more room. A
+        // phone reads from flash, not a spinning disk, so 1.5 s of lead is
+        // ample; that alone cuts the per-track cost from 1.5 MB to 0.5 MB and
+        // triples how many tracks fit in the same memory. The budget below is
+        // then sized to hold several sessions' worth of those windows.
         if (profile.device_class == DeviceClass::Constrained) {
             profile.decode_threads = 1;
             profile.fill_threads = 1;
             profile.source_cache_mb = 128;
+            profile.protected_blocks_per_source = 16;  // ~1.5 s
         } else {
             profile.decode_threads = 2;
             profile.fill_threads = 2;
             profile.source_cache_mb = 192;
+            profile.protected_blocks_per_source = 24;  // ~2.2 s
         }
         return profile;
     }
@@ -152,6 +161,9 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
     else if (ram_gb <= 16.5) profile.source_cache_mb = 1024;
     else if (ram_gb <= 32.5) profile.source_cache_mb = 2048;
     else                     profile.source_cache_mb = 3072;
+    // Unchanged on desktop: BlockCache's own default, kept explicit so the
+    // handheld value below reads as a deviation from it rather than a mystery.
+    profile.protected_blocks_per_source = 48;  // ~4.5 s
     return profile;
 }
 

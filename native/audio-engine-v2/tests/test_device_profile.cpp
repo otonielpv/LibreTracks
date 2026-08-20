@@ -139,28 +139,45 @@ TEST_CASE("unknown core count does not produce a zero-thread pool") {
     CHECK(lt_device_profile_for(handheld_probe(2 * kGb, 1 * kGb, 0)).decode_threads >= 1);
 }
 
-TEST_CASE("a handheld cache still fits a real session's protected working set") {
-    // The regression this pins, measured on the device: BlockCache never evicts
-    // each source's 48 most recent blocks. Below sources x 48 blocks the cache
-    // cannot hold what it has promised to keep, so it thrashes and the audio
-    // thread is served silence. A 48 MB budget did exactly that to a 36-stem
-    // set: 43.5 million silenced frames, 98 [LT_STARVATION] events.
+TEST_CASE("a handheld cache holds a real session's read-ahead windows") {
+    // Playback streams from disk; the memory goes on the read-ahead window that
+    // eviction may not touch, once per PLAYING track. The budget has to hold
+    // that whole working set with slack, or the cache thrashes and the audio
+    // thread is served silence — 43.5 million silenced frames on the CPH1931
+    // when a 48 MB budget met 36 sources holding the desktop 48-block window.
     constexpr std::size_t kBlockBytes = 4096 * sizeof(float) * 2;  // 32 KiB
-    constexpr std::size_t kProtectedBlocksPerSource = 48;
     constexpr std::size_t kRealisticSources = 36;  // the user's WhatAGod set
-
-    const std::size_t protected_bytes =
-        kRealisticSources * kProtectedBlocksPerSource * kBlockBytes;
 
     for (const auto& profile :
          {lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8)),
           lt_device_profile_for(handheld_probe(6 * kGb, 3 * kGb, 8))}) {
+        const std::size_t working_set =
+            kRealisticSources * profile.protected_blocks_per_source * kBlockBytes;
         const std::size_t budget_bytes = profile.source_cache_mb * 1024 * 1024;
-        CHECK(budget_bytes > protected_bytes);
-        // ...with real headroom, not a hair over: a cache exactly the size of
-        // its protected set has nowhere to put the blocks it is fetching.
-        CHECK(budget_bytes >= protected_bytes * 2);
+
+        CHECK(budget_bytes > working_set);
+        // Real headroom, not a hair over: a cache the exact size of its
+        // protected set has nowhere to put the blocks it is fetching.
+        CHECK(budget_bytes >= working_set * 2);
     }
+}
+
+TEST_CASE("a handheld reads less far ahead than a desktop") {
+    // The per-track cost of streaming, and therefore the track ceiling on a
+    // phone. Flash needs far less lead than the desktop default assumes, and
+    // shortening the window is what buys tracks — a bigger budget alone does
+    // not, because the window is reserved per playing source.
+    const auto oppo =
+        lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8));
+    const auto desktop = lt_device_profile_for(desktop_probe(16 * kGb, 8));
+
+    CHECK(oppo.protected_blocks_per_source < desktop.protected_blocks_per_source);
+    // Still enough lead to cover a disk hiccup: at 4096-frame blocks and
+    // 44.1 kHz, 16 blocks is ~1.5 s.
+    CHECK(oppo.protected_blocks_per_source >= 16);
+
+    // Desktop keeps BlockCache's shipping default, unchanged.
+    CHECK(desktop.protected_blocks_per_source == 48);
 }
 
 TEST_CASE("a handheld's decode pool is smaller than the desktop policy would pick") {
