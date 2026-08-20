@@ -39,6 +39,30 @@ use crate::song_store::{ProjectError, SONG_FILE_NAME};
 /// The importer rejects versions it doesn't understand rather than guessing.
 const SESSION_PACKAGE_FORMAT_VERSION: u32 = 1;
 
+/// How a package carries its audio.
+///
+/// Replaces the old `include_audio: bool`; the two original modes keep their
+/// exact behaviour, and `Prepared` is the third.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionPackageAudio {
+    /// Light: reference audio by its existing path. Only reusable on the machine
+    /// that exported it.
+    Referenced,
+    /// Full: bundle the original files, byte for byte.
+    Original,
+    /// Optimized: bundle audio already decoded to 16-bit PCM, so the receiving
+    /// device plays it without decoding or resampling anything. Larger to
+    /// transfer, dramatically faster to open on a phone.
+    Prepared,
+}
+
+impl SessionPackageAudio {
+    /// Whether audio travels inside the package at all.
+    fn bundles_audio(self) -> bool {
+        !matches!(self, SessionPackageAudio::Referenced)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SessionPackageManifest {
@@ -48,6 +72,16 @@ struct SessionPackageManifest {
     /// set self-contained and portable to another machine.
     #[serde(default)]
     bundled_audio: bool,
+    /// Set only by an Optimized export: the audio inside is already decoded PCM
+    /// at this rate. The importer matches the engine to it, which is what turns
+    /// "decode and resample 36 stems" into "open and play".
+    ///
+    /// Additive and optional: an older LibreTracks ignores it and still opens
+    /// the package, because the payload is ordinary WAV either way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prepared_sample_rate: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prepared_format: Option<String>,
 }
 
 /// A project file that travels alongside the session document but whose
@@ -465,13 +499,38 @@ pub fn export_session_as_package(
     sidecars: &[SidecarFile],
     output_path: &Path,
     include_audio: bool,
+    on_progress: impl FnMut(usize, usize),
+) -> Result<SessionPackageExport, ProjectError> {
+    let audio_mode = if include_audio {
+        SessionPackageAudio::Original
+    } else {
+        SessionPackageAudio::Referenced
+    };
+    export_session_as_package_with_audio(
+        cache_root,
+        song_dir,
+        song,
+        sidecars,
+        output_path,
+        audio_mode,
+        on_progress,
+    )
+}
+
+/// Export choosing how the audio travels. See [`SessionPackageAudio`].
+pub fn export_session_as_package_with_audio(
+    cache_root: &Path,
+    song_dir: &Path,
+    song: &Song,
+    sidecars: &[SidecarFile],
+    output_path: &Path,
+    audio_mode: SessionPackageAudio,
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<SessionPackageExport, ProjectError> {
-    let manifest = SessionPackageManifest {
-        format_version: SESSION_PACKAGE_FORMAT_VERSION,
-        session_title: song.title.clone(),
-        bundled_audio: include_audio,
-    };
+    let include_audio = audio_mode.bundles_audio();
+    // Filled in as sources are prepared; every source in a session shares one
+    // rate in practice, and the first one decides what the manifest declares.
+    let mut prepared_sample_rate: Option<u32> = None;
 
     let file = File::create(output_path)?;
     let mut zip = ZipWriter::new(file);
@@ -481,9 +540,9 @@ pub fn export_session_as_package(
     // store them so export stays fast on large sets.
     let stored = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
-    zip.start_file("manifest.json", deflated)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-    zip.write_all(serde_json::to_vec_pretty(&manifest)?.as_slice())?;
+    // The manifest is written LAST: an Optimized export only learns the rate it
+    // is carrying once it has decoded a source, and the importer needs that
+    // rate to be honest. Entry order in a zip does not matter to readers.
 
     // Plan a unique in-package path for each distinct clip audio (resolving
     // basename collisions across songs). In a FULL package we rewrite the clips'
@@ -499,7 +558,16 @@ pub fn export_session_as_package(
     } else {
         Vec::new()
     };
-    let planned = plan_audio_sources(song_dir, song, &library_paths);
+    let mut planned = plan_audio_sources(song_dir, song, &library_paths);
+    if matches!(audio_mode, SessionPackageAudio::Prepared) {
+        // The payload is PCM now, whatever the source was, so the entry names
+        // must say so — a "Bass.mp3" holding WAV bytes would be decoded by
+        // extension and fail. Collision suffixes live in the stem, so renaming
+        // the extension cannot reintroduce a clash.
+        for source in &mut planned {
+            source.relative_path = crate::prepared_audio::prepared_relative_path(&source.relative_path);
+        }
+    }
     let relative_by_clip_path: HashMap<String, String> = planned
         .iter()
         .map(|source| (source.clip_path.clone(), source.relative_path.clone()))
@@ -576,11 +644,34 @@ pub fn export_session_as_package(
         // Full packages bundle the source audio under its unique path so the set
         // opens on another machine without the originals. Independent of the
         // waveform below — a source we can't analyse for peaks should still ship.
-        if include_audio {
-            if let Ok(audio_bytes) = fs::read(source_abs) {
-                zip.start_file(relative_path.clone(), stored)
-                    .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-                zip.write_all(&audio_bytes)?;
+        match audio_mode {
+            SessionPackageAudio::Referenced => {}
+            SessionPackageAudio::Original => {
+                if let Ok(audio_bytes) = fs::read(source_abs) {
+                    zip.start_file(relative_path.clone(), stored)
+                        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                    zip.write_all(&audio_bytes)?;
+                }
+            }
+            SessionPackageAudio::Prepared => {
+                // Decode once, here, so the receiving device never has to. A
+                // source we cannot decode is skipped rather than failing the
+                // whole export — same tolerance the Original path has for an
+                // unreadable file.
+                let staging = std::env::temp_dir().join(format!(
+                    "libretracks-prepare-{}-{}.wav",
+                    std::process::id(),
+                    index
+                ));
+                if let Ok(info) = crate::prepared_audio::prepare_audio_to_wav(source_abs, &staging) {
+                    prepared_sample_rate.get_or_insert(info.sample_rate);
+                    if let Ok(prepared_bytes) = fs::read(&staging) {
+                        zip.start_file(relative_path.clone(), stored)
+                            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                        zip.write_all(&prepared_bytes)?;
+                    }
+                }
+                let _ = fs::remove_file(&staging);
             }
         }
 
@@ -616,6 +707,27 @@ pub fn export_session_as_package(
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
         zip.write_all(&waveform_bytes)?;
     }
+
+    // Now that any preparation has happened, the manifest can state the truth
+    // about what this package carries.
+    let manifest = SessionPackageManifest {
+        format_version: SESSION_PACKAGE_FORMAT_VERSION,
+        session_title: song.title.clone(),
+        bundled_audio: include_audio,
+        prepared_sample_rate: match audio_mode {
+            SessionPackageAudio::Prepared => prepared_sample_rate,
+            _ => None,
+        },
+        prepared_format: match audio_mode {
+            SessionPackageAudio::Prepared if prepared_sample_rate.is_some() => {
+                Some("pcm_s16".to_string())
+            }
+            _ => None,
+        },
+    };
+    zip.start_file("manifest.json", deflated)
+        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    zip.write_all(serde_json::to_vec_pretty(&manifest)?.as_slice())?;
 
     zip.finish()
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
@@ -889,6 +1001,28 @@ mod tests {
         fs::write(dir.join("automation.ltautomation"), b"AUTO").expect("automation");
     }
 
+    /// Like [`write_session_dir`], but the audio is REAL WAV rather than the
+    /// `b"RIFF....one"` placeholder. The Optimized export decodes what it
+    /// bundles, so it needs something a decoder will accept.
+    fn write_session_dir_with_real_audio(dir: &Path) {
+        write_session_dir(dir);
+        for name in ["one.wav", "two.wav"] {
+            let spec = hound::WavSpec {
+                channels: 2,
+                sample_rate: 44_100,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            };
+            let path = dir.join("audio").join(name);
+            let mut writer = hound::WavWriter::create(&path, spec).expect("create wav");
+            for frame in 0..256 {
+                writer.write_sample((frame % 500) as i16).expect("l");
+                writer.write_sample((frame % 300) as i16).expect("r");
+            }
+            writer.finalize().expect("finalize");
+        }
+    }
+
     fn sidecars() -> Vec<SidecarFile> {
         vec![
             SidecarFile {
@@ -1134,6 +1268,8 @@ mod tests {
                 format_version: SESSION_PACKAGE_FORMAT_VERSION,
                 session_title: "Sin sesion".into(),
                 bundled_audio: true,
+                prepared_sample_rate: None,
+                prepared_format: None,
             })
             .expect("manifest");
             writer.start_file("manifest.json", options).expect("start");
@@ -1242,6 +1378,141 @@ mod tests {
                 "clip {} differs between the two extraction routes",
                 clip.file_path
             );
+        }
+    }
+
+    #[test]
+    fn optimized_export_ships_pcm_and_declares_its_rate() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir_with_real_audio(song_dir);
+        let song = session();
+        let package_path = song_dir.join("set.ltset");
+
+        export_session_as_package_with_audio(
+            song_dir,
+            song_dir,
+            &song,
+            &sidecars(),
+            &package_path,
+            SessionPackageAudio::Prepared,
+            |_, _| {},
+        )
+        .expect("export optimized");
+
+        // The manifest must declare what it carries: the importer matches the
+        // engine to this rate, which is the whole point of the mode.
+        let file = fs::File::open(&package_path).expect("open package");
+        let mut archive = ZipArchive::new(file).expect("read zip");
+        let mut manifest_json = String::new();
+        archive
+            .by_name("manifest.json")
+            .expect("manifest")
+            .read_to_string(&mut manifest_json)
+            .expect("read manifest");
+        let manifest: SessionPackageManifest =
+            serde_json::from_str(&manifest_json).expect("parse manifest");
+
+        assert!(manifest.bundled_audio);
+        assert_eq!(manifest.prepared_format.as_deref(), Some("pcm_s16"));
+        assert_eq!(
+            manifest.prepared_sample_rate,
+            Some(44_100),
+            "the fixture audio is 44.1 kHz and the package must say so"
+        );
+
+        // Every bundled entry is WAV, whatever the source extension was: the
+        // engine picks its decoder by extension, so an .mp3 holding PCM would
+        // fail to open.
+        let names: Vec<String> = (0..archive.len())
+            .filter_map(|index| archive.by_index(index).ok().map(|e| e.name().to_string()))
+            .filter(|name| name.starts_with("audio/"))
+            .collect();
+        assert!(!names.is_empty(), "an optimized package must bundle audio");
+        for name in &names {
+            assert!(name.ends_with(".wav"), "bundled {name} is not PCM-named");
+        }
+    }
+
+    #[test]
+    fn an_optimized_package_opens_like_any_other() {
+        // Backward/forward compatibility: the payload is ordinary WAV, so the
+        // existing importer handles it without knowing the mode exists.
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir_with_real_audio(song_dir);
+        let package_path = song_dir.join("set.ltset");
+
+        export_session_as_package_with_audio(
+            song_dir,
+            song_dir,
+            &session(),
+            &sidecars(),
+            &package_path,
+            SessionPackageAudio::Prepared,
+            |_, _| {},
+        )
+        .expect("export optimized");
+
+        let target = tempfile::tempdir().expect("target");
+        let extracted =
+            extract_session_package(&target.path().join("Set"), &package_path, |_, _| {})
+                .expect("extract");
+
+        assert!(extracted.bundled_audio);
+        let loaded = crate::load_song_from_file(&extracted.song_file).expect("load session");
+
+        // Every clip resolves to a file that is actually there, and it is PCM.
+        for clip in &loaded.clips {
+            let resolved = extracted.song_dir.join(&clip.file_path);
+            assert!(resolved.is_file(), "clip {} is missing", clip.file_path);
+            assert!(
+                clip.file_path.ends_with(".wav"),
+                "clip {} should point at prepared PCM",
+                clip.file_path
+            );
+            let reader = hound::WavReader::open(&resolved).expect("clip is readable WAV");
+            assert_eq!(reader.spec().bits_per_sample, 16);
+        }
+    }
+
+    #[test]
+    fn the_two_original_modes_are_untouched_by_the_new_one() {
+        // Regression guard: Light and Full must behave exactly as before, and
+        // must not start declaring a prepared rate.
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+
+        for (mode, expect_bundled) in [
+            (SessionPackageAudio::Referenced, false),
+            (SessionPackageAudio::Original, true),
+        ] {
+            let package_path = song_dir.join(format!("set-{expect_bundled}.ltset"));
+            export_session_as_package_with_audio(
+                song_dir,
+                song_dir,
+                &session(),
+                &sidecars(),
+                &package_path,
+                mode,
+                |_, _| {},
+            )
+            .expect("export");
+
+            let file = fs::File::open(&package_path).expect("open");
+            let mut archive = ZipArchive::new(file).expect("zip");
+            let mut json = String::new();
+            archive
+                .by_name("manifest.json")
+                .expect("manifest")
+                .read_to_string(&mut json)
+                .expect("read");
+            let manifest: SessionPackageManifest = serde_json::from_str(&json).expect("parse");
+
+            assert_eq!(manifest.bundled_audio, expect_bundled);
+            assert_eq!(manifest.prepared_sample_rate, None);
+            assert_eq!(manifest.prepared_format, None);
         }
     }
 
@@ -1566,7 +1837,9 @@ mod tests {
             format_version: SESSION_PACKAGE_FORMAT_VERSION,
             session_title: "x".into(),
             bundled_audio: false,
-        };
+            prepared_sample_rate: None,
+            prepared_format: None,
+};
         zip.write_all(&serde_json::to_vec(&manifest).unwrap())
             .expect("write");
         zip.finish().expect("finish");
@@ -1588,7 +1861,9 @@ mod tests {
             format_version: SESSION_PACKAGE_FORMAT_VERSION + 99,
             session_title: "x".into(),
             bundled_audio: false,
-        };
+            prepared_sample_rate: None,
+            prepared_format: None,
+};
         zip.write_all(&serde_json::to_vec(&manifest).unwrap())
             .expect("write");
         zip.finish().expect("finish");

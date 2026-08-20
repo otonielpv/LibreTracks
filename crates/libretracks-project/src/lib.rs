@@ -2,6 +2,7 @@
 
 mod importer;
 mod package;
+mod prepared_audio;
 mod session_package;
 mod session_sample_rate;
 mod song_store;
@@ -18,6 +19,7 @@ pub use package::{
     merge_extracted_song_package, ExtractedSongPackage, PackageLibraryAssetEntry,
     SongImportTrackMode, SongPackageExport, SongPackageImportResult,
 };
+pub use prepared_audio::{prepare_audio_to_wav, prepared_relative_path, PreparedAudioInfo};
 pub use session_package::{
     export_session_as_package, extract_session_package, extract_session_package_from_reader,
     ExtractedSessionPackage,
