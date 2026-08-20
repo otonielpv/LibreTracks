@@ -2,6 +2,7 @@
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
 #include <lt_engine/sources/resampler.h>
+#include <lt_engine/core/device_profile.h>
 #include <lt_engine/core/thread_policy.h>
 #include <lt_engine/core/fs_path.h>
 #include <lt_engine/debug/logging.h>
@@ -79,29 +80,29 @@ void yield_to_ui_scheduler() {
     decode_background_yield();
 }
 
-// Total streaming-block cache budget (MB), scaled to installed RAM. The cache
-// is GLOBAL across all sources, so a fixed 512 MB starved playback once several
-// songs/tracks shared it. Scaling gives machines with more RAM proportionally
-// more headroom. On 8 GB it stays at 512 (there is no room to grow without
-// paging — the working-set pressure thread_policy.h documents); the 8 GB case
-// is fixed by the per-source eviction guard in BlockCache, not by this budget.
-// The tiers mirror lt_recommend_worker_threads()'s RAM buckets.
+// Total streaming-block cache budget (MB). The cache is GLOBAL across all
+// sources, so a fixed 512 MB starved playback once several songs/tracks shared
+// it. Scaling gives machines with more RAM proportionally more headroom. On
+// 8 GB it stays at 512 (there is no room to grow without paging — the
+// working-set pressure thread_policy.h documents); the 8 GB case is fixed by
+// the per-source eviction guard in BlockCache, not by this budget.
+//
+// The tiers now live in device_profile.h, which also handles the case installed
+// RAM cannot: a phone. 512 MB is roughly half of everything available on a
+// 2.58 GB device, and claiming it is what made the low-memory killer take the
+// system down mid-import.
 size_t source_cache_mb_for_ram() {
-    const std::uint64_t ram = lt::lt_physical_ram_bytes();
-    const double ram_gb = ram > 0 ? static_cast<double>(ram) / (1024.0 * 1024.0 * 1024.0)
-                                   : 8.0;  // assume a middling 8GB when unknown
-    if (ram_gb <= 8.5)  return 512;
-    if (ram_gb <= 16.5) return 1024;
-    if (ram_gb <= 32.5) return 2048;
-    return 3072;
+    return lt::lt_device_profile().source_cache_mb;
 }
 
 size_t source_cache_blocks_from_env() {
     size_t cache_mb = source_cache_mb_for_ram();
     // Explicit override always wins (A/B testing, constrained deployments).
+    // The floor is 16 rather than 64 so a handheld budget can be dialled below
+    // the desktop minimum while measuring.
     if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_CACHE_MB")) {
         const int parsed = std::atoi(raw);
-        if (parsed >= 64 && parsed <= 4096)
+        if (parsed >= 16 && parsed <= 4096)
             cache_mb = static_cast<size_t>(parsed);
     }
     const size_t bytes_per_block =
@@ -333,14 +334,9 @@ size_t source_disk_cache_limit_bytes() {
             return static_cast<size_t>(parsed) * 1024ull * 1024ull;
     }
 
-    constexpr unsigned long long kMinBytes = 4ull * 1024ull * 1024ull * 1024ull; // 4 GiB
     const std::string dir = source_cache_dir();
     const unsigned long long free_bytes = free_disk_bytes_for(parent_path_compat(dir));
-    // 10% of free disk. If the stat failed (free_bytes == 0) we land on the
-    // minimum, which keeps the policy safe on weird filesystems.
-    const unsigned long long ten_percent = free_bytes / 10ull;
-    const unsigned long long budget = ten_percent > kMinBytes ? ten_percent : kMinBytes;
-    return static_cast<size_t>(budget);
+    return lt::lt_disk_cache_limit_for(free_bytes, lt::lt_device_profile().device_class);
 }
 
 struct CacheEntryStat {
@@ -632,7 +628,7 @@ static unsigned fill_thread_count_from_env() {
         } catch (...) {
         }
     }
-    return static_cast<unsigned>(lt_recommend_worker_threads(WorkerRole::Fill));
+    return static_cast<unsigned>(lt::lt_device_profile().fill_threads);
 }
 
 SourceManager::SourceManager()
@@ -1452,6 +1448,17 @@ Frame SourceManager::total_cache_miss_frames() const noexcept {
             total += entry.source->cache_miss_frames();
     }
     return total;
+}
+
+std::size_t SourceManager::release_cached_blocks_under_pressure(std::size_t keep_per_source) {
+    // Deliberately does NOT take write_mutex_: this runs on whatever thread the
+    // OS delivers the low-memory warning on, and blocking behind a session load
+    // would defeat the point of reacting quickly. BlockCache does its own
+    // locking, and it is the only thing we touch.
+    const std::size_t freed = block_cache_.release_unprotected(keep_per_source);
+    lt_debug_log("[LT_MEMPRESSURE] released %zu MB from the block cache (keep=%zu/source)\n",
+                 freed / (1024 * 1024), keep_per_source);
+    return freed;
 }
 
 void SourceManager::clear() {

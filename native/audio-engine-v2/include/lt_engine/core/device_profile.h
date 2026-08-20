@@ -141,6 +141,39 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
     return profile;
 }
 
+// PCM disk-cache budget, in bytes, from the free space on the cache volume.
+//
+// Desktop policy (unchanged): 10% of free space, but never below 4 GiB, so a
+// nearly-full drive still has a usable working set.
+//
+// That minimum is actively harmful on a phone. The import that prompted this
+// work consumed 4.91 GB of a 10 GB free partition — and a 4 GiB cache floor
+// says that is fine. Handhelds get 10% capped at 512 MB, and nothing at all
+// once free space drops below 1 GB: a device that is nearly full must not be
+// pushed over by our cache. Serving from the original file is slower than
+// serving from cache, but it is not "your phone is out of space".
+//
+// Pure function of its inputs so the policy can be tested without a filesystem.
+inline std::size_t lt_disk_cache_limit_for(std::uint64_t free_bytes, DeviceClass device_class) {
+    const bool handheld =
+        device_class == DeviceClass::Handheld || device_class == DeviceClass::Constrained;
+
+    const std::uint64_t ten_percent = free_bytes / 10ull;
+
+    if (handheld) {
+        constexpr std::uint64_t kFloorFreeBytes = 1024ull * 1024 * 1024;  // 1 GB
+        constexpr std::uint64_t kMaxBytes = 512ull * 1024 * 1024;
+        // free_bytes == 0 means the stat failed; on a phone assume the worst.
+        if (free_bytes < kFloorFreeBytes) return 0;
+        return static_cast<std::size_t>(std::min(ten_percent, kMaxBytes));
+    }
+
+    // Desktop: 10% of free disk, floored at 4 GiB. A failed stat (0) lands on
+    // the minimum, which keeps the policy safe on weird filesystems.
+    constexpr std::uint64_t kMinBytes = 4ull * 1024 * 1024 * 1024;
+    return static_cast<std::size_t>(ten_percent > kMinBytes ? ten_percent : kMinBytes);
+}
+
 // Memory the system reports as available, in bytes. 0 when we can't tell.
 // Only Linux/Android answers: it's the only platform where we need it, and
 // MemAvailable is the number Android's own low-memory killer watches.

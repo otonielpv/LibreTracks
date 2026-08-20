@@ -153,6 +153,12 @@ public:
     // Unload all sources (e.g. session close).
     void clear();
 
+    // Release cached blocks when the OS says memory is short (Android's
+    // onTrimMemory). Keeps each source's freshest blocks so playback in
+    // progress survives — a live user would rather hear a glitch than silence.
+    // Returns bytes freed. Safe to call from any non-audio thread.
+    std::size_t release_cached_blocks_under_pressure(std::size_t keep_per_source = 16);
+
 private:
     struct Entry {
         std::string              file_path;

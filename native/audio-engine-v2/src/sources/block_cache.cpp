@@ -365,4 +365,87 @@ void BlockCache::clear() {
     }
 }
 
+size_t BlockCache::release_unprotected(size_t keep_per_source) {
+    // Unlike clear(), this keeps each source's freshest blocks — the read-ahead
+    // window the audio thread is about to need. Dropping those under memory
+    // pressure would trade a system stall for an audible dropout, and a user
+    // playing live would rather we glitch than go silent.
+    //
+    // Everything else goes: on a phone getting onTrimMemory(CRITICAL), the
+    // alternative to handing memory back is being killed.
+    std::vector<std::shared_ptr<CacheBlock>> snapshot;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        snapshot.reserve(blocks_.size());
+        for (const auto& [key, block] : blocks_) {
+            if (block) snapshot.push_back(block);
+        }
+    }
+    if (snapshot.empty()) return 0;
+
+    // Per source, the last_used value at or above which a block is kept. Same
+    // rule evict_if_needed() uses, so pressure eviction and routine eviction
+    // protect exactly the same blocks.
+    std::unordered_map<Id, std::vector<uint64_t>> ages_by_source;
+    ages_by_source.reserve(snapshot.size());
+    for (const auto& block : snapshot)
+        ages_by_source[block->key.source_id].push_back(
+            block->last_used.load(std::memory_order_relaxed));
+
+    // A block is kept when last_used >= its source's threshold. The bounds are
+    // therefore 0 = keep everything and UINT64_MAX = keep nothing; the very
+    // first block ever cached has last_used == 0, so "keep all" cannot be
+    // spelled as a threshold of 0 under a strict comparison.
+    // A block is kept when last_used >= its source's threshold. The bounds are
+    // therefore 0 = keep everything and UINT64_MAX = keep nothing; the very
+    // first block ever cached has last_used == 0, so "keep all" cannot be
+    // spelled as a threshold of 0 under a strict comparison.
+    std::unordered_map<Id, uint64_t> keep_threshold;
+    keep_threshold.reserve(ages_by_source.size());
+    for (auto& [source_id, ages] : ages_by_source) {
+        if (keep_per_source == 0) {
+            keep_threshold[source_id] = UINT64_MAX;  // keep nothing
+            continue;
+        }
+        if (ages.size() <= keep_per_source) {
+            keep_threshold[source_id] = 0;  // keep everything
+            continue;
+        }
+        // The Kth largest last_used. With the `>=` test above, that value and
+        // everything fresher than it survive — exactly K blocks.
+        const auto kth = ages.begin() + static_cast<long>(keep_per_source - 1);
+        std::nth_element(ages.begin(), kth, ages.end(), std::greater<uint64_t>());
+        keep_threshold[source_id] = *kth;
+    }
+
+    // Blocks leave the map here and die when `retired` goes out of scope, after
+    // mtx_ is released: the audio thread must never wait on our deallocations.
+    std::vector<std::shared_ptr<CacheBlock>> retired;
+    size_t freed_bytes = 0;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        retired.reserve(blocks_.size());
+        for (auto it = blocks_.begin(); it != blocks_.end();) {
+            const auto& block = it->second;
+            if (!block) {
+                it = blocks_.erase(it);
+                continue;
+            }
+            const auto threshold = keep_threshold.find(block->key.source_id);
+            const uint64_t last_used = block->last_used.load(std::memory_order_relaxed);
+            if (threshold != keep_threshold.end() && last_used >= threshold->second) {
+                ++it;  // protected: the audio thread may be about to read it
+                continue;
+            }
+            freed_bytes += block->samples.size() * sizeof(float);
+            retired.push_back(std::move(it->second));
+            it = blocks_.erase(it);
+        }
+        blocks_cached_.store(blocks_.size(), std::memory_order_relaxed);
+        const size_t used = bytes_used_.load(std::memory_order_relaxed);
+        bytes_used_.store(used > freed_bytes ? used - freed_bytes : 0, std::memory_order_relaxed);
+    }
+    return freed_bytes;
+}
+
 } // namespace lt

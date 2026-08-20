@@ -122,6 +122,15 @@ public:
     // thread's read(); call it from the control thread.
     void             clear();
 
+    // Hand memory back under pressure, keeping each source's `keep_per_source`
+    // freshest blocks — the read-ahead window the audio thread is about to
+    // need. Unlike clear(), playback in progress survives this (it may glitch;
+    // it will not stop). Returns bytes freed.
+    //
+    // For Android's onTrimMemory: the alternative to giving memory back when
+    // the system asks is being killed. Safe to call from any non-audio thread.
+    size_t           release_unprotected(size_t keep_per_source);
+
     // --- Lock-contention diagnostics (LIBRETRACKS_AUDIO_DIAG) ---------------
     // Worst-case microseconds the audio thread (read) spent BLOCKED acquiring
     // mtx_, and the worst-case time a worker (fill/evict) HELD it. If the read
