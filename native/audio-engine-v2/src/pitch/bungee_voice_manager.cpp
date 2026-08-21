@@ -549,10 +549,13 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
 
     // Build voices in parallel. Each voice is an isolated BungeePitchVoice
     // instance — Bungee itself is not thread-safe per-instance but instances
-    // are independent. Warming (~80ms each at hop=-1) dominates the cost
-    // for SetSongTranspose / SeekAbsolute; serializing 8 voices took ~1s on
-    // M1-class CPUs. Parallelizing collapses that to ~150-200ms (warm of the
-    // slowest voice + overheads). Reads from SourceManager are thread-safe
+    // are independent. Warming used to dominate this call — the comment here
+    // claimed ~150-200 ms — but that was while is_warm() never returned true
+    // and every voice burned its whole frame budget. With convergence detection
+    // the whole map now builds in 2.6 ms for one track and 5.7 ms for sixteen,
+    // measured. The parallelism is kept because it is already written and
+    // harmless, not because it is load-bearing. Reads from SourceManager are
+    // thread-safe
     // (it serves a streaming background worker and concurrent renderers
     // already).
     const int sample_rate = impl_->sample_rate;

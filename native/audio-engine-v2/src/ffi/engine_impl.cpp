@@ -1915,8 +1915,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // ready voice set for this marker under the current session
             // revision, atomically swap it into BungeeVoiceManager BEFORE
             // scheduling the seek. The audio thread's next block will see
-            // the new voices, eliminating the ~80 ms control-thread voice-
-            // construction cost the reactive rebuild_for_seek path pays.
+            // the new voices. NOTE: that construction cost is no longer what
+            // makes a jump feel slow. Measured after is_warm() started
+            // reporting convergence, build_seek_voice_map takes 2.6 ms for one
+            // track and 5.7 ms for sixteen — imperceptible. What the user
+            // waits for is wait_jump_target_audio_ready below, which blocks the
+            // transport for up to LIBRETRACKS_SEEK_SOURCE_WAIT_MS (default 750)
+            // until the target's audio is decoded.
             //
             // Fallback: if no prepared set exists (e.g. revision changed,
             // marker added after last LoadSession), fall through to the
