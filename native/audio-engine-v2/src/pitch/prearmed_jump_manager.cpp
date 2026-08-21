@@ -2,6 +2,7 @@
 
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
+#include <lt_engine/pitch/voice_priming.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/sources/source_manager.h>
 
@@ -120,197 +121,6 @@ int prearm_source_wait_ms() {
 
 double semitones_to_pitch_scale(Semitones semitones) {
     return std::pow(2.0, static_cast<double>(semitones) / 12.0);
-}
-
-// Warm a freshly-constructed voice by feeding zero input on the control
-// thread until Bungee's analysis pipeline is full. Mirrors
-// BungeeVoiceManager::warm_voice — duplicated rather than refactored to keep
-// the MVP self-contained and trivially revertible.
-//
-// See memory [[project-bungee-warm-voice]]: skipping this loop causes
-// STATUS_ACCESS_VIOLATION on the audio thread's first Stream::process call.
-constexpr int kWarmFramesAt48k = 28800; // 600 ms safety cap
-
-// `pitch_scale` must be the pitch the voice will actually run at — see the
-// note on BungeeVoiceManager::warm_voice. Warming at 1.0 and switching later
-// displaces the pipeline in proportion to the transpose, which is what put
-// prearmed pitched jumps off the beat.
-void warm_voice_silence(BungeePitchVoice& voice,
-                        int sample_rate,
-                        int channel_count,
-                        int max_in_frames,
-                        double time_ratio = 1.0,
-                        double pitch_scale = 1.0) {
-    if (!voice.is_ready()) return;
-    const int max_warm = std::max(0,
-        static_cast<int>(static_cast<long long>(kWarmFramesAt48k) * sample_rate / 48000));
-    if (max_warm <= 0) return;
-
-    std::vector<std::vector<float>> in_planes(
-        static_cast<std::size_t>(channel_count),
-        std::vector<float>(static_cast<std::size_t>(max_in_frames), 0.0f));
-    std::vector<std::vector<float>> out_planes(
-        static_cast<std::size_t>(channel_count),
-        std::vector<float>(static_cast<std::size_t>(max_in_frames), 0.0f));
-    std::vector<const float*> in_ptrs(static_cast<std::size_t>(channel_count), nullptr);
-    std::vector<float*>       out_ptrs(static_cast<std::size_t>(channel_count), nullptr);
-    for (int c = 0; c < channel_count; ++c) {
-        in_ptrs[static_cast<std::size_t>(c)]  = in_planes[static_cast<std::size_t>(c)].data();
-        out_ptrs[static_cast<std::size_t>(c)] = out_planes[static_cast<std::size_t>(c)].data();
-    }
-
-    int fed = 0;
-    while (fed < max_warm) {
-        const int chunk = std::min(max_in_frames, max_warm - fed);
-        // Ratio lives in the proportion between the frame counts, which is
-        // the only form Bungee reads it in.
-        const int out_chunk = std::max(1, static_cast<int>(std::llround(
-            static_cast<double>(chunk) / (time_ratio > 0.0 ? time_ratio : 1.0))));
-        (void)voice.render_block(in_ptrs.data(), chunk,
-                                  out_ptrs.data(), std::min(out_chunk, max_in_frames),
-                                  pitch_scale);
-        fed += chunk;
-        if (voice.is_warm()) break;
-    }
-}
-
-// Real-audio prefeed for prearmed voices.
-//
-// AFTER warm_voice_silence has filled Bungee's analysis pipeline with zeros,
-// feed `latency()` frames of REAL source audio starting at `target_source_frame`
-// while concurrently discarding the same number of output frames. The discarded
-// output covers Bungee's transition from "all silence" to "real audio" — that
-// transition is artefact-rich and we don't want the audio thread to hear it.
-//
-// After prefeed, the voice's next render_block call will return output that
-// corresponds to source position `target_source_frame` in the listener's
-// timeline. The audio thread, which feeds source from
-// `(target_source_frame + latency())` per render block, gets uninterrupted
-// real-audio continuation: prefeed covered [target, target+latency), audio
-// thread covers [target+latency, …).
-//
-// Math:
-//   pre-warm:           input_pos = W,         output_pos = W - L  (silence)
-//   feed L real:        input_pos = W + L,     output_pos still ≈ W - L
-//   drain L output:     input_pos = W + L,     output_pos = W      (= start of
-//                                                                    real audio)
-//   audio thread's 1st  input_pos = W + L + 480, output_pos = W + 480
-//   render_block call:  → output corresponds to source[target..target+480) ✓
-//
-// We pad with silence if `target_source_frame` is near the source end or before
-// the source start (matches what TrackRenderer does on the audio thread).
-//
-// Prefeed with the same pitch scale the audio thread will use after the jump,
-// so Bungee's first audible grain is already in the target transpose state.
-// Result of aligning a warm voice on a jump target.
-//   anchor       the source frame the voice will emit NEXT
-//   fed_through  the source frame input has been fed up to
-// Both come out of Bungee's own accounting rather than being predicted: the
-// pipeline delay moves with pitch, so a latency sampled before the prefeed
-// left pitched jumps landing off the beat in proportion to the transpose.
-struct PrefeedResult {
-    Frame anchor = 0;
-    Frame fed_through = 0;
-};
-
-PrefeedResult prefeed_voice_with_target_audio(BungeePitchVoice& voice,
-                                      const DecodedSource& source,
-                                      Frame target_source_frame,
-                                      int sample_rate,
-                                      int channel_count,
-                                      int max_in_frames,
-                                      double pitch_scale,
-                                      double time_ratio = 1.0) {
-    (void)sample_rate;
-    if (!voice.is_ready())
-        return PrefeedResult{target_source_frame, target_source_frame};
-    const int latency_frames = static_cast<int>(voice.latency_frames());
-    if (latency_frames <= 0)  // voice not warm
-        return PrefeedResult{target_source_frame, target_source_frame};
-
-    // Buffers reused across iterations.
-    std::vector<float> read_l(static_cast<std::size_t>(max_in_frames), 0.0f);
-    std::vector<float> read_r(static_cast<std::size_t>(max_in_frames), 0.0f);
-    std::vector<float> out_l (static_cast<std::size_t>(max_in_frames), 0.0f);
-    std::vector<float> out_r (static_cast<std::size_t>(max_in_frames), 0.0f);
-    std::vector<const float*> in_ptrs (static_cast<std::size_t>(channel_count));
-    std::vector<float*>       out_ptrs(static_cast<std::size_t>(channel_count));
-    in_ptrs [0] = read_l.data();
-    out_ptrs[0] = out_l.data();
-    if (channel_count >= 2) {
-        in_ptrs [1] = read_r.data();
-        out_ptrs[1] = out_r.data();
-    }
-
-    const Frame src_end  = source.duration_frames();
-    Frame  read_cursor   = target_source_frame; // absolute source frame to read next
-
-    const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
-    auto read_source = [&](int frames) {
-        std::fill(read_l.begin(), read_l.begin() + frames, 0.0f);
-        std::fill(read_r.begin(), read_r.begin() + frames, 0.0f);
-        const int dst_offset = read_cursor < 0
-            ? static_cast<int>(std::min<Frame>(frames, -read_cursor))
-            : 0;
-        const Frame read_start = std::max<Frame>(0, read_cursor);
-        const int available = (dst_offset >= frames || read_start >= src_end)
-            ? 0
-            : static_cast<int>(std::min<long long>(
-                frames - dst_offset, static_cast<long long>(src_end - read_start)));
-        if (available > 0) {
-            float* read_into[2] = {
-                read_l.data() + dst_offset,
-                read_r.data() + dst_offset};
-            const int got = source.read(read_start, available, read_into,
-                                         std::min(2, source.channel_count()));
-            if (got > 0 && source.channel_count() == 1) {
-                std::copy_n(read_l.begin() + dst_offset, got,
-                            read_r.begin() + dst_offset);
-            }
-        }
-        read_cursor += frames;
-    };
-
-    // Push `latency_frames` of real source through and discard the output: it
-    // is the flush of the warm silence and belongs to positions before the
-    // target. Discarding it leaves the voice emitting target_source_frame next.
-    //
-    // One loop for every ratio. The two-branch version keyed on
-    // |ratio - 1| > 1e-6 disagreed with the engine's own definition of warp,
-    // and the prearm tests sat in the gap between them.
-    const long long input_pos_before_real = voice.input_position();
-    const Frame real_audio_read_start = read_cursor;
-
-    int fed = 0;
-    while (fed < latency_frames) {
-        const int input_chunk = std::min(max_in_frames, latency_frames - fed);
-        const int output_chunk = std::max(1, std::min(
-            max_in_frames,
-            static_cast<int>(std::llround(
-                static_cast<double>(input_chunk) / safe_ratio))));
-        read_source(input_chunk);
-        (void)voice.render_block(in_ptrs.data(), input_chunk,
-                                  out_ptrs.data(), output_chunk,
-                                  pitch_scale);
-        fed += input_chunk;
-    }
-    voice.clear_queued_output();
-
-    // Ask Bungee where it is rather than predicting it. outputPosition() is the
-    // input-frame position of the next sample it will emit, and every input
-    // frame fed above was one source frame read contiguously, so the scales
-    // differ only by the constant captured before the loop.
-    const double consumed_before_output =
-        voice.output_position() - static_cast<double>(input_pos_before_real);
-    const Frame anchor = real_audio_read_start
-        + static_cast<Frame>(std::llround(consumed_before_output));
-
-
-    // No output priming: it sized itself against latency_frames, which can
-    // exceed the FIFO capacity, and push_fifo drops the excess silently after
-    // the read cursor has already passed it — tearing the contiguity this
-    // function exists to establish.
-    return PrefeedResult{anchor, read_cursor};
 }
 
 // Per-clip prep spec for a single prearmed target.
@@ -667,8 +477,8 @@ BuildResult build_prepared_set(
         }
         const double pitch_scale =
             semitones_to_pitch_scale(spec.effective_semitones);
-        warm_voice_silence(*voice, sample_rate, channel_count, max_in_frames,
-                           spec.time_ratio, pitch_scale);
+        voice_priming::warm(*voice, sample_rate, channel_count, max_in_frames,
+                            spec.time_ratio, pitch_scale);
         const int latency_frames =
             static_cast<int>(voice->latency_frames());
         if (!ensure_bungee_jump_read_window_ready(
@@ -677,13 +487,13 @@ BuildResult build_prepared_set(
             ++br.unloaded_clips_skipped;
             continue;
         }
-        PrefeedResult aligned{
+        voice_priming::Alignment aligned{
             spec.target_source_frame,
             spec.target_source_frame + latency_frames};
         if (spec.source) {
-            aligned = prefeed_voice_with_target_audio(
+            aligned = voice_priming::align_on_source(
                 *voice, *spec.source, spec.target_source_frame,
-                sample_rate, channel_count, max_in_frames,
+                channel_count, max_in_frames,
                 pitch_scale, spec.time_ratio);
         }
         // The voice emits `anchor` next and input is fed to `fed_through`.
