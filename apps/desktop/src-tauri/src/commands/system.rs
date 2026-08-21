@@ -132,6 +132,14 @@ pub struct OwnershipDiagnostics {
     /// Frames played as silence due to streaming prebuffer starvation. Nonzero
     /// is the "audio silent until it catches up" symptom on slow machines.
     pub source_cache_miss_frames: u64,
+
+    /// Warp timing invariants, surfaced so an end-to-end test can assert them
+    /// against the real app. `warp_feed_gap_frames` must stay 0 while playing;
+    /// fed/made is the stretch ratio the engine actually delivered.
+    pub warp_feed_gap_frames: u64,
+    pub warp_feed_gap_events: u64,
+    pub warp_source_frames_fed: u64,
+    pub warp_output_frames_made: u64,
 }
 
 #[tauri::command]
@@ -201,6 +209,11 @@ pub fn get_ownership_diagnostics(
         callback_load_percent: cpu.map(|c| c.callback_load_percent).unwrap_or(0.0),
         underrun_count: cpu.map(|c| c.underrun_count).unwrap_or(0),
         source_cache_miss_frames: cpu.map(|c| c.source_cache_miss_frames).unwrap_or(0),
+
+        warp_feed_gap_frames: cpu.map(|c| c.warp_feed_gap_frames).unwrap_or(0),
+        warp_feed_gap_events: cpu.map(|c| c.warp_feed_gap_events).unwrap_or(0),
+        warp_source_frames_fed: cpu.map(|c| c.warp_source_frames_fed).unwrap_or(0),
+        warp_output_frames_made: cpu.map(|c| c.warp_output_frames_made).unwrap_or(0),
     })
 }
 

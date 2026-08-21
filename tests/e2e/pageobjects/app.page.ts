@@ -1314,6 +1314,28 @@ class AppPage {
     );
   }
 
+  /**
+   * Audio-thread diagnostic counters straight from the engine snapshot.
+   *
+   * The warp timing invariants live here because they cannot be recovered from
+   * the rendered signal: once the grains have smeared it, a feed that skipped
+   * or repeated source frames sounds much like one that did not. `warp_*`
+   * counters are cumulative since engine start, so take a reading before and
+   * after the window under test and compare the deltas.
+   */
+  async engineDiagnostics(): Promise<Record<string, number>> {
+    return browser.execute(
+      () =>
+        (
+          window as unknown as {
+            __ltE2E: {
+              getEngineDiagnostics: () => Promise<Record<string, number>>;
+            };
+          }
+        ).__ltE2E.getEngineDiagnostics(),
+    );
+  }
+
   /** Read persisted backend settings after a realtime engine toggle. */
   async settings(): Promise<E2ESettings> {
     return browser.execute(

@@ -57,6 +57,20 @@ struct CpuDiagnostics {
     uint64_t track_renderer_scratch_resize_in_audio_thread_count = 0;
     uint64_t track_renderer_block_too_large_count = 0;
     int track_renderer_scratch_capacity_frames = 0;
+    // Warp timing invariants, surfaced so an end-to-end test can assert them
+    // against the real app instead of only against a unit harness.
+    //
+    // Bungee splices whatever it is handed into one stream, so the renderer owes
+    // it a feed that is contiguous (no frame skipped or repeated) and that
+    // advances at the requested ratio. Neither property is visible in the output
+    // signal once the grains have smeared it, and both were broken:
+    //   gap_frames  MUST stay 0 during continuous playback.
+    //   fed / made  is the warp ratio actually delivered; compare it against the
+    //               ratio the region asked for.
+    uint64_t warp_feed_gap_frames = 0;
+    uint64_t warp_feed_gap_events = 0;
+    uint64_t warp_source_frames_fed = 0;
+    uint64_t warp_output_frames_made = 0;
     // Total frames played as silence because a streaming block wasn't cached in
     // time (prebuffer starvation). The measurable form of "audio is silent
     // until it catches up" on slow machines. Surfaced in release diagnostics.

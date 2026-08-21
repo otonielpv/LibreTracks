@@ -16,6 +16,7 @@ import {
   getSettings,
   getSongView,
   getTransportSnapshot,
+  getOwnershipDiagnostics,
   createUserPad,
   assignPadKey,
   setPadConfigRealtime,
@@ -96,6 +97,16 @@ export interface E2ETestHooks {
   getSongView: () => Promise<SongView | null>;
   getTransportSnapshot: () => Promise<TransportSnapshot>;
   getSettings: () => Promise<AppSettings>;
+  /**
+   * Raw engine snapshot JSON with the audio-thread diagnostic counters.
+   *
+   * Exists for the warp timing invariants, which the output signal cannot
+   * reveal: whether the source feed handed to Bungee was contiguous, and what
+   * stretch ratio was actually delivered. Reading them here is what lets an
+   * end-to-end test check those against a real audio device instead of a unit
+   * harness.
+   */
+  getEngineDiagnostics: () => Promise<Record<string, number>>;
   getTimelineView: () => { cameraX: number; zoomLevel: number };
   getTrackMeters: () => MeterDictionary;
   getAudioOutputMeter: () => Promise<AudioOutputMeterLevel>;
@@ -359,6 +370,8 @@ export function useE2ETestHooks(
       getSongView: () => getSongView({ includeWaveforms: false }),
       getTransportSnapshot,
       getSettings,
+      getEngineDiagnostics: async () =>
+        (await getOwnershipDiagnostics()) as Record<string, number>,
       getTimelineView: () => {
         const { cameraX, zoomLevel } = useTimelineUIStore.getState();
         return { cameraX, zoomLevel };

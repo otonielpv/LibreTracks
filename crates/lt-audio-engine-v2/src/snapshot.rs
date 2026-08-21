@@ -156,6 +156,22 @@ pub struct CpuDiagnostics {
     /// until it catches up" on slow machines.
     #[serde(default)]
     pub source_cache_miss_frames: u64,
+    /// Warp timing invariants. The renderer owes Bungee a source feed that is
+    /// contiguous and advances at the requested ratio; neither property
+    /// survives into the rendered signal, so these counters are the only way to
+    /// check them against a running engine.
+    ///
+    /// `warp_feed_gap_frames` must stay 0 during continuous playback — any gap
+    /// is source material skipped or fed twice. `warp_source_frames_fed` over
+    /// `warp_output_frames_made` is the stretch ratio actually delivered.
+    #[serde(default)]
+    pub warp_feed_gap_frames: u64,
+    #[serde(default)]
+    pub warp_feed_gap_events: u64,
+    #[serde(default)]
+    pub warp_source_frames_fed: u64,
+    #[serde(default)]
+    pub warp_output_frames_made: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -1002,6 +1002,10 @@ std::string EngineImpl::get_snapshot() const {
         snap.cpu.mixer_skipped_track_count = mixer_->skipped_track_count();
         auto tr = TrackRenderer::diagnostics();
         snap.cpu.track_renderer_prepare_count = tr.prepare_count;
+        snap.cpu.warp_feed_gap_frames     = tr.stretched_feed_gap_frames;
+        snap.cpu.warp_feed_gap_events     = tr.stretched_feed_gap_events;
+        snap.cpu.warp_source_frames_fed   = tr.stretched_source_frames_fed;
+        snap.cpu.warp_output_frames_made  = tr.stretched_output_frames_made;
         snap.cpu.track_renderer_scratch_resize_count = tr.scratch_resize_count;
         snap.cpu.track_renderer_scratch_resize_in_audio_thread_count =
             tr.scratch_resize_in_audio_thread_count;

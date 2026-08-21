@@ -196,6 +196,23 @@ export async function getTransportSnapshot(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("get_transport_snapshot");
 }
 
+/**
+ * Audio-thread diagnostic counters from the running engine.
+ *
+ * Not used by the UI — it exists so end-to-end tests can assert engine
+ * invariants against the real app rather than only against a unit harness. The
+ * warp timing counters in particular (`warp_feed_gap_frames` and the fed/made
+ * pair) are invisible in the output signal, so this is the only way to check
+ * them with a real audio device in the loop.
+ */
+export async function getOwnershipDiagnostics(): Promise<
+  Record<string, number | string | boolean>
+> {
+  return invokeCommand<Record<string, number | string | boolean>>(
+    "get_ownership_diagnostics",
+  );
+}
+
 export async function getSongView(
   options?: { includeWaveforms?: boolean },
 ): Promise<SongView | null> {
