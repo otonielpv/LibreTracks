@@ -48,6 +48,10 @@ std::atomic<std::uint64_t> TrackRenderer::pitch_missing_stream_silence_count_{0}
 std::atomic<std::uint64_t> TrackRenderer::path_direct_count_{0};
 std::atomic<std::uint64_t> TrackRenderer::path_varispeed_count_{0};
 std::atomic<std::uint64_t> TrackRenderer::path_stretched_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::stretched_feed_gap_frames_{0};
+std::atomic<std::uint64_t> TrackRenderer::stretched_feed_gap_events_{0};
+std::atomic<std::uint64_t> TrackRenderer::stretched_source_frames_fed_{0};
+std::atomic<std::uint64_t> TrackRenderer::stretched_output_frames_made_{0};
 
 void TrackRenderer::prepare(int max_block_frames) noexcept {
     if (max_block_frames <= 0)
@@ -96,7 +100,11 @@ TrackRendererDiagnostics TrackRenderer::diagnostics() noexcept {
         pitch_missing_stream_silence_count_.load(std::memory_order_relaxed),
         path_direct_count_.load(std::memory_order_relaxed),
         path_varispeed_count_.load(std::memory_order_relaxed),
-        path_stretched_count_.load(std::memory_order_relaxed)};
+        path_stretched_count_.load(std::memory_order_relaxed),
+        stretched_feed_gap_frames_.load(std::memory_order_relaxed),
+        stretched_feed_gap_events_.load(std::memory_order_relaxed),
+        stretched_source_frames_fed_.load(std::memory_order_relaxed),
+        stretched_output_frames_made_.load(std::memory_order_relaxed)};
 }
 
 void TrackRenderer::reset_diagnostics() noexcept {
@@ -109,6 +117,10 @@ void TrackRenderer::reset_diagnostics() noexcept {
     path_direct_count_.store(0, std::memory_order_relaxed);
     path_varispeed_count_.store(0, std::memory_order_relaxed);
     path_stretched_count_.store(0, std::memory_order_relaxed);
+    stretched_feed_gap_frames_.store(0, std::memory_order_relaxed);
+    stretched_feed_gap_events_.store(0, std::memory_order_relaxed);
+    stretched_source_frames_fed_.store(0, std::memory_order_relaxed);
+    stretched_output_frames_made_.store(0, std::memory_order_relaxed);
 }
 
 bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
@@ -471,6 +483,30 @@ int TrackRenderer::render_path_stretched(const ClipBlock&     cb,
         std::fill(bungee_in_r_.begin() + std::max(0, dst_offset + got),
                   bungee_in_r_.begin() + feed_frames, 0.0f);
     }
+    // ── Warp timing invariants (see TrackRendererDiagnostics) ────────────
+    // Record what span of the source this block actually handed the stretcher,
+    // so a test — or a production diagnostic — can prove the feed is contiguous
+    // and advancing at the requested ratio. Only meaningful when we fed
+    // something; a FIFO-drain block feeds nothing and must not count as a gap.
+    if (feed_frames > 0) {
+        if (last_stretched_feed_end_ >= 0 && last_stretched_clip_ == cb.clip) {
+            const long long gap =
+                static_cast<long long>(read_from) - last_stretched_feed_end_;
+            if (gap != 0) {
+                stretched_feed_gap_frames_.fetch_add(
+                    static_cast<std::uint64_t>(std::llabs(gap)),
+                    std::memory_order_relaxed);
+                stretched_feed_gap_events_.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        last_stretched_feed_end_ = static_cast<long long>(read_from) + feed_frames;
+        last_stretched_clip_ = cb.clip;
+        stretched_source_frames_fed_.fetch_add(
+            static_cast<std::uint64_t>(feed_frames), std::memory_order_relaxed);
+    }
+    stretched_output_frames_made_.fetch_add(
+        static_cast<std::uint64_t>(cb.frames_to_read), std::memory_order_relaxed);
+
     const float* in_ptrs[2] = { bungee_in_l_.data(), bungee_in_r_.data() };
     const auto dsp_t0 = std::chrono::steady_clock::now();
     const int produced = bv->render_block(

@@ -33,6 +33,7 @@ add_executable(lt_engine_tests
     test_folder_controls.cpp
     bungee_pitch_voice_tests.cpp
     bungee_voice_manager_tests.cpp
+    warp_timing_tests.cpp
     prearmed_jump_tests.cpp
 )
 

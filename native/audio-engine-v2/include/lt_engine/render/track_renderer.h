@@ -29,6 +29,37 @@ struct TrackRendererDiagnostics {
     std::uint64_t path_direct_count = 0;
     std::uint64_t path_varispeed_count = 0;
     std::uint64_t path_stretched_count = 0;
+
+    // ── Warp timing invariants ───────────────────────────────────────────
+    // Bungee's Stream treats everything we hand it as ONE contiguous input
+    // stream: it has no idea where in the file a block came from. So the warp
+    // path owes the stretcher two things, and both are measured here because
+    // neither is visible in the output signal once the grains have smeared it.
+    //
+    //  1. CONTIGUITY. Consecutive feeds must abut exactly. A gap means source
+    //     material was skipped; an overlap means it was fed twice. Either one
+    //     is a splice Bungee cannot see and cannot repair.
+    //  2. RATE. The total source span fed must equal (output frames elapsed x
+    //     warp ratio). Any per-block rounding that always leans the same way
+    //     integrates into an audible drift against the click.
+    //
+    // A cursor that accumulates can satisfy one of these while breaking the
+    // other, which is exactly how both historical bugs hid from the suite.
+    // Deriving the read position from the timeline satisfies both by
+    // construction.
+
+    // Sum of |gap| between the end of one stretched feed and the start of the
+    // next, per voice. MUST be 0 during continuous playback. Non-zero means
+    // spliced source.
+    std::uint64_t stretched_feed_gap_frames = 0;
+    // How many blocks contributed a non-zero gap. Separates "one big seek"
+    // from "a little wrong on every block".
+    std::uint64_t stretched_feed_gap_events = 0;
+    // Total source frames fed, and total output frames produced, across all
+    // stretched blocks. Their quotient is the effective warp ratio actually
+    // delivered — compare against the requested ratio to catch drift.
+    std::uint64_t stretched_source_frames_fed = 0;
+    std::uint64_t stretched_output_frames_made = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -148,6 +179,16 @@ private:
     static std::atomic<std::uint64_t> path_direct_count_;
     static std::atomic<std::uint64_t> path_varispeed_count_;
     static std::atomic<std::uint64_t> path_stretched_count_;
+    static std::atomic<std::uint64_t> stretched_feed_gap_frames_;
+    static std::atomic<std::uint64_t> stretched_feed_gap_events_;
+    static std::atomic<std::uint64_t> stretched_source_frames_fed_;
+    static std::atomic<std::uint64_t> stretched_output_frames_made_;
+
+    // Where the previous stretched feed for this renderer ended, so the next
+    // one can prove it abuts. Per-renderer (not static): each track owns its
+    // own renderer and its own feed stream. -1 = no feed yet.
+    Frame last_stretched_feed_end_ = -1;
+    const Clip* last_stretched_clip_ = nullptr;
 };
 
 } // namespace lt
