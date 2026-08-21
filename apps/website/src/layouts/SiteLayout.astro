@@ -93,6 +93,10 @@ const softwareSchema = {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* Ownership proof for Google Search Console. Must stay on every page and
+        outside the noIndex guard: Google reads it wherever it lands, and
+        removing it un-verifies the property. */}
+    <meta name="google-site-verification" content="Flpzp-UREGKOBDVuAhhNDb-mbP-w5ilomf2lQEXhAaY" />
     <title>{title}</title>
     <meta name="description" content={description} />
     {noIndex && <meta name="robots" content="noindex, nofollow, noarchive" />}

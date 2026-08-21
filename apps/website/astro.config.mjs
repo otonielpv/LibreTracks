@@ -20,6 +20,17 @@ export default defineConfig({
     }),
     tailwind({ applyBaseStyles: false }),
     starlight({
+      // Starlight renders docs pages with its own layout, so the verification
+      // tag in SiteLayout never reaches them. Inject it here too.
+      head: [
+        {
+          tag: "meta",
+          attrs: {
+            name: "google-site-verification",
+            content: "Flpzp-UREGKOBDVuAhhNDb-mbP-w5ilomf2lQEXhAaY",
+          },
+        },
+      ],
       title: {
         en: "LibreTracks Docs",
         es: "Documentación LibreTracks",
