@@ -18,6 +18,7 @@ import { registerSessionSetupFlows } from "./session/setup.flows.js";
 import { registerSessionTransposeFlows } from "./session/transpose.flows.js";
 import { registerSessionTransposePerTrackFlows } from "./session/transposePerTrack.flows.js";
 import { registerSessionWarpFlows } from "./session/warp.flows.js";
+import { registerSessionJumpSilenceFlows } from "./session/jumpSilence.flows.js";
 import {
   AUDIO_FILE_NAME,
   UNUSED_AUDIO_FILE_NAME,
@@ -107,6 +108,7 @@ describe("Session creation", () => {
   registerSessionKeyFlows();
   registerSessionTransposeFlows();
   registerSessionWarpFlows();
+  registerSessionJumpSilenceFlows();
   registerSessionTransposePerTrackFlows();
   registerSessionAutomationFlows();
   registerSessionPadFlows(fixture);

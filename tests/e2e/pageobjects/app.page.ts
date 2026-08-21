@@ -1336,6 +1336,19 @@ class AppPage {
     );
   }
 
+  /** Trigger the live-performance jump to a section marker. */
+  async scheduleMarkerJump(markerId: string): Promise<void> {
+    await browser.execute(
+      (id: string) =>
+        (
+          window as unknown as {
+            __ltE2E: { scheduleMarkerJump: (m: string) => Promise<void> };
+          }
+        ).__ltE2E.scheduleMarkerJump(id),
+      markerId,
+    );
+  }
+
   /** Read persisted backend settings after a realtime engine toggle. */
   async settings(): Promise<E2ESettings> {
     return browser.execute(

@@ -111,7 +111,22 @@ TEST_CASE("sparse ASIO channel selection preserves physical external routes") {
 }
 
 #if LT_ENGINE_HAVE_BUNGEE
-TEST_CASE("scheduled jump without prepared voices clears stale Bungee voice and latches repair target") {
+// An unprepared scheduled jump used to publish an EMPTY voice map, which
+// silenced every warped or transposed track until the control thread repaired
+// it. That was the right trade when the renderer integrated a source cursor: a
+// voice left in place would keep playing the pre-jump position indefinitely,
+// and a hole was better than being permanently wrong.
+//
+// It stopped being right when the read position started coming from the
+// timeline. A voice left alone now re-anchors on the very next block and is
+// reading the correct source within one pipeline flush, so keeping it costs a
+// crossfaded moment of the old position instead of a few hundred milliseconds
+// of silence at the exact instant the user hit a section.
+//
+// What still must hold is the repair latch: the control thread has to learn
+// that an unprepared jump happened so it can rebuild voices for material that
+// has none.
+TEST_CASE("scheduled jump without prepared voices keeps voices and latches repair target") {
     constexpr Frame kDuration = 48000 * 90;
     constexpr Frame kTrigger = 48000 * 10 + 325;
     constexpr Frame kTarget = 48000 * 44 + 117;
@@ -197,8 +212,11 @@ TEST_CASE("scheduled jump without prepared voices clears stale Bungee voice and 
     mixer.render(out, 2, kBlock, test::kFixtureSampleRate);
 
     CHECK(mixer.scheduled_jump_executed_count() == 1);
+    // The repair latch is the part that still matters: without it the control
+    // thread never rebuilds voices for clips that have none at the target.
     CHECK(mixer.take_pending_scheduled_jump() == kTarget);
-    CHECK(bvm.voice_for("clip-p") == nullptr);
+    // And the voice survives, so the track does not go silent waiting.
+    CHECK(bvm.voice_for("clip-p") != nullptr);
 
     bvm.rebuild_for_seek(kTarget, *session, sources);
     CHECK(bvm.voice_for("clip-p") != nullptr);

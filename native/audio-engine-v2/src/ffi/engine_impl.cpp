@@ -1960,7 +1960,25 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.marker_id });
                         return Result<void>::ok();
                     }
-                    bungee_voices_->clear();
+                    // Prearm miss. Do NOT clear: an empty voice map makes
+                    // voice_for() return null, the stretched path render
+                    // nothing, and every warped or transposed track go SILENT
+                    // until the rebuild lands — a few hundred milliseconds of
+                    // hole at the exact moment the user hit a section.
+                    //
+                    // Clearing was right when the renderer integrated a cursor:
+                    // stale voices would then keep playing the wrong place
+                    // forever, and silence was the lesser evil. It is not right
+                    // any more. The renderer derives its read position from the
+                    // timeline, so a voice left in place re-anchors on the next
+                    // block and is reading the correct source within one
+                    // pipeline flush. The listener gets a crossfaded moment of
+                    // the previous position instead of a gap, which is what
+                    // every other DAW does with a jump it could not prepare.
+                    //
+                    // Clips that have no voice at all (jumping into material
+                    // that was never enrolled) are still silent until the
+                    // rebuild — unchanged, and the rebuild is what fixes them.
                     bungee_voices_->rebuild_for_seek_async(
                         target_frame, *session_, *source_manager_);
                 }
@@ -2009,7 +2027,25 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.region_id });
                         return Result<void>::ok();
                     }
-                    bungee_voices_->clear();
+                    // Prearm miss. Do NOT clear: an empty voice map makes
+                    // voice_for() return null, the stretched path render
+                    // nothing, and every warped or transposed track go SILENT
+                    // until the rebuild lands — a few hundred milliseconds of
+                    // hole at the exact moment the user hit a section.
+                    //
+                    // Clearing was right when the renderer integrated a cursor:
+                    // stale voices would then keep playing the wrong place
+                    // forever, and silence was the lesser evil. It is not right
+                    // any more. The renderer derives its read position from the
+                    // timeline, so a voice left in place re-anchors on the next
+                    // block and is reading the correct source within one
+                    // pipeline flush. The listener gets a crossfaded moment of
+                    // the previous position instead of a gap, which is what
+                    // every other DAW does with a jump it could not prepare.
+                    //
+                    // Clips that have no voice at all (jumping into material
+                    // that was never enrolled) are still silent until the
+                    // rebuild — unchanged, and the rebuild is what fixes them.
                     bungee_voices_->rebuild_for_seek_async(
                         target_frame, *session_, *source_manager_);
                 }
@@ -2056,7 +2092,25 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.song_id });
                         return Result<void>::ok();
                     }
-                    bungee_voices_->clear();
+                    // Prearm miss. Do NOT clear: an empty voice map makes
+                    // voice_for() return null, the stretched path render
+                    // nothing, and every warped or transposed track go SILENT
+                    // until the rebuild lands — a few hundred milliseconds of
+                    // hole at the exact moment the user hit a section.
+                    //
+                    // Clearing was right when the renderer integrated a cursor:
+                    // stale voices would then keep playing the wrong place
+                    // forever, and silence was the lesser evil. It is not right
+                    // any more. The renderer derives its read position from the
+                    // timeline, so a voice left in place re-anchors on the next
+                    // block and is reading the correct source within one
+                    // pipeline flush. The listener gets a crossfaded moment of
+                    // the previous position instead of a gap, which is what
+                    // every other DAW does with a jump it could not prepare.
+                    //
+                    // Clips that have no voice at all (jumping into material
+                    // that was never enrolled) are still silent until the
+                    // rebuild — unchanged, and the rebuild is what fixes them.
                     bungee_voices_->rebuild_for_seek_async(
                         target_frame, *session_, *source_manager_);
                 }

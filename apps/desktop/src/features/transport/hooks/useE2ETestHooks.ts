@@ -17,6 +17,7 @@ import {
   getSongView,
   getTransportSnapshot,
   getOwnershipDiagnostics,
+  scheduleMarkerJump,
   createUserPad,
   assignPadKey,
   setPadConfigRealtime,
@@ -107,6 +108,12 @@ export interface E2ETestHooks {
    * harness.
    */
   getEngineDiagnostics: () => Promise<Record<string, number>>;
+  /**
+   * Schedule a jump to a section marker — the same call the ruler's context
+   * menu makes. Exposed so a test can trigger the live-performance jump path
+   * and measure what the listener actually gets.
+   */
+  scheduleMarkerJump: (markerId: string) => Promise<void>;
   getTimelineView: () => { cameraX: number; zoomLevel: number };
   getTrackMeters: () => MeterDictionary;
   getAudioOutputMeter: () => Promise<AudioOutputMeterLevel>;
@@ -372,6 +379,9 @@ export function useE2ETestHooks(
       getSettings,
       getEngineDiagnostics: async () =>
         (await getOwnershipDiagnostics()) as Record<string, number>,
+      scheduleMarkerJump: async (markerId: string) => {
+        await scheduleMarkerJump(markerId);
+      },
       getTimelineView: () => {
         const { cameraX, zoomLevel } = useTimelineUIStore.getState();
         return { cameraX, zoomLevel };

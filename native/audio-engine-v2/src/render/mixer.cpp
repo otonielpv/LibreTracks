@@ -818,8 +818,16 @@ void Mixer::render(float** output_channels,
         if (apply_seek_fade)
             fade_.trigger_crossfade();
         if (!due_jump->prepared_voice_map) {
-            if (bungee_voices_)
-                bungee_voices_->publish_empty_voice_map_realtime();
+            // Unprepared scheduled jump. The voices stay published on purpose:
+            // publishing an empty map here silenced every warped or transposed
+            // track until the control thread repaired them, which is the hole
+            // heard on scheduled markers.
+            //
+            // That was the right trade when the renderer integrated a cursor —
+            // a stale voice played the wrong position indefinitely. Now the
+            // read position comes from the timeline, so the voice re-anchors on
+            // the next block and is correct within one pipeline flush. The
+            // crossfade below covers the seam.
             pending_scheduled_jump_frame_.store(due_jump->target_frame, std::memory_order_release);
             jump_debug_log(
                 "[LT_JUMP_DEBUG][mixer] scheduled_jump_needs_control_repair target_frame=%lld\n",

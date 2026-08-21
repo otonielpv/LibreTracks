@@ -140,6 +140,18 @@ pub struct OwnershipDiagnostics {
     pub warp_feed_gap_events: u64,
     pub warp_source_frames_fed: u64,
     pub warp_output_frames_made: u64,
+
+    /// Prearmed-jump cache. A jump that HITS is instant; a jump that MISSES
+    /// makes the engine publish an empty voice map and rebuild asynchronously,
+    /// which is silence for as long as the rebuild takes. So the hit rate is
+    /// the direct measure of "do jumps sound instant".
+    pub prearm_ready_count: i32,
+    pub prearm_take_hit_total: u64,
+    pub prearm_take_miss_total: u64,
+    pub prearm_stale_discard_total: u64,
+    pub prearm_prepared_total: u64,
+    pub prearm_prepare_failed_total: u64,
+    pub prearm_worker_busy: bool,
 }
 
 #[tauri::command]
@@ -154,6 +166,7 @@ pub fn get_ownership_diagnostics(
 
     let pitch = snap.as_ref().map(|s| &s.pitch);
     let cpu = snap.as_ref().map(|s| &s.cpu);
+    let prearm = snap.as_ref().map(|s| &s.prearmed_jumps);
 
     Ok(OwnershipDiagnostics {
         realtime_command_count: rt.live_mix_realtime_command_count,
@@ -214,6 +227,16 @@ pub fn get_ownership_diagnostics(
         warp_feed_gap_events: cpu.map(|c| c.warp_feed_gap_events).unwrap_or(0),
         warp_source_frames_fed: cpu.map(|c| c.warp_source_frames_fed).unwrap_or(0),
         warp_output_frames_made: cpu.map(|c| c.warp_output_frames_made).unwrap_or(0),
+
+        prearm_ready_count: prearm.map(|p| p.ready_count).unwrap_or(0),
+        prearm_take_hit_total: prearm.map(|p| p.take_hit_total).unwrap_or(0),
+        prearm_take_miss_total: prearm.map(|p| p.take_miss_total).unwrap_or(0),
+        prearm_stale_discard_total: prearm.map(|p| p.stale_discard_total).unwrap_or(0),
+        prearm_prepared_total: prearm.map(|p| p.prepared_total).unwrap_or(0),
+        prearm_prepare_failed_total: prearm
+            .map(|p| p.prepare_failed_total)
+            .unwrap_or(0),
+        prearm_worker_busy: prearm.map(|p| p.worker_busy).unwrap_or(false),
     })
 }
 
