@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Coste",
+    "Licencia de pago por edición, con actualizaciones de versión mayor aparte.",
+    "Gratis y de código abierto (AGPL-3.0). Sin licencia, sin cuenta y sin suscripción.",
+  ],
+  [
+    "Para qué está pensado",
+    "Producción musical completa: componer, grabar, editar, mezclar y diseñar sonido.",
+    "Reproducir en directo pistas que ya tienes terminadas.",
+  ],
+  [
+    "Organizar el repertorio",
+    "La Session View da escenas y clips; el orden del concierto lo montas tú con escenas, locators o un Set por canción.",
+    "La canción es la unidad de trabajo: cada una con sus pistas, tempo, tonalidad, marcas y nivel propio.",
+  ],
+  [
+    "Click y voz guía",
+    "Se resuelven con pistas dedicadas y routing manual hacia el bus de monitores.",
+    "Metrónomo y voz guía son señales de monitor propias, con su salida configurable aparte de la música.",
+  ],
+  [
+    "Cambiar de tono en el ensayo",
+    "Requiere warp y ajustar la transposición pista a pista.",
+    "Transposición por canción, con un botón T por pista para decidir cuáles la siguen.",
+  ],
+  [
+    "Control remoto",
+    "Con Ableton Link o apps de terceros vía MIDI.",
+    "Remote web incluido: transporte, mezcla y marcas desde el móvil o la tablet, con la superficie editable.",
+  ],
+  [
+    "Equipo necesario",
+    "Un portátil con holgura para una sesión de producción.",
+    "App nativa ligera (Rust + Tauri). También corre en Android.",
+  ],
+];
+
+const strengths = [
+  [
+    "Abre tu Set de Ableton",
+    "Archivo → Importar Reaper/Ableton acepta archivos .als. Los clips de audio pasan a pistas recreadas, los locators a marcas de sección, y se importa el tempo y el compás. No hace falta exportar todos los stems y reconstruir el set a mano.",
+  ],
+  [
+    "Una columna por canción",
+    "La Vista Compacta enseña el repertorio como columnas con sus controles de reproducción y un mezclador compartido, para leerlo de un vistazo encima del escenario.",
+  ],
+  [
+    "Saltos pensados en compases",
+    "Salta a una sección al instante, en la siguiente marca, después de un número de compases o al terminar la canción. Sostén un Vamp mientras el pastor o el cantante alargan un momento.",
+  ],
+  [
+    "Voz guía hablada",
+    "Anuncia la sección que viene ('Coro', 'Puente') y cuenta la entrada antes del downbeat, para que la banda entre junta sin mirar la pantalla.",
+  ],
+];
+
+const limits = [
+  "Si compones, grabas o mezclas, quédate con Ableton Live. LibreTracks no graba audio, no tiene instrumentos virtuales, no aloja plugins VST y no pretende sustituir a un DAW de producción.",
+  "Si tu directo se apoya en instrumentos y efectos de Ableton tocando en tiempo real, esa parte no la cubrimos: LibreTracks reproduce audio ya renderizado.",
+  "Si ya tienes Live pagado y montado, y te funciona, cambiar solo por ahorrar no compensa. Esta página es para quien está empezando, para quien usa Live únicamente como reproductor de pistas, o para quien necesita montar un segundo equipo sin pagar otra licencia.",
+  "La importación conserva la estructura útil para el directo —clips, pistas, tempo, compás y locators—, no cada detalle interno del Set. Revisa el resultado antes de tocar con él.",
+];
+---
+
+<AlternativePage
+  lang="es"
+  rival="Ableton Live"
+  title="Alternativa gratuita a Ableton Live para directo | LibreTracks"
+  description="¿Usas Ableton Live solo para lanzar pistas en directo? LibreTracks es un reproductor multitrack gratuito y de código abierto que importa tus Sets .als y añade click, voz guía, cambio de tono y control remoto."
+  eyebrow="Alternativa gratuita a Ableton Live"
+  heading="Si solo usas Ableton Live para lanzar pistas, esto pesa mucho menos"
+  intro="Mucha gente paga una licencia de Live y acaba usando una fracción mínima: poner pistas en la Session View y darle al play en el concierto. LibreTracks hace exactamente esa parte —pistas por canción, click, voz guía, cambio de tono, MIDI y control remoto— gratis, en código abierto, y sabe abrir tus archivos .als."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Dónde Ableton Live sigue siendo la elección correcta"
+  limits={limits}
+  closing="Importa un Set que ya tengas, coloca las marcas de sección y prueba a saltar entre ellas con la banda. Si no te convence, no has perdido más que un rato: no hay licencia ni cuenta de por medio."
+/>

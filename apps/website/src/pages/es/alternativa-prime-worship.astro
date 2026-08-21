@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Modelo",
+    "Servicio por suscripción con su propio catálogo.",
+    "Software gratuito y de código abierto (AGPL-3.0). Sin cuota ni cuenta.",
+  ],
+  [
+    "De dónde salen las pistas",
+    "De su catálogo, listas para tocar.",
+    "De donde tú las traigas: producidas por tu equipo, compradas o exportadas de vuestra DAW.",
+  ],
+  [
+    "Dónde corre",
+    "Orientado a tablet y móvil.",
+    "Windows, macOS, Linux y Android.",
+  ],
+  [
+    "Conexión a internet",
+    "Catálogo y cuenta en la nube.",
+    "Todo local. Funciona sin conexión una vez instalado.",
+  ],
+  [
+    "Personalizar el arreglo",
+    "Dentro de lo que permita cada canción del catálogo.",
+    "Control total: son tus pistas, tus marcas, tu mezcla y tus rutas de salida.",
+  ],
+  [
+    "Voz guía y click",
+    "Incluidos.",
+    "Incluidos: voz guía hablada en español e inglés y metrónomo, con salidas independientes.",
+  ],
+  [
+    "Coste a largo plazo",
+    "Recurrente mientras lo uses.",
+    "Ninguno. El programa y las sesiones son vuestros.",
+  ],
+];
+
+const strengths = [
+  [
+    "Sin suscripción",
+    "Para equipos pequeños o con presupuesto ajustado, quitar una cuota recurrente del presupuesto anual cambia las cuentas.",
+  ],
+  [
+    "Voz guía en español",
+    "Anuncia la sección siguiente y cuenta la entrada antes del downbeat, además de avisos hablados que colocas donde quieras.",
+  ],
+  [
+    "Tonalidad por canción",
+    "Transpón cada canción a la tonalidad de quien la cante ese día, eligiendo con el botón T qué pistas siguen el cambio.",
+  ],
+  [
+    "El set entero en un archivo",
+    "Un .ltset lleva la sesión completa —canciones, biblioteca, automatización y ondas— para prepararla en casa y abrirla igual en el equipo del local.",
+  ],
+];
+
+const limits = [
+  "LibreTracks no tiene catálogo. Si vuestro flujo depende de descargar canciones ya preparadas y con licencia, eso lo hace Prime y aquí no lo vais a encontrar.",
+  "Las pistas las ponéis vosotros. Si el equipo no produce ni compra multitracks, el problema de conseguir el audio sigue ahí.",
+  "Un servicio de suscripción trae soporte y todo integrado. Aquí el soporte es la documentación, el repositorio en GitHub y el grupo de la comunidad.",
+  "El cambio tiene un coste de aprendizaje real. Probadlo en un ensayo entre semana antes de llevarlo a un domingo.",
+];
+---
+
+<AlternativePage
+  lang="es"
+  rival="Prime"
+  title="Alternativa gratuita a Prime Worship | LibreTracks"
+  description="LibreTracks es un reproductor multitrack gratuito y de código abierto para equipos de alabanza: voz guía en español, click, cambio de tono, MIDI y control remoto, sin suscripción y sin conexión."
+  eyebrow="Alternativa gratuita a Prime"
+  heading="Reproductor multitrack para el equipo de alabanza, sin suscripción"
+  intro="Prime junta el catálogo de canciones y el reproductor en un mismo servicio de pago. Si vuestro equipo ya tiene sus propias pistas, lo que necesitáis es solo el reproductor. LibreTracks lo es: voz guía hablada en español, click, cambio de tono por canción, MIDI y control remoto desde el móvil, gratis y funcionando sin conexión."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Dónde Prime cubre algo que nosotros no"
+  limits={limits}
+  closing="Montad una canción que ya toquéis, colocad sus marcas de sección y probadlo en un ensayo. No hay cuenta que crear ni periodo de prueba que caduque."
+/>

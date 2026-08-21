@@ -1,0 +1,164 @@
+---
+// Shared shell for the "LibreTracks vs X" landing pages. These target people
+// searching for an alternative to a specific tool, so each page keeps the same
+// shape: what LibreTracks does for that use case, an honest comparison table,
+// and an explicit "where the other tool is the better choice" section. That
+// last block is deliberate — claiming to win everywhere reads as a brochure
+// and ages badly.
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  lang: "en" | "es";
+  /** Product this page compares against, e.g. "Ableton Live". */
+  rival: string;
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  /** [need, rival's approach, LibreTracks' approach] */
+  rows: string[][];
+  /** Points in LibreTracks' favour: [title, body] */
+  strengths: string[][];
+  /** Honest limits: cases where the rival is the right pick. */
+  limitsTitle: string;
+  limits: string[];
+  /** Closing paragraph before the download CTA. */
+  closing: string;
+}
+
+const {
+  title,
+  description,
+  lang,
+  rival,
+  eyebrow,
+  heading,
+  intro,
+  rows,
+  strengths,
+  limitsTitle,
+  limits,
+  closing,
+} = Astro.props;
+
+const isSpanish = lang === "es";
+const prefix = isSpanish ? "/es" : "";
+const t = isSpanish
+  ? {
+      need: "Necesidad",
+      libre: "LibreTracks",
+      download: "Descargar gratis",
+      docs: "Ver la documentación",
+      strengthsEyebrow: "Qué aporta LibreTracks",
+      compareEyebrow: "Comparativa",
+      compareHeading: `LibreTracks y ${rival}, lado a lado`,
+      limitsEyebrow: "Sé realista",
+      closingEyebrow: "Pruébalo",
+      closingHeading: "Descárgalo y monta un set en una tarde",
+    }
+  : {
+      need: "Need",
+      libre: "LibreTracks",
+      download: "Download free",
+      docs: "Read the docs",
+      strengthsEyebrow: "What LibreTracks brings",
+      compareEyebrow: "Comparison",
+      compareHeading: `LibreTracks and ${rival}, side by side`,
+      limitsEyebrow: "Being realistic",
+      closingEyebrow: "Try it",
+      closingHeading: "Download it and build a set this afternoon",
+    };
+---
+
+<SiteLayout title={title} description={description} lang={lang}>
+  <main>
+    <section class="site-shell hero">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">{eyebrow}</p>
+          <h1>{heading}</h1>
+          <p>{intro}</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href={`${prefix}/download`}>{t.download}</a>
+            <a class="button-link" href={`${prefix}/docs/`}>{t.docs}</a>
+          </div>
+        </div>
+        <div class="product-shot">
+          <img
+            src="/screenshots/Compact-View.png"
+            alt={isSpanish
+              ? "Vista Compacta de LibreTracks con una columna por canción"
+              : "LibreTracks Compact View with one column per song"}
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">{t.strengthsEyebrow}</p>
+          <h2>{isSpanish ? "Pensado para el escenario, no para el estudio." : "Built for the stage, not the studio."}</h2>
+        </div>
+        <div class="feature-grid">
+          {strengths.map(([name, body]) => (
+            <article class="feature-card">
+              <strong>{name}</strong>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">{t.compareEyebrow}</p>
+          <h2>{t.compareHeading}</h2>
+        </div>
+        <table class="compare-table">
+          <thead>
+            <tr><th>{t.need}</th><th>{rival}</th><th>{t.libre}</th></tr>
+          </thead>
+          <tbody>
+            {rows.map(([need, theirs, ours]) => (
+              <tr><td>{need}</td><td>{theirs}</td><td>{ours}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell docs-preview">
+        <div class="section-heading">
+          <p class="eyebrow">{t.limitsEyebrow}</p>
+          <h2>{limitsTitle}</h2>
+        </div>
+        <div class="docs-list">
+          {limits.map((line) => (
+            <article><p>{line}</p></article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">{t.closingEyebrow}</p>
+          <h2>{t.closingHeading}</h2>
+          <p>{closing}</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href={`${prefix}/download`}>{t.download}</a>
+            <a class="button-link" href={`${prefix}/docs/core-concepts/`}>
+              {isSpanish ? "Conceptos base" : "Core concepts"}
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</SiteLayout>

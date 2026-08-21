@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Model",
+    "Subscription service: you pay a fee for as long as you use it.",
+    "Free and open-source software (AGPL-3.0). No fee, no account.",
+  ],
+  [
+    "Where the tracks come from",
+    "Their licensed multitrack catalogue, ready to play.",
+    "Wherever you bring them from: bought, produced by your team, or exported from your DAW.",
+  ],
+  [
+    "Where it runs",
+    "Built mainly for tablet and phone.",
+    "Windows, macOS, Linux and Android. The machine you already own will do.",
+  ],
+  [
+    "Internet connection",
+    "Catalogue and account live in the cloud.",
+    "Everything is local. Once installed, it works offline.",
+  ],
+  [
+    "Preparing the set",
+    "Pick songs from the catalogue and adjust the instrumentation.",
+    "Build the session from your own stems, markers, outputs and mix, then reuse it.",
+  ],
+  [
+    "Guide vocals and click",
+    "Included — one of its signature features.",
+    "Included: spoken guide in English and Spanish, plus a metronome, each with its own output.",
+  ],
+  [
+    "If you stop paying",
+    "You lose access to the service.",
+    "There is nothing to stop paying. The program and your sessions are yours.",
+  ],
+];
+
+const strengths = [
+  [
+    "Your tracks, no monthly fee",
+    "If your team already produces its own stems, or buys them individually, LibreTracks plays them with real live controls without adding a subscription on top.",
+  ],
+  [
+    "Spoken guide vocals",
+    "Announces the section coming up ('Chorus', 'Verse 2', 'Bridge') and counts the band in before the downbeat, plus spoken cues like 'Build' or 'Drums In' wherever you place them.",
+  ],
+  [
+    "Per-song key changes",
+    "Transpose a song to suit whoever is singing that week, and use the per-track T button to decide which stems follow the change.",
+  ],
+  [
+    "Runs on the venue laptop",
+    "A lightweight native desktop app with hardware outputs, MIDI Learn and a mobile remote for whoever is at the desk.",
+  ],
+];
+
+const limits = [
+  "LibreTracks has no track catalogue. If what you need is to download ready-made, licensed multitracks of well-known songs, that is exactly what Playback does and we do not.",
+  "Here you supply the tracks. If your team neither produces nor buys multitracks, free software does not solve the underlying problem, which is sourcing the audio.",
+  "Playback is highly polished on tablet and solves catalogue, preparation and playback in one go. LibreTracks gives you the player; the material and the prep are on you.",
+  "If your team is happy on the subscription and nobody wants to touch the rig before Sunday, switching has a real cost in time and learning. Try it midweek, not at a dress rehearsal.",
+];
+---
+
+<AlternativePage
+  lang="en"
+  rival="Playback"
+  title="Free Alternative to Playback by MultiTracks | LibreTracks"
+  description="LibreTracks is a free, open-source multitrack player for worship teams: spoken guide vocals, click, key changes and a mobile remote, with no subscription. Plays your own tracks, offline."
+  eyebrow="Free Playback alternative"
+  heading="A multitrack player with no monthly fee, running your own tracks"
+  intro="Playback solves two things at once: it gives you the multitrack catalogue and it gives you the player. If your team already has its stems — produced, bought, or exported from your own DAW — the only missing piece is the second one. LibreTracks is that second piece: spoken guide vocals, click, key changes, MIDI and a mobile remote, free and open source."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Where Playback does something we do not"
+  limits={limits}
+  closing="Take the stems for a song you already play, build the session with its section markers, and try it at a midweek rehearsal. It is free and works offline, so there is nothing to risk."
+/>

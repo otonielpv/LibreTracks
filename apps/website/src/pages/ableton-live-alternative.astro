@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Cost",
+    "Paid licence per edition, with major upgrades sold separately.",
+    "Free and open source (AGPL-3.0). No licence, no account, no subscription.",
+  ],
+  [
+    "What it is for",
+    "Full music production: writing, recording, editing, mixing and sound design.",
+    "Playing back finished tracks on stage.",
+  ],
+  [
+    "Organising the set",
+    "Session View gives you scenes and clips; the running order is something you build with scenes, locators or one Set per song.",
+    "The song is the unit of work: each one carries its own stems, tempo, key, markers and master level.",
+  ],
+  [
+    "Click and guide vocals",
+    "Handled with dedicated tracks and manual routing to the monitor bus.",
+    "Metronome and spoken guide are monitor signals with their own configurable outputs.",
+  ],
+  [
+    "Changing key at rehearsal",
+    "Needs warping plus per-track transposition.",
+    "Transpose per song, with a per-track T button to choose which stems follow.",
+  ],
+  [
+    "Remote control",
+    "Via Ableton Link or third-party MIDI apps.",
+    "Built-in web remote: transport, mixer and markers from a phone or tablet, with an editable surface.",
+  ],
+  [
+    "Machine you need",
+    "A laptop with headroom for a production session.",
+    "A lightweight native app (Rust + Tauri). It also runs on Android.",
+  ],
+];
+
+const strengths = [
+  [
+    "Opens your Ableton Set",
+    "File → Import Reaper/Ableton reads .als files. Arrangement audio clips become clips on recreated tracks, locators become section markers, and tempo and time signature come across. No exporting every stem and rebuilding the set by hand.",
+  ],
+  [
+    "One column per song",
+    "Compact View lays the set out as columns with their own play controls and a shared mixer, so it stays readable on stage.",
+  ],
+  [
+    "Jumps that think in bars",
+    "Jump to a section immediately, at the next marker, after a bar count, or at the end of the song. Hold a Vamp while the moment runs long.",
+  ],
+  [
+    "Spoken guide vocals",
+    "Announces the section coming up and counts the band in before the downbeat, so nobody has to watch the screen.",
+  ],
+];
+
+const limits = [
+  "If you write, record or mix, stay with Ableton Live. LibreTracks does not record audio, has no virtual instruments, hosts no VST plugins and is not trying to replace a production DAW.",
+  "If your show leans on Ableton instruments and effects playing in real time, that is not covered here: LibreTracks plays back audio that is already rendered.",
+  "If you already own Live and your rig works, switching purely to save money is not worth it. This page is for people starting out, people who use Live only as a track player, or anyone building a second rig without buying another licence.",
+  "The importer keeps what matters live — clips, tracks, tempo, time signature and locators — not every internal detail of the Set. Check the result before you gig with it.",
+];
+---
+
+<AlternativePage
+  lang="en"
+  rival="Ableton Live"
+  title="Free Ableton Live Alternative for Live Playback | LibreTracks"
+  description="Using Ableton Live just to fire backing tracks? LibreTracks is a free, open-source multitrack player that imports your .als Sets and adds click, guide vocals, key changes and a mobile remote."
+  eyebrow="Free Ableton Live alternative"
+  heading="If you only use Ableton Live to fire tracks, this is a lot lighter"
+  intro="Plenty of bands buy a Live licence and end up using a sliver of it: load the stems into Session View and hit play at the gig. LibreTracks does exactly that part — per-song stems, click, guide vocals, key changes, MIDI and a mobile remote — for free, in the open, and it reads your .als files."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Where Ableton Live is still the right call"
+  limits={limits}
+  closing="Import a Set you already have, drop in the section markers and try jumping between them with the band. If it does not click, you have lost an afternoon and nothing else — there is no licence or account involved."
+/>

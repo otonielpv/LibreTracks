@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Cost",
+    "Cheap but paid licence, with an evaluation period.",
+    "Free and open source (AGPL-3.0), no licence or account.",
+  ],
+  [
+    "What it is for",
+    "A full DAW: recording, editing, mixing and mastering.",
+    "Playing back finished tracks on stage.",
+  ],
+  [
+    "Building the live rig",
+    "Very possible, and done well, but through custom actions, routing templates and sometimes scripts you maintain yourself.",
+    "The live controls ship with the app: marker jumps, Vamp, transitions and song jumps.",
+  ],
+  [
+    "Set running order",
+    "Regions and the Region Render Matrix, or one project per song.",
+    "The song is the unit: regions carrying their own tempo, key, markers and master level.",
+  ],
+  [
+    "Click and guide vocals",
+    "Built-in metronome; guide vocals are something you build from your own audio tracks.",
+    "Metronome and spoken guide as monitor signals with independent outputs.",
+  ],
+  [
+    "Remote control",
+    "OSC or hand-configured control surfaces.",
+    "Built-in editable web remote from a phone or tablet.",
+  ],
+  [
+    "Learning curve",
+    "Enormous flexibility, paid for in setup time.",
+    "Fewer options, aimed at one job.",
+  ],
+];
+
+const strengths = [
+  [
+    "Opens your .rpp projects",
+    "File → Import Reaper/Ableton reads .rpp files. Audio items become clips, tracks and folder tracks are recreated, tempo and time-signature changes come across, REGIONs become LibreTracks songs and MARKERs become section markers inside them.",
+  ],
+  [
+    "No actions or scripts to maintain",
+    "Section jumps, Vamp and transitions are features of the program, not a personal rig you have to rebuild when you change machines.",
+  ],
+  [
+    "Compact View for the stage",
+    "One column per song with its own controls and a shared mixer, readable under pressure, with no window rearranging before each gig.",
+  ],
+  [
+    "Carries the whole set",
+    "A .ltset file packs the entire session — songs, library, automation and waveforms — so you prepare at home and open it as-is on the venue machine.",
+  ],
+];
+
+const limits = [
+  "If you record, edit or mix, stay with Reaper. LibreTracks does not record, hosts no plugins and has no destructive audio editing.",
+  "Reaper is among the most configurable DAWs there is. If you have already built your own actions and templates for live work and you are comfortable with them, that setup works fine and you do not need to move.",
+  "Reaper is inexpensive. If price is your only reason to switch, the gap is small — the real argument is that here you configure nothing to get live controls.",
+  "The importer keeps what matters on stage — clips, tracks, folders, tempo, time signature, regions and markers — not every project detail. Check it before you play.",
+];
+---
+
+<AlternativePage
+  lang="en"
+  rival="Reaper"
+  title="Reaper Alternative for Live Backing Tracks | LibreTracks"
+  description="Reaper is superb for production, but the live rig is something you build yourself. LibreTracks imports your .rpp projects and ships the stage controls ready-made. Free and open source."
+  eyebrow="Reaper alternative for the stage"
+  heading="Reaper produces beautifully. The live rig you have to build yourself"
+  intro="Running backing tracks in Reaper means building your own system: custom actions, routing templates, sometimes scripts. It works, but it is yours to maintain. LibreTracks ships those controls out of the box — marker jumps, Vamp, transitions, click, guide vocals and a remote — and reads your .rpp files so you do not start from scratch."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Where Reaper still wins"
+  limits={limits}
+  closing="Import an .rpp you already gig with and compare how long it takes to be ready to play. It is free, so the experiment costs you nothing but the time."
+/>

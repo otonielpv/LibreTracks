@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Model",
+    "Subscription service with its own catalogue.",
+    "Free and open-source software (AGPL-3.0). No fee, no account.",
+  ],
+  [
+    "Where the tracks come from",
+    "Their catalogue, ready to play.",
+    "Wherever you bring them from: produced by your team, bought, or exported from your DAW.",
+  ],
+  [
+    "Where it runs",
+    "Aimed at tablet and phone.",
+    "Windows, macOS, Linux and Android.",
+  ],
+  [
+    "Internet connection",
+    "Catalogue and account in the cloud.",
+    "Entirely local. Works offline once installed.",
+  ],
+  [
+    "Customising the arrangement",
+    "Within whatever each catalogue song allows.",
+    "Full control: your stems, your markers, your mix and your outputs.",
+  ],
+  [
+    "Guide vocals and click",
+    "Included.",
+    "Included: spoken guide in English and Spanish, plus a metronome, with independent outputs.",
+  ],
+  [
+    "Long-term cost",
+    "Recurring for as long as you use it.",
+    "None. The program and the sessions are yours.",
+  ],
+];
+
+const strengths = [
+  [
+    "No subscription",
+    "For small teams or tight budgets, taking a recurring fee out of the annual figure changes the maths.",
+  ],
+  [
+    "Spoken guide vocals",
+    "Announces the next section and counts the band in before the downbeat, plus spoken cues placed wherever you want them.",
+  ],
+  [
+    "Key per song",
+    "Transpose each song to suit whoever is singing that day, choosing with the T button which stems follow the change.",
+  ],
+  [
+    "The whole set in one file",
+    "A .ltset carries the complete session — songs, library, automation and waveforms — so you prepare at home and open it unchanged on the venue machine.",
+  ],
+];
+
+const limits = [
+  "LibreTracks has no catalogue. If your workflow depends on downloading ready-made, licensed songs, Prime does that and you will not find it here.",
+  "You supply the tracks. If the team neither produces nor buys multitracks, the problem of sourcing the audio is still there.",
+  "A subscription service comes with support and everything integrated. Here, support is the documentation, the GitHub repository and the community group.",
+  "Switching has a real learning cost. Try it at a midweek rehearsal before taking it to a Sunday.",
+];
+---
+
+<AlternativePage
+  lang="en"
+  rival="Prime"
+  title="Free Alternative to Prime Worship | LibreTracks"
+  description="LibreTracks is a free, open-source multitrack player for worship teams: spoken guide vocals, click, key changes, MIDI and a mobile remote — no subscription, works offline."
+  eyebrow="Free Prime alternative"
+  heading="A multitrack player for the worship team, without the subscription"
+  intro="Prime bundles the song catalogue and the player into one paid service. If your team already has its own stems, the player is all you need. LibreTracks is exactly that: spoken guide vocals, click, per-song key changes, MIDI and a mobile remote — free, open source and working offline."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Where Prime covers something we do not"
+  limits={limits}
+  closing="Build one song you already play, drop in its section markers and try it at a rehearsal. There is no account to create and no trial to expire."
+/>

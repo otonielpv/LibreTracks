@@ -21,14 +21,35 @@ const prefix = isSpanish ? "/es" : "";
 // (e.g. /download ↔ /es/download), not jump back to the home page. Strip or
 // add the `/es` prefix on the current path to build the counterpart URL.
 const currentPath = Astro.url.pathname;
+
+// Landing pages that target search terms use a translated slug, so the plain
+// `/es` prefix swap below would point at a 404. Map those pairs explicitly.
+// Keys and values are stored without a trailing slash.
+const TRANSLATED_SLUGS: Record<string, string> = {
+  "/ableton-live-alternative": "/es/alternativa-ableton-live",
+  "/reaper-live-alternative": "/es/alternativa-reaper-directo",
+  "/playback-multitracks-alternative": "/es/alternativa-playback-multitracks",
+  "/prime-worship-alternative": "/es/alternativa-prime-worship",
+};
+const ES_TO_EN = Object.fromEntries(
+  Object.entries(TRANSLATED_SLUGS).map(([en, es]) => [es, en]),
+);
+
+const bare = currentPath.replace(/\/$/, "") || "/";
 let switchHref: string;
 if (isSpanish) {
   // /es/download → /download ; /es or /es/ → /
-  switchHref = currentPath.replace(/^\/es(?=\/|$)/, "") || "/";
+  switchHref = ES_TO_EN[bare] ?? (currentPath.replace(/^\/es(?=\/|$)/, "") || "/");
 } else {
   // /download → /es/download ; / → /es/
-  switchHref = currentPath === "/" ? "/es/" : `/es${currentPath}`;
+  switchHref =
+    TRANSLATED_SLUGS[bare] ?? (currentPath === "/" ? "/es/" : `/es${currentPath}`);
 }
+
+// hreflang must point at the other page's canonical URL exactly, and canonicals
+// here carry a trailing slash. The mapped slugs above are stored without one,
+// so normalise before the URLs are built.
+if (!switchHref.endsWith("/")) switchHref += "/";
 
 // Canonical + hreflang. Without these Google treats /  and /es/ as competing
 // pages for the same product instead of two locales of one page.

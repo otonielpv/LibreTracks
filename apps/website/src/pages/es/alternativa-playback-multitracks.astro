@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Modelo",
+    "Servicio por suscripción: pagas una cuota mientras lo uses.",
+    "Software gratuito y de código abierto (AGPL-3.0). Sin cuota, sin cuenta.",
+  ],
+  [
+    "De dónde salen las pistas",
+    "De su catálogo de multitracks con licencia, listas para usar.",
+    "De donde tú las traigas: compradas, producidas por tu equipo o exportadas de tu DAW.",
+  ],
+  [
+    "Dónde corre",
+    "Pensado sobre todo para tablet y móvil.",
+    "Windows, macOS, Linux y Android. El equipo que ya tengas sirve.",
+  ],
+  [
+    "Conexión a internet",
+    "El catálogo y la cuenta viven en la nube.",
+    "Todo es local. Una vez instalado, funciona sin conexión.",
+  ],
+  [
+    "Preparar el repertorio",
+    "Eliges canciones del catálogo y ajustas la instrumentación.",
+    "Montas la sesión con tus pistas, marcas, rutas de salida y mezcla, y la reutilizas.",
+  ],
+  [
+    "Voz guía y click",
+    "Incluidos, es una de sus señas de identidad.",
+    "Incluidos: voz guía hablada en español e inglés y metrónomo, cada uno con su salida.",
+  ],
+  [
+    "Si dejas de pagar",
+    "Pierdes el acceso al servicio.",
+    "No hay nada que dejar de pagar. El programa y tus sesiones son tuyos.",
+  ],
+];
+
+const strengths = [
+  [
+    "Tus pistas, sin cuota mensual",
+    "Si tu equipo ya produce sus propias pistas, o las compra sueltas, LibreTracks las reproduce con controles de directo sin añadir una suscripción encima.",
+  ],
+  [
+    "Voz guía en español",
+    "Anuncia la sección que viene ('Coro', 'Verso 2', 'Puente') y cuenta la entrada antes del downbeat. También da avisos hablados como 'Sube Intensidad' o 'Entra Batería' donde los coloques.",
+  ],
+  [
+    "Cambio de tono por canción",
+    "Transpón una canción a la tonalidad de quien canta ese domingo, y decide con el botón T qué pistas siguen el cambio y cuáles no.",
+  ],
+  [
+    "Corre en el portátil del local",
+    "Es una app de escritorio nativa y ligera, con salidas de hardware, MIDI Learn y control remoto desde el móvil para quien esté en la mesa.",
+  ],
+];
+
+const limits = [
+  "LibreTracks no tiene catálogo de pistas. Si lo que necesitas es descargar multitracks de canciones conocidas ya preparadas y con licencia, eso es exactamente lo que hace Playback y nosotros no lo hacemos.",
+  "Aquí las pistas las pones tú. Si tu equipo no produce ni compra multitracks, un programa gratuito no te resuelve el problema de fondo, que es conseguir el audio.",
+  "Playback está muy pulido en tablet y resuelve la parte de catálogo, preparación y reproducción de una sola vez. LibreTracks te da el reproductor; el material y la preparación corren de tu cuenta.",
+  "Si tu equipo funciona bien con la suscripción y nadie quiere tocar el sistema antes del domingo, cambiar tiene un coste real de tiempo y de aprendizaje. Pruébalo entre semana, no en un ensayo general.",
+];
+---
+
+<AlternativePage
+  lang="es"
+  rival="Playback"
+  title="Alternativa gratuita a Playback de MultiTracks | LibreTracks"
+  description="LibreTracks es un reproductor multitrack gratuito y de código abierto para grupos de alabanza: voz guía en español, click, cambio de tono y control remoto, sin suscripción. Reproduce tus propias pistas."
+  eyebrow="Alternativa gratuita a Playback"
+  heading="Un reproductor multitrack sin cuota mensual, con tus propias pistas"
+  intro="Playback resuelve dos cosas a la vez: te da el catálogo de multitracks y te da el reproductor. Si tu equipo ya tiene sus pistas —producidas, compradas o exportadas de vuestra DAW—, lo único que os falta es la segunda parte. LibreTracks es esa segunda parte: voz guía en español, click, cambio de tono, MIDI y control remoto, gratis y en código abierto."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Dónde Playback hace algo que nosotros no"
+  limits={limits}
+  closing="Coge las pistas de una canción que ya toquéis, monta la sesión con sus marcas de sección y pruébalo en un ensayo entre semana. Es gratis y funciona sin conexión, así que no arriesgas nada."
+/>

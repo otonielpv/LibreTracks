@@ -1,0 +1,82 @@
+---
+import AlternativePage from "../../components/AlternativePage.astro";
+
+const rows = [
+  [
+    "Coste",
+    "Licencia barata pero de pago, con periodo de evaluación.",
+    "Gratis y de código abierto (AGPL-3.0), sin licencia ni cuenta.",
+  ],
+  [
+    "Para qué está pensado",
+    "DAW completo: grabar, editar, mezclar y masterizar.",
+    "Reproducir en directo pistas ya terminadas.",
+  ],
+  [
+    "Montar el directo",
+    "Se puede, y muy bien, pero a base de acciones personalizadas, plantillas de routing y scripts que configuras tú.",
+    "Los controles de directo vienen hechos: saltos de marca, Vamp, transiciones y saltos de canción.",
+  ],
+  [
+    "Orden del repertorio",
+    "Con regiones y la Region Render Matrix, o un proyecto por canción.",
+    "La canción es la unidad: regiones con su tempo, tonalidad, marcas y nivel propio.",
+  ],
+  [
+    "Click y voz guía",
+    "Metrónomo integrado; la voz guía la montas con pistas de audio propias.",
+    "Metrónomo y voz guía hablada como señales de monitor, con salida independiente.",
+  ],
+  [
+    "Control remoto",
+    "Con OSC o superficies de control configuradas a mano.",
+    "Remote web incluido y editable, desde el móvil o la tablet.",
+  ],
+  [
+    "Curva de aprendizaje",
+    "Enorme flexibilidad, a cambio de tiempo de configuración.",
+    "Menos opciones, orientadas a una sola tarea.",
+  ],
+];
+
+const strengths = [
+  [
+    "Abre tus proyectos .rpp",
+    "Archivo → Importar Reaper/Ableton lee archivos .rpp. Los items de audio pasan a clips, se recrean pistas y carpetas, se importan tempo y cambios de compás, las REGIONs se convierten en canciones de LibreTracks y los MARKERs en marcas de sección dentro de ellas.",
+  ],
+  [
+    "Sin acciones ni scripts que mantener",
+    "Los saltos entre secciones, el Vamp y las transiciones son funciones del programa, no un montaje personal que tengas que rehacer cuando cambias de equipo.",
+  ],
+  [
+    "Vista Compacta para el escenario",
+    "Una columna por canción con sus controles y un mezclador compartido, legible bajo presión, sin tener que reorganizar la ventana antes de cada bolo.",
+  ],
+  [
+    "Se lleva el set entero",
+    "Un archivo .ltset empaqueta la sesión completa —canciones, biblioteca, automatización y ondas— para prepararla en casa y abrirla tal cual en el equipo del local.",
+  ],
+];
+
+const limits = [
+  "Si grabas, editas o mezclas, sigue con Reaper. LibreTracks no graba, no aloja plugins y no tiene edición de audio destructiva.",
+  "Reaper es de los DAW más configurables que existen. Si ya has construido tu sistema de acciones y plantillas para el directo y estás cómodo con él, funciona perfectamente y no necesitas cambiar.",
+  "Reaper cuesta poco. Si tu única razón para migrar es el precio, la diferencia es pequeña; el argumento real es que aquí no hay que configurar nada para tener controles de directo.",
+  "La conversión conserva lo útil para el escenario —clips, pistas, carpetas, tempo, compás, regiones y marcas—, no cada detalle del proyecto. Revísalo antes de tocar.",
+];
+---
+
+<AlternativePage
+  lang="es"
+  rival="Reaper"
+  title="Alternativa a Reaper para tocar en directo | LibreTracks"
+  description="Reaper es excelente produciendo, pero el directo lo montas tú con acciones y plantillas. LibreTracks importa tus proyectos .rpp y trae los controles de escenario ya hechos. Gratis y de código abierto."
+  eyebrow="Alternativa a Reaper para el escenario"
+  heading="Reaper produce de maravilla. El directo lo tienes que montar tú"
+  intro="Para tocar con pistas en Reaper acabas construyendo tu propio sistema: acciones personalizadas, plantillas de routing, a veces scripts. Funciona, pero es tuyo y hay que mantenerlo. LibreTracks trae esos controles de fábrica —saltos de marca, Vamp, transiciones, click, voz guía y control remoto— y abre tus archivos .rpp para que no empieces de cero."
+  rows={rows}
+  strengths={strengths}
+  limitsTitle="Dónde Reaper sigue ganando"
+  limits={limits}
+  closing="Importa un .rpp que ya uses en directo y compara cuánto tardas en dejarlo listo para tocar. Es gratis, así que la prueba solo te cuesta el rato."
+/>
