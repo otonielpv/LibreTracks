@@ -889,6 +889,27 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     impl_->sample_rate  = static_cast<int>(dev->getCurrentSampleRate());
     impl_->buffer_size  = dev->getCurrentBufferSizeSamples();
     impl_->output_latency_samples = dev->getOutputLatencyInSamples();
+    // What the listener actually waits through. The transport moves in a couple
+    // of milliseconds, but everything already handed to the driver keeps playing
+    // first, so THIS is the floor on how instant a jump can feel — no amount of
+    // engine work moves it. Logged at open so "the jump is not instant" can be
+    // answered with a number instead of a guess.
+    {
+        const double sr = impl_->sample_rate > 0
+            ? static_cast<double>(impl_->sample_rate) : 48000.0;
+        lt_debug_log(
+            "[LT_DEVICE] opened name=\"%s\" backend=%s sr=%d buffer=%d (%.1f ms) "
+            "output_latency=%d samples (%.1f ms) total_out=%.1f ms channels=%d\n",
+            impl_->device_name.c_str(),
+            impl_->backend.c_str(),
+            impl_->sample_rate,
+            impl_->buffer_size,
+            1000.0 * impl_->buffer_size / sr,
+            impl_->output_latency_samples,
+            1000.0 * impl_->output_latency_samples / sr,
+            1000.0 * (impl_->buffer_size + impl_->output_latency_samples) / sr,
+            impl_->output_channel_count);
+    }
     impl_->output_channel_names.clear();
     auto names = dev->getOutputChannelNames();
     for (const auto& name : names)
