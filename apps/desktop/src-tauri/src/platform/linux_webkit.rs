@@ -1,54 +1,50 @@
-//! WebKitGTK white-screen mitigation for Linux desktop builds.
+//! WebKitGTK compatibility policy for Linux desktop builds.
 //!
-//! On Linux, Tauri renders the UI through WebKitGTK. On many modern setups the
-//! DMABUF-based renderer WebKitGTK uses by default fails to allocate GPU buffers
-//! and the window comes up as a blank white screen with nothing painted — a
-//! well-known WebKitGTK issue, not an application bug. It bites hardest on:
+//! Disabling the DMABUF renderer is a useful workaround for affected
+//! proprietary NVIDIA drivers, but WebKit then falls back to SHM transport and
+//! UI rendering gets measurably slower. Applying the workaround to every Linux
+//! machine made healthy AMD and Intel systems use that slow path too.
 //!
-//!   - NVIDIA proprietary drivers,
-//!   - immutable/atomic distros (Bazzite, Fedora Silverblue, SteamOS, …) where
-//!     the WebKitGTK stack ships in a slightly different shape than upstream
-//!     expects,
-//!   - some Wayland compositors.
-//!
-//! The fix that virtually every affected Tauri app converges on is to force
-//! WebKitGTK off the DMABUF renderer by exporting `WEBKIT_DISABLE_DMABUF_RENDERER=1`
-//! before the webview is created. It falls back to a software/GL path that is a
-//! hair slower to composite but paints reliably. For our UI (a DAW transport, not
-//! a 3D canvas) the difference is imperceptible.
-//!
-//! We apply it here in-process so users never have to know the flag exists or
-//! touch a terminal — the whole point is that it "just works" on a fresh install.
-//!
-//! ## Escape hatch
-//!
-//! A user whose machine renders fine with the accelerated path and who would
-//! rather keep it can opt out by setting `LIBRETRACKS_KEEP_DMABUF=1` in their
-//! environment. And if the variable is *already* set (by the user, a wrapper
-//! script, or an AppImage launcher), we never override their explicit choice.
+//! The release AppImage is post-processed to use the host WebKitGTK/GTK/Mesa
+//! stack instead of mixing libraries from the build distro with the host GPU
+//! stack. Here we only enable the DMABUF workaround automatically when an
+//! NVIDIA kernel driver is detected.
+//! `LIBRETRACKS_DISABLE_DMABUF=1` forces the compatibility path and
+//! `LIBRETRACKS_KEEP_DMABUF=1` forces the accelerated path. An existing
+//! `WEBKIT_DISABLE_DMABUF_RENDERER` value is always respected.
 
-/// Apply the Linux WebKitGTK white-screen mitigation.
-///
-/// MUST be called before the Tauri `Builder` is constructed / the webview is
-/// created — WebKitGTK reads these variables once at renderer init, so setting
-/// them later has no effect.
+#[cfg(target_os = "linux")]
+fn nvidia_kernel_driver_present() -> bool {
+    if std::path::Path::new("/proc/driver/nvidia/version").exists() {
+        return true;
+    }
+
+    let Ok(cards) = std::fs::read_dir("/sys/class/drm") else {
+        return false;
+    };
+    cards.filter_map(Result::ok).any(|card| {
+        std::fs::read_to_string(card.path().join("device/vendor"))
+            .map(|vendor| vendor.trim().eq_ignore_ascii_case("0x10de"))
+            .unwrap_or(false)
+    })
+}
+
+/// Apply Linux WebKitGTK compatibility settings before Tauri creates a webview.
 ///
 /// No-op on non-Linux targets.
 pub fn apply_webkit_workarounds() {
     #[cfg(target_os = "linux")]
     {
-        // Explicit opt-out: the user wants to keep the accelerated DMABUF path.
-        if std::env::var_os("LIBRETRACKS_KEEP_DMABUF").is_some() {
+        if std::env::var_os("LIBRETRACKS_KEEP_DMABUF").is_some()
+            || std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some()
+        {
             return;
         }
 
-        // Never clobber a value the user (or a launcher wrapper) already set —
-        // respect their explicit choice in either direction.
-        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-            // SAFETY: called at the very start of `run()`, single-threaded,
-            // before any webview or worker thread exists. This flag is consumed
-            // only by WebKitGTK, so the Windows env/FFI desync gotcha (Rust
-            // set_var not visible to the in-process C++ engine) does not apply.
+        let force_compatibility = std::env::var_os("LIBRETRACKS_DISABLE_DMABUF").is_some();
+        if force_compatibility || nvidia_kernel_driver_present() {
+            // SAFETY: called at the start of run(), single-threaded, before any
+            // webview or worker exists. WebKitGTK reads this setting at init.
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }

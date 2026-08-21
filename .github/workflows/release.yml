@@ -526,6 +526,32 @@ jobs:
           projectPath: 'apps/desktop'
           args: ${{ matrix.os == 'macos-latest' && '--verbose --target universal-apple-darwin' || matrix.os == 'macos-15-intel' && '--verbose --target x86_64-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,rpm,appimage' || '--verbose' }}
 
+      - name: Use system WebKitGTK in AppImage
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APPIMAGE="$(find target-desktop-native -type f -name '*.AppImage' -print -quit)"
+          if [ -z "$APPIMAGE" ]; then
+            echo "::error::No AppImage found under target-desktop-native"
+            exit 1
+          fi
+          bash scripts/linux-system-webkit-appimage.sh "$APPIMAGE"
+
+          EXTRACT_DIR="$(mktemp -d)"
+          trap 'rm -rf "$EXTRACT_DIR"' EXIT
+          cd "$EXTRACT_DIR"
+          "$GITHUB_WORKSPACE/$APPIMAGE" --appimage-extract >/dev/null
+          if find squashfs-root/usr/lib -maxdepth 1 -name 'libwebkit2gtk*' -print -quit | grep -q .; then
+            echo "::error::AppImage still bundles WebKitGTK instead of using the host stack"
+            exit 1
+          fi
+          if grep -R -q 'GDK_BACKEND=x11' squashfs-root/AppRun squashfs-root/apprun-hooks 2>/dev/null; then
+            echo "::error::AppImage still forces the X11 backend"
+            exit 1
+          fi
+          echo "AppImage uses the host GTK/WebKit stack and does not force X11."
+
       - name: Validate Windows runtime linkage
         if: matrix.platform == 'windows'
         shell: pwsh

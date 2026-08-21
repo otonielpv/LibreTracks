@@ -13,6 +13,10 @@ LibreTracks is a lightweight native app (Rust + Tauri) rather than a heavyweight
 | **macOS** | macOS 10.15 **Catalina** | Intel and Apple Silicon. Keep the system up to date — the in‑app UI uses the system WebView, and an old WebKit can render parts of the interface incorrectly. |
 | **Linux** | Ubuntu 22.04 / Fedora 36 or newer | Requires `webkit2gtk-4.1`, `gtk3` and ALSA. Provided as `.deb`, `.rpm` and `.AppImage`. |
 
+The AppImage uses the host's WebKitGTK, GTK and Mesa stack, just like the `.deb`
+and `.rpm` packages. This avoids mixing current graphics drivers with older
+bundled libraries and improves Wayland compatibility on Bazzite, Arch and Fedora.
+
 > **Why macOS 10.15+?** The desktop UI runs inside the operating system's WebView. LibreTracks ships CSS down‑levelled for the WebKit in Catalina's Safari 13, and the audio engine bundles its own FFmpeg/codec libraries inside the app, so it launches without any system‑wide dependencies. Older macOS releases ship a WebKit too old to render the interface and miss symbols the app needs at launch.
 
 ## Android

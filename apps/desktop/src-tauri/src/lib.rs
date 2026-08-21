@@ -58,10 +58,9 @@ pub fn run() {
     // hook's stderr output.
     infra::error_log::install_panic_hook();
 
-    // Mitigate the WebKitGTK white-screen bug on Linux (blank window on NVIDIA /
-    // immutable distros like Bazzite) before the webview is created. No-op on
-    // other platforms. See platform::linux_webkit for the rationale and the
-    // user opt-out.
+    // Select the Linux WebKitGTK renderer policy before the webview is created:
+    // keep accelerated DMABUF on AMD/Intel and use the compatibility path for
+    // affected NVIDIA drivers or an explicit user override. No-op elsewhere.
     platform::linux_webkit::apply_webkit_workarounds();
 
     // Keep the env flag visible for diagnostics; desktop audio now routes

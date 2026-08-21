@@ -13,6 +13,10 @@ LibreTracks es una app nativa ligera (Rust + Tauri), no un DAW de estudio pesado
 | **macOS** | macOS 10.15 **Catalina** | Intel y Apple Silicon. Mantén el sistema actualizado — la interfaz usa el WebView del sistema y un WebKit antiguo puede renderizar partes de la UI de forma incorrecta. |
 | **Linux** | Ubuntu 22.04 / Fedora 36 o posterior | Requiere `webkit2gtk-4.1`, `gtk3` y ALSA. Se distribuye como `.deb`, `.rpm` y `.AppImage`. |
 
+La AppImage usa WebKitGTK, GTK y Mesa del propio sistema, igual que los paquetes
+`.deb` y `.rpm`. Esto evita mezclar controladores gráficos actuales con librerías
+antiguas y mejora la compatibilidad con Bazzite, Arch y Fedora bajo Wayland.
+
 > **¿Por qué macOS 10.15+?** La UI de escritorio corre dentro del WebView del sistema operativo. LibreTracks distribuye su CSS adaptado al WebKit del Safari 13 de Catalina, y el motor de audio incluye sus propias librerías de FFmpeg/códecs dentro de la app, así que arranca sin depender de nada instalado en el sistema. Las versiones anteriores de macOS traen un WebKit demasiado antiguo para renderizar la interfaz y carecen de símbolos que la app necesita al arrancar.
 
 ## Android
