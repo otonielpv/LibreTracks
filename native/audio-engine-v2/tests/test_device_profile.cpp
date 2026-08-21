@@ -101,16 +101,65 @@ TEST_CASE("the Oppo CPH1931 classifies as Constrained") {
     CHECK(profile.usable_budget_bytes == 128 * kMb);
 }
 
-TEST_CASE("a roomier handheld is not treated as Constrained") {
-    // 6 GB phone with 3 GB free: still a phone (small cache, few threads), but
-    // not on the edge.
-    const auto profile = lt_device_profile_for(handheld_probe(6 * kGb, 3 * kGb, 8));
+TEST_CASE("a middling handheld is neither Constrained nor Roomy") {
+    // 6 GB phone with 2 GB free: comfortably off the edge, but not the 3 GB
+    // that earns desktop-sized read-ahead.
+    const auto profile = lt_device_profile_for(handheld_probe(6 * kGb, 2 * kGb, 8));
 
     CHECK(profile.device_class == DeviceClass::Handheld);
     CHECK(profile.decode_threads == 3);
     CHECK(profile.fill_threads == 2);
     CHECK(profile.source_cache_mb == 192);
-    CHECK(profile.usable_budget_bytes == 256 * kMb);  // quarter of 3 GB, capped
+    // A quarter of 2 GB is 512 MB, so the middling tier's 256 MB cap binds.
+    CHECK(profile.usable_budget_bytes == 256 * kMb);
+}
+
+TEST_CASE("a modern 8 GB phone is not throttled like a 2.5 GB one") {
+    // A Moto G86 (8 GB, UFS storage) idling with ~4 GB free. Reported from the
+    // field: it was getting the same budgets as the CPH1931 because there were
+    // only two handheld tiers, and jumps stuttered while the fill pool refilled
+    // the read-ahead window.
+    const auto moto = lt_device_profile_for(handheld_probe(8 * kGb, 4 * kGb, 8));
+    const auto oppo =
+        lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8));
+
+    CHECK(moto.device_class == DeviceClass::RoomyHandheld);
+
+    // Strictly more of everything than the constrained device: this is the
+    // whole point of the tier existing.
+    CHECK(moto.source_cache_mb > oppo.source_cache_mb);
+    CHECK(moto.protected_blocks_per_source > oppo.protected_blocks_per_source);
+    CHECK(moto.decode_threads > oppo.decode_threads);
+    CHECK(moto.fill_threads > oppo.fill_threads);
+
+    // A jump has to refill the read-ahead window before the first sample
+    // sounds, so a roomy phone gets the desktop-sized one.
+    CHECK(moto.protected_blocks_per_source == 48);
+    CHECK(moto.source_cache_mb == 512);
+}
+
+TEST_CASE("the three handheld tiers are ordered, with no gap between them") {
+    // Same device, three amounts of memory free. Each step up must give at
+    // least as much as the one below — a tier that accidentally inverted would
+    // hand a bigger phone a smaller budget.
+    const auto tight = lt_device_profile_for(handheld_probe(8 * kGb, 1 * kGb, 8));
+    const auto middling = lt_device_profile_for(handheld_probe(8 * kGb, 2 * kGb, 8));
+    const auto roomy = lt_device_profile_for(handheld_probe(8 * kGb, 4 * kGb, 8));
+
+    CHECK(tight.device_class == DeviceClass::Constrained);
+    CHECK(middling.device_class == DeviceClass::Handheld);
+    CHECK(roomy.device_class == DeviceClass::RoomyHandheld);
+
+    CHECK(tight.source_cache_mb <= middling.source_cache_mb);
+    CHECK(middling.source_cache_mb <= roomy.source_cache_mb);
+    CHECK(tight.protected_blocks_per_source <= middling.protected_blocks_per_source);
+    CHECK(middling.protected_blocks_per_source <= roomy.protected_blocks_per_source);
+    CHECK(tight.usable_budget_bytes <= middling.usable_budget_bytes);
+    CHECK(middling.usable_budget_bytes <= roomy.usable_budget_bytes);
+
+    // ...and a roomy phone still never claims desktop-scale memory: the app
+    // shares the device with the system, which kills long before "free" hits 0.
+    CHECK(roomy.usable_budget_bytes <= 512 * kMb);
 }
 
 TEST_CASE("handheld budgets follow AVAILABLE memory, not installed memory") {

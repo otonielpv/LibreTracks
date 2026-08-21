@@ -44,6 +44,7 @@ enum class DeviceClass {
     ModestDesktop,  // 4-8 GB
     Handheld,       // Android/iOS
     Constrained,    // Handheld with little memory actually available
+    RoomyHandheld,  // Modern phone/tablet with desktop-class memory
 };
 
 struct DeviceProfile {
@@ -81,6 +82,11 @@ struct DeviceProbe {
 // "a phone that cannot afford us".
 inline constexpr std::uint64_t kConstrainedAvailableBytes = 1536ull * 1024 * 1024;
 
+// Above this much AVAILABLE memory a handheld is treated as roomy. A modern
+// 8 GB phone (a Moto G86, say) idles with 3-4 GB free and has UFS storage, not
+// eMMC; holding it to a 2.5 GB device's budgets throttles it for no reason.
+inline constexpr std::uint64_t kRoomyAvailableBytes = 3072ull * 1024 * 1024;
+
 // The whole policy, as a pure function of the probe. Desktop paths delegate to
 // the existing thread_policy/source_manager rules so this cannot drift from
 // them; only the handheld branches are new.
@@ -100,16 +106,19 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
         const std::uint64_t available =
             probe.available_ram_bytes > 0 ? probe.available_ram_bytes : probe.physical_ram_bytes / 4;
 
-        profile.device_class = available < kConstrainedAvailableBytes ? DeviceClass::Constrained
-                                                                     : DeviceClass::Handheld;
+        if (available < kConstrainedAvailableBytes)      profile.device_class = DeviceClass::Constrained;
+        else if (available >= kRoomyAvailableBytes)      profile.device_class = DeviceClass::RoomyHandheld;
+        else                                            profile.device_class = DeviceClass::Handheld;
 
         // A quarter of what's free, capped. The cap matters more than the
         // fraction: the app also pays for a separate WebView process, and the
         // system starts killing long before "free" reaches zero.
         const std::uint64_t quarter = available / 4;
-        const std::uint64_t cap = profile.device_class == DeviceClass::Constrained
-                                      ? 128ull * 1024 * 1024
-                                      : 256ull * 1024 * 1024;
+        std::uint64_t cap = 256ull * 1024 * 1024;
+        if (profile.device_class == DeviceClass::Constrained)
+            cap = 128ull * 1024 * 1024;
+        else if (profile.device_class == DeviceClass::RoomyHandheld)
+            cap = 512ull * 1024 * 1024;
         profile.usable_budget_bytes = std::min(quarter, cap);
 
         // Decode threads: this is preparation work (decode + resample + write
@@ -137,16 +146,31 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
         // ample; that alone cuts the per-track cost from 1.5 MB to 0.5 MB and
         // triples how many tracks fit in the same memory. The budget below is
         // then sized to hold several sessions' worth of those windows.
-        if (profile.device_class == DeviceClass::Constrained) {
-            profile.decode_threads = 2;
-            profile.fill_threads = 1;
-            profile.source_cache_mb = 128;
-            profile.protected_blocks_per_source = 16;  // ~1.5 s
-        } else {
-            profile.decode_threads = 3;
-            profile.fill_threads = 2;
-            profile.source_cache_mb = 192;
-            profile.protected_blocks_per_source = 24;  // ~2.2 s
+        //
+        // A modern phone is not a small desktop, but it is not the CPH1931
+        // either: 8 GB and UFS storage want the desktop-sized read-ahead, and
+        // the window is what a JUMP has to refill before the first sample
+        // sounds. Holding such a device to a 2.5 GB budget is throttling for
+        // no reason.
+        switch (profile.device_class) {
+            case DeviceClass::Constrained:
+                profile.decode_threads = 2;
+                profile.fill_threads = 1;
+                profile.source_cache_mb = 128;
+                profile.protected_blocks_per_source = 16;  // ~1.5 s
+                break;
+            case DeviceClass::RoomyHandheld:
+                profile.decode_threads = 4;
+                profile.fill_threads = 3;
+                profile.source_cache_mb = 512;
+                profile.protected_blocks_per_source = 48;  // ~4.5 s, as desktop
+                break;
+            default:  // Handheld
+                profile.decode_threads = 3;
+                profile.fill_threads = 2;
+                profile.source_cache_mb = 192;
+                profile.protected_blocks_per_source = 24;  // ~2.2 s
+                break;
         }
         return profile;
     }
@@ -261,6 +285,7 @@ inline const char* lt_device_class_name(DeviceClass device_class) {
         case DeviceClass::ModestDesktop: return "ModestDesktop";
         case DeviceClass::Handheld:      return "Handheld";
         case DeviceClass::Constrained:   return "Constrained";
+        case DeviceClass::RoomyHandheld: return "RoomyHandheld";
     }
     return "Unknown";
 }
