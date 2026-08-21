@@ -7,6 +7,7 @@
 // this repo has been bitten by before.
 
 #include <doctest/doctest.h>
+#include <lt_engine/devices/audio_device_manager.h>
 
 #include <lt_engine/core/device_profile.h>
 
@@ -256,4 +257,28 @@ TEST_CASE("the cached profile is resolved once and stays stable") {
     CHECK(first.fill_threads >= 1);
     CHECK(first.source_cache_mb > 0);
     CHECK(lt_device_class_name(first.device_class) != nullptr);
+}
+
+// Backends that cannot sustain a small buffer.
+//
+// Asking DirectSound for 128 frames does not give low latency, it gives
+// underruns — and an underrunning DirectSound device drops whole buffers, so
+// the audio jumps forward repeatedly. The user hears "crackling AND too fast",
+// which sounds like a pitch bug and is not one. Measured on one device:
+// 512 frames played clean at 29.0 ms out; 128 crackled and ran fast.
+//
+// The clamp is what stops a settings dialog from offering a combination the
+// backend cannot honour. WASAPI and ASIO keep their own minimum, which is the
+// whole reason to prefer them for low latency.
+TEST_CASE("small buffers are clamped only on the backends that cannot hold them") {
+    CHECK(lt_min_buffer_frames_for_backend("DirectSound") == 512);
+    CHECK(lt_min_buffer_frames_for_backend("Windows Audio (MME)") == 512);
+    // Case-insensitive: JUCE spells these differently across versions.
+    CHECK(lt_min_buffer_frames_for_backend("directsound") == 512);
+
+    // 0 means "trust the driver" — these are the low-latency paths.
+    CHECK(lt_min_buffer_frames_for_backend("Windows Audio") == 0);
+    CHECK(lt_min_buffer_frames_for_backend("ASIO") == 0);
+    CHECK(lt_min_buffer_frames_for_backend("CoreAudio") == 0);
+    CHECK(lt_min_buffer_frames_for_backend("") == 0);
 }

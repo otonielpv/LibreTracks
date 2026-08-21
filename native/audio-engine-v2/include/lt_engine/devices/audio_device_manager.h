@@ -20,7 +20,45 @@
 #include <string>
 #include <vector>
 
+#include <cctype>
+
 namespace lt {
+
+// Smallest buffer a backend can actually sustain, in frames. 0 = trust the
+// driver's own minimum.
+//
+// DirectSound and MME go through the OS shared mixer and are not built for
+// small buffers. Asking for one does not produce low latency; it produces
+// underruns — and an underrunning DirectSound device drops whole buffers, so
+// the audio jumps forward again and again. What the listener reports is not
+// "it crackles", it is "it crackles AND plays too fast", which sounds like a
+// pitch bug and is not one.
+//
+// Measured on one device and session:
+//     buffer=512 (11.6 ms) + latency 768  ->  29.0 ms out, clean
+//     buffer=128 ( 2.9 ms) + latency 192  ->  crackling, audibly sped up
+//
+// WASAPI and ASIO are the backends to reach for when low latency is the goal:
+// the same hardware on WASAPI runs 441 frames at 20.0 ms total, comfortably.
+//
+// Clamping rather than refusing is deliberate. Someone who picks 128 wants low
+// latency, and the honest answer is the lowest this backend can give them —
+// reported back through actual_buffer_size(), so the UI shows what is really
+// running instead of what was asked for.
+//
+// Pure function of its input so the policy can be tested without a device.
+inline int lt_min_buffer_frames_for_backend(const std::string& backend) {
+    std::string name;
+    name.reserve(backend.size());
+    for (char c : backend)
+        name.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    if (name.find("directsound") != std::string::npos ||
+        name.find("mme") != std::string::npos) {
+        return 512;
+    }
+    return 0;
+}
+
 
 struct DeviceDescriptor {
     std::string id;

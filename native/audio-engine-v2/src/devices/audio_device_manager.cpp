@@ -840,6 +840,17 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     setup.bufferSize = request.buffer_size > 0
         ? request.buffer_size
         : kDefaultLowLatencyBufferSize;
+    {
+        const auto backend_now = impl_->juce_manager.getCurrentAudioDeviceType().toStdString();
+        const int floor_frames = lt_min_buffer_frames_for_backend(backend_now);
+        if (floor_frames > 0 && setup.bufferSize < floor_frames) {
+            lt_debug_log(
+                "[LT_DEVICE] buffer %d too small for backend \"%s\"; using %d "
+                "(smaller underruns and plays back sped up on this backend)\n",
+                setup.bufferSize, backend_now.c_str(), floor_frames);
+            setup.bufferSize = floor_frames;
+        }
+    }
 
     if (device_debug_enabled()) {
         const auto current_type = impl_->juce_manager.getCurrentAudioDeviceType();
