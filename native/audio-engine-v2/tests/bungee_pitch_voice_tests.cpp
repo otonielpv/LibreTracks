@@ -183,9 +183,16 @@ TEST_CASE("BungeePitchVoice produces finite output on one block") {
 TEST_CASE("Warp[0]: input cursor advances by output_frames * time_ratio") {
     constexpr int kBlocks = 32;
     constexpr double kRatio = 1.5;
-    constexpr int kInputPerBlock = static_cast<int>(kBlockFrames * 2); // headroom for any ratio <= 2
+    // The ratio IS this proportion: render_block consumes everything it is
+    // given for the output requested, so feeding more than kBlockFrames*kRatio
+    // would silently ask for a different stretch than the one under test.
+    constexpr int kInputPerBlock = static_cast<int>(kBlockFrames * kRatio);
     BungeePitchVoice voice;
-    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+    // Headroom for ratios above 1: Bungee's Stream is built with this as its
+    // maxInputFrameCount, and render_block clamps the feed to it, so a voice
+    // sized to exactly one block can never be driven faster than real time.
+    // The engine sizes every voice at block x 4 for the same reason.
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames * 4));
 
     // Feed enough source per block to cover ratio > 1. Bungee consumes up to
     // ceil(output_frames * ratio) input frames per call; we just oversize the
@@ -197,8 +204,7 @@ TEST_CASE("Warp[0]: input cursor advances by output_frames * time_ratio") {
     float* out_ptrs[2] = {out_l.data(), out_r.data()};
 
     for (int b = 0; b < kBlocks; ++b) {
-        (void)voice.render_block(in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames,
-                                 1.0, kRatio);
+        (void)voice.render_block(in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames, 1.0);
     }
 
     // After N blocks, Bungee should have consumed roughly N * kBlockFrames *
@@ -224,8 +230,7 @@ TEST_CASE("Warp[0]: identity ratio matches pre-warp behaviour") {
     float* out_ptrs[2] = {out_l.data(), out_r.data()};
 
     for (int b = 0; b < 8; ++b) {
-        (void)voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames,
-                                 1.0, 1.0);
+        (void)voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0);
     }
     // With ratio=1.0 the input cursor must advance lock-step with output â€”
     // the legacy `pitch_scale=1.0, no warp` invariant the engine relies on.
@@ -238,9 +243,13 @@ TEST_CASE("Warp[0]: pitch preserved under time-stretch (sine)") {
     constexpr int kBlocks = 64;
     constexpr double kFreqHz = 440.0;
     constexpr double kRatio = 1.5;
-    constexpr int kInputPerBlock = static_cast<int>(kBlockFrames * 2);
+    constexpr int kInputPerBlock = static_cast<int>(kBlockFrames * kRatio);
     BungeePitchVoice voice;
-    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+    // Headroom for ratios above 1: Bungee's Stream is built with this as its
+    // maxInputFrameCount, and render_block clamps the feed to it, so a voice
+    // sized to exactly one block can never be driven faster than real time.
+    // The engine sizes every voice at block x 4 for the same reason.
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames * 4));
 
     auto in_l = make_sine(kInputPerBlock, kFreqHz);
     auto in_r = make_sine(kInputPerBlock, kFreqHz);
@@ -255,7 +264,7 @@ TEST_CASE("Warp[0]: pitch preserved under time-stretch (sine)") {
         // Feed the same multi-block sine repeatedly â€” phase discontinuity at
         // each block boundary is fine; we just need bandlimited-ish content.
         const int produced = voice.render_block(
-            in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames, 1.0, kRatio);
+            in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames, 1.0);
         collected_l.insert(collected_l.end(),
                            out_l.begin(), out_l.begin() + produced);
     }
@@ -280,9 +289,13 @@ TEST_CASE("Warp[0]: pitch preserved under time-stretch (sine)") {
 TEST_CASE("Warp[0]: output stays bounded and discontinuity-free") {
     constexpr int kBlocks = 64;
     constexpr double kRatio = 0.75; // slow down (source advances < output)
-    constexpr int kInputPerBlock = kBlockFrames; // ratio < 1 needs no extra input
+    constexpr int kInputPerBlock = static_cast<int>(kBlockFrames * kRatio);
     BungeePitchVoice voice;
-    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+    // Headroom for ratios above 1: Bungee's Stream is built with this as its
+    // maxInputFrameCount, and render_block clamps the feed to it, so a voice
+    // sized to exactly one block can never be driven faster than real time.
+    // The engine sizes every voice at block x 4 for the same reason.
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames * 4));
 
     auto in_l = make_sine(kInputPerBlock, 220.0);
     auto in_r = make_sine(kInputPerBlock, 220.0);
@@ -294,7 +307,7 @@ TEST_CASE("Warp[0]: output stays bounded and discontinuity-free") {
     float worst_amp = 0.0f;
     for (int b = 0; b < kBlocks; ++b) {
         const int produced = voice.render_block(
-            in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames, 1.0, kRatio);
+            in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames, 1.0);
         if (b < 4) continue; // skip warmup
         for (int f = 0; f < produced; ++f) {
             worst_amp = std::max(worst_amp, std::abs(out_l[f]));
@@ -326,13 +339,15 @@ TEST_CASE("Warp[0]: real WAV survives time-stretch without clipping (optional)")
     REQUIRE(src_sr > 0);
 
     BungeePitchVoice voice;
-    REQUIRE(voice.configure(src_sr, kChannels, kBlockFrames));
+    // Headroom for ratios above 1 -- see the note on the ratio test above.
+    REQUIRE(voice.configure(src_sr, kChannels, kBlockFrames * 4));
 
     constexpr double kRatio = 1.25; // ~25% faster, common warp range
-    // Always hand Bungee at least ceil(block * ratio) input frames so a
-    // ratio > 1 has enough source to consume.
-    const int kInputPerBlock = static_cast<int>(
-        std::lround(kBlockFrames * kRatio)) + 4;
+    // Feed exactly what the cursor advances. render_block consumes everything
+    // it is handed, so a few "safety" frames on top are not slack -- they are
+    // source material fed twice, which is precisely the discontinuity this
+    // test measures.
+    const int kInputPerBlock = static_cast<int>(std::lround(kBlockFrames * kRatio));
     int src_cursor = 0;
     std::vector<float> out_l(kBlockFrames, 0.f), out_r(kBlockFrames, 0.f);
     float* out_ptrs[2] = {out_l.data(), out_r.data()};
@@ -345,7 +360,7 @@ TEST_CASE("Warp[0]: real WAV survives time-stretch without clipping (optional)")
             src_l.data() + src_cursor,
             src_r.data() + src_cursor};
         const int produced = voice.render_block(
-            in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames, 1.0, kRatio);
+            in_ptrs, kInputPerBlock, out_ptrs, kBlockFrames, 1.0);
         // Advance the source cursor in lock-step with how much Bungee
         // actually consumed â€” that is exactly the contract under test.
         src_cursor += static_cast<int>(std::lround(kBlockFrames * kRatio));
@@ -365,85 +380,21 @@ TEST_CASE("Warp[0]: real WAV survives time-stretch without clipping (optional)")
 }
 
 
-// Regression: the source cursor must advance by INPUT CONSUMED, never by
-// output delivered out of the queued FIFO.
-//
-// After a prearmed jump the voice reaches the audio thread with a primed
-// output FIFO. While that FIFO drains, track_renderer feeds nothing
-// (feed_frames == 0, because `queued >= frames_to_read`), yet render_block
-// used to advance the cursor by `delivered * ratio` regardless.
-//
-// The renderer derives its next read position as
-//     read_from = cursor + latency + compensation + queued * ratio
-// so while draining, the growing `cursor` and the shrinking `queued` cancel
-// exactly and read_from freezes. When the FIFO empties, the renderer re-feeds
-// from that frozen position and replays audio the primed FIFO already
-// emitted. Observed on a real 27-track session: read_from pinned at 8763264
-// for 8 blocks while the cursor advanced 3584 frames (~75 ms), heard as the
-// jump "doubling".
-//
-// This locks the contract documented on reset_source_cursor(): a render_block
-// that consumes no input must not move the cursor.
-TEST_CASE("Warp[0]: draining the FIFO does not advance the source cursor") {
-    // Oversize the input buffers: Bungee may consume more than one block per
-    // process() call (same headroom the ratio test above uses).
-    constexpr int kInputFrames = kBlockFrames * 2;
-    BungeePitchVoice voice;
-    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+// The test that used to sit here asserted that draining the output FIFO left
+// the voice's source cursor untouched. That invariant no longer exists: the
+// voice has no cursor. Position is derived from the timeline on every block by
+// the renderer, so there is nothing here that can drift out of step with the
+// FIFO. warp_timing_tests.cpp checks the property that replaced it -- that the
+// source feed is contiguous and advances at the requested ratio -- which is
+// the thing the cursor was an unreliable proxy for.
 
-    const auto sine  = make_sine(kInputFrames, 440.0);
-    const std::vector<float> zeros(static_cast<size_t>(kInputFrames), 0.0f);
-    std::vector<float> out_l(kBlockFrames, 0.f), out_r(kBlockFrames, 0.f);
-    const float* in_ptrs[2]   = { sine.data(), sine.data() };
-    const float* zero_ptrs[2] = { zeros.data(), zeros.data() };
-    float*       out_ptrs[2]  = { out_l.data(), out_r.data() };
-
-    // Warm with silence (see [[project-bungee-warm-voice]]). latency() — and
-    // therefore is_warm() — is only valid after the first process() call, so
-    // render first and test the condition afterwards.
-    for (int i = 0; i < 60; ++i) {
-        voice.render_block(zero_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0, 1.0);
-        if (voice.is_warm()) break;
-    }
-
-    // Prime the output FIFO the way the seek / prearm path does.
-    for (int i = 0; i < 32 && voice.queued_output_frames() < kBlockFrames * 2; ++i) {
-        if (voice.prime_output_fifo(in_ptrs, kBlockFrames, 1.0, 1.0) <= 0)
-            break;
-    }
-    REQUIRE(voice.queued_output_frames() >= kBlockFrames);
-
-    // Drain one block WITHOUT feeding — exactly what track_renderer does when
-    // `queued >= frames_to_read`.
-    const long long cursor_before = voice.source_cursor();
-    const int queued_before = voice.queued_output_frames();
-    const int produced = voice.render_block(in_ptrs, /*input_frames=*/0,
-                                            out_ptrs, kBlockFrames, 1.0, 1.0);
-    CHECK(produced == kBlockFrames);
-    CHECK(voice.queued_output_frames() == queued_before - kBlockFrames);
-    // No input consumed, so the cursor must not have moved.
-    CHECK(voice.source_cursor() == cursor_before);
-}
-
-
-// ---------------------------------------------------------------------------
-// is_warm() has to be answerable.
-//
-// It used to compare latency against max_input_frames, which is one block
-// times four -- 1920 here. Bungee's latency settles at 4864 frames at hop=-1
-// and 9728 at hop=0, so the comparison was false for the entire life of every
-// voice ever built. Nothing broke visibly: the three warm loops that consult
-// it simply ran to their frame budget every time instead of stopping when the
-// voice was ready, burning several times the necessary CPU on every seek,
-// jump and warp toggle -- precisely the work that widens the window in which
-// the transport clock runs away from the position a voice was built for.
-//
-// The predicate now asks whether latency has CONVERGED, which is the property
-// those callers actually want and which holds at any hop setting.
-// ---------------------------------------------------------------------------
 TEST_CASE("Warp[0]: is_warm() reports convergence and the warm loop can stop") {
     BungeePitchVoice voice;
-    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+    // Headroom for ratios above 1: Bungee's Stream is built with this as its
+    // maxInputFrameCount, and render_block clamps the feed to it, so a voice
+    // sized to exactly one block can never be driven faster than real time.
+    // The engine sizes every voice at block x 4 for the same reason.
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames * 4));
 
     const std::vector<float> zeros(static_cast<size_t>(kBlockFrames), 0.0f);
     std::vector<float> out_l(kBlockFrames, 0.f), out_r(kBlockFrames, 0.f);
@@ -455,7 +406,7 @@ TEST_CASE("Warp[0]: is_warm() reports convergence and the warm loop can stop") {
     int fed = 0;
     const int budget = kSampleRate;  // one second: far more than convergence needs
     while (fed < budget && !voice.is_warm()) {
-        voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0, 1.0);
+        voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0);
         fed += kBlockFrames;
     }
 
@@ -487,7 +438,7 @@ TEST_CASE("Warp[0]: the voice runs at the low-latency hop setting") {
 
     int fed = 0;
     while (fed < kSampleRate && !voice.is_warm()) {
-        voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0, 1.0);
+        voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0);
         fed += kBlockFrames;
     }
     REQUIRE(voice.is_warm());

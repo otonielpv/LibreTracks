@@ -29,12 +29,14 @@ struct BungeePitchVoice::Impl {
     int max_in_frames = 0;
     bool ready = false;
 
-    // External "source frame" counter the renderer reads to know where the
-    // next file read should start. Lives in source-frame units regardless
-    // of pitch_scale/time_ratio. Advanced by `input_to_consume` each
-    // render_block / prime call.
-    long long source_cursor = 0;
-    double source_cursor_fraction = 0.0;
+    // How far into the source this voice has been fed, in absolute source
+    // frames. Purely a contiguity pointer: the next feed starts here so the
+    // stream Bungee sees has no seam. It says nothing about where playback is
+    // — the renderer derives that from the timeline every block.
+    long long fed_through = 0;
+    // fed_through minus the source frame the voice was emitting when it was
+    // anchored: the constant head start Bungee needs over its own output.
+    long long feed_lead = 0;
 
     // Clip placement this voice was last built/retimed for. Compared by the
     // manager so an unchanged clip's voice is never hard-retimed (see header).
@@ -82,15 +84,6 @@ struct BungeePitchVoice::Impl {
     void clear_fifo() noexcept {
         fifo_read = 0;
         fifo_size = 0;
-    }
-
-    void advance_source_cursor(double source_frames) noexcept {
-        if (source_frames <= 0.0)
-            return;
-        const double total = source_cursor_fraction + source_frames;
-        const auto whole = static_cast<long long>(std::floor(total));
-        source_cursor += whole;
-        source_cursor_fraction = total - static_cast<double>(whole);
     }
 
     int fifo_write_index() const noexcept {
@@ -233,56 +226,40 @@ int BungeePitchVoice::render_block(const float* const* input,
                                    int input_frames,
                                    float* const* output,
                                    int output_frames,
-                                   double pitch_scale,
-                                   double time_ratio) noexcept {
+                                   double pitch_scale) noexcept {
     if (!impl_ || !impl_->ready || !impl_->stream || input_frames < 0 || output_frames <= 0)
         return 0;
     if (!output) return 0;
 
     auto& I = *impl_;
-    const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
+
+    // Anything already synthesised comes out first. A block served entirely
+    // from here consumed no input, so the feed position must not move — and it
+    // does not, because this function no longer owns a position at all.
     int delivered = I.pop_fifo(output, 0, output_frames);
     I.apply_fade(output, 0, delivered);
-    if (delivered >= output_frames) {
-        // Served entirely from the queued FIFO: no input was consumed, so the
-        // source cursor must NOT move. Advancing it here (by delivered*ratio)
-        // used to desync the cursor from Bungee's real input position while a
-        // prearmed FIFO drained. The renderer's read position
-        //   read_from = cursor + latency + compensation + queued*ratio
-        // then froze — the growing cursor and shrinking queue cancelled — and
-        // the re-feed after the drain replayed the primed span (~75 ms of
-        // doubled audio on every warp jump).
+    if (delivered >= output_frames || input_frames <= 0)
         return delivered;
-    }
 
-    // Bungee::Stream::process semantics:
-    //   speed = inputFrameCount / outputFrameCount
-    //   returns ~outputFrameCount frames of output, written into outputPointers.
-    // For warp speed R (output is R× faster than source), the source cursor
-    // must advance R× per output frame → speed = R → inputFrameCount = R *
-    // outputFrameCount. Output side stays at process_frames so the wrapped
-    // I.process_planes scratch (sized to max_in_frames) is never overflowed,
-    // and the caller must supply at least R*process_frames input samples.
-    const int max_output_from_input = std::max(
-        1, static_cast<int>(std::floor(
-            static_cast<double>(std::max(1, input_frames)) / safe_ratio)));
-    const int process_frames = std::min({
-        output_frames - delivered,
-        I.max_in_frames,
-        max_output_from_input});
-    int consumed_input = 0;
+    // Bungee::Stream::process derives its speed from the two frame counts:
+    //     speed = inputFrameCount / outputFrameCount
+    // so handing over `input_frames` of source for `process_frames` of output
+    // IS how the warp ratio is set. There is no separate ratio to keep in
+    // agreement, which is the point: the caller sized the span from the
+    // timeline, and that span is honoured exactly.
+    //
+    // Both sides are capped at max_in_frames — the output because
+    // I.process_planes is sized to it, the input because that is the
+    // maxInputFrameCount the Stream was constructed with.
+    const int process_frames = std::min(output_frames - delivered, I.max_in_frames);
+    const int input_to_consume = std::min(input_frames, I.max_in_frames);
     if (process_frames > 0) {
-        const int input_to_consume = std::min(
-            input_frames,
-            std::max(1, static_cast<int>(std::ceil(
-                static_cast<double>(process_frames) * safe_ratio))));
         const int produced = I.stream->process(
             input,
             I.process_ptrs.data(),
             input_to_consume,
             static_cast<double>(process_frames),
             pitch_scale);
-        consumed_input = input_to_consume;
         I.observe_latency(I.stream->latency());
         I.push_fifo(produced);
         const int popped = I.pop_fifo(output, delivered, output_frames - delivered);
@@ -290,45 +267,7 @@ int BungeePitchVoice::render_block(const float* const* input,
         delivered += popped;
     }
 
-    // The cursor lives in SOURCE-frame units and tracks what Bungee actually
-    // consumed, not what we handed the caller — see reset_source_cursor()'s
-    // contract. Output popped from the FIFO was already paid for by an earlier
-    // process() call, so counting it again double-advances the cursor.
-    I.advance_source_cursor(static_cast<double>(consumed_input));
-
     return delivered;
-}
-
-int BungeePitchVoice::prime_output_fifo(const float* const* input,
-                                        int input_frames,
-                                        double pitch_scale,
-                                        double time_ratio) noexcept {
-    if (!impl_ || !impl_->ready || !impl_->stream || !input || input_frames <= 0)
-        return 0;
-
-    auto& I = *impl_;
-    const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
-    const int process_frames = std::min(
-        I.max_in_frames,
-        std::max(1, static_cast<int>(std::floor(
-            static_cast<double>(input_frames) / safe_ratio))));
-    if (process_frames <= 0)
-        return 0;
-
-    const int input_to_consume = std::min(
-        input_frames,
-        std::max(1, static_cast<int>(std::ceil(
-            static_cast<double>(process_frames) * safe_ratio))));
-    const int before = I.fifo_size;
-    const int produced = I.stream->process(
-        input,
-        I.process_ptrs.data(),
-        input_to_consume,
-        static_cast<double>(process_frames),
-        pitch_scale);
-    I.push_fifo(produced);
-    I.source_cursor += input_to_consume;
-    return I.fifo_size - before;
 }
 
 int BungeePitchVoice::queued_output_frames() const noexcept {
@@ -350,12 +289,6 @@ double BungeePitchVoice::latency_frames() const noexcept {
     return impl_->stream->latency();
 }
 
-int BungeePitchVoice::alignment_compensation_frames(double pitch_scale) const noexcept {
-    if (!impl_ || impl_->sample_rate <= 0 || pitch_scale <= 0.0) return 0;
-    const double base = static_cast<double>(impl_->sample_rate) * 0.032;
-    return static_cast<int>(std::lround(base * ((1.0 / pitch_scale) - 1.0)));
-}
-
 bool BungeePitchVoice::is_warm() const noexcept {
     return impl_ && impl_->warm;
 }
@@ -372,15 +305,27 @@ void BungeePitchVoice::arm_fade_in(int fade_ms) noexcept {
     impl_->fade_frames_done = 0;
 }
 
-void BungeePitchVoice::reset_source_cursor(long long source_frame) noexcept {
-    if (impl_) {
-        impl_->source_cursor = source_frame;
-        impl_->source_cursor_fraction = 0.0;
-    }
+void BungeePitchVoice::set_feed_anchor(long long anchor_source_frame,
+                                       long long fed_through) noexcept {
+    if (!impl_) return;
+    impl_->fed_through = fed_through;
+    impl_->feed_lead   = fed_through - anchor_source_frame;
 }
 
-long long BungeePitchVoice::source_cursor() const noexcept {
-    return impl_ ? impl_->source_cursor : 0;
+long long BungeePitchVoice::fed_through() const noexcept {
+    return impl_ ? impl_->fed_through : 0;
+}
+
+long long BungeePitchVoice::feed_lead_frames() const noexcept {
+    return impl_ ? impl_->feed_lead : 0;
+}
+
+void BungeePitchVoice::advance_fed_through(long long frames) noexcept {
+    if (impl_ && frames > 0) impl_->fed_through += frames;
+}
+
+void BungeePitchVoice::reanchor_feed(long long fed_through) noexcept {
+    if (impl_) impl_->fed_through = fed_through;
 }
 
 void BungeePitchVoice::clear_queued_output() noexcept {
@@ -425,17 +370,14 @@ const char* BungeePitchVoice::backend_name() const noexcept { return "unavailabl
 long long BungeePitchVoice::input_position() const noexcept { return 0; }
 double BungeePitchVoice::output_position() const noexcept { return 0.0; }
 double BungeePitchVoice::latency_frames() const noexcept { return 0.0; }
-int BungeePitchVoice::alignment_compensation_frames(double) const noexcept { return 0; }
 bool BungeePitchVoice::is_warm() const noexcept { return false; }
 void BungeePitchVoice::arm_fade_in(int) noexcept {}
 int BungeePitchVoice::queued_output_frames() const noexcept { return 0; }
-int BungeePitchVoice::prime_output_fifo(const float* const*, int, double, double) noexcept { return 0; }
 
 int BungeePitchVoice::render_block(const float* const*,
                                    int,
                                    float* const* output,
                                    int output_frames,
-                                   double,
                                    double) noexcept {
     if (output && output_frames > 0) {
         for (int ch = 0; ch < 2; ++ch) {
@@ -446,8 +388,11 @@ int BungeePitchVoice::render_block(const float* const*,
     return 0;
 }
 
-void BungeePitchVoice::reset_source_cursor(long long) noexcept {}
-long long BungeePitchVoice::source_cursor() const noexcept { return 0; }
+void BungeePitchVoice::set_feed_anchor(long long, long long) noexcept {}
+long long BungeePitchVoice::fed_through() const noexcept { return 0; }
+long long BungeePitchVoice::feed_lead_frames() const noexcept { return 0; }
+void BungeePitchVoice::advance_fed_through(long long) noexcept {}
+void BungeePitchVoice::reanchor_feed(long long) noexcept {}
 void BungeePitchVoice::clear_queued_output() noexcept {}
 void BungeePitchVoice::set_clip_mapping(long long, long long, double) noexcept {}
 long long BungeePitchVoice::mapped_timeline_start() const noexcept { return 0; }

@@ -84,3 +84,48 @@ warp map to publish at jump time.
 -DLT_ENGINE_USE_BUNGEE=ON
 -DLT_BUNGEE_DIR=<unpacked-bungee-release>
 ```
+
+## How position works (and why there is no cursor)
+
+The renderer derives the source read position from the timeline on every block:
+
+```
+required_fed_through = clip.source_start
+                     + round((timeline_offset + block) * ratio)
+                     + feed_lead
+feed                 = required_fed_through - voice.fed_through()
+```
+
+`fed_through` is a contiguity pointer, not a position estimate: it says where
+the last feed stopped so the next one abuts it. `feed_lead` is the constant
+head start Bungee needs over its own output, captured once when the voice is
+anchored.
+
+Two things follow, and both were bugs before:
+
+- **Nothing accumulates.** The warp path used to integrate a cursor, which
+  turned a fraction of a frame of per-block rounding into a track running ahead
+  of the click by the last chorus. `warp_timing_tests.cpp` measures the
+  delivered ratio against the requested one and holds it under 0.01%.
+- **The live `latency()` never reaches a read address.** Its resting value
+  moves with the ratio — measured at 255 frames between 1.0 and 0.8333 — and
+  folding a moving number into a read address tore the source feed at exactly
+  the moment the user toggled warp.
+
+### The anchor is read out of Bungee, not predicted
+
+After the prefeed, `Stream::outputPosition()` gives the input-frame position of
+the next sample the voice will emit. Every frame fed was one source frame read
+contiguously, so that converts to a source frame directly. Predicting it
+instead — from a latency sampled before the prefeed — is what
+`alignment_compensation_frames()` existed to paper over.
+
+That function is gone. It returned `sample_rate * 0.032 * (1/pitch - 1)`, a
+hand-tuned constant with no derivation, and measurement showed it *was* the
+error rather than the correction: with the anchor derived and the pitch
+consistent, a click lands within 5 frames of its unpitched position across the
+whole ±7 semitone range, and adding the constant back displaces it by exactly
+the constant.
+
+Warm the voice at the pitch it will run at. Warming at 1.0 and switching later
+displaces the pipeline by -383 frames at -7 semitones and +255 at +7.

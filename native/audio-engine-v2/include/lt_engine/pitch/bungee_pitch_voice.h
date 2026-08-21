@@ -49,36 +49,31 @@ public:
 
     // ── DSP (audio thread, must not allocate) ────────────────────────────
 
-    // Render up to output_frames pitched output frames into out[0..channels-1].
+    // Render up to output_frames frames into out[0..channels-1].
     // input is planar source audio: input[ch] points to input_frames floats.
     // pitch_scale is a frequency multiplier; 1.0 = no change, 0.5 = octave
     // down, 2.0 = octave up. Bungee accepts a new pitch value every call,
     // gaplessly.
-    // time_ratio is the source-advance multiplier per block. 1.0 = identity
-    // (Bungee's input cursor advances by input_frames). Values >1 consume the
-    // source faster than output is produced (compressing time → plays faster
-    // while pitch_scale preserves the perceived pitch). Default 1.0 preserves
-    // existing pitch-only behaviour. Test-only entry point until the warp
-    // integration arrives.
+    //
+    // The time-stretch ratio is NOT a parameter: Bungee derives its speed from
+    // the ratio of the frame counts you pass
+    //     speed = input_frames / output_frames
+    // so the caller sets the ratio purely by choosing how much source to hand
+    // over for the output it wants. Passing a separate ratio alongside those
+    // counts invited them to disagree, and when they did the disagreement was
+    // silent — it showed up only as a track drifting away from the click over
+    // several minutes.
+    //
+    // Everything given in `input` is consumed. The caller decides the span,
+    // because only the caller knows where the timeline is.
     int render_block(const float* const* input,
                      int input_frames,
                      float* const* output,
                      int output_frames,
-                     double pitch_scale,
-                     double time_ratio = 1.0) noexcept;
-
-    // Control-thread prefill used by prepared jumps. It feeds source input to
-    // Bungee and stores the produced output in the realtime FIFO without
-    // delivering it yet, so tiny post-jump spans can be served without doing
-    // the first synthesis call on the audio thread.
-    int prime_output_fifo(const float* const* input,
-                          int input_frames,
-                          double pitch_scale,
-                          double time_ratio = 1.0) noexcept;
+                     double pitch_scale) noexcept;
 
     // Output frames already produced by Bungee and waiting in the realtime
-    // FIFO. TrackRenderer uses this to advance the next source read so partial
-    // post-jump renders keep Bungee's input stream continuous.
+    // FIFO.
     int queued_output_frames() const noexcept;
 
     // ── Latency / position introspection (per Bungee issue #38) ─────────
@@ -105,7 +100,7 @@ public:
     // is alive (stub build). May be 0 until the first render_block() returns
     // a non-zero frame count.
     double latency_frames() const noexcept;
-    int    alignment_compensation_frames(double pitch_scale) const noexcept;
+
 
     // True once Bungee's analysis pipeline is full and the next render_block()
     // will produce useful, timeline-aligned audio.
@@ -123,19 +118,40 @@ public:
     // Latency reaches its resting value after roughly 2048 input frames.
     bool   is_warm() const noexcept;
 
-    // ── Source cursor (mirrors the warp-aware advance model) ────────────
+    // ── Feed position ────────────────────────────────────────────────────
     //
-    // The voice tracks an external "source frame" that the renderer reads
-    // from before feeding samples. Each render_block / prime_output_fifo
-    // advances this cursor by `input_frames` (regardless of pitch_scale or
-    // time_ratio — the cursor lives in source-frame units, which is what
-    // the file read uses). reset_source_cursor() lets the prearm path
-    // position the voice at a jump target before the first render.
+    // The voice does NOT track where the timeline is. It tracks only how far
+    // into the source it has been fed, so the next feed can start exactly
+    // where the last one stopped. Bungee concatenates every buffer it is given
+    // into one logical stream, so this contiguity is the caller's entire
+    // responsibility — a gap skips material and an overlap repeats it, and the
+    // stretcher can detect neither.
     //
-    // Default value at configure() is 0; the manager sets it to
-    // clip.source_start_frame after configure for non-prearm builds.
-    void      reset_source_cursor(long long source_frame) noexcept;
-    long long source_cursor() const noexcept;
+    // Where playback IS, is the renderer's business, derived from the timeline
+    // frame on every block. This voice used to keep its own accumulating
+    // estimate of that, which is how a fraction of a frame per block turned
+    // into a track running ahead of the click by the last chorus. Position is
+    // now computed, never integrated.
+    //
+    // set_feed_anchor() is how the control thread hands over a prepared voice:
+    //   anchor_source_frame  the source frame the voice will emit NEXT
+    //   fed_through          the source frame input has been fed up to
+    // Their difference is the pipeline lead — the head start Bungee needs over
+    // what it is emitting — and it is held constant from then on, so the live
+    // latency() reading never leaks into a read address.
+    void      set_feed_anchor(long long anchor_source_frame,
+                              long long fed_through) noexcept;
+    long long fed_through() const noexcept;
+    long long feed_lead_frames() const noexcept;
+
+    // Move the feed position without feeding, for blocks that deliberately do
+    // no work (a muted track). Keeps the voice lined up for the un-mute.
+    void      advance_fed_through(long long frames) noexcept;
+
+    // Force the feed position, abandoning contiguity. For discontinuities the
+    // voice could not have anticipated; the caller owns masking the seam.
+    void      reanchor_feed(long long fed_through) noexcept;
+
     void      clear_queued_output() noexcept;
 
     // ── Applied clip mapping (for incremental retime) ────────────────────

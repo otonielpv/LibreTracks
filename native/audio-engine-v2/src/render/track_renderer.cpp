@@ -410,23 +410,51 @@ int TrackRenderer::render_path_stretched(const ClipBlock&     cb,
         static_cast<int>(bungee_in_r_.size()));
     const double safe_ratio = warp_time_ratio > 0.0 ? warp_time_ratio : 1.0;
 
-    // Bungee consumes ~ceil(output_frames * ratio) input frames per call to
-    // produce output_frames of stretched output. For pitch-only (ratio=1)
-    // this equals frames_to_read, matching the old pitch-path behaviour.
-    const int input_to_feed = std::min(
-        bungee_in_capacity,
-        static_cast<int>(std::ceil(
-            static_cast<double>(cb.frames_to_read) * safe_ratio)));
-    if (input_to_feed <= 0) {
-        pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-        return 0;
-    }
+    // ── Where the timeline says this clip must have been fed to ──────────
+    //
+    // Under warp, one timeline frame is `ratio` source frames, so the source
+    // position of any timeline frame is a closed-form function of it. Deriving
+    // it fresh every block is what stops this path accumulating error: a
+    // dropped block, a late rebuild or a rounding remainder is corrected on the
+    // very next block instead of surviving as a permanent offset.
+    //
+    // This mirrors what every other path here already does — prepare_clip_block
+    // computes the same mapping for Direct and Varispeed. Warp was the only
+    // renderer path integrating a cursor instead, and every timing bug it has
+    // ever had traces to that.
+    //
+    // `feed_lead` is the constant head start Bungee needs over the audio it is
+    // emitting, captured once when the voice was anchored. Deliberately not
+    // latency_frames(): that reading shifts when the ratio changes (measured:
+    // 255 frames going from 1.0 to 0.8333), and folding a moving number into a
+    // read address tears the source feed exactly when the user least expects
+    // it — at the moment they toggle warp.
+    const long long clip_source_start =
+        static_cast<long long>(cb.clip->source_start_frame);
+    const long long timeline_offset =
+        static_cast<long long>(cb.source_frame) - clip_source_start;
+    const long long required_fed_through =
+        clip_source_start
+        + std::llround(static_cast<double>(timeline_offset + cb.frames_to_read)
+                       * safe_ratio)
+        + bv->feed_lead_frames();
 
-    // Silent-track gate: keep the voice's source cursor in sync with the
-    // timeline (so un-mute resumes at the right position) but skip the
-    // expensive grain synthesis.
+    long long feed_wanted = required_fed_through - bv->fed_through();
+    if (feed_wanted < 0 || feed_wanted > bungee_in_capacity) {
+        // The voice is not where the timeline expects, by more than one block's
+        // worth. It was just built, or the transport moved without it hearing.
+        // Re-anchor instead of feeding a wrong span: one stale block is
+        // recoverable and self-corrects next block, a silently wrong feed is
+        // neither.
+        bv->reanchor_feed(required_fed_through);
+        feed_wanted = 0;
+    }
+    const int feed_frames = static_cast<int>(feed_wanted);
+
+    // Silent-track gate: hold the feed position against the timeline so the
+    // un-mute lands in the right place, but skip the grain synthesis.
     if (track_is_silent) {
-        bv->reset_source_cursor(bv->source_cursor() + input_to_feed);
+        bv->advance_fed_through(feed_frames);
         std::fill(scratch_l_.begin(),
                   scratch_l_.begin() + cb.frames_to_read, 0.0f);
         std::fill(scratch_r_.begin(),
@@ -435,21 +463,11 @@ int TrackRenderer::render_path_stretched(const ClipBlock&     cb,
     }
 
     const int queued = bv->queued_output_frames();
-    int feed_frames = queued >= cb.frames_to_read ? 0 : input_to_feed;
-    feed_frames = std::min(feed_frames, bungee_in_capacity);
-
     const double pitch_scale = std::pow(2.0,
         static_cast<double>(effective_semitones) / 12.0);
-    const long long latency = static_cast<long long>(bv->latency_frames());
-    const int compensation = bv->alignment_compensation_frames(pitch_scale);
-    // Read from where the voice last left off. The voice tracks its own
-    // source cursor so warp ratios that don't advance the timeline 1:1 stay
-    // in sync without the renderer having to re-derive the offset.
-    const long long cursor = bv->source_cursor();
-    const Frame queued_source_frames = static_cast<Frame>(std::ceil(
-        static_cast<double>(queued) * safe_ratio));
-    const Frame read_from = static_cast<Frame>(cursor
-        + latency + compensation + queued_source_frames);
+    // Read from exactly where the last feed stopped. Contiguity is not an
+    // optimisation here: Bungee splices whatever it is handed into one stream.
+    const Frame read_from = static_cast<Frame>(bv->fed_through());
     const Frame src_end = cb.src->duration_frames();
 
     if (feed_frames > 0) {
@@ -510,20 +528,21 @@ int TrackRenderer::render_path_stretched(const ClipBlock&     cb,
     const float* in_ptrs[2] = { bungee_in_l_.data(), bungee_in_r_.data() };
     const auto dsp_t0 = std::chrono::steady_clock::now();
     const int produced = bv->render_block(
-        in_ptrs, feed_frames, scratch_, cb.frames_to_read, pitch_scale,
-        safe_ratio);
+        in_ptrs, feed_frames, scratch_, cb.frames_to_read, pitch_scale);
     const auto dsp_us = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - dsp_t0).count();
+    // Everything we fed was consumed, so the contiguity pointer moves by
+    // exactly that much and the next block picks up where this one stopped.
+    bv->advance_fed_through(feed_frames);
     const int queued_after = bv->queued_output_frames();
 
     if (queued > 0 || cb.frames_to_read < feed_frames || safe_ratio != 1.0) {
         track_jump_debug_log(
-            "[LT_JUMP_DEBUG][track-renderer] stretched track=%s clip=%s cursor=%lld frames=%d queued_before=%d queued_source=%lld feed=%d input=%d produced=%d queued_after=%d read_from=%lld latency=%lld compensation=%d pitch=%.6f ratio=%.6f dsp_us=%lld\n",
+            "[LT_JUMP_DEBUG][track-renderer] stretched track=%s clip=%s frames=%d queued_before=%d feed=%d produced=%d queued_after=%d read_from=%lld required_fed=%lld lead=%lld pitch=%.6f ratio=%.6f dsp_us=%lld\n",
             track_id.c_str(), cb.clip->id.c_str(),
-            cursor, cb.frames_to_read, queued,
-            static_cast<long long>(queued_source_frames), feed_frames,
-            input_to_feed, produced, queued_after,
-            static_cast<long long>(read_from), latency, compensation,
+            cb.frames_to_read, queued, feed_frames, produced, queued_after,
+            static_cast<long long>(read_from), required_fed_through,
+            bv->feed_lead_frames(),
             pitch_scale, safe_ratio,
             static_cast<long long>(dsp_us));
     }

@@ -155,7 +155,7 @@ TEST_CASE("region transpose retimes the warm voice in place, preserving phase") 
     // Advance the warm voice so its source cursor is non-trivial (mimics the
     // engine having rendered a few blocks of warped audio before the user
     // reaches for the key control).
-    const long long cursor_before = before->source_cursor();
+    const long long fed_before = before->fed_through();
 
     // Simulate CmdSetRegionTranspose's new path: mutate the region's transpose
     // and retime the existing voices at the same playhead.
@@ -164,7 +164,7 @@ TEST_CASE("region transpose retimes the warm voice in place, preserving phase") 
 
     BungeePitchVoice* after = mgr.voice_for("clip1");
     CHECK(after == before);                       // same warm voice, not rebuilt
-    CHECK(after->source_cursor() == cursor_before); // phase preserved (no reset)
+    CHECK(after->fed_through() == fed_before); // phase preserved (no reset)
 #endif
 }
 

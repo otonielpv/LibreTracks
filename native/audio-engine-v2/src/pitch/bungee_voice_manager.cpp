@@ -287,11 +287,19 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
 // ratios). At 200 ms documented latency this is ~3x the expected need.
 constexpr int kMaxWarmFramesAt48k = 8192;  // ~170 ms at 48 kHz
 
+// `pitch_scale` must be the pitch the voice will actually run at. Warming at
+// 1.0 and switching afterwards moves the pipeline: measured against Bungee
+// 2.4.24, changing pitch mid-stream displaces the output by -383 frames at
+// -7 semitones and +255 at +7, which lands a jump visibly off the beat. That
+// displacement is what alignment_compensation_frames() used to paper over with
+// a hand-tuned 32 ms constant; warming at the right pitch removes the cause,
+// and the constant with it.
 void warm_voice(BungeePitchVoice& voice,
                 int sample_rate,
                 int channel_count,
                 int max_in_frames,
-                double time_ratio = 1.0) {
+                double time_ratio = 1.0,
+                double pitch_scale = 1.0) {
     if (!voice.is_ready()) return;
     const int max_warm_frames = std::max(0,
         static_cast<int>(static_cast<long long>(kMaxWarmFramesAt48k) * sample_rate / 48000));
@@ -312,10 +320,13 @@ void warm_voice(BungeePitchVoice& voice,
     int fed = 0;
     while (fed < max_warm_frames) {
         const int chunk = std::min(max_in_frames, max_warm_frames - fed);
+        // Ratio expressed the only way Bungee reads it: the proportion
+        // between the two frame counts.
+        const int out_chunk = std::max(1, static_cast<int>(std::llround(
+            static_cast<double>(chunk) / (time_ratio > 0.0 ? time_ratio : 1.0))));
         (void)voice.render_block(in_ptrs.data(), chunk,
-                                  out_ptrs.data(), chunk,
-                                  /*pitch_scale*/ 1.0,
-                                  /*time_ratio*/ time_ratio);
+                                  out_ptrs.data(), std::min(out_chunk, max_in_frames),
+                                  pitch_scale);
         fed += chunk;
         if (voice.is_warm())
             break;
@@ -352,8 +363,7 @@ int seek_source_wait_ms() {
 bool ensure_seek_read_window_ready(const SourceManager& sources,
                                    const VoiceSpec& spec,
                                    int max_in_frames,
-                                   int latency_frames,
-                                   int compensation_frames) {
+                                   int latency_frames) {
     if (!spec.source)
         return false;
 
@@ -361,16 +371,12 @@ bool ensure_seek_read_window_ready(const SourceManager& sources,
     if (src_end <= 0 || spec.source_frame >= src_end)
         return false;
 
-    const Frame compensation_start =
-        spec.source_frame + std::min<Frame>(0, compensation_frames);
     const Frame read_start =
-        spec.source_frame
-        + static_cast<Frame>(latency_frames)
-        + static_cast<Frame>(compensation_frames);
+        spec.source_frame + static_cast<Frame>(latency_frames);
     const int read_ahead = std::max(
         std::max(1, max_in_frames) * 2,
         std::max(1, spec.source->sample_rate() / 2));
-    const Frame required_start = std::min(compensation_start, read_start);
+    const Frame required_start = std::min(spec.source_frame, read_start);
     const Frame required_end = read_start + static_cast<Frame>(read_ahead);
 
     const Frame clamped_start = std::max<Frame>(0, required_start);
@@ -389,14 +395,13 @@ bool ensure_seek_read_window_ready(const SourceManager& sources,
     const int wait_ms = seek_source_wait_ms();
     if (lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG")) {
         lt_debug_log(
-            "[LT_JUMP_DEBUG][bungee] wait_seek_source clip=%s source=%s source_frame=%lld ready_start=%lld ready_frames=%d latency=%d compensation=%d max_in=%d wait_ms=%d\n",
+            "[LT_JUMP_DEBUG][bungee] wait_seek_source clip=%s source=%s source_frame=%lld ready_start=%lld ready_frames=%d latency=%d max_in=%d wait_ms=%d\n",
             spec.clip_id.c_str(),
             spec.source_id.c_str(),
             static_cast<long long>(spec.source_frame),
             static_cast<long long>(clamped_start),
             required_frames,
             latency_frames,
-            compensation_frames,
             max_in_frames,
             wait_ms);
     }
@@ -414,18 +419,33 @@ bool ensure_seek_read_window_ready(const SourceManager& sources,
     return spec.source->is_range_ready(clamped_start, required_frames);
 }
 
-void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
-                                     const DecodedSource& source,
-                                     Frame source_frame,
-                                     int sample_rate,
-                                     int channel_count,
-                                     int max_in_frames,
-                                     double pitch_scale,
-                                     double time_ratio = 1.0) {
-    if (!voice.is_ready()) return;
+// Result of aligning a warm voice on a target source frame.
+//   anchor  the source frame the voice will emit NEXT
+//   fed_through  the source frame input has been fed up to
+// Both are read out of Bungee's own accounting rather than predicted, because
+// the pipeline delay is not the constant the old code assumed: it moves with
+// pitch and with ratio. Predicting it from a latency sampled before the
+// prefeed left pitched jumps landing up to 116 frames off the beat, in
+// proportion to the transpose.
+struct PrefeedResult {
+    Frame anchor = 0;
+    Frame fed_through = 0;
+};
+
+// Aligns a warm voice on `source_frame`. Returns the anchor unchanged and
+// nothing fed when there was nothing to do.
+PrefeedResult prefeed_voice_with_source_audio(BungeePitchVoice& voice,
+                                      const DecodedSource& source,
+                                      Frame source_frame,
+                                      int sample_rate,
+                                      int channel_count,
+                                      int max_in_frames,
+                                      double pitch_scale,
+                                      double time_ratio = 1.0) {
+    (void)sample_rate;
+    if (!voice.is_ready()) return PrefeedResult{source_frame, source_frame};
     const int latency_frames = static_cast<int>(voice.latency_frames());
-    if (latency_frames <= 0) return;
-    const int compensation_frames = voice.alignment_compensation_frames(pitch_scale);
+    if (latency_frames <= 0) return PrefeedResult{source_frame, source_frame};
 
     std::vector<float> read_l(static_cast<std::size_t>(max_in_frames), 0.0f);
     std::vector<float> read_r(static_cast<std::size_t>(max_in_frames), 0.0f);
@@ -441,9 +461,8 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
     }
 
     const Frame src_end = source.duration_frames();
-    Frame read_cursor = source_frame + static_cast<Frame>(compensation_frames);
+    Frame read_cursor = source_frame;
     const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
-    const bool warp_active = std::abs(safe_ratio - 1.0) > 1.0e-6;
     auto read_source = [&](int frames) {
         std::fill(read_l.begin(), read_l.begin() + frames, 0.0f);
         std::fill(read_r.begin(), read_r.begin() + frames, 0.0f);
@@ -468,81 +487,58 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
         read_cursor += frames;
     };
 
-    if (warp_active) {
-        // Keep seek/immediate-jump warp prefeed source-continuous. With
-        // ratio != 1, one output frame does not equal one consumed source
-        // frame, so the pitch-only drain loop below would skip or repeat
-        // source material before the first realtime block.
-        voice.clear_queued_output();
-        const int max_output_per_call = std::max(1, std::min(
-            max_in_frames,
-            static_cast<int>(std::floor(
-                static_cast<double>(max_in_frames) / safe_ratio))));
-        int consumed_input = 0;
-        while (consumed_input < latency_frames) {
-            const int remaining = latency_frames - consumed_input;
-            int output_frames = static_cast<int>(std::floor(
-                static_cast<double>(remaining) / safe_ratio));
-            if (output_frames <= 0)
-                break;
-            output_frames = std::min(output_frames, max_output_per_call);
-            const int input_frames = std::min(
-                max_in_frames,
-                std::max(1, static_cast<int>(std::ceil(
-                    static_cast<double>(output_frames) * safe_ratio))));
-            read_source(input_frames);
-            (void)voice.render_block(in_ptrs.data(), input_frames,
-                                      out_ptrs.data(), output_frames,
-                                      pitch_scale,
-                                      safe_ratio);
-            consumed_input += input_frames;
-        }
-        voice.clear_queued_output();
-        return;
-    }
+    // Push `latency_frames` of real source through the pipeline and throw the
+    // output away. That output is the flush of whatever warm_voice left in
+    // there, so it belongs to source positions BEFORE source_frame; discarding
+    // it is what leaves the voice emitting source_frame next.
+    //
+    // One loop for every ratio. There used to be two, chosen by
+    // |ratio - 1| > 1e-6, which disagreed with the engine's own definition of
+    // warp (region.warp_enabled && warp_source_bpm > 0). Any ratio close enough
+    // to 1 satisfied one and not the other, and the tests happened to sit in
+    // exactly that gap — they set warp_source_bpm = 120.0001 against a tempo of
+    // 120, so every "warp" test prepared through the non-warp branch.
+    //
+    // The ratio is expressed the only way Bungee accepts it: as the proportion
+    // between the frame counts handed to each process() call.
+    // Input position before any real audio, so the readings below can be
+    // expressed back in source frames.
+    const long long input_pos_before_real = voice.input_position();
+    const Frame real_audio_read_start = read_cursor;
 
     int fed = 0;
     while (fed < latency_frames) {
-        const int chunk = std::min(max_in_frames, latency_frames - fed);
-
-        read_source(chunk);
-
-        (void)voice.render_block(in_ptrs.data(), chunk,
-                                  out_ptrs.data(), chunk,
-                                  pitch_scale,
-                                  time_ratio);
-        fed += chunk;
+        const int input_chunk = std::min(max_in_frames, latency_frames - fed);
+        const int output_chunk = std::max(1, std::min(
+            max_in_frames,
+            static_cast<int>(std::llround(
+                static_cast<double>(input_chunk) / safe_ratio))));
+        read_source(input_chunk);
+        (void)voice.render_block(in_ptrs.data(), input_chunk,
+                                  out_ptrs.data(), output_chunk,
+                                  pitch_scale);
+        fed += input_chunk;
     }
+    voice.clear_queued_output();
 
-    // Target queued output equal to the renderer's lookahead. The audio
-    // thread's first read uses `cursor + latency_frames + queued_source`, so
-    // unless the FIFO already holds `latency_frames` of output Bungee will
-    // emit silence until grain alignment catches up (~140 ms at 44.1 kHz with
-    // hop=-1). The previous heuristic (~2048 frames) primed less than a
-    // quarter of the latency window, leaving an audible head silence on every
-    // Play/seek. Pick the larger of latency_frames and the prior heuristic so
-    // we never prime *less* than before, and cap at latency_frames * 2 to
-    // bound the budget when latency_frames itself is small.
-    const int prior_heuristic = std::max(
-        max_in_frames,
-        std::min(max_in_frames * 4, std::max(max_in_frames, sample_rate / 20)));
-    const int prime_target_frames = std::max(prior_heuristic, latency_frames);
-    int primed_total = voice.queued_output_frames();
-    int prime_budget = std::max(prime_target_frames * 2,
-                                latency_frames * 2);
-    while (max_in_frames > 0
-           && primed_total < prime_target_frames
-           && prime_budget > 0) {
-        const int prime_frames = std::min(max_in_frames, prime_budget);
-        read_source(prime_frames);
-        const int before = voice.queued_output_frames();
-        (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames, pitch_scale,
-                                      time_ratio);
-        primed_total = voice.queued_output_frames();
-        prime_budget -= prime_frames;
-        if (primed_total <= before)
-            break;
-    }
+    // Ask Bungee where it actually is instead of predicting it. outputPosition()
+    // is the input-frame position of the next sample it will emit, and every
+    // input frame we fed was one source frame read contiguously, so the two
+    // scales differ only by a constant we captured above.
+    const double consumed_before_output =
+        voice.output_position() - static_cast<double>(input_pos_before_real);
+    const Frame anchor = real_audio_read_start
+        + static_cast<Frame>(std::llround(consumed_before_output));
+
+    // No output priming. It used to fill the FIFO so the first realtime block
+    // needed no synthesis, sized against `latency_frames` — which at hop=0
+    // exceeds the FIFO capacity, and push_fifo drops the overflow silently
+    // while the read cursor has already moved past it, tearing the very
+    // contiguity the prefeed exists to establish. The first block is not
+    // special enough to be worth that: the pipeline is aligned now, so it
+    // synthesises like every other block.
+
+    return PrefeedResult{anchor, read_cursor};
 }
 #endif // LT_ENGINE_HAVE_BUNGEE
 
@@ -588,7 +584,8 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         }
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
-                   spec.time_ratio);
+                   spec.time_ratio,
+                   semitones_to_pitch_scale(spec.effective_semitones));
         // Prefeed the voice with real source audio so the audio thread's
         // first render_block returns aligned output instead of the ~140ms of
         // silence that warm_voice (zero input) leaves in Bungee's output
@@ -597,19 +594,23 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         // exact prefeed strategy below.
         const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
         const int latency_frames = static_cast<int>(voice->latency_frames());
-        const int compensation_frames =
-            voice->alignment_compensation_frames(pitch_scale);
         const bool window_ready = ensure_seek_read_window_ready(
             sources, spec, impl_->max_in_frames,
-            latency_frames, compensation_frames);
+            latency_frames);
+        PrefeedResult aligned{spec.source_frame,
+                              spec.source_frame + latency_frames};
         if (window_ready && spec.source) {
-            prefeed_voice_with_source_audio(
+            aligned = prefeed_voice_with_source_audio(
                 *voice, *spec.source, spec.source_frame,
                 impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
                 pitch_scale, spec.time_ratio);
         }
-        voice->reset_source_cursor(
-            static_cast<long long>(spec.source_frame));
+        // Without a prefeed the fallback above skips `latency` into the source
+        // rather than letting the voice run permanently late: a brief head gap
+        // is masked by the fade-in armed below, whereas a constant lag never
+        // stops fighting the click.
+        voice->set_feed_anchor(static_cast<long long>(aligned.anchor),
+                               static_cast<long long>(aligned.fed_through));
         voice->set_clip_mapping(spec.timeline_start_frame,
                                 spec.source_start_frame, spec.time_ratio);
         // Voice is already primed with real audio above; ask for 0-frame
@@ -701,7 +702,12 @@ void BungeeVoiceManager::retime_existing_for_session(
             ++retimed_soft;
             continue;
         }
-        voice.reset_source_cursor(static_cast<long long>(spec.source_frame));
+        // Hard retime: the clip really moved. Keep the pipeline lead the voice
+        // already established — it is warm and that lead is still valid — and
+        // just move the anchor to the new source position.
+        voice.set_feed_anchor(
+            static_cast<long long>(spec.source_frame),
+            static_cast<long long>(spec.source_frame) + voice.feed_lead_frames());
         voice.clear_queued_output();
         voice.arm_fade_in(3);
         voice.set_clip_mapping(spec.timeline_start_frame,
@@ -785,11 +791,10 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
                 return;
 
             warm_voice(*voice, sample_rate, channel_count, max_in_frames,
-                       spec.time_ratio);
+                       spec.time_ratio,
+                       semitones_to_pitch_scale(spec.effective_semitones));
             const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
             const int latency_frames = static_cast<int>(voice->latency_frames());
-            const int compensation_frames =
-                voice->alignment_compensation_frames(pitch_scale);
             // The prefeed window may not be decoded yet the FIRST time a region's
             // warp is toggled on (its source hasn't been streamed into the block
             // cache). Do NOT abandon the voice in that case — publishing without
@@ -800,18 +805,20 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
             // fade length are conditional on the window being ready.
             const bool window_ready = ensure_seek_read_window_ready(
                 sources, spec, max_in_frames,
-                latency_frames, compensation_frames);
+                latency_frames);
+            PrefeedResult aligned{spec.source_frame,
+                                  spec.source_frame + latency_frames};
             if (window_ready && spec.source) {
-                prefeed_voice_with_source_audio(
+                aligned = prefeed_voice_with_source_audio(
                     *voice, *spec.source, spec.source_frame,
                     sample_rate, channel_count, max_in_frames,
                     pitch_scale, spec.time_ratio);
             }
-            // Anchor the voice's source cursor at the timeline position the
-            // renderer will start reading from. The renderer's read formula
-            // (cursor + latency + compensation + queued) assumes this anchor.
-            voice->reset_source_cursor(
-                static_cast<long long>(spec.source_frame));
+            // Which source frame the voice will emit next, and how far input
+            // has been fed. The renderer derives every later read from the
+            // timeline plus the lead those two numbers imply.
+            voice->set_feed_anchor(static_cast<long long>(aligned.anchor),
+                                   static_cast<long long>(aligned.fed_through));
             voice->set_clip_mapping(spec.timeline_start_frame,
                                     spec.source_start_frame, spec.time_ratio);
             // Prefed voice starts clean (fade 0); un-prefed voice masks its
@@ -876,14 +883,13 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
         }
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
-                   spec.time_ratio);
+                   spec.time_ratio,
+                   semitones_to_pitch_scale(spec.effective_semitones));
         // warm_voice consumed the voice's initial fade window with zero
         // input. Prefeed target audio and discard Bungee's silence->audio
         // transition so the audio thread starts on an already-stable grain.
         const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
         const int latency_frames = static_cast<int>(voice->latency_frames());
-        const int compensation_frames =
-            voice->alignment_compensation_frames(pitch_scale);
         // Never abandon the voice when the prefeed window isn't decoded yet —
         // that leaves the clip without a Bungee voice and its region plays
         // silent until the source warms. Install the voice regardless; make
@@ -891,15 +897,17 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
         // rebuild_for_session / build_seek_voice_map.
         const bool window_ready = ensure_seek_read_window_ready(
             sources, spec, impl_->max_in_frames,
-            latency_frames, compensation_frames);
+            latency_frames);
+        PrefeedResult aligned{spec.source_frame,
+                              spec.source_frame + latency_frames};
         if (window_ready && spec.source) {
-            prefeed_voice_with_source_audio(
+            aligned = prefeed_voice_with_source_audio(
                 *voice, *spec.source, spec.source_frame,
                 impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
                 pitch_scale, spec.time_ratio);
         }
-        voice->reset_source_cursor(
-            static_cast<long long>(spec.source_frame));
+        voice->set_feed_anchor(static_cast<long long>(aligned.anchor),
+                               static_cast<long long>(aligned.fed_through));
         voice->set_clip_mapping(spec.timeline_start_frame,
                                 spec.source_start_frame, spec.time_ratio);
         // A prefed voice starts clean (mixer's seek de-click ramp covers the

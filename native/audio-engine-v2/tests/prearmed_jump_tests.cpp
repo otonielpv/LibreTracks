@@ -104,6 +104,17 @@ void init_fixture(SourceManager& sources,
         region.start_frame     = 0;
         region.end_frame       = kClipLen;
         region.warp_enabled    = true;
+        // A region's transpose SHADOWS the song's — resolve_region_transpose
+        // returns song.transpose_semitones only when no region covers the
+        // frame. Leaving this at 0 while setting song.transpose_semitones made
+        // the fixture ask for two different pitches at once: the prearm built
+        // and prefed an UNPITCHED voice, while the test rendered it through
+        // render_n_blocks at the transposed pitch. The old read formula
+        // recomputed its alignment fudge from the render-time pitch, which
+        // silently cancelled the mismatch; once the pitch was resolved at
+        // prepare time the fixture's own inconsistency became visible as a
+        // ~100-frame onset error.
+        region.transpose_semitones = transpose_amount;
         // Phase-4 routes pitch-only-no-warp through Varispeed. These prearm
         // tests need the Stretched path (Bungee voice + prearm), which
         // requires warp_active. Use a near-unity ratio so prefeed alignment

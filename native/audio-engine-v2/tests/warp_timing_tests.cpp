@@ -132,14 +132,27 @@ WarpRun render_continuous(double song_bpm, double source_bpm,
 
     const Song&  song  = session.songs[0];
     const Track& track = song.tracks[0];
+    auto render_blocks = [&](int from, int count) {
+        for (int b = from; b < from + count; ++b) {
+            std::fill(out_l.begin(), out_l.end(), 0.0f);
+            std::fill(out_r.begin(), out_r.end(), 0.0f);
+            renderer.render(track, static_cast<Frame>(b) * block, block,
+                            out, 2, sm, &voices, kSR,
+                            /*effective_semitones=*/0, &song);
+        }
+    };
+
+    // The first block reconciles the freshly built voice with the timeline: the
+    // prefeed leaves it aligned to within a frame or two, and the renderer
+    // closes that gap in one step. That correction is the design working, but
+    // it is a one-off, so let it happen before the counters start — otherwise a
+    // single settling block would be averaged in as if it were a steady rate.
+    constexpr int kSettleBlocks = 4;
+    render_blocks(0, kSettleBlocks);
+    TrackRenderer::reset_diagnostics();
+
     const int blocks = static_cast<int>(seconds * kSR / block);
-    for (int b = 0; b < blocks; ++b) {
-        std::fill(out_l.begin(), out_l.end(), 0.0f);
-        std::fill(out_r.begin(), out_r.end(), 0.0f);
-        renderer.render(track, static_cast<Frame>(b) * block, block,
-                        out, 2, sm, &voices, kSR,
-                        /*effective_semitones=*/0, &song);
-    }
+    render_blocks(kSettleBlocks, blocks);
 
     const auto d = TrackRenderer::diagnostics();
     return WarpRun{d.stretched_feed_gap_frames, d.stretched_feed_gap_events,
@@ -156,11 +169,7 @@ WarpRun render_continuous(double song_bpm, double source_bpm,
 // independently of what was actually consumed: a cursor advancing by output
 // rather than input, or Bungee's live latency() folded into the read address.
 // ───────────────────────────────────────────────────────────────────────────
-// Marked should_fail until the read position is derived from the timeline.
-// The suite stays green while the defect is on record; the decorator comes off
-// in the commit that fixes it, and its removal is the proof the fix landed.
-TEST_CASE("Warp: the source feed is contiguous across blocks"
-          * doctest::should_fail()) {
+TEST_CASE("Warp: the source feed is contiguous across blocks") {
     struct Case { const char* name; double song_bpm, source_bpm; int block; };
     const Case cases[] = {
         {"120->100 @512", 100.0, 120.0, 512},
@@ -190,9 +199,7 @@ TEST_CASE("Warp: the source feed is contiguous across blocks"
 // tight: at 0.01% a four-minute song drifts ~24 ms, which is already audible
 // against a click, so anything looser would licence the bug.
 // ───────────────────────────────────────────────────────────────────────────
-// should_fail for the same reason as the contiguity case above.
-TEST_CASE("Warp: the delivered ratio does not drift from the requested ratio"
-          * doctest::should_fail()) {
+TEST_CASE("Warp: the delivered ratio does not drift from the requested ratio") {
     struct Case { const char* name; double song_bpm, source_bpm; int block; };
     const Case cases[] = {
         {"120->100 @512", 100.0, 120.0, 512},
