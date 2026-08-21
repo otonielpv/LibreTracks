@@ -1760,6 +1760,24 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 } else {
                     wait_jump_target_audio_ready(
                         *source_manager_, *session_, c.frame, seek_window);
+                    // Widen the read-ahead exactly as the stopped branch does.
+                    // Without this a jump taken WHILE PLAYING only ever asked
+                    // for `seek_window` — max(4096, buffer * 8), about 93 ms at
+                    // a 512-frame buffer — so playback landed, ran through that
+                    // sliver and then starved while the streaming worker caught
+                    // up from a cold position. Measured on a real session:
+                    // bursts of 35, 93 and 221 ms of silenced frames logged as
+                    // [LT_STARVATION] within seconds of each jump.
+                    //
+                    // That silence is what "the jump is not instant" actually
+                    // was. The transport moves in about 10 ms (see the
+                    // seek_breakdown line above); the audio simply was not in
+                    // RAM yet. Requesting only queues blocks for the fill pool,
+                    // so this costs the jump nothing.
+                    request_playback_audio_window(
+                        *source_manager_, *session_, c.frame,
+                        playback_prefetch_window_frames(
+                            clock_ ? clock_->sample_rate() : 48000));
                 }
             }
             const auto seek_t_wait = std::chrono::steady_clock::now();
@@ -1800,8 +1818,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 seek_voice_map = bungee_voices_->build_seek_voice_map(
                     to, *session_, *source_manager_);
             }
-            if (source_manager_ && session_)
+            if (source_manager_ && session_) {
                 wait_jump_target_audio_ready(*source_manager_, *session_, to, seek_window);
+                // Wide read-ahead, same reason as CmdSeek: the narrow seek
+                // window alone leaves playback starving a few blocks later.
+                request_playback_audio_window(
+                    *source_manager_, *session_, to,
+                    playback_prefetch_window_frames(
+                        clock_ ? clock_->sample_rate() : 48000));
+            }
             clock_->seek(to);
             if (bungee_voices_ && seek_voice_map)
                 bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
@@ -1980,6 +2005,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         // freshly-published voices.
                         clock_->seek(target_frame);
                         if (mixer_) mixer_->trigger_crossfade();
+                        // The prearmed set carries voices, not audio blocks.
+                        // Without a wide read-ahead the jump lands instantly and
+                        // then starves a few blocks later, which sounds like the
+                        // jump itself was late. See the note in CmdSeek.
+                        if (source_manager_ && session_)
+                            request_playback_audio_window(
+                                *source_manager_, *session_, target_frame,
+                                playback_prefetch_window_frames(
+                                    clock_ ? clock_->sample_rate() : 48000));
                         prearmed_jumps_->prepare_all_targets_async(
                             session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.marker_id });
@@ -2047,6 +2081,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);
                         if (mixer_) mixer_->trigger_crossfade();
+                        // The prearmed set carries voices, not audio blocks.
+                        // Without a wide read-ahead the jump lands instantly and
+                        // then starves a few blocks later, which sounds like the
+                        // jump itself was late. See the note in CmdSeek.
+                        if (source_manager_ && session_)
+                            request_playback_audio_window(
+                                *source_manager_, *session_, target_frame,
+                                playback_prefetch_window_frames(
+                                    clock_ ? clock_->sample_rate() : 48000));
                         prearmed_jumps_->prepare_all_targets_async(
                             session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.region_id });
@@ -2112,6 +2155,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);
                         if (mixer_) mixer_->trigger_crossfade();
+                        // The prearmed set carries voices, not audio blocks.
+                        // Without a wide read-ahead the jump lands instantly and
+                        // then starves a few blocks later, which sounds like the
+                        // jump itself was late. See the note in CmdSeek.
+                        if (source_manager_ && session_)
+                            request_playback_audio_window(
+                                *source_manager_, *session_, target_frame,
+                                playback_prefetch_window_frames(
+                                    clock_ ? clock_->sample_rate() : 48000));
                         prearmed_jumps_->prepare_all_targets_async(
                             session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.song_id });
