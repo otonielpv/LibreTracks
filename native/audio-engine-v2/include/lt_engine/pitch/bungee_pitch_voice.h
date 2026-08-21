@@ -107,9 +107,20 @@ public:
     double latency_frames() const noexcept;
     int    alignment_compensation_frames(double pitch_scale) const noexcept;
 
-    // Convenience: true when the next render_block() should produce useful,
-    // timeline-aligned audio (i.e. latency has caught up). Equivalent to
-    // latency_frames() < epsilon.
+    // True once Bungee's analysis pipeline is full and the next render_block()
+    // will produce useful, timeline-aligned audio.
+    //
+    // This asks whether latency has CONVERGED, not whether it is small. The
+    // previous test — latency_frames() < max_input_frames — could never be
+    // satisfied: latency settles at 4864 frames at hop=-1 and 9728 at hop=0,
+    // while max_input_frames is one block times four (2048 at a 512-frame
+    // block). It returned false for the entire life of every voice, so the
+    // warm loops that consult it always ran to their frame budget instead of
+    // stopping when the voice was actually ready.
+    //
+    // Convergence is the property those callers want and it holds for any hop
+    // setting, so nothing here needs revisiting if the granularity changes.
+    // Latency reaches its resting value after roughly 2048 input frames.
     bool   is_warm() const noexcept;
 
     // ── Source cursor (mirrors the warp-aware advance model) ────────────

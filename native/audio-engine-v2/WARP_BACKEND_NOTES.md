@@ -37,6 +37,32 @@ On the 44.1 kHz sample, ratio `1.213`, 3 voices:
 `hop=-1` was the best standalone Bungee warp test: it had the lowest Bungee
 latency and was not audibly worse in the sample A/B.
 
+### Latency by hop, measured directly against the library
+
+Bungee 2.4.24 Basic, 44.1 kHz, measured with a standalone harness linked
+straight against `bungee.lib` rather than through the engine:
+
+| hop | latency | | stabilises after |
+|---|---:|---:|---:|
+| `0`  | 9728 frames | 220.6 ms | ~2048 input frames |
+| `-1` | 4864 frames | 110.3 ms | ~2048 input frames |
+
+Exactly a factor of two. That latency is the floor on how quickly a jump can
+speak, how much material a seek must prefeed, and how long the engine stays in
+an inconsistent state after a warp toggle.
+
+`BungeePitchVoice` shipped with `hop=0` for a period after the warp and pitch
+voices were merged into it — the argument was lost in the merge and the
+doubled latency went unnoticed because nothing tested it. `Warp[0]: the voice
+runs at the low-latency hop setting` now pins it.
+
+Related: `is_warm()` used to compare latency against `max_input_frames`
+(one block x 4). Since latency rests far above that at either hop, the
+predicate was false for every voice that ever existed, and the warm loops that
+consult it always ran to their frame budget instead of stopping on time. It now
+tests for latency *convergence*, which is what those callers want and which
+holds at any hop.
+
 ## Engine Integration
 
 `BungeeVoiceManager` owns one `BungeePitchVoice` per clip that needs pitch,

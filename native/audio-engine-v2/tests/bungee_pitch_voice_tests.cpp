@@ -364,5 +364,140 @@ TEST_CASE("Warp[0]: real WAV survives time-stretch without clipping (optional)")
     CHECK(worst_step < 0.9f); // catches obvious zipper/click artefacts
 }
 
-#endif // LT_ENGINE_HAVE_BUNGEE
 
+// Regression: the source cursor must advance by INPUT CONSUMED, never by
+// output delivered out of the queued FIFO.
+//
+// After a prearmed jump the voice reaches the audio thread with a primed
+// output FIFO. While that FIFO drains, track_renderer feeds nothing
+// (feed_frames == 0, because `queued >= frames_to_read`), yet render_block
+// used to advance the cursor by `delivered * ratio` regardless.
+//
+// The renderer derives its next read position as
+//     read_from = cursor + latency + compensation + queued * ratio
+// so while draining, the growing `cursor` and the shrinking `queued` cancel
+// exactly and read_from freezes. When the FIFO empties, the renderer re-feeds
+// from that frozen position and replays audio the primed FIFO already
+// emitted. Observed on a real 27-track session: read_from pinned at 8763264
+// for 8 blocks while the cursor advanced 3584 frames (~75 ms), heard as the
+// jump "doubling".
+//
+// This locks the contract documented on reset_source_cursor(): a render_block
+// that consumes no input must not move the cursor.
+TEST_CASE("Warp[0]: draining the FIFO does not advance the source cursor") {
+    // Oversize the input buffers: Bungee may consume more than one block per
+    // process() call (same headroom the ratio test above uses).
+    constexpr int kInputFrames = kBlockFrames * 2;
+    BungeePitchVoice voice;
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+
+    const auto sine  = make_sine(kInputFrames, 440.0);
+    const std::vector<float> zeros(static_cast<size_t>(kInputFrames), 0.0f);
+    std::vector<float> out_l(kBlockFrames, 0.f), out_r(kBlockFrames, 0.f);
+    const float* in_ptrs[2]   = { sine.data(), sine.data() };
+    const float* zero_ptrs[2] = { zeros.data(), zeros.data() };
+    float*       out_ptrs[2]  = { out_l.data(), out_r.data() };
+
+    // Warm with silence (see [[project-bungee-warm-voice]]). latency() — and
+    // therefore is_warm() — is only valid after the first process() call, so
+    // render first and test the condition afterwards.
+    for (int i = 0; i < 60; ++i) {
+        voice.render_block(zero_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0, 1.0);
+        if (voice.is_warm()) break;
+    }
+
+    // Prime the output FIFO the way the seek / prearm path does.
+    for (int i = 0; i < 32 && voice.queued_output_frames() < kBlockFrames * 2; ++i) {
+        if (voice.prime_output_fifo(in_ptrs, kBlockFrames, 1.0, 1.0) <= 0)
+            break;
+    }
+    REQUIRE(voice.queued_output_frames() >= kBlockFrames);
+
+    // Drain one block WITHOUT feeding — exactly what track_renderer does when
+    // `queued >= frames_to_read`.
+    const long long cursor_before = voice.source_cursor();
+    const int queued_before = voice.queued_output_frames();
+    const int produced = voice.render_block(in_ptrs, /*input_frames=*/0,
+                                            out_ptrs, kBlockFrames, 1.0, 1.0);
+    CHECK(produced == kBlockFrames);
+    CHECK(voice.queued_output_frames() == queued_before - kBlockFrames);
+    // No input consumed, so the cursor must not have moved.
+    CHECK(voice.source_cursor() == cursor_before);
+}
+
+
+// ---------------------------------------------------------------------------
+// is_warm() has to be answerable.
+//
+// It used to compare latency against max_input_frames, which is one block
+// times four -- 1920 here. Bungee's latency settles at 4864 frames at hop=-1
+// and 9728 at hop=0, so the comparison was false for the entire life of every
+// voice ever built. Nothing broke visibly: the three warm loops that consult
+// it simply ran to their frame budget every time instead of stopping when the
+// voice was ready, burning several times the necessary CPU on every seek,
+// jump and warp toggle -- precisely the work that widens the window in which
+// the transport clock runs away from the position a voice was built for.
+//
+// The predicate now asks whether latency has CONVERGED, which is the property
+// those callers actually want and which holds at any hop setting.
+// ---------------------------------------------------------------------------
+TEST_CASE("Warp[0]: is_warm() reports convergence and the warm loop can stop") {
+    BungeePitchVoice voice;
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+
+    const std::vector<float> zeros(static_cast<size_t>(kBlockFrames), 0.0f);
+    std::vector<float> out_l(kBlockFrames, 0.f), out_r(kBlockFrames, 0.f);
+    const float* in_ptrs[2]  = { zeros.data(), zeros.data() };
+    float*       out_ptrs[2] = { out_l.data(), out_r.data() };
+
+    CHECK_FALSE(voice.is_warm());  // nothing processed yet
+
+    int fed = 0;
+    const int budget = kSampleRate;  // one second: far more than convergence needs
+    while (fed < budget && !voice.is_warm()) {
+        voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0, 1.0);
+        fed += kBlockFrames;
+    }
+
+    // The whole point: it becomes true.
+    INFO("frames fed until warm = " << fed);
+    CHECK(voice.is_warm());
+    // Latency settles after ~2048 input frames. Generous headroom keeps this a
+    // guard against "never warms" rather than a brittle exact count.
+    CHECK(fed <= 8192);
+}
+
+// ---------------------------------------------------------------------------
+// The hop setting is a shipped configuration, so pin it.
+//
+// log2SynthesisHopAdjust = -1 halves the grain hop and with it the structural
+// latency. That number is the floor on how fast a jump can speak and how long
+// the engine stays inconsistent after a warp toggle, so a silent regression to
+// hop=0 doubles the cost of every discontinuity in the app. It has already
+// happened once, when the warp and pitch voices were merged into one class.
+// ---------------------------------------------------------------------------
+TEST_CASE("Warp[0]: the voice runs at the low-latency hop setting") {
+    BungeePitchVoice voice;
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
+
+    const std::vector<float> zeros(static_cast<size_t>(kBlockFrames), 0.0f);
+    std::vector<float> out_l(kBlockFrames, 0.f), out_r(kBlockFrames, 0.f);
+    const float* in_ptrs[2]  = { zeros.data(), zeros.data() };
+    float*       out_ptrs[2] = { out_l.data(), out_r.data() };
+
+    int fed = 0;
+    while (fed < kSampleRate && !voice.is_warm()) {
+        voice.render_block(in_ptrs, kBlockFrames, out_ptrs, kBlockFrames, 1.0, 1.0);
+        fed += kBlockFrames;
+    }
+    REQUIRE(voice.is_warm());
+
+    const double latency_ms = voice.latency_frames() * 1000.0 / kSampleRate;
+    INFO("latency = " << voice.latency_frames() << " frames (" << latency_ms << " ms)");
+    // hop=-1 measures ~110 ms; hop=0 measures ~221 ms. The band below accepts
+    // the former and rejects the latter with room for sample-rate differences.
+    CHECK(latency_ms > 60.0);
+    CHECK(latency_ms < 150.0);
+}
+
+#endif // LT_ENGINE_HAVE_BUNGEE

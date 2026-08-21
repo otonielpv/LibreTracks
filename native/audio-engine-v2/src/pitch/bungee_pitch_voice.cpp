@@ -48,6 +48,30 @@ struct BungeePitchVoice::Impl {
     int fade_total_frames = 0;
     int fade_frames_done = 0;
 
+    // Latency-convergence tracking for is_warm(). Bungee's latency climbs in
+    // steps as the analysis pipeline fills, then holds. Two consecutive
+    // readings at the same value mean it has settled.
+    double last_latency = -1.0;
+    int    latency_stable_blocks = 0;
+    bool   warm = false;
+
+    void observe_latency(double latency) noexcept {
+        // latency() is only meaningful once a grain has been synthesised;
+        // before that Stream::outputPosition() has no chunk to interpolate.
+        if (!(latency > 0.0)) {
+            last_latency = -1.0;
+            latency_stable_blocks = 0;
+            return;
+        }
+        if (last_latency >= 0.0 && std::abs(latency - last_latency) < 0.5)
+            ++latency_stable_blocks;
+        else
+            latency_stable_blocks = 0;
+        last_latency = latency;
+        if (latency_stable_blocks >= 2)
+            warm = true;
+    }
+
     int fifo_capacity_frames = 0;
     int fifo_read = 0;
     int fifo_size = 0;
@@ -154,8 +178,21 @@ bool BungeePitchVoice::configure(int sample_rate,
 
     try {
         Bungee::SampleRates rates{sample_rate, sample_rate};
+        // log2SynthesisHopAdjust = -1 halves the grain hop, which halves the
+        // structural latency. Measured against Bungee 2.4.24 Basic at 44.1 kHz:
+        //
+        //   hop =  0   9728 frames   220.6 ms
+        //   hop = -1   4864 frames   110.3 ms
+        //
+        // That latency is the floor on everything the user feels: how long a
+        // jump takes to speak, how much material a seek has to prefeed, how
+        // long the engine spends in an inconsistent state after a warp toggle.
+        // -1 is what WARP_BACKEND_NOTES.md documents and what shipped until the
+        // warp and pitch voices were merged into this class, where the argument
+        // was lost. -2 was tried and rejected: it is stable, but the quality
+        // cost on real transposed material was audible in an A/B.
         impl_->stretcher = std::make_unique<Impl::Stretcher>(
-            rates, channel_count, 0);
+            rates, channel_count, -1);
         impl_->stream = std::make_unique<Impl::Stream>(
             *impl_->stretcher, max_input_frames_per_block, channel_count);
 
@@ -207,7 +244,14 @@ int BungeePitchVoice::render_block(const float* const* input,
     int delivered = I.pop_fifo(output, 0, output_frames);
     I.apply_fade(output, 0, delivered);
     if (delivered >= output_frames) {
-        I.advance_source_cursor(static_cast<double>(delivered) * safe_ratio);
+        // Served entirely from the queued FIFO: no input was consumed, so the
+        // source cursor must NOT move. Advancing it here (by delivered*ratio)
+        // used to desync the cursor from Bungee's real input position while a
+        // prearmed FIFO drained. The renderer's read position
+        //   read_from = cursor + latency + compensation + queued*ratio
+        // then froze — the growing cursor and shrinking queue cancelled — and
+        // the re-feed after the drain replayed the primed span (~75 ms of
+        // doubled audio on every warp jump).
         return delivered;
     }
 
@@ -226,6 +270,7 @@ int BungeePitchVoice::render_block(const float* const* input,
         output_frames - delivered,
         I.max_in_frames,
         max_output_from_input});
+    int consumed_input = 0;
     if (process_frames > 0) {
         const int input_to_consume = std::min(
             input_frames,
@@ -237,13 +282,19 @@ int BungeePitchVoice::render_block(const float* const* input,
             input_to_consume,
             static_cast<double>(process_frames),
             pitch_scale);
+        consumed_input = input_to_consume;
+        I.observe_latency(I.stream->latency());
         I.push_fifo(produced);
         const int popped = I.pop_fifo(output, delivered, output_frames - delivered);
         I.apply_fade(output, delivered, popped);
         delivered += popped;
     }
 
-    I.advance_source_cursor(static_cast<double>(delivered) * safe_ratio);
+    // The cursor lives in SOURCE-frame units and tracks what Bungee actually
+    // consumed, not what we handed the caller — see reset_source_cursor()'s
+    // contract. Output popped from the FIFO was already paid for by an earlier
+    // process() call, so counting it again double-advances the cursor.
+    I.advance_source_cursor(static_cast<double>(consumed_input));
 
     return delivered;
 }
@@ -306,8 +357,7 @@ int BungeePitchVoice::alignment_compensation_frames(double pitch_scale) const no
 }
 
 bool BungeePitchVoice::is_warm() const noexcept {
-    if (!impl_ || !impl_->stream) return false;
-    return impl_->stream->latency() < static_cast<double>(impl_->max_in_frames);
+    return impl_ && impl_->warm;
 }
 
 void BungeePitchVoice::arm_fade_in(int fade_ms) noexcept {
