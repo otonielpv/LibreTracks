@@ -1132,6 +1132,8 @@ const en = {
     monitor: "Monitor",
     extOutMono: "Out {{channel}}",
     extOutStereo: "Out {{left}}/{{right}}",
+    hiddenCount_one: "{{count}} track hidden",
+    hiddenCount_other: "{{count}} tracks hidden",
     laneFolderEmpty: "Empty folder",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",

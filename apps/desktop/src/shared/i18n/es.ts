@@ -1163,6 +1163,8 @@ const es = {
     monitor: "Monitor",
     extOutMono: "Out {{channel}}",
     extOutStereo: "Out {{left}}/{{right}}",
+    hiddenCount_one: "{{count}} pista oculta",
+    hiddenCount_other: "{{count}} pistas ocultas",
     laneFolderEmpty: "Carpeta vacia",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",

@@ -73,6 +73,13 @@ type CompactMixerProps = {
    * the parent so the toggle UI can live in the TimelineToolbar
    * instead of stealing strip-band space. */
   filterActiveSong: boolean;
+  /** Folder track ids the user has folded. Shared with the DAW track
+   * header (same set, same toggle) so a folder folded in one view is
+   * folded in the other. */
+  collapsedFolders: Set<string>;
+  /** Fold / unfold a folder. Same handler the DAW header uses, so the
+   * collapsed flag is persisted to the song by one implementation. */
+  onToggleFolder: (trackId: string) => void;
 } & CompactMixerProps_DragSelection;
 
 /** Default colour applied to a track strip when track.color is null, the
@@ -94,9 +101,45 @@ export function resolveVisibleTracks(
   tracks: TrackSummary[],
   activeSongTrackIds: Set<string> | null,
   filterActiveSong: boolean,
+  collapsedFolders: Set<string> = EMPTY_COLLAPSED,
 ): TrackSummary[] {
-  if (!filterActiveSong || !activeSongTrackIds) return tracks;
+  return resolveMixerRows(
+    tracks,
+    activeSongTrackIds,
+    filterActiveSong,
+    collapsedFolders,
+  ).tracks;
+}
 
+/**
+ * The strips to render, plus how many strips each collapsed folder is hiding.
+ *
+ * The count is what the folded folder reports on its face ("3 pistas"), so it
+ * counts strips the user would actually get back by unfolding: descendants at
+ * any depth, and only those that survived the active-song filter. Deriving it
+ * from the same walk that hides them is what keeps the two in agreement — a
+ * separate "children of this folder" count would over-report as soon as the
+ * song filter dropped one, or under-report on a nested folder.
+ */
+export function resolveMixerRows(
+  tracks: TrackSummary[],
+  activeSongTrackIds: Set<string> | null,
+  filterActiveSong: boolean,
+  collapsedFolders: Set<string> = EMPTY_COLLAPSED,
+): { tracks: TrackSummary[]; hiddenCountByFolderId: Map<string, number> } {
+  const songFiltered = filterActiveSong && activeSongTrackIds
+    ? filterToActiveSong(tracks, activeSongTrackIds)
+    : tracks;
+
+  return hideCollapsedDescendants(songFiltered, collapsedFolders);
+}
+
+const EMPTY_COLLAPSED: Set<string> = new Set();
+
+function filterToActiveSong(
+  tracks: TrackSummary[],
+  activeSongTrackIds: Set<string>,
+): TrackSummary[] {
   const byId = new Map(tracks.map((track) => [track.id, track]));
   const visibleIds = new Set<string>(activeSongTrackIds);
   for (const id of activeSongTrackIds) {
@@ -111,6 +154,49 @@ export function resolveVisibleTracks(
   return tracks.filter((track) => visibleIds.has(track.id));
 }
 
+/**
+ * Drops every descendant of a collapsed folder, at any depth. Mirrors the
+ * arrangement's buildVisibleTracks(): a child is visible only when its parent
+ * is both visible and expanded, so folding a top-level folder also folds the
+ * sub-folders nested inside it.
+ *
+ * Unlike the arrangement, the list handed to the mixer can already be a subset
+ * (the active-song filter above may have removed a strip), so visibility is
+ * resolved against the full ancestor chain rather than the previous row.
+ */
+function hideCollapsedDescendants(
+  tracks: TrackSummary[],
+  collapsedFolders: Set<string>,
+): { tracks: TrackSummary[]; hiddenCountByFolderId: Map<string, number> } {
+  const hiddenCountByFolderId = new Map<string, number>();
+  if (collapsedFolders.size === 0) {
+    return { tracks, hiddenCountByFolderId };
+  }
+
+  const byId = new Map(tracks.map((track) => [track.id, track]));
+  const visible = tracks.filter((track) => {
+    let current = byId.get(track.parentTrackId ?? "");
+    const seen = new Set<string>([track.id]);
+    // The OUTERMOST collapsed ancestor is the one whose face the user reads,
+    // so keep walking past an inner fold and credit the hidden strip there.
+    let hiddenBy: string | null = null;
+    while (current) {
+      if (collapsedFolders.has(current.id)) hiddenBy = current.id;
+      if (seen.has(current.id)) break; // defensive: parent cycle
+      seen.add(current.id);
+      current = byId.get(current.parentTrackId ?? "");
+    }
+    if (!hiddenBy) return true;
+    hiddenCountByFolderId.set(
+      hiddenBy,
+      (hiddenCountByFolderId.get(hiddenBy) ?? 0) + 1,
+    );
+    return false;
+  });
+
+  return { tracks: visible, hiddenCountByFolderId };
+}
+
 function CompactMixerComponent({
   tracks,
   audioRoutingOptions,
@@ -121,6 +207,8 @@ function CompactMixerComponent({
   onTrackDragStart,
   activeSongTrackIds,
   filterActiveSong,
+  collapsedFolders,
+  onToggleFolder,
 }: CompactMixerProps) {
   // Build a (childTrackId → parent colour / parent name) lookup once so each
   // strip can render its Reaper-style folder cue (a thin coloured ribbon on
@@ -146,9 +234,15 @@ function CompactMixerComponent({
   // PLUS every ancestor folder of those tracks (so the parent hierarchy
   // remains visible and a child doesn't appear orphaned). When the
   // filter is off, or no song is active, show everything as before.
-  const visibleTracks = useMemo(
-    () => resolveVisibleTracks(tracks, activeSongTrackIds, filterActiveSong),
-    [filterActiveSong, activeSongTrackIds, tracks],
+  const { tracks: visibleTracks, hiddenCountByFolderId } = useMemo(
+    () =>
+      resolveMixerRows(
+        tracks,
+        activeSongTrackIds,
+        filterActiveSong,
+        collapsedFolders,
+      ),
+    [collapsedFolders, filterActiveSong, activeSongTrackIds, tracks],
   );
 
   return (
@@ -165,6 +259,9 @@ function CompactMixerComponent({
             isSelected={selectedTrackIds.includes(track.id)}
             onSelect={onTrackSelect}
             onDragStart={onTrackDragStart}
+            isCollapsed={collapsedFolders.has(track.id)}
+            hiddenChildCount={hiddenCountByFolderId.get(track.id) ?? 0}
+            onToggleFolder={onToggleFolder}
           />
         ))}
       </div>
@@ -223,6 +320,12 @@ type CompactMixerStripProps = {
     event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
+  /** Only meaningful on a folder strip: whether its children are folded. */
+  isCollapsed: boolean;
+  /** Strips this folder is currently hiding — shown on its face while
+   * folded so the user knows what unfolding gives back. 0 when expanded. */
+  hiddenChildCount: number;
+  onToggleFolder: (trackId: string) => void;
 };
 
 // Snap thresholds: when the slider lands within this fraction of the
@@ -260,6 +363,9 @@ function CompactMixerStripComponent({
   isSelected,
   onSelect,
   onDragStart,
+  isCollapsed,
+  hiddenChildCount,
+  onToggleFolder,
 }: CompactMixerStripProps) {
   const { t } = useTranslation();
   const isFolder = track.kind === "folder";
@@ -399,7 +505,9 @@ function CompactMixerStripComponent({
     <div
       className={`lt-compact-mixer-strip ${
         isFolder ? "is-folder" : ""
-      } ${parentInfo ? "is-child" : ""} ${isSelected ? "is-selected" : ""}`}
+      } ${isFolder && isCollapsed ? "is-folded" : ""} ${
+        parentInfo ? "is-child" : ""
+      } ${isSelected ? "is-selected" : ""}`}
       data-track-id={track.id}
       style={
         {
@@ -424,15 +532,60 @@ function CompactMixerStripComponent({
         data-strip-noninteractive=""
       >
         {isFolder ? (
-          <span
-            className="lt-compact-mixer-folder-icon material-symbols-outlined"
-            aria-hidden="true"
+          // Ableton-style disclosure triangle: the control is the chevron,
+          // and the direction of its point states expanded vs folded. The
+          // folder icon next to it stays decorative — an icon that only
+          // identifies the row type reads as a label, not a button.
+          <button
+            type="button"
+            className="lt-compact-mixer-fold material-symbols-outlined"
+            aria-expanded={!isCollapsed}
+            aria-label={
+              isCollapsed
+                ? t("trackHeader.expand", { name: track.name })
+                : t("trackHeader.collapse", { name: track.name })
+            }
+            title={
+              isCollapsed
+                ? t("trackHeader.expand", { name: track.name })
+                : t("trackHeader.collapse", { name: track.name })
+            }
+            // The button sits inside the name band, which is the strip's
+            // drag handle — without stopping mousedown, pressing the chevron
+            // would arm a reorder drag instead of folding.
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFolder(track.id);
+            }}
           >
-            folder
-          </span>
+            {isCollapsed ? "chevron_right" : "expand_more"}
+          </button>
         ) : null}
+        {/* No folder icon beside the chevron: the strip is only 6.5rem wide,
+            and .is-folder already gives it its own background and thicker
+            accent. Two glyphs would crowd out the name for no added meaning. */}
         <span className="lt-compact-mixer-strip-name-text">{track.name}</span>
       </div>
+      {isFolder && isCollapsed ? (
+        // Takes the slot the "↳ Parent" hint uses on child strips, so a
+        // folded folder gains this line instead of the strip changing height.
+        <button
+          type="button"
+          className="lt-compact-mixer-strip-hidden-count"
+          // No aria-label: its own text ("3 pistas ocultas") is the better
+          // announcement, and reusing the chevron's label would put two
+          // identically-named controls on the same strip.
+          title={t("trackHeader.expand", { name: track.name })}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFolder(track.id);
+          }}
+        >
+          {t("trackHeader.hiddenCount", { count: hiddenChildCount })}
+        </button>
+      ) : null}
       {parentInfo ? (
         <div
           className="lt-compact-mixer-strip-parent"

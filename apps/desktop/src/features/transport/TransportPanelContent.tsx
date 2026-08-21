@@ -7906,6 +7906,8 @@ export function TransportPanelContent() {
                       compactMixerFilterActiveSong={
                         compactMixerFilterActiveSong
                       }
+                      collapsedFolders={collapsedFolders}
+                      onToggleFolder={handleTrackHeaderFolderToggle}
                     />
                   ) : null}
 

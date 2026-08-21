@@ -135,6 +135,12 @@ type CompactViewProps = {
    * Owned by the project-wide parent so the toggle UI can live in
    * the TimelineToolbar without lifting more wiring than necessary. */
   compactMixerFilterActiveSong: boolean;
+  /** Folder track ids the user has folded. Shared with the DAW track
+   * header so folding a folder in either view folds it in both. */
+  collapsedFolders: Set<string>;
+  /** Fold / unfold a folder — the DAW header's own handler, which also
+   * persists the flag to the song. */
+  onToggleFolder: (trackId: string) => void;
   /** Fired when the user wants to commit the master gain for a region. */
   onMasterGainChange: (regionId: string, gain: number) => void;
   onMasterGainCommit: (regionId: string) => void;
@@ -272,6 +278,8 @@ function CompactViewComponent({
   selectedRegionId,
   onSelectRegion,
   compactMixerFilterActiveSong,
+  collapsedFolders,
+  onToggleFolder,
 }: CompactViewProps) {
   const isPackageDragOver = dragPreview?.isPackage === true;
 
@@ -481,6 +489,8 @@ function CompactViewComponent({
           onTrackDragStart={onTrackDragStart}
           activeSongTrackIds={activeSongTrackIds}
           filterActiveSong={compactMixerFilterActiveSong}
+          collapsedFolders={collapsedFolders}
+          onToggleFolder={onToggleFolder}
         />
       ) : null}
     </div>
