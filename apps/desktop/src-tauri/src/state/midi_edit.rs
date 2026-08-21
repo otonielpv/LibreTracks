@@ -248,6 +248,8 @@ impl DesktopSession {
             super::AudioChangeImpact::MixerOnly,
             false,
             true,
+            // History is recorded by the callers; the clips themselves are final.
+            super::UpdatePhase::Commit,
         )?;
         self.reset_midi_cursor(self.engine.position_seconds());
         Ok(self.snapshot())

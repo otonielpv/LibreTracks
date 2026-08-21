@@ -2145,7 +2145,14 @@ impl DesktopSession {
         impact: AudioChangeImpact,
         bump_revision: bool,
     ) -> Result<(), DesktopError> {
-        self.persist_song_update_internal(song, audio, impact, true, bump_revision)
+        self.persist_song_update_internal(
+            song,
+            audio,
+            impact,
+            true,
+            bump_revision,
+            UpdatePhase::Commit,
+        )
     }
 
     pub(super) fn persist_song_update_internal(
@@ -2155,6 +2162,7 @@ impl DesktopSession {
         impact: AudioChangeImpact,
         record_history: bool,
         bump_revision: bool,
+        phase: UpdatePhase,
     ) -> Result<(), DesktopError> {
         self.sync_position(audio)?;
 
@@ -2211,11 +2219,27 @@ impl DesktopSession {
             AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
                 if playback_state == PlaybackState::Playing {
                     if impact == AudioChangeImpact::TimelineWindow {
-                        // record_history=false marks an IN-PROGRESS drag (the
-                        // _live_ variants); the commit records history. Pass that
-                        // through as `live` so the engine defers the warp
-                        // hard-retime to the drop (avoids the per-tick "trrrr").
-                        audio.update_live_timeline_window(&song, !record_history)?;
+                        // The engine defers its warp hard-retime while a gesture
+                        // is still in progress, because doing it per tick of a
+                        // drag buzzes. That decision belongs to the caller, which
+                        // is the only thing that knows whether more updates are
+                        // coming for the same gesture.
+                        //
+                        // This used to be `!record_history`, i.e. inferred from
+                        // whether an undo entry was being written. Those are
+                        // different questions, and three callers answered the
+                        // wrong one: undo/redo, the MIDI clip commit, and the
+                        // warp toggle all skip history for their own reasons and
+                        // were therefore taken for drags in progress. For the
+                        // warp toggle that was the bug behind "the click
+                        // desyncs the moment I turn warp on": the session and
+                        // the transport moved to the warped geometry while the
+                        // voices were left on the old mapping, and nothing came
+                        // afterwards to correct them.
+                        audio.update_live_timeline_window(
+                            &song,
+                            phase == UpdatePhase::Preview,
+                        )?;
                     } else {
                         // Structural edits (add/remove/move tracks & clips,
                         // import audio) go through the INCREMENTAL upsert command
@@ -3094,6 +3118,27 @@ pub(super) enum AudioChangeImpact {
     TimelineWindow,
     /// Sources added/removed, tracks added/deleted. Always triggers full source reload.
     StructureRebuild,
+}
+
+/// Whether a song update is the final word on an edit, or one frame of a
+/// gesture that is still happening.
+///
+/// The engine treats these differently: on a `Preview` it leaves Bungee voices
+/// whose clip mapping moved exactly where they are, because re-anchoring them
+/// on every tick of a drag is audible as a buzz; on a `Commit` it repositions
+/// them once, cleanly.
+///
+/// This used to be inferred from whether the update wrote an undo entry, which
+/// is a different question with a different answer. Undo/redo, the MIDI clip
+/// commit and the warp toggle all skip history deliberately and were therefore
+/// all mistaken for drags in progress — so the voices were never repositioned
+/// and the engine was left holding the pre-edit mapping for good.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum UpdatePhase {
+    /// More updates are coming for this same gesture.
+    Preview,
+    /// The edit is settled.
+    Commit,
 }
 
 pub(super) fn build_empty_song(song_id: String, title: String) -> Song {

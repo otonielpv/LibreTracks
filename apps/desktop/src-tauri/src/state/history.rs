@@ -12,7 +12,7 @@ use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 
 use super::{
-    AudioChangeImpact, DesktopSession, TransposeHistoryGroup, TransposeHistoryTarget,
+    AudioChangeImpact, DesktopSession, TransposeHistoryGroup, TransposeHistoryTarget, UpdatePhase,
     MAX_TRACK_GAIN,
 };
 
@@ -136,6 +136,9 @@ impl DesktopSession {
             AudioChangeImpact::StructureRebuild,
             false,
             true,
+            // Undo/redo skips history because it IS the history; the resulting
+            // state is settled, not a gesture in progress.
+            UpdatePhase::Commit,
         )?;
 
         Ok(self.snapshot())
@@ -167,6 +170,9 @@ impl DesktopSession {
             AudioChangeImpact::StructureRebuild,
             false,
             true,
+            // Undo/redo skips history because it IS the history; the resulting
+            // state is settled, not a gesture in progress.
+            UpdatePhase::Commit,
         )?;
 
         Ok(self.snapshot())

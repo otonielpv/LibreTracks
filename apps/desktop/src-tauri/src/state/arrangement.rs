@@ -17,6 +17,7 @@ use super::{
     normalize_timeline_start_seconds, normalize_ui_color, prune_auto_created_empty_tracks,
     prune_empty_regions, refresh_song_duration, reparent_track, timestamp_suffix, ui_locale,
     validate_clip_window, AudioChangeImpact, ClipMoveRequest, CreateAudioTrackWithClipRequest,
+    UpdatePhase,
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession,
 };
 
@@ -114,6 +115,8 @@ impl DesktopSession {
             AudioChangeImpact::TimelineWindow,
             false,
             false,
+            // A clip drag in progress: more ticks are coming for this gesture.
+            UpdatePhase::Preview,
         )?;
 
         Ok(())
@@ -172,6 +175,8 @@ impl DesktopSession {
             AudioChangeImpact::TimelineWindow,
             false,
             false,
+            // A clip drag in progress: more ticks are coming for this gesture.
+            UpdatePhase::Preview,
         )?;
 
         Ok(())

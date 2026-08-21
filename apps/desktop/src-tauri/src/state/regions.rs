@@ -20,6 +20,7 @@ use super::{
     set_song_tempo_at_source_position, shift_song_suffix, snap_regions_after_to_downbeats,
     song_has_active_warp, sort_song_regions, split_clips_crossing_point, timestamp_suffix,
     ui_locale, validate_time_signature, AudioChangeImpact, DesktopSession, TransposeHistoryTarget,
+    UpdatePhase,
 };
 
 impl DesktopSession {
@@ -669,12 +670,19 @@ impl DesktopSession {
         // on the next audio block. Persist as a timeline change because warp
         // also remaps clip/region lengths in the runtime timeline.
         audio.update_live_region_warp(region_id, warp_enabled, live_warp_source_bpm)?;
+        // Commit, not preview. Toggling warp is a single decision, and the
+        // geometry published here is its final form: clip, region and marker
+        // positions all remapped by the new ratio. Sending it as a preview left
+        // the engine's voices on the pre-warp mapping while the transport moved
+        // to the warped one, which is what the click desyncing from the tracks
+        // actually was.
         self.persist_song_update_internal(
             song,
             audio,
             AudioChangeImpact::TimelineWindow,
             false,
             true,
+            UpdatePhase::Commit,
         )?;
 
         Ok(self.snapshot())
@@ -837,6 +845,15 @@ impl DesktopSession {
                 AudioChangeImpact::TimelineWindow,
                 record_history,
                 true,
+                // Here `record_history` really does track the gesture: it is
+                // false while the transpose stepper is being dragged and true
+                // when it settles, because history coalesces a run of steps
+                // into one entry.
+                if record_history {
+                    UpdatePhase::Commit
+                } else {
+                    UpdatePhase::Preview
+                },
             )?;
         } else {
             // Warp absorbs duration, so region transpose is pitch-only.
@@ -847,6 +864,11 @@ impl DesktopSession {
                 AudioChangeImpact::MixerOnly,
                 record_history,
                 true,
+                if record_history {
+                    UpdatePhase::Commit
+                } else {
+                    UpdatePhase::Preview
+                },
             )?;
         }
         audio.record_commit_pitch();
@@ -919,6 +941,11 @@ impl DesktopSession {
             AudioChangeImpact::MixerOnly,
             record_history,
             true,
+            if record_history {
+                UpdatePhase::Commit
+            } else {
+                UpdatePhase::Preview
+            },
         )?;
         self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
         self.last_source_readiness = Some(audio.source_readiness_summary());
