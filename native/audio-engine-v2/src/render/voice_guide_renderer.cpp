@@ -601,6 +601,17 @@ void VoiceGuideRenderer::render(float** output_channels,
                     (jump_target.active && jump_target.at_frame > abs_frame)
                         ? jump_target.at_frame
                         : -1;
+                // Playback never proceeds past a pending jump's trigger frame —
+                // the jump fires there and takes the playhead elsewhere. Markers
+                // beyond that horizon are unreachable and must not be announced
+                // or reported. Unlike `jump_frame`, this stays valid on the
+                // trigger frame itself, so the last block before the jump does
+                // not briefly "see" the section after the loop. This is the vamp
+                // bug: vamping on "Bridge" spoke the "Verse" that follows it.
+                const Frame reachable_horizon =
+                    jump_target.active ? jump_target.at_frame : -1;
+                const bool marker_unreachable =
+                    reachable_horizon >= 0 && marker_frame > reachable_horizon;
 
                 // Fire (section + count) for one target downbeat. Each beat-frame
                 // guard keys off the absolute frame, so distinct targets that
@@ -732,7 +743,8 @@ void VoiceGuideRenderer::render(float** output_channels,
                     soonest = jump_frame;
                     soonest_kind = jump_target.kind;
                 }
-                if (marker_frame > abs_frame && (soonest < 0 || marker_frame < soonest)) {
+                if (marker_frame > abs_frame && !marker_unreachable
+                    && (soonest < 0 || marker_frame < soonest)) {
                     soonest = marker_frame;
                     soonest_kind = marker->kind;
                 }
@@ -756,7 +768,10 @@ void VoiceGuideRenderer::render(float** output_channels,
                     announce_target(jump_frame, jump_target.kind, jump_target.variant,
                                     jump_dest, /*is_jump=*/true);
                 }
-                if (marker && marker_frame > abs_frame && marker_frame != jump_frame) {
+                // `marker_unreachable` (above) gates out the section that sits
+                // past the jump — announcing it is the vamp bug.
+                if (marker && marker_frame > abs_frame && marker_frame != jump_frame
+                    && !marker_unreachable) {
                     announce_target(marker_frame, marker->kind, marker->variant,
                                     marker_frame, /*is_jump=*/false);
                 }

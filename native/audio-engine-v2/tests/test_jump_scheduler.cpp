@@ -342,6 +342,97 @@ TEST_CASE("at-frame trigger fires at trigger frame and resolves separate target"
     CHECK(due->trigger_frame == 96000);
 }
 
+// ── peek_announceable_jump ───────────────────────────────────────────────────
+
+// A song with two section markers: Bridge at 4s and Verse at 12s (48k).
+static Session make_session_with_sections() {
+    Session sess;
+    sess.id = "s"; sess.sample_rate = 48000;
+    Song song; song.id = "song-1"; song.start_frame = 0; song.end_frame = 960000; song.name = "S";
+    Marker bridge; bridge.id = "m-bridge"; bridge.name = "Bridge";
+    bridge.kind = MarkerKind::Bridge; bridge.frame = 192000;
+    Marker verse; verse.id = "m-verse"; verse.name = "Verse";
+    verse.kind = MarkerKind::Verse; verse.frame = 576000;
+    song.markers.push_back(bridge);
+    song.markers.push_back(verse);
+    sess.songs.push_back(std::move(song));
+    return sess;
+}
+
+TEST_CASE("vamp loop jump (Frame target) is announceable as its section") {
+    // The vamp schedules a Frame-target jump back to the loop start. The voice
+    // guide needs the SECTION SITTING ON THAT FRAME so it announces the section
+    // being vamped ("Bridge") instead of whatever follows the loop.
+    TransportClock clock(48000);
+    auto sess = make_session_with_sections();
+    JumpScheduler sched;
+    clock.seek(240000); // inside the vamped bridge
+    clock.play();
+
+    ScheduledJump jump;
+    jump.jump_id = "__lt_vamp_loop__";
+    jump.target = frame_target(192000);      // loop start = Bridge marker
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = 480000;             // loop end
+    sched.schedule(jump);
+    sched.drain_pending();
+
+    auto announce = sched.peek_announceable_jump(sess, clock);
+    REQUIRE(announce.has_value());
+    CHECK(announce->has_marker_target);
+    CHECK(announce->target_kind == MarkerKind::Bridge);
+    CHECK(announce->trigger_frame == 480000);
+    CHECK(announce->target_frame == 192000);
+}
+
+TEST_CASE("a Frame target landing on no section is not announceable") {
+    // A frame-target jump into empty timeline (an automation cue to a bare
+    // position) has no name to speak, so it must not claim a marker target.
+    TransportClock clock(48000);
+    auto sess = make_session_with_sections();
+    JumpScheduler sched;
+    clock.seek(240000);
+    clock.play();
+
+    ScheduledJump jump;
+    jump.jump_id = "j-frame";
+    jump.target = frame_target(384000);   // nowhere near a marker
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = 480000;
+    sched.schedule(jump);
+    sched.drain_pending();
+
+    auto announce = sched.peek_announceable_jump(sess, clock);
+    REQUIRE(announce.has_value());
+    CHECK_FALSE(announce->has_marker_target);
+}
+
+TEST_CASE("a Frame target slightly off the marker frame still resolves it") {
+    // The vamp's destination frame comes from a seconds->frames conversion, so
+    // it can land a few samples off the marker's own frame.
+    TransportClock clock(48000);
+    auto sess = make_session_with_sections();
+    JumpScheduler sched;
+    clock.seek(240000);
+    clock.play();
+
+    ScheduledJump jump;
+    jump.jump_id = "__lt_vamp_loop__";
+    jump.target = frame_target(192000 + 37);
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = 480000;
+    sched.schedule(jump);
+    sched.drain_pending();
+
+    auto announce = sched.peek_announceable_jump(sess, clock);
+    REQUIRE(announce.has_value());
+    CHECK(announce->has_marker_target);
+    CHECK(announce->target_kind == MarkerKind::Bridge);
+}
+
 TEST_CASE("at-frame due jump carries prepared voice map payload") {
     TransportClock clock(48000);
     auto sess = make_session_with_marker();

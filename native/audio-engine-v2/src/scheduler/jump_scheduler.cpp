@@ -32,6 +32,34 @@ bool jump_debug_enabled() {
     return on;
 }
 
+// Resolve the section marker sitting on `frame`, for announcing a jump whose
+// destination is expressed as a raw frame rather than a marker id (the vamp
+// loop). The frame comes from a seconds→frames conversion of the section's
+// start, so it can land a hair off the marker's own frame; accept the nearest
+// section marker within a small window and prefer an exact hit.
+//
+// Cue markers and Custom (no recording) are skipped, mirroring the voice
+// guide's own upcoming_marker(): the vamped section's name is what we want.
+constexpr Frame kFrameTargetMarkerTolerance = 4800;  // ~100ms at 48kHz
+
+const Marker* section_marker_at_frame(const Session& session, Frame frame) noexcept {
+    const Marker* best = nullptr;
+    Frame best_distance = 0;
+    for (const auto& song : session.songs) {
+        for (const auto& m : song.markers) {
+            if (m.kind == MarkerKind::Custom) continue;
+            if (m.is_cue()) continue;
+            const Frame distance = m.frame > frame ? m.frame - frame : frame - m.frame;
+            if (distance > kFrameTargetMarkerTolerance) continue;
+            if (!best || distance < best_distance) {
+                best = &m;
+                best_distance = distance;
+            }
+        }
+    }
+    return best;
+}
+
 const char* trigger_name(JumpTrigger trigger) noexcept {
     switch (trigger) {
         case JumpTrigger::Immediate: return "Immediate";
@@ -381,8 +409,13 @@ std::optional<AnnounceableJump> JumpScheduler::peek_announceable_jump(
     for (const auto& j : impl_->jumps) {
         if (j.status != JumpStatus::Pending && j.status != JumpStatus::Armed)
             continue;
-        if (j.target.kind != JumpTarget::Kind::Marker)
-            continue;  // only marker destinations are announced
+        // Marker destinations are announced by id; frame destinations (the vamp
+        // loop schedules one at the section's start frame) are announced by
+        // resolving whatever section marker sits on that frame. Other kinds
+        // (region/song/next/previous) have no section name to speak.
+        if (j.target.kind != JumpTarget::Kind::Marker &&
+            j.target.kind != JumpTarget::Kind::Frame)
+            continue;
 
         // Resolve the trigger frame ahead of time. Immediate jumps have no lead
         // time, so they are not announceable.
@@ -409,12 +442,17 @@ std::optional<AnnounceableJump> JumpScheduler::peek_announceable_jump(
         }
         if (trigger_frame <= cur) continue;  // already past or unresolved
 
-        // Find the destination marker to read its kind/variant.
+        // Find the destination marker to read its kind/variant. A Marker target
+        // names it by id; a Frame target (vamp loop) is matched by position —
+        // the section marker landed on, which is the section being vamped.
         const Marker* dest = nullptr;
-        if (j.target.id)
+        if (j.target.kind == JumpTarget::Kind::Marker && j.target.id) {
             for (const auto& song : session.songs)
                 for (const auto& m : song.markers)
                     if (m.id == *j.target.id) { dest = &m; break; }
+        } else if (j.target.kind == JumpTarget::Kind::Frame && j.target.frame) {
+            dest = section_marker_at_frame(session, *j.target.frame);
+        }
 
         AnnounceableJump candidate;
         candidate.trigger_frame = trigger_frame;

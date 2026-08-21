@@ -462,6 +462,65 @@ TEST_CASE("a jump to a region (Custom kind) leaves earlier markers announced") {
     CHECK(diag.counts_fired == 8);        // marker count (4) + jump count (4)
 }
 
+TEST_CASE("vamp: the marker after the loop is not announced during the vamp") {
+    // Reported bug: vamping on "Bridge" made the guide speak "Verse" — the
+    // section that follows the loop — because the linear next-marker path
+    // announced it even though the vamp jump fires first and never lets the
+    // playhead reach it.
+    //
+    // Layout: Bridge marker at 4s, Verse marker at 12s. The vamp loops
+    // [4s, 10s), so its jump triggers at 10s and lands back on the Bridge.
+    // The Verse at 12s is unreachable and must stay silent.
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    auto session = make_session(MarkerKind::Bridge, 4.0);
+    Marker verse;
+    verse.id = "m2";
+    verse.name = "Verse";
+    verse.kind = MarkerKind::Verse;
+    verse.frame = static_cast<Frame>(kSampleRate) * 12;
+    session.songs[0].markers.push_back(verse);
+
+    VoiceGuideTarget vamp;
+    vamp.active = true;
+    vamp.at_frame = static_cast<Frame>(kSampleRate) * 10;         // loop end (trigger)
+    vamp.destination_frame = static_cast<Frame>(kSampleRate) * 4; // loop start (Bridge)
+    vamp.kind = MarkerKind::Bridge;
+    auto ch = render_all(r, session, kSampleRate * 11, 1024, vamp);
+    auto diag = r.diagnostics();
+    // Two announcements only: the Bridge at 4s (linear, before the trigger) and
+    // the Bridge again for the vamp wrap at 10s. The Verse never speaks.
+    CHECK(diag.announcements_fired == 2);
+    CHECK(diag.counts_fired == 8); // 4 for the linear Bridge + 4 for the wrap
+
+    // And the "upcoming marker" readout, sampled mid-vamp (at 8s, while the loop
+    // jump is still pending), must name the vamped section rather than the Verse
+    // sitting past the loop.
+    VoiceGuideRenderer r2;
+    r2.set_clip_bank(make_marked_bank());
+    r2.set_config({true, 1.0f, "monitor", 1, true});
+    render_all(r2, session, kSampleRate * 8, 1024, vamp);
+    CHECK(r2.diagnostics().next_marker_kind == std::string("bridge"));
+}
+
+TEST_CASE("a marker before the jump trigger is still announced during a vamp") {
+    // Guard the other side of the unreachable-marker rule: a marker the playhead
+    // DOES cross before the jump fires keeps its announcement.
+    VoiceGuideRenderer r;
+    r.set_clip_bank(make_marked_bank());
+    r.set_config({true, 1.0f, "monitor", 1, true});
+    auto session = make_session(MarkerKind::Chorus, 4.0);
+    VoiceGuideTarget vamp;
+    vamp.active = true;
+    vamp.at_frame = static_cast<Frame>(kSampleRate) * 10;
+    vamp.destination_frame = static_cast<Frame>(kSampleRate) * 2;
+    vamp.kind = MarkerKind::Bridge;
+    auto ch = render_all(r, session, kSampleRate * 11, 1024, vamp);
+    auto diag = r.diagnostics();
+    CHECK(diag.announcements_fired == 2); // the Chorus at 4s + the vamp wrap
+}
+
 TEST_CASE("a jump landing on the same frame as a marker fires once, not twice") {
     VoiceGuideRenderer r;
     r.set_clip_bank(make_marked_bank());
