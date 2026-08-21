@@ -1793,10 +1793,26 @@ impl DesktopSession {
         )?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
+            // Timing breakdown for "the jump is not instant". Everything here
+            // runs before the command returns, and the transport does not move
+            // until reposition_audio's seek has completed inside the engine, so
+            // this brackets what the user waits through after the click.
+            let jump_t0 = std::time::Instant::now();
             self.cancel_native_scheduled_jumps(audio)?;
+            let t_cancel = jump_t0.elapsed();
             if was_playing {
                 audio.start_master_fade(1.0, 0.0)?;
+                let t_fade = jump_t0.elapsed();
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
+                if jump_debug_logging_enabled() {
+                    eprintln!(
+                        "[LT_JUMP_DEBUG][rust-command] marker_jump_breakdown cancel_ms={:.2} fade_ms={:.2} reposition_ms={:.2} total_ms={:.2}",
+                        t_cancel.as_secs_f64() * 1000.0,
+                        (t_fade - t_cancel).as_secs_f64() * 1000.0,
+                        (jump_t0.elapsed() - t_fade).as_secs_f64() * 1000.0,
+                        jump_t0.elapsed().as_secs_f64() * 1000.0,
+                    );
+                }
                 self.transport_clock
                     .note_jump_while_playing(self.engine.position_seconds());
             } else {

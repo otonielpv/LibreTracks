@@ -1737,11 +1737,17 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // it after publishing pitch, the audio thread would render
             // several blocks with new pitch voices but stale warp voices,
             // producing a brief desync ("pitched track lags warp track").
+            // Timing breakdown for "the jump is not instant". The transport does
+            // not move until everything below has finished, so whatever
+            // dominates here IS the latency the user feels between the click
+            // and the audio moving. Gated on the jump-debug flag.
+            const auto seek_t0 = std::chrono::steady_clock::now();
             std::shared_ptr<const PreparedVoiceMap> seek_voice_map;
             if (bungee_voices_ && bungee_voices_->is_available() && session_ && source_manager_) {
                 seek_voice_map = bungee_voices_->build_seek_voice_map(
                     c.frame, *session_, *source_manager_);
             }
+            const auto seek_t_voices = std::chrono::steady_clock::now();
             if (source_manager_ && session_) {
                 if (preparing_stopped_playback) {
                     wait_playback_audio_window_ready(
@@ -1755,6 +1761,20 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     wait_jump_target_audio_ready(
                         *source_manager_, *session_, c.frame, seek_window);
                 }
+            }
+            const auto seek_t_wait = std::chrono::steady_clock::now();
+            if (jump_debug_enabled()) {
+                const auto ms = [](auto a, auto b) {
+                    return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count()
+                           / 1000.0;
+                };
+                debug_log(
+                    "[LT_JUMP_DEBUG][native-command] seek_breakdown frame=%lld playing=%d build_voices_ms=%.2f wait_audio_ms=%.2f total_ms=%.2f\n",
+                    static_cast<long long>(c.frame),
+                    preparing_stopped_playback ? 0 : 1,
+                    ms(seek_t0, seek_t_voices),
+                    ms(seek_t_voices, seek_t_wait),
+                    ms(seek_t0, seek_t_wait));
             }
             clock_->seek(c.frame);
             if (bungee_voices_ && seek_voice_map)
