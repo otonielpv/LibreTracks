@@ -43,7 +43,7 @@ public:
                   int                sample_rate,
                   Frame              duration_frames,
                   BlockCache*        cache,
-                  std::function<void(const Id&, int)> request_block);
+                  std::function<void(const Id&, int, bool)> request_block);
 
     // Read `frame_count` frames starting at `offset_frames` into `out`.
     // `out` is pre-allocated: out[ch] points to a buffer of frame_count floats.
@@ -75,7 +75,10 @@ private:
     Id                 source_id_;
     std::vector<float> samples_;
     BlockCache*        cache_ = nullptr;
-    std::function<void(const Id&, int)> request_block_;
+    // (source_id, block_index, urgent). `urgent` marks the block the audio
+    // thread is silencing right now, so the fill workers serve it before any
+    // read-ahead. See SourceManager::request_block.
+    std::function<void(const Id&, int, bool)> request_block_;
     mutable std::atomic<int> read_ahead_anchor_block_{-1};
     mutable std::atomic<Frame> cache_miss_frames_{0};
     int    channel_count_   = 0;

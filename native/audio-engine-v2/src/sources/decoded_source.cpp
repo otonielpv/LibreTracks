@@ -36,7 +36,7 @@ DecodedSource::DecodedSource(Id                 source_id,
                              int                sample_rate,
                              Frame              duration_frames,
                              BlockCache*        cache,
-                             std::function<void(const Id&, int)> request_block)
+                             std::function<void(const Id&, int, bool)> request_block)
     : source_id_(std::move(source_id))
     , cache_(cache)
     , request_block_(std::move(request_block))
@@ -79,8 +79,10 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                         block_offset,
                         chunk);
                 }
-                if (request_block_)
-                    request_block_(source_id_, block_index);
+                if (request_block_) {
+                    // URGENT: this is the block being silenced right now.
+                    request_block_(source_id_, block_index, /*urgent=*/true);
+                }
                 for (int ch = 0; ch < out_channels; ++ch)
                     std::fill(out[ch] + copied, out[ch] + copied + chunk, 0.f);
                 // Count the silenced frames (streaming starvation) so the
@@ -113,7 +115,7 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                             static_cast<Frame>(next_block) * cache_->block_frames();
                         if (next_start >= duration_frames_)
                             break;
-                        request_block_(source_id_, next_block);
+                        request_block_(source_id_, next_block, /*urgent=*/false);
                     }
                 }
             }

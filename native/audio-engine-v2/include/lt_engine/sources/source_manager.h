@@ -120,7 +120,22 @@ public:
     bool try_install_native_file(const Id& source_id,
                                   int engine_sample_rate);
 
-    void request_block(const Id& source_id, int block_index) const noexcept;
+    // Queue a streaming block for the fill workers.
+    //
+    // `urgent` marks the block the audio thread needs for the block it is
+    // rendering RIGHT NOW — i.e. a cache miss it just silenced. Everything else
+    // is read-ahead the renderer will not touch for another second or more.
+    //
+    // The distinction is the whole point. A single FIFO served both, so after a
+    // jump each of N tracks queued one urgent block plus its read-ahead, and the
+    // last track's urgent block waited behind (N-1) x 17 blocks of material
+    // nobody needed yet. Measured on a 39-track session: bursts of 93-221 ms of
+    // silenced frames, which a scheduler model reproduces almost exactly from
+    // the queue order alone. Serving urgent first is ~16x on time-to-first-audio
+    // and costs nothing — the same work happens, in a better order.
+    void request_block(const Id& source_id,
+                       int block_index,
+                       bool urgent = false) const noexcept;
     void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
     CacheDiagnostics cache_diagnostics() const;
 
@@ -208,7 +223,14 @@ private:
     mutable BlockCache              block_cache_;
     mutable std::mutex              fill_mtx_;
     mutable std::condition_variable fill_cv_;
+    // Blocks the audio thread is starving for. Drained before fill_queue_ and
+    // never batched — each one is wanted on its own, immediately.
+    mutable std::deque<CacheKey>    fill_queue_urgent_;
+    // Read-ahead. Kept a plain FIFO so the contiguous-run batching in
+    // fill_worker_loop still sees each track's blocks in order.
     mutable std::queue<CacheKey>    fill_queue_;
+    // Value = already queued as urgent. A block queued as read-ahead and then
+    // wanted urgently is promoted rather than skipped.
     mutable std::unordered_map<CacheKey, bool, CacheKeyHash> queued_blocks_;
     mutable bool                    fill_stop_ = false;
     // Pool of block-fill workers. A single worker can't repopulate evicted

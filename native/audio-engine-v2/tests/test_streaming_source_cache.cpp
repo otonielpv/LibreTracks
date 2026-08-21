@@ -968,15 +968,17 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
     cache.fill(source_id, 0, first_block.data(), kChannels, kDefaultBlockFrames);
 
     std::vector<int> requested_blocks;
+    std::vector<bool> requested_urgency;
     DecodedSource source(
         source_id,
         kChannels,
         kSampleRate,
         kFrames,
         &cache,
-        [&](const Id& id, int block_index) {
+        [&](const Id& id, int block_index, bool urgent) {
             CHECK(id == source_id);
             requested_blocks.push_back(block_index);
+            requested_urgency.push_back(urgent);
         });
 
     std::vector<float> left(512, 0.0f);
@@ -987,9 +989,63 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
     CHECK(requested_blocks.size() == 16);
     CHECK(requested_blocks.front() == 1);
     CHECK(requested_blocks.back() == 16);
+    // Block 0 was already cached, so every request here is read-ahead: material
+    // the renderer will not touch for another second and a half. None of it may
+    // claim the urgent lane, or it would queue ahead of a track that is being
+    // silenced right now.
+    for (bool urgent : requested_urgency)
+        CHECK_FALSE(urgent);
 
     REQUIRE(source.read(512, 512, out, 2) == 512);
     CHECK(requested_blocks.size() == 16);
+}
+
+// The block being silenced right now must claim the urgent lane; the
+// read-ahead behind it must not.
+//
+// The fill workers drain urgent requests before any read-ahead, so this flag is
+// what decides whether a starving track waits behind other tracks' lookahead.
+// With one shared FIFO, a jump made each of N tracks queue an urgent block plus
+// 16 read-ahead blocks, and the last track's urgent block sat behind (N-1) x 17
+// blocks nobody needed yet — measured as 93-221 ms of silence on a 39-track
+// session. Mixing the two lanes up again would restore exactly that.
+TEST_CASE("a silenced block is requested urgently, its read-ahead is not") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 32;
+    const Id source_id = "urgent-source";
+
+    // Empty cache: the very first read misses and must silence.
+    BlockCache cache(kDefaultBlockFrames, 64);
+
+    std::vector<std::pair<int, bool>> requests;
+    DecodedSource source(
+        source_id, kChannels, kSampleRate, kFrames, &cache,
+        [&](const Id& id, int block_index, bool urgent) {
+            CHECK(id == source_id);
+            requests.emplace_back(block_index, urgent);
+        });
+
+    std::vector<float> left(512, 0.0f), right(512, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    REQUIRE(source.read(0, 512, out, 2) == 512);
+    REQUIRE_FALSE(requests.empty());
+
+    // Exactly one urgent request, and it is the block that was silenced.
+    int urgent_count = 0;
+    for (const auto& [block, urgent] : requests) {
+        if (!urgent) continue;
+        ++urgent_count;
+        CHECK(block == 0);
+    }
+    CHECK(urgent_count == 1);
+
+    // Everything else is lookahead and stays in the normal lane.
+    CHECK(requests.size() > 1);
+    for (const auto& [block, urgent] : requests) {
+        if (block != 0)
+            CHECK_FALSE(urgent);
+    }
 }
 
 TEST_CASE("BlockCache protects each source's recent window from cross-source eviction") {

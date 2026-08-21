@@ -903,8 +903,8 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
             sample_rate,
             duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index) {
-                request_block(id, block_index);
+            [this](const Id& id, int block_index, bool urgent) {
+                request_block(id, block_index, urgent);
             });
         entry.status = "cache_ready";
         entry.error_message.clear();
@@ -1001,7 +1001,9 @@ Result<void> SourceManager::decode_and_store_streaming(
         entry.source = std::make_shared<DecodedSource>(
             source_id, channel_count, sample_rate, projected_out_frames,
             &block_cache_,
-            [this](const Id& id, int block_index) { request_block(id, block_index); });
+            [this](const Id& id, int block_index, bool urgent) {
+                request_block(id, block_index, urgent);
+            });
         entry.status = "streaming";
         entry.error_message.clear();
         publish_locked(std::move(next));
@@ -1197,7 +1199,9 @@ Result<void> SourceManager::decode_and_store_streaming(
         entry.source = std::make_shared<DecodedSource>(
             source_id, channel_count, sample_rate, duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index) { request_block(id, block_index); });
+            [this](const Id& id, int block_index, bool urgent) {
+                request_block(id, block_index, urgent);
+            });
         // R5: the cache file is now closed and finalized — open the disk gate to
         // the full length so the fill worker can fetch any (incl. evicted) block.
         decoded_frames->store(duration_frames, std::memory_order_release);
@@ -1216,16 +1220,32 @@ Result<void> SourceManager::decode_and_store_streaming(
 #endif
 }
 
-void SourceManager::request_block(const Id& source_id, int block_index) const noexcept {
+void SourceManager::request_block(const Id& source_id,
+                                  int block_index,
+                                  bool urgent) const noexcept {
     if (block_index < 0 || block_cache_.has_block(source_id, block_index))
         return;
     CacheKey key{source_id, block_index};
     {
         std::lock_guard lock(fill_mtx_);
-        if (queued_blocks_.find(key) != queued_blocks_.end())
-            return;
-        queued_blocks_[key] = true;
-        fill_queue_.push(key);
+        auto it = queued_blocks_.find(key);
+        if (it != queued_blocks_.end()) {
+            // Already queued. If it was read-ahead and the audio thread is now
+            // starving for it, promote it: push onto the urgent side and leave
+            // the read-ahead entry where it is. The stale entry costs nothing —
+            // fill_blocks_from_disk filters out blocks that are already cached
+            // by the time it runs.
+            if (!urgent || it->second)
+                return;
+            it->second = true;
+            fill_queue_urgent_.push_back(key);
+        } else {
+            queued_blocks_[key] = urgent;
+            if (urgent)
+                fill_queue_urgent_.push_back(key);
+            else
+                fill_queue_.push(key);
+        }
     }
     fill_cv_.notify_one();
 }
@@ -1273,7 +1293,7 @@ CacheDiagnostics SourceManager::cache_diagnostics() const {
 
 size_t SourceManager::fill_queue_depth() const noexcept {
     std::lock_guard lock(fill_mtx_);
-    return fill_queue_.size();
+    return fill_queue_urgent_.size() + fill_queue_.size();
 }
 
 SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
@@ -1477,6 +1497,7 @@ void SourceManager::clear() {
         std::lock_guard fill_lock(fill_mtx_);
         std::queue<CacheKey> empty;
         fill_queue_.swap(empty);
+        fill_queue_urgent_.clear();
         queued_blocks_.clear();
     }
     // Wake every fill worker so it releases its cache-file handle, and wait
@@ -1576,11 +1597,11 @@ void SourceManager::fill_worker_loop() const {
         {
             std::unique_lock lock(fill_mtx_);
             fill_cv_.wait(lock, [this, &reader] {
-                return fill_stop_ || !fill_queue_.empty()
+                return fill_stop_ || !fill_queue_urgent_.empty() || !fill_queue_.empty()
                     || reader.generation !=
                            fill_generation_.load(std::memory_order_acquire);
             });
-            if (fill_stop_ && fill_queue_.empty()) {
+            if (fill_stop_ && fill_queue_urgent_.empty() && fill_queue_.empty()) {
                 reader.close();
                 return;
             }
@@ -1595,24 +1616,34 @@ void SourceManager::fill_worker_loop() const {
                 reader.close();
                 reader.generation = generation;
                 fill_idle_cv_.notify_all();
-                if (fill_queue_.empty())
+                if (fill_queue_urgent_.empty() && fill_queue_.empty())
                     continue;
             }
-            key = fill_queue_.front();
-            fill_queue_.pop();
-            queued_blocks_.erase(key);
-
-            block_batch.push_back(key.block_index);
-            constexpr std::size_t kMaxBatchBlocks = 64;
-            while (!fill_queue_.empty() && block_batch.size() < kMaxBatchBlocks) {
-                const CacheKey& next = fill_queue_.front();
-                if (next.source_id != key.source_id ||
-                    next.block_index != block_batch.back() + 1) {
-                    break;
-                }
-                block_batch.push_back(next.block_index);
-                queued_blocks_.erase(next);
+            if (!fill_queue_urgent_.empty()) {
+                // Starving block: take exactly one and go. Batching would only
+                // delay it behind material the renderer does not need yet, and
+                // every block on this side is wanted by a different track.
+                key = fill_queue_urgent_.front();
+                fill_queue_urgent_.pop_front();
+                queued_blocks_.erase(key);
+                block_batch.push_back(key.block_index);
+            } else {
+                key = fill_queue_.front();
                 fill_queue_.pop();
+                queued_blocks_.erase(key);
+
+                block_batch.push_back(key.block_index);
+                constexpr std::size_t kMaxBatchBlocks = 64;
+                while (!fill_queue_.empty() && block_batch.size() < kMaxBatchBlocks) {
+                    const CacheKey& next = fill_queue_.front();
+                    if (next.source_id != key.source_id ||
+                        next.block_index != block_batch.back() + 1) {
+                        break;
+                    }
+                    block_batch.push_back(next.block_index);
+                    queued_blocks_.erase(next);
+                    fill_queue_.pop();
+                }
             }
         }
         fill_blocks_from_disk(key.source_id, block_batch, reader);
@@ -1839,8 +1870,8 @@ bool SourceManager::try_install_native_file(const Id& source_id,
             engine_sample_rate,
             duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index) {
-                request_block(id, block_index);
+            [this](const Id& id, int block_index, bool urgent) {
+                request_block(id, block_index, urgent);
             });
         entry.status = "cache_ready";
         entry.error_message.clear();
@@ -1932,8 +1963,8 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
             engine_sample_rate,
             duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index) {
-                request_block(id, block_index);
+            [this](const Id& id, int block_index, bool urgent) {
+                request_block(id, block_index, urgent);
             });
         entry.status = "cache_ready";
         entry.error_message.clear();

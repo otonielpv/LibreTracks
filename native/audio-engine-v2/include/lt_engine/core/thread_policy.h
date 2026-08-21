@@ -119,12 +119,31 @@ inline int lt_recommend_worker_threads_for(WorkerRole role, int cores_in, std::u
         return std::clamp(n, floor, 6);
     }
 
-    // Fill: disk-I/O bound, ~no per-thread RAM. Scale with cores; a few threads
-    // already saturate a single disk. Trim hard on low core/RAM so it doesn't
-    // compete with decode (or the audio thread) during an import on a modest PC.
-    int cap = 4;
+    // Fill: disk-I/O bound, ~no per-thread RAM. The useful parallelism is set by
+    // how many requests the storage will service at once, not by core count, so
+    // this scales past the "one thread per core" intuition — but only where
+    // there are cores to spare.
+    //
+    // Measured against a real 39-track session (SSD), refilling every track's
+    // window after a jump:
+    //     4 threads  21.4 ms      12 threads  13.8 ms      24 threads  14.2 ms
+    // A third faster, and flat beyond ~12. Worth taking on a big machine.
+    //
+    // Modest PCs keep exactly what they had: `spare` is already cores-1, so a
+    // 4-core box lands on 3 either way, and the low-core/low-RAM trim to 2 is
+    // untouched. Raising the cap only ever changes machines that were being held
+    // back by the constant.
+    //
+    // Note this is now the SECOND-order fix. Serving the starving block before
+    // any read-ahead (SourceManager::request_block) is worth ~16x on its own;
+    // extra threads only refill the lookahead sooner.
+    // Never take more than half the cores: these run at ABOVE_NORMAL and must
+    // not crowd the audio callback or the decode pool. Half of 8 is 4, so an
+    // 8-core desktop lands exactly where it always did; only machines with real
+    // headroom (16+ cores) see more.
+    int cap = std::clamp(cores / 2, 4, 8);
     if (low_core || ram_gb <= 4.5) cap = 2;
-    return std::clamp(std::min(spare, cap), 1, 4);
+    return std::clamp(std::min(spare, cap), 1, 8);
 }
 
 // Recommend a background worker count for `role`, scaled to this machine.
