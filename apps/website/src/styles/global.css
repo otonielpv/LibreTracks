@@ -154,6 +154,10 @@ h1 {
   line-height: 0.88;
 }
 
+.hero h1 {
+  font-size: clamp(3rem, 5.2vw, 5.25rem);
+}
+
 .hero p {
   max-width: 58ch;
   margin: 0;
@@ -1355,7 +1359,7 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  h1 {
+  .hero h1 {
     max-width: 100%;
   }
 
