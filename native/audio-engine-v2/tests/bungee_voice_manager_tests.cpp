@@ -168,6 +168,52 @@ TEST_CASE("region transpose retimes the warm voice in place, preserving phase") 
 #endif
 }
 
+// The contract the desktop side depends on when it labels an update Preview or
+// Commit.
+//
+// A commit MUST reposition a voice whose clip mapping moved; a preview must
+// leave it alone, because re-anchoring on every tick of a drag is audible. The
+// flag used to be inferred from whether an undo entry was written, so the warp
+// toggle -- which deliberately skips history -- arrived labelled as a drag in
+// progress. The session and the transport moved to the warped geometry, the
+// voices stayed on the old mapping, and nothing came afterwards to fix them:
+// that is what "the click desyncs the moment I turn warp on" was.
+TEST_CASE("retime repositions a moved clip on commit but not on preview") {
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+
+    auto session = make_one_transposed_clip_session(/*semitones=*/0);
+    mgr.rebuild_for_session(session, sm, /*playhead=*/0);
+
+#if LT_ENGINE_HAVE_BUNGEE
+    BungeePitchVoice* voice = mgr.voice_for("clip1");
+    REQUIRE(voice != nullptr);
+    const long long fed_at_start = voice->fed_through();
+
+    // Move the clip: exactly the kind of mapping change a warp toggle produces
+    // when it remaps every clip and region by the new ratio.
+    session.songs[0].tracks[0].clips[0].source_start_frame = kSR;
+
+    // Preview: a gesture is still in progress, so the voice keeps playing.
+    mgr.retime_existing_for_session(session, sm, /*playhead=*/0, /*live=*/true);
+    CHECK(mgr.voice_for("clip1") == voice);
+    CHECK(voice->fed_through() == fed_at_start);
+
+    // Commit: the edit is settled, so the voice must follow the clip. Without
+    // this the engine renders the new geometry through a voice still reading
+    // the old source position, for as long as playback continues.
+    mgr.retime_existing_for_session(session, sm, /*playhead=*/0, /*live=*/false);
+    CHECK(mgr.voice_for("clip1") == voice);   // repositioned, not rebuilt
+    CHECK(voice->fed_through() != fed_at_start);
+    // Anchored on the clip's new source start, plus the pipeline lead it keeps.
+    CHECK(voice->fed_through()
+          == static_cast<long long>(kSR) + voice->feed_lead_frames());
+#endif
+}
+
 TEST_CASE("rebuild_for_seek replaces voices at the new playhead") {
     BungeeVoiceManager mgr;
     if (!mgr.prepare(kSR, kChannels, kBlock)) return;
