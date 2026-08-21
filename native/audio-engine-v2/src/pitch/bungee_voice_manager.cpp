@@ -39,6 +39,18 @@ namespace lt {
 
 namespace {
 
+// Every caller that reaches here has something BLOCKED on the result: a seek
+// whose clock will not move until the voices are built, a session load waiting
+// to become playable, or a repair of a discontinuity the listener is already
+// hearing. So these go down the urgent lane.
+//
+// Queuing them as ordinary read-ahead is what left `build_voices_ms` at 160 ms
+// on a real 39-clip session: the blocks needed to build the voice for the jump
+// sat behind every track's lookahead, and the transport waited for all of it.
+//
+// PrearmedJumpManager keeps its own copy of this helper deliberately
+// non-urgent — that one is speculative, preparing jumps nobody has asked for
+// yet, and must not push aside blocks a playing track needs now.
 void request_source_range(const SourceManager& sources,
                           const Id& source_id,
                           Frame start,
@@ -48,7 +60,7 @@ void request_source_range(const SourceManager& sources,
     const int last = static_cast<int>(
         std::max<Frame>(0, start + frames - 1) / kDefaultBlockFrames);
     for (int block = first; block <= last; ++block)
-        sources.request_block(source_id, block);
+        sources.request_block(source_id, block, /*urgent=*/true);
 }
 
 // Mirror of the LIBRETRACKS_AUDIO_DEBUG flag used in engine_impl.cpp. Cached
