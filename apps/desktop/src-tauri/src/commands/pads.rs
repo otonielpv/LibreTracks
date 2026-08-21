@@ -877,15 +877,43 @@ pub async fn assign_pad_key(
     if meta.is_none() {
         return Err("pad is not a user pad".to_string());
     }
-    let src = PathBuf::from(&source_path);
+    // On Android the picker hands back a `content://` document URI, not a
+    // filesystem path — `PathBuf::from` on one yields a path that never exists,
+    // and the user just sees "source file not found" for a file they can see in
+    // the picker. Materialise it into a private temp file first, the same way
+    // the .ltpkg import does. `staged` is Some only when we made that copy, so
+    // the desktop path stays a plain borrow of the picked file.
+    #[cfg(target_os = "android")]
+    let (src, staged) = {
+        if source_path.starts_with("content://") {
+            use std::str::FromStr as _;
+            let picked = tauri_plugin_fs::FilePath::from_str(&source_path)
+                .map_err(|error| format!("ruta de origen no valida: {error}"))?;
+            let name_hint = crate::platform::mobile_files::picked_file_name(&picked);
+            let staged = crate::platform::mobile_files::stage_picked_file_to_temp(
+                &app,
+                &picked,
+                if name_hint.is_empty() { "pad-source" } else { &name_hint },
+            )?;
+            (staged.clone(), Some(staged))
+        } else {
+            (PathBuf::from(&source_path), None)
+        }
+    };
+    #[cfg(not(target_os = "android"))]
+    let (src, staged): (PathBuf, Option<PathBuf>) = (PathBuf::from(&source_path), None);
+
     if !src.is_file() {
+        if let Some(path) = staged.as_ref() {
+            let _ = fs::remove_file(path);
+        }
         return Err(format!("source file not found: {source_path}"));
     }
     let dst = dir.join(format!("{stem}.wav"));
     let stem = (*stem).to_string();
 
     // Decode/copy off the async runtime; it's CPU-heavy for compressed sources.
-    tokio::task::spawn_blocking(move || -> Result<(), String> {
+    let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
         if src.extension().and_then(|e| e.to_str()) == Some("wav") {
             fs::copy(&src, &dst).map_err(|e| format!("copy {stem}.wav: {e}"))?;
             Ok(())
@@ -894,7 +922,13 @@ pub async fn assign_pad_key(
         }
     })
     .await
-    .map_err(|e| format!("assign task panicked: {e}"))??;
+    .map_err(|e| format!("assign task panicked: {e}"))?;
+
+    // Clean up the staging copy whether the decode succeeded or not.
+    if let Some(path) = staged {
+        let _ = fs::remove_file(path);
+    }
+    result?;
 
     Ok(entry_for_pad_dir(&dir, &pad_id))
 }
