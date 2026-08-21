@@ -1,6 +1,6 @@
 ---
-title: Documentacion de LibreTracks
-description: Documentacion tecnica y de usuario para LibreTracks.
+title: Documentación de LibreTracks
+description: "Manual de LibreTracks, el reproductor multitrack gratuito para directo: primeros pasos, conceptos, control en vivo, salidas de audio y control remoto."
 ---
 
 LibreTracks es una workstation de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta pensada para preparar el show con antelacion, guardar o convertir la sesion en plantilla, y tocar con routing, marcas, saltos, controles de transposicion, timeline con colores, MIDI, atajos personalizables y remote movil de forma predecible.

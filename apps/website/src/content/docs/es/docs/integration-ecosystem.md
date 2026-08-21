@@ -1,6 +1,6 @@
 ---
-title: Integracion Y Ecosistema
-description: Paquetes de cancion, import/export, arquitectura remote y flujo recomendado.
+title: Integración y ecosistema
+description: Paquetes de canción, importación y exportación, arquitectura del control remoto y flujo de trabajo recomendado con tu DAW.
 ---
 
 ## Exportar Canciones

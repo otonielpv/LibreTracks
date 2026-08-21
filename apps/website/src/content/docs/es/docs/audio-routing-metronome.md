@@ -1,6 +1,6 @@
 ---
-title: Routing Y Metronomo
-description: Dispositivo de audio, salidas externas, rutas por pista, metronomo y MIDI.
+title: Salidas de audio y metrónomo
+description: Configura el dispositivo de audio, las salidas externas, las rutas por pista, el metrónomo (click) y el MIDI en LibreTracks.
 ---
 
 ## Dispositivo De Audio

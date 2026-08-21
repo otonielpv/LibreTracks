@@ -1,6 +1,6 @@
 ---
 title: Vista Compacta
-description: Vista tipo Session Ableton de LibreTracks — canciones como columnas, mixer compartido, drag-and-drop, importacion/exportacion ltpkg, importacion Reaper/Ableton, seleccion multiple y reordenacion de tracks.
+description: "Vista tipo Session de Ableton en LibreTracks: canciones como columnas, mixer compartido, drag and drop, importación y exportación .ltpkg, importación desde Reaper y Ableton, selección múltiple y reordenación de pistas."
 ---
 
 La **Vista Compacta** es una segunda proyeccion del mismo proyecto. La vista DAW (timeline lineal) y la vista compacta comparten el mismo modelo: lo que haces en una se ve inmediatamente en la otra. 

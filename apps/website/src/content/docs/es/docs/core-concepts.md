@@ -1,6 +1,6 @@
 ---
-title: Conceptos Base
-description: La cancion como unidad de trabajo, biblioteca, pistas, clips, marcas, cambios de compas y regiones de cancion.
+title: Conceptos base
+description: "La canción como unidad de trabajo en LibreTracks: biblioteca, pistas, clips, marcas, cambios de compás y regiones de canción."
 ---
 
 ## Las Canciones — La Unidad Sobre La Que Trabajas

@@ -1,6 +1,6 @@
 ---
-title: Voz Guia
-description: Anuncios de seccion hablados, avisos dinamicos y conteo de entrada antes de las marcas y los saltos programados.
+title: Voz guía
+description: Anuncios de sección hablados, avisos dinámicos y conteo de entrada antes de las marcas y los saltos programados.
 ---
 
 La **Voz Guia** anuncia la seccion que viene y te da la entrada antes de cada marca, igual que la app Playback de iPad guia a una banda. Cuando el cursor se acerca a una marca con tipo —o cuando un salto programado esta a punto de ejecutarse— una voz dice la seccion ("Coro", "Verso 2", "Puente") y cuenta los beats del compas previo ("1, 2, 3, 4") para que la banda entre junta en el downbeat. Tambien puede dar **avisos dinamicos** —instrucciones cortas habladas como "Sube Intensidad", "Toda La Banda", "Entra Bateria" o "Sube Tono"— en los momentos donde los coloques.

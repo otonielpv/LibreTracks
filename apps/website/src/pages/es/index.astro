@@ -2,46 +2,51 @@
 import SiteLayout from "../../layouts/SiteLayout.astro";
 
 const capabilities = [
-  ["Directos organizados por canciones", "Organiza el concierto como canciones con sus propias regiones, clips, tempo, nivel principal, marcas y paquetes reutilizables."],
-  ["Control musical en vivo", "Usa saltos de marca, saltos de cancion, bucles Vamp, modos de transicion, atajos y mapeos MIDI desde una superficie enfocada."],
-  ["Tono y tempo", "Transpone canciones, ajusta el audio al tempo del timeline con Warp y decide que pistas siguen el cambio de tono con el control T por pista."],
-  ["Ruteo y control remoto", "Envia pistas, click, cues, guias y buses de carpeta a las salidas correctas, y controla transporte o mezcla desde movil/tablet."],
+  ["Multitracks organizados por canción", "Organiza el concierto como canciones con sus propias regiones, clips, tempo, nivel principal, marcas y paquetes reutilizables."],
+  ["Control musical en vivo", "Usa saltos de marca, saltos de canción, bucles Vamp, modos de transición, atajos y mapeos MIDI desde una superficie enfocada."],
+  ["Cambio de tono y tempo", "Transpone canciones, ajusta el audio al tempo del timeline con Warp y decide qué pistas siguen el cambio de tono con el control T por pista."],
+  ["Salidas y control remoto", "Envía pistas, click, cues, voz guía y buses de carpeta a las salidas correctas, y controla transporte o mezcla desde el móvil o la tablet."],
 ];
 
 const workflow = [
   ["Construye la biblioteca", "Importa WAVs preparados, organiza recursos en carpetas virtuales y reutiliza canciones con paquetes LibreTracks.", "/screenshots/Library-Assets-Import.gif"],
-  ["Da forma al repertorio", "Organiza clips en un timeline musical, crea regiones de cancion, colorea sesiones densas y coloca marcas donde ocurren las decisiones en vivo.", "/screenshots/Proyecto.png"],
-  ["Ensaya y toca", "Cambia a Vista Compacta para ver una columna por cancion, ajustar la mezcla compartida, disparar canciones y leer el repertorio bajo presion.", "/screenshots/Compact-View.png"],
+  ["Da forma al repertorio", "Organiza clips en un timeline musical, crea regiones de canción, colorea sesiones densas y coloca marcas donde ocurren las decisiones en vivo.", "/screenshots/Proyecto.png"],
+  ["Ensaya y toca", "Cambia a Vista Compacta para ver una columna por canción, ajustar la mezcla compartida, disparar canciones y leer el repertorio bajo presión.", "/screenshots/Compact-View.png"],
 ];
 
 const viewHighlights = [
   ["Timeline lineal", "Una vista tipo DAW para organizar pistas, editar clips, revisar marcas y preparar la estructura del concierto."],
-  ["Vista Compacta", "Una vista orientada a canciones para ensayo y directo, con columnas, controles de reproduccion, faders master y mezclador compartido."],
-  ["Un unico proyecto", "Las dos vistas editan la misma sesion, asi que clips, ruteo, canciones, colores y mezcla se mantienen sincronizados."],
+  ["Vista Compacta", "Una vista orientada a canciones para ensayo y directo, con columnas, controles de reproducción, faders master y mezclador compartido."],
+  ["Un único proyecto", "Las dos vistas editan la misma sesión, así que clips, salidas, canciones, colores y mezcla se mantienen sincronizados."],
 ];
 
 const controlHighlights = [
-  ["Saltos en vivo", "Dispara secciones inmediatamente, en la siguiente marca, despues de varios compases o en limites de cancion con transiciones opcionales."],
-  ["Warp y transposicion", "Cambia tempo o tonalidad por region de cancion mientras mantienes click, guias o referencias bajo control explicito."],
-  ["Ruteo de escenario", "Usa pistas de audio, pistas de carpeta, ruteo heredado, metronomo, salidas hardware, MIDI Learn y control remoto movil."],
+  ["Saltos en vivo", "Dispara secciones inmediatamente, en la siguiente marca, después de varios compases o en límites de canción con transiciones opcionales."],
+  ["Warp y transposición", "Cambia tempo o tonalidad por región de canción mientras mantienes click, voz guía o referencias bajo control explícito."],
+  ["Salidas de escenario", "Usa pistas de audio, pistas de carpeta, ruteo heredado, metrónomo, salidas hardware, MIDI Learn y control remoto móvil."],
 ];
 
 const fit = [
-  ["Produccion", "Compone, graba, edita, mezcla y disena sonido en tu DAW de estudio.", "Trae el audio terminado a una sesion de playback enfocada en directo."],
-  ["Preparacion del repertorio", "Un DAW general puede hacerlo, pero suele depender de escenas, acciones o plantillas de ruteo personalizadas.", "Construye canciones, marcas, clips, ruteo, paquetes y controles en vivo alrededor del repertorio."],
-  ["Decisiones en vivo", "Flexible, pero normalmente atado a la complejidad de una sesion de produccion.", "Usa controles dedicados para Vamp, saltos, transiciones, transposicion, ruteo, MIDI y mezcla remota."],
-  ["Superficie de escenario", "Potente para operadores que necesitan todo el entorno de produccion.", "Enfocado para musicos, directores musicales y operadores de playback que ejecutan directos preparados."],
+  ["Producción", "Compone, graba, edita, mezcla y diseña sonido en tu DAW de estudio.", "Trae el audio terminado a una sesión de playback enfocada en directo."],
+  ["Preparación del repertorio", "Un DAW general puede hacerlo, pero suele depender de escenas, acciones o plantillas de ruteo personalizadas.", "Construye canciones, marcas, clips, salidas, paquetes y controles en vivo alrededor del repertorio."],
+  ["Decisiones en vivo", "Flexible, pero normalmente atado a la complejidad de una sesión de producción.", "Usa controles dedicados para Vamp, saltos, transiciones, transposición, salidas, MIDI y mezcla remota."],
+  ["Superficie de escenario", "Potente para operadores que necesitan todo el entorno de producción.", "Enfocado para músicos, directores musicales y operadores de playback que ejecutan directos preparados."],
 ];
 ---
 
-<SiteLayout title="LibreTracks - Playback en Vivo Por Canciones" description="LibreTracks es una herramienta de playback en vivo por canciones para musicos, directores musicales y operadores de playback." lang="es">
+<SiteLayout
+  title="LibreTracks — Reproductor Multitrack Gratuito para Directo"
+  description="Reproductor de multitracks gratuito y de código abierto para tocar en directo: pistas por canción, click, voz guía, cambio de tono y tempo, MIDI y control remoto desde el móvil. Windows, macOS, Linux y Android."
+  lang="es"
+  schema
+>
   <main>
     <section class="site-shell hero">
       <div class="hero-grid">
         <div>
-          <p class="eyebrow">Playback en vivo por canciones</p>
-          <h1>LibreTracks</h1>
-          <p>Prepara un concierto como canciones, pistas, marcas, cues y rutas. Organizalo en un timeline, ensayalo en Vista Compacta y ejecuta el directo con saltos musicales, control de tono, MIDI y control remoto movil.</p>
+          <p class="eyebrow">Gratis y de código abierto</p>
+          <h1>Reproductor multitrack para tocar en directo</h1>
+          <p>LibreTracks organiza el concierto por canciones: pistas, click, voz guía, marcas y rutas de salida. Prepáralo en el timeline, ensáyalo en Vista Compacta y ejecuta el directo con saltos musicales, cambio de tono y tempo, MIDI y control remoto desde el móvil.</p>
           <div class="hero-actions">
             <a class="button-link primary" href="/es/download">Descargar</a>
             <a class="button-link" href="/es/docs/">Explorar docs</a>
@@ -56,9 +61,9 @@ const fit = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">Para que sirve</p>
-          <h2>Un lugar enfocado para convertir audio preparado en un directo controlado.</h2>
-          <p>LibreTracks no intenta reemplazar tu DAW de produccion. Es una herramienta de escenario que toma pistas terminadas, las organiza por canciones y da al operador controles predecibles para ensayo y directo.</p>
+          <p class="eyebrow">Para qué sirve</p>
+          <h2>Convierte tus multitracks en un directo controlado.</h2>
+          <p>LibreTracks no intenta reemplazar tu DAW de producción. Es una herramienta de escenario que toma pistas terminadas, las organiza por canciones y da al operador controles predecibles para ensayo y directo.</p>
         </div>
         <div class="feature-grid">
           {capabilities.map(([title, body]) => (
@@ -75,7 +80,7 @@ const fit = [
       <div class="site-shell">
         <div class="section-heading">
           <p class="eyebrow">Flujo</p>
-          <h2>De pistas preparadas a un repertorio listo para tocar.</h2>
+          <h2>De las pistas al repertorio listo para tocar.</h2>
         </div>
         <div class="workflow-grid">
           {workflow.map(([title, body, image]) => (
@@ -96,7 +101,7 @@ const fit = [
         <div class="section-heading">
           <p class="eyebrow">Dos vistas, un directo</p>
           <h2>Prepara en el timeline. Toca desde la lista de canciones.</h2>
-          <p>El timeline lineal es ideal para construir la sesion; la Vista Compacta es ideal para ensayar canciones, disparar transiciones y mantener visible el mezclador. Las dos son proyecciones del mismo proyecto.</p>
+          <p>El timeline lineal es ideal para construir la sesión; la Vista Compacta es ideal para ensayar canciones, disparar transiciones y mantener visible el mezclador. Las dos son proyecciones del mismo proyecto.</p>
           <div class="hero-actions">
             <a class="button-link primary" href="/es/docs/compact-view/">Docs Vista Compacta</a>
             <a class="button-link" href="/es/docs/core-concepts/">Conceptos base</a>
@@ -117,8 +122,8 @@ const fit = [
       <div class="site-shell">
         <div class="section-heading">
           <p class="eyebrow">Control en vivo</p>
-          <h2>Haz flexible el directo sin convertirlo en una sesion de produccion.</h2>
-          <p>LibreTracks mantiene las operaciones de escenario cerca de la intencion musical: saltar a secciones, sostener un Vamp, moverse entre canciones, transponer el repertorio, enviar cues y delegar mezcla a otro dispositivo.</p>
+          <h2>Haz flexible el directo sin convertirlo en una sesión de producción.</h2>
+          <p>LibreTracks mantiene las operaciones de escenario cerca de la intención musical: saltar a secciones, sostener un Vamp, moverse entre canciones, transponer el repertorio, enviar cues y delegar la mezcla a otro dispositivo.</p>
         </div>
         <div class="feature-grid">
           {controlHighlights.map(([title, body]) => (
@@ -134,7 +139,7 @@ const fit = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">Donde encaja</p>
+          <p class="eyebrow">Dónde encaja</p>
           <h2>Usa tu DAW para producir. Usa LibreTracks para el concierto.</h2>
           <p>LibreTracks complementa herramientas como Reaper, Ableton Live, Logic o Cubase llevando audio preparado a un flujo dedicado de playback en directo.</p>
         </div>

@@ -3,12 +3,16 @@ import SiteLayout from "../../layouts/SiteLayout.astro";
 import GithubReleases from "../../components/GithubReleases.astro";
 ---
 
-<SiteLayout title="Descargar LibreTracks" description="Descarga la ultima release de LibreTracks desde GitHub." lang="es">
+<SiteLayout
+  title="Descargar LibreTracks Gratis — Reproductor Multitrack"
+  description="Descarga LibreTracks gratis para Windows, macOS, Linux y Android. Reproductor multitrack de código abierto para tocar en directo, sin licencia, sin cuenta y sin suscripción."
+  lang="es"
+>
   <main class="site-shell band">
     <div class="section-heading">
       <p class="eyebrow">Descargas</p>
-      <h2>Ultima release de GitHub.</h2>
-      <p>Los instaladores se cargan desde la API publica de GitHub Releases durante el build estatico, asi que esta pagina sigue la version publicada actual.</p>
+      <h2>Descarga LibreTracks gratis para Windows, macOS, Linux y Android.</h2>
+      <p>Los instaladores se cargan desde la API pública de GitHub Releases durante el build estático, así que esta página siempre muestra la versión publicada más reciente.</p>
     </div>
     <GithubReleases lang="es" />
   </main>

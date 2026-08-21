@@ -6,10 +6,15 @@ interface Props {
   description: string;
   lang?: "en" | "es";
   noIndex?: boolean;
+  /** Site-relative image for social previews. Defaults to the locale's card. */
+  image?: string;
+  /** Emit the SoftwareApplication schema (home pages only, to avoid duplicates). */
+  schema?: boolean;
 }
 
-const { title, description, lang = "en", noIndex = false } = Astro.props;
+const { title, description, lang = "en", noIndex = false, image, schema = false } = Astro.props;
 const isSpanish = lang === "es";
+const socialCard = image ?? (isSpanish ? "/og-image.png" : "/og-image-en.png");
 const prefix = isSpanish ? "/es" : "";
 
 // Language switch should stay on the equivalent page in the other language
@@ -24,6 +29,42 @@ if (isSpanish) {
   // /download → /es/download ; / → /es/
   switchHref = currentPath === "/" ? "/es/" : `/es${currentPath}`;
 }
+
+// Canonical + hreflang. Without these Google treats /  and /es/ as competing
+// pages for the same product instead of two locales of one page.
+const site = Astro.site ?? new URL("https://libretracks.pages.dev");
+const canonical = new URL(currentPath, site);
+const altEn = new URL(isSpanish ? switchHref : currentPath, site);
+const altEs = new URL(isSpanish ? currentPath : switchHref, site);
+const ogImage = new URL(socialCard, site);
+
+const softwareSchema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "LibreTracks",
+  applicationCategory: "MultimediaApplication",
+  applicationSubCategory: isSpanish
+    ? "Reproductor multitrack para directo"
+    : "Multitrack playback software for live performance",
+  operatingSystem: "Windows, macOS, Linux, Android",
+  description,
+  url: canonical.href,
+  downloadUrl: new URL(`${prefix}/download`, site).href,
+  image: ogImage.href,
+  inLanguage: isSpanish ? "es" : "en",
+  license: "https://www.gnu.org/licenses/agpl-3.0.html",
+  isAccessibleForFree: true,
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "EUR",
+  },
+  author: {
+    "@type": "Person",
+    name: "otonielpv",
+    url: "https://github.com/otonielpv",
+  },
+};
 ---
 
 <!doctype html>
@@ -31,11 +72,32 @@ if (isSpanish) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
     <meta name="description" content={description} />
     {noIndex && <meta name="robots" content="noindex, nofollow, noarchive" />}
     {noIndex && <meta name="referrer" content="no-referrer" />}
+    {!noIndex && <link rel="canonical" href={canonical.href} />}
+    {!noIndex && <link rel="alternate" hreflang="en" href={altEn.href} />}
+    {!noIndex && <link rel="alternate" hreflang="es" href={altEs.href} />}
+    {!noIndex && <link rel="alternate" hreflang="x-default" href={altEn.href} />}
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LibreTracks" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.href} />
+    <meta property="og:image" content={ogImage.href} />
+    <meta property="og:locale" content={isSpanish ? "es_ES" : "en_US"} />
+    <meta property="og:locale:alternate" content={isSpanish ? "en_US" : "es_ES"} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage.href} />
+
     <link rel="icon" href="/icon.svg" />
-    <title>{title}</title>
+    {schema && !noIndex && (
+      <script type="application/ld+json" set:html={JSON.stringify(softwareSchema)} />
+    )}
   </head>
   <body>
     <div class="site-page">
@@ -44,11 +106,11 @@ if (isSpanish) {
           <img src="/icon.svg" alt="" />
           <span>LibreTracks</span>
         </a>
-        <nav class="nav-links" aria-label={isSpanish ? "Navegacion principal" : "Primary navigation"}>
+        <nav class="nav-links" aria-label={isSpanish ? "Navegación principal" : "Primary navigation"}>
           <a href={`${prefix}/download`}>{isSpanish ? "Descargas" : "Downloads"}</a>
           <a href={`${prefix}/usage`}>{isSpanish ? "Uso" : "Usage"}</a>
-          <a href={`${prefix}/docs/`}>{isSpanish ? "Documentacion" : "Docs"}</a>
-          <a href={switchHref}>{isSpanish ? "English" : "Español"}</a>
+          <a href={`${prefix}/docs/`}>{isSpanish ? "Documentación" : "Docs"}</a>
+          <a href={switchHref} hreflang={isSpanish ? "en" : "es"}>{isSpanish ? "English" : "Español"}</a>
           <a
             class="social-link"
             href="https://github.com/otonielpv/LibreTracks"

@@ -1,6 +1,6 @@
 ---
-title: Pitch, Warp Y El Boton T
-description: Como interactuan la transposicion de region, el warp y el toggle T por pista en LibreTracks.
+title: Cambio de tono, warp y el botón T
+description: "Cómo cambiar el tono y el tempo de una canción en LibreTracks: transposición por región, warp y el botón T por pista."
 ---
 
 LibreTracks separa tres cosas que a menudo se confunden: el **tempo del timeline** (BPM), el **warp de region** y la **transposicion de region** (pitch). El modelo es el mismo que usa Ableton Live, asi que si has usado Warp alli el mapa mental sirve igual.

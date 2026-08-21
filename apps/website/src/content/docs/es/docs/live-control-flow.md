@@ -1,6 +1,6 @@
 ---
-title: Control En Vivo
-description: Saltos de marca, Vamp, saltos de cancion, transiciones, atajos y remote.
+title: Control en vivo
+description: Saltos de marca, bucles Vamp, saltos de canción, transiciones, atajos de teclado y control remoto durante el directo.
 ---
 
 ## Modos De Salto De Marca

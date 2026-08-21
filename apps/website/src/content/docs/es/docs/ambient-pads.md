@@ -1,5 +1,5 @@
 ---
-title: Pads De Ambiente
+title: Pads de ambiente
 description: Instalación de packs, tonalidad, volumen, routing, transición continua y control mediante Remote y automatizaciones.
 ---
 
