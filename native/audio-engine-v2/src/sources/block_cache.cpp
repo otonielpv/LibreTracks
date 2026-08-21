@@ -146,6 +146,10 @@ void BlockCache::fill(const Id&    source_id,
     std::shared_ptr<CacheBlock> replaced;
     {
         std::lock_guard<std::mutex> lk(mtx_);
+        // A block can be pinned before it exists — pin() records the intent and
+        // the fill that finally delivers it applies the flag.
+        if (pinned_keys_.count(key))
+            prepared->pinned.store(true, std::memory_order_relaxed);
         auto [it, inserted] = blocks_.try_emplace(key, prepared);
         if (inserted) {
             blocks_cached_.fetch_add(1, std::memory_order_relaxed);
@@ -228,6 +232,32 @@ CacheDiagnostics BlockCache::diagnostics() const noexcept {
     return d;
 }
 
+void BlockCache::pin(const Id& source_id, int block_index) {
+    if (block_index < 0) return;
+    const CacheKey key{source_id, block_index};
+    std::lock_guard<std::mutex> lk(mtx_);
+    pinned_keys_.insert(key);
+    // If it is already resident, mark it now; otherwise fill() will.
+    auto it = blocks_.find(key);
+    if (it != blocks_.end() && it->second)
+        it->second->pinned.store(true, std::memory_order_relaxed);
+}
+
+void BlockCache::unpin_all() {
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (const auto& key : pinned_keys_) {
+        auto it = blocks_.find(key);
+        if (it != blocks_.end() && it->second)
+            it->second->pinned.store(false, std::memory_order_relaxed);
+    }
+    pinned_keys_.clear();
+}
+
+size_t BlockCache::pinned_count() const noexcept {
+    std::lock_guard<std::mutex> lk(mtx_);
+    return pinned_keys_.size();
+}
+
 void BlockCache::evict_if_needed() {
     if (blocks_cached_.load(std::memory_order_relaxed) <= max_blocks_)
         return;
@@ -296,6 +326,10 @@ void BlockCache::evict_if_needed() {
     std::vector<Candidate> aged;
     aged.reserve(snapshot.size());
     for (const auto& block : snapshot) {
+        // Pinned blocks are the preload set: they exist so a cold start never
+        // reaches the disk, which only works if eviction cannot take them.
+        if (block->pinned.load(std::memory_order_relaxed))
+            continue;
         const uint64_t age = block->last_used.load(std::memory_order_relaxed);
         if (k != 0 && age >= protect_threshold[block->key.source_id])
             continue;
@@ -360,6 +394,10 @@ void BlockCache::clear() {
     {
         std::lock_guard<std::mutex> lk(mtx_);
         retired.swap(blocks_);
+        // The preload set describes blocks that no longer exist. Sources are
+        // being invalidated wholesale (a sample-rate re-decode, a session
+        // unload), so whoever reloads them owns pinning them again.
+        pinned_keys_.clear();
         blocks_cached_.store(0, std::memory_order_relaxed);
         bytes_used_.store(0, std::memory_order_relaxed);
     }

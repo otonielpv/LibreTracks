@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace lt {
@@ -142,6 +143,25 @@ public:
     // Diagnostics (LIBRETRACKS_AUDIO_DIAG): pending fill requests and the
     // block-cache lock-contention stats (resets the latter on read).
     size_t fill_queue_depth() const noexcept;
+    // ── Preload ──────────────────────────────────────────────────────────
+    //
+    // Keep the first block of each given (source, source_start_frame) resident,
+    // so starting playback never has to reach the disk for it. Replaces the
+    // previous preload set outright: callers pass the whole set for the song
+    // they are on.
+    //
+    // Cheap by design. One block per clip is 32 KB, so 39 clips cost 1.2 MB —
+    // against a cache budget of 512 MB on the smallest supported machine. The
+    // saving it buys is the difference between a resident block (0.196 ms) and
+    // one read past the OS cache (4.4 ms median, measured), multiplied by every
+    // track wanting its first block at the same instant.
+    //
+    // `max_blocks` bounds the set regardless of how many clips are passed, so a
+    // pathological song cannot eat the cache.
+    void preload_clip_heads(
+        const std::vector<std::pair<Id, Frame>>& clip_starts,
+        size_t max_blocks = 256) const;
+
     BlockCache::LockStats take_block_cache_lock_stats() noexcept {
         return block_cache_.take_lock_stats();
     }

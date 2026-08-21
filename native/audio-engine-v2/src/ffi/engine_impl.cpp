@@ -1631,6 +1631,21 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 mixer_->set_bungee_voice_manager(bungee_voices_.get());
             }
             // Build Bungee voices for whatever is currently transposed at playhead.
+            // Pin the first block of every clip so the first Play does not have
+            // to reach the disk for 39 tracks at once. A block read past the OS
+            // cache costs 4.4 ms against 0.196 ms resident (measured), and every
+            // track wants its head at the same instant — which is the few
+            // hundred milliseconds of [LT_STARVATION] logged right after a
+            // session loads. One block per clip, so a 39-clip song costs 1.2 MB.
+            if (source_manager_) {
+                std::vector<std::pair<Id, Frame>> clip_heads;
+                for (const auto& song : next_session->songs)
+                    for (const auto& track : song.tracks)
+                        for (const auto& clip : track.clips)
+                            clip_heads.emplace_back(clip.source_id,
+                                                    clip.source_start_frame);
+                source_manager_->preload_clip_heads(clip_heads);
+            }
             // Source data may not be decoded yet — voices for unloaded sources are
             // skipped and rebuilt later when sources become ready.
             if (bungee_voices_ && bungee_voices_->is_available())

@@ -25,6 +25,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace lt {
@@ -55,6 +56,9 @@ struct CacheBlock {
     int                block_frames  = 0;
     std::atomic<bool>  ready{false};
     std::atomic<uint64_t> last_used{0};  // monotonic counter
+    // Never evicted while set. Used for the preload set — the handful of blocks
+    // that must be resident so playback can start without touching the disk.
+    std::atomic<bool>  pinned{false};
 };
 
 struct CacheDiagnostics {
@@ -143,6 +147,32 @@ public:
     };
     LockStats take_lock_stats() noexcept;
 
+    // ── Preload set ──────────────────────────────────────────────────────
+    //
+    // Blocks that stay resident regardless of how long ago they were used, so a
+    // cold start does not have to reach the disk for them.
+    //
+    // Measured on a 39-track session: a block read with the OS cache bypassed
+    // costs 4.4 ms (median, p95 5.3), against 0.196 ms once it is resident —
+    // 22x. Multiplied by every track needing its first block at once, that is
+    // the few hundred milliseconds of silence the engine logs after loading a
+    // session.
+    //
+    // Deliberately NOT used for jump targets. Pinning the neighbourhood of all
+    // 58 markers in that session would cost 72-216 MB, and it would buy little:
+    // the urgent fill lane already serves a cold jump's blocks before any
+    // read-ahead. Clip heads alone cost 1.2 MB and cover the case that is
+    // actually still broken. If a symptom ever justifies more, pin a rolling
+    // window of the next few markers (~6 MB) rather than all of them.
+    //
+    // `pin` records the intent; the block becomes resident when a fill worker
+    // delivers it. Control thread only.
+    void pin(const Id& source_id, int block_index);
+    // Forget every pinned block (song change / session unload). Already-loaded
+    // blocks stay cached but become evictable again.
+    void unpin_all();
+    size_t pinned_count() const noexcept;
+
 private:
     void evict_if_needed();
 
@@ -156,6 +186,9 @@ private:
     // prune. The audio thread never touches this mutex.
     std::mutex                                             eviction_mtx_;
     std::unordered_map<CacheKey, std::shared_ptr<CacheBlock>, CacheKeyHash> blocks_;
+    // Keys that must stay resident. Kept separately from the blocks themselves
+    // so a block can be pinned before it has been loaded.
+    std::unordered_set<CacheKey, CacheKeyHash>                              pinned_keys_;
     std::atomic<uint64_t> clock_{0};
 
     mutable std::atomic<size_t> hits_{0};

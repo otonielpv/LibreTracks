@@ -1009,6 +1009,46 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
 // 16 read-ahead blocks, and the last track's urgent block sat behind (N-1) x 17
 // blocks nobody needed yet — measured as 93-221 ms of silence on a 39-track
 // session. Mixing the two lanes up again would restore exactly that.
+// A pinned block survives the pressure that evicts everything else.
+//
+// This is the whole preload contract: the first block of each clip stays
+// resident so the first Play never reaches the disk for it. Measured, a block
+// read past the OS cache costs 4.4 ms against 0.196 ms resident — and every
+// track wants its head at the same instant, which is the few hundred
+// milliseconds of silence logged right after a session loads. If eviction can
+// take these, the preload is decoration.
+TEST_CASE("a pinned block survives eviction pressure") {
+    constexpr int kChannels = 2;
+    // Tiny cache with no per-source protection, so ordinary LRU is guaranteed
+    // to reclaim: nothing but the pin can save a block here.
+    BlockCache cache(kDefaultBlockFrames, /*max_blocks=*/8,
+                     /*protected_recent_per_source=*/0);
+
+    const Id kept = "pinned-source";
+    auto audio = make_reference_audio(kDefaultBlockFrames, kChannels);
+
+    cache.pin(kept, 0);
+    cache.fill(kept, 0, audio.data(), kChannels, kDefaultBlockFrames);
+    REQUIRE(cache.has_block(kept, 0));
+    CHECK(cache.pinned_count() == 1);
+
+    // Flood well past capacity from other sources.
+    for (int i = 0; i < 64; ++i) {
+        cache.fill("flood-source", i, audio.data(), kChannels, kDefaultBlockFrames);
+    }
+
+    // The flood evicted plenty — but not the pinned block.
+    CHECK(cache.has_block(kept, 0));
+
+    // And unpinning hands it back to ordinary LRU.
+    cache.unpin_all();
+    CHECK(cache.pinned_count() == 0);
+    for (int i = 64; i < 160; ++i) {
+        cache.fill("flood-source", i, audio.data(), kChannels, kDefaultBlockFrames);
+    }
+    CHECK_FALSE(cache.has_block(kept, 0));
+}
+
 TEST_CASE("a silenced block is requested urgently, its read-ahead is not") {
     constexpr int kChannels = 2;
     constexpr int kSampleRate = 48000;

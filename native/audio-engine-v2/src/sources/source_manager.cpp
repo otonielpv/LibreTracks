@@ -1291,6 +1291,37 @@ CacheDiagnostics SourceManager::cache_diagnostics() const {
     return block_cache_.diagnostics();
 }
 
+void SourceManager::preload_clip_heads(
+        const std::vector<std::pair<Id, Frame>>& clip_starts,
+        size_t max_blocks) const {
+    // Replace the whole set: the caller owns the policy and passes the song it
+    // is on, so anything pinned for a previous song must stop being pinned.
+    block_cache_.unpin_all();
+
+    size_t pinned = 0;
+    for (const auto& [source_id, start_frame] : clip_starts) {
+        if (pinned >= max_blocks) break;
+        const auto source = get_shared(source_id);
+        if (!source || !source->is_streaming())
+            continue;  // a fully-resident source needs no preload
+        if (start_frame < 0 || start_frame >= source->duration_frames())
+            continue;
+        const int block = block_cache_.block_index_for(start_frame);
+        block_cache_.pin(source_id, block);
+        // Pinning only records intent; the block still has to be fetched. Mark
+        // it urgent so it lands before any read-ahead already in flight.
+        request_block(source_id, block, /*urgent=*/true);
+        ++pinned;
+    }
+
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log(
+            "[LT_PRELOAD] pinned %zu clip head(s) of %zu requested (cap %zu, %.1f MB)\n",
+            pinned, clip_starts.size(), max_blocks,
+            double(pinned) * kDefaultBlockFrames * 2 * sizeof(float) / (1024.0 * 1024.0));
+    }
+}
+
 size_t SourceManager::fill_queue_depth() const noexcept {
     std::lock_guard lock(fill_mtx_);
     return fill_queue_urgent_.size() + fill_queue_.size();
