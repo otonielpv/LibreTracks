@@ -517,3 +517,148 @@ pub fn reveal_error_log(app: AppHandle) -> Result<(), String> {
         .reveal_item_in_dir(&path)
         .map_err(|error| error.to_string())
 }
+
+/// Default tail size for the in-app log viewer: enough context to see what
+/// happened before a failure, small enough that the WebView renders it without
+/// a stutter (the engine log grows unbounded across sessions).
+const DIAGNOSTICS_LOG_TAIL_BYTES: u64 = 256 * 1024;
+const DIAGNOSTICS_LOG_MAX_TAIL_BYTES: u64 = 4 * 1024 * 1024;
+
+/// The tail of one diagnostics log, ready to render.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsLogView {
+    /// Absolute path, so a desktop user can find the file themselves.
+    pub path: String,
+    pub total_bytes: u64,
+    /// True when older lines were left out of `contents`.
+    pub truncated: bool,
+    pub contents: String,
+}
+
+/// Resolve a log kind to its file.
+///
+/// - `errors`: `logs/errors.log`, the app's own error log (panics, failed
+///   commands, frontend exceptions).
+/// - `engine`: the C++ engine's diagnostic log (`[LT_STARVATION]`,
+///   `[LT_DEVICE]`, `[LT_THREADS]`…), whose path Rust pins at startup via
+///   `LIBRETRACKS_AUDIO_DEBUG_LOG`. This is the one that says whether a track
+///   went silent because the audio thread ran out of decoded blocks.
+fn diagnostics_log_path(kind: &str) -> Result<PathBuf, String> {
+    match kind {
+        "errors" => crate::infra::error_log::errors_path()
+            .ok_or_else(|| "error logger not initialized".to_string()),
+        "engine" => std::env::var_os("LIBRETRACKS_AUDIO_DEBUG_LOG")
+            .map(PathBuf::from)
+            .filter(|path| !path.as_os_str().is_empty())
+            .ok_or_else(|| "engine log path is not set".to_string()),
+        other => Err(format!("unknown diagnostics log: {other}")),
+    }
+}
+
+/// Read the END of a diagnostics log so Settings can SHOW it on the device.
+///
+/// Copying to the clipboard was the only way to get at these, which does not
+/// survive a big log (and on Android there is no file manager to fall back
+/// to). Reading the tail — not the whole file — keeps this usable no matter
+/// how long the engine log has grown.
+#[tauri::command]
+pub fn read_diagnostics_log(
+    kind: String,
+    max_bytes: Option<u64>,
+) -> Result<DiagnosticsLogView, String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let path = diagnostics_log_path(&kind)?;
+    let limit = max_bytes
+        .unwrap_or(DIAGNOSTICS_LOG_TAIL_BYTES)
+        .clamp(4096, DIAGNOSTICS_LOG_MAX_TAIL_BYTES);
+
+    let mut file = match fs::File::open(&path) {
+        Ok(file) => file,
+        // Nothing logged yet is a normal state, not an error.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(DiagnosticsLogView {
+                path: path.to_string_lossy().into_owned(),
+                total_bytes: 0,
+                truncated: false,
+                contents: String::new(),
+            })
+        }
+        Err(error) => return Err(error.to_string()),
+    };
+
+    let total_bytes = file.metadata().map_err(|error| error.to_string())?.len();
+    let start = total_bytes.saturating_sub(limit);
+    let truncated = start > 0;
+    if truncated {
+        file.seek(SeekFrom::Start(start))
+            .map_err(|error| error.to_string())?;
+    }
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .map_err(|error| error.to_string())?;
+
+    let mut contents = String::from_utf8_lossy(&buffer).into_owned();
+    if truncated {
+        // The seek lands mid-line; drop that fragment so the view starts on a
+        // whole entry.
+        if let Some(first_break) = contents.find('\n') {
+            contents = contents[first_break + 1..].to_string();
+        }
+    }
+
+    Ok(DiagnosticsLogView {
+        path: path.to_string_lossy().into_owned(),
+        total_bytes,
+        truncated,
+        contents,
+    })
+}
+
+/// Save a diagnostics log wherever the user wants it, so they can attach the
+/// WHOLE file to a bug report instead of pasting a clipboard excerpt. On
+/// Android this is the only way to get the file out of the app's private
+/// storage. Returns false when the user cancels.
+#[tauri::command]
+pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String> {
+    let path = diagnostics_log_path(&kind)?;
+    if !path.is_file() {
+        return Err("that log has not been written yet".to_string());
+    }
+    let suggested_name = format!(
+        "libretracks-{}-{}.log",
+        if kind == "engine" { "engine" } else { "errors" },
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0)
+    );
+
+    #[cfg(target_os = "android")]
+    {
+        let Some(target) = crate::platform::mobile_files::save_file(
+            &app,
+            "Guardar registro de diagnostico",
+            &suggested_name,
+        ) else {
+            return Ok(false);
+        };
+        crate::platform::mobile_files::copy_path_to_picked_target(&app, &path, &target)?;
+        return Ok(true);
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = &app;
+        let Some(target) = rfd::FileDialog::new()
+            .set_title("Guardar registro de diagnostico")
+            .set_file_name(&suggested_name)
+            .save_file()
+        else {
+            return Ok(false);
+        };
+        fs::copy(&path, &target).map_err(|error| error.to_string())?;
+        Ok(true)
+    }
+}

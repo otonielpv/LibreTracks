@@ -386,6 +386,40 @@ export async function revealErrorLog(): Promise<void> {
   await invokeCommand("reveal_error_log");
 }
 
+/** Which diagnostics log a Settings action refers to. */
+export type DiagnosticsLogKind = "errors" | "engine";
+
+export type DiagnosticsLogView = {
+  /** Absolute path of the file on disk. */
+  path: string;
+  totalBytes: number;
+  /** True when older lines were left out of `contents`. */
+  truncated: boolean;
+  contents: string;
+};
+
+/**
+ * Tail of one diagnostics log, for showing it inside the app. Copying to the
+ * clipboard is not enough on a phone: there is no file manager to fall back to
+ * and a long log does not survive the paste.
+ */
+export async function readDiagnosticsLog(
+  kind: DiagnosticsLogKind,
+  maxBytes?: number,
+): Promise<DiagnosticsLogView> {
+  return invokeCommand<DiagnosticsLogView>("read_diagnostics_log", {
+    kind,
+    maxBytes,
+  });
+}
+
+/** Save the WHOLE log wherever the user picks. False when they cancel. */
+export async function saveDiagnosticsLog(
+  kind: DiagnosticsLogKind,
+): Promise<boolean> {
+  return invokeCommand<boolean>("save_diagnostics_log", { kind });
+}
+
 export type DecodingCacheInfo = {
   /** Effective directory the engine writes decoded `.rf64` cache files into. */
   dir: string;

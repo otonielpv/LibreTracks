@@ -167,6 +167,16 @@ const en = {
       diagnosticsCopy: "Copy error log",
       diagnosticsCopied: "Error log copied to clipboard.",
       diagnosticsEmpty: "No errors have been recorded yet.",
+      diagnosticsEngineTitle: "Audio engine log",
+      diagnosticsEngineDescription:
+        "What the audio engine did while playing: devices, buffers, and dropouts. This is the one to look at when a track goes silent.",
+      diagnosticsView: "View log",
+      diagnosticsHide: "Hide log",
+      diagnosticsSave: "Save log...",
+      diagnosticsSaved: "Log saved.",
+      diagnosticsRefresh: "Refresh",
+      diagnosticsLogSize: "{{size}} on disk",
+      diagnosticsTailOnly: "showing the end of the file",
       decodingCacheTitle: "Audio cache",
       decodingCacheDescription:
         "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. Changing the folder leaves old files behind until you clear the cache.",

@@ -169,6 +169,16 @@ const es = {
       diagnosticsCopy: "Copiar registro de errores",
       diagnosticsCopied: "Registro de errores copiado al portapapeles.",
       diagnosticsEmpty: "Aún no se han registrado errores.",
+      diagnosticsEngineTitle: "Registro del motor de audio",
+      diagnosticsEngineDescription:
+        "Lo que hizo el motor de audio al reproducir: dispositivos, buffers y cortes. Es el que hay que mirar cuando una pista se queda muda.",
+      diagnosticsView: "Ver registro",
+      diagnosticsHide: "Ocultar registro",
+      diagnosticsSave: "Guardar registro...",
+      diagnosticsSaved: "Registro guardado.",
+      diagnosticsRefresh: "Actualizar",
+      diagnosticsLogSize: "{{size}} en disco",
+      diagnosticsTailOnly: "se muestra el final del archivo",
       decodingCacheTitle: "Caché de audio",
       decodingCacheDescription:
         "El audio que no es WAV (MP3, FLAC…) se decodifica una vez y se guarda aquí para que cargue al instante la próxima vez. Al cambiar la carpeta, los archivos anteriores quedan en la antigua hasta que vacíes la caché.",

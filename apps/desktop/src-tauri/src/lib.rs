@@ -244,6 +244,8 @@ pub fn run() {
             commands::system::read_error_log,
             commands::system::append_frontend_error,
             commands::system::reveal_error_log,
+            commands::system::read_diagnostics_log,
+            commands::system::save_diagnostics_log,
             commands::system::fetch_latest_release,
             commands::system::report_ui_render_metric,
             commands::project::start_create_song,

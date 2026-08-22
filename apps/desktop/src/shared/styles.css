@@ -1204,6 +1204,38 @@ textarea {
   color: #57f1db;
 }
 
+/* Log header: the file's size/state on the left, the refresh action on the
+   right, instead of the default all-to-the-right action row. */
+.lt-inline-actions--split {
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* In-app viewer for the diagnostics logs. Copying to the clipboard is not a
+   way to READ a log on a phone, where there is no file manager either. */
+.lt-log-viewer {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  max-height: 40vh;
+  overflow: auto;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 2px;
+  background: rgb(0 0 0 / 0.35);
+  color: rgb(229 226 225 / 0.85);
+  font: 400 0.76rem/1.5 "JetBrains Mono", ui-monospace, monospace;
+  /* Log lines are long; wrap rather than scroll the page sideways. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lt-log-viewer-path {
+  display: block;
+  margin-top: 0.35rem;
+  color: rgb(229 226 225 / 0.45);
+  font: 400 0.72rem/1.4 "Space Grotesk", sans-serif;
+  overflow-wrap: anywhere;
+}
+
 .lt-inline-actions button.is-primary {
   border-color: rgb(87 241 219 / 0.24);
   background: rgb(87 241 219 / 0.14);

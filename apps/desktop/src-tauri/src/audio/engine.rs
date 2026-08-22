@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc, Arc, Mutex, OnceLock,
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -2192,8 +2192,14 @@ impl AudioController {
                 }
                 "failed" | "cancelled" => {
                     failed_count += 1;
-                    // Terminal (won't progress further) — counts as done so the
-                    // aggregate can reach 100 and the indicator dismisses.
+                    // A source that never loads is a track that plays SILENCE
+                    // for the whole song, and nothing else records it: the
+                    // wait loop treats failed as done so playback is not held
+                    // up, and the only UI mention lives inside the preparing
+                    // indicator, which is debounced and gone by the time the
+                    // user presses play. Put it in the error log, which the
+                    // Diagnostics panel can show on the device.
+                    report_failed_source(&source.source_id, &source.error_message);
                     progress_sum += 100.0;
                 }
                 _ => {
@@ -3166,6 +3172,33 @@ fn playback_prepare_wait_timeout() -> Duration {
 /// True when every source in the snapshot has reached a terminal preparation
 /// state (decoded/cached, or failed/cancelled — both count as "done" so a broken
 /// source never hangs the wait). An empty source set is trivially ready.
+/// Record a source that will never load, once per source + reason.
+///
+/// The readiness summary is polled continuously, so this must not append a
+/// line per poll. The set is process-wide on purpose: the engine keeps sources
+/// registered across session loads, and one report per failure is what a bug
+/// report needs.
+fn report_failed_source(source_id: &str, error_message: &str) {
+    static REPORTED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let reported = REPORTED.get_or_init(|| Mutex::new(HashSet::new()));
+    let key = format!("{source_id}|{error_message}");
+    let mut guard = match reported.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if !guard.insert(key) {
+        return;
+    }
+    crate::infra::error_log::write_error(&format!(
+        "audio source failed to load (its track plays silence): {source_id} — {}",
+        if error_message.is_empty() {
+            "no reason reported by the engine"
+        } else {
+            error_message
+        }
+    ));
+}
+
 fn sources_ready(snapshot: &EngineSnapshot) -> bool {
     let total = snapshot.source_states.len();
     if total == 0 {

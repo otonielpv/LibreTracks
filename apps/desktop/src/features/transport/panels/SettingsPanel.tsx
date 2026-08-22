@@ -9,8 +9,6 @@ import {
   getDecodingCacheInfo,
   isAndroidApp,
   purgeDecodingCache,
-  readErrorLog,
-  revealErrorLog,
   setDecodingCacheDir,
   setDecodingCacheMaxGb,
 } from "@libretracks/shared/desktopApi";
@@ -23,6 +21,7 @@ import { formatMidiBinding } from "../helpers";
 import { formatUserFacingError } from "../errors/formatTransportError";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
+import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
 import { UpdateCheckField } from "./UpdateCheckField";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import {
@@ -845,7 +844,7 @@ export function SettingsPanel({
                   id="lt-settings-panel-diagnostics"
                   aria-labelledby="lt-settings-tab-diagnostics"
                 >
-                  <DiagnosticsTabPanel />
+                  <DiagnosticsSettingsTab />
                 </section>
               ) : null}
 
@@ -1343,90 +1342,3 @@ function DecodingCacheField() {
   );
 }
 
-function DiagnosticsTabPanel() {
-  const { t } = useTranslation();
-  const [status, setStatus] = useState<ReactNode>(null);
-
-  const handleReveal = () => {
-    void revealErrorLog().catch((error) => {
-      setStatus(
-          <small className="lt-update-check-status lt-update-check-status--error">
-          {formatUserFacingError(error, t)}
-        </small>,
-      );
-    });
-  };
-
-  const handleCopy = () => {
-    void (async () => {
-      try {
-        const contents = await readErrorLog();
-        if (!contents.trim()) {
-          setStatus(
-            <small className="lt-update-check-status">
-              {t("transport.settingsModal.diagnosticsEmpty", {
-                defaultValue: "No errors have been recorded yet.",
-              })}
-            </small>,
-          );
-          return;
-        }
-        await navigator.clipboard.writeText(contents);
-        setStatus(
-          <small className="lt-update-check-status lt-update-check-status--new">
-            {t("transport.settingsModal.diagnosticsCopied", {
-              defaultValue: "Error log copied to clipboard.",
-            })}
-          </small>,
-        );
-      } catch (error) {
-        setStatus(
-          <small className="lt-update-check-status lt-update-check-status--error">
-            {formatUserFacingError(error, t)}
-          </small>,
-        );
-      }
-    })();
-  };
-
-  return (
-    <div className="lt-settings-section-grid">
-      <div className="lt-settings-field">
-        <span className="lt-settings-field-label">
-          {t("transport.settingsModal.diagnosticsTitle", {
-            defaultValue: "Error log",
-          })}
-        </span>
-        <small>
-          {t("transport.settingsModal.diagnosticsDescription", {
-            defaultValue:
-              "If the app freezes or misbehaves, send us this log so we can find the cause. It records errors only — no audio or personal data.",
-          })}
-        </small>
-        <div className="lt-inline-actions">
-          {!isAndroidApp ? (
-            <button
-              type="button"
-              className="lt-secondary-button"
-              onClick={handleReveal}
-            >
-              {t("transport.settingsModal.diagnosticsOpenFolder", {
-                defaultValue: "Open logs folder",
-              })}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="lt-secondary-button"
-            onClick={handleCopy}
-          >
-            {t("transport.settingsModal.diagnosticsCopy", {
-              defaultValue: "Copy error log",
-            })}
-          </button>
-        </div>
-        {status}
-      </div>
-    </div>
-  );
-}
