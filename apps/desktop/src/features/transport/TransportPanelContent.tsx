@@ -2262,6 +2262,47 @@ export function TransportPanelContent() {
 
   const handleLocateMissingFile = useCallback(
     async (missingPath: string) => {
+      // Android: the native dialog hands back a `content://` URI, not a path,
+      // and the engine cannot open one — pointing at the right file "did
+      // nothing" because the clip was repointed to an unreadable URI. Pick
+      // through the WebView chooser instead and bring the FILE into the
+      // session's audio/ folder (same staged pipeline as a library import),
+      // then repoint the clip at that copy. The chooser only opens inside the
+      // tap's user-gesture window, so it must come before any await.
+      if (isAndroidApp) {
+        const files = await pickFilesViaWebView("audio/*");
+        const picked = files[0];
+        if (!picked) {
+          return;
+        }
+
+        await runAction(
+          async () => {
+            const stagedPayload = {
+              fileName: picked.name,
+              sourcePath: await stageFileForImport(picked, true),
+            };
+            const importedAssets = await importStagedAudioFiles([
+              stagedPayload,
+            ]);
+            const relocated = importedAssets[0];
+            if (!relocated) {
+              return;
+            }
+
+            const nextSnapshot = await resolveMissingFile(
+              missingPath,
+              relocated.filePath,
+            );
+            applyPlaybackSnapshot(nextSnapshot);
+            await Promise.all([refreshSongView(), refreshLibraryState()]);
+            setStatus(t("transport.status.projectSaved"));
+          },
+          { busy: true },
+        );
+        return;
+      }
+
       await runAction(
         async () => {
           const selectedPath = await open({
