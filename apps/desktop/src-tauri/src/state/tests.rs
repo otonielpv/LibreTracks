@@ -1943,6 +1943,97 @@ fn delete_library_asset_rejects_files_used_by_existing_clips() {
     assert!(error.to_string().contains("already used on the timeline"));
 }
 
+/// A library entry spelled in a different case than the clip that uses it is
+/// the SAME file on Windows/macOS/Android external storage. Deleting it there
+/// unlinked audio another song was still playing — reported from the field as
+/// "faltan archivos" on songs the user never touched.
+#[test]
+fn delete_library_asset_rejects_a_case_variant_a_clip_still_uses() {
+    let mut session = session_with_song_dir("library-delete-case-demo", demo_song());
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+    let audio_path = song_dir.join("audio").join("test.wav");
+
+    let error = session
+        .delete_library_asset("audio/TEST.wav")
+        .expect_err("delete should be rejected");
+
+    assert!(error.to_string().contains("already used on the timeline"));
+    assert!(audio_path.exists(), "the clip's audio must survive");
+}
+
+/// Imports slugify to lowercase; a session that arrived in a `.ltset` keeps the
+/// original casing of its audio. On a case-insensitive filesystem both spellings
+/// are one file, so handing out the lowercase name as "free" silently replaced
+/// the other song's audio.
+#[test]
+fn import_never_overwrites_an_existing_file_that_differs_only_in_case() {
+    let mut session = session_with_song_dir(
+        "library-import-case-demo",
+        build_empty_song("song_1".into(), "Nueva".into()),
+    );
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+
+    let existing_path = song_dir.join("audio").join("Bajo.wav");
+    write_silent_test_wav(&existing_path, 5);
+    write_library_manifest(&song_dir, &["audio/Bajo.wav".to_string()])
+        .expect("manifest should save");
+    let existing_bytes = fs::read(&existing_path).expect("existing audio should read");
+
+    let incoming_path = song_dir.join("incoming-bajo.wav");
+    write_silent_test_wav(&incoming_path, 2);
+    let incoming_bytes = fs::read(&incoming_path).expect("incoming audio should read");
+
+    let imported = session
+        .import_audio_files_from_bytes(&[AudioFileImportPayload {
+            file_name: "Bajo.wav".into(),
+            bytes: incoming_bytes,
+        }])
+        .expect("import should succeed");
+
+    assert_eq!(imported.len(), 1);
+    assert_eq!(imported[0].file_path, "audio/bajo-1.wav");
+    assert_eq!(
+        fs::read(&existing_path).expect("existing audio should still read"),
+        existing_bytes,
+        "the audio already in the session must not be replaced"
+    );
+}
+
+/// The reserved set is built from the manifest plus the clips, so audio sitting
+/// in `audio/` that neither knows about (a forgotten import, leftovers from an
+/// interrupted extraction) used to be a free name — and a failed import's
+/// rollback would then delete it.
+#[test]
+fn import_never_overwrites_audio_missing_from_the_manifest() {
+    let mut session = session_with_song_dir(
+        "library-import-orphan-demo",
+        build_empty_song("song_1".into(), "Nueva".into()),
+    );
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+
+    let orphan_path = song_dir.join("audio").join("huerfano.wav");
+    write_silent_test_wav(&orphan_path, 5);
+    write_library_manifest(&song_dir, &[]).expect("manifest should save");
+    let orphan_bytes = fs::read(&orphan_path).expect("orphan audio should read");
+
+    let incoming_path = song_dir.join("incoming-huerfano.wav");
+    write_silent_test_wav(&incoming_path, 2);
+    let incoming_bytes = fs::read(&incoming_path).expect("incoming audio should read");
+
+    let imported = session
+        .import_audio_files_from_bytes(&[AudioFileImportPayload {
+            file_name: "huerfano.wav".into(),
+            bytes: incoming_bytes,
+        }])
+        .expect("import should succeed");
+
+    assert_eq!(imported[0].file_path, "audio/huerfano-1.wav");
+    assert_eq!(
+        fs::read(&orphan_path).expect("orphan audio should still read"),
+        orphan_bytes
+    );
+}
+
 fn song_with_folder_hierarchy() -> Song {
     let mut song = demo_song();
     // A parent folder track + a child audio routed to a custom bus, plus the

@@ -312,11 +312,43 @@ struct PlannedAudioSource {
     relative_path: String,
 }
 
-/// Allocate a collision-free `audio/<name>` relative path for `file_name`,
-/// suffixing `-1`, `-2`… on a name (case-insensitively) already reserved. Folds
-/// case so a case-insensitive filesystem on the target doesn't alias two
-/// distinct sources onto one file — see the library dedup rationale.
-fn allocate_audio_relative_path(reserved_lower: &mut HashSet<String>, file_name: &str) -> String {
+/// Turn a song name into a folder name a filesystem and a zip both accept.
+///
+/// Keeps the name READABLE — accents, spaces and case survive, because the
+/// point of these folders is that a human opening `audio/` can tell whose stems
+/// are whose. Only what would break a path is removed: separators, the Windows
+/// reserved characters, control codes, and leading/trailing dots or spaces
+/// (Windows silently strips those, which would make the folder we wrote and the
+/// folder we recorded disagree). `None` when nothing usable is left.
+pub fn sanitize_audio_folder_name(name: &str) -> Option<String> {
+    let cleaned = name
+        .chars()
+        .filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .collect::<String>();
+    let trimmed = cleaned.trim().trim_matches('.').trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    // Long names are a portability hazard on Windows (MAX_PATH) once the
+    // session folder, `audio/`, and the file name are added on top.
+    Some(trimmed.chars().take(64).collect::<String>().trim().to_string())
+        .filter(|name| !name.is_empty())
+}
+
+/// Allocate a collision-free `audio/[<folder>/]<name>` relative path for
+/// `file_name`, suffixing `-1`, `-2`… on a name (case-insensitively) already
+/// reserved. Folds case so a case-insensitive filesystem on the target doesn't
+/// alias two distinct sources onto one file — see the library dedup rationale.
+///
+/// `folder` is the song the audio belongs to. Two songs that each ship a
+/// `Bass.wav` then keep their own copy under their own folder instead of
+/// becoming `Bass.wav` + `Bass-1.wav` in one flat heap where nobody can tell
+/// which is which.
+fn allocate_audio_relative_path(
+    reserved_lower: &mut HashSet<String>,
+    folder: Option<&str>,
+    file_name: &str,
+) -> String {
     let path = Path::new(file_name);
     let stem = path.file_stem().and_then(|v| v.to_str()).unwrap_or("audio");
     let extension = path.extension().and_then(|v| v.to_str());
@@ -329,7 +361,10 @@ fn allocate_audio_relative_path(reserved_lower: &mut HashSet<String>, file_name:
             (n, Some(ext)) => format!("{stem}-{n}.{ext}"),
             (n, None) => format!("{stem}-{n}"),
         };
-        let candidate = format!("audio/{name}");
+        let candidate = match folder {
+            Some(folder) => format!("audio/{folder}/{name}"),
+            None => format!("audio/{name}"),
+        };
         if reserved_lower.insert(candidate.to_lowercase()) {
             return candidate;
         }
@@ -352,19 +387,43 @@ fn allocate_audio_relative_path(reserved_lower: &mut HashSet<String>, file_name:
 fn plan_audio_sources(
     song_dir: &Path,
     song: &Song,
-    library_paths: &[String],
+    library: &[LibraryAudioEntry],
     audio_mode: SessionPackageAudio,
 ) -> Vec<PlannedAudioSource> {
     let mut seen = HashSet::new();
     let mut reserved_lower = HashSet::new();
     let mut planned = Vec::new();
 
+    // Which song each audio belongs to, so the package groups it under that
+    // name. The library's own folder (what the user sees in the Library panel,
+    // set from the region name when audio is dropped on a song) wins; a clip
+    // whose asset was never filed falls back to the region it plays in.
+    let library_folder_by_path: HashMap<String, String> = library
+        .iter()
+        .filter_map(|entry| {
+            let folder = entry.folder.as_deref().and_then(sanitize_audio_folder_name)?;
+            Some((stored_path_key(&entry.path), folder))
+        })
+        .collect();
+
     // Clips first so their bundled names stay stable regardless of the library.
-    let clip_paths = song.clips.iter().map(|clip| clip.file_path.clone());
-    for stored_path in clip_paths.chain(library_paths.iter().cloned()) {
+    let clip_entries = song.clips.iter().map(|clip| {
+        (
+            clip.file_path.clone(),
+            audio_folder_for_seconds(song, clip.timeline_start_seconds),
+        )
+    });
+    let library_entries = library
+        .iter()
+        .map(|entry| (entry.path.clone(), None::<String>));
+    for (stored_path, region_folder) in clip_entries.chain(library_entries) {
         if !seen.insert(stored_path.clone()) {
             continue;
         }
+        let folder = library_folder_by_path
+            .get(&stored_path_key(&stored_path))
+            .cloned()
+            .or(region_folder);
         let source_abs = if Path::new(&stored_path).is_absolute() {
             PathBuf::from(&stored_path)
         } else {
@@ -387,7 +446,8 @@ fn plan_audio_sources(
         } else {
             file_name
         };
-        let relative_path = allocate_audio_relative_path(&mut reserved_lower, file_name);
+        let relative_path =
+            allocate_audio_relative_path(&mut reserved_lower, folder.as_deref(), file_name);
         planned.push(PlannedAudioSource {
             clip_path: stored_path,
             source_abs,
@@ -397,13 +457,50 @@ fn plan_audio_sources(
     planned
 }
 
+/// Comparable key for a path exactly as a clip or a library asset stores it
+/// (relative or absolute): separators unified, case folded — audio lives on
+/// case-insensitive filesystems in practice.
+fn stored_path_key(stored_path: &str) -> String {
+    normalize_zip_path(stored_path).to_lowercase()
+}
+
+/// The folder inside `audio/` that a clip's audio belongs under: the song it
+/// plays in, sanitized for a filesystem. `None` when the clip sits outside
+/// every region — that audio stays at the flat `audio/` root, which is also
+/// what every session written before grouping existed looks like.
+///
+/// Shared by the package EXPORT and the `.ltpkg` IMPORT so both name the same
+/// folder for the same song; two copies of this rule would drift and scatter
+/// one song's stems across two folders.
+pub fn audio_folder_for_seconds(song: &Song, seconds: f64) -> Option<String> {
+    region_name_for_seconds(song, seconds)
+        .as_deref()
+        .and_then(sanitize_audio_folder_name)
+}
+
+/// Name of the song region playing at `seconds`, if any. The fallback for
+/// grouping a clip whose audio was never filed into a library folder.
+fn region_name_for_seconds(song: &Song, seconds: f64) -> Option<String> {
+    song.regions
+        .iter()
+        .find(|region| seconds >= region.start_seconds && seconds < region.end_seconds)
+        .map(|region| region.name.clone())
+}
+
+/// One audio path a session's `library.json` references, with the virtual
+/// folder it was filed under (the song name, when the asset was dropped on one).
+struct LibraryAudioEntry {
+    path: String,
+    folder: Option<String>,
+}
+
 /// The audio paths a session's `library.json` references, in file order.
 ///
 /// Reads both shapes the sidecar has used: the current
 /// `assets: [{ filePath, … }]` and the legacy `filePaths: ["…"]`. Best-effort —
 /// a missing or unparseable sidecar yields an empty list, so the export falls
 /// back to bundling clip audio only rather than failing.
-fn library_audio_paths(song_dir: &Path) -> Vec<String> {
+fn library_audio_paths(song_dir: &Path) -> Vec<LibraryAudioEntry> {
     // The desktop crate owns LIBRARY_MANIFEST_FILE_NAME; the same name is used
     // verbatim below when the sidecar is bundled, so keep the two in step.
     let Ok(bytes) = fs::read(song_dir.join("library.json")) else {
@@ -413,22 +510,26 @@ fn library_audio_paths(song_dir: &Path) -> Vec<String> {
         return Vec::new();
     };
     let mut paths = Vec::new();
-    let mut push = |path: &str| {
+    let mut push = |path: &str, folder: Option<&str>| {
         if !path.is_empty() {
-            paths.push(path.to_string());
+            paths.push(LibraryAudioEntry {
+                path: path.to_string(),
+                folder: folder.map(str::to_string),
+            });
         }
     };
     if let Some(assets) = value.get("assets").and_then(|a| a.as_array()) {
         for asset in assets {
             if let Some(path) = asset.get("filePath").and_then(|v| v.as_str()) {
-                push(path);
+                push(path, asset.get("folderPath").and_then(|v| v.as_str()));
             }
         }
     }
+    // Legacy shape: paths only, no folders.
     if let Some(file_paths) = value.get("filePaths").and_then(|a| a.as_array()) {
         for entry in file_paths {
             if let Some(path) = entry.as_str() {
-                push(path);
+                push(path, None);
             }
         }
     }
@@ -670,9 +771,18 @@ pub fn export_session_as_package_with_audio(
                 // source we cannot decode is skipped rather than failing the
                 // whole export — same tolerance the Original path has for an
                 // unreadable file.
+                // Unique per CALL, not just per process+index: two exports
+                // running at once (two tests in one binary, or a user exporting
+                // while a background export finishes) otherwise pick the same
+                // staging name, and the one that finishes first deletes the
+                // other's file — the audio then silently never makes it into
+                // the package.
+                static STAGING_SEQUENCE: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(0);
                 let staging = std::env::temp_dir().join(format!(
-                    "libretracks-prepare-{}-{}.wav",
+                    "libretracks-prepare-{}-{}-{}.wav",
                     std::process::id(),
+                    STAGING_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                     index
                 ));
                 if let Ok(info) = crate::prepared_audio::prepare_audio_to_wav(source_abs, &staging) {
@@ -1102,8 +1212,9 @@ mod tests {
         let dest_dir = target.path().join("Imported");
         extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
 
-        // The asset travelled...
-        let bundled = dest_dir.join("audio").join("Alto.mp3");
+        // The asset travelled — under the folder it was filed in, so the
+        // package says which song it belongs to.
+        let bundled = dest_dir.join("audio").join("Reckless").join("Alto.mp3");
         assert!(
             bundled.exists(),
             "a library asset no clip uses must still be bundled in a full package"
@@ -1117,11 +1228,125 @@ mod tests {
         let asset_path = library["assets"][0]["filePath"]
             .as_str()
             .expect("asset path");
-        assert_eq!(asset_path, "audio/Alto.mp3");
+        assert_eq!(asset_path, "audio/Reckless/Alto.mp3");
         assert_eq!(
             library["filePaths"][0].as_str().expect("legacy path"),
-            "audio/Alto.mp3"
+            "audio/Reckless/Alto.mp3"
         );
+    }
+
+    #[test]
+    fn audio_folder_follows_the_song_the_clip_plays_in() {
+        let song = session();
+
+        assert_eq!(
+            audio_folder_for_seconds(&song, 0.0).as_deref(),
+            Some("Cancion 1")
+        );
+        // The boundary belongs to the song that starts there, not the one that
+        // ends there — a clip at 30.0 is song 2's.
+        assert_eq!(
+            audio_folder_for_seconds(&song, 30.0).as_deref(),
+            Some("Cancion 2")
+        );
+        // Audio parked outside every region keeps the flat root, which is what
+        // every session written before grouping existed looks like.
+        assert_eq!(audio_folder_for_seconds(&song, 90.0), None);
+    }
+
+    #[test]
+    fn folder_names_survive_accents_but_not_path_characters() {
+        // Readability is the point: accents, spaces and case stay.
+        assert_eq!(
+            sanitize_audio_folder_name("Poema de Salvación").as_deref(),
+            Some("Poema de Salvación")
+        );
+        // Anything that would break a path is dropped, not escaped.
+        assert_eq!(
+            sanitize_audio_folder_name("AC/DC: Live?").as_deref(),
+            Some("ACDC Live")
+        );
+        // Windows strips trailing dots and spaces, so the folder we write and
+        // the one we record would disagree; trim them ourselves.
+        assert_eq!(
+            sanitize_audio_folder_name(" Intro. ").as_deref(),
+            Some("Intro")
+        );
+        // Nothing usable left -> no folder, audio stays at the root.
+        assert_eq!(sanitize_audio_folder_name("///"), None);
+        assert_eq!(sanitize_audio_folder_name("   "), None);
+    }
+
+    /// Every song's audio ships under a folder named after the song, so two
+    /// songs that each have a `Bajo.wav` stay apart AND stay identifiable.
+    ///
+    /// Flat `audio/` made them `Bajo.wav` + `Bajo-1.wav`, and nothing on disk
+    /// said which was whose — the state a user hit after importing a set and
+    /// then trying to clean up one song's files.
+    #[test]
+    fn full_export_groups_each_songs_audio_under_its_own_folder() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+
+        // Two DIFFERENT files that share a basename, one per song.
+        let stems = tempfile::tempdir().expect("stems");
+        let first = stems.path().join("uno").join("Bajo.wav");
+        let second = stems.path().join("dos").join("Bajo.wav");
+        for (path, bytes) in [(&first, b"RIFF....bajo-uno"), (&second, b"RIFF....bajo-dos")] {
+            fs::create_dir_all(path.parent().expect("parent")).expect("stem dir");
+            fs::write(path, bytes).expect("stem");
+        }
+
+        let mut song = session();
+        song.clips = vec![
+            clip(
+                "c1",
+                "t1",
+                &first.to_string_lossy().replace(char::from(92u8), "/"),
+                0.0,
+                10.0,
+            ),
+            clip(
+                "c2",
+                "t1",
+                &second.to_string_lossy().replace(char::from(92u8), "/"),
+                30.0,
+                10.0,
+            ),
+        ];
+
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &song,
+            &sidecars(),
+            &package_path,
+            true,
+            |_, _| {},
+        )
+        .expect("export full");
+
+        let target = tempfile::tempdir().expect("target");
+        let dest_dir = target.path().join("Imported");
+        extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
+
+        let from_first = dest_dir.join("audio").join("Cancion 1").join("Bajo.wav");
+        let from_second = dest_dir.join("audio").join("Cancion 2").join("Bajo.wav");
+        assert!(from_first.is_file(), "song 1 audio must live under its own folder");
+        assert!(from_second.is_file(), "song 2 audio must live under its own folder");
+        // Each folder holds ITS song's bytes — not one copy shared by both.
+        assert_eq!(fs::read(&from_first).expect("read"), b"RIFF....bajo-uno");
+        assert_eq!(fs::read(&from_second).expect("read"), b"RIFF....bajo-dos");
+        // And nothing was left flat at the root.
+        assert!(!dest_dir.join("audio").join("Bajo.wav").exists());
+
+        // The extracted session's clips point at the grouped copies.
+        let session_file = dest_dir.join("Imported.ltsession");
+        let document = fs::read_to_string(&session_file).expect("session document");
+        assert!(document.contains("audio/Cancion 1/Bajo.wav"), "{document}");
+        assert!(document.contains("audio/Cancion 2/Bajo.wav"), "{document}");
     }
 
     /// Extraction must stay usable from a worker thread while another thread

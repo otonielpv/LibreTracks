@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use libretracks_core::Song;
 use libretracks_project::{
     global_waveform_file_path, import_wav_files_to_library, read_audio_metadata,
-    PackageLibraryAssetEntry,
+    audio_folder_for_seconds, PackageLibraryAssetEntry,
 };
 
 use serde::{Deserialize, Serialize};
@@ -110,11 +110,12 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let normalized_file_path = normalize_library_file_path(file_path);
+        let doomed_key = library_file_identity(&song_dir, &normalized_file_path);
 
         if song
             .clips
             .iter()
-            .any(|clip| normalize_library_file_path(&clip.file_path) == normalized_file_path)
+            .any(|clip| library_file_identity(&song_dir, &clip.file_path) == doomed_key)
         {
             return Err(DesktopError::AudioCommand(
                 "cannot delete a library asset that is already used on the timeline".into(),
@@ -126,8 +127,16 @@ impl DesktopSession {
         write_library_manifest_assets(&song_dir, &library_assets)?;
 
         let audio_file_path = resolve_audio_file_path(&song_dir, &normalized_file_path);
-        let deleted_local_audio =
-            !Path::new(&normalized_file_path).is_absolute() && audio_file_path.exists();
+        // A session written before the allocator folded case can hold two
+        // manifest entries that name the SAME file on disk. Forgetting the
+        // entry is fine; unlinking the bytes another entry still points at is
+        // not, so the physical delete only happens when nothing else claims it.
+        let still_claimed_by_another_asset = library_assets
+            .iter()
+            .any(|asset| library_file_identity(&song_dir, &asset.file_path) == doomed_key);
+        let deleted_local_audio = !Path::new(&normalized_file_path).is_absolute()
+            && audio_file_path.exists()
+            && !still_claimed_by_another_asset;
         // The global waveform entry is keyed by the audio's path+size+mtime, so
         // capture its path BEFORE removing the audio (stat must still succeed).
         let global_waveform_path =
@@ -372,6 +381,31 @@ pub(super) fn normalize_library_file_path(file_path: &str) -> String {
     file_path.replace('\\', "/")
 }
 
+/// Key that answers "do these two library paths name the same audio file?".
+///
+/// Comparing the stored strings is not enough: the same file can be spelled
+/// relative (`audio/bajo.wav`, how imports register it) or absolute (how a
+/// desktop drag-and-drop registers the user's original), and on a
+/// case-insensitive filesystem — NTFS, APFS, Android's emulated external
+/// storage — it can be spelled in different casings. Deciding on the raw
+/// string is what let a delete unlink audio that another song's clip was
+/// still playing.
+///
+/// Folding case makes the comparison conservative on a case-sensitive
+/// filesystem: two genuinely distinct files whose names differ only in case
+/// are treated as one, so a delete is REFUSED rather than performed. Refusing
+/// to delete is the safe direction; unlinking someone else's audio is not.
+pub(super) fn library_file_identity(song_dir: &Path, file_path: &str) -> String {
+    let normalized = normalize_library_file_path(file_path);
+    let resolved = resolve_audio_file_path(song_dir, &normalized);
+    let canonical = fs::canonicalize(&resolved).unwrap_or(resolved);
+    let key = normalize_library_file_path(canonical.to_string_lossy().as_ref()).to_lowercase();
+    // Windows canonicalize returns the `\\?\` verbatim form; a path that could
+    // not be canonicalized (the file is gone) does not carry it. Drop it so the
+    // two spellings still compare equal.
+    key.strip_prefix("//?/").map(str::to_string).unwrap_or(key)
+}
+
 fn sanitize_import_file_name(file_name: &str) -> Result<String, DesktopError> {
     let trimmed = file_name.trim();
     if trimmed.is_empty() {
@@ -398,7 +432,32 @@ fn sanitize_import_file_name(file_name: &str) -> Result<String, DesktopError> {
     Ok(format!("{}.{}", sanitized_stem, extension))
 }
 
-fn allocate_library_audio_path(reserved_paths: &HashSet<String>, file_name: &str) -> String {
+/// Pick a free `audio/<name>` for a file being brought into the session.
+///
+/// A candidate is only free when NOTHING already claims it, and "claims" is
+/// deliberately broader than a string match on `reserved_paths`:
+///
+/// - **Case-folded comparison.** On a case-insensitive filesystem — NTFS,
+///   APFS, and Android's emulated external storage, where sessions live —
+///   `audio/Bajo.wav` and `audio/bajo.wav` are the SAME file. Imports run
+///   their name through [`sanitize_import_file_name`], which lowercases, so a
+///   session that arrived from a `.ltset` (extraction preserves the original
+///   casing) had every capitalised name shadowed by its slug: importing
+///   `Bajo.wav` into a set that already had `audio/Bajo.wav` handed out
+///   `audio/bajo.wav` as "free" and the write silently REPLACED the other
+///   song's audio. Reported from the field on Android — a bass and a guide
+///   track of untouched songs lost their audio.
+/// - **What is actually on disk.** The reserved set comes from the manifest
+///   plus the clips; a file that is in `audio/` but in neither (an import the
+///   user later "forgot", leftovers from an interrupted extraction) would
+///   otherwise be overwritten too — and the rollback path of a failed import
+///   would then delete it.
+fn allocate_library_audio_path(
+    song_dir: &Path,
+    reserved_paths: &HashSet<String>,
+    folder: Option<&str>,
+    file_name: &str,
+) -> String {
     let source_path = Path::new(file_name);
     let stem = source_path
         .file_stem()
@@ -409,6 +468,11 @@ fn allocate_library_audio_path(reserved_paths: &HashSet<String>, file_name: &str
         .and_then(|value| value.to_str())
         .unwrap_or("wav");
 
+    let reserved_lower = reserved_paths
+        .iter()
+        .map(|path| path.to_lowercase())
+        .collect::<HashSet<_>>();
+
     let mut index = 0_u32;
     loop {
         let next_name = if index == 0 {
@@ -416,8 +480,13 @@ fn allocate_library_audio_path(reserved_paths: &HashSet<String>, file_name: &str
         } else {
             format!("{stem}-{index}.{extension}")
         };
-        let candidate = format!("audio/{next_name}");
-        if !reserved_paths.contains(&candidate) {
+        let candidate = match folder {
+            Some(folder) => format!("audio/{folder}/{next_name}"),
+            None => format!("audio/{next_name}"),
+        };
+        if !reserved_lower.contains(&candidate.to_lowercase())
+            && !resolve_audio_file_path(song_dir, &candidate).exists()
+        {
             return candidate;
         }
         index += 1;
@@ -457,6 +526,22 @@ pub(super) fn place_bundled_audio_and_repoint(
     // by original file name so sibling clips of the same source reuse it.
     // file name -> "audio/<final>" relative path of the written copy.
     let mut copied: HashMap<String, String> = HashMap::new();
+    // Where each imported clip's audio goes: under the folder of the song it
+    // lands in, so `audio/` says whose stems are whose. `song` here is the
+    // MERGED session (the destination's regions plus the imported one), which
+    // is why the folder comes from each clip's own position rather than from a
+    // single name passed in. Audio that lands outside any region keeps the flat
+    // `audio/` root, exactly as before.
+    let folder_for_clip: HashMap<String, Option<String>> = song
+        .clips
+        .iter()
+        .map(|clip| {
+            (
+                clip.id.clone(),
+                audio_folder_for_seconds(song, clip.timeline_start_seconds),
+            )
+        })
+        .collect();
 
     for clip in &mut song.clips {
         let Some(file_name) = Path::new(&clip.file_path)
@@ -480,13 +565,26 @@ pub(super) fn place_bundled_audio_and_repoint(
 
         // Original is gone: write the bundled copy (once per source) and
         // re-point the clip to it.
-        let relative_path = if let Some(existing) = copied.get(&file_name) {
+        let folder = folder_for_clip.get(&clip.id).cloned().flatten();
+        // Keyed by folder + name: the same file name coming from two songs
+        // gets one copy per song, not one shared copy.
+        let copy_key = format!("{}/{file_name}", folder.as_deref().unwrap_or(""));
+        let relative_path = if let Some(existing) = copied.get(&copy_key) {
             existing.clone()
         } else {
-            let relative_path = allocate_library_audio_path(&reserved_paths, &file_name);
+            let relative_path = allocate_library_audio_path(
+                song_dir,
+                &reserved_paths,
+                folder.as_deref(),
+                &file_name,
+            );
             reserved_paths.insert(relative_path.clone());
-            fs::write(song_dir.join(&relative_path), bytes)?;
-            copied.insert(file_name.clone(), relative_path.clone());
+            let destination = song_dir.join(&relative_path);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&destination, bytes)?;
+            copied.insert(copy_key, relative_path.clone());
             relative_path
         };
         clip.file_path = relative_path;
@@ -518,7 +616,7 @@ pub fn import_audio_files_from_bytes_to_library(
 
         for file in files {
             let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
-            let relative_path = allocate_library_audio_path(&reserved_paths, &sanitized_file_name);
+            let relative_path = allocate_library_audio_path(song_dir, &reserved_paths, None, &sanitized_file_name);
             reserved_paths.insert(relative_path.clone());
 
             let absolute_path = resolve_audio_file_path(song_dir, &relative_path);
@@ -613,7 +711,7 @@ pub fn import_staged_audio_files_to_library(
             }
 
             let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
-            let relative_path = allocate_library_audio_path(&reserved_paths, &sanitized_file_name);
+            let relative_path = allocate_library_audio_path(song_dir, &reserved_paths, None, &sanitized_file_name);
             reserved_paths.insert(relative_path.clone());
 
             let absolute_path = resolve_audio_file_path(song_dir, &relative_path);
@@ -965,10 +1063,29 @@ fn collect_scanned_library_file_paths(song_dir: &Path) -> Result<Vec<String>, De
         return Ok(Vec::new());
     }
 
+    // Recursive: packages group their audio by song (`audio/<Canción>/x.wav`),
+    // so a flat listing would report an imported set as having no library at
+    // all. Sessions written before that are flat and still list the same.
     let mut file_paths = Vec::new();
-    for entry in fs::read_dir(audio_dir)? {
+    scan_audio_dir_into(&audio_dir, "audio", &mut file_paths)?;
+    file_paths.sort();
+    Ok(file_paths)
+}
+
+fn scan_audio_dir_into(
+    dir: &Path,
+    relative_prefix: &str,
+    file_paths: &mut Vec<String>,
+) -> Result<(), DesktopError> {
+    for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
+        let entry_name = entry.file_name().to_string_lossy().to_string();
+
+        if path.is_dir() {
+            scan_audio_dir_into(&path, &format!("{relative_prefix}/{entry_name}"), file_paths)?;
+            continue;
+        }
         if !path.is_file() {
             continue;
         }
@@ -981,12 +1098,9 @@ fn collect_scanned_library_file_paths(song_dir: &Path) -> Result<Vec<String>, De
             continue;
         }
 
-        let file_name = entry.file_name().to_string_lossy().to_string();
-        file_paths.push(format!("audio/{file_name}"));
+        file_paths.push(format!("{relative_prefix}/{entry_name}"));
     }
-
-    file_paths.sort();
-    Ok(file_paths)
+    Ok(())
 }
 
 pub(super) fn collect_library_file_paths(
