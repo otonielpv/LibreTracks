@@ -35,6 +35,9 @@ const copy = es
       previousPeriod: "frente al periodo anterior",
       dailyTrend: "Evolucion diaria",
       utcActivity: "Actividad por hora UTC",
+      weekly: "Uso por dia de la semana",
+      weeklyNote: "Dia local del dispositivo. Un pico en domingo indica uso en directo; una semana plana indica ensayos.",
+      sundayShare: "Uso en domingo",
       geography: "Uso por pais",
       geographyNote: "Pais aproximado inferido en el edge; nunca ubicacion precisa.",
       versions: "Versiones instaladas",
@@ -73,6 +76,9 @@ const copy = es
       previousPeriod: "versus previous period",
       dailyTrend: "Daily trend",
       utcActivity: "Activity by UTC hour",
+      weekly: "Usage by weekday",
+      weeklyNote: "Device-local weekday. A Sunday spike means live use; a flat week means rehearsals.",
+      sundayShare: "Sunday usage",
       geography: "Usage by country",
       geographyNote: "Approximate country inferred at the edge; never precise location.",
       versions: "Installed versions",
@@ -150,6 +156,7 @@ const copy = es
   type Daily = { day: string; activeDevices: number; activatedDevices: number; featureDevices: number };
   type Breakdown = { label: string; sessions: number; devices: number };
   type Hourly = { hour: string; sessions: number; devices: number };
+  type Weekday = { weekday: number; sessions: number; devices: number };
   type ProductStats = {
     generatedAt: string;
     windowDays: number;
@@ -163,6 +170,7 @@ const copy = es
     maturity: { installationAge: Bucket[]; activeDays: Bucket[] };
     daily: Daily[];
     hourly: Hourly[];
+    weekly: { weekdays: Weekday[]; sundayShare: number };
     breakdown: {
       countries: Breakdown[];
       versions: Breakdown[];
@@ -247,6 +255,11 @@ const copy = es
   };
   const label = (key: string) => names[locale]?.[key] ?? key;
   const regionNames = new Intl.DisplayNames([locale], { type: "region" });
+  // 2024-01-07 is a Sunday, so index 0 lines up with Date.getDay() and the
+  // local_weekday column without hardcoding day names per language.
+  const weekdayFormat = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
+  const weekdayName = (weekday: number) =>
+    weekdayFormat.format(new Date(Date.UTC(2024, 0, 7 + weekday)));
   const chartInstances: Array<ReturnType<typeof echarts.init>> = [];
   const isoByNumericCode = new Map(
     countryLookup.countries
@@ -376,6 +389,20 @@ const copy = es
     return card;
   }
 
+  function weeklyCard(): HTMLElement {
+    const card = document.createElement("article");
+    card.className = "analytics-card analytics-chart-card";
+    const note = document.createElement("p");
+    note.className = "stats-muted";
+    note.textContent = copy.weeklyNote;
+    card.append(heading(copy.weekly), note);
+    const plot = document.createElement("div");
+    plot.className = "analytics-echart";
+    plot.dataset.chart = "weekly";
+    card.append(plot);
+    return card;
+  }
+
   const chartTheme = {
     text: "#bacac5",
     grid: "rgba(186, 202, 197, 0.10)",
@@ -422,6 +449,24 @@ const copy = es
       xAxis: { ...axis, type: "category", data: data.hourly.map((row) => row.hour) },
       yAxis: { ...axis, type: "value", minInterval: 1 },
       series: [{ name: copy.starts, type: "bar", barMaxWidth: 20, data: data.hourly.map((row) => row.sessions), itemStyle: { borderRadius: [3, 3, 0, 0] } }],
+    });
+    const weekly = root?.querySelector<HTMLElement>('[data-chart="weekly"]');
+    if (weekly) createChart(weekly, {
+      aria: { enabled: true }, tooltip,
+      grid: { left: 42, right: 14, top: 16, bottom: 34 },
+      xAxis: { ...axis, type: "category", data: data.weekly.weekdays.map((row) => weekdayName(row.weekday)) },
+      yAxis: { ...axis, type: "value", minInterval: 1 },
+      series: [{
+        name: copy.devices,
+        type: "bar",
+        barMaxWidth: 26,
+        itemStyle: { borderRadius: [3, 3, 0, 0] },
+        // Sunday carries the answer, so it never blends into the other bars.
+        data: data.weekly.weekdays.map((row) => ({
+          value: row.devices,
+          itemStyle: { color: row.weekday === 0 ? chartTheme.amber : chartTheme.teal },
+        })),
+      }],
     });
     const funnel = root?.querySelector<HTMLElement>('[data-chart="funnel"]');
     if (funnel) createChart(funnel, {
@@ -490,6 +535,7 @@ const copy = es
       metric(numbers.format(data.activeDeviceDays), copy.devices, data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined),
       metric(`${activationRate.toFixed(1)}%`, copy.activationRate),
       metric(`${deepSessionRate.toFixed(1)}%`, copy.deepSessions),
+      metric(`${data.weekly.sundayShare.toFixed(1)}%`, copy.sundayShare),
     );
 
     const grid = document.createElement("div");
@@ -497,6 +543,7 @@ const copy = es
     grid.append(
       trend(data.daily),
       chartCard(copy.utcActivity, "hourly"),
+      weeklyCard(),
       chartCard(copy.activation, "funnel"),
       countryMap(data.breakdown.countries),
       dimension(copy.versions, data.breakdown.versions),

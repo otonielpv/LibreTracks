@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   classifyPlatform,
   dailyDeviceToken,
+  localWeekday,
   recordProductEvent,
   resetTelemetrySessionForTest,
   submitAppSession,
@@ -40,6 +41,20 @@ describe("privacy-preserving telemetry", () => {
     expect(nextDay).not.toBe(first);
   });
 
+  it("reads the weekday from the device calendar, never from UTC", () => {
+    // A Sunday evening service in the Americas is already Monday in UTC.
+    // Reading getUTCDay() here would file those services under Monday and
+    // hide the very pattern this metric exists to measure.
+    const sundayEveningInTheAmericas = {
+      getDay: () => 0,
+      getUTCDay: () => 1,
+    } as unknown as Date;
+
+    expect(localWeekday(sundayEveningInTheAmericas)).toBe("0");
+    expect(localWeekday(new Date(2026, 7, 23, 20, 30))).toBe("0");
+    expect(localWeekday(new Date(2026, 7, 25, 20, 30))).toBe("2");
+  });
+
   it("sends nothing before opt-in and only one start per app session", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -61,6 +76,7 @@ describe("privacy-preserving telemetry", () => {
       version: "1.10.0",
       installationAgeBucket: "day_0",
       activeDaysBucket: "1",
+      localWeekday: String(new Date().getDay()),
     });
     expect(body.dailyDeviceToken).toMatch(/^[a-f0-9]{64}$/);
   });
@@ -97,6 +113,7 @@ describe("privacy-preserving telemetry", () => {
       consentVersion: 3,
     });
     expect(body).not.toHaveProperty("installationAgeBucket");
+    expect(body).not.toHaveProperty("localWeekday");
   });
 
   it("serializes telemetry requests instead of creating concurrent bursts", async () => {

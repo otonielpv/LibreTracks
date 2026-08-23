@@ -57,6 +57,18 @@ export type InstallationProfile = {
   activeDaysBucket: "1" | "2_3" | "4_7" | "8_30" | "31_plus";
 };
 
+/**
+ * Local weekday of this app start, "0" (Sunday) to "6" (Saturday).
+ *
+ * The server only knows the UTC day, and a Sunday evening service in the
+ * Americas lands on Monday UTC. Reading the weekday from the device is what
+ * separates worship services from weekday rehearsals; three bits with no
+ * calendar date attached stay well inside the coarse-bucket policy.
+ */
+export function localWeekday(now = new Date()): string {
+  return String(now.getDay());
+}
+
 export const useTelemetryStore = create<TelemetryState>()(
   persist(
     (set) => ({
@@ -261,6 +273,7 @@ async function submitTelemetryEvent(
         dailyDeviceToken: token,
         ...platform,
         ...profile,
+        ...(event === "app_started" ? { localWeekday: localWeekday() } : {}),
       }),
     });
     return response.ok;

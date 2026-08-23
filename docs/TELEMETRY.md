@@ -19,6 +19,16 @@ The public dashboard provides rolling 24-hour, 7-day and 30-day totals, hourly
 and daily UTC trends, and 30-day country/version/platform breakdowns. Timeline
 buckets and breakdowns with fewer than five devices are suppressed.
 
+`app_started` also carries the weekday the start happened on according to the
+device's own calendar, as a single digit from `0` (Sunday) to `6` (Saturday).
+It cannot be derived from `utc_day`: a Sunday evening service anywhere in the
+Americas is already Monday in UTC, so a server-side weekday would move exactly
+the worship services this metric exists to count into Monday. The field carries
+three bits and no calendar date, is optional, and clients that predate it are
+stored as `unknown`. It answers whether LibreTracks runs at services or at
+weekday rehearsals; the private dashboard charts it and reports the Sunday
+share of reporting device-days.
+
 Consent version 3 enables the closed product-event taxonomy defined by
 `PRODUCT_EVENT_NAMES`. It covers activation, feature adoption, selected action
 outcomes and 5/15/30/60-minute active-session milestones. Every product event
@@ -39,7 +49,8 @@ does not collect or expose cities, coordinates or IP addresses.
 2. Apply the SQL files in `apps/website/migrations` in numeric order in the D1
    SQL console (or with Wrangler's `d1 execute --remote --file` command). An
    existing installation must run only the numbered files it has not yet
-   applied. Product metrics require `0003_product_telemetry.sql`.
+   applied. Product metrics require `0003_product_telemetry.sql`, and the
+   weekday chart requires `0005_local_weekday.sql`.
 3. In the LibreTracks Pages project, add a D1 binding named exactly
    `TELEMETRY_DB` and select that database for both production and preview.
 4. Confirm the Pages project root is `apps/website`. Pages Functions must live
@@ -66,6 +77,8 @@ add a monthly scheduled Worker that runs the same deletion query.
 - Keep Cloudflare's data-processing terms and transfer settings documented.
 - Keep country inference limited to Cloudflare's two-letter edge country code;
   do not add regions, cities or coordinates.
+- Keep the local calendar signal limited to the weekday; a local date, clock
+  time or UTC offset would narrow a device far more than a weekday does.
 - Do not add project names, paths, audio/MIDI device names, precise OS versions,
   IP addresses, full User-Agent strings or persistent identifiers.
 - If a new event or field is added, update both privacy pages and request fresh

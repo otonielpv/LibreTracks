@@ -1213,7 +1213,7 @@ const en = {
     eyebrow: "Privacy",
     title: "Help improve LibreTracks",
       description:
-        "Allow optional product statistics: app starts and UTC time, broad platform and country, feature adoption, completed or failed actions, coarse installation maturity and active-session milestones. LibreTracks never sends precise location, project content, audio, names, paths or connected hardware.",
+        "Allow optional product statistics: app starts, UTC time and local weekday, broad platform and country, feature adoption, completed or failed actions, coarse installation maturity and active-session milestones. LibreTracks never sends precise location, project content, audio, names, paths or connected hardware.",
     detail:
       "A random secret stays on this device. Only a token that changes every day is sent, so it cannot build a long-term device history.",
     allow: "Allow usage statistics",

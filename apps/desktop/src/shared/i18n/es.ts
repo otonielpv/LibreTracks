@@ -1244,7 +1244,7 @@ const es = {
     eyebrow: "Privacidad",
     title: "Ayuda a mejorar LibreTracks",
       description:
-        "Permite estadisticas opcionales de producto: inicios y hora UTC, plataforma general y pais, adopcion de funciones, acciones completadas o fallidas, madurez aproximada de la instalacion e hitos de sesion activa. LibreTracks nunca envia ubicacion precisa, contenido de proyectos, audio, nombres, rutas ni hardware conectado.",
+        "Permite estadisticas opcionales de producto: inicios, hora UTC y dia de la semana local, plataforma general y pais, adopcion de funciones, acciones completadas o fallidas, madurez aproximada de la instalacion e hitos de sesion activa. LibreTracks nunca envia ubicacion precisa, contenido de proyectos, audio, nombres, rutas ni hardware conectado.",
     detail:
       "Un secreto aleatorio permanece en este dispositivo. Solo se envia un token que cambia cada dia, por lo que no permite crear un historial del equipo a largo plazo.",
     allow: "Permitir estadisticas de uso",

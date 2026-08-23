@@ -14,6 +14,7 @@ type TelemetryEvent = {
   deviceClass: string;
   installationAgeBucket?: string;
   activeDaysBucket?: string;
+  localWeekday?: string;
 };
 
 const CORS_HEADERS = {
@@ -70,6 +71,8 @@ const INSTALLATION_AGE_BUCKETS = new Set([
   "days_91_plus",
 ]);
 const ACTIVE_DAYS_BUCKETS = new Set(["1", "2_3", "4_7", "8_30", "31_plus"]);
+// "0" is Sunday, matching both Date.getDay() and SQLite's strftime('%w').
+const LOCAL_WEEKDAYS = new Set(["0", "1", "2", "3", "4", "5", "6"]);
 
 function response(status: number, body: Record<string, unknown>): Response {
   return Response.json(body, { status, headers: CORS_HEADERS });
@@ -90,8 +93,14 @@ function isValidEvent(value: unknown): value is TelemetryEvent {
       typeof event.activeDaysBucket === "string" &&
       ACTIVE_DAYS_BUCKETS.has(event.activeDaysBucket));
 
+  const weekdayIsValid =
+    event.localWeekday === undefined ||
+    (typeof event.localWeekday === "string" &&
+      LOCAL_WEEKDAYS.has(event.localWeekday));
+
   return (
     (isAppStart || isProductEvent) &&
+    weekdayIsValid &&
     (consentVersion === undefined || consentVersion === 2 || consentVersion === 3) &&
     profileIsValid &&
     typeof event.version === "string" &&
@@ -149,8 +158,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         `INSERT INTO telemetry_events
           (received_at, utc_day, event_name, daily_device_token, app_version,
            os, arch, device_class, country_code, installation_age_bucket,
-           active_days_bucket)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+           active_days_bucket, local_weekday)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
       ).bind(
         now,
         utcDay,
@@ -163,6 +172,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         countryCode,
         payload.installationAgeBucket ?? "unknown",
         payload.activeDaysBucket ?? "unknown",
+        payload.localWeekday ?? "unknown",
       )
     : env.TELEMETRY_DB.prepare(
         `INSERT INTO telemetry_product_events

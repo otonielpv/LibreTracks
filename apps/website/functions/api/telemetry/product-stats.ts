@@ -10,6 +10,7 @@ type SignalRow = { signal: string; devices: number };
 type BucketRow = { label: string; devices: number };
 type BreakdownRow = { label: string; sessions: number; devices: number };
 type HourlyRow = { hour: string; sessions: number; devices: number };
+type WeekdayRow = { weekday: string; sessions: number; devices: number };
 type DailyRow = {
   day: string;
   activeDevices: number;
@@ -95,6 +96,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     activeDaysResult,
     dailyResult,
     hourlyResult,
+    weekdayResult,
     countries,
     versions,
     operatingSystems,
@@ -201,6 +203,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       )
         .bind(since)
         .all<HourlyRow>(),
+      // Grouped on the device-reported local weekday, never on utc_day: a
+      // Sunday evening service in the Americas is already Monday in UTC.
+      env.TELEMETRY_DB.prepare(
+        `SELECT local_weekday AS weekday, COUNT(*) AS sessions,
+                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
+           FROM telemetry_events
+          WHERE received_at >= ?1 AND local_weekday != 'unknown'
+          GROUP BY local_weekday ORDER BY weekday`,
+      )
+        .bind(since)
+        .all<WeekdayRow>(),
       breakdown(env.TELEMETRY_DB, "country_code", since),
       breakdown(env.TELEMETRY_DB, "app_version", since),
       breakdown(env.TELEMETRY_DB, "os", since),
@@ -208,6 +221,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     ]);
 
   const activeDeviceDays = totals?.devices ?? 0;
+  // Index 0 is Sunday, matching Date.getDay() on the client.
+  const weekdayRows = Array.from({ length: 7 }, (_, weekday) => {
+    const row = weekdayResult.results.find(
+      (candidate) => Number(candidate.weekday) === weekday,
+    );
+    return {
+      weekday,
+      sessions: row?.sessions ?? 0,
+      devices: row?.devices ?? 0,
+    };
+  });
   const byEvent = new Map(eventsResult.results.map((row) => [row.event, row]));
   const bySignal = new Map(signalsResult.results.map((row) => [row.signal, row.devices]));
   const signalKeys = [
@@ -267,6 +291,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
         activeDays: activeDaysResult.results,
       },
       daily: dailyResult.results,
+      weekly: {
+        weekdays: weekdayRows,
+        // Share of reporting device-days that land on a local Sunday. Well
+        // above one seventh means LibreTracks is mostly running at services,
+        // a flat week means it is mostly running at rehearsals.
+        sundayShare: rate(
+          weekdayRows[0]?.devices ?? 0,
+          weekdayRows.reduce((total, row) => total + row.devices, 0),
+        ),
+      },
       hourly: Array.from({ length: 24 }, (_, hour) => {
         const key = String(hour).padStart(2, "0");
         return (
