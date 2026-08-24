@@ -60,8 +60,12 @@ type TileSurface = OffscreenCanvas | HTMLCanvasElement;
 type TileEntry = {
   namespace: string;
   canvas: TileSurface;
+  /** Ancho del backing store, en píxeles físicos. */
   width: number;
   height: number;
+  /** Tramo cubierto en el espacio lógico del timeline. */
+  logicalWidth: number;
+  pixelRatio: number;
   lastUsedAt: number;
 };
 
@@ -87,6 +91,8 @@ export type TileRequest = {
   tileIndex: number;
   /** Alto del carril en el que se va a dibujar, para no rasterizar de más. */
   laneHeightPx: number;
+  /** Escala física del tile. Opcional para callers y pruebas anteriores. */
+  pixelRatio?: number;
   /** Distancia al centro del viewport, en píxeles. Ordena la cola: lo que el
    *  usuario está mirando se rasteriza antes que lo que roza el borde. */
   priority: number;
@@ -101,6 +107,11 @@ export function tileHeightForLane(laneHeightPx: number) {
     }
   }
   return TILE_HEIGHT_STEPS[TILE_HEIGHT_STEPS.length - 1];
+}
+
+function tilePixelRatio(request: Pick<TileRequest, "pixelRatio">) {
+  const ratio = request.pixelRatio ?? 1;
+  return Number.isFinite(ratio) ? clamp(ratio, 1, 2) : 1;
 }
 
 export function getWaveformRenderPixelsPerSecond(pixelsPerSecond: number) {
@@ -257,6 +268,7 @@ export function tileNamespace(request: TileRequest) {
     // La altura entra en la clave: un tile de 32 px no sirve para un carril
     // de 128, y rasterizar siempre a 256 era el desperdicio que este paso quita.
     String(tileHeightForLane(request.laneHeightPx)),
+    tilePixelRatio(request).toFixed(3),
   ].join(":");
 }
 
@@ -460,6 +472,7 @@ type PendingTile = {
   request: TileRequest;
   tileStartPixel: number;
   tileWidth: number;
+  surfaceWidth: number;
   tileHeight: number;
   priority: number;
 };
@@ -706,7 +719,7 @@ export class WaveformTileCache {
       return {
         canvas: entry.canvas,
         tileStartPixel,
-        tileWidth: entry.width,
+        tileWidth: entry.logicalWidth,
       };
     }
 
@@ -718,6 +731,10 @@ export class WaveformTileCache {
         request,
         tileStartPixel,
         tileWidth,
+        surfaceWidth: Math.max(
+          1,
+          Math.ceil(tileWidth * tilePixelRatio(request)),
+        ),
         tileHeight: tileHeightForLane(request.laneHeightPx),
         priority: request.priority,
       });
@@ -804,7 +821,7 @@ export class WaveformTileCache {
           const overlapStart = Math.max(fallbackStartPixel, tileStart);
           const overlapEnd = Math.min(
             fallbackEndPixel,
-            tileStart + entry.width,
+            tileStart + entry.logicalWidth,
           );
           if (overlapEnd <= overlapStart) {
             continue;
@@ -815,8 +832,8 @@ export class WaveformTileCache {
           entry.lastUsedAt = ++this.accessCounter;
           slices.push({
             canvas: entry.canvas,
-            sourceX: overlapStart - tileStart,
-            sourceWidth: overlapEnd - overlapStart,
+            sourceX: (overlapStart - tileStart) * entry.pixelRatio,
+            sourceWidth: (overlapEnd - overlapStart) * entry.pixelRatio,
             targetStartPixel: overlapStartSeconds * targetPixelsPerSecond,
             targetWidth:
               (overlapEndSeconds - overlapStartSeconds) *
@@ -871,7 +888,7 @@ export class WaveformTileCache {
   }
 
   private rasterize(item: PendingTile): boolean {
-    const surface = createTileSurface(item.tileWidth, item.tileHeight);
+    const surface = createTileSurface(item.surfaceWidth, item.tileHeight);
     if (!surface) {
       return false;
     }
@@ -881,20 +898,24 @@ export class WaveformTileCache {
     }
 
     const rasterStartedAt = performance.now();
+    const pixelRatio = tilePixelRatio(item.request);
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     renderWaveformTile(
       context,
       item.request,
       item.tileStartPixel,
       item.tileWidth,
-      item.tileHeight,
+      item.tileHeight / pixelRatio,
     );
     recordWaveformTileRender(performance.now() - rasterStartedAt);
 
     const entry: TileEntry = {
       namespace: item.namespace,
       canvas: surface,
-      width: item.tileWidth,
+      width: item.surfaceWidth,
       height: item.tileHeight,
+      logicalWidth: item.tileWidth,
+      pixelRatio,
       lastUsedAt: ++this.accessCounter,
     };
     this.tiles.set(item.key, entry);

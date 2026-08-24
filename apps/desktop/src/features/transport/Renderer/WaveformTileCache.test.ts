@@ -213,6 +213,7 @@ function installFakeCanvas() {
     lineTo() {},
     closePath() {},
     fill() {},
+    setTransform() {},
     set fillStyle(_value: string) {},
     set lineJoin(_value: string) {},
     set lineCap(_value: string) {},
@@ -401,5 +402,35 @@ describe("altura del tile", () => {
 
     // 32 px contra 256: ocho veces menos. Antes ambos rasterizaban a 256.
     expect(tall.stats().bytes).toBe(low.stats().bytes * 8);
+  });
+
+  it("rasteriza también el ancho del tile a resolución física", () => {
+    const oneX = new WaveformTileCache();
+    oneX.getTile({
+      clip: buildClip(),
+      waveform: buildWaveform(),
+      pixelsPerSecond: 120,
+      clipPixelWidth: 1024,
+      tileIndex: 0,
+      laneHeightPx: 64,
+      pixelRatio: 1,
+      priority: 0,
+    });
+    oneX.drainPendingTiles(1000);
+
+    const twoX = new WaveformTileCache();
+    twoX.getTile({
+      clip: buildClip(),
+      waveform: buildWaveform(),
+      pixelsPerSecond: 120,
+      clipPixelWidth: 1024,
+      tileIndex: 0,
+      laneHeightPx: 64,
+      pixelRatio: 2,
+      priority: 0,
+    });
+    twoX.drainPendingTiles(1000);
+
+    expect(twoX.stats().bytes).toBe(oneX.stats().bytes * 2);
   });
 });

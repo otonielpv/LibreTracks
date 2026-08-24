@@ -819,7 +819,8 @@ export function drawTrackClipsLayer(
             pixelsPerSecond: renderPixelsPerSecond,
             clipPixelWidth: renderClipPixelWidth,
             tileIndex,
-            laneHeightPx: clipHeight * devicePixelRatioForTiles(),
+            laneHeightPx: clipHeight * waveformTilePixelRatio(),
+            pixelRatio: waveformTilePixelRatio(),
             priority,
           });
 
@@ -840,7 +841,8 @@ export function drawTrackClipsLayer(
             pixelsPerSecond: renderPixelsPerSecond,
             clipPixelWidth: renderClipPixelWidth,
             tileIndex,
-            laneHeightPx: clipHeight * devicePixelRatioForTiles(),
+            laneHeightPx: clipHeight * waveformTilePixelRatio(),
+            pixelRatio: waveformTilePixelRatio(),
             priority,
           });
           if (fallbackSlices) {
@@ -928,8 +930,12 @@ export function drawTrackClipsLayer(
  * por `devicePixelRatio`, así que un carril de 60 px CSS en una pantalla 2x
  * necesita 120 px de tile para no verse borroso.
  */
-function devicePixelRatioForTiles() {
-  return typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+function waveformTilePixelRatio() {
+  const devicePixelRatio =
+    typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  // DPR 2 ya evita el reescalado visible. En móviles DPR 3–4, rasterizar al
+  // valor completo haría que el LRU de 48 MiB expulsase tiles visibles.
+  return clamp(devicePixelRatio, 1, 2);
 }
 
 /** Marca el inicio de un pintado: vacía la cola de tiles pendientes. */
