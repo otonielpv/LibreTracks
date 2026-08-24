@@ -788,7 +788,12 @@ export function drawTrackClipsLayer(
         context.clip();
         const visiblePixelStart = Math.max(0, -left);
         const visiblePixelEnd = Math.min(width, snapshot.width - left);
-        const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(snapshot.zoomLevel);
+        // La caché sigue el zoom CONFIRMADO, no cada valor provisional del
+        // gesto. Durante la rueda/pinza se escala la generación estable y sólo
+        // se crea un namespace nuevo cuando vence el debounce de commit.
+        const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(
+          snapshot.pixelsPerSecond,
+        );
         const renderScale = snapshot.zoomLevel / renderPixelsPerSecond;
         const renderClipPixelWidth = Math.max(1, clip.durationSeconds * renderPixelsPerSecond);
         const visibleRenderPixelStart = visiblePixelStart / renderScale;
@@ -799,13 +804,15 @@ export function drawTrackClipsLayer(
           Math.ceil(visibleRenderPixelEnd / WAVEFORM_TILE_WIDTH_PX) - 1,
         );
 
-        // Prioridad de la cola: distancia del clip al centro del viewport.
-        // Lo que el usuario está mirando se rasteriza antes que lo que roza
-        // el borde.
-        const clipCenterX = clippedLeft + visibleWidth / 2;
-        const priority = Math.abs(clipCenterX - snapshot.width / 2);
-
         for (let tileIndex = startTileIndex; tileIndex <= endTileIndex; tileIndex += 1) {
+          const tileStartPixel = tileIndex * WAVEFORM_TILE_WIDTH_PX;
+          const tileEndPixel = Math.min(
+            renderClipPixelWidth,
+            tileStartPixel + WAVEFORM_TILE_WIDTH_PX,
+          );
+          const tileCenterX =
+            left + ((tileStartPixel + tileEndPixel) / 2) * renderScale;
+          const priority = Math.abs(tileCenterX - snapshot.width / 2);
           const tile = waveformTileCache.getTile({
             clip,
             waveform,
@@ -827,15 +834,34 @@ export function drawTrackClipsLayer(
             continue;
           }
 
-          // El tile está en la cola: se rellena SÓLO su tramo con la
-          // envolvente de baja resolución. Pintarla sobre el clip entero
-          // taparía los tiles que sí están listos, y eso se ve como un
-          // parpadeo de la onda buena a la aproximada.
-          const tileStartPixel = tileIndex * WAVEFORM_TILE_WIDTH_PX;
-          const tileEndPixel = Math.min(
-            renderClipPixelWidth,
-            tileStartPixel + WAVEFORM_TILE_WIDTH_PX,
-          );
+          const fallbackSlices = waveformTileCache.getFallbackTileSlices({
+            clip,
+            waveform,
+            pixelsPerSecond: renderPixelsPerSecond,
+            clipPixelWidth: renderClipPixelWidth,
+            tileIndex,
+            laneHeightPx: clipHeight * devicePixelRatioForTiles(),
+            priority,
+          });
+          if (fallbackSlices) {
+            for (const slice of fallbackSlices) {
+              context.drawImage(
+                slice.canvas,
+                slice.sourceX,
+                0,
+                slice.sourceWidth,
+                slice.canvas.height,
+                left + slice.targetStartPixel * renderScale,
+                clipTop,
+                slice.targetWidth * renderScale,
+                clipHeight,
+              );
+            }
+            continue;
+          }
+
+          // Carga fría: no existe ningún nivel vecino todavía. Sólo en ese
+          // caso se usa la envolvente barata mientras llega el primer tile.
           if (tileEndPixel <= tileStartPixel) {
             continue;
           }

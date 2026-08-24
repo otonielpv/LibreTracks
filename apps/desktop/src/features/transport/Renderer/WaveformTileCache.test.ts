@@ -305,6 +305,59 @@ describe("cola de rasterización con presupuesto", () => {
     expect(cache.getTile(request({ tileIndex: 1, priority: 10 }))).not.toBeNull();
     expect(cache.getTile(request({ tileIndex: 0, priority: 900 }))).toBeNull();
   });
+
+  it("recorta un tile del nivel vecino mientras llega el zoom nuevo", () => {
+    const cache = new WaveformTileCache();
+    const oldPixelsPerSecond = getWaveformRenderPixelsPerSecond(120);
+    const targetPixelsPerSecond = oldPixelsPerSecond * 1.5;
+    const durationSeconds = 20;
+    const zoomClip = buildClip({
+      durationSeconds,
+      sourceDurationSeconds: durationSeconds,
+      sourceWindowDurationSeconds: durationSeconds,
+    });
+    const oldRequest = request({
+      clip: zoomClip,
+      pixelsPerSecond: oldPixelsPerSecond,
+      clipPixelWidth: durationSeconds * oldPixelsPerSecond,
+      tileIndex: 0,
+    });
+    cache.getTile(oldRequest);
+    cache.drainPendingTiles(1000);
+
+    const targetRequest = request({
+      clip: zoomClip,
+      pixelsPerSecond: targetPixelsPerSecond,
+      clipPixelWidth: durationSeconds * targetPixelsPerSecond,
+      tileIndex: 0,
+    });
+    expect(cache.getTile(targetRequest)).toBeNull();
+
+    const slices = cache.getFallbackTileSlices(targetRequest);
+    expect(slices).not.toBeNull();
+    expect(
+      slices?.reduce((total, slice) => total + slice.targetWidth, 0),
+    ).toBeCloseTo(1024, 5);
+  });
+
+  it("no mezcla como fallback tiles pertenecientes a otro clip", () => {
+    const cache = new WaveformTileCache();
+    const oldPixelsPerSecond = getWaveformRenderPixelsPerSecond(120);
+    const oldRequest = request({
+      pixelsPerSecond: oldPixelsPerSecond,
+      clipPixelWidth: 4096,
+    });
+    cache.getTile(oldRequest);
+    cache.drainPendingTiles(1000);
+
+    const otherClipRequest = request({
+      clip: buildClip({ waveformKey: "audio/other.wav" }),
+      waveform: buildWaveform({ waveformKey: "audio/other.wav" }),
+      pixelsPerSecond: oldPixelsPerSecond * 1.5,
+      clipPixelWidth: 4096 * 1.5,
+    });
+    expect(cache.getFallbackTileSlices(otherClipRequest)).toBeNull();
+  });
 });
 
 describe("altura del tile", () => {

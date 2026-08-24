@@ -71,6 +71,14 @@ export type WaveformTile = {
   tileWidth: number;
 };
 
+export type WaveformFallbackTileSlice = {
+  canvas: TileSurface;
+  sourceX: number;
+  sourceWidth: number;
+  targetStartPixel: number;
+  targetWidth: number;
+};
+
 export type TileRequest = {
   clip: ClipSummary;
   waveform: WaveformSummaryDto;
@@ -714,6 +722,114 @@ export class WaveformTileCache {
         priority: request.priority,
       });
     }
+    return null;
+  }
+
+  /**
+   * Busca el mismo tramo temporal en una generación de zoom vecina.
+   *
+   * Los índices de tile no coinciden entre escalas: un tile de 1024 px a
+   * 120 px/s cubre más tiempo que uno a 180 px/s. Por eso se traduce primero
+   * el tile pedido a segundos locales del clip y después se recortan uno o más
+   * tiles de la escala vecina. Sólo se devuelve una generación si cubre el
+   * tramo entero; mezclar huecos de varias escalas volvería a producir el
+   * parpadeo que este fallback evita.
+   */
+  getFallbackTileSlices(
+    request: TileRequest,
+  ): WaveformFallbackTileSlice[] | null {
+    const targetPixelsPerSecond = getWaveformRenderPixelsPerSecond(
+      request.pixelsPerSecond,
+    );
+    const targetStartPixel = request.tileIndex * WAVEFORM_TILE_WIDTH_PX;
+    const targetEndPixel = Math.min(
+      request.clipPixelWidth,
+      targetStartPixel + WAVEFORM_TILE_WIDTH_PX,
+    );
+    if (targetEndPixel <= targetStartPixel || targetPixelsPerSecond <= 0) {
+      return null;
+    }
+
+    const startSeconds = targetStartPixel / targetPixelsPerSecond;
+    const endSeconds = targetEndPixel / targetPixelsPerSecond;
+    // Vecino inmediato primero, tanto al acercar como al alejar. Se buscan más
+    // anillos porque una rueda/pinza continua puede recorrer todo G3 antes de
+    // que venza el debounce y se confirme un nuevo zoom.
+    for (let distance = 1; distance <= 12; distance += 1) {
+      for (const direction of [-1, 1] as const) {
+        const offset = distance * direction;
+        const fallbackPixelsPerSecond = getWaveformRenderPixelsPerSecond(
+          targetPixelsPerSecond * Math.pow(WAVEFORM_ZOOM_CACHE_STEP, offset),
+        );
+        if (fallbackPixelsPerSecond === targetPixelsPerSecond) {
+          continue;
+        }
+        const fallbackClipPixelWidth = Math.max(
+          1,
+          request.clip.durationSeconds * fallbackPixelsPerSecond,
+        );
+        const fallbackStartPixel = startSeconds * fallbackPixelsPerSecond;
+        const fallbackEndPixel = Math.min(
+          fallbackClipPixelWidth,
+          endSeconds * fallbackPixelsPerSecond,
+        );
+        const firstTileIndex = Math.max(
+          0,
+          Math.floor(fallbackStartPixel / WAVEFORM_TILE_WIDTH_PX),
+        );
+        const lastTileIndex = Math.max(
+          firstTileIndex,
+          Math.ceil(fallbackEndPixel / WAVEFORM_TILE_WIDTH_PX) - 1,
+        );
+        const fallbackRequest = {
+          ...request,
+          pixelsPerSecond: fallbackPixelsPerSecond,
+          clipPixelWidth: fallbackClipPixelWidth,
+        };
+        const namespace = tileNamespace(fallbackRequest);
+        const slices: WaveformFallbackTileSlice[] = [];
+        let complete = true;
+
+        for (
+          let tileIndex = firstTileIndex;
+          tileIndex <= lastTileIndex;
+          tileIndex += 1
+        ) {
+          const entry = this.tiles.get(tileKey(namespace, tileIndex));
+          if (!entry) {
+            complete = false;
+            break;
+          }
+          const tileStart = tileIndex * WAVEFORM_TILE_WIDTH_PX;
+          const overlapStart = Math.max(fallbackStartPixel, tileStart);
+          const overlapEnd = Math.min(
+            fallbackEndPixel,
+            tileStart + entry.width,
+          );
+          if (overlapEnd <= overlapStart) {
+            continue;
+          }
+          const overlapStartSeconds =
+            overlapStart / fallbackPixelsPerSecond;
+          const overlapEndSeconds = overlapEnd / fallbackPixelsPerSecond;
+          entry.lastUsedAt = ++this.accessCounter;
+          slices.push({
+            canvas: entry.canvas,
+            sourceX: overlapStart - tileStart,
+            sourceWidth: overlapEnd - overlapStart,
+            targetStartPixel: overlapStartSeconds * targetPixelsPerSecond,
+            targetWidth:
+              (overlapEndSeconds - overlapStartSeconds) *
+              targetPixelsPerSecond,
+          });
+        }
+
+        if (complete && slices.length > 0) {
+          return slices;
+        }
+      }
+    }
+
     return null;
   }
 
