@@ -248,7 +248,14 @@ const ensureEngineV2 = (normalizedEnv) => {
 
   const vcpkgTriplet = normalizedEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows-release";
   const buildVcpkgBin = path.join(buildDir, "vcpkg_installed", vcpkgTriplet, "bin");
-  if (useFFmpeg === "ON") {
+  // Windows only: there FFmpeg comes from vcpkg as DLLs that must sit next to
+  // the engine, so this copy is meaningless elsewhere. Linux gets its libav*
+  // from our own LGPL prefix via PKG_CONFIG_PATH (scripts/build-ffmpeg-linux.sh)
+  // and vendors them with scripts/linux-bundle-ffmpeg.sh; macOS relocates its
+  // dylibs in the block below. Without this platform guard the vcpkg path is
+  // checked on every OS and LT_ENGINE_USE_FFMPEG=ON simply cannot build outside
+  // Windows — it throws before reaching the bundler.
+  if (useFFmpeg === "ON" && process.platform === "win32") {
     if (!existsSync(buildVcpkgBin)) {
       throw new Error(`Expected FFmpeg runtime DLLs in ${buildVcpkgBin}, but the directory was not found.`);
     }

@@ -2247,6 +2247,98 @@ impl AudioController {
         }
     }
 
+    /// Combined sampler: one `get_snapshot()` FFI call yields both pitch and
+    /// source-readiness summaries. On Linux, each `get_snapshot()` costs
+    /// ~100 ms, so calling this instead of the two separate methods halves
+    /// the hold-time of the audio state lock during the periodic sync.
+    pub fn pitch_and_source_summary(
+        &self,
+    ) -> (PitchPrepareSummary, SourceReadinessSummary) {
+        let mut state = match self.state.lock() {
+            Ok(state) => state,
+            Err(_) => return (PitchPrepareSummary::default(), SourceReadinessSummary::default()),
+        };
+        let Ok(snapshot) = ensure_engine(&mut state).and_then(|engine| {
+            engine
+                .get_snapshot()
+                .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        }) else {
+            return (PitchPrepareSummary::default(), SourceReadinessSummary::default());
+        };
+
+        let pitch = snapshot.pitch;
+        let pitch_summary = PitchPrepareSummary {
+            pitch_prepare_active: pitch.pitch_prepare_active,
+            pitch_prepare_pending: pitch.pitch_prepare_pending,
+            pitch_prepare_progress: pitch.pitch_prepare_progress,
+            pitch_proxy_blocks_ready: pitch.pitch_proxy_blocks_ready,
+            pitch_proxy_blocks_missing: pitch.pitch_proxy_blocks_missing,
+            pitch_proxy_blocks_pending: pitch.pitch_proxy_blocks_pending,
+            pitch_jobs_pending: pitch.pitch_jobs_pending,
+            pitch_jobs_running: pitch.pitch_jobs_running,
+            pitch_jobs_completed: pitch.pitch_jobs_completed,
+            pitch_jobs_failed: pitch.pitch_jobs_failed,
+            pitch_prepare_status: pitch.pitch_prepare_status,
+            pitch_prepare_message: pitch.pitch_prepare_message,
+            active_pitch_render_path: pitch.active_pitch_render_path,
+            last_pitch_prepare_reason: pitch.last_pitch_prepare_reason,
+            last_pitch_proxy_error: pitch.last_pitch_proxy_error,
+            last_missing_proxy_key: pitch.last_missing_proxy_key,
+            last_missing_proxy_block_index: pitch.last_missing_proxy_block_index,
+        };
+
+        let current_sources: Vec<_> = snapshot
+            .source_states
+            .iter()
+            .filter(|source| {
+                state
+                    .current_song_source_ids
+                    .contains(&normalize_source_id(&source.source_id))
+            })
+            .collect();
+
+        let total = current_sources.len();
+        let mut ready_count = 0usize;
+        let mut loading_count = 0usize;
+        let mut failed_count = 0usize;
+        let mut progress_sum: f64 = 0.0;
+        for source in &current_sources {
+            match source.status.as_str() {
+                "ready" | "cache_ready" => {
+                    ready_count += 1;
+                    progress_sum += 100.0;
+                }
+                "failed" | "cancelled" => {
+                    failed_count += 1;
+                    report_failed_source(&source.source_id, &source.error_message);
+                    progress_sum += 100.0;
+                }
+                _ => {
+                    loading_count += 1;
+                    progress_sum += source.progress_percent.clamp(0, 100) as f64;
+                }
+            }
+        }
+        let sources_ready = total == 0 || (ready_count + failed_count) >= total;
+        let progress_percent = if total == 0 {
+            100.0
+        } else {
+            progress_sum / total as f64
+        };
+        let source_summary = SourceReadinessSummary {
+            sources_ready,
+            sources_total: total,
+            sources_ready_count: ready_count,
+            sources_loading_count: loading_count,
+            sources_failed_count: failed_count,
+            sources_progress_percent: progress_percent,
+            cache_ram_used_mb: snapshot.source_cache.ram_bytes_used / (1024 * 1024),
+            cache_disk_used_mb: snapshot.source_cache.disk_bytes_used / (1024 * 1024),
+        };
+
+        (pitch_summary, source_summary)
+    }
+
     pub fn replace_song_buffers(
         &self,
         song_dir: &Path,

@@ -287,7 +287,12 @@ pub fn get_desktop_performance_snapshot(
 ///
 /// Independent of the session lock — see `ResourceMonitor` — so polling this
 /// at ~1 Hz never contends with heavy session work.
-#[tauri::command]
+///
+/// `(async)` moves it off the main thread: sampling `/proc` costs tens of
+/// milliseconds at best, and a plain `#[tauri::command]` runs inline on the GTK
+/// main loop that drives WebKitGTK rendering, turning this 1 Hz poll into a 1 Hz
+/// UI freeze on Linux. See `get_transport_snapshot` for the same reasoning.
+#[tauri::command(async)]
 pub fn get_system_resource_snapshot(
     state: State<'_, DesktopState>,
 ) -> Result<SystemResourceSnapshot, String> {
