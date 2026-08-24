@@ -247,6 +247,47 @@ function installFakeCanvas() {
   (globalThis as Record<string, unknown>).OffscreenCanvas = FakeOffscreenCanvas;
 }
 
+type PathPoint = { x: number; y: number };
+
+function installRecordingCanvas(paths: PathPoint[][]) {
+  let currentPath: PathPoint[] | null = null;
+  const context = {
+    clearRect() {},
+    fillRect() {},
+    beginPath() {
+      currentPath = [];
+      paths.push(currentPath);
+    },
+    moveTo(x: number, y: number) {
+      currentPath?.push({ x, y });
+    },
+    lineTo(x: number, y: number) {
+      currentPath?.push({ x, y });
+    },
+    closePath() {
+      if (currentPath?.length) {
+        currentPath.push(currentPath[0]);
+      }
+    },
+    fill() {},
+    setTransform() {},
+    set fillStyle(_value: string) {},
+    set lineJoin(_value: string) {},
+    set lineCap(_value: string) {},
+  };
+  class RecordingOffscreenCanvas {
+    constructor(
+      public width: number,
+      public height: number,
+    ) {}
+    getContext() {
+      return context;
+    }
+  }
+  (globalThis as Record<string, unknown>).OffscreenCanvas =
+    RecordingOffscreenCanvas;
+}
+
 function removeFakeCanvas() {
   delete (globalThis as Record<string, unknown>).OffscreenCanvas;
 }
@@ -287,6 +328,45 @@ describe("cola de rasterización con presupuesto", () => {
 
     expect(cache.getTile(request())).not.toBeNull();
     expect(cache.hasPendingTiles()).toBe(false);
+  });
+
+  it("dibuja transitorios densos por intervalos sin diagonales entre buckets", () => {
+    const paths: PathPoint[][] = [];
+    installRecordingCanvas(paths);
+    const cache = new WaveformTileCache();
+    const peaks = [0, 0, 1, 0, 0, 0, 0, 0];
+    const denseWaveform = buildWaveform({
+      lods: [
+        {
+          resolutionFrames: 256,
+          bucketCount: peaks.length,
+          minPeaks: peaks.map((value) => -value),
+          maxPeaks: peaks,
+        },
+      ],
+    });
+
+    cache.getTile(
+      request({
+        clip: buildClip({
+          durationSeconds: 8,
+          sourceWindowDurationSeconds: 8,
+        }),
+        waveform: denseWaveform,
+        clipPixelWidth: 32,
+      }),
+    );
+    expect(cache.drainPendingTiles(1000)).toBe(1);
+
+    const waveformPath = paths.at(-1) ?? [];
+    expect(waveformPath.length).toBeGreaterThan(2);
+    for (let index = 1; index < waveformPath.length; index += 1) {
+      const previous = waveformPath[index - 1];
+      const current = waveformPath[index];
+      const changesX = Math.abs(current.x - previous.x) > 1e-9;
+      const changesY = Math.abs(current.y - previous.y) > 1e-9;
+      expect(changesX && changesY).toBe(false);
+    }
   });
 
   it("vacía la cola al empezar un pintado, para no rasterizar lo ya invisible", () => {

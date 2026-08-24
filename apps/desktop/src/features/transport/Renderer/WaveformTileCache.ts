@@ -366,9 +366,6 @@ function renderWaveformTile(
   context.lineJoin = "round";
   context.lineCap = "round";
 
-  const xDenominator = Math.max(1, clipSampleCount - 1);
-  const pxPerBucket = request.clipPixelWidth / xDenominator;
-  const shouldUseSteppedPeaks = pxPerBucket > 5;
   const hasRightChannel =
     minPeaksRight.length === minPeaks.length &&
     maxPeaksRight.length === maxPeaks.length;
@@ -384,12 +381,11 @@ function renderWaveformTile(
       startIndex,
       endIndex,
       clipStartIndex,
-      xDenominator,
+      clipSampleCount,
       request.clipPixelWidth,
       tileStartPixel,
       tileHeight * 0.25,
       tileHeight * 0.2,
-      shouldUseSteppedPeaks,
     );
     drawChannelPeaks(
       context,
@@ -398,12 +394,11 @@ function renderWaveformTile(
       startIndex,
       endIndex,
       clipStartIndex,
-      xDenominator,
+      clipSampleCount,
       request.clipPixelWidth,
       tileStartPixel,
       tileHeight * 0.75,
       tileHeight * 0.2,
-      shouldUseSteppedPeaks,
     );
     return;
   }
@@ -415,12 +410,11 @@ function renderWaveformTile(
     startIndex,
     endIndex,
     clipStartIndex,
-    xDenominator,
+    clipSampleCount,
     request.clipPixelWidth,
     tileStartPixel,
     tileHeight * 0.5,
     tileHeight * 0.42,
-    shouldUseSteppedPeaks,
   );
 }
 
@@ -431,46 +425,48 @@ function drawChannelPeaks(
   startIndex: number,
   endIndex: number,
   clipStartIndex: number,
-  xDenominator: number,
+  clipSampleCount: number,
   clipPixelWidth: number,
   tileStartPixel: number,
   centerY: number,
   amplitudeY: number,
-  shouldUseSteppedPeaks: boolean,
 ) {
-  context.beginPath();
-  let previousTopY = 0;
+  const bucketBoundaryX = (index: number) =>
+    ((index - clipStartIndex) / clipSampleCount) * clipPixelWidth -
+    tileStartPixel;
 
+  // Cada entrada del LOD es el minimo/maximo de un INTERVALO de audio, no
+  // una muestra puntual. Unir los centros con diagonales convertia un click
+  // aislado en un rombo y hacia que su forma cambiase al saltar de LOD durante
+  // el zoom. La envolvente escalonada conserva los extremos de cada bucket y
+  // sólo cambia en su frontera temporal real.
+  context.beginPath();
   for (let index = startIndex; index < endIndex; index += 1) {
-    const clipLocalX =
-      ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
-    const x = clipLocalX - tileStartPixel;
     const y = centerY - clamp(maxPeaks[index], -1, 1) * amplitudeY;
     if (index === startIndex) {
-      context.moveTo(x, y);
-      previousTopY = y;
-    } else {
-      if (shouldUseSteppedPeaks) {
-        context.lineTo(x, previousTopY);
-      }
-      context.lineTo(x, y);
-      previousTopY = y;
+      context.moveTo(bucketBoundaryX(index), y);
+    }
+    const right = bucketBoundaryX(index + 1);
+    context.lineTo(right, y);
+    if (index + 1 < endIndex) {
+      const nextY =
+        centerY - clamp(maxPeaks[index + 1], -1, 1) * amplitudeY;
+      context.lineTo(right, nextY);
     }
   }
 
-  let previousBottomY = 0;
   for (let index = endIndex - 1; index >= startIndex; index -= 1) {
-    const clipLocalX =
-      ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
-    const x = clipLocalX - tileStartPixel;
     const y = centerY - clamp(minPeaks[index], -1, 1) * amplitudeY;
     if (index === endIndex - 1) {
-      previousBottomY = y;
-    } else if (shouldUseSteppedPeaks) {
-      context.lineTo(x, previousBottomY);
+      context.lineTo(bucketBoundaryX(index + 1), y);
     }
-    context.lineTo(x, y);
-    previousBottomY = y;
+    const left = bucketBoundaryX(index);
+    context.lineTo(left, y);
+    if (index > startIndex) {
+      const previousY =
+        centerY - clamp(minPeaks[index - 1], -1, 1) * amplitudeY;
+      context.lineTo(left, previousY);
+    }
   }
 
   context.closePath();
