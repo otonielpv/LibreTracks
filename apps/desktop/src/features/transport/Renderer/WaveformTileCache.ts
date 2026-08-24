@@ -2,7 +2,9 @@ import type {
   ClipSummary,
   WaveformLodDto,
   WaveformSummaryDto,
+  WaveformWindowDto,
 } from "../desktopApi";
+import { getWaveformWindow } from "../desktopApi";
 import { recordWaveformTileRender } from "../perf/perfMetrics";
 import { clamp } from "../timeline/timelineMath";
 
@@ -66,6 +68,8 @@ type TileEntry = {
   /** Tramo cubierto en el espacio lógico del timeline. */
   logicalWidth: number;
   pixelRatio: number;
+  /** true cuando la superficie procede de una ventana PCM bajo demanda. */
+  detail: boolean;
   lastUsedAt: number;
 };
 
@@ -282,11 +286,11 @@ function renderWaveformTile(
   tileStartPixel: number,
   tileWidth: number,
   tileHeight: number,
+  resolvedLod?: ResolvedWaveformLod,
 ) {
-  const waveformLod = selectWaveformLod(
-    request.waveform,
-    request.pixelsPerSecond,
-  );
+  const waveformLod =
+    resolvedLod ??
+    selectWaveformLod(request.waveform, request.pixelsPerSecond);
   const maxPeaks = waveformLod?.maxPeaks ?? new Float32Array(0);
   const minPeaks = waveformLod?.minPeaks ?? new Float32Array(0);
   const maxPeaksRight = waveformLod?.maxPeaksRight ?? new Float32Array(0);
@@ -501,6 +505,19 @@ export type SketchRect = {
   height: number;
 };
 
+type DetailWindowEntry = {
+  lod: ResolvedWaveformLod;
+  bytes: number;
+  lastUsedAt: number;
+};
+
+export type WaveformWindowLoader = (
+  waveformKey: string,
+  startSeconds: number,
+  endSeconds: number,
+  bucketCount: number,
+) => Promise<WaveformWindowDto | null>;
+
 function sketchPeakForBucket(
   peaks: Float32Array,
   from: number,
@@ -682,9 +699,30 @@ export class WaveformTileCache {
    */
   private pending = new Map<string, PendingTile>();
 
+  /** Ventanas finas ya decodificadas. Comparten el mismo presupuesto de bytes
+   * con las superficies: así el detalle bajo demanda no crea una segunda caché
+   * sin límite. */
+  private readonly detailWindows = new Map<string, DetailWindowEntry>();
+
+  private readonly detailRequests = new Map<string, Promise<void>>();
+
+  private readonly detailUnavailableUntil = new Map<string, number>();
+
+  /** Claves visibles en el pintado actual. Una respuesta que ya no pertenece a
+   * este conjunto se descarta: el invoke nativo no se puede abortar, pero su
+   * resultado sí, que es lo importante durante rueda/pinza continua. */
+  private visibleDetailKeys = new Set<string>();
+
+  private detailReadySinceLastDrain = false;
+
+  constructor(
+    private readonly loadWindow: WaveformWindowLoader = getWaveformWindow,
+  ) {}
+
   /** Vacía la cola de pendientes. Se llama una vez por pintado. */
   beginPaint() {
     this.pending.clear();
+    this.visibleDetailKeys = new Set<string>();
   }
 
   /**
@@ -713,9 +751,31 @@ export class WaveformTileCache {
     }
 
     const key = tileKey(namespace, request.tileIndex);
+    this.requestDetailWindowIfUseful(key, request, tileStartPixel, tileWidth);
     const entry = this.tiles.get(key);
     if (entry) {
       entry.lastUsedAt = ++this.accessCounter;
+      // Mantén devolviendo el tile grueso mientras su sustituto fino se
+      // rasteriza fuera del frame. Así la mejora es atómica y no hay ni un
+      // frame de boceto/flash al llegar la respuesta nativa.
+      if (this.detailWindows.has(key) && !entry.detail) {
+        const existing = this.pending.get(key);
+        if (!existing || request.priority < existing.priority) {
+          this.pending.set(key, {
+            key,
+            namespace,
+            request,
+            tileStartPixel,
+            tileWidth,
+            surfaceWidth: Math.max(
+              1,
+              Math.ceil(tileWidth * tilePixelRatio(request)),
+            ),
+            tileHeight: tileHeightForLane(request.laneHeightPx),
+            priority: request.priority,
+          });
+        }
+      }
       return {
         canvas: entry.canvas,
         tileStartPixel,
@@ -852,7 +912,7 @@ export class WaveformTileCache {
 
   /** ¿Queda trabajo encolado? */
   hasPendingTiles() {
-    return this.pending.size > 0;
+    return this.pending.size > 0 || this.detailReadySinceLastDrain;
   }
 
   /**
@@ -864,8 +924,10 @@ export class WaveformTileCache {
    * ya no queda tiempo.
    */
   drainPendingTiles(budgetMs: number): number {
+    const detailBecameReady = this.detailReadySinceLastDrain;
+    this.detailReadySinceLastDrain = false;
     if (this.pending.size === 0) {
-      return 0;
+      return detailBecameReady ? 1 : 0;
     }
 
     const queue = [...this.pending.values()].sort(
@@ -900,13 +962,40 @@ export class WaveformTileCache {
     const rasterStartedAt = performance.now();
     const pixelRatio = tilePixelRatio(item.request);
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    renderWaveformTile(
-      context,
-      item.request,
-      item.tileStartPixel,
-      item.tileWidth,
-      item.tileHeight / pixelRatio,
-    );
+    const detail = this.detailWindows.get(item.key);
+    if (detail) {
+      detail.lastUsedAt = ++this.accessCounter;
+      const sourceDuration = Math.max(
+        Number.EPSILON,
+        detail.lod.bucketCount / Math.max(1, item.surfaceWidth),
+      );
+      renderWaveformTile(
+        context,
+        {
+          ...item.request,
+          clip: {
+            ...item.request.clip,
+            sourceStartSeconds: 0,
+            sourceWindowDurationSeconds: sourceDuration,
+            sourceDurationSeconds: sourceDuration,
+            durationSeconds: sourceDuration,
+          },
+          clipPixelWidth: item.tileWidth,
+        },
+        0,
+        item.tileWidth,
+        item.tileHeight / pixelRatio,
+        detail.lod,
+      );
+    } else {
+      renderWaveformTile(
+        context,
+        item.request,
+        item.tileStartPixel,
+        item.tileWidth,
+        item.tileHeight / pixelRatio,
+      );
+    }
     recordWaveformTileRender(performance.now() - rasterStartedAt);
 
     const entry: TileEntry = {
@@ -916,8 +1005,13 @@ export class WaveformTileCache {
       height: item.tileHeight,
       logicalWidth: item.tileWidth,
       pixelRatio,
+      detail: Boolean(detail),
       lastUsedAt: ++this.accessCounter,
     };
+    const previous = this.tiles.get(item.key);
+    if (previous) {
+      this.byteEstimate -= tileByteSize(previous);
+    }
     this.tiles.set(item.key, entry);
     this.byteEstimate += tileByteSize(entry);
     this.pruneLeastRecentlyUsedTiles();
@@ -926,7 +1020,103 @@ export class WaveformTileCache {
 
   /** Tiles vivos y bytes que ocupan. Lo publica el pintado en el HUD. */
   stats() {
-    return { entries: this.tiles.size, bytes: this.byteEstimate };
+    return {
+      entries: this.tiles.size + this.detailWindows.size,
+      bytes: this.byteEstimate,
+    };
+  }
+
+  private requestDetailWindowIfUseful(
+    key: string,
+    request: TileRequest,
+    tileStartPixel: number,
+    tileWidth: number,
+  ) {
+    const finestResolution = request.waveform.lods.reduce(
+      (best, lod) => Math.min(best, Math.max(1, lod.resolutionFrames)),
+      Number.POSITIVE_INFINITY,
+    );
+    const detailThreshold = request.waveform.sampleRate / finestResolution;
+    if (
+      !Number.isFinite(detailThreshold) ||
+      request.pixelsPerSecond <= detailThreshold ||
+      request.clipPixelWidth <= 0
+    ) {
+      return;
+    }
+
+    this.visibleDetailKeys.add(key);
+    const cached = this.detailWindows.get(key);
+    if (cached) {
+      cached.lastUsedAt = ++this.accessCounter;
+      return;
+    }
+    if (
+      this.detailRequests.has(key) ||
+      (this.detailUnavailableUntil.get(key) ?? 0) > Date.now()
+    ) {
+      return;
+    }
+
+    const sourceWindowSeconds =
+      request.clip.sourceWindowDurationSeconds ?? request.clip.durationSeconds;
+    const fromRatio = clamp(tileStartPixel / request.clipPixelWidth, 0, 1);
+    const toRatio = clamp(
+      (tileStartPixel + tileWidth) / request.clipPixelWidth,
+      fromRatio,
+      1,
+    );
+    const startSeconds =
+      request.clip.sourceStartSeconds + fromRatio * sourceWindowSeconds;
+    const endSeconds =
+      request.clip.sourceStartSeconds + toRatio * sourceWindowSeconds;
+    const bucketCount = Math.max(
+      1,
+      Math.ceil(tileWidth * tilePixelRatio(request)),
+    );
+
+    const promise = this.loadWindow(
+      request.clip.waveformKey,
+      startSeconds,
+      endSeconds,
+      bucketCount,
+    )
+      .then((window) => {
+        // Logical cancellation: never cache or repaint a generation that the
+        // current viewport no longer asks for.
+        if (!this.visibleDetailKeys.has(key)) {
+          return;
+        }
+        const lod = resolveWaveformWindow(window);
+        if (!lod) {
+          this.detailUnavailableUntil.set(key, Date.now() + 750);
+          return;
+        }
+        const bytes =
+          (lod.minPeaks.byteLength +
+            lod.maxPeaks.byteLength +
+            lod.minPeaksRight.byteLength +
+            lod.maxPeaksRight.byteLength);
+        this.detailWindows.set(key, {
+          lod,
+          bytes,
+          lastUsedAt: ++this.accessCounter,
+        });
+        this.byteEstimate += bytes;
+        // La superficie gruesa se conserva hasta que drainPendingTiles haya
+        // terminado la fina; getTile la devuelve y a la vez encola el reemplazo.
+        this.detailReadySinceLastDrain = true;
+        this.pruneLeastRecentlyUsedTiles();
+      })
+      .catch(() => {
+        // Detail is opportunistic. Native-unavailable and transient IPC errors
+        // both keep the persisted LOD visible and retry later.
+        this.detailUnavailableUntil.set(key, Date.now() + 750);
+      })
+      .finally(() => {
+        this.detailRequests.delete(key);
+      });
+    this.detailRequests.set(key, promise);
   }
 
   private pruneLeastRecentlyUsedTiles() {
@@ -934,15 +1124,61 @@ export class WaveformTileCache {
       return;
     }
 
-    const entriesByAge = [...this.tiles.entries()].sort(
-      (left, right) => left[1].lastUsedAt - right[1].lastUsedAt,
-    );
-    for (const [key, entry] of entriesByAge) {
+    const entriesByAge = [
+      ...[...this.tiles.entries()].map(([key, entry]) => ({
+        kind: "tile" as const,
+        key,
+        bytes: tileByteSize(entry),
+        lastUsedAt: entry.lastUsedAt,
+      })),
+      ...[...this.detailWindows.entries()].map(([key, entry]) => ({
+        kind: "detail" as const,
+        key,
+        bytes: entry.bytes,
+        lastUsedAt: entry.lastUsedAt,
+      })),
+    ].sort((left, right) => left.lastUsedAt - right.lastUsedAt);
+    for (const entry of entriesByAge) {
       if (this.byteEstimate <= MAX_CACHE_BYTES) {
         break;
       }
-      this.byteEstimate -= tileByteSize(entry);
-      this.tiles.delete(key);
+      this.byteEstimate -= entry.bytes;
+      if (entry.kind === "tile") this.tiles.delete(entry.key);
+      else this.detailWindows.delete(entry.key);
     }
   }
+}
+
+function resolveWaveformWindow(
+  window: WaveformWindowDto | null,
+): ResolvedWaveformLod | null {
+  if (!window || window.bucketCount <= 0) return null;
+  const minPeaks = decodeFloat32Peaks(
+    window.minPeaksBase64,
+    window.bucketCount,
+  );
+  const maxPeaks = decodeFloat32Peaks(
+    window.maxPeaksBase64,
+    window.bucketCount,
+  );
+  if (
+    minPeaks.length !== window.bucketCount ||
+    maxPeaks.length !== window.bucketCount
+  ) {
+    return null;
+  }
+  return {
+    resolutionFrames: 1,
+    bucketCount: window.bucketCount,
+    minPeaks,
+    maxPeaks,
+    minPeaksRight: decodeFloat32Peaks(
+      window.minPeaksRightBase64,
+      window.bucketCount,
+    ),
+    maxPeaksRight: decodeFloat32Peaks(
+      window.maxPeaksRightBase64,
+      window.bucketCount,
+    ),
+  };
 }

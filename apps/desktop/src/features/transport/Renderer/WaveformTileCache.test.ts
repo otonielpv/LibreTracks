@@ -359,6 +359,77 @@ describe("cola de rasterización con presupuesto", () => {
     });
     expect(cache.getFallbackTileSlices(otherClipRequest)).toBeNull();
   });
+
+  it("sólo pide detalle nativo por encima del techo del LOD persistido", () => {
+    const calls: unknown[][] = [];
+    const cache = new WaveformTileCache(async (...args) => {
+      calls.push(args);
+      return null;
+    });
+
+    cache.getTile(request({ pixelsPerSecond: 180 }));
+    expect(calls).toHaveLength(0);
+
+    cache.getTile(request({ pixelsPerSecond: 200 }));
+    expect(calls).toHaveLength(1);
+  });
+
+  it("mantiene el tile grueso hasta sustituirlo atómicamente por el fino", async () => {
+    let resolveWindow!: (
+      value: import("../desktopApi").WaveformWindowDto | null,
+    ) => void;
+    const response = new Promise<import("../desktopApi").WaveformWindowDto | null>(
+      (resolve) => {
+        resolveWindow = resolve;
+      },
+    );
+    const cache = new WaveformTileCache(() => response);
+    const highZoom = request({ pixelsPerSecond: 300, clipPixelWidth: 1200 });
+
+    expect(cache.getTile(highZoom)).toBeNull();
+    expect(cache.drainPendingTiles(1000)).toBe(1);
+    const coarse = cache.getTile(highZoom);
+    expect(coarse).not.toBeNull();
+
+    const peaks = Array.from({ length: 1024 }, (_, index) =>
+      index % 2 === 0 ? -0.75 : 0.75,
+    );
+    resolveWindow({
+      sampleRate: 48_000,
+      startSeconds: 0,
+      endSeconds: 1024 / 300,
+      bucketCount: 1024,
+      minPeaksBase64: encodeFloat32Peaks(peaks.map((value) => -Math.abs(value))),
+      maxPeaksBase64: encodeFloat32Peaks(peaks.map((value) => Math.abs(value))),
+    });
+    await response;
+    await Promise.resolve();
+
+    // El canvas grueso sigue disponible mientras se encola el reemplazo fino.
+    expect(cache.getTile(highZoom)?.canvas).toBe(coarse?.canvas);
+    expect(cache.hasPendingTiles()).toBe(true);
+    expect(cache.drainPendingTiles(1000)).toBeGreaterThan(0);
+    expect(cache.getTile(highZoom)?.canvas).not.toBe(coarse?.canvas);
+  });
+
+  it("descarta la respuesta de una ventana que dejó de ser visible", async () => {
+    let resolveWindow!: (value: import("../desktopApi").WaveformWindowDto | null) => void;
+    const response = new Promise<import("../desktopApi").WaveformWindowDto | null>(
+      (resolve) => {
+        resolveWindow = resolve;
+      },
+    );
+    const cache = new WaveformTileCache(() => response);
+    cache.getTile(request({ pixelsPerSecond: 300, clipPixelWidth: 1200 }));
+
+    cache.beginPaint();
+    resolveWindow(null);
+    await response;
+    await Promise.resolve();
+
+    expect(cache.hasPendingTiles()).toBe(false);
+    expect(cache.stats()).toEqual({ entries: 0, bytes: 0 });
+  });
 });
 
 describe("altura del tile", () => {
