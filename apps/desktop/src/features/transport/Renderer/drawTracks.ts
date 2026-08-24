@@ -5,7 +5,7 @@ import { clipDisplayName } from "../helpers";
 // singleton directly (whose .t always reflects the current language) rather
 // than threading `t` through every snapshot construction site.
 import i18n from "../../../shared/i18n";
-import { reportWaveformTileCache } from "../perf/perfMetrics";
+import { recordTileDrain, reportWaveformTileCache } from "../perf/perfMetrics";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timeline/timelineMath";
 import {
@@ -915,7 +915,17 @@ export function beginWaveformTilePaint() {
 export function drainWaveformTileWork(
   budgetMs = WAVEFORM_TILE_FRAME_BUDGET_MS,
 ) {
-  return waveformTileCache.drainPendingTiles(budgetMs) > 0;
+  if (!waveformTileCache.hasPendingTiles()) {
+    return false;
+  }
+  // Se mide la llamada ENTERA, no la suma de sus tiles: la diferencia entre
+  // las dos es lo que cuesta asignar superficies y expulsar de la caché, que
+  // es la hipótesis viva para los frames de 27-42 ms que sobrevivieron al
+  // paso 04 (docs/plans/ui-performance/state/04.md).
+  const startedAt = performance.now();
+  const rendered = waveformTileCache.drainPendingTiles(budgetMs);
+  recordTileDrain(performance.now() - startedAt);
+  return rendered > 0;
 }
 
 export function buildTrackStructureSignature(song: SongView, visibleTracks: TimelineTrackSummary[]) {

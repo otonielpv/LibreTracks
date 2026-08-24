@@ -175,6 +175,10 @@ export function PerfHud() {
             : ""}
         </div>
         <div style={{ opacity: 0.82 }}>
+          drain: peor {snapshot.tileDrainWorstMs.toFixed(1)} ms ·{" "}
+          {snapshot.tileDrainMsLastSecond.toFixed(1)} ms/s
+        </div>
+        <div style={{ opacity: 0.82 }}>
           grid builds: {snapshot.gridBuilds} · {snapshot.gridEntries} entradas
         </div>
         {lastGesture ? (

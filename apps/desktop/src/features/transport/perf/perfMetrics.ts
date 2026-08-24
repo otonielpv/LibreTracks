@@ -76,10 +76,25 @@ let waveformTileRenderWorstLastSecond = 0;
 let waveformTileMsThisSecond = 0;
 let waveformTileMsLastSecond = 0;
 let waveformTileWindowStart = 0;
+let tileDrainWindowStart = 0;
 // Gauges publicados por la caché una vez por pintado.
 let waveformTileCacheEntries = 0;
 let waveformTileCacheBytes = 0;
 let waveformTileCachePeakBytes = 0;
+
+/**
+ * Duración de la llamada de drenado COMPLETA, por frame — no de cada tile.
+ *
+ * Tras el paso 04 la aritmética dejó de cuadrar: los tiles suman 20-38 ms por
+ * SEGUNDO (≈0,2 ms por frame) y sin embargo siguen apareciendo frames de 27 a
+ * 42 ms. O el drenado cuesta mucho más que la suma de sus tiles —asignar y
+ * liberar superficies, expulsiones de la caché— o el pico no es del drenado en
+ * absoluto. Medir el drenado entero es lo que separa las dos hipótesis.
+ */
+let tileDrainWorstThisSecond = 0;
+let tileDrainWorstLastSecond = 0;
+let tileDrainMsThisSecond = 0;
+let tileDrainMsLastSecond = 0;
 
 // Reconstrucciones de la rejilla (causa C6).
 let gridBuildCount = 0; // monotónico
@@ -253,6 +268,11 @@ export function stopPerfMetrics() {
   waveformTileMsThisSecond = 0;
   waveformTileMsLastSecond = 0;
   waveformTileWindowStart = 0;
+  tileDrainWorstThisSecond = 0;
+  tileDrainWorstLastSecond = 0;
+  tileDrainMsThisSecond = 0;
+  tileDrainMsLastSecond = 0;
+  tileDrainWindowStart = 0;
   waveformTileCacheEntries = 0;
   waveformTileCacheBytes = 0;
   waveformTileCachePeakBytes = 0;
@@ -289,6 +309,13 @@ function tick(now: number) {
   }
 
   rollWaveformTileWindow(now);
+  if (now - tileDrainWindowStart >= 1000) {
+    tileDrainWorstLastSecond = tileDrainWorstThisSecond;
+    tileDrainMsLastSecond = tileDrainMsThisSecond;
+    tileDrainWorstThisSecond = 0;
+    tileDrainMsThisSecond = 0;
+    tileDrainWindowStart = now;
+  }
 
   rafId = window.requestAnimationFrame(tick);
 }
@@ -352,6 +379,13 @@ export function recordWaveformTileRender(ms: number) {
   // La ventana de un segundo NO rueda aquí: la hace rodar `tick()`. Ver el
   // comentario en esa función — este fue un defecto real, detectado en la
   // primera medición.
+}
+
+/** Coste de una llamada completa a la cola de tiles, en un frame. */
+export function recordTileDrain(ms: number) {
+  if (!started) return;
+  tileDrainMsThisSecond += ms;
+  if (ms > tileDrainWorstThisSecond) tileDrainWorstThisSecond = ms;
 }
 
 /** Estado de la caché de tiles, publicado una vez por pintado. */
@@ -515,6 +549,9 @@ export type PerfSnapshot = {
   waveformTileRenderWorstMs: number;
   /** Milisegundos gastados rasterizando tiles durante el último segundo. */
   waveformTileMsLastSecond: number;
+  /** Peor llamada de drenado del último segundo, y total del segundo. */
+  tileDrainWorstMs: number;
+  tileDrainMsLastSecond: number;
   waveformTileCacheEntries: number;
   waveformTileCacheBytes: number;
   waveformTileCachePeakBytes: number;
@@ -566,6 +603,7 @@ type RecordedSample = {
   waveformTileRenders: number;
   waveformTileMsLastSecond: number;
   waveformTileCacheBytes: number;
+  tileDrainWorstMs: number;
   gridBuilds: number;
 };
 
@@ -601,6 +639,7 @@ function appendRecordedSample() {
     waveformTileRenders: snap.waveformTileRenders,
     waveformTileMsLastSecond: snap.waveformTileMsLastSecond,
     waveformTileCacheBytes: snap.waveformTileCacheBytes,
+    tileDrainWorstMs: snap.tileDrainWorstMs,
     gridBuilds: snap.gridBuilds,
   });
   if (recordedSamples.length > MAX_RECORDED_SAMPLES) {
@@ -1200,6 +1239,8 @@ export function readPerfSnapshot(): PerfSnapshot {
     waveformTileRenderEma,
     waveformTileRenderWorstMs: waveformTileRenderWorstLastSecond,
     waveformTileMsLastSecond,
+    tileDrainWorstMs: tileDrainWorstLastSecond,
+    tileDrainMsLastSecond,
     waveformTileCacheEntries,
     waveformTileCacheBytes,
     waveformTileCachePeakBytes,
