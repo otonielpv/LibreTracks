@@ -7,7 +7,7 @@ La **Vista Compacta** es una segunda proyeccion del mismo proyecto. La vista DAW
 
 ![Vista Compacta](/screenshots/Compact-View.png)
 
-Cambia entre las dos con la tecla `Tab` o con el boton del icono `view_module` / `view_timeline` en la barra de herramientas.
+Rota entre las vistas con la tecla `Tab` (y `Shift+Tab` para ir en sentido contrario), o elige una con los botones `view_timeline` / `view_module` / `stadium` de la barra de herramientas. La tercera es la [Vista Live](/es/docs/live-view/), para el directo.
 
 ![Boton para activar Vista Compacta](/screenshots/Compact-View-Button.png)
 
@@ -154,7 +154,7 @@ El boton de `Snap to Grid` en la barra de herramientas ahora usa un **icono de i
 
 Mas atajos relacionados:
 
-- `Tab` — alternar entre vista DAW y vista compacta.
+- `Tab` — rotar entre vista DAW, vista compacta y Vista Live (`Shift+Tab` rota al reves).
 - `Shift + numero` — saltar a una cancion (respeta el modo de transicion global).
 - En la barra de transposicion / warp del toolbar: la cancion enlazada es la que tengas seleccionada en la vista compacta (o la del playhead si no hay seleccion expresa).
 

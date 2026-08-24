@@ -7,7 +7,7 @@ The **Compact View** is a second projection of the same project. The DAW view (l
 
 ![Compact View](/screenshots/Compact-View.png)
 
-Toggle between them with `Tab` or with the `view_module` / `view_timeline` button in the toolbar.
+Cycle through the views with `Tab` (and `Shift+Tab` to go the other way), or pick one with the `view_timeline` / `view_module` / `stadium` buttons in the toolbar. The third one is the [Live View](/docs/live-view/), for the show itself.
 
 ![Button to toggle Compact View](/screenshots/Compact-View-Button.png)
 
@@ -154,7 +154,7 @@ The `Snap to Grid` button in the toolbar now uses a **magnet icon**, visually di
 
 Related shortcuts:
 
-- `Tab` — toggle between DAW and compact view.
+- `Tab` — cycle DAW, compact and Live views (`Shift+Tab` cycles backwards).
 - `Shift + number` — jump to a song (respects the project-wide transition mode).
 - The transposition / warp toolbar bars target the song you've selected in the compact view (or the playhead song if no explicit selection).
 
