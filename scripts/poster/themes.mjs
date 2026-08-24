@@ -58,6 +58,19 @@ export const THEMES = [
     headlineWeight: 900,
   },
   {
+    id: 'showcase',
+    // Cyan on deep navy, the screenshot repeated as a device family: the
+    // desktop shot large with a tablet and a phone stacked in front of it.
+    // For releases whose headline is the same feature on every screen size.
+    layout: 'devices',
+    accent: '#22d3ee',
+    accentSoft: '#67e8f9',
+    bg: '#050b14',
+    bgGlow: 'radial-gradient(120% 95% at 50% -10%, #0b2a3d 0%, #050b14 62%)',
+    motif: 'stagelight',
+    headlineWeight: 900,
+  },
+  {
     id: 'console',
     // Green-on-near-black, feature list as a numbered column beside a framed
     // screenshot. Technical, understated.

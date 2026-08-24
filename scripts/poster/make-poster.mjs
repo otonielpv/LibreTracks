@@ -91,6 +91,17 @@ function main() {
     throw new Error(`Screenshot not found: ${shot}`);
   }
 
+  // Optional extra screenshots, for layouts that show the same feature on more
+  // than one device (see the `devices` layout). Order matters: mid-size device
+  // first, phone second.
+  const shots = (spec.shots ?? []).map((rel) => {
+    const file = path.resolve(specDir, rel);
+    if (!existsSync(file)) {
+      throw new Error(`Screenshot not found: ${file}`);
+    }
+    return file;
+  });
+
   const theme = pickTheme(spec.version, args.theme ? String(args.theme) : spec.theme);
 
   const fontsDir = path.join(REPO, 'apps', 'desktop', 'public', 'fonts');
@@ -105,7 +116,7 @@ function main() {
     if (!existsSync(file)) throw new Error(`Missing font ${name}: ${file}`);
   }
 
-  const html = renderPoster({ ...spec, shot }, theme, assets);
+  const html = renderPoster({ ...spec, shot, shots }, theme, assets);
 
   const base = String(args.out ?? spec.out ?? `cartel-${spec.version}-${theme.id}`);
   const htmlPath = path.join(specDir, `${base}.html`);

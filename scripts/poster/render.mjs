@@ -26,6 +26,11 @@ function motifCss(theme) {
     case 'waveform':
       return `background-image:repeating-linear-gradient(90deg, ${theme.accent}1f 0 2px, transparent 2px 13px);
         -webkit-mask-image:linear-gradient(180deg, transparent 0%, #000 42%, #000 58%, transparent 100%);`;
+    case 'stagelight':
+      return `background-image:
+        radial-gradient(58% 42% at 22% 8%, ${theme.accent}1c 0%, transparent 70%),
+        radial-gradient(52% 38% at 82% 4%, ${theme.accent}16 0%, transparent 72%),
+        repeating-linear-gradient(90deg, ${theme.accent}0e 0 1px, transparent 1px 96px);`;
     case 'dots':
       return `background-image:radial-gradient(${theme.accent}26 1.6px, transparent 1.7px);background-size:26px 26px;`;
     case 'grid':
@@ -65,7 +70,7 @@ function numberedFeatures(features) {
  * pile of conditionals inside one.
  */
 export function renderPoster(spec, theme, assets) {
-  const { version, headline, headlineAccent, sub, badge, features, shot } = spec;
+  const { version, headline, headlineAccent, sub, badge, features, shot, shots = [] } = spec;
 
   const fonts = [
     fontFace('Space Grotesk', 700, assets.grotesk700),
@@ -75,10 +80,12 @@ export function renderPoster(spec, theme, assets) {
     fontFace('Inter', 900, assets.inter900),
   ].join('\n');
 
-  const shotUri = dataUri(
-    shot,
-    path.extname(shot).toLowerCase() === '.jpg' ? 'image/jpeg' : 'image/png',
-  );
+  const toShotUri = (file) =>
+    dataUri(file, path.extname(file).toLowerCase() === '.jpg' ? 'image/jpeg' : 'image/png');
+  const shotUri = toShotUri(shot);
+  // Layouts that show a device family read the extra screenshots in order:
+  // the first is the mid-size device, the second the phone.
+  const extraUris = shots.map(toShotUri);
 
   const brand = `<div class="brand">
       <div class="brand-name">LIBRETRACKS</div>
@@ -119,6 +126,26 @@ export function renderPoster(spec, theme, assets) {
         ${versionChip}
         ${headlineHtml}
         <p class="sub">${esc(sub)}</p>
+      </div>
+      <div class="feats-row">${featureBlocks(features)}</div>
+    </div>`;
+  } else if (theme.layout === 'devices') {
+    const tablet = extraUris[0]
+      ? `<img class="shot dev-tablet" src="${extraUris[0]}" alt="">`
+      : '';
+    const phone = extraUris[1]
+      ? `<img class="shot dev-phone" src="${extraUris[1]}" alt="">`
+      : '';
+    body = `<div class="l-devices">
+      <div class="dev-copy">
+        ${versionChip}
+        ${headlineHtml}
+        <p class="sub">${esc(sub)}</p>
+      </div>
+      <div class="devices">
+        <img class="shot dev-desktop" src="${shotUri}" alt="">
+        ${tablet}
+        ${phone}
       </div>
       <div class="feats-row">${featureBlocks(features)}</div>
     </div>`;
@@ -223,6 +250,33 @@ h1{font-size:96px;font-weight:${theme.headlineWeight};line-height:.96;letter-spa
 .l-tilt .feats-row{order:3;flex:0 0 auto;}
 .tilt-copy h1{font-size:88px;}
 .tilt-copy .sub{margin-top:16px;}
+
+/* devices — the same feature on three screen sizes. The shots are absolutely
+   positioned inside a flexible box: each one is sized by WIDTH only, so its
+   own aspect ratio decides the height and nothing is squashed. They overlap on
+   purpose (desktop behind, phone in front) — that stack is what says "this runs
+   everywhere" at a glance. */
+.l-devices{flex:1;display:flex;flex-direction:column;padding-top:28px;overflow:hidden;}
+.dev-copy{flex:0 0 auto;}
+.dev-copy h1{font-size:76px;}
+.dev-copy .sub{margin-top:12px;font-size:23px;max-width:30ch;}
+/* The box is sized by the flex row, and every shot is placed by WIDTH only so
+   its own aspect ratio sets the height. Keep the tallest shot (the desktop one)
+   under the row height or the stack runs over the feature strip. */
+.devices{flex:1 1 auto;position:relative;margin:20px -70px 44px -20px;min-height:0;}
+/* The bottom margin is the guard rail: the phone sits in FRONT of everything
+   and its lower edge must clear the feature strip, or a column reads as
+   covered by a screenshot. */
+.devices .shot{position:absolute;}
+/* The desktop and tablet shots are cropped from the bottom (their marker grid
+   stops before the window does, and the empty half reads as dead space on a
+   poster); the phone one already fills its frame. */
+.dev-desktop{width:860px;height:380px;object-fit:cover;object-position:top left;right:-16px;top:0;}
+.dev-tablet{width:376px;height:168px;object-fit:cover;object-position:top left;left:0;bottom:52px;z-index:2;}
+.dev-phone{width:308px;left:214px;bottom:18px;z-index:3;}
+.l-devices .feats-row{flex:0 0 auto;}
+.l-devices .feat-title{font-size:21px;}
+.l-devices .feat-body{font-size:17px;}
 
 /* list — numbered features beside a framed shot. The grid must stretch (not
    centre) its rows, otherwise the shot floats at its natural size and leaves
