@@ -466,33 +466,113 @@ function tileByteSize(entry: Pick<TileEntry, "width" | "height">) {
   return entry.width * entry.height * 4;
 }
 
-/**
- * Envolvente de la onda a muy baja resolución, dibujada DIRECTAMENTE sobre el
- * lienzo de destino.
- *
- * Es el relleno mientras el tile de verdad está en la cola. Sin esto, sacar la
- * rasterización del frame cambiaría un tirón por un parpadeo — el clip se
- * quedaría con el marcador de "analizando" durante uno o dos frames al cruzar
- * un paso de zoom, que es peor que el problema que se venía a resolver.
- *
- * Cuesta `SKETCH_BUCKETS` iteraciones, no las ~1024 de un tile, y no asigna
- * ninguna superficie. Visualmente es la misma onda borrosa, que es como se
- * comporta Ableton: aparece difusa y se afina sola.
- */
-const SKETCH_BUCKETS = 48;
+/** Buckets del boceto. Suficientes para que se lea como una onda y no como una
+ *  fila de bloques; muy por debajo de los ~1024 de un tile de verdad. */
+const SKETCH_BUCKETS = 64;
 
+export type SketchRect = {
+  /** Tramo de la VENTANA del clip que cubre este dibujo, en [0,1]. */
+  fromRatio: number;
+  toRatio: number;
+  left: number;
+  width: number;
+  top: number;
+  height: number;
+};
+
+function sketchPeakForBucket(
+  peaks: Float32Array,
+  from: number,
+  step: number,
+  bucket: number,
+  takeMaximum: boolean,
+) {
+  const sliceStart = Math.max(0, Math.floor(from + bucket * step));
+  const sliceEnd = Math.min(
+    peaks.length,
+    Math.max(sliceStart + 1, Math.ceil(from + (bucket + 1) * step)),
+  );
+  let peak = takeMaximum ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+  for (let source = sliceStart; source < sliceEnd; source += 1) {
+    peak = takeMaximum
+      ? Math.max(peak, peaks[source])
+      : Math.min(peak, peaks[source]);
+  }
+  return Number.isFinite(peak) ? clamp(peak, -1, 1) : 0;
+}
+
+function drawSketchChannel(
+  context: CanvasRenderingContext2D,
+  minPeaks: Float32Array,
+  maxPeaks: Float32Array,
+  from: number,
+  to: number,
+  rect: SketchRect,
+  buckets: number,
+  centerY: number,
+  amplitude: number,
+) {
+  const step = (to - from) / buckets;
+  context.beginPath();
+  for (let index = 0; index < buckets; index += 1) {
+    const x = rect.left + (index / (buckets - 1)) * rect.width;
+    const peak = sketchPeakForBucket(maxPeaks, from, step, index, true);
+    const y = centerY - peak * amplitude;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  }
+  for (let index = buckets - 1; index >= 0; index -= 1) {
+    const x = rect.left + (index / (buckets - 1)) * rect.width;
+    const peak = sketchPeakForBucket(minPeaks, from, step, index, false);
+    context.lineTo(x, centerY - peak * amplitude);
+  }
+  context.closePath();
+  context.fill();
+}
+
+/**
+ * Envolvente de la onda a baja resolución, dibujada DIRECTAMENTE sobre el
+ * lienzo de destino. Es el relleno mientras el tile de verdad está en la cola.
+ *
+ * Dos cosas que la primera versión hizo mal y se vieron en cuanto se probó a
+ * ojo — ningún test las cubría:
+ *
+ * 1. **Agrega, no muestrea.** Tomar UN pico por bucket de salida, con miles de
+ *    buckets de LOD por medio, hace que los puntos caigan donde caigan: allí
+ *    donde uno cae en un cruce por cero la envolvente se estrangula, y el clip
+ *    se dibuja como una fila de lentes en vez de como una onda. Hay que tomar
+ *    el máximo y el mínimo de CADA tramo.
+ * 2. **Sólo cubre el tramo que falta.** Antes se pintaba sobre el clip entero
+ *    en cuanto faltaba un solo tile, tapando los que sí estaban rasterizados.
+ *    Eso era el parpadeo: la onda buena sustituida por el boceto.
+ *
+ * Para que agregar salga barato se elige el LOD por la resolución del BOCETO,
+ * no por la del zoom: con ~64 buckets de salida basta un LOD grueso, y el bucle
+ * recorre decenas de valores en vez de decenas de miles.
+ */
 export function drawWaveformSketch(
   context: CanvasRenderingContext2D,
   clip: ClipSummary,
   waveform: WaveformSummaryDto,
-  pixelsPerSecond: number,
-  left: number,
-  width: number,
-  top: number,
-  height: number,
+  rect: SketchRect,
 ) {
-  const lod = selectWaveformLod(waveform, pixelsPerSecond);
-  if (!lod || !lod.maxPeaks.length || clip.sourceDurationSeconds <= 0) {
+  if (clip.sourceDurationSeconds <= 0 || rect.width < 2) {
+    return false;
+  }
+
+  const windowSeconds =
+    clip.sourceWindowDurationSeconds ?? clip.durationSeconds;
+  if (windowSeconds <= 0) {
+    return false;
+  }
+
+  const buckets = Math.max(
+    2,
+    Math.min(SKETCH_BUCKETS, Math.floor(rect.width / 3)),
+  );
+  // LOD elegido para la resolución del boceto, no para la del zoom.
+  const lod = selectWaveformLod(waveform, buckets / windowSeconds);
+  if (!lod || !lod.maxPeaks.length || !lod.minPeaks.length) {
     return false;
   }
 
@@ -501,44 +581,64 @@ export function drawWaveformSketch(
     0,
     1,
   );
-  const spanRatio = clamp(
-    (clip.sourceWindowDurationSeconds ?? clip.durationSeconds) /
-      clip.sourceDurationSeconds,
-    0,
-    1,
-  );
-  const firstIndex = Math.floor(startRatio * lod.maxPeaks.length);
-  const lastIndex = Math.min(
-    lod.maxPeaks.length,
-    Math.ceil((startRatio + spanRatio) * lod.maxPeaks.length),
-  );
-  const span = lastIndex - firstIndex;
-  if (span <= 0) {
+  const spanRatio = clamp(windowSeconds / clip.sourceDurationSeconds, 0, 1);
+  const windowFirst = startRatio * lod.maxPeaks.length;
+  const windowSpan = spanRatio * lod.maxPeaks.length;
+  const from = windowFirst + clamp(rect.fromRatio, 0, 1) * windowSpan;
+  const to = windowFirst + clamp(rect.toRatio, 0, 1) * windowSpan;
+  if (to - from <= 0) {
     return false;
   }
 
-  const centerY = top + height / 2;
-  const amplitude = height * 0.42;
-  const buckets = Math.max(2, Math.min(SKETCH_BUCKETS, Math.floor(width / 2)));
-
   context.save();
   context.fillStyle = "rgba(20, 20, 20, 0.55)";
-  context.beginPath();
-  for (let index = 0; index < buckets; index += 1) {
-    const source = firstIndex + Math.floor((index / buckets) * span);
-    const x = left + (index / (buckets - 1)) * width;
-    const y = centerY - clamp(lod.maxPeaks[source], -1, 1) * amplitude;
-    if (index === 0) context.moveTo(x, y);
-    else context.lineTo(x, y);
+  const hasRightChannel =
+    lod.minPeaksRight.length === lod.minPeaks.length &&
+    lod.maxPeaksRight.length === lod.maxPeaks.length;
+  if (hasRightChannel) {
+    context.fillStyle = "rgba(20, 20, 20, 0.18)";
+    context.fillRect(
+      rect.left,
+      Math.round(rect.top + rect.height * 0.5),
+      rect.width,
+      1,
+    );
+    context.fillStyle = "rgba(20, 20, 20, 0.55)";
+    drawSketchChannel(
+      context,
+      lod.minPeaks,
+      lod.maxPeaks,
+      from,
+      to,
+      rect,
+      buckets,
+      rect.top + rect.height * 0.25,
+      rect.height * 0.2,
+    );
+    drawSketchChannel(
+      context,
+      lod.minPeaksRight,
+      lod.maxPeaksRight,
+      from,
+      to,
+      rect,
+      buckets,
+      rect.top + rect.height * 0.75,
+      rect.height * 0.2,
+    );
+  } else {
+    drawSketchChannel(
+      context,
+      lod.minPeaks,
+      lod.maxPeaks,
+      from,
+      to,
+      rect,
+      buckets,
+      rect.top + rect.height * 0.5,
+      rect.height * 0.42,
+    );
   }
-  for (let index = buckets - 1; index >= 0; index -= 1) {
-    const source = firstIndex + Math.floor((index / buckets) * span);
-    const x = left + (index / (buckets - 1)) * width;
-    const y = centerY - clamp(lod.minPeaks[source], -1, 1) * amplitude;
-    context.lineTo(x, y);
-  }
-  context.closePath();
-  context.fill();
   context.restore();
   return true;
 }

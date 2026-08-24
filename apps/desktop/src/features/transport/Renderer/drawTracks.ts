@@ -804,7 +804,6 @@ export function drawTrackClipsLayer(
         // el borde.
         const clipCenterX = clippedLeft + visibleWidth / 2;
         const priority = Math.abs(clipCenterX - snapshot.width / 2);
-        let missedTile = false;
 
         for (let tileIndex = startTileIndex; tileIndex <= endTileIndex; tileIndex += 1) {
           const tile = waveformTileCache.getTile({
@@ -816,33 +815,38 @@ export function drawTrackClipsLayer(
             laneHeightPx: clipHeight * devicePixelRatioForTiles(),
             priority,
           });
-          if (!tile) {
-            missedTile = true;
+
+          if (tile) {
+            context.drawImage(
+              tile.canvas,
+              left + tile.tileStartPixel * renderScale,
+              clipTop,
+              tile.tileWidth * renderScale,
+              clipHeight,
+            );
             continue;
           }
 
-          context.drawImage(
-            tile.canvas,
-            left + tile.tileStartPixel * renderScale,
-            clipTop,
-            tile.tileWidth * renderScale,
-            clipHeight,
+          // El tile está en la cola: se rellena SÓLO su tramo con la
+          // envolvente de baja resolución. Pintarla sobre el clip entero
+          // taparía los tiles que sí están listos, y eso se ve como un
+          // parpadeo de la onda buena a la aproximada.
+          const tileStartPixel = tileIndex * WAVEFORM_TILE_WIDTH_PX;
+          const tileEndPixel = Math.min(
+            renderClipPixelWidth,
+            tileStartPixel + WAVEFORM_TILE_WIDTH_PX,
           );
-        }
-
-        // Algún tile aún está en la cola: rellena con la envolvente de baja
-        // resolución para que no haya un hueco mientras se rasteriza.
-        if (missedTile) {
-          drawWaveformSketch(
-            context,
-            clip,
-            waveform,
-            snapshot.zoomLevel,
-            clippedLeft,
-            visibleWidth,
-            clipTop,
-            clipHeight,
-          );
+          if (tileEndPixel <= tileStartPixel) {
+            continue;
+          }
+          drawWaveformSketch(context, clip, waveform, {
+            fromRatio: tileStartPixel / renderClipPixelWidth,
+            toRatio: tileEndPixel / renderClipPixelWidth,
+            left: left + tileStartPixel * renderScale,
+            width: (tileEndPixel - tileStartPixel) * renderScale,
+            top: clipTop,
+            height: clipHeight,
+          });
         }
         context.restore();
         if (clip.color || track.color) {
