@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+const waveformTileRequests = vi.hoisted(() => [] as Array<{ pixelsPerSecond: number }>);
+
 vi.mock("./WaveformTileCache", () => {
   return {
     WAVEFORM_TILE_WIDTH_PX: 1024,
@@ -21,7 +23,8 @@ vi.mock("./WaveformTileCache", () => {
         return false;
       }
 
-      getTile() {
+      getTile(request: { pixelsPerSecond: number }) {
+        waveformTileRequests.push(request);
         return {
           canvas: { width: 64, height: 32 },
           tileStartPixel: 0,
@@ -241,6 +244,18 @@ describe("drawTrackClipsLayer", () => {
         ([text]) => text === "ANALYZING...",
       ),
     ).toBe(false);
+  });
+
+  it("elige la generación de onda desde el zoom visible, no desde el commit diferido", () => {
+    waveformTileRequests.length = 0;
+    const context = createContextSpy();
+    const snapshot = createSnapshot(true);
+    snapshot.pixelsPerSecond = 120;
+    snapshot.zoomLevel = 180;
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    expect(waveformTileRequests[0]?.pixelsPerSecond).toBe(180);
   });
 
   it("labels clips from their file name instead of the destination track", () => {

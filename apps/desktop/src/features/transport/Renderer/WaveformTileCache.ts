@@ -9,7 +9,10 @@ import { recordWaveformTileRender } from "../perf/perfMetrics";
 import { clamp } from "../timeline/timelineMath";
 
 export const WAVEFORM_TILE_WIDTH_PX = 1024;
-const WAVEFORM_ZOOM_CACHE_STEP = 1.5;
+// 1.5 permitía hasta +22 % / -18 % de escalado respecto al bitmap nativo y se
+// percibía como desenfoque durante la rueda. Con la cola y los sustitutos ya
+// fuera del frame, 1.25 limita el error a aproximadamente ±11 %.
+const WAVEFORM_ZOOM_CACHE_STEP = 1.25;
 
 /**
  * Alturas de tile permitidas, en píxeles.
@@ -123,9 +126,13 @@ export function getWaveformRenderPixelsPerSecond(pixelsPerSecond: number) {
     return 1;
   }
 
-  const exponent = Math.round(
-    Math.log(pixelsPerSecond) / Math.log(WAVEFORM_ZOOM_CACHE_STEP),
-  );
+  const rawExponent =
+    Math.log(pixelsPerSecond) / Math.log(WAVEFORM_ZOOM_CACHE_STEP);
+  // Los niveles vecinos se calculan multiplicando por el propio step. Por
+  // error binario, log(step^n * step) puede producir n+0.499999999999996 y
+  // Math.round lo manda de vuelta al nivel anterior. En zoom-out eso hacía que
+  // el sustituto superior se saltase y reapareciese una forma vieja inferior.
+  const exponent = Math.floor(rawExponent + 0.5 + 1e-9);
   return Math.max(1, Math.pow(WAVEFORM_ZOOM_CACHE_STEP, exponent));
 }
 
@@ -518,6 +525,8 @@ export type WaveformWindowLoader = (
   bucketCount: number,
 ) => Promise<WaveformWindowDto | null>;
 
+type DetailRequestState = "not-needed" | "pending" | "ready" | "unavailable";
+
 function sketchPeakForBucket(
   peaks: Float32Array,
   from: number,
@@ -751,7 +760,12 @@ export class WaveformTileCache {
     }
 
     const key = tileKey(namespace, request.tileIndex);
-    this.requestDetailWindowIfUseful(key, request, tileStartPixel, tileWidth);
+    const detailState = this.requestDetailWindowIfUseful(
+      key,
+      request,
+      tileStartPixel,
+      tileWidth,
+    );
     const entry = this.tiles.get(key);
     if (entry) {
       entry.lastUsedAt = ++this.accessCounter;
@@ -781,6 +795,14 @@ export class WaveformTileCache {
         tileStartPixel,
         tileWidth: entry.logicalWidth,
       };
+    }
+
+    // A zoom alto no construyas primero un tile con el LOD persistido para
+    // sustituirlo enseguida por otro fino. Mientras llega la ventana, drawTracks
+    // conserva el vecino anterior (o el boceto en carga fría); después sólo hay
+    // una transición, directamente a la geometría definitiva.
+    if (detailState === "pending") {
+      return null;
     }
 
     const existing = this.pending.get(key);
@@ -832,8 +854,14 @@ export class WaveformTileCache {
     // Vecino inmediato primero, tanto al acercar como al alejar. Se buscan más
     // anillos porque una rueda/pinza continua puede recorrer todo G3 antes de
     // que venza el debounce y se confirme un nuevo zoom.
-    for (let distance = 1; distance <= 12; distance += 1) {
-      for (const direction of [-1, 1] as const) {
+    // 24 pasos de 1.25 cubren más de 200x, suficiente para todo el rango de
+    // zoom aunque una rueda rápida avance muchos namespaces antes del drain.
+    for (let distance = 1; distance <= 24; distance += 1) {
+      // El nivel superior se prueba primero. Al alejar, es la generación que el
+      // usuario estaba viendo justo antes y además contiene al menos tanta
+      // información como el destino. El orden inverso elegía a menudo una
+      // generación vieja y más basta, origen de las formas raras en zoom-out.
+      for (const direction of [1, -1] as const) {
         const offset = distance * direction;
         const fallbackPixelsPerSecond = getWaveformRenderPixelsPerSecond(
           targetPixelsPerSecond * Math.pow(WAVEFORM_ZOOM_CACHE_STEP, offset),
@@ -1031,7 +1059,7 @@ export class WaveformTileCache {
     request: TileRequest,
     tileStartPixel: number,
     tileWidth: number,
-  ) {
+  ): DetailRequestState {
     const finestResolution = request.waveform.lods.reduce(
       (best, lod) => Math.min(best, Math.max(1, lod.resolutionFrames)),
       Number.POSITIVE_INFINITY,
@@ -1042,20 +1070,20 @@ export class WaveformTileCache {
       request.pixelsPerSecond <= detailThreshold ||
       request.clipPixelWidth <= 0
     ) {
-      return;
+      return "not-needed";
     }
 
     this.visibleDetailKeys.add(key);
     const cached = this.detailWindows.get(key);
     if (cached) {
       cached.lastUsedAt = ++this.accessCounter;
-      return;
+      return "ready";
     }
-    if (
-      this.detailRequests.has(key) ||
-      (this.detailUnavailableUntil.get(key) ?? 0) > Date.now()
-    ) {
-      return;
+    if (this.detailRequests.has(key)) {
+      return "pending";
+    }
+    if ((this.detailUnavailableUntil.get(key) ?? 0) > Date.now()) {
+      return "unavailable";
     }
 
     const sourceWindowSeconds =
@@ -1090,6 +1118,7 @@ export class WaveformTileCache {
         const lod = resolveWaveformWindow(window);
         if (!lod) {
           this.detailUnavailableUntil.set(key, Date.now() + 750);
+          this.detailReadySinceLastDrain = true;
           return;
         }
         const bytes =
@@ -1112,11 +1141,13 @@ export class WaveformTileCache {
         // Detail is opportunistic. Native-unavailable and transient IPC errors
         // both keep the persisted LOD visible and retry later.
         this.detailUnavailableUntil.set(key, Date.now() + 750);
+        this.detailReadySinceLastDrain = true;
       })
       .finally(() => {
         this.detailRequests.delete(key);
       });
     this.detailRequests.set(key, promise);
+    return "pending";
   }
 
   private pruneLeastRecentlyUsedTiles() {

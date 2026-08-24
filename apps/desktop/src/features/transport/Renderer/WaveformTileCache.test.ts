@@ -181,11 +181,28 @@ describe("WaveformTileCache", () => {
 
   it("quantizes nearby zoom levels to the same waveform render scale", () => {
     expect(getWaveformRenderPixelsPerSecond(50)).toBe(
-      getWaveformRenderPixelsPerSecond(60),
+      getWaveformRenderPixelsPerSecond(52),
     );
     expect(getWaveformRenderPixelsPerSecond(72)).toBe(
-      getWaveformRenderPixelsPerSecond(86),
+      getWaveformRenderPixelsPerSecond(75),
     );
+  });
+
+  it("limita el desenfoque de cuantización de zoom a aproximadamente 12 %", () => {
+    for (let pixelsPerSecond = 18; pixelsPerSecond <= 1152; pixelsPerSecond *= 1.03) {
+      const render = getWaveformRenderPixelsPerSecond(pixelsPerSecond);
+      expect(Math.max(render / pixelsPerSecond, pixelsPerSecond / render)).toBeLessThan(1.12);
+    }
+  });
+
+  it("avanza exactamente al vecino superior sin volver por redondeo flotante", () => {
+    for (const pixelsPerSecond of [20, 50, 120, 200, 600, 1100]) {
+      const level = getWaveformRenderPixelsPerSecond(pixelsPerSecond);
+      expect(getWaveformRenderPixelsPerSecond(level * 1.25)).toBeCloseTo(
+        level * 1.25,
+        8,
+      );
+    }
   });
 });
 
@@ -360,6 +377,29 @@ describe("cola de rasterización con presupuesto", () => {
     expect(cache.getFallbackTileSlices(otherClipRequest)).toBeNull();
   });
 
+  it("prefiere el vecino superior cuando existen ambos lados del zoom", () => {
+    const cache = new WaveformTileCache();
+    const waveform = buildWaveform({ sampleRate: 480_000 });
+    const target = getWaveformRenderPixelsPerSecond(200);
+    const lower = target / 1.25;
+    const higher = target * 1.25;
+    const base = { waveform, clipPixelWidth: 4096 };
+
+    cache.getTile(request({ ...base, pixelsPerSecond: lower }));
+    cache.drainPendingTiles(1000);
+    cache.getTile(request({ ...base, pixelsPerSecond: higher }));
+    cache.getTile(request({ ...base, pixelsPerSecond: higher, tileIndex: 1 }));
+    cache.drainPendingTiles(1000);
+    const higherTile = cache.getTile(
+      request({ ...base, pixelsPerSecond: higher }),
+    );
+
+    const slices = cache.getFallbackTileSlices(
+      request({ ...base, pixelsPerSecond: target }),
+    );
+    expect(slices?.[0].canvas).toBe(higherTile?.canvas);
+  });
+
   it("sólo pide detalle nativo por encima del techo del LOD persistido", () => {
     const calls: unknown[][] = [];
     const cache = new WaveformTileCache(async (...args) => {
@@ -374,7 +414,7 @@ describe("cola de rasterización con presupuesto", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("mantiene el tile grueso hasta sustituirlo atómicamente por el fino", async () => {
+  it("no crea un tile grueso intermedio mientras espera el detalle fino", async () => {
     let resolveWindow!: (
       value: import("../desktopApi").WaveformWindowDto | null,
     ) => void;
@@ -387,9 +427,8 @@ describe("cola de rasterización con presupuesto", () => {
     const highZoom = request({ pixelsPerSecond: 300, clipPixelWidth: 1200 });
 
     expect(cache.getTile(highZoom)).toBeNull();
-    expect(cache.drainPendingTiles(1000)).toBe(1);
-    const coarse = cache.getTile(highZoom);
-    expect(coarse).not.toBeNull();
+    expect(cache.hasPendingTiles()).toBe(false);
+    expect(cache.drainPendingTiles(1000)).toBe(0);
 
     const peaks = Array.from({ length: 1024 }, (_, index) =>
       index % 2 === 0 ? -0.75 : 0.75,
@@ -405,11 +444,13 @@ describe("cola de rasterización con presupuesto", () => {
     await response;
     await Promise.resolve();
 
-    // El canvas grueso sigue disponible mientras se encola el reemplazo fino.
-    expect(cache.getTile(highZoom)?.canvas).toBe(coarse?.canvas);
+    // La respuesta despierta el renderer; sólo entonces se encola la superficie
+    // definitiva. No hubo una superficie gruesa que pudiera parpadear antes.
     expect(cache.hasPendingTiles()).toBe(true);
     expect(cache.drainPendingTiles(1000)).toBeGreaterThan(0);
-    expect(cache.getTile(highZoom)?.canvas).not.toBe(coarse?.canvas);
+    expect(cache.getTile(highZoom)).toBeNull();
+    expect(cache.drainPendingTiles(1000)).toBe(1);
+    expect(cache.getTile(highZoom)).not.toBeNull();
   });
 
   it("descarta la respuesta de una ventana que dejó de ser visible", async () => {
@@ -429,6 +470,24 @@ describe("cola de rasterización con presupuesto", () => {
 
     expect(cache.hasPendingTiles()).toBe(false);
     expect(cache.stats()).toEqual({ entries: 0, bytes: 0 });
+  });
+
+  it("vuelve al LOD persistido si el detalle nativo no está disponible", async () => {
+    const response = Promise.resolve(null);
+    const cache = new WaveformTileCache(() => response);
+    const highZoom = request({ pixelsPerSecond: 300, clipPixelWidth: 1200 });
+
+    expect(cache.getTile(highZoom)).toBeNull();
+    await response;
+    await Promise.resolve();
+
+    // Primer drain: notifica que terminó la petición. El siguiente pintado ya
+    // puede encolar el tile tradicional sin mostrar un error al usuario.
+    expect(cache.drainPendingTiles(1000)).toBe(1);
+    await Promise.resolve();
+    expect(cache.getTile(highZoom)).toBeNull();
+    expect(cache.drainPendingTiles(1000)).toBe(1);
+    expect(cache.getTile(highZoom)).not.toBeNull();
   });
 });
 

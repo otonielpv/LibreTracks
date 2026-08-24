@@ -788,11 +788,12 @@ export function drawTrackClipsLayer(
         context.clip();
         const visiblePixelStart = Math.max(0, -left);
         const visiblePixelEnd = Math.min(width, snapshot.width - left);
-        // La caché sigue el zoom CONFIRMADO, no cada valor provisional del
-        // gesto. Durante la rueda/pinza se escala la generación estable y sólo
-        // se crea un namespace nuevo cuando vence el debounce de commit.
+        // El namespace sigue el zoom VISIBLE, cuantizado por la caché. Usar el
+        // valor confirmado por React dejaba el mismo bitmap estirándose durante
+        // todo el debounce de rueda/pinza: era el difuminado de ~100 ms que se
+        // veía antes de que la onda volviese a enfocarse.
         const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(
-          snapshot.pixelsPerSecond,
+          snapshot.zoomLevel,
         );
         const renderScale = snapshot.zoomLevel / renderPixelsPerSecond;
         const renderClipPixelWidth = Math.max(1, clip.durationSeconds * renderPixelsPerSecond);
