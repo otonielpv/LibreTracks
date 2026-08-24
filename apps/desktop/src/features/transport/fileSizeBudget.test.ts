@@ -39,7 +39,10 @@ const BUDGETS: Record<string, number> = {
   // El monolito. Objetivo: que baje, nunca que suba.
   "TransportPanelContent.tsx": 8500,
   "library/libraryDragDrop.ts": 2300,
-  "timeline/TimelineCanvasPane.tsx": 2000,
+  // Bajado de 2000 tras extraer timeline/useRegionDrag.ts (paso 02 de
+  // docs/plans/ui-performance). La cabecera de este fichero pide bajar el
+  // numero cuando un fichero adelgaza de verdad, o deja de avisar de nada.
+  "timeline/TimelineCanvasPane.tsx": 1700,
   "menus/timelineMenus.ts": 1650,
   "panels/SettingsPanel.tsx": 1500,
   "timeline/TimelineToolbar.tsx": 1250,

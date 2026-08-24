@@ -42,6 +42,8 @@ import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
+import { regionHotspotBounds } from "./regionHotspotBounds";
+import { useRegionDrag } from "./useRegionDrag";
 import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
 import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
@@ -493,58 +495,6 @@ export function TimelineCanvasPane({
   }, [laneAreaRef]);
 
   // ── Region resize drag ──────────────────────────────────────────────────
-  // Local-only state for the in-flight resize. Backend is touched once on
-  // pointer-up via onRegionResizeCommit; everything else is optimistic. Kept
-  // in useRef + useState pair because the rAF-style move handler needs the
-  // stable initial values via ref while React still has to re-render to
-  // reflect the live preview width.
-  type RegionResizeDrag = {
-    regionId: string;
-    edge: "start" | "end";
-    pointerId: number;
-    pointerStartClientX: number;
-    pointerScaleX: number;
-    initialStartSeconds: number;
-    initialEndSeconds: number;
-    minStartSeconds: number; // lower clamp for the moving edge (left neighbour end or 0)
-    maxEndSeconds: number; // upper clamp for the moving edge (right neighbour start or duration)
-    // Magnet bounds from the clips INSIDE the region: the region must not be
-    // shrunk past the audio it contains, or the backend rejects it. End edge
-    // can't go below the last clip's end; start edge can't go above the first
-    // clip's start. null = no clips in the region (no clip constraint).
-    clipFloorEndSeconds: number | null; // hard floor for the END edge
-    clipCeilStartSeconds: number | null; // hard ceiling for the START edge
-    previewStartSeconds: number;
-    previewEndSeconds: number;
-  };
-  const regionResizeDragRef = useRef<RegionResizeDrag | null>(null);
-  const [regionResizePreview, setRegionResizePreview] = useState<{
-    regionId: string;
-    startSeconds: number;
-    endSeconds: number;
-  } | null>(null);
-
-  // Move drag (translate the entire song — region + clips + markers).
-  // The math here is simpler than resize because the region's WIDTH
-  // doesn't change; only its start moves and we just translate
-  // everything inside by the same delta. The clamp comes from the
-  // neighbour regions on either side: the moved song can't slide
-  // into another song's range.
-  type RegionMoveDrag = {
-    regionId: string;
-    pointerId: number;
-    pointerStartClientX: number;
-    pointerScaleX: number;
-    initialStartSeconds: number;
-    initialEndSeconds: number;
-    // Clamps for the moving START seconds (so neighbour-end ≤ start
-    // and start + duration ≤ next neighbour's start).
-    minStartSeconds: number;
-    maxStartSeconds: number;
-    previewStartSeconds: number;
-    previewEndSeconds: number;
-  };
-  const regionMoveDragRef = useRef<RegionMoveDrag | null>(null);
   // Touch long-press → region context menu (Android). The WebView doesn't fire
   // oncontextmenu on a finger long-press (only right-click does), so we time
   // the press and synthesize the same call. Cancelled if the finger moves
@@ -562,345 +512,27 @@ export function TimelineCanvasPane({
       regionLongPressRef.current = null;
     }
   };
-  const [regionMovePreview, setRegionMovePreview] = useState<{
-    regionId: string;
-    startSeconds: number;
-    endSeconds: number;
-    deltaSeconds: number;
-  } | null>(null);
-
-  const MIN_REGION_DURATION_SECONDS = 0.1;
-
-  function beginRegionResize(
-    event: ReactPointerEvent<HTMLDivElement>,
-    region: SongRegionSummary,
-    edge: "start" | "end",
-  ) {
-    if (!song) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    // Build sorted neighbours to compute clamp bounds. Neighbour-end is the
-    // lower bound for our start edge; neighbour-start is the upper bound
-    // for our end edge.
-    const sorted = [...song.regions].sort(
-      (left, right) => left.startSeconds - right.startSeconds,
-    );
-    const idx = sorted.findIndex((entry) => entry.id === region.id);
-    const leftNeighbour = idx > 0 ? sorted[idx - 1] : null;
-    const rightNeighbour =
-      idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
-    const minStart = leftNeighbour ? leftNeighbour.endSeconds : 0;
-    // With a right neighbour, that neighbour's start is the hard wall — the
-    // region must not overlap it. Without one, the region is free to grow past
-    // the end of the song into the empty workspace tail; growing it does not
-    // move the song end or any clips (the user moves those separately if they
-    // want to). The 1-hour workspace tail is the practical upper bound.
-    const maxEnd = rightNeighbour
-      ? rightNeighbour.startSeconds
-      : getTimelineWorkspaceEndSeconds(song.durationSeconds);
-
-    // Magnet to the clips the region contains: a region can't be shrunk past
-    // its own audio (the backend rejects clips falling outside the region). A
-    // clip counts as "inside" if its timeline span overlaps the region's
-    // current span. The END edge can't shrink below the furthest clip end; the
-    // START edge can't grow past the earliest clip start.
-    let clipFloorEndSeconds: number | null = null;
-    let clipCeilStartSeconds: number | null = null;
-    for (const clips of Object.values(clipsByTrack)) {
-      for (const clip of clips) {
-        const clipStart = clip.timelineStartSeconds;
-        const clipEnd = clip.timelineStartSeconds + clip.durationSeconds;
-        const overlapsRegion =
-          clipStart < region.endSeconds && clipEnd > region.startSeconds;
-        if (!overlapsRegion) continue;
-        clipFloorEndSeconds =
-          clipFloorEndSeconds === null
-            ? clipEnd
-            : Math.max(clipFloorEndSeconds, clipEnd);
-        clipCeilStartSeconds =
-          clipCeilStartSeconds === null
-            ? clipStart
-            : Math.min(clipCeilStartSeconds, clipStart);
-      }
-    }
-
-    regionResizeDragRef.current = {
-      regionId: region.id,
-      edge,
-      pointerId: event.pointerId,
-      pointerStartClientX: event.clientX,
-      pointerScaleX: getElementScaleX(
-        event.currentTarget.getBoundingClientRect(),
-        event.currentTarget.offsetWidth,
-      ),
-      initialStartSeconds: region.startSeconds,
-      initialEndSeconds: region.endSeconds,
-      minStartSeconds: minStart,
-      maxEndSeconds: maxEnd,
-      clipFloorEndSeconds,
-      clipCeilStartSeconds,
-      previewStartSeconds: region.startSeconds,
-      previewEndSeconds: region.endSeconds,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.currentTarget.classList.add("is-active");
-    setRegionResizePreview({
-      regionId: region.id,
-      startSeconds: region.startSeconds,
-      endSeconds: region.endSeconds,
-    });
-  }
-
-  function updateRegionResize(event: ReactPointerEvent<HTMLDivElement>) {
-    const drag = regionResizeDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId || !song) return;
-
-    const effectivePixelsPerSecond =
-      livePixelsPerSecondRef.current ?? pixelsPerSecond;
-    if (effectivePixelsPerSecond <= 0) return;
-
-    const deltaSeconds =
-      (event.clientX - drag.pointerStartClientX) /
-      drag.pointerScaleX /
-      effectivePixelsPerSecond;
-
-    let nextStart = drag.initialStartSeconds;
-    let nextEnd = drag.initialEndSeconds;
-    if (drag.edge === "start") {
-      nextStart = drag.initialStartSeconds + deltaSeconds;
-    } else {
-      nextEnd = drag.initialEndSeconds + deltaSeconds;
-    }
-
-    // Snap to BAR grid (downbeat). Song boundaries are bar-aligned;
-    // snapping mid-bar would produce off-grid edges. Alt bypasses
-    // snap for ad-hoc resizing.
-    const shouldSnap = Boolean(snapEnabled) && !event.altKey;
-    if (shouldSnap) {
-      const songBpm = song.bpm;
-      const songTs = song.timeSignature;
-      const tempoRegions = buildSongTempoRegions(song);
-      if (drag.edge === "start") {
-        nextStart = snapToTimelineBar(nextStart, songBpm, songTs, tempoRegions);
-      } else {
-        nextEnd = snapToTimelineBar(nextEnd, songBpm, songTs, tempoRegions);
-      }
-    }
-
-    // Clamp to neighbours and minimum duration.
-    if (drag.edge === "start") {
-      // Magnet: the start edge can't grow past the first clip's start (would
-      // leave audio outside the region → backend error). Hard-stop there.
-      const startCeil =
-        drag.clipCeilStartSeconds === null
-          ? drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS
-          : Math.min(
-              drag.clipCeilStartSeconds,
-              drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS,
-            );
-      nextStart = Math.max(drag.minStartSeconds, Math.min(nextStart, startCeil));
-    } else {
-      // Magnet: the end edge can't shrink below the last clip's end. Hard-stop
-      // there so the region stays "imantado" at the clip boundary.
-      const endFloor =
-        drag.clipFloorEndSeconds === null
-          ? drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS
-          : Math.max(
-              drag.clipFloorEndSeconds,
-              drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS,
-            );
-      nextEnd = Math.min(drag.maxEndSeconds, Math.max(nextEnd, endFloor));
-    }
-
-    drag.previewStartSeconds = nextStart;
-    drag.previewEndSeconds = nextEnd;
-    setRegionResizePreview({
-      regionId: drag.regionId,
-      startSeconds: nextStart,
-      endSeconds: nextEnd,
-    });
-  }
-
-  function endRegionResize(event: ReactPointerEvent<HTMLDivElement>) {
-    const drag = regionResizeDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-
-    event.currentTarget.classList.remove("is-active");
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // Pointer was already released by the browser; ignore.
-    }
-
-    const finalStart = drag.previewStartSeconds;
-    const finalEnd = drag.previewEndSeconds;
-    const changed =
-      finalStart !== drag.initialStartSeconds ||
-      finalEnd !== drag.initialEndSeconds;
-
-    regionResizeDragRef.current = null;
-    setRegionResizePreview(null);
-
-    if (changed && onRegionResizeCommit) {
-      onRegionResizeCommit(drag.regionId, finalStart, finalEnd);
-    }
-  }
-
-  function beginRegionMove(
-    event: ReactPointerEvent<HTMLElement>,
-    region: SongRegionSummary,
-  ) {
-    if (!song) return;
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    const sorted = [...song.regions].sort(
-      (left, right) => left.startSeconds - right.startSeconds,
-    );
-    const idx = sorted.findIndex((entry) => entry.id === region.id);
-    const leftNeighbour = idx > 0 ? sorted[idx - 1] : null;
-    const rightNeighbour =
-      idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
-    const duration = region.endSeconds - region.startSeconds;
-    const minStart = leftNeighbour ? leftNeighbour.endSeconds : 0;
-    // No upper bound: moving right is always allowed. The backend
-    // cascade-pushes any region that would overlap, and the user is
-    // free to extend the project past its current end.
-    const maxStart = Number.POSITIVE_INFINITY;
-
-    regionMoveDragRef.current = {
-      regionId: region.id,
-      pointerId: event.pointerId,
-      pointerStartClientX: event.clientX,
-      pointerScaleX: getElementScaleX(
-        event.currentTarget.getBoundingClientRect(),
-        event.currentTarget.offsetWidth,
-      ),
-      initialStartSeconds: region.startSeconds,
-      initialEndSeconds: region.endSeconds,
-      minStartSeconds: minStart,
-      maxStartSeconds: Math.max(minStart, maxStart),
-      previewStartSeconds: region.startSeconds,
-      previewEndSeconds: region.endSeconds,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.currentTarget.classList.add("is-moving");
-    setRegionMovePreview({
-      regionId: region.id,
-      startSeconds: region.startSeconds,
-      endSeconds: region.endSeconds,
-      deltaSeconds: 0,
-    });
-  }
-
-  function updateRegionMove(event: ReactPointerEvent<HTMLElement>) {
-    const drag = regionMoveDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId || !song) return;
-
-    const effectivePixelsPerSecond =
-      livePixelsPerSecondRef.current ?? pixelsPerSecond;
-    if (effectivePixelsPerSecond <= 0) return;
-
-    const rawDelta =
-      (event.clientX - drag.pointerStartClientX) /
-      drag.pointerScaleX /
-      effectivePixelsPerSecond;
-    let nextStart = drag.initialStartSeconds + rawDelta;
-
-    // Visual snap during the drag uses the FULL song grid (the moved
-    // region's own tempo markers included). This makes the preview
-    // land on the SAME visible grid lines the user sees on screen.
-    // The commit-time logic in endRegionMove re-snaps using the
-    // previous region's grid, which is what actually matters for
-    // the final landing position. Holding Shift bypasses snap.
-    const shouldSnap = Boolean(snapEnabled) && !event.shiftKey;
-    if (shouldSnap) {
-      nextStart = snapToTimelineGrid(
-        nextStart,
-        song.bpm,
-        song.timeSignature,
-        1,
-        effectivePixelsPerSecond,
-        buildSongTempoRegions(song),
-      );
-    }
-
-    // Clamp to neighbour bounds — no overlap with adjacent songs.
-    nextStart = Math.max(
-      drag.minStartSeconds,
-      Math.min(nextStart, drag.maxStartSeconds),
-    );
-
-    const duration = drag.initialEndSeconds - drag.initialStartSeconds;
-    const nextEnd = nextStart + duration;
-
-    drag.previewStartSeconds = nextStart;
-    drag.previewEndSeconds = nextEnd;
-    setRegionMovePreview({
-      regionId: drag.regionId,
-      startSeconds: nextStart,
-      endSeconds: nextEnd,
-      deltaSeconds: nextStart - drag.initialStartSeconds,
-    });
-  }
-
-  function endRegionMove(event: ReactPointerEvent<HTMLElement>) {
-    const drag = regionMoveDragRef.current;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-
-    event.currentTarget.classList.remove("is-moving");
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // Pointer was already released — ignore.
-    }
-
-    // On commit, re-snap using the PREVIOUS region's grid (with the
-    // moved region's tempo markers filtered out, since they travel
-    // with the region and would otherwise grid the destination zone
-    // with the moved region's own BPM). This is what makes the
-    // final landing align with the destination's bars/beats. Shift
-    // bypasses snap entirely.
-    let finalStart = drag.previewStartSeconds;
-    if (snapEnabled && !event.shiftKey && song) {
-      const oldStart = drag.initialStartSeconds;
-      const oldEnd = drag.initialEndSeconds;
-      const insideMoved = (pos: number) =>
-        pos >= oldStart - 0.001 && pos < oldEnd;
-      const songWithoutMovedInternals: SongView = {
-        ...song,
-        tempoMarkers: song.tempoMarkers.filter(
-          (m) => !insideMoved(m.startSeconds),
-        ),
-        timeSignatureMarkers: song.timeSignatureMarkers.filter(
-          (m) => !insideMoved(m.startSeconds),
-        ),
-      };
-      const livePps =
-        livePixelsPerSecondRef.current ?? pixelsPerSecond ?? 1;
-      finalStart = snapToTimelineGrid(
-        finalStart,
-        song.bpm,
-        song.timeSignature,
-        1,
-        livePps,
-        buildSongTempoRegions(songWithoutMovedInternals),
-      );
-      finalStart = Math.max(
-        drag.minStartSeconds,
-        Math.min(finalStart, drag.maxStartSeconds),
-      );
-    }
-    const finalDelta = finalStart - drag.initialStartSeconds;
-    regionMoveDragRef.current = null;
-    setRegionMovePreview(null);
-
-    if (Math.abs(finalDelta) > 1e-6 && onRegionMoveCommit) {
-      onRegionMoveCommit(drag.regionId, finalDelta);
-    }
-  }
+  // Arrastre y redimensionado de las bandas de canción. Ver ./useRegionDrag:
+  // el preview en vuelo se escribe sobre el elemento, no por `setState`.
+  const {
+    registerRegionHotspot,
+    restoreRegionHotspot,
+    regionMoveDragRef,
+    beginRegionResize,
+    updateRegionResize,
+    endRegionResize,
+    beginRegionMove,
+    updateRegionMove,
+    endRegionMove,
+  } = useRegionDrag({
+    song,
+    pixelsPerSecond,
+    livePixelsPerSecondRef,
+    clipsByTrack,
+    snapEnabled,
+    onRegionResizeCommit,
+    onRegionMoveCommit,
+  });
 
   // ── Section-marker / automation-cue move drag ───────────────────────────
   // See ./useMarkerMoveDrag for why the two marker kinds resolve the pointer
@@ -1152,21 +784,16 @@ export function TimelineCanvasPane({
             onNativeTrackHeightChange={onNativeTrackHeightChange}
           >
             {song?.regions.map((region) => {
-              // Live preview during resize or move: drag updates the
-              // in-flight region's bounds optimistically; everyone else
-              // renders as-is.
-              const isResizing = regionResizePreview?.regionId === region.id;
-              const isMoving = regionMovePreview?.regionId === region.id;
-              const renderStart = isResizing
-                ? regionResizePreview.startSeconds
-                : isMoving
-                ? regionMovePreview.startSeconds
-                : region.startSeconds;
-              const renderEnd = isResizing
-                ? regionResizePreview.endSeconds
-                : isMoving
-                ? regionMovePreview.endSeconds
-                : region.endSeconds;
+              // React pinta la posición de REPOSO. La posición en vuelo la
+              // escribe el arrastre directamente sobre el elemento (ver
+              // `applyRegionHotspotBounds`), sin pasar por aquí: un `setState`
+              // por `pointermove` costaba un render completo de este panel por
+              // frame.
+              const { leftPx, widthPx } = regionHotspotBounds(
+                region.startSeconds,
+                region.endSeconds,
+                pixelsPerSecond,
+              );
               const regionDescription = `Carril superior: región ${region.name}${region.warpEnabled && region.warpSourceBpm ? `, BPM original ${formatBpm(region.warpSourceBpm)}` : ""}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`;
               return (
                 <button
@@ -1180,14 +807,12 @@ export function TimelineCanvasPane({
                   ].filter(Boolean).join(" ")}
                   aria-label={regionDescription}
                   title={regionDescription}
+                  ref={(element) => registerRegionHotspot(region.id, element)}
                   style={{
-                    left: renderStart * pixelsPerSecond,
+                    left: leftPx,
                     top: LANE_REGIONS.top,
                     height: LANE_REGIONS.height,
-                    width: Math.max(
-                      24,
-                      (renderEnd - renderStart) * pixelsPerSecond,
-                    ),
+                    width: widthPx,
                   }}
                   onMouseDown={(event) => {
                     event.preventDefault();
@@ -1226,7 +851,7 @@ export function TimelineCanvasPane({
                           regionLongPressRef.current.fired = true;
                           if (regionMoveDragRef.current?.regionId === regionId) {
                             regionMoveDragRef.current = null;
-                            setRegionMovePreview(null);
+                            restoreRegionHotspot(regionId);
                           }
                           onRegionContextMenu(
                             {
