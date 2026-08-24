@@ -179,6 +179,7 @@ import {
 } from "./markerKinds";
 import { TimelineCanvasPane } from "./timeline/TimelineCanvasPane";
 import { HorizontalScrollbar } from "./timeline/HorizontalScrollbar";
+import { settlePerfCommits } from "./perf/perfMetrics";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./compact/CompactView";
 import { LivePerformanceView } from "./live/LivePerformanceView";
@@ -4159,6 +4160,14 @@ export function TransportPanelContent() {
     setIsProjectViewHydrating,
     hydrateWaveformCacheFromSong,
   });
+
+  // El modelo ya refleja la edición -> cierra el cronómetro que el HUD abrió al
+  // soltar el arrastre. Es `editCommitMs`, la métrica del paso 03 de
+  // docs/plans/ui-performance: mide lo que el usuario percibe como "y después
+  // de un tiempo se realiza el movimiento". No-op con el HUD apagado.
+  useEffect(() => {
+    settlePerfCommits();
+  }, [song]);
 
   // Project identity changed (different session or song) -> reset all
   // project-scoped state so nothing leaks across projects.

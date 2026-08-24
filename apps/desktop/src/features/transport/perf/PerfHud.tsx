@@ -85,6 +85,23 @@ export function PerfHud() {
       : snapshot.worstFrameMs <= 33
         ? "#e0c97e"
         : "#e07e7e";
+  // Un frame son ~16,7 ms; si la rasterización de tiles se come más de la
+  // mitad de un frame por segundo ya es visible como tirón.
+  const tileColor =
+    snapshot.waveformTileMsLastSecond <= 8
+      ? "#7ee07e"
+      : snapshot.waveformTileMsLastSecond <= 33
+        ? "#e0c97e"
+        : "#e07e7e";
+  const lastGesture = snapshot.gestures[0] ?? null;
+  const lastCommit = snapshot.commits[0] ?? null;
+  // Verde = el arrastre no pasó por React, que es el objetivo del paso 02.
+  const gestureColor =
+    lastGesture === null || lastGesture.renders === 0
+      ? "#7ee07e"
+      : lastGesture.renders <= 3
+        ? "#e0c97e"
+        : "#e07e7e";
 
   return (
     <div
@@ -133,6 +150,50 @@ export function PerfHud() {
       </div>
       <div style={{ opacity: 0.6 }}>
         canvas paints total: {snapshot.canvasPaintCount}
+      </div>
+
+      {/* Bloque del plan docs/plans/ui-performance. Compacto a propósito: el
+          detalle (medianas por gesto, IPC por comando) sale por
+          window.__lt_perf.plan(), que no compite por espacio en pantalla. */}
+      <div
+        style={{
+          marginTop: 6,
+          paddingTop: 6,
+          borderTop: "1px solid rgba(255,255,255,0.12)",
+        }}
+      >
+        <div style={{ color: tileColor }}>
+          tiles: {snapshot.waveformTileRenders} · {" "}
+          {snapshot.waveformTileMsLastSecond.toFixed(1)} ms/s · peor{" "}
+          {snapshot.waveformTileRenderWorstMs.toFixed(2)} ms
+        </div>
+        <div style={{ opacity: 0.82 }}>
+          tile cache: {snapshot.waveformTileCacheEntries} ·{" "}
+          {(snapshot.waveformTileCacheBytes / (1024 * 1024)).toFixed(0)} MiB
+          {snapshot.waveformTileCachePeakBytes > snapshot.waveformTileCacheBytes
+            ? ` (pico ${(snapshot.waveformTileCachePeakBytes / (1024 * 1024)).toFixed(0)})`
+            : ""}
+        </div>
+        <div style={{ opacity: 0.82 }}>
+          grid builds: {snapshot.gridBuilds} · {snapshot.gridEntries} entradas
+        </div>
+        {lastGesture ? (
+          <div style={{ marginTop: 3, color: gestureColor }}>
+            {lastGesture.kind}: {lastGesture.renders} renders /{" "}
+            {lastGesture.moves} moves · {lastGesture.tileRenders} tiles
+          </div>
+        ) : null}
+        {lastCommit ? (
+          <div style={{ opacity: 0.82 }}>
+            commit {lastCommit.kind}: {lastCommit.ms.toFixed(0)} ms
+            {lastCommit.settledBy === "timeout" ? " (sin resolver)" : ""}
+          </div>
+        ) : null}
+        {snapshot.openCommits > 0 ? (
+          <div style={{ opacity: 0.6 }}>
+            commits en vuelo: {snapshot.openCommits}
+          </div>
+        ) : null}
       </div>
 
       {snapshot.renderCounts.length > 0 ? (
@@ -207,7 +268,7 @@ export function PerfHud() {
       ) : null}
 
       <div style={{ opacity: 0.4, marginTop: 6 }}>
-        Ctrl+Shift+F toggle · window.__lt_perf.mark('label')
+        Ctrl+Shift+F toggle · __lt_perf.plan() / .mark() / .clear()
       </div>
     </div>
   );

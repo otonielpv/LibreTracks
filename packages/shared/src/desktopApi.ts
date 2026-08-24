@@ -50,11 +50,37 @@ export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 export const isAndroidApp =
   isTauriApp && /android/i.test(navigator.userAgent);
 
+/**
+ * Observer notified after every `invokeCommand` call. Exists so the desktop
+ * app's perf HUD can build a per-command IPC profile without this package
+ * depending on it (shared cannot import from apps/*).
+ *
+ * Null by default, so the instrumentation costs one null check per call when
+ * nobody is watching. Registered by `perfMetrics.startPerfMetrics()`.
+ */
+export type IpcObserver = (
+  command: string,
+  durationMs: number,
+  ok: boolean,
+) => void;
+
+let ipcObserver: IpcObserver | null = null;
+
+export function setIpcObserver(observer: IpcObserver | null) {
+  ipcObserver = observer;
+}
+
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
+  // Only read the clock when someone is listening: an unobserved call pays a
+  // single null check.
+  const startedAt = ipcObserver ? performance.now() : 0;
   try {
-    return await invoke<T>(command, args);
+    const result = await invoke<T>(command, args);
+    ipcObserver?.(command, performance.now() - startedAt, true);
+    return result;
   } catch (error) {
+    ipcObserver?.(command, performance.now() - startedAt, false);
     // Central capture point for ALL command failures that surface to the
     // frontend — covers the many commands not explicitly instrumented on the
     // Rust side. Never let logging mask the original error: swallow its own

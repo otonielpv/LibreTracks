@@ -5,6 +5,7 @@ import { clipDisplayName } from "../helpers";
 // singleton directly (whose .t always reflects the current language) rather
 // than threading `t` through every snapshot construction site.
 import i18n from "../../../shared/i18n";
+import { reportWaveformTileCache } from "../perf/perfMetrics";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timeline/timelineMath";
 import {
@@ -778,6 +779,11 @@ export function drawTrackClipsLayer(
     context.stroke();
   }
   context.restore();
+
+  // Una sola publicación por pintado (no por tile): el HUD sólo necesita el
+  // gauge, y así el coste no escala con el número de clips visibles.
+  const tileStats = waveformTileCache.stats();
+  reportWaveformTileCache(tileStats.entries, tileStats.bytes);
 }
 
 export function buildTrackStructureSignature(song: SongView, visibleTracks: TimelineTrackSummary[]) {

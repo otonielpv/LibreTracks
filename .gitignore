@@ -74,3 +74,9 @@ tests/e2e/.wdio-*/
 # release. Regenerate with tests/e2e/specs/marketing-shots.e2e.ts.
 marketing/
 tests/e2e/specs/marketing-shots.e2e.ts
+# Sesión de referencia del banco de rendimiento de UI. La genera
+# scripts/generate-perf-session.mjs y pesa ~170 MB de WAV; es salida
+# reproducible, no fuente. Ruta completa a propósito: un patrón más ancho
+# (samples/ o perf-*) se tragaría fuentes por nombre — ya hubo un caso con
+# `build*` en este mismo fichero.
+samples/perf-setlist/

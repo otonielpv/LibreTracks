@@ -3,6 +3,7 @@ import type {
   WaveformLodDto,
   WaveformSummaryDto,
 } from "../desktopApi";
+import { recordWaveformTileRender } from "../perf/perfMetrics";
 import { clamp } from "../timeline/timelineMath";
 
 export const WAVEFORM_TILE_WIDTH_PX = 1024;
@@ -389,10 +390,23 @@ function drawChannelPeaks(
   context.fill();
 }
 
+/**
+ * Memoria del backing store de un tile. Cada superficie es RGBA de 8 bits, así
+ * que son 4 bytes por píxel. Con los valores actuales (1024x256) sale
+ * exactamente 1 MiB por tile — el dato que hace visible que el techo de la
+ * caché son 320 MiB (ver C4d del diagnóstico).
+ */
+function tileByteSize(entry: Pick<TileEntry, "width" | "height">) {
+  return entry.width * entry.height * 4;
+}
+
 export class WaveformTileCache {
   private readonly tiles = new Map<string, TileEntry>();
 
   private accessCounter = 0;
+
+  /** Bytes de las superficies vivas, mantenido de forma incremental. */
+  private byteEstimate = 0;
 
   getTile(request: TileRequest): WaveformTile | null {
     const namespace = tileNamespace(request);
@@ -423,7 +437,11 @@ export class WaveformTileCache {
         return null;
       }
 
+      // Fallo de caché: la rasterización ocurre AQUÍ, dentro del frame de
+      // pintado. Medirla es el punto del paso 01; repartirla, el del paso 04.
+      const rasterStartedAt = performance.now();
       renderWaveformTile(context, request, tileStartPixel, tileWidth);
+      recordWaveformTileRender(performance.now() - rasterStartedAt);
       entry = {
         namespace,
         canvas: surface,
@@ -432,6 +450,7 @@ export class WaveformTileCache {
         lastUsedAt: ++this.accessCounter,
       };
       this.tiles.set(key, entry);
+      this.byteEstimate += tileByteSize(entry);
       this.pruneLeastRecentlyUsedTiles();
     } else {
       entry.lastUsedAt = ++this.accessCounter;
@@ -447,9 +466,15 @@ export class WaveformTileCache {
   pruneNamespaces(activeNamespaces: Set<string>) {
     for (const [key, entry] of this.tiles) {
       if (!activeNamespaces.has(entry.namespace)) {
+        this.byteEstimate -= tileByteSize(entry);
         this.tiles.delete(key);
       }
     }
+  }
+
+  /** Tiles vivos y bytes que ocupan. Lo publica el pintado en el HUD. */
+  stats() {
+    return { entries: this.tiles.size, bytes: this.byteEstimate };
   }
 
   buildNamespace(
@@ -477,7 +502,8 @@ export class WaveformTileCache {
       (left, right) => left[1].lastUsedAt - right[1].lastUsedAt,
     );
     const deleteCount = Math.max(1, this.tiles.size - MAX_CACHED_TILES);
-    for (const [key] of entriesByAge.slice(0, deleteCount)) {
+    for (const [key, entry] of entriesByAge.slice(0, deleteCount)) {
+      this.byteEstimate -= tileByteSize(entry);
       this.tiles.delete(key);
     }
   }
