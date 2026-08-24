@@ -5138,7 +5138,7 @@ export function TransportPanelContent() {
             timingRegion?.timeSignature ?? songBaseTimeSignature,
             liveZoomLevelRef.current,
             livePixelsPerSecondRef.current,
-            buildSongTempoRegions(song),
+            songTempoRegions,
           ),
           0,
           Math.max(0, durationSeconds),
@@ -5275,6 +5275,17 @@ export function TransportPanelContent() {
   );
   const songBaseBpm = getSongBaseBpm(song);
   const songBaseTimeSignature = getSongBaseTimeSignature(song);
+  // Las regiones de tempo se derivan del song y NO cambian entre renders del
+  // panel. Construirlas en el cuerpo del render les daba identidad nueva cada
+  // vez, lo que reventaba el memo de `useTimelineGrid` (su dep `params.regions`)
+  // y, por la cadena `timelineGrid` -> `TimelineRenderer.updateState` ->
+  // `markAllDirty`, repintaba las TRES capas de canvas en cada render.
+  //
+  // Medido antes del cambio (docs/plans/ui-performance/state/01.md): el
+  // contador `gridBuilds` era IDÉNTICO al de renders de este componente en las
+  // 25 muestras comprobadas — 1:1, sin una excepción. Un notch de rueda
+  // costaba 9-11 reconstrucciones.
+  const songTempoRegions = useMemo(() => buildSongTempoRegions(song), [song]);
   const displayedBpm = readoutTempoRegion?.bpm ?? songBaseBpm;
   const displayedTimeSignature =
     readoutTempoRegion?.timeSignature ?? songBaseTimeSignature;
@@ -5606,7 +5617,7 @@ export function TransportPanelContent() {
   const timelineGrid = useTimelineGrid({
     durationSeconds: workspaceDurationSeconds,
     bpm: songBaseBpm,
-    regions: buildSongTempoRegions(song),
+    regions: songTempoRegions,
     timeSignature: songBaseTimeSignature,
     zoomLevel,
     pixelsPerSecond,

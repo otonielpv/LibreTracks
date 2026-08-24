@@ -525,6 +525,35 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
   };
 }
 
+/**
+ * Índice del primer valor `>= target` en un array ORDENADO ascendente, o
+ * `values.length` si no hay ninguno. Búsqueda binaria.
+ *
+ * Existe para que el dibujo de la rejilla recorra sólo el tramo visible en vez
+ * de recorrer el proyecto entero y descartar. En un setlist de 80 minutos son
+ * ~9600 entradas por capa y por frame para pintar 16.
+ *
+ * La premisa (arrays ordenados) la garantiza `buildVisibleTimelineGrid`: emite
+ * los beats en orden dentro de cada región y `normalizeTimelineRegions` ordena
+ * las regiones por `startSeconds`. Hay un test que lo vigila.
+ */
+export function firstIndexAtOrAfter(
+  values: readonly number[],
+  target: number,
+) {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (values[mid] < target) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
 export function snapToTimelineGrid(
   seconds: number,
   bpm: number,

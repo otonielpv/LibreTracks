@@ -9,7 +9,11 @@ import {
 } from "../desktopApi";
 import type { TimelineGrid } from "../timeline/timelineMath";
 import { markerCategory, markerColor } from "../markerKinds";
-import { screenXToSeconds, secondsToScreenX } from "../timeline/timelineMath";
+import {
+  firstIndexAtOrAfter,
+  screenXToSeconds,
+  secondsToScreenX,
+} from "../timeline/timelineMath";
 
 /** Convert a `#rrggbb` colour to an `rgba(...)` string at the given alpha. Used
  * to derive the translucent flag fill from a marker kind's solid colour. */
@@ -109,6 +113,45 @@ function getPrimaryRulerMarkers(grid: TimelineGrid) {
   );
 }
 
+/**
+ * Marcas candidatas a etiqueta y el hueco mínimo entre ellas, cacheado por
+ * IDENTIDAD de la rejilla.
+ *
+ * `getPrimaryRulerMarkers` asigna un array de hasta 2400 elementos y
+ * `getLabelSkipDivisor` lo recorre entero; ambos corrían en CADA pintado del
+ * ruler. Ninguno de los dos depende del zoom ni de la cámara, sólo de la
+ * rejilla, que desde el paso 06 ya no cambia de identidad entre frames.
+ *
+ * El hueco se guarda en SEGUNDOS, no en píxeles, precisamente para que el zoom
+ * no invalide la caché: con `pixelsPerSecond > 0`,
+ * `min(dₖ · pps) = min(dₖ) · pps`, así que el divisor sale idéntico al que
+ * calculaba el código anterior.
+ */
+let cachedLabelGrid: TimelineGrid | null = null;
+let cachedLabelPlan: {
+  markers: TimelineGrid["markers"];
+  minIntervalSeconds: number;
+} | null = null;
+
+function getRulerLabelPlan(grid: TimelineGrid) {
+  if (cachedLabelGrid === grid && cachedLabelPlan) {
+    return cachedLabelPlan;
+  }
+
+  const markers = getPrimaryRulerMarkers(grid);
+  let minIntervalSeconds = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < markers.length; index += 1) {
+    const interval = markers[index].seconds - markers[index - 1].seconds;
+    if (interval > 0 && interval < minIntervalSeconds) {
+      minIntervalSeconds = interval;
+    }
+  }
+
+  cachedLabelGrid = grid;
+  cachedLabelPlan = { markers, minIntervalSeconds };
+  return cachedLabelPlan;
+}
+
 function getPrimaryMarkerOrdinal(
   marker: TimelineGrid["markers"][number],
   grid: TimelineGrid,
@@ -120,21 +163,16 @@ function getPrimaryMarkerOrdinal(
   return Math.floor((marker.barNumber - 1) / grid.barLabelStep);
 }
 
-function getLabelSkipDivisor(
-  primaryMarkers: TimelineGrid["markers"],
-  pixelsPerSecond: number,
-) {
-  let minimumPrimaryIntervalPx = Number.POSITIVE_INFINITY;
-
-  for (let index = 1; index < primaryMarkers.length; index += 1) {
-    const intervalPx =
-      (primaryMarkers[index].seconds - primaryMarkers[index - 1].seconds) *
-      pixelsPerSecond;
-    if (intervalPx > 0) {
-      minimumPrimaryIntervalPx = Math.min(minimumPrimaryIntervalPx, intervalPx);
-    }
-  }
-
+/**
+ * Cada cuántas marcas candidatas se pinta una etiqueta, dado el hueco mínimo
+ * entre candidatas EN PÍXELES.
+ *
+ * Antes recibía la lista de marcas y calculaba el mínimo recorriéndola entera
+ * en cada pintado. El mínimo en segundos lo cachea ahora `getRulerLabelPlan`;
+ * como `pixelsPerSecond > 0`, `min(dₖ · pps) = min(dₖ) · pps` y el resultado es
+ * el mismo número que antes.
+ */
+function resolveLabelSkipDivisor(minimumPrimaryIntervalPx: number) {
   let labelSkipDivisor = 1;
   while (
     Number.isFinite(minimumPrimaryIntervalPx) &&
@@ -144,6 +182,29 @@ function getLabelSkipDivisor(
   }
 
   return labelSkipDivisor;
+}
+
+/**
+ * Índice de la primera marca cuyo `seconds >= target`, por búsqueda binaria.
+ * Gemela de `firstIndexAtOrAfter` para la lista de marcas (que son objetos, no
+ * números). Las marcas salen ordenadas de `buildVisibleTimelineGrid`; hay un
+ * test en `packages/shared` que lo vigila.
+ */
+function firstMarkerAtOrAfter(
+  markers: TimelineGrid["markers"],
+  target: number,
+) {
+  let low = 0;
+  let high = markers.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (markers[mid].seconds < target) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
 }
 
 export type RulerMarkerDrawOptions = {
@@ -239,15 +300,24 @@ export function drawGridLines(
   // zoom). Drawing at a fractional x instead would slide smoothly but shimmer
   // (the antialiasing split changes every frame). A 1px vertical line can't be
   // both perfectly crisp and perfectly smooth in a raster; we keep it crisp.
-  for (const seconds of grid.beats) {
+  // Las listas están ordenadas, así que el tramo visible se acota con una
+  // búsqueda binaria en vez de recorrer el proyecto entero descartando: en un
+  // setlist de 80 min eran ~9600 entradas por capa y por frame para pintar 16.
+  // El descarte por `x` se mantiene porque el redondeo a píxel entero puede
+  // sacar del lienzo un valor que en segundos sí caía dentro.
+  for (
+    let index = firstIndexAtOrAfter(grid.beats, visibleStartSeconds);
+    index < grid.beats.length;
+    index += 1
+  ) {
+    const seconds = grid.beats[index];
+    if (seconds > visibleEndSeconds) {
+      break;
+    }
+
     const x =
       Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
-    if (
-      seconds < visibleStartSeconds ||
-      seconds > visibleEndSeconds ||
-      x < 0 ||
-      x > width
-    ) {
+    if (x < 0 || x > width) {
       continue;
     }
 
@@ -257,15 +327,19 @@ export function drawGridLines(
     }
   }
 
-  for (const seconds of grid.bars) {
+  for (
+    let index = firstIndexAtOrAfter(grid.bars, visibleStartSeconds);
+    index < grid.bars.length;
+    index += 1
+  ) {
+    const seconds = grid.bars[index];
+    if (seconds > visibleEndSeconds) {
+      break;
+    }
+
     const x =
       Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
-    if (
-      seconds < visibleStartSeconds ||
-      seconds > visibleEndSeconds ||
-      x < 0 ||
-      x > width
-    ) {
+    if (x < 0 || x > width) {
       continue;
     }
 
@@ -293,25 +367,32 @@ export function drawRulerGridLabels(
 ) {
   const visibleStartSeconds = screenXToSeconds(0, cameraX, pixelsPerSecond);
   const visibleEndSeconds = screenXToSeconds(width, cameraX, pixelsPerSecond);
-  const primaryMarkers = getPrimaryRulerMarkers(grid);
-  const labelSkipDivisor = getLabelSkipDivisor(primaryMarkers, pixelsPerSecond);
+  const { markers: primaryMarkers, minIntervalSeconds } =
+    getRulerLabelPlan(grid);
+  const labelSkipDivisor = resolveLabelSkipDivisor(
+    minIntervalSeconds * pixelsPerSecond,
+  );
 
   context.textAlign = "left";
   context.textBaseline = "top";
 
-  for (const marker of primaryMarkers) {
+  // Sólo el tramo visible, con el mismo margen de 2 s que tenía el descarte
+  // lineal. El filtro por ordinal es por marca, así que acotar primero la
+  // ventana y aplicarlo después produce exactamente el mismo conjunto.
+  for (
+    let index = firstMarkerAtOrAfter(primaryMarkers, visibleStartSeconds - 2);
+    index < primaryMarkers.length;
+    index += 1
+  ) {
+    const marker = primaryMarkers[index];
+    if (marker.seconds > visibleEndSeconds + 2) {
+      break;
+    }
     if (getPrimaryMarkerOrdinal(marker, grid) % labelSkipDivisor !== 0) {
       continue;
     }
 
     const markerX = secondsToScreenX(marker.seconds, cameraX, pixelsPerSecond);
-    if (
-      marker.seconds < visibleStartSeconds - 2 ||
-      marker.seconds > visibleEndSeconds + 2
-    ) {
-      continue;
-    }
-
     const x = Math.round(markerX) + 4;
     const y = GRID_LABEL_TOP;
 

@@ -16,6 +16,82 @@ import {
 
 const waveformTileCache = new WaveformTileCache();
 
+/**
+ * Índices derivados del `song`, calculados una vez por identidad de canción en
+ * vez de una vez por carril y por frame.
+ *
+ * Antes, el bucle de dibujo hacía por FRAME: un `tracks.filter()` por cada
+ * carril de carpeta visible, un `[...cues].sort()` en la pista de automatización
+ * y un `.filter().sort()` por cada pista MIDI. A 144 fps con 29 pistas eso es
+ * ruido de asignación puro, y el `song` no cambia entre frames.
+ *
+ * El `WeakMap` se apoya en la identidad del `song`: cambia sólo cuando el
+ * backend publica una revisión nueva, que es exactamente cuando estos índices
+ * dejan de ser válidos. Y al ser débil no retiene canciones cerradas.
+ *
+ * **Condición que hay que respetar:** el `song` se REEMPLAZA entero, nunca se
+ * muta en sitio. Todo el frontend lo cumple hoy (`setSong` siempre recibe un
+ * objeto nuevo, incluidos los parches optimistas de color y de pista). Si algún
+ * día alguien mutara `song.automationCues` o `song.tracks` sin cambiar la
+ * identidad del objeto, este índice se quedaría obsoleto y el carril dibujaría
+ * datos viejos.
+ */
+type SongDrawIndex = {
+  childCountByTrackId: Map<string, number>;
+  /** Cues ordenadas por tiempo: `drawAutomationLane` las lee en ese orden. */
+  sortedAutomationCues: NonNullable<SongView["automationCues"]>;
+  /** Clips MIDI agrupados por pista y ordenados por posición. */
+  midiClipsByTrackId: Map<string, NonNullable<SongView["midiClips"]>>;
+};
+
+const songDrawIndexCache = new WeakMap<SongView, SongDrawIndex>();
+
+function getSongDrawIndex(song: SongView): SongDrawIndex {
+  const cached = songDrawIndexCache.get(song);
+  if (cached) {
+    return cached;
+  }
+
+  const childCountByTrackId = new Map<string, number>();
+  for (const track of song.tracks) {
+    if (!track.parentTrackId) continue;
+    childCountByTrackId.set(
+      track.parentTrackId,
+      (childCountByTrackId.get(track.parentTrackId) ?? 0) + 1,
+    );
+  }
+
+  const sortedAutomationCues = [...(song.automationCues ?? [])].sort(
+    (left, right) => left.atSeconds - right.atSeconds,
+  );
+
+  const midiClipsByTrackId = new Map<
+    string,
+    NonNullable<SongView["midiClips"]>
+  >();
+  for (const clip of song.midiClips ?? []) {
+    const bucket = midiClipsByTrackId.get(clip.trackId);
+    if (bucket) {
+      bucket.push(clip);
+    } else {
+      midiClipsByTrackId.set(clip.trackId, [clip]);
+    }
+  }
+  for (const clips of midiClipsByTrackId.values()) {
+    clips.sort(
+      (left, right) => left.timelineStartSeconds - right.timelineStartSeconds,
+    );
+  }
+
+  const index: SongDrawIndex = {
+    childCountByTrackId,
+    sortedAutomationCues,
+    midiClipsByTrackId,
+  };
+  songDrawIndexCache.set(song, index);
+  return index;
+}
+
 /** The flat colour the track area is painted with, and the backdrop that
  * anything wanting to mask the grid must blend against. */
 const TRACK_BACKDROP_RGB = [14, 14, 14] as const;
@@ -258,10 +334,9 @@ export function drawAutomationLane(
   const centerY = trackTop + laneHeight / 2;
 
   // Ableton-style collision handling: a cue's label may only extend up to the
-  // next cue's diamond. Sort by time so each cue knows where its neighbour is.
-  const cues = [...(snapshot.song.automationCues ?? [])].sort(
-    (left, right) => left.atSeconds - right.atSeconds,
-  );
+  // next cue's diamond, so el orden por tiempo es parte del dibujo. Viene ya
+  // ordenado del índice por canción (antes se ordenaba en cada frame).
+  const cues = getSongDrawIndex(snapshot.song).sortedAutomationCues;
 
   const LABEL_PADDING_X = 8;
   const LABEL_GAP = 10; // min px between this label's end and the next diamond
@@ -372,9 +447,8 @@ export function drawMidiLane(
   const laneHeight = snapshot.trackHeight;
   const centerY = trackTop + laneHeight / 2;
 
-  const clips = (snapshot.song.midiClips ?? [])
-    .filter((clip) => clip.trackId === trackId)
-    .sort((left, right) => left.timelineStartSeconds - right.timelineStartSeconds);
+  const clips =
+    getSongDrawIndex(snapshot.song).midiClipsByTrackId.get(trackId) ?? [];
   if (clips.length === 0) {
     return;
   }
@@ -504,6 +578,11 @@ export function drawTrackClipsLayer(
       viewport.height,
     );
 
+  const songDrawIndex = getSongDrawIndex(snapshot.song);
+  // `includes` por clip es O(seleccionados) dentro del bucle; el Set se
+  // construye una vez por pintado.
+  const selectedClipIdSet = new Set(snapshot.selectedClipIds);
+
   context.save();
   context.clearRect(0, 0, snapshot.width, snapshot.height);
 
@@ -519,7 +598,7 @@ export function drawTrackClipsLayer(
   for (let trackIndex = visibleTrackStart; trackIndex < visibleTrackEnd; trackIndex += 1) {
     const track = snapshot.visibleTracks[trackIndex];
     const trackTop = trackIndex * snapshot.trackHeight;
-    const childCount = snapshot.song.tracks.filter((candidate) => candidate.parentTrackId === track.id).length;
+    const childCount = songDrawIndex.childCountByTrackId.get(track.id) ?? 0;
 
     if (track.isAutomation) {
       drawAutomationLane(context, snapshot, trackTop);
@@ -675,7 +754,7 @@ export function drawTrackClipsLayer(
           : trackTop;
       const clipHeight = snapshot.trackHeight;
       const isSelected =
-        snapshot.selectedClipId === clip.id || snapshot.selectedClipIds.includes(clip.id);
+        snapshot.selectedClipId === clip.id || selectedClipIdSet.has(clip.id);
 
       context.fillStyle = clip.color ?? track.color ?? "rgba(210, 212, 209, 0.92)";
       context.strokeStyle =

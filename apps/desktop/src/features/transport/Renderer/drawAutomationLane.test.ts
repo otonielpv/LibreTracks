@@ -45,8 +45,14 @@ function buildSnapshot(
     height: 400,
     trackHeight: 96,
     song: {
+      // `tracks` y `midiClips` no los usa el carril de automatización, pero el
+      // índice por canción de drawTracks sí los recorre. El fixture dice ser un
+      // SongView y en producción esos campos SIEMPRE vienen del backend, así
+      // que el que estaba incompleto era el doble, no el código.
+      tracks: [],
+      midiClips: [],
       automationCues: cues,
-    } as TrackSceneSnapshot["song"],
+    } as unknown as TrackSceneSnapshot["song"],
     visibleTracks: [],
     clipsByTrack: {},
     waveformCache: {},
