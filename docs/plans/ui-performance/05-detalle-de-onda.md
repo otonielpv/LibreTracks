@@ -127,23 +127,23 @@ este paso**: primero que haya datos, luego se decide cómo pintarlos.
 
 ## Criterios de aceptación
 
-- [ ] `source_peaks_window` existe en C++ con test unitario que compara su
+- [x] `source_peaks_window` existe en C++ con test unitario que compara su
       salida contra un recorte de `source_peaks` sobre el mismo archivo. Debe
       coincidir **exactamente** (mismos min/max) para una ventana alineada.
-- [ ] La respuesta viaja en **binario**, no en JSON de flotantes. Verificable
+- [x] La respuesta viaja en **binario**, no en JSON de flotantes. Verificable
       midiendo el tamaño de la respuesta para 1024 buckets estéreo: debe rondar
       los 16 KB, no los ~60 KB de la representación textual.
-- [ ] El comando de Tauri **no toma `session.lock`** durante la lectura.
+- [x] El comando de Tauri **no toma `session.lock`** durante la lectura.
       Verificable por inspección; **no** lo pruebes por temporización de hilos
       (hay precedente de dos releases tumbadas por eso —
       `project_ltset_lock_test_timing`).
-- [ ] Con el source no cargado, el comando responde «no disponible» y la UI
+- [x] Con el source no cargado, el comando responde «no disponible» y la UI
       sigue pintando con el LOD grueso, sin error visible.
 - [ ] **Comparativa visual obligatoria**: mismo clip, mismo zoom máximo, antes y
       después. La escalera de 6,7 px debe desaparecer. Capturas en el PR.
 - [ ] Medición del coste: tiempo del comando para una ventana de 1,22 s con un
       stem de 4 min, en release. Anotar en el PR.
-- [ ] Ni el `SongView` ni el `.ltpeaks` crecen. Este paso **no** cambia el
+- [x] Ni el `SongView` ni el `.ltpeaks` crecen. Este paso **no** cambia el
       formato de la caché de ondas (sigue en v6).
 - [ ] Sigue funcionando en Android (el engine es el mismo). Compilar para
       Android antes de cerrar: `cargo check` de escritorio **no** compila el
