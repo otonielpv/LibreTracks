@@ -1,5 +1,5 @@
-param(
-  [ValidateSet("dev", "check", "build", "test")]
+﻿param(
+  [ValidateSet("dev", "check", "build", "profile", "test")]
   [string]$Mode = "dev"
 )
 
@@ -88,7 +88,7 @@ if ($useE2ECapture -eq "ON") {
   $engineV2BuildName = "$engineV2BuildName-e2e"
 }
 $engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\$engineV2BuildName"
-$engineV2Config = if ($Mode -eq "build" -or $Mode -eq "test") { "Release" } else { "Debug" }
+$engineV2Config = if ($Mode -eq "build" -or $Mode -eq "profile" -or $Mode -eq "test") { "Release" } else { "Debug" }
 $engineV2LibDir = Join-Path $engineV2BuildDir $engineV2Config
 $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
 $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
@@ -473,6 +473,24 @@ switch ($Mode) {
   }
   "build" {
     npm --prefix apps/desktop run tauri:build
+  }
+  # Build de MEDICION (docs/plans/ui-performance/PROTOCOLO.md).
+  #
+  # `tauri build --debug` empaqueta el bundle de frontend de PRODUCCION (sin
+  # React en modo dev, sin Vite/HMR - los artefactos que ya invalidaron una
+  # medicion en este repo) pero deja el binario de Rust en debug. Eso importa
+  # por dos razones practicas:
+  #
+  #   1. `is_debug_build()` es `cfg!(debug_assertions)`, y App.tsx solo monta
+  #      el PerfHud cuando es true. En un build de release el HUD NO existe.
+  #   2. Tauri 2 solo habilita DevTools en debug (la feature `devtools` no esta
+  #      activada en Cargo.toml), y sin consola no hay `window.__lt_perf`.
+  #
+  # El engine C++ si va en Release (ver $engineV2Config), asi que el audio se
+  # comporta como en produccion. Lo unico pesimista son los tiempos de IPC del
+  # lado Rust: compara siempre profile contra profile.
+  "profile" {
+    npm --prefix apps/desktop run tauri:build -- --debug
   }
   "test" {
     # C++ DSP tests (doctest) FIRST — these are headless and deterministic

@@ -15,6 +15,7 @@
     "build:desktop": "npm --prefix apps/desktop run build",
     "check:desktop:native": "node ./scripts/desktop-native.mjs check",
     "build:desktop:native": "node ./scripts/desktop-native.mjs build",
+    "profile:desktop:native": "node ./scripts/desktop-native.mjs profile",
     "test:desktop": "npm --prefix apps/desktop run test",
     "test:shared": "npm --prefix packages/shared run test",
     "dev:remote": "npm --prefix apps/remote run dev --",

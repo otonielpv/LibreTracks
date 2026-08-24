@@ -3,11 +3,13 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const allowedModes = new Set(["dev", "check", "build", "test"]);
+const allowedModes = new Set(["dev", "check", "build", "profile", "test"]);
 const mode = process.argv[2] ?? "dev";
 
 if (!allowedModes.has(mode)) {
-  console.error(`Unsupported mode "${mode}". Use: dev | check | build | test.`);
+  console.error(
+    `Unsupported mode "${mode}". Use: dev | check | build | profile | test.`,
+  );
   process.exit(1);
 }
 
@@ -133,7 +135,10 @@ const ensureEngineV2 = (normalizedEnv) => {
   const resolvedBuildName = useE2ECapture === "ON" ? `${buildName}-e2e` : buildName;
   const buildDir = path.join(repoRoot, "native", "audio-engine-v2", resolvedBuildName);
   const buildArg = `native/audio-engine-v2/${resolvedBuildName}`;
-  const buildConfig = mode === "build" || mode === "test" ? "Release" : "Debug";
+  const buildConfig =
+  mode === "build" || mode === "profile" || mode === "test"
+    ? "Release"
+    : "Debug";
   const libDir = process.platform === "win32" ? path.join(buildDir, buildConfig) : buildDir;
 
   console.log(`Audio Engine v2 Bungee requested: ${useBungeeRequested}`);
@@ -301,6 +306,29 @@ switch (mode) {
     run(
       "npm",
       ["--prefix", "apps/desktop", "run", "tauri:build"],
+      { env: runEnv },
+    );
+    break;
+  // Build de MEDICIÓN (docs/plans/ui-performance/PROTOCOLO.md).
+  //
+  // `tauri build --debug` empaqueta el bundle de frontend de PRODUCCIÓN (sin
+  // React en modo dev, sin Vite/HMR — los artefactos que ya invalidaron una
+  // medición en este repo, ver docs/REDESIGN_transport_refs_to_stores.md) pero
+  // deja el binario de Rust en debug. Eso importa por dos razones prácticas:
+  //
+  //   1. `is_debug_build()` es `cfg!(debug_assertions)`, y el PerfHud sólo se
+  //      monta cuando es true. En un build de release el HUD NO existe.
+  //   2. Tauri 2 sólo habilita DevTools en debug (la feature `devtools` no
+  //      está activada en Cargo.toml), y sin consola no hay
+  //      `window.__lt_perf.plan()` ni exportación.
+  //
+  // El engine C++ sí va en Release (arriba), así que el audio se comporta como
+  // en producción. Lo único pesimista son los tiempos de IPC del lado Rust:
+  // anótalo al comparar, y compara siempre profile contra profile.
+  case "profile":
+    run(
+      "npm",
+      ["--prefix", "apps/desktop", "run", "tauri:build", "--", "--debug"],
       { env: runEnv },
     );
     break;
