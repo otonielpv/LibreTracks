@@ -21,6 +21,20 @@ struct SourcePeakOverview {
     std::vector<float> max_peaks_right;
 };
 
+// Exact min/max envelope for a bounded source interval. Unlike
+// SourcePeakOverview this is requested in display-sized buckets, so maximum
+// zoom never has to stretch the persisted 256-frame overview.
+struct SourcePeakWindow {
+    int sample_rate = 0;
+    Frame start_frame = 0;
+    Frame end_frame = 0;
+    int bucket_count = 0;
+    std::vector<float> min_peaks;
+    std::vector<float> max_peaks;
+    std::vector<float> min_peaks_right;
+    std::vector<float> max_peaks_right;
+};
+
 // ---------------------------------------------------------------------------
 // DecodedSource — fully decoded, resampled, float32 audio in engine memory.
 //

@@ -166,6 +166,10 @@ public:
         return block_cache_.take_lock_stats();
     }
     SourcePeakOverview source_peaks(const Id& source_id, int resolution_frames) const;
+    SourcePeakWindow source_peaks_window(const Id& source_id,
+                                         Frame start_frame,
+                                         Frame end_frame,
+                                         int bucket_count) const;
 
     // Get a loaded source.  Returns nullptr if not loaded.
     // Safe to call from audio thread (read-only once loaded).

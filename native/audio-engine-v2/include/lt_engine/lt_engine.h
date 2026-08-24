@@ -117,6 +117,29 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
                                                     const char* source_id,
                                                     int32_t resolution_frames);
 
+/** Borrowed binary view of an exact source interval. `data` contains little-
+ *  endian float32 planes in this order: min-left, max-left, then (for stereo)
+ *  min-right, max-right. The pointer remains valid until the next call on the
+ *  same thread and must not be freed. This API is additive; the JSON overview
+ *  endpoint above remains available to older hosts. */
+typedef struct LtSourcePeaksWindowView {
+    const uint8_t* data;
+    uint64_t data_len;
+    int32_t sample_rate;
+    int32_t channel_count;
+    int64_t start_frame;
+    int64_t end_frame;
+    int32_t bucket_count;
+    int32_t ok;
+} LtSourcePeaksWindowView;
+
+LT_API LtSourcePeaksWindowView lt_audio_engine_get_source_peaks_window(
+    LtEngine* engine,
+    const char* source_id,
+    int64_t start_frame,
+    int64_t end_frame,
+    int32_t bucket_count);
+
 /** E2E-only output capture. Returns an error unless its build flag is enabled. */
 LT_API const char* lt_audio_engine_capture_output_samples(LtEngine* engine);
 

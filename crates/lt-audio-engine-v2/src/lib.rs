@@ -44,6 +44,18 @@ pub struct SourcePeaks {
     pub max_peaks_right: Vec<f32>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SourcePeaksWindow {
+    pub sample_rate: u32,
+    pub start_frame: i64,
+    pub end_frame: i64,
+    pub bucket_count: usize,
+    pub min_peaks: Vec<f32>,
+    pub max_peaks: Vec<f32>,
+    pub min_peaks_right: Vec<f32>,
+    pub max_peaks_right: Vec<f32>,
+}
+
 #[derive(Debug, Deserialize)]
 struct SourcePeaksResponse {
     ok: bool,
@@ -347,13 +359,35 @@ impl Engine {
         })
     }
 
+    pub fn source_peaks_window(
+        &self,
+        source_id: &str,
+        start_frame: i64,
+        end_frame: i64,
+        bucket_count: usize,
+    ) -> Result<SourcePeaksWindow, EngineError> {
+        if end_frame <= start_frame || bucket_count == 0 {
+            return Err(EngineError::Internal("invalid source peak window".into()));
+        }
+        let source_id = std::ffi::CString::new(source_id)
+            .map_err(|e| EngineError::Serialization(e.to_string()))?;
+        let view = unsafe {
+            lt_audio_engine_get_source_peaks_window(
+                self.handle,
+                source_id.as_ptr(),
+                start_frame,
+                end_frame,
+                bucket_count.min(i32::MAX as usize) as i32,
+            )
+        };
+        source_peaks_window_from_view(view)
+    }
+
     /// E2E: snapshot the most recent final stereo output for spectral analysis.
     pub fn capture_output_samples(&self) -> Result<OutputCapture, EngineError> {
         let ptr = unsafe { lt_audio_engine_capture_output_samples(self.handle) };
         if ptr.is_null() {
-            return Err(EngineError::Internal(
-                "output capture returned null".into(),
-            ));
+            return Err(EngineError::Internal("output capture returned null".into()));
         }
         let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
         let response: OutputCaptureResponse =
@@ -398,12 +432,9 @@ pub fn decoding_cache_dir() -> String {
     unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
 }
 
-pub fn file_peaks(
-    file_path: &str,
-    resolution_frames: usize,
-) -> Result<SourcePeaks, EngineError> {
-    let file_path = std::ffi::CString::new(file_path)
-        .map_err(|e| EngineError::Serialization(e.to_string()))?;
+pub fn file_peaks(file_path: &str, resolution_frames: usize) -> Result<SourcePeaks, EngineError> {
+    let file_path =
+        std::ffi::CString::new(file_path).map_err(|e| EngineError::Serialization(e.to_string()))?;
     let ptr = unsafe {
         lt_audio_engine_analyze_file_peaks(
             file_path.as_ptr(),
@@ -474,6 +505,100 @@ fn source_peaks_from_json(ptr: *const std::ffi::c_char) -> Result<SourcePeaks, E
         min_peaks_right: response.min_peaks_right,
         max_peaks_right: response.max_peaks_right,
     })
+}
+
+fn source_peaks_window_from_view(
+    view: LtSourcePeaksWindowView,
+) -> Result<SourcePeaksWindow, EngineError> {
+    if view.ok == 0
+        || view.data.is_null()
+        || view.sample_rate <= 0
+        || view.bucket_count <= 0
+        || view.channel_count < 1
+        || view.channel_count > 2
+    {
+        return Err(EngineError::Internal(
+            "source peak window unavailable".into(),
+        ));
+    }
+    let buckets = view.bucket_count as usize;
+    let planes = (view.channel_count as usize) * 2;
+    let expected = buckets
+        .checked_mul(planes)
+        .and_then(|count| count.checked_mul(std::mem::size_of::<f32>()))
+        .ok_or_else(|| EngineError::Serialization("source peak window is too large".into()))?;
+    if view.data_len as usize != expected {
+        return Err(EngineError::Serialization(format!(
+            "source peak window size mismatch: expected {expected}, got {}",
+            view.data_len
+        )));
+    }
+
+    // The C++ view is thread-local and borrowed. Copy it before returning or
+    // making another native call, decoding explicit little-endian f32 values.
+    let bytes = unsafe { std::slice::from_raw_parts(view.data, expected) };
+    let mut decoded = Vec::with_capacity(buckets * planes);
+    for raw in bytes.chunks_exact(4) {
+        decoded.push(f32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]));
+    }
+    let plane = |index: usize| decoded[index * buckets..(index + 1) * buckets].to_vec();
+    Ok(SourcePeaksWindow {
+        sample_rate: view.sample_rate as u32,
+        start_frame: view.start_frame,
+        end_frame: view.end_frame,
+        bucket_count: buckets,
+        min_peaks: plane(0),
+        max_peaks: plane(1),
+        min_peaks_right: if planes == 4 { plane(2) } else { vec![] },
+        max_peaks_right: if planes == 4 { plane(3) } else { vec![] },
+    })
+}
+
+#[cfg(test)]
+mod source_peak_window_tests {
+    use super::*;
+
+    #[test]
+    fn decodes_borrowed_stereo_planes_and_copies_them() {
+        let values = [-0.5_f32, -0.25, 0.5, 0.75, -0.8, -0.6, 0.8, 0.9];
+        let bytes: Vec<u8> = values
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect();
+        let view = LtSourcePeaksWindowView {
+            data: bytes.as_ptr(),
+            data_len: bytes.len() as u64,
+            sample_rate: 48_000,
+            channel_count: 2,
+            start_frame: 100,
+            end_frame: 140,
+            bucket_count: 2,
+            ok: 1,
+        };
+
+        let decoded = source_peaks_window_from_view(view).expect("valid binary view");
+        assert_eq!(decoded.min_peaks, vec![-0.5, -0.25]);
+        assert_eq!(decoded.max_peaks, vec![0.5, 0.75]);
+        assert_eq!(decoded.min_peaks_right, vec![-0.8, -0.6]);
+        assert_eq!(decoded.max_peaks_right, vec![0.8, 0.9]);
+        assert_eq!((decoded.start_frame, decoded.end_frame), (100, 140));
+    }
+
+    #[test]
+    fn rejects_malformed_binary_length() {
+        let bytes = [0_u8; 4];
+        let result = source_peaks_window_from_view(LtSourcePeaksWindowView {
+            data: bytes.as_ptr(),
+            data_len: bytes.len() as u64,
+            sample_rate: 48_000,
+            channel_count: 1,
+            start_frame: 0,
+            end_frame: 10,
+            bucket_count: 2,
+            ok: 1,
+        });
+        assert!(matches!(result, Err(EngineError::Serialization(_))));
+    }
 }
 
 /// Short, human-readable tag for an EngineCommand variant, used in error

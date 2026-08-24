@@ -53,6 +53,10 @@ public:
     std::string  list_devices(bool force_rescan = false)  const;
     std::string  get_source_peaks(const std::string& source_id,
                                   int resolution_frames) const;
+    SourcePeakWindow get_source_peaks_window(const std::string& source_id,
+                                             Frame start_frame,
+                                             Frame end_frame,
+                                             int bucket_count) const;
     // E2E-only. Returns an unavailable error when the native build flag is off.
     std::string  capture_output_samples() const;
     // Decode a pad key from disk and swap it into the renderer, RIGHT NOW, on

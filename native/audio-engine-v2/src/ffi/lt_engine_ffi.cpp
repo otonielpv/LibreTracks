@@ -9,6 +9,8 @@
 #include <lt_engine/engine_impl.h>
 #include <lt_engine/sources/source_manager.h>
 #include <nlohmann/json.hpp>
+#include <cstring>
+#include <vector>
 
 namespace {
 
@@ -129,6 +131,59 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
     thread_local std::string buf;
     buf = as_impl(engine)->get_source_peaks(source_id, static_cast<int>(resolution_frames));
     return buf.c_str();
+}
+
+LT_API LtSourcePeaksWindowView lt_audio_engine_get_source_peaks_window(
+    LtEngine* engine,
+    const char* source_id,
+    int64_t start_frame,
+    int64_t end_frame,
+    int32_t bucket_count) {
+    LtSourcePeaksWindowView view{};
+    if (!engine || !source_id || bucket_count <= 0 || end_frame <= start_frame)
+        return view;
+
+    try {
+        const auto window = as_impl(engine)->get_source_peaks_window(
+            source_id, static_cast<lt::Frame>(start_frame),
+            static_cast<lt::Frame>(end_frame), static_cast<int>(bucket_count));
+        if (window.sample_rate <= 0 || window.bucket_count <= 0
+            || window.min_peaks.size() != static_cast<std::size_t>(window.bucket_count)
+            || window.max_peaks.size() != static_cast<std::size_t>(window.bucket_count)) {
+            return view;
+        }
+
+        thread_local std::vector<uint8_t> bytes;
+        const bool stereo = window.min_peaks_right.size() == window.min_peaks.size()
+                         && window.max_peaks_right.size() == window.max_peaks.size();
+        const std::size_t plane_bytes = window.min_peaks.size() * sizeof(float);
+        bytes.resize(plane_bytes * (stereo ? 4u : 2u));
+        std::size_t offset = 0;
+        auto append = [&](const std::vector<float>& plane) {
+            // LibreTracks targets little-endian desktop/Android ABIs. Keeping
+            // the payload as raw f32 avoids a multi-megabyte JSON float parse.
+            std::memcpy(bytes.data() + offset, plane.data(), plane_bytes);
+            offset += plane_bytes;
+        };
+        append(window.min_peaks);
+        append(window.max_peaks);
+        if (stereo) {
+            append(window.min_peaks_right);
+            append(window.max_peaks_right);
+        }
+
+        view.data = bytes.data();
+        view.data_len = static_cast<uint64_t>(bytes.size());
+        view.sample_rate = window.sample_rate;
+        view.channel_count = stereo ? 2 : 1;
+        view.start_frame = window.start_frame;
+        view.end_frame = window.end_frame;
+        view.bucket_count = window.bucket_count;
+        view.ok = 1;
+        return view;
+    } catch (...) {
+        return view;
+    }
 }
 
 LT_API const char* lt_audio_engine_capture_output_samples(LtEngine* engine) {

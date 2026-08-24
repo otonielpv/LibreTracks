@@ -1458,6 +1458,155 @@ SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
     return overview;
 }
 
+SourcePeakWindow SourceManager::source_peaks_window(const Id& source_id,
+                                                    Frame start_frame,
+                                                    Frame end_frame,
+                                                    int bucket_count) const {
+    SourcePeakWindow window;
+
+    Entry entry;
+    {
+        auto entries = load_entries();
+        auto it = entries->find(source_id);
+        if (it == entries->end())
+            return window;
+        entry = it->second;
+    }
+
+    window.sample_rate = entry.sample_rate;
+    if (!entry.source || !entry.source->is_loaded() || entry.channel_count <= 0
+        || entry.duration_frames <= 0 || entry.status == "streaming") {
+        return window;
+    }
+
+    const Frame clamped_start = std::clamp<Frame>(start_frame, 0, entry.duration_frames);
+    const Frame clamped_end = std::clamp<Frame>(end_frame, clamped_start,
+                                                entry.duration_frames);
+    const Frame span = clamped_end - clamped_start;
+    if (span <= 0 || bucket_count <= 0)
+        return window;
+
+    // Bound hostile/accidental requests while preserving one bucket per source
+    // frame. Normal callers request roughly one bucket per physical pixel.
+    constexpr int kMaxBuckets = 1 << 20;
+    const int actual_buckets = static_cast<int>(std::min<Frame>(
+        span, std::min(bucket_count, kMaxBuckets)));
+    const bool stereo = entry.channel_count >= 2;
+
+    window.start_frame = clamped_start;
+    window.end_frame = clamped_end;
+    window.bucket_count = actual_buckets;
+    window.min_peaks.assign(static_cast<std::size_t>(actual_buckets), 0.f);
+    window.max_peaks.assign(static_cast<std::size_t>(actual_buckets), 0.f);
+    if (stereo) {
+        window.min_peaks_right.assign(static_cast<std::size_t>(actual_buckets), 0.f);
+        window.max_peaks_right.assign(static_cast<std::size_t>(actual_buckets), 0.f);
+    }
+    std::vector<bool> initialized(static_cast<std::size_t>(actual_buckets), false);
+
+    auto consume = [&](Frame relative, float left, float right) {
+        const auto bucket = static_cast<std::size_t>(std::min<Frame>(
+            actual_buckets - 1,
+            (relative * static_cast<Frame>(actual_buckets)) / span));
+        left = std::clamp(left, -1.f, 1.f);
+        right = std::clamp(right, -1.f, 1.f);
+        if (!initialized[bucket]) {
+            window.min_peaks[bucket] = window.max_peaks[bucket] = left;
+            if (stereo)
+                window.min_peaks_right[bucket] = window.max_peaks_right[bucket] = right;
+            initialized[bucket] = true;
+            return;
+        }
+        window.min_peaks[bucket] = std::min(window.min_peaks[bucket], left);
+        window.max_peaks[bucket] = std::max(window.max_peaks[bucket], left);
+        if (stereo) {
+            window.min_peaks_right[bucket] = std::min(window.min_peaks_right[bucket], right);
+            window.max_peaks_right[bucket] = std::max(window.max_peaks_right[bucket], right);
+        }
+    };
+
+    constexpr int kChunkFrames = 16384;
+    Frame cursor = clamped_start;
+    if (entry.cache_file_path.empty()) {
+        std::vector<float> left(static_cast<std::size_t>(kChunkFrames), 0.f);
+        std::vector<float> right(stereo ? static_cast<std::size_t>(kChunkFrames) : 0, 0.f);
+        while (cursor < clamped_end) {
+            const int wanted = static_cast<int>(
+                std::min<Frame>(kChunkFrames, clamped_end - cursor));
+            float* outputs[2] = {left.data(), stereo ? right.data() : nullptr};
+            const int read = entry.source->read(cursor, wanted, outputs, stereo ? 2 : 1);
+            if (read <= 0)
+                break;
+            for (int frame = 0; frame < read; ++frame)
+                consume(cursor + frame - clamped_start, left[frame],
+                        stereo ? right[frame] : 0.f);
+            cursor += read;
+        }
+    } else {
+        std::vector<float> interleaved(static_cast<std::size_t>(kChunkFrames)
+                                       * static_cast<std::size_t>(entry.channel_count), 0.f);
+#if LT_ENGINE_USE_LIBSNDFILE
+        SF_INFO info{};
+        SNDFILE* sf = lt_sf_open(entry.cache_file_path, SFM_READ, &info);
+        if (!sf || info.channels != entry.channel_count
+            || sf_seek(sf, static_cast<sf_count_t>(clamped_start), SEEK_SET) < 0) {
+            if (sf) sf_close(sf);
+            window.min_peaks.clear();
+            window.max_peaks.clear();
+            window.min_peaks_right.clear();
+            window.max_peaks_right.clear();
+            return window;
+        }
+#else
+        std::ifstream in(entry.cache_file_path, std::ios::binary);
+        if (!in) {
+            window.min_peaks.clear();
+            window.max_peaks.clear();
+            window.min_peaks_right.clear();
+            window.max_peaks_right.clear();
+            return window;
+        }
+        in.seekg(static_cast<std::streamoff>(clamped_start)
+                 * entry.channel_count * sizeof(float), std::ios::beg);
+#endif
+        while (cursor < clamped_end) {
+            const int wanted = static_cast<int>(
+                std::min<Frame>(kChunkFrames, clamped_end - cursor));
+#if LT_ENGINE_USE_LIBSNDFILE
+            const int read = static_cast<int>(sf_readf_float(
+                sf, interleaved.data(), static_cast<sf_count_t>(wanted)));
+#else
+            const std::size_t sample_count = static_cast<std::size_t>(wanted)
+                                           * entry.channel_count;
+            in.read(reinterpret_cast<char*>(interleaved.data()),
+                    static_cast<std::streamsize>(sample_count * sizeof(float)));
+            const int read = static_cast<int>(static_cast<std::size_t>(in.gcount())
+                / (sizeof(float) * static_cast<std::size_t>(entry.channel_count)));
+#endif
+            if (read <= 0)
+                break;
+            for (int frame = 0; frame < read; ++frame) {
+                const float* row = interleaved.data()
+                    + static_cast<std::size_t>(frame) * entry.channel_count;
+                consume(cursor + frame - clamped_start, row[0], stereo ? row[1] : 0.f);
+            }
+            cursor += read;
+        }
+#if LT_ENGINE_USE_LIBSNDFILE
+        sf_close(sf);
+#endif
+    }
+
+    // Never expose a partial window under a cache key that implies completeness.
+    if (cursor != clamped_end) {
+        window.min_peaks.clear();
+        window.max_peaks.clear();
+        window.min_peaks_right.clear();
+        window.max_peaks_right.clear();
+    }
+    return window;
+}
+
 const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
     auto entries = load_entries();
     auto it = entries->find(source_id);

@@ -744,6 +744,88 @@ TEST_CASE("a natively-streamed source reports that it publishes no peaks") {
     std::remove(wav_path.c_str());
 }
 
+TEST_CASE("source peak windows read only the requested interval at display resolution") {
+    ScopedCacheDir scope("peak_window");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = 96;
+    constexpr Frame kStart = 12;
+    constexpr Frame kEnd = 44;
+    constexpr int kBuckets = 8;
+    const auto samples = make_reference_audio(kFrames, kChannels);
+
+    auto verify = [&](const SourcePeakWindow& window) {
+        REQUIRE(window.sample_rate == kSampleRate);
+        REQUIRE(window.start_frame == kStart);
+        REQUIRE(window.end_frame == kEnd);
+        REQUIRE(window.bucket_count == kBuckets);
+        REQUIRE(window.min_peaks.size() == kBuckets);
+        REQUIRE(window.max_peaks.size() == kBuckets);
+        REQUIRE(window.min_peaks_right.size() == kBuckets);
+        REQUIRE(window.max_peaks_right.size() == kBuckets);
+
+        for (int bucket = 0; bucket < kBuckets; ++bucket) {
+            float min_left = 1.f, max_left = -1.f;
+            float min_right = 1.f, max_right = -1.f;
+            for (Frame frame = kStart; frame < kEnd; ++frame) {
+                const int mapped = static_cast<int>(
+                    ((frame - kStart) * kBuckets) / (kEnd - kStart));
+                if (mapped != bucket)
+                    continue;
+                const auto base = static_cast<std::size_t>(frame * kChannels);
+                min_left = std::min(min_left, samples[base]);
+                max_left = std::max(max_left, samples[base]);
+                min_right = std::min(min_right, samples[base + 1]);
+                max_right = std::max(max_right, samples[base + 1]);
+            }
+            // The default disk cache is PCM16, so allow its single-quantum
+            // difference while requiring the same bucket boundaries/extrema.
+            CHECK(window.min_peaks[bucket] == doctest::Approx(min_left).epsilon(0.001));
+            CHECK(window.max_peaks[bucket] == doctest::Approx(max_left).epsilon(0.001));
+            CHECK(window.min_peaks_right[bucket] == doctest::Approx(min_right).epsilon(0.001));
+            CHECK(window.max_peaks_right[bucket] == doctest::Approx(max_right).epsilon(0.001));
+        }
+    };
+
+    auto verify_aligned_overview_slice = [&](const SourcePeakOverview& overview,
+                                             const SourcePeakWindow& window) {
+        REQUIRE(overview.resolution_frames == 4);
+        const std::size_t first = static_cast<std::size_t>(kStart / 4);
+        for (std::size_t bucket = 0; bucket < kBuckets; ++bucket) {
+            // Same source, same aligned four-frame buckets: the window path
+            // must be bit-identical to slicing the established overview path.
+            CHECK(window.min_peaks[bucket] == overview.min_peaks[first + bucket]);
+            CHECK(window.max_peaks[bucket] == overview.max_peaks[first + bucket]);
+            CHECK(window.min_peaks_right[bucket]
+                  == overview.min_peaks_right[first + bucket]);
+            CHECK(window.max_peaks_right[bucket]
+                  == overview.max_peaks_right[first + bucket]);
+        }
+    };
+
+    SUBCASE("in-memory source") {
+        SourceManager manager;
+        manager.register_source("memory-window", "");
+        REQUIRE(manager.store_decoded_source(
+            "memory-window", samples, kChannels, kSampleRate, kFrames).is_ok());
+        const auto window = manager.source_peaks_window(
+            "memory-window", kStart, kEnd, kBuckets);
+        verify(window);
+        verify_aligned_overview_slice(manager.source_peaks("memory-window", 4), window);
+    }
+
+    SUBCASE("disk-backed source") {
+        SourceManager manager;
+        manager.register_source("disk-window", "disk-window.wav");
+        REQUIRE(manager.store_decoded_source(
+            "disk-window", samples, kChannels, kSampleRate, kFrames).is_ok());
+        const auto window = manager.source_peaks_window(
+            "disk-window", kStart, kEnd, kBuckets);
+        verify(window);
+        verify_aligned_overview_slice(manager.source_peaks("disk-window", 4), window);
+    }
+}
+
 TEST_CASE("purge_source_cache reports files it could not delete") {
     // A user reported "Clear cache" in Settings freeing nothing. Cause: while a
     // session is loaded the engine streams audio straight out of these cache

@@ -27,6 +27,19 @@ pub struct LtEngine {
     _private: [u8; 0],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct LtSourcePeaksWindowView {
+    pub data: *const u8,
+    pub data_len: u64,
+    pub sample_rate: i32,
+    pub channel_count: i32,
+    pub start_frame: i64,
+    pub end_frame: i64,
+    pub bucket_count: i32,
+    pub ok: i32,
+}
+
 // ── Real FFI (C++ library present) ─────────────────────────────────────────
 #[cfg(not(any(
     feature = "no-link",
@@ -47,18 +60,20 @@ extern "C" {
     pub fn lt_audio_engine_service_control_thread(engine: *mut LtEngine);
     pub fn lt_audio_engine_poll_event(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_get_snapshot(engine: *mut LtEngine) -> *const c_char;
-    pub fn lt_audio_engine_list_devices(
-        engine: *mut LtEngine,
-        force_rescan: i32,
-    ) -> *const c_char;
+    pub fn lt_audio_engine_list_devices(engine: *mut LtEngine, force_rescan: i32) -> *const c_char;
     pub fn lt_audio_engine_get_source_peaks(
         engine: *mut LtEngine,
         source_id: *const c_char,
         resolution_frames: i32,
     ) -> *const c_char;
-    pub fn lt_audio_engine_capture_output_samples(
+    pub fn lt_audio_engine_get_source_peaks_window(
         engine: *mut LtEngine,
-    ) -> *const c_char;
+        source_id: *const c_char,
+        start_frame: i64,
+        end_frame: i64,
+        bucket_count: i32,
+    ) -> LtSourcePeaksWindowView;
+    pub fn lt_audio_engine_capture_output_samples(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_analyze_file_peaks(
         file_path: *const c_char,
         resolution_frames: i32,
@@ -74,10 +89,8 @@ extern "C" {
     pub fn lt_audio_engine_source_cache_size_bytes() -> u64;
     pub fn lt_audio_engine_purge_source_cache() -> u64;
     pub fn lt_audio_engine_purge_source_cache_ex(out_failed: *mut u32) -> u64;
-    pub fn lt_audio_engine_release_cached_audio(
-        engine: *mut LtEngine,
-        keep_per_source: u32,
-    ) -> u64;
+    pub fn lt_audio_engine_release_cached_audio(engine: *mut LtEngine, keep_per_source: u32)
+        -> u64;
 }
 
 // ── Stubs (no-link feature — tests only) ───────────────────────────────────
@@ -205,6 +218,29 @@ pub unsafe fn lt_audio_engine_get_source_peaks(
     _: i32,
 ) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
+}
+
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_get_source_peaks_window(
+    _: *mut LtEngine,
+    _: *const c_char,
+    _: i64,
+    _: i64,
+    _: i32,
+) -> LtSourcePeaksWindowView {
+    LtSourcePeaksWindowView {
+        data: std::ptr::null(),
+        data_len: 0,
+        sample_rate: 0,
+        channel_count: 0,
+        start_frame: 0,
+        end_frame: 0,
+        bucket_count: 0,
+        ok: 0,
+    }
 }
 #[cfg(any(
     feature = "no-link",

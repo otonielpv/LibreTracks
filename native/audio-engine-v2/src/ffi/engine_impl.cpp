@@ -1535,6 +1535,16 @@ std::string EngineImpl::get_source_peaks(const std::string& source_id,
     return out.dump();
 }
 
+SourcePeakWindow EngineImpl::get_source_peaks_window(const std::string& source_id,
+                                                     Frame start_frame,
+                                                     Frame end_frame,
+                                                     int bucket_count) const {
+    if (!source_manager_)
+        return {};
+    return source_manager_->source_peaks_window(
+        source_id, start_frame, end_frame, bucket_count);
+}
+
 std::string EngineImpl::capture_output_samples() const {
     json out;
     out["ok"] = false;
