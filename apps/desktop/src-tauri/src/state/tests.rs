@@ -4715,3 +4715,99 @@ fn place_bundled_audio_reuses_existing_original_and_copies_missing_one() {
         b"gone-bytes"
     );
 }
+
+/// Mover una canción NO debe reconstruir la sesión del motor.
+///
+/// `move_song_region` traslada clips y marcas: no añade ni quita fuentes ni
+/// pistas, que es lo que justifica una reconstrucción estructural. Estaba
+/// clasificado como `StructureRebuild` y eso costaba, medido en el build de
+/// medición con la sesión de referencia (29 pistas, 500 clips):
+///
+///     move_song_region    629 ms
+///     update_song_region   19 ms   (mismo trabajo, TransportOnly)
+///     move_clip           6,5 ms   (TimelineWindow)
+///
+/// Ver docs/plans/ui-performance/00-DIAGNOSTICO.md, causa C8.
+#[test]
+fn moving_a_song_region_does_not_rebuild_the_engine_session() {
+    let mut session = session_with_song_dir("region-move-impact", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let before = audio.realtime_control_diagnostics().session_rebuild_count;
+
+    session
+        .move_song_region("region_1", 4.0, &audio)
+        .expect("song region should move");
+
+    let after = audio.realtime_control_diagnostics().session_rebuild_count;
+    assert_eq!(
+        after, before,
+        "mover una cancion reconstruyo la sesion del motor; deberia bastar con \
+         la ventana de linea de tiempo"
+    );
+}
+
+/// Y la traslación en sí: región, clips y marcas de dentro se mueven juntos.
+/// Sin esto, el test de arriba se podría satisfacer no haciendo nada.
+#[test]
+fn moving_a_song_region_translates_its_clips_and_markers() {
+    let mut session = session_with_song_dir("region-move-translate", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    let before = session.engine.song().cloned().expect("song loaded");
+    let region_before = before
+        .regions
+        .iter()
+        .find(|region| region.id == "region_1")
+        .cloned()
+        .expect("region_1 exists");
+    let clip_before = before
+        .clips
+        .iter()
+        .find(|clip| clip.id == "clip_1")
+        .cloned()
+        .expect("clip_1 exists");
+    let marker_before = before.section_markers.first().cloned();
+
+    session
+        .move_song_region("region_1", 4.0, &audio)
+        .expect("song region should move");
+
+    let after = session.engine.song().cloned().expect("song loaded");
+    let region_after = after
+        .regions
+        .iter()
+        .find(|region| region.id == "region_1")
+        .expect("region_1 still exists");
+    let clip_after = after
+        .clips
+        .iter()
+        .find(|clip| clip.id == "clip_1")
+        .expect("clip_1 still exists");
+
+    assert!(
+        (region_after.start_seconds - (region_before.start_seconds + 4.0)).abs() < 1e-6,
+        "la region no se traslado"
+    );
+    assert!(
+        (region_after.end_seconds - (region_before.end_seconds + 4.0)).abs() < 1e-6,
+        "la region cambio de longitud al moverse"
+    );
+    assert!(
+        (clip_after.timeline_start_seconds
+            - (clip_before.timeline_start_seconds + 4.0))
+            .abs()
+            < 1e-6,
+        "el clip no viajo con su cancion"
+    );
+    if let Some(marker_before) = marker_before {
+        let marker_after = after
+            .section_markers
+            .iter()
+            .find(|marker| marker.id == marker_before.id)
+            .expect("marker still exists");
+        assert!(
+            (marker_after.start_seconds - (marker_before.start_seconds + 4.0)).abs() < 1e-6,
+            "la marca no viajo con su cancion"
+        );
+    }
+}

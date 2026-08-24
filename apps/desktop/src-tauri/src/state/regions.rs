@@ -598,7 +598,27 @@ impl DesktopSession {
 
         refresh_song_duration(&mut song);
         audio.update_live_song_regions(&song)?;
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        // TimelineWindow, no StructureRebuild.
+        //
+        // Mover una cancion TRASLADA clips y marcas: no anade ni quita fuentes
+        // ni pistas, que es lo que justifica una reconstruccion estructural.
+        // `move_clip` y `move_clips_batch` -- que ademas reajustan regiones --
+        // se conforman con TimelineWindow desde siempre.
+        //
+        // La etiqueta no era gratis. Medido en el build de medicion
+        // (docs/plans/ui-performance/state/01.md y state/03.md):
+        //
+        //     move_song_region    629 ms   <- StructureRebuild
+        //     update_song_region   19 ms   <- TransportOnly, mismo trabajo por
+        //                                     lo demas (clona el song, toca la
+        //                                     region, update_live_song_regions)
+        //     move_clip           6,5 ms   <- TimelineWindow
+        //
+        // Los ~610 ms de diferencia son `upsert_song_tracks`, que con la
+        // sesion de referencia empuja 29 pistas y 500 clips al motor C++ en
+        // cada empujon de una cancion. La geometria de las regiones ya viaja
+        // por `update_live_song_regions`, en la linea de arriba.
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
 
         Ok(self.snapshot())
     }
