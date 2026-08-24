@@ -7,6 +7,7 @@ import {
   resolveFollowCameraEaseFactor,
   resolveFollowCameraX,
   resolveVisualCorrectionSeconds,
+  resolveVisualPlaybackPosition,
 } from "./playbackClock";
 
 function anchor(overrides: Partial<PlaybackVisualAnchor>): PlaybackVisualAnchor {
@@ -15,6 +16,7 @@ function anchor(overrides: Partial<PlaybackVisualAnchor>): PlaybackVisualAnchor 
     anchorReceivedAtMs: 0,
     durationSeconds: 100,
     running: true,
+    playbackRate: 1,
     correctionSeconds: 0,
     ...overrides,
   };
@@ -47,6 +49,29 @@ describe("resolveVisualCorrectionSeconds", () => {
     expect(
       resolveVisualCorrectionSeconds(a, 1000 + CLOCK_RESYNC_EASE_MS + 500),
     ).toBe(0);
+  });
+});
+
+describe("resolveVisualPlaybackPosition", () => {
+  it("advances at the engine playback rate in warped regions", () => {
+    const a = anchor({
+      anchorPositionSeconds: 10,
+      anchorReceivedAtMs: 1_000,
+      playbackRate: 0.8,
+    });
+
+    expect(resolveVisualPlaybackPosition(a, 3_500)).toBeCloseTo(12, 6);
+  });
+
+  it("does not advance a stopped anchor", () => {
+    const a = anchor({
+      anchorPositionSeconds: 10,
+      anchorReceivedAtMs: 1_000,
+      playbackRate: 1.5,
+      running: false,
+    });
+
+    expect(resolveVisualPlaybackPosition(a, 3_500)).toBe(10);
   });
 });
 

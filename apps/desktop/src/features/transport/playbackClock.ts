@@ -8,7 +8,7 @@
  * The visual playhead position is an extrapolation from an anchor:
  *
  *   displayed = anchorPositionSeconds
- *             + (now - anchorReceivedAtMs)      // linear advance
+ *             + (now - anchorReceivedAtMs) * playbackRate
  *             + residualCorrection(now)         // eased drift resync
  *
  * When a snapshot poll shows the extrapolation has drifted from the backend
@@ -24,6 +24,9 @@ export type PlaybackVisualAnchor = {
   anchorReceivedAtMs: number;
   durationSeconds: number;
   running: boolean;
+  /** Timeline seconds advanced per real second. This differs from 1 in
+   * warped/varispeed regions and must match the engine clock. */
+  playbackRate: number;
   correctionSeconds: number;
 };
 
@@ -75,6 +78,27 @@ export function resolveVisualCorrectionSeconds(
   }
   const remaining = 1 - elapsedMs / CLOCK_RESYNC_EASE_MS;
   return anchor.correctionSeconds * remaining;
+}
+
+/** Extrapolates the visual timeline position from the same rate published by
+ * the engine. Keeping this pure makes warp/varispeed clock behaviour testable
+ * without involving the 60fps React-free render path. */
+export function resolveVisualPlaybackPosition(
+  anchor: PlaybackVisualAnchor,
+  nowMs: number,
+): number {
+  const playbackRate =
+    Number.isFinite(anchor.playbackRate) && anchor.playbackRate > 0
+      ? anchor.playbackRate
+      : 1;
+  const elapsedSeconds = anchor.running
+    ? Math.max(0, nowMs - anchor.anchorReceivedAtMs) / 1000
+    : 0;
+  return (
+    anchor.anchorPositionSeconds +
+    elapsedSeconds * playbackRate +
+    resolveVisualCorrectionSeconds(anchor, nowMs)
+  );
 }
 
 /**

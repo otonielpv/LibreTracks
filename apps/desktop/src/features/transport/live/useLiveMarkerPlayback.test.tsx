@@ -30,4 +30,25 @@ describe("useLiveMarkerPlayback", () => {
     expect(result.current.activeGroupId).toBe("verse");
     expect(result.current.nextGroupId).toBe("chorus");
   });
+
+  it("publishes a marker boundary on the next frame without rounding early", () => {
+    vi.useFakeTimers();
+    const groups = buildLiveMarkerGroups([
+      { id: "intro", name: "Intro", startSeconds: 0, kind: "intro" },
+      { id: "verse", name: "Estrofa", startSeconds: 10, kind: "verse" },
+    ]);
+    const playhead = { current: 9.6 };
+    const { result } = renderHook(() =>
+      useLiveMarkerPlayback(groups, [], playhead),
+    );
+
+    expect(result.current.activeGroupId).toBe("intro");
+    expect(result.current.positionSeconds).toBe(9.6);
+
+    playhead.current = 10.01;
+    act(() => vi.advanceTimersToNextFrame());
+
+    expect(result.current.activeGroupId).toBe("verse");
+    expect(result.current.positionSeconds).toBe(10.01);
+  });
 });

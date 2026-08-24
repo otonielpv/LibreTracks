@@ -350,7 +350,7 @@ import {
 import {
   CLOCK_RESYNC_MAX_SMOOTH_SECONDS,
   resolveFollowCameraX,
-  resolveVisualCorrectionSeconds,
+  resolveVisualPlaybackPosition,
 } from "./playbackClock";
 import {
   buildAudioRoutingOptions,
@@ -1513,6 +1513,7 @@ export function TransportPanelContent() {
     anchorReceivedAtMs: 0,
     durationSeconds: 0,
     running: false,
+    playbackRate: 1,
     // Smooth drift resync. When a snapshot poll shows the extrapolated playhead
     // has drifted from the backend clock, we DON'T snap: we re-anchor to the
     // true position and stash the old visual offset here, then decay it to zero
@@ -3059,6 +3060,7 @@ export function TransportPanelContent() {
       nextSnapshot.playbackState,
       nextSnapshot.positionSeconds.toFixed(6),
       nextSnapshot.transportClock?.anchorPositionSeconds?.toFixed(6) ?? "none",
+      nextSnapshot.transportClock?.playbackRate?.toFixed(6) ?? "1.000000",
       nextSnapshot.transportClock?.running ? "1" : "0",
       String(nextSnapshot.projectRevision),
     ].join("|");
@@ -3125,9 +3127,15 @@ export function TransportPanelContent() {
       : nextSnapshot.positionSeconds;
     const baseAnchorPositionSeconds =
       anchorMeta?.anchorPositionSeconds ?? fallbackAnchorPositionSeconds;
-    const emittedLatencySeconds =
+    const playbackRate =
+      nextSnapshot.transportClock?.playbackRate &&
+      nextSnapshot.transportClock.playbackRate > 0
+        ? nextSnapshot.transportClock.playbackRate
+        : 1;
+    const emittedLatencyTimelineSeconds =
       isRunning && anchorMeta
-        ? Math.max(0, (Date.now() - anchorMeta.emittedAtUnixMs) / 1000)
+        ? Math.max(0, (Date.now() - anchorMeta.emittedAtUnixMs) / 1000) *
+          playbackRate
         : 0;
     const durationSeconds = songDurationSecondsRef.current;
     const maxDuration =
@@ -3137,7 +3145,7 @@ export function TransportPanelContent() {
           ? durationSeconds
           : Number.MAX_SAFE_INTEGER;
     const anchorPositionSeconds = clamp(
-      baseAnchorPositionSeconds + emittedLatencySeconds,
+      baseAnchorPositionSeconds + emittedLatencyTimelineSeconds,
       0,
       maxDuration,
     );
@@ -3147,6 +3155,7 @@ export function TransportPanelContent() {
       anchorReceivedAtMs: performance.now(),
       durationSeconds: timelineDurationSecondsRef.current || durationSeconds,
       running: isRunning,
+      playbackRate,
       correctionSeconds: 0,
     };
 
@@ -3158,18 +3167,13 @@ export function TransportPanelContent() {
   function resolveCurrentVisualPosition() {
     const anchor = playbackVisualAnchorRef.current;
     const nowMs = performance.now();
-    const elapsedSeconds = anchor.running
-      ? (nowMs - anchor.anchorReceivedAtMs) / 1000
-      : 0;
     const durationSeconds =
       anchor.durationSeconds ||
       timelineDurationSecondsRef.current ||
       songDurationSecondsRef.current;
 
     return clamp(
-      anchor.anchorPositionSeconds +
-        elapsedSeconds +
-        resolveVisualCorrectionSeconds(anchor, nowMs),
+      resolveVisualPlaybackPosition(anchor, nowMs),
       0,
       durationSeconds || Number.MAX_SAFE_INTEGER,
     );
@@ -3191,6 +3195,7 @@ export function TransportPanelContent() {
             timelineDurationSecondsRef.current ||
             songDurationSecondsRef.current,
           running: false,
+          playbackRate: 1,
           correctionSeconds: 0,
         };
         syncLivePosition(0);
@@ -3220,6 +3225,10 @@ export function TransportPanelContent() {
           nextSnapshot.transportClock?.lastJumpPositionSeconds &&
         previousSnapshot.transportClock?.lastSeekPositionSeconds ===
           nextSnapshot.transportClock?.lastSeekPositionSeconds &&
+        Math.abs(
+          playbackVisualAnchorRef.current.playbackRate -
+            (nextSnapshot.transportClock?.playbackRate ?? 1),
+        ) < 0.000001 &&
         playbackVisualAnchorRef.current.running &&
         Boolean(nextSnapshot.transportClock?.running);
 
@@ -3259,6 +3268,7 @@ export function TransportPanelContent() {
             durationSeconds:
               timelineDurationSecondsRef.current || durationSeconds,
             running: true,
+            playbackRate: nextSnapshot.transportClock?.playbackRate ?? 1,
             // Displayed = clampedTarget + correction = visualNow at t0, then the
             // correction eases out → converges to the true clock with no jump.
             correctionSeconds: visualNowSeconds - clampedTarget,
@@ -4478,13 +4488,8 @@ export function TransportPanelContent() {
       }
 
       const anchor = playbackVisualAnchorRef.current;
-      const elapsedSeconds = anchor.running
-        ? (nowMs - anchor.anchorReceivedAtMs) / 1000
-        : 0;
       const nextPositionSeconds = resolveVisualPositionAcrossPendingJump(
-        anchor.anchorPositionSeconds +
-          elapsedSeconds +
-          resolveVisualCorrectionSeconds(anchor, nowMs),
+        resolveVisualPlaybackPosition(anchor, nowMs),
       );
 
       syncLivePosition(nextPositionSeconds);
@@ -5056,6 +5061,7 @@ export function TransportPanelContent() {
       anchorReceivedAtMs: performance.now(),
       durationSeconds,
       running: false,
+      playbackRate: 1,
       correctionSeconds: 0,
     };
     syncLivePosition(clampedPosition, { durationSeconds });
@@ -5073,6 +5079,7 @@ export function TransportPanelContent() {
       durationSeconds:
         timelineDurationSecondsRef.current || songDurationSecondsRef.current,
       running: false,
+      playbackRate: 1,
       correctionSeconds: 0,
     };
     syncLivePosition(0);

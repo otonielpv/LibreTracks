@@ -141,7 +141,10 @@ export function resolveLivePlaybackPosition(
       : (sortedRegions.find((region) => region.startSeconds > position) ?? null);
 
   return {
-    positionSeconds: Math.round(position),
+    // Keep the sampled position exact. Rounding here made consumers that
+    // derive the active row switch as much as half a second before/after a
+    // marker. Labels round only at their formatting boundary.
+    positionSeconds: position,
     activeGroupId: active?.id ?? null,
     nextGroupId: next?.id ?? null,
     currentRegionId: currentRegion?.id ?? null,

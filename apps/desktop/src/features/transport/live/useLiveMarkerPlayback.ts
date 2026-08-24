@@ -23,13 +23,25 @@ function isSamePosition(
   right: LivePlaybackPosition,
 ) {
   return (
-    left.positionSeconds === right.positionSeconds &&
+    Math.floor(left.positionSeconds) === Math.floor(right.positionSeconds) &&
     left.activeGroupId === right.activeGroupId &&
     left.nextGroupId === right.nextGroupId &&
     left.currentRegionId === right.currentRegionId &&
     left.nextRegionId === right.nextRegionId &&
     left.secondsToNextGroup === right.secondsToNextGroup &&
     left.progressPercent === right.progressPercent
+  );
+}
+
+function isSamePlaybackStructure(
+  left: LivePlaybackPosition,
+  right: LivePlaybackPosition,
+) {
+  return (
+    left.activeGroupId === right.activeGroupId &&
+    left.nextGroupId === right.nextGroupId &&
+    left.currentRegionId === right.currentRegionId &&
+    left.nextRegionId === right.nextRegionId
   );
 }
 
@@ -49,18 +61,37 @@ export function useLiveMarkerPlayback(
   sourcesRef.current = { groups, regions, positionSecondsRef };
 
   useEffect(() => {
-    const publish = () => {
+    let frameId = 0;
+    let lastResolved = position;
+    const resolveCurrent = () => {
       const sources = sourcesRef.current;
-      const next = resolveLivePlaybackPosition(
+      return resolveLivePlaybackPosition(
         sources.groups,
         sources.regions,
         sources.positionSecondsRef.current,
       );
+    };
+    const publishClock = () => {
+      const next = resolveCurrent();
+      lastResolved = next;
       setPosition((current) => (isSamePosition(current, next) ? current : next));
     };
-    publish();
-    const intervalId = window.setInterval(publish, LIVE_UI_POLL_MS);
-    return () => window.clearInterval(intervalId);
+    const followStructure = () => {
+      const next = resolveCurrent();
+      if (!isSamePlaybackStructure(lastResolved, next)) {
+        lastResolved = next;
+        setPosition(next);
+      }
+      frameId = window.requestAnimationFrame(followStructure);
+    };
+
+    publishClock();
+    frameId = window.requestAnimationFrame(followStructure);
+    const intervalId = window.setInterval(publishClock, LIVE_UI_POLL_MS);
+    return () => {
+      window.clearInterval(intervalId);
+      window.cancelAnimationFrame(frameId);
+    };
   }, []);
 
   return position ?? EMPTY_POSITION;
