@@ -34,6 +34,7 @@ const PRODUCT_EVENTS = new Set([
   "session_exported",
   "session_export_failed",
   "project_open_failed",
+  "feature_daw_view",
   "feature_compact_view",
   "feature_live_view",
   "feature_metronome",

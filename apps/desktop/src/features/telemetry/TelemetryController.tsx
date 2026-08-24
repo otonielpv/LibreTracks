@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { isTauriApp } from "../transport/desktopApi";
 import {
+  recordProductEvent,
   startEngagementTracking,
   submitAppSession,
   useTelemetryStore,
@@ -26,7 +27,11 @@ export function TelemetryController({ version }: Props) {
 
   useEffect(() => {
     if (!activeInThisBuild || preference !== "enabled") return;
-    void submitAppSession(version);
+    void submitAppSession(version).then(() => {
+      // DAW is the non-persisted initial view, so waiting until telemetry is
+      // configured records the view users actually land on after app start.
+      recordProductEvent("feature_daw_view");
+    });
     return startEngagementTracking();
   }, [activeInThisBuild, preference, version]);
 

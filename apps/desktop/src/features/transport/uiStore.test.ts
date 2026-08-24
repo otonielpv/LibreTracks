@@ -60,6 +60,7 @@ describe("useTimelineUIStore", () => {
 
       expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
       expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
 
     it("cycles backward through DAW, Live and Compact", () => {
@@ -72,12 +73,19 @@ describe("useTimelineUIStore", () => {
 
       expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
       expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
 
     it("records use of the live performance view", () => {
       get().setViewMode("live");
 
       expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
+    });
+
+    it("records an explicit return to the DAW view", () => {
+      get().setViewMode("daw");
+
+      expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
   });
 

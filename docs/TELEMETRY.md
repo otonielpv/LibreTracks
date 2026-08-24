@@ -49,8 +49,9 @@ does not collect or expose cities, coordinates or IP addresses.
 2. Apply the SQL files in `apps/website/migrations` in numeric order in the D1
    SQL console (or with Wrangler's `d1 execute --remote --file` command). An
    existing installation must run only the numbered files it has not yet
-   applied. Product metrics require `0003_product_telemetry.sql`, and the
-   weekday chart requires `0005_local_weekday.sql`.
+   applied. Product metrics require `0003_product_telemetry.sql`, the weekday
+   chart requires `0005_local_weekday.sql`, and DAW view adoption requires
+   `0006_daw_view_telemetry.sql`.
 3. In the LibreTracks Pages project, add a D1 binding named exactly
    `TELEMETRY_DB` and select that database for both production and preview.
 4. Confirm the Pages project root is `apps/website`. Pages Functions must live

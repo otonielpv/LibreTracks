@@ -15,6 +15,7 @@ describe("telemetry contract", () => {
     const migrations = [
       "0003_product_telemetry.sql",
       "0004_live_view_telemetry.sql",
+      "0006_daw_view_telemetry.sql",
     ].map((file) =>
       readFileSync(resolve(repository, "apps/website/migrations", file), "utf8"),
     ).join("\n");

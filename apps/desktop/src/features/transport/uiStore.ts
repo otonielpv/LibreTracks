@@ -20,6 +20,10 @@ export const TIMELINE_DEFAULT_SNAP_ENABLED = true;
 export const TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED = false;
 export const DEFAULT_VIEW_MODE: ViewMode = "daw";
 
+function recordViewMode(viewMode: ViewMode): void {
+  recordProductEvent(`feature_${viewMode}_view`);
+}
+
 type TimelineUIState = {
   cameraX: number;
   zoomLevel: number;
@@ -70,8 +74,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     midiLearnMode: null,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
-      if (viewMode === "compact") recordProductEvent("feature_compact_view");
-      if (viewMode === "live") recordProductEvent("feature_live_view");
+      recordViewMode(viewMode);
       set({ viewMode });
     },
     toggleViewMode: () => {
@@ -82,8 +85,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
             : state.viewMode === "compact"
               ? "live"
               : "daw";
-        if (viewMode === "compact") recordProductEvent("feature_compact_view");
-        if (viewMode === "live") recordProductEvent("feature_live_view");
+        recordViewMode(viewMode);
         return { viewMode };
       });
     },
@@ -95,8 +97,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
             : state.viewMode === "live"
               ? "compact"
               : "daw";
-        if (viewMode === "compact") recordProductEvent("feature_compact_view");
-        if (viewMode === "live") recordProductEvent("feature_live_view");
+        recordViewMode(viewMode);
         return { viewMode };
       });
     },

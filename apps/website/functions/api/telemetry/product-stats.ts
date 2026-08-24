@@ -19,6 +19,7 @@ type DailyRow = {
 };
 
 const FEATURE_EVENTS = [
+  "feature_daw_view",
   "feature_compact_view",
   "feature_live_view",
   "feature_metronome",
