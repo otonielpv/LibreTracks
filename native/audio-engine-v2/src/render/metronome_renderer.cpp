@@ -215,9 +215,17 @@ MetronomeConfig MetronomeRenderer::config() const {
     return config;
 }
 
-void MetronomeRenderer::reset_voice() noexcept {
-    for (auto& v : voices_)
-        v.remaining = 0;
+void MetronomeRenderer::forget_fire_history() noexcept {
+    // A timeline jump invalidates which beats we have already announced, but NOT
+    // the clicks that are still sounding. A click is a 22-30 ms percussive event
+    // with its own envelope, phase and index; none of that is derived from the
+    // timeline, so the jump has no bearing on it. Silencing it — hard cut or
+    // short fade, both were tried — is heard as a click that stops before it
+    // finishes, which is exactly as wrong as the step it replaced. Let it ring
+    // out across the seam, the way a DAW's metronome does through a loop.
+    //
+    // Only the fire history is reset, so the beat at the destination can trigger
+    // even if a beat at the same grid position already fired before the jump.
     last_started_beat_frame_ = -1;
     last_started_sub_frame_ = -1;
 }
@@ -357,7 +365,7 @@ void MetronomeRenderer::render(float** output_channels,
     if (num_channels <= 0 || num_frames <= 0 || sample_rate <= 0.0) return;
 
     if (last_render_end_ >= 0 && timeline_frame != last_render_end_)
-        reset_voice();
+        forget_fire_history();
     last_render_end_ = timeline_frame + num_frames;
 
     const bool enabled = enabled_.load(std::memory_order_acquire);

@@ -418,3 +418,60 @@ TEST_CASE("metronome ticks with an empty song (no clips)") {
     CHECK(count_clicks(left) == 2);   // 120bpm over 1s => 2 beats
     CHECK(peak(left) > 0.01f);
 }
+
+// Repro (vamp wrap, LT session "nueva-cancion-optimizada", Puente 2 -> Repeticion):
+// a scheduled jump makes the mixer render one callback as two spans, and the
+// second span starts at a timeline frame that is not the continuation of the
+// first. The metronome used to drop every sounding click on that discontinuity
+// (`v.remaining = 0`), truncating the waveform mid-cycle. The click is mixed
+// AFTER the song's master gain and the fader goes well above unity (the
+// reported session ran at 3.3), so that truncation is a full-scale step.
+//
+// Fading the click out instead of cutting it removes the step but is still
+// wrong, and was rejected on listening: a click that stops before its envelope
+// finishes reads as "the last click didn't sound properly". The click owes
+// nothing to the timeline — its envelope, phase and index are its own — so it
+// must ring out across the seam untouched.
+TEST_CASE("a timeline jump lets the sounding click ring out") {
+    MetronomeRenderer renderer;
+    auto session = make_session();          // 120 bpm, 4/4, 48 kHz
+    MetronomeConfig config;
+    config.enabled = true;
+    config.volume = 3.3f;                   // above unity, as a real session runs
+    config.accent_enabled = true;
+    renderer.set_config(config);
+
+    std::vector<float> left(512, 0.0f), right(512, 0.0f);
+    float* out[] = { left.data(), right.data() };
+
+    // The downbeat accent fires at frame 0 and lasts ~30 ms (1440 frames), so
+    // 512 frames in it is still sounding at full amplitude.
+    renderer.render(out, 2, 512, 48000.0, 0, &session);
+    const float before_jump = left.back();
+    REQUIRE(std::abs(before_jump) > 0.1f);  // the click really is mid-cycle
+
+    // The wrap. Target is deliberately off the beat grid (beats land every
+    // 24000 frames; 100000 is not one) so no new click fires and we measure the
+    // surviving click on its own.
+    std::fill(left.begin(), left.end(), 0.0f);
+    std::fill(right.begin(), right.end(), 0.0f);
+    renderer.render(out, 2, 512, 48000.0, 100000, &session);
+
+    // No step across the seam: the waveform simply continues.
+    CHECK(std::abs(left.front() - before_jump) < 0.05f);
+
+    // And it is still going at the end of this block — the click is 1440 frames
+    // long and only 1024 have been rendered, so silence here means it was cut
+    // short (hard or faded), which is the defect this test exists for.
+    CHECK(std::abs(left.back()) > 0.01f);
+
+    // It does finish on its own schedule: by ~1440 frames the envelope is spent.
+    std::fill(left.begin(), left.end(), 0.0f);
+    std::fill(right.begin(), right.end(), 0.0f);
+    renderer.render(out, 2, 512, 48000.0, 100512, &session);
+    CHECK(peak(left) < std::abs(before_jump));   // decayed, not sustained
+    std::fill(left.begin(), left.end(), 0.0f);
+    std::fill(right.begin(), right.end(), 0.0f);
+    renderer.render(out, 2, 512, 48000.0, 101024, &session);
+    CHECK(peak(left) < 0.001f);                  // fully done, no bleed onward
+}

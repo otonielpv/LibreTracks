@@ -454,15 +454,14 @@ void VoiceGuideRenderer::trigger_clip(
     v->bank = bank;
 }
 
-void VoiceGuideRenderer::reset_voices() noexcept {
-    for (auto& v : voices_) {
-        v.samples = nullptr;
-        v.index = 0;
-        v.total = 0;
-        v.fade_remaining = -1;
-        v.fade_total = 0;
-        v.bank.reset();
-    }
+void VoiceGuideRenderer::reset_voices(double sample_rate) noexcept {
+    // Release rather than truncate. Dropping `samples` on the spot cuts the
+    // announcement mid-waveform, and the guide is mixed after the song's master
+    // gain on a fader that goes above unity — that step is an audible pop on
+    // every jump, and on a vamp it lands on every wrap because the guide is
+    // announcing the destination exactly when the wrap fires. The choke ramp
+    // already exists for overlapping announcements; use it here too.
+    choke_active_voices(sample_rate);
     last_section_frame_ = -1;
     last_count_frame_ = -1;
     last_cue_frame_ = -1;
@@ -507,7 +506,7 @@ void VoiceGuideRenderer::render(float** output_channels,
 
     // A discontinuity (seek/jump) invalidates in-flight voices and fire history.
     if (last_render_end_ >= 0 && timeline_frame != last_render_end_)
-        reset_voices();
+        reset_voices(sample_rate);
     last_render_end_ = timeline_frame + num_frames;
 
     const bool enabled = enabled_.load(std::memory_order_acquire);

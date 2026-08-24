@@ -171,7 +171,10 @@ private:
     void trigger_clip(const VoiceGuideClip* clip, float gain, double sample_rate,
                       const std::shared_ptr<const VoiceGuideClipBank>& bank) noexcept;
     void choke_active_voices(double sample_rate) noexcept;
-    void reset_voices() noexcept;
+    // Release every sounding announcement over the choke ramp and clear the
+    // fire history. Called on a timeline discontinuity (seek / jump / vamp
+    // wrap), so it needs the sample rate to size the ramp.
+    void reset_voices(double sample_rate) noexcept;
 
     // Resolve the first SECTION marker at or after `frame` (non-Custom, not a
     // cue). This is the count-in downbeat target. Returns nullptr if none.

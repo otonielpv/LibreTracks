@@ -123,7 +123,9 @@ private:
     void trigger_voice(const VoiceSpec& spec, double sample_rate) noexcept;
     Voice* free_voice() noexcept;
 
-    void reset_voice() noexcept;
+    // Clear which beats have already fired, WITHOUT touching the clicks that
+    // are still sounding. Called on a timeline discontinuity.
+    void forget_fire_history() noexcept;
 
     std::atomic<bool> enabled_{false};
     std::atomic<float> volume_{0.75f};
