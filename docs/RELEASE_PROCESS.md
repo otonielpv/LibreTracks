@@ -435,8 +435,14 @@ code so future sessions stay in sync.)
 
 ## 11. Make the release poster (mandatory, one per release)
 
-Every release gets its own 1080x1080 announcement image, generated with the
+Every release gets its own square announcement image, generated with the
 poster tool and handed back together with the Facebook draft (step 12).
+
+The layout is 1080x1080 but the capture runs at 2x, so the PNG lands at
+2160x2160 (~1.2 MB). That density is for the SCREENSHOTS, not the type: an app
+window is ~1900px wide and the poster shows it at ~860, so at 1x Chrome threw
+away more than half of every UI label and the app photographed as mush. Pass
+`--scale 1` only if something specifically needs a 1080x1080 file.
 
 ```bash
 mkdir -p marketing/poster-<NEW>
@@ -451,18 +457,23 @@ under `scripts/poster/` is versioned, so any release can be re-rendered.
 ### Every poster must look different
 
 This is the point of the tool, not a nice-to-have: a feed of identical posters
-stops being read. `scripts/poster/themes.mjs` holds five themes, each with its
+stops being read. `scripts/poster/themes.mjs` holds six themes, each with its
 own palette, background motif AND layout (`spotlight`, `bleed-right`, `split`,
-`tilt`, `list`). `pickTheme()` derives one from the version number — weighted so
-consecutive releases never land on the same theme — so the default already
-varies release to release and re-running for the same version reproduces the
-same poster.
+`tilt`, `devices`, `list`). `pickTheme()` derives one from the version number —
+weighted so consecutive releases never land on the same theme — so the default
+already varies release to release and re-running for the same version reproduces
+the same poster.
 
 - Let the version pick the theme. Override with `--theme <id>` only when a
   release deserves a specific look (`--list-themes` shows them all).
-- When the five start feeling familiar, **add a sixth theme** rather than
-  re-using one. A new theme is a palette + a motif + a layout block in
-  `render.mjs`; adding one is what keeps this from going stale.
+- When they start feeling familiar, **add a new theme** rather than re-using
+  one. A theme is a palette + a motif + a layout block in `render.mjs`; adding
+  one is what keeps this from going stale. (Note that adding a theme reshuffles
+  what `pickTheme()` returns for every version, since it indexes into the list.)
+- `showcase` (layout `devices`) is the odd one out: it stacks THREE screenshots
+  — desktop behind, tablet and phone in front — for a release whose headline is
+  the same feature on every screen size. It reads the extra ones from the
+  optional `shots` array in the spec, mid-size device first, phone second.
 
 ### The copy file
 
@@ -477,6 +488,7 @@ pistas a la vez",
   "headlineAccent": ".",
   "sub": "Selecciona, ajusta una, y todas te siguen.",
   "shot": "shot.png",
+  "shots": ["tablet.png", "phone.png"],
   "features": [{ "title": "Mezcla en grupo", "body": "volumen, pan, mute, solo" }]
 }
 ```
@@ -484,9 +496,11 @@ pistas a la vez",
 - `headline`: the release's ONE headline change, 2 short lines. `
 ` is a
   deliberate break — poster headlines are typeset by hand, not left to wrap.
+- `shots`: optional, only read by the `devices` layout. Ignored elsewhere.
 - `features`: exactly 4, drawn from the Spanish bullets of
-  `docs/releases/v<NEW>.md`. Keep each `body` to ~4 words so the four columns
-  stay on one line; a 2-line wrap in one column and not the others looks broken.
+  `docs/releases/v<NEW>.md`. Keep each `body` to ~4 words AND each `title` to
+  ~2 so the four columns stay on one line; a 2-line wrap in one column and not
+  the others looks broken.
 - Spanish, same voice as the Facebook post. Check the accents.
 
 ### Look at the PNG before shipping it

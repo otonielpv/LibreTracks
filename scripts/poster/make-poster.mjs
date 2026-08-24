@@ -1,14 +1,21 @@
 #!/usr/bin/env node
 /**
- * Generate the release announcement poster (1080x1080, ready for Facebook and
- * Instagram) from a JSON copy file plus a screenshot, capturing it with the
- * locally installed Chrome/Edge in headless mode.
+ * Generate the release announcement poster (a 1080x1080 layout, ready for
+ * Facebook and Instagram) from a JSON copy file plus a screenshot, capturing it
+ * with the locally installed Chrome/Edge in headless mode.
+ *
+ * The capture runs at 2x by default, so the PNG comes out 2160x2160. The layout
+ * is still 1080 CSS pixels — the extra density is for the SCREENSHOTS: an app
+ * window is ~1900px wide and the poster shows it at ~860, so at 1x Chrome threw
+ * away more than half of every UI label and the app photographed as mush.
+ * `--scale 1` goes back to a 1080x1080 file when something needs it.
  *
  * The poster style is picked from the version number (see themes.mjs) so every
  * release looks different without anyone choosing; --theme overrides it.
  *
  *   node scripts/poster/make-poster.mjs --spec marketing/poster-1.10.1/poster.json
  *   node scripts/poster/make-poster.mjs --spec <file> --theme stage
+ *   node scripts/poster/make-poster.mjs --spec <file> --scale 1
  *   node scripts/poster/make-poster.mjs --list-themes
  *
  * Output lands next to the spec file as <name>.png, with the intermediate HTML
@@ -104,6 +111,12 @@ function main() {
 
   const theme = pickTheme(spec.version, args.theme ? String(args.theme) : spec.theme);
 
+  // Density of the capture, not of the layout: the page is always 1080 CSS px.
+  const scale = Number(args.scale ?? spec.scale ?? 2);
+  if (!Number.isFinite(scale) || scale < 1 || scale > 4) {
+    throw new Error(`--scale must be between 1 and 4, got "${args.scale ?? spec.scale}"`);
+  }
+
   const fontsDir = path.join(REPO, 'apps', 'desktop', 'public', 'fonts');
   const assets = {
     grotesk700: path.join(fontsDir, 'space-grotesk-700-latin.woff2'),
@@ -133,7 +146,7 @@ function main() {
       '--headless=new',
       '--disable-gpu',
       '--hide-scrollbars',
-      '--force-device-scale-factor=1',
+      `--force-device-scale-factor=${scale}`,
       '--window-size=1080,1080',
       `--screenshot=${pngPath}`,
       // file:// so the data: URIs and inline fonts resolve without a server.
@@ -143,6 +156,7 @@ function main() {
   );
 
   console.log(`theme:  ${theme.id} (${theme.layout}, ${theme.accent})`);
+  console.log(`size:   ${1080 * scale}x${1080 * scale} (${scale}x)`);
   console.log(`html:   ${htmlPath}`);
   console.log(`poster: ${pngPath}`);
   console.log('Look at the PNG before publishing it — check for clipped text and personal data.');
