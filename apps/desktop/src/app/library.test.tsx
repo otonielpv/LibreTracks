@@ -198,7 +198,7 @@ describe("App / library", () => {
     await renderApp();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /cambiar a vista compacta/i }));
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.liveView.openCompact) }));
     });
 
     const compactSongHeader = document.querySelector(".lt-compact-song-header");
