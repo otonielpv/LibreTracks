@@ -36,6 +36,7 @@ import { markerCategory } from "../markerKinds";
 import {
   buildTrackStructureSignature,
   drawTrackCanvasBackground,
+  drainWaveformTileWork,
   drawTrackClipsLayer,
 } from "../Renderer/drawTracks";
 import {
@@ -869,6 +870,7 @@ export function TimelineTrackCanvas({
         renderTracks: (context, snapshot, viewport) => {
           drawTrackClipsLayer(context, snapshot, viewport);
         },
+        drainTileWork: () => drainWaveformTileWork(),
       },
     );
     rendererRef.current = renderer;

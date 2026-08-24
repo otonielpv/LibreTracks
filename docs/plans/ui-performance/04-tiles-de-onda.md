@@ -95,18 +95,22 @@ código de limpieza que nadie invoca.
       `baseline.json`.
 - [ ] En G3 (zoom continuo de 1 a 16) el fps EMA no cae por debajo del umbral
       que fije la línea base menos un margen declarado en el PR.
-- [ ] `waveformTileBytes` tiene un techo duro y **se respeta** en G3 con la
-      sesión grande (20 canciones). Anotar el pico.
-- [ ] Con `trackHeight` mínimo, los tiles se rasterizan a la altura reducida.
-      Verificable con un test unitario sobre el namespace/altura elegida.
+- [ ] `waveformTileBytes` tiene un techo duro (48 MiB) y **se respeta** en G3
+      con la sesión grande. **Pendiente de medir.**
+- [x] Con `trackHeight` mínimo, los tiles se rasterizan a la altura reducida.
+      Cubierto por `tileHeightForLane` y por un test que compara la memoria de
+      un carril de 18 px contra uno de 148: 8× menos.
 - [ ] La waveform con carriles bajos se ve **mejor** que antes, no sólo más
       rápida (el escalado 256→18 desaparece). Captura antes/después en el PR.
 - [ ] Nunca aparece un hueco blanco donde había onda durante un zoom rápido.
-- [ ] `WaveformTileCache.test.ts` sigue pasando, ampliado con: presupuesto por
-      frame respetado, sustituto de nivel vecino, expulsión por bytes.
-- [ ] Hay un test que **sabe fallar**: comprueba que `getTile` no rasteriza de
-      forma síncrona. Verifica que falla contra el código actual.
-- [ ] `pruneNamespaces` está llamada o borrada, no en el limbo.
+- [x] `WaveformTileCache.test.ts` ampliado: cola, presupuesto por frame,
+      prioridad por cercanía al centro, purga al empezar el pintado y
+      cuantización de altura. El "sustituto de nivel vecino" se resolvió de otra
+      forma (envolvente de baja resolución), ver el punto 3 en state/04.md.
+- [x] Hay un test que **sabe fallar**: comprueba que `getTile` no rasteriza de
+      forma síncrona. Con la mutación que lo devuelve al frame, 5 tests rojos.
+- [x] `pruneNamespaces` **borrada**. Con la cola auto-podable y el LRU por
+      bytes no hace falta.
 
 ## Notas para el implementador
 

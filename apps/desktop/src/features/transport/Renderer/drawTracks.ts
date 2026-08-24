@@ -9,8 +9,10 @@ import { reportWaveformTileCache } from "../perf/perfMetrics";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timeline/timelineMath";
 import {
+  drawWaveformSketch,
   getWaveformRenderPixelsPerSecond,
   WaveformTileCache,
+  WAVEFORM_TILE_FRAME_BUDGET_MS,
   WAVEFORM_TILE_WIDTH_PX,
 } from "./WaveformTileCache";
 
@@ -578,6 +580,7 @@ export function drawTrackClipsLayer(
       viewport.height,
     );
 
+  beginWaveformTilePaint();
   const songDrawIndex = getSongDrawIndex(snapshot.song);
   // `includes` por clip es O(seleccionados) dentro del bucle; el Set se
   // construye una vez por pintado.
@@ -796,6 +799,13 @@ export function drawTrackClipsLayer(
           Math.ceil(visibleRenderPixelEnd / WAVEFORM_TILE_WIDTH_PX) - 1,
         );
 
+        // Prioridad de la cola: distancia del clip al centro del viewport.
+        // Lo que el usuario está mirando se rasteriza antes que lo que roza
+        // el borde.
+        const clipCenterX = clippedLeft + visibleWidth / 2;
+        const priority = Math.abs(clipCenterX - snapshot.width / 2);
+        let missedTile = false;
+
         for (let tileIndex = startTileIndex; tileIndex <= endTileIndex; tileIndex += 1) {
           const tile = waveformTileCache.getTile({
             clip,
@@ -803,8 +813,11 @@ export function drawTrackClipsLayer(
             pixelsPerSecond: renderPixelsPerSecond,
             clipPixelWidth: renderClipPixelWidth,
             tileIndex,
+            laneHeightPx: clipHeight * devicePixelRatioForTiles(),
+            priority,
           });
           if (!tile) {
+            missedTile = true;
             continue;
           }
 
@@ -813,6 +826,21 @@ export function drawTrackClipsLayer(
             left + tile.tileStartPixel * renderScale,
             clipTop,
             tile.tileWidth * renderScale,
+            clipHeight,
+          );
+        }
+
+        // Algún tile aún está en la cola: rellena con la envolvente de baja
+        // resolución para que no haya un hueco mientras se rasteriza.
+        if (missedTile) {
+          drawWaveformSketch(
+            context,
+            clip,
+            waveform,
+            snapshot.zoomLevel,
+            clippedLeft,
+            visibleWidth,
+            clipTop,
             clipHeight,
           );
         }
@@ -863,6 +891,31 @@ export function drawTrackClipsLayer(
   // gauge, y así el coste no escala con el número de clips visibles.
   const tileStats = waveformTileCache.stats();
   reportWaveformTileCache(tileStats.entries, tileStats.bytes);
+}
+
+/**
+ * Los tiles se rasterizan en píxeles de DISPOSITIVO: el lienzo ya está escalado
+ * por `devicePixelRatio`, así que un carril de 60 px CSS en una pantalla 2x
+ * necesita 120 px de tile para no verse borroso.
+ */
+function devicePixelRatioForTiles() {
+  return typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+}
+
+/** Marca el inicio de un pintado: vacía la cola de tiles pendientes. */
+export function beginWaveformTilePaint() {
+  waveformTileCache.beginPaint();
+}
+
+/**
+ * Rasteriza tiles encolados dentro del presupuesto del frame. La llama el
+ * renderer DESPUÉS de pintar. Devuelve true si hizo algo, para que el frame
+ * siguiente vuelva a pintar y los muestre.
+ */
+export function drainWaveformTileWork(
+  budgetMs = WAVEFORM_TILE_FRAME_BUDGET_MS,
+) {
+  return waveformTileCache.drainPendingTiles(budgetMs) > 0;
 }
 
 export function buildTrackStructureSignature(song: SongView, visibleTracks: TimelineTrackSummary[]) {

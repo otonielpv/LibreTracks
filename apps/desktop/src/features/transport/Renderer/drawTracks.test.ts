@@ -5,7 +5,22 @@ vi.mock("./WaveformTileCache", () => {
     WAVEFORM_TILE_WIDTH_PX: 1024,
     getWaveformRenderPixelsPerSecond: (pixelsPerSecond: number) =>
       pixelsPerSecond,
+    WAVEFORM_TILE_FRAME_BUDGET_MS: 4,
+    drawWaveformSketch: () => true,
+    tileNamespace: () => "ns",
+    tileHeightForLane: (height: number) => (height <= 32 ? 32 : 256),
     WaveformTileCache: class {
+      // El pintado vacia la cola de pendientes al empezar (paso 04).
+      beginPaint() {}
+
+      drainPendingTiles() {
+        return 0;
+      }
+
+      hasPendingTiles() {
+        return false;
+      }
+
       getTile() {
         return {
           canvas: { width: 64, height: 32 },

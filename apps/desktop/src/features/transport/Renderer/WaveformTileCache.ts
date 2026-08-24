@@ -7,9 +7,40 @@ import { recordWaveformTileRender } from "../perf/perfMetrics";
 import { clamp } from "../timeline/timelineMath";
 
 export const WAVEFORM_TILE_WIDTH_PX = 1024;
-const TILE_HEIGHT_PX = 256;
 const WAVEFORM_ZOOM_CACHE_STEP = 1.5;
-const MAX_CACHED_TILES = 320;
+
+/**
+ * Alturas de tile permitidas, en píxeles.
+ *
+ * El tile se rasterizaba SIEMPRE a 256 px de alto y luego se escalaba al
+ * carril. Con la altura mínima de pista (18 px) eso son **14 veces más píxeles
+ * de los que se ven**, y el escalado 256→18 además se come los picos finos: es
+ * parte de por qué la onda se ve sucia en carriles bajos.
+ *
+ * Se cuantiza en cuatro escalones en vez de usar la altura exacta para que la
+ * caché no se fragmente: arrastrar el borde de una pista cambia su altura
+ * píxel a píxel, y con altura exacta cada píxel sería un namespace nuevo.
+ */
+const TILE_HEIGHT_STEPS = [32, 64, 128, 256] as const;
+
+/**
+ * Techo de la caché en BYTES, no en número de tiles.
+ *
+ * Antes el tope eran 320 tiles, que con 1024x256 RGBA son 320 MiB en el caso
+ * peor — y medido en el build de medición se llegó a un pico de 146 MB. Un
+ * tope en bytes es el único que da una garantía; el de conteo depende de un
+ * tamaño de tile que ahora es variable.
+ */
+const MAX_CACHE_BYTES = 48 * 1024 * 1024;
+
+/**
+ * Milisegundos que un frame puede gastar rasterizando tiles.
+ *
+ * El presupuesto de frame a 60 Hz son 16,7 ms y a 144 Hz son 6,9. Cuatro
+ * milisegundos dejan sitio al resto del pintado en el primer caso y, en el
+ * segundo, reparten el trabajo en más frames en vez de tirar uno entero.
+ */
+export const WAVEFORM_TILE_FRAME_BUDGET_MS = 4;
 const decodedWaveformLodCache = new WeakMap<
   WaveformLodDto,
   ResolvedWaveformLod
@@ -40,13 +71,29 @@ export type WaveformTile = {
   tileWidth: number;
 };
 
-type TileRequest = {
+export type TileRequest = {
   clip: ClipSummary;
   waveform: WaveformSummaryDto;
   pixelsPerSecond: number;
   clipPixelWidth: number;
   tileIndex: number;
+  /** Alto del carril en el que se va a dibujar, para no rasterizar de más. */
+  laneHeightPx: number;
+  /** Distancia al centro del viewport, en píxeles. Ordena la cola: lo que el
+   *  usuario está mirando se rasteriza antes que lo que roza el borde. */
+  priority: number;
 };
+
+/** Escalón de altura de tile que cubre un carril de `laneHeightPx`. */
+export function tileHeightForLane(laneHeightPx: number) {
+  const target = Math.max(1, laneHeightPx);
+  for (const step of TILE_HEIGHT_STEPS) {
+    if (step >= target) {
+      return step;
+    }
+  }
+  return TILE_HEIGHT_STEPS[TILE_HEIGHT_STEPS.length - 1];
+}
 
 export function getWaveformRenderPixelsPerSecond(pixelsPerSecond: number) {
   if (!Number.isFinite(pixelsPerSecond) || pixelsPerSecond <= 0) {
@@ -171,7 +218,12 @@ function getTileContext(surface: TileSurface) {
   return context;
 }
 
-function tileNamespace(request: TileRequest) {
+/**
+ * Clave de caché de un tile. Exportada porque su propiedad clave —que dos
+ * clips distintos NUNCA compartan clave— es de corrección, no de rendimiento:
+ * si colisionaran, un clip mostraría la onda de otro. Tiene tests propios.
+ */
+export function tileNamespace(request: TileRequest) {
   const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(
     request.pixelsPerSecond,
   );
@@ -194,6 +246,9 @@ function tileNamespace(request: TileRequest) {
     request.clip.sourceDurationSeconds.toFixed(6),
     request.clip.durationSeconds.toFixed(6),
     renderPixelsPerSecond.toFixed(4),
+    // La altura entra en la clave: un tile de 32 px no sirve para un carril
+    // de 128, y rasterizar siempre a 256 era el desperdicio que este paso quita.
+    String(tileHeightForLane(request.laneHeightPx)),
   ].join(":");
 }
 
@@ -206,6 +261,7 @@ function renderWaveformTile(
   request: TileRequest,
   tileStartPixel: number,
   tileWidth: number,
+  tileHeight: number,
 ) {
   const waveformLod = selectWaveformLod(
     request.waveform,
@@ -274,7 +330,7 @@ function renderWaveformTile(
     return;
   }
 
-  context.clearRect(0, 0, tileWidth, TILE_HEIGHT_PX);
+  context.clearRect(0, 0, tileWidth, tileHeight);
   context.fillStyle = "rgba(20, 20, 20, 0.72)";
   context.lineJoin = "round";
   context.lineCap = "round";
@@ -288,7 +344,7 @@ function renderWaveformTile(
 
   if (hasRightChannel) {
     context.fillStyle = "rgba(20, 20, 20, 0.18)";
-    context.fillRect(0, Math.round(TILE_HEIGHT_PX * 0.5), tileWidth, 1);
+    context.fillRect(0, Math.round(tileHeight * 0.5), tileWidth, 1);
     context.fillStyle = "rgba(20, 20, 20, 0.72)";
     drawChannelPeaks(
       context,
@@ -300,8 +356,8 @@ function renderWaveformTile(
       xDenominator,
       request.clipPixelWidth,
       tileStartPixel,
-      TILE_HEIGHT_PX * 0.25,
-      TILE_HEIGHT_PX * 0.2,
+      tileHeight * 0.25,
+      tileHeight * 0.2,
       shouldUseSteppedPeaks,
     );
     drawChannelPeaks(
@@ -314,8 +370,8 @@ function renderWaveformTile(
       xDenominator,
       request.clipPixelWidth,
       tileStartPixel,
-      TILE_HEIGHT_PX * 0.75,
-      TILE_HEIGHT_PX * 0.2,
+      tileHeight * 0.75,
+      tileHeight * 0.2,
       shouldUseSteppedPeaks,
     );
     return;
@@ -331,8 +387,8 @@ function renderWaveformTile(
     xDenominator,
     request.clipPixelWidth,
     tileStartPixel,
-    TILE_HEIGHT_PX * 0.5,
-    TILE_HEIGHT_PX * 0.42,
+    tileHeight * 0.5,
+    tileHeight * 0.42,
     shouldUseSteppedPeaks,
   );
 }
@@ -390,6 +446,16 @@ function drawChannelPeaks(
   context.fill();
 }
 
+type PendingTile = {
+  key: string;
+  namespace: string;
+  request: TileRequest;
+  tileStartPixel: number;
+  tileWidth: number;
+  tileHeight: number;
+  priority: number;
+};
+
 /**
  * Memoria del backing store de un tile. Cada superficie es RGBA de 8 bits, así
  * que son 4 bytes por píxel. Con los valores actuales (1024x256) sale
@@ -400,6 +466,83 @@ function tileByteSize(entry: Pick<TileEntry, "width" | "height">) {
   return entry.width * entry.height * 4;
 }
 
+/**
+ * Envolvente de la onda a muy baja resolución, dibujada DIRECTAMENTE sobre el
+ * lienzo de destino.
+ *
+ * Es el relleno mientras el tile de verdad está en la cola. Sin esto, sacar la
+ * rasterización del frame cambiaría un tirón por un parpadeo — el clip se
+ * quedaría con el marcador de "analizando" durante uno o dos frames al cruzar
+ * un paso de zoom, que es peor que el problema que se venía a resolver.
+ *
+ * Cuesta `SKETCH_BUCKETS` iteraciones, no las ~1024 de un tile, y no asigna
+ * ninguna superficie. Visualmente es la misma onda borrosa, que es como se
+ * comporta Ableton: aparece difusa y se afina sola.
+ */
+const SKETCH_BUCKETS = 48;
+
+export function drawWaveformSketch(
+  context: CanvasRenderingContext2D,
+  clip: ClipSummary,
+  waveform: WaveformSummaryDto,
+  pixelsPerSecond: number,
+  left: number,
+  width: number,
+  top: number,
+  height: number,
+) {
+  const lod = selectWaveformLod(waveform, pixelsPerSecond);
+  if (!lod || !lod.maxPeaks.length || clip.sourceDurationSeconds <= 0) {
+    return false;
+  }
+
+  const startRatio = clamp(
+    clip.sourceStartSeconds / clip.sourceDurationSeconds,
+    0,
+    1,
+  );
+  const spanRatio = clamp(
+    (clip.sourceWindowDurationSeconds ?? clip.durationSeconds) /
+      clip.sourceDurationSeconds,
+    0,
+    1,
+  );
+  const firstIndex = Math.floor(startRatio * lod.maxPeaks.length);
+  const lastIndex = Math.min(
+    lod.maxPeaks.length,
+    Math.ceil((startRatio + spanRatio) * lod.maxPeaks.length),
+  );
+  const span = lastIndex - firstIndex;
+  if (span <= 0) {
+    return false;
+  }
+
+  const centerY = top + height / 2;
+  const amplitude = height * 0.42;
+  const buckets = Math.max(2, Math.min(SKETCH_BUCKETS, Math.floor(width / 2)));
+
+  context.save();
+  context.fillStyle = "rgba(20, 20, 20, 0.55)";
+  context.beginPath();
+  for (let index = 0; index < buckets; index += 1) {
+    const source = firstIndex + Math.floor((index / buckets) * span);
+    const x = left + (index / (buckets - 1)) * width;
+    const y = centerY - clamp(lod.maxPeaks[source], -1, 1) * amplitude;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  }
+  for (let index = buckets - 1; index >= 0; index -= 1) {
+    const source = firstIndex + Math.floor((index / buckets) * span);
+    const x = left + (index / (buckets - 1)) * width;
+    const y = centerY - clamp(lod.minPeaks[source], -1, 1) * amplitude;
+    context.lineTo(x, y);
+  }
+  context.closePath();
+  context.fill();
+  context.restore();
+  return true;
+}
+
 export class WaveformTileCache {
   private readonly tiles = new Map<string, TileEntry>();
 
@@ -408,6 +551,30 @@ export class WaveformTileCache {
   /** Bytes de las superficies vivas, mantenido de forma incremental. */
   private byteEstimate = 0;
 
+  /**
+   * Tiles pedidos este pintado que aún no existen.
+   *
+   * Se vacía al principio de cada pintado (`beginPaint`) y lo rellena
+   * `getTile`, así que sólo contiene tiles **visibles ahora mismo**. Eso lo
+   * hace auto-podable: durante un zoom continuo, los tiles de un nivel que ya
+   * se abandonó desaparecen de la cola sin que nadie tenga que limpiarlos.
+   */
+  private pending = new Map<string, PendingTile>();
+
+  /** Vacía la cola de pendientes. Se llama una vez por pintado. */
+  beginPaint() {
+    this.pending.clear();
+  }
+
+  /**
+   * Devuelve el tile si está listo; si no, lo **encola** y devuelve null.
+   *
+   * Antes rasterizaba aquí mismo, dentro del frame de pintado. Medido en el
+   * build de medición: picos de frame de 27,7 / 41,7 / 55,5 / 69,4 / 76,5 ms
+   * coincidiendo con ráfagas de tiles, contra un presupuesto de 6,9 ms
+   * (144 Hz). Al cruzar un paso de zoom de 1,5x cambian de golpe TODOS los
+   * namespaces visibles, así que la ráfaga son decenas de tiles en un frame.
+   */
   getTile(request: TileRequest): WaveformTile | null {
     const namespace = tileNamespace(request);
     const tileStartPixel = request.tileIndex * WAVEFORM_TILE_WIDTH_PX;
@@ -425,51 +592,99 @@ export class WaveformTileCache {
     }
 
     const key = tileKey(namespace, request.tileIndex);
-    let entry = this.tiles.get(key);
-    if (!entry) {
-      const surface = createTileSurface(tileWidth, TILE_HEIGHT_PX);
-      if (!surface) {
-        return null;
-      }
-
-      const context = getTileContext(surface);
-      if (!context) {
-        return null;
-      }
-
-      // Fallo de caché: la rasterización ocurre AQUÍ, dentro del frame de
-      // pintado. Medirla es el punto del paso 01; repartirla, el del paso 04.
-      const rasterStartedAt = performance.now();
-      renderWaveformTile(context, request, tileStartPixel, tileWidth);
-      recordWaveformTileRender(performance.now() - rasterStartedAt);
-      entry = {
-        namespace,
-        canvas: surface,
-        width: tileWidth,
-        height: TILE_HEIGHT_PX,
-        lastUsedAt: ++this.accessCounter,
-      };
-      this.tiles.set(key, entry);
-      this.byteEstimate += tileByteSize(entry);
-      this.pruneLeastRecentlyUsedTiles();
-    } else {
+    const entry = this.tiles.get(key);
+    if (entry) {
       entry.lastUsedAt = ++this.accessCounter;
+      return {
+        canvas: entry.canvas,
+        tileStartPixel,
+        tileWidth: entry.width,
+      };
     }
 
-    return {
-      canvas: entry.canvas,
-      tileStartPixel,
-      tileWidth: entry.width,
-    };
+    const existing = this.pending.get(key);
+    if (!existing || request.priority < existing.priority) {
+      this.pending.set(key, {
+        key,
+        namespace,
+        request,
+        tileStartPixel,
+        tileWidth,
+        tileHeight: tileHeightForLane(request.laneHeightPx),
+        priority: request.priority,
+      });
+    }
+    return null;
   }
 
-  pruneNamespaces(activeNamespaces: Set<string>) {
-    for (const [key, entry] of this.tiles) {
-      if (!activeNamespaces.has(entry.namespace)) {
-        this.byteEstimate -= tileByteSize(entry);
-        this.tiles.delete(key);
+  /** ¿Queda trabajo encolado? */
+  hasPendingTiles() {
+    return this.pending.size > 0;
+  }
+
+  /**
+   * Rasteriza tiles encolados hasta agotar `budgetMs`, de más cerca del centro
+   * del viewport a más lejos. Devuelve cuántos rasterizó.
+   *
+   * El presupuesto se comprueba ANTES de cada tile, no después: así un tile
+   * caro puede pasarse del presupuesto, pero nunca se empieza uno sabiendo que
+   * ya no queda tiempo.
+   */
+  drainPendingTiles(budgetMs: number): number {
+    if (this.pending.size === 0) {
+      return 0;
+    }
+
+    const queue = [...this.pending.values()].sort(
+      (left, right) => left.priority - right.priority,
+    );
+    const startedAt = performance.now();
+    let rendered = 0;
+
+    for (const item of queue) {
+      if (rendered > 0 && performance.now() - startedAt >= budgetMs) {
+        break;
+      }
+      this.pending.delete(item.key);
+      if (this.rasterize(item)) {
+        rendered += 1;
       }
     }
+
+    return rendered;
+  }
+
+  private rasterize(item: PendingTile): boolean {
+    const surface = createTileSurface(item.tileWidth, item.tileHeight);
+    if (!surface) {
+      return false;
+    }
+    const context = getTileContext(surface);
+    if (!context) {
+      return false;
+    }
+
+    const rasterStartedAt = performance.now();
+    renderWaveformTile(
+      context,
+      item.request,
+      item.tileStartPixel,
+      item.tileWidth,
+      item.tileHeight,
+    );
+    recordWaveformTileRender(performance.now() - rasterStartedAt);
+
+    const entry: TileEntry = {
+      namespace: item.namespace,
+      canvas: surface,
+      width: item.tileWidth,
+      height: item.tileHeight,
+      lastUsedAt: ++this.accessCounter,
+    };
+    this.tiles.set(item.key, entry);
+    this.byteEstimate += tileByteSize(entry);
+    this.pruneLeastRecentlyUsedTiles();
+    return true;
   }
 
   /** Tiles vivos y bytes que ocupan. Lo publica el pintado en el HUD. */
@@ -477,32 +692,18 @@ export class WaveformTileCache {
     return { entries: this.tiles.size, bytes: this.byteEstimate };
   }
 
-  buildNamespace(
-    clip: ClipSummary,
-    waveform: WaveformSummaryDto,
-    pixelsPerSecond: number,
-  ) {
-    const renderPixelsPerSecond =
-      getWaveformRenderPixelsPerSecond(pixelsPerSecond);
-    return tileNamespace({
-      clip,
-      waveform,
-      pixelsPerSecond: renderPixelsPerSecond,
-      clipPixelWidth: Math.max(1, clip.durationSeconds * renderPixelsPerSecond),
-      tileIndex: 0,
-    });
-  }
-
   private pruneLeastRecentlyUsedTiles() {
-    if (this.tiles.size <= MAX_CACHED_TILES) {
+    if (this.byteEstimate <= MAX_CACHE_BYTES) {
       return;
     }
 
     const entriesByAge = [...this.tiles.entries()].sort(
       (left, right) => left[1].lastUsedAt - right[1].lastUsedAt,
     );
-    const deleteCount = Math.max(1, this.tiles.size - MAX_CACHED_TILES);
-    for (const [key, entry] of entriesByAge.slice(0, deleteCount)) {
+    for (const [key, entry] of entriesByAge) {
+      if (this.byteEstimate <= MAX_CACHE_BYTES) {
+        break;
+      }
       this.byteEstimate -= tileByteSize(entry);
       this.tiles.delete(key);
     }

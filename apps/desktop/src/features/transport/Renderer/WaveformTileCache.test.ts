@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { ClipSummary, WaveformSummaryDto } from "../desktopApi";
 import {
@@ -6,6 +6,8 @@ import {
   WaveformTileCache,
   decodeFloat32Peaks,
   selectWaveformLod,
+  tileHeightForLane,
+  tileNamespace,
 } from "./WaveformTileCache";
 
 function encodeFloat32Peaks(values: number[]) {
@@ -62,6 +64,24 @@ function buildClip(overrides?: Partial<ClipSummary>): ClipSummary {
   };
 }
 
+/** Clave de cache de un clip, con los valores por defecto del test. */
+function namespaceOf(
+  clip: ReturnType<typeof buildClip>,
+  waveform: ReturnType<typeof buildWaveform>,
+  pixelsPerSecond = 120,
+  laneHeightPx = 96,
+) {
+  return tileNamespace({
+    clip,
+    waveform,
+    pixelsPerSecond,
+    clipPixelWidth: Math.max(1, clip.durationSeconds * pixelsPerSecond),
+    tileIndex: 0,
+    laneHeightPx,
+    priority: 0,
+  });
+}
+
 describe("WaveformTileCache", () => {
   it("decodes float32 peaks from base64 payloads", () => {
     const decoded = decodeFloat32Peaks(
@@ -107,31 +127,39 @@ describe("WaveformTileCache", () => {
   });
 
   it("builds different namespaces when waveform identity inputs change", () => {
-    const cache = new WaveformTileCache();
-    const baseClip = buildClip();
-    const baseWaveform = buildWaveform();
-
-    const baseNamespace = cache.buildNamespace(baseClip, baseWaveform, 120);
-    const durationNamespace = cache.buildNamespace(
+    const baseNamespace = namespaceOf(buildClip(), buildWaveform());
+    const durationNamespace = namespaceOf(
       buildClip({ sourceDurationSeconds: 9 }),
-      baseWaveform,
-      120,
+      buildWaveform(),
     );
-    const waveformNamespace = cache.buildNamespace(
+    const waveformNamespace = namespaceOf(
       buildClip({ waveformKey: "audio/other.wav" }),
       buildWaveform({ waveformKey: "audio/other.wav" }),
-      120,
     );
 
     expect(durationNamespace).not.toBe(baseNamespace);
     expect(waveformNamespace).not.toBe(baseNamespace);
   });
 
+  it("builds different namespaces for different lane heights", () => {
+    // El alto entra en la clave desde el paso 04: un tile rasterizado para un
+    // carril de 32 px no sirve para uno de 128, y reutilizarlo lo estiraria.
+    const clip = buildClip();
+    const waveform = buildWaveform();
+    expect(namespaceOf(clip, waveform, 120, 30)).not.toBe(
+      namespaceOf(clip, waveform, 120, 120),
+    );
+    // Pero dentro del mismo escalon SI se reutiliza, o arrastrar el borde de
+    // una pista invalidaria la cache pixel a pixel.
+    expect(namespaceOf(clip, waveform, 120, 30)).toBe(
+      namespaceOf(clip, waveform, 120, 31),
+    );
+  });
+
   it("builds different namespaces for mono and stereo waveform tiles", () => {
-    const cache = new WaveformTileCache();
     const baseClip = buildClip();
-    const monoNamespace = cache.buildNamespace(baseClip, buildWaveform(), 120);
-    const stereoNamespace = cache.buildNamespace(
+    const monoNamespace = namespaceOf(baseClip, buildWaveform(), 120);
+    const stereoNamespace = namespaceOf(
       baseClip,
       buildWaveform({
         lods: [
@@ -158,5 +186,167 @@ describe("WaveformTileCache", () => {
     expect(getWaveformRenderPixelsPerSecond(72)).toBe(
       getWaveformRenderPixelsPerSecond(86),
     );
+  });
+});
+
+/**
+ * Paso 04 de docs/plans/ui-performance: la rasterización sale del frame.
+ *
+ * Medido antes del cambio: al cruzar un paso de zoom de 1,5x cambian de golpe
+ * TODOS los namespaces visibles, y los tiles se rasterizaban dentro del
+ * pintado. Picos de frame de 27,7 / 41,7 / 55,5 / 69,4 / 76,5 ms contra un
+ * presupuesto de 6,9 ms (144 Hz), y un pico de caché de 146 MB.
+ */
+/**
+ * jsdom no implementa canvas: `getContext("2d")` devuelve null, asi que la
+ * rasterizacion no llegaria a ocurrir y los tests medirian una cola que nunca
+ * se vacia. Un `OffscreenCanvas` de mentira con lo justo que usa
+ * `renderWaveformTile` es suficiente — aqui no se comprueban pixeles, se
+ * comprueba CUANDO y CUANTO se rasteriza.
+ */
+function installFakeCanvas() {
+  const context = {
+    clearRect() {},
+    fillRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    closePath() {},
+    fill() {},
+    set fillStyle(_value: string) {},
+    set lineJoin(_value: string) {},
+    set lineCap(_value: string) {},
+  };
+  class FakeOffscreenCanvas {
+    constructor(
+      public width: number,
+      public height: number,
+    ) {}
+    getContext() {
+      return context;
+    }
+  }
+  (globalThis as Record<string, unknown>).OffscreenCanvas = FakeOffscreenCanvas;
+}
+
+function removeFakeCanvas() {
+  delete (globalThis as Record<string, unknown>).OffscreenCanvas;
+}
+
+describe("cola de rasterización con presupuesto", () => {
+  beforeEach(installFakeCanvas);
+  afterEach(removeFakeCanvas);
+
+  function request(overrides: Record<string, unknown> = {}) {
+    return {
+      clip: buildClip(),
+      waveform: buildWaveform(),
+      pixelsPerSecond: 120,
+      clipPixelWidth: 4096,
+      tileIndex: 0,
+      laneHeightPx: 96,
+      priority: 0,
+      ...overrides,
+    } as Parameters<WaveformTileCache["getTile"]>[0];
+  }
+
+  it("NO rasteriza dentro de getTile: devuelve null y encola", () => {
+    const cache = new WaveformTileCache();
+
+    // Éste es el criterio del paso. Antes, este mismo getTile rasterizaba el
+    // tile entero antes de devolverlo.
+    expect(cache.getTile(request())).toBeNull();
+    expect(cache.hasPendingTiles()).toBe(true);
+    // Y no ocupa memoria hasta que se rasteriza de verdad.
+    expect(cache.stats().entries).toBe(0);
+  });
+
+  it("sirve el tile ya rasterizado sin volver a encolar", () => {
+    const cache = new WaveformTileCache();
+    cache.getTile(request());
+    expect(cache.drainPendingTiles(1000)).toBe(1);
+    expect(cache.hasPendingTiles()).toBe(false);
+
+    expect(cache.getTile(request())).not.toBeNull();
+    expect(cache.hasPendingTiles()).toBe(false);
+  });
+
+  it("vacía la cola al empezar un pintado, para no rasterizar lo ya invisible", () => {
+    // Durante un zoom continuo se piden tiles de niveles que se abandonan al
+    // frame siguiente. Si la cola no se vaciara, se rasterizarían igual.
+    const cache = new WaveformTileCache();
+    cache.getTile(request({ tileIndex: 0 }));
+    cache.getTile(request({ tileIndex: 1 }));
+    expect(cache.hasPendingTiles()).toBe(true);
+
+    cache.beginPaint();
+    expect(cache.hasPendingTiles()).toBe(false);
+    expect(cache.drainPendingTiles(1000)).toBe(0);
+  });
+
+  it("respeta el presupuesto en vez de vaciar la cola de golpe", () => {
+    const cache = new WaveformTileCache();
+    for (let index = 0; index < 40; index += 1) {
+      cache.getTile(request({ tileIndex: index, clipPixelWidth: 64 * 1024 }));
+    }
+
+    // Presupuesto cero: rasteriza UNO (nunca se queda parado del todo) y deja
+    // el resto para el frame siguiente.
+    expect(cache.drainPendingTiles(0)).toBe(1);
+    expect(cache.hasPendingTiles()).toBe(true);
+  });
+
+  it("rasteriza antes lo que está más cerca del centro del viewport", () => {
+    const cache = new WaveformTileCache();
+    cache.getTile(request({ tileIndex: 0, priority: 900 }));
+    cache.getTile(request({ tileIndex: 1, priority: 10 }));
+
+    cache.drainPendingTiles(0);
+    expect(cache.getTile(request({ tileIndex: 1, priority: 10 }))).not.toBeNull();
+    expect(cache.getTile(request({ tileIndex: 0, priority: 900 }))).toBeNull();
+  });
+});
+
+describe("altura del tile", () => {
+  beforeEach(installFakeCanvas);
+  afterEach(removeFakeCanvas);
+
+  it("cuantiza el alto del carril en escalones", () => {
+    expect(tileHeightForLane(18)).toBe(32);
+    expect(tileHeightForLane(32)).toBe(32);
+    expect(tileHeightForLane(33)).toBe(64);
+    expect(tileHeightForLane(96)).toBe(128);
+    expect(tileHeightForLane(148)).toBe(256);
+    // Por encima del último escalón no crece: 256 es el techo.
+    expect(tileHeightForLane(4000)).toBe(256);
+  });
+
+  it("un carril bajo no paga la memoria de uno alto", () => {
+    const low = new WaveformTileCache();
+    low.getTile({
+      clip: buildClip(),
+      waveform: buildWaveform(),
+      pixelsPerSecond: 120,
+      clipPixelWidth: 1024,
+      tileIndex: 0,
+      laneHeightPx: 18,
+      priority: 0,
+    });
+    low.drainPendingTiles(1000);
+
+    const tall = new WaveformTileCache();
+    tall.getTile({
+      clip: buildClip(),
+      waveform: buildWaveform(),
+      pixelsPerSecond: 120,
+      clipPixelWidth: 1024,
+      tileIndex: 0,
+      laneHeightPx: 148,
+      priority: 0,
+    });
+    tall.drainPendingTiles(1000);
+
+    // 32 px contra 256: ocho veces menos. Antes ambos rasterizaban a 256.
+    expect(tall.stats().bytes).toBe(low.stats().bytes * 8);
   });
 });

@@ -51,6 +51,8 @@ type TimelineRendererOptions = {
     snapshot: TrackSceneSnapshot,
     viewport: TimelineViewportMetrics,
   ) => void;
+  /** Rasteriza tiles pendientes con presupuesto. true = hizo trabajo. */
+  drainTileWork?: () => boolean;
 };
 
 function isRenderableCanvasSize(value: number) {
@@ -308,6 +310,19 @@ export class TimelineRenderer {
 
         if (willPaint) {
           recordCanvasRender(performance.now() - paintStartedAt);
+        }
+
+        // Rasterización de tiles de waveform, DESPUÉS de pintar y con
+        // presupuesto. Antes ocurría dentro del pintado, y al cruzar un paso
+        // de zoom de 1,5x se rasterizaban decenas de tiles en un solo frame:
+        // picos medidos de 27,7 a 76,5 ms contra un presupuesto de 6,9 ms
+        // (docs/plans/ui-performance/state/01.md).
+        //
+        // Si rasterizó algo, el frame siguiente tiene que repintar para
+        // mostrarlo; mientras haya cola, seguimos pidiendo repintado. El
+        // relleno de baja resolución tapa el hueco entretanto.
+        if (this.options.drainTileWork?.()) {
+          this.dirtyTracks = true;
         }
       }
     }
