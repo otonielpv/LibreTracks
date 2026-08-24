@@ -132,10 +132,21 @@ public:
         return oboe::DataCallbackResult::Continue;
     }
 
-    // Fired after AAudio closed the stream underneath us — typically a route
-    // change (headphones unplugged, BT device off). The engine sees the error
-    // via device_info().last_error; recovery is a fresh open_device() from
-    // the control layer. TODO(milestone 4): auto-reopen on route change.
+    // Fired (on an Oboe-internal thread) after AAudio tore the stream down
+    // underneath us. On Android that is not an exotic failure: it is what
+    // EVERY route change looks like — plugging a USB audio interface, pulling
+    // headphones, a Bluetooth device going away. AAudio never migrates an open
+    // stream to the new endpoint; the app is expected to open a fresh one.
+    //
+    // We do NOT reopen from here. Oboe permits it, but open/close would then
+    // race the control thread's own open_device()/close_device() and we would
+    // need a second lock on the hot path to make that safe. Instead the flag
+    // below surfaces through fallback_active(), and the Rust device watchdog
+    // (AudioController::device_watchdog_tick, ~2×/s) re-sends the configured
+    // device as CmdRecoverOutputDevice — the same, already-proven recovery
+    // path desktop uses after a suspend kills the endpoint. With a "system
+    // default" selection (the Android norm) that reopen lands on whatever
+    // AAudio now considers default, i.e. the interface just plugged in.
     void onErrorAfterClose(oboe::AudioStream* /*stream*/, oboe::Result error) override {
         last_error_ = std::string("oboe stream closed: ") + oboe::convertToText(error);
         error_flag_.store(true, std::memory_order_relaxed);
@@ -175,6 +186,14 @@ struct AudioDeviceManager::Impl {
     // system default). Reported back through device_info() so the control
     // layer can tell which endpoint is actually live.
     std::string open_device_id;
+    // "An output stream is supposed to be running." Set by open_device (even
+    // when the open then fails), cleared by close_device. fallback_active()
+    // needs it to tell "we deliberately have no output" (shut down) apart from
+    // "we should have one and don't" (open failed, or AAudio disconnected us) —
+    // only the latter is worth a watchdog retry. Atomic because the watchdog
+    // polls it through device_info() from a different thread than the control
+    // thread that opens and closes.
+    std::atomic<bool> want_stream{false};
 };
 
 AudioDeviceManager::AudioDeviceManager() : impl_(std::make_unique<Impl>()) {}
@@ -208,6 +227,11 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool /*force_resc
 Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
                                              AudioRenderCallback* callback) {
     close_device();
+    // After close_device(), which clears it. Armed BEFORE the open can fail so
+    // a failed open is retried by the watchdog instead of leaving the app
+    // silent — the endpoint a route change is switching to is routinely not
+    // ready for the first attempt.
+    impl_->want_stream.store(true, std::memory_order_relaxed);
 
     impl_->adaptor = std::make_unique<OboeCallbackAdaptor>(callback);
 
@@ -343,6 +367,7 @@ Result<void> AudioDeviceManager::close_device() {
     // The stream is fully torn down before the adaptor it points at dies.
     impl_->adaptor.reset();
     impl_->open_device_id.clear();
+    impl_->want_stream.store(false, std::memory_order_relaxed);
     return Result<void>::ok();
 }
 
@@ -388,6 +413,7 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.last_error  = impl_->last_error;
     if (impl_->adaptor && impl_->adaptor->has_error())
         info.last_error = impl_->adaptor->last_error();
+    info.fallback_active = fallback_active();
     return info;
 }
 
@@ -399,9 +425,24 @@ double AudioDeviceManager::take_callback_work_max_ms() {
     return impl_->adaptor ? impl_->adaptor->take_work_max_ms() : 0.0;
 }
 
-// Desktop-only feature for now: Oboe route changes are handled by AAudio
-// itself (TODO milestone 4 auto-reopen); no fallback pump on Android.
-bool AudioDeviceManager::fallback_active() const { return false; }
+// "There is no live output stream right now." Unlike the JUCE backend this is
+// not backed by a fallback clock pump — a disconnected AAudio stream simply
+// stops calling us, so the transport pauses for the ~2 s the watchdog takes to
+// reopen rather than running on silently. What matters is that it flips to
+// true, because two things downstream key off it:
+//   * the Rust watchdog retries CmdRecoverOutputDevice while it is true, and
+//   * CmdSetOutputDevice's idempotency guard is bypassed while it is true,
+//     so re-sending the very same device id (what recovery does) is not
+//     swallowed as a no-op.
+// Without it a USB interface plugged in mid-session left the app permanently
+// silent: AAudio had closed the stream and nothing ever opened another.
+bool AudioDeviceManager::fallback_active() const {
+    if (!impl_->want_stream.load(std::memory_order_relaxed))
+        return false;                       // shut down on purpose
+    if (!impl_->stream)
+        return true;                        // open failed — keep retrying
+    return impl_->adaptor && impl_->adaptor->has_error();  // AAudio disconnected us
+}
 
 } // namespace lt
 

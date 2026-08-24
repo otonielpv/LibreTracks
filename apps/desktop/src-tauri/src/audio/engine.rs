@@ -60,6 +60,11 @@ pub enum AudioBackendKind {
     Jack,
     DirectSound,
     Mme,
+    /// Android (Oboe → AAudio/OpenSL ES). The Settings UI hides the backend
+    /// selector there, but the device descriptors still carry it, and mapping
+    /// it to `Unknown` both mislabelled every Android device and logged a
+    /// bogus "unknown JUCE typename" line on every device-list refresh.
+    Oboe,
     Unknown,
 }
 
@@ -1690,7 +1695,12 @@ impl AudioController {
                 // reported when the user changes headphones between
                 // sessions. Checking first means we skip the doomed
                 // open entirely and go straight to system default.
-                let available = engine.list_devices().unwrap_or_default();
+                let mut available = engine.list_devices().unwrap_or_default();
+                // Same merge as list_devices(): on Android a saved USB-interface
+                // id lives only in the JNI enumeration, so probing the engine
+                // list alone declared it "gone", wiped the selection and fell
+                // back to the built-in speaker on every launch.
+                crate::platform::append_platform_output_devices(&mut available);
                 let device_exists = available
                     .iter()
                     .any(|d| d.device_id == device_id || d.device_name == device_id);
@@ -2033,9 +2043,15 @@ impl AudioController {
                 "list_devices: state locked".into(),
             ));
         };
-        let devices = ensure_engine(&mut state)?
+        let mut devices = ensure_engine(&mut state)?
             .list_devices_ext(force_rescan)
             .map_err(|e| DesktopError::AudioCommand(e.to_string()))?;
+        // Android: the engine's Oboe backend only knows the AAudio default
+        // route, so the concrete endpoints (USB interface, Bluetooth, wired)
+        // come from the JNI enumeration. Without this the Settings dropdown
+        // showed a single "system output" entry and a plugged-in USB audio
+        // interface was simply not listed. No-op on desktop.
+        crate::platform::append_platform_output_devices(&mut devices);
         Ok(devices_response(devices))
     }
 
@@ -3358,6 +3374,7 @@ fn backend_from_str(value: &str) -> AudioBackendKind {
         "jack" => AudioBackendKind::Jack,
         "directsound" | "direct_sound" | "direct sound" => AudioBackendKind::DirectSound,
         "mme" => AudioBackendKind::Mme,
+        "oboe" => AudioBackendKind::Oboe,
         other => {
             // Surface unknown backend typenames so we can extend the match
             // arms above instead of silently hiding the backend behind

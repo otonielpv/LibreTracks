@@ -1296,6 +1296,9 @@ export type AudioBackendKind =
   | "jack"
   | "direct_sound"
   | "mme"
+  // Android (Oboe -> AAudio). The Settings UI hides the backend selector on
+  // Android, but device descriptors still carry the backend.
+  | "oboe"
   | "unknown";
 
 export type AudioSampleFormat = "f32" | "i16" | "u16" | "unknown";
@@ -1330,6 +1333,7 @@ function normalizeAudioBackendKind(value: unknown): AudioBackendKind | null {
       "jack",
       "direct_sound",
       "mme",
+      "oboe",
       "unknown",
     ].includes(value)
     ? (value as AudioBackendKind)

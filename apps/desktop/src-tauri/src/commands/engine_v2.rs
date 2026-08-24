@@ -88,21 +88,11 @@ pub fn engine_v2_list_devices(
     let mut devices = with_engine(&state, |e| e.list_devices()).map_err(|e| e.to_string())?;
 
     // On Android the engine's Oboe backend only reports the AAudio default
-    // route as a single virtual "system output". Enumerate the concrete
-    // hardware endpoints (speaker / wired / USB interface / Bluetooth) via
-    // AudioManager.getDevices() and append them so the user can pick one. The
-    // engine's entry stays first as "system default" (empty device_id).
-    #[cfg(target_os = "android")]
-    {
-        let enumerated = crate::platform::android_audio_devices::enumerate_output_devices();
-        for device in enumerated {
-            // Guard against the (unlikely) duplicate id, keeping the engine's
-            // entry authoritative.
-            if !devices.iter().any(|d| d.device_id == device.device_id) {
-                devices.push(device);
-            }
-        }
-    }
+    // route as a single virtual "system output"; the concrete hardware
+    // endpoints (speaker / wired / USB interface / Bluetooth) come from
+    // AudioManager.getDevices(). Shared with the Settings path in
+    // AudioController::list_devices so the two lists can never drift again.
+    crate::platform::append_platform_output_devices(&mut devices);
 
     Ok(devices)
 }

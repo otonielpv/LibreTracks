@@ -63,7 +63,13 @@ pub fn enumerate_output_devices() -> Vec<DeviceInfo> {
                 backend: "oboe".to_string(),
                 sample_rate: 0,
                 buffer_size: 0,
-                output_channel_count: d.channel_count.max(1),
+                // Clamped to what the Oboe backend can actually drive. It
+                // renders a fixed stereo pair (`kOutputChannels` in
+                // audio_device_manager_oboe.cpp), so reporting the 4/8 outputs
+                // a multi-channel USB interface advertises would let Settings
+                // offer "Out 3/4" routes that play into nothing. Raise this
+                // together with the backend, not before it.
+                output_channel_count: d.channel_count.clamp(1, 2),
                 output_channel_names: Vec::new(),
                 // Empty means "unknown", never "supports nothing" — the rate
                 // planner reads it that way and leaves the device alone. This

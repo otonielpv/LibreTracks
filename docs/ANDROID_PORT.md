@@ -138,6 +138,37 @@ cmake --build build-android-x86_64
   tempo marker en mitad de la canción se aplica en vivo.
   Decoders: libsndfile + dr_mp3/dr_flac (sin FFmpeg ni vcpkg) +
   **MediaCodec del sistema** para todo lo demás (ver abajo).
+- **Selección de dispositivo de salida (2026-08-24)**: la lista de salidas
+  en Android se construye en DOS capas y hay que entender la división antes
+  de tocarla.
+  - El backend Oboe sólo conoce la **ruta por defecto de AAudio**:
+    `list_devices()` devuelve UNA entrada virtual con id vacío ("predeterminado
+    del sistema"). Los endpoints reales (altavoz, cascos, interfaz USB,
+    Bluetooth) están detrás de `AudioManager.getDevices()`, que es API sólo de
+    Java: se lee por JNI en `platform/android_audio_devices.rs` y los ids son
+    el `AudioDeviceInfo.getId()` entero, que viaja tal cual hasta
+    `AudioStreamBuilder::setDeviceId()`.
+  - Las dos capas se juntan en `platform::append_platform_output_devices`, y
+    **toda** enumeración del engine tiene que pasar por ahí: la lista de
+    Ajustes (`AudioController::list_devices`) y la sonda "¿sigue estando mi
+    dispositivo guardado?" de `apply_settings`. Cuando sólo lo hacía
+    `engine_v2_list_devices` — un comando que el frontend no llama nunca — una
+    interfaz USB enchufada era invisible en Ajustes y la selección guardada se
+    borraba en cada arranque. Lo vigila
+    `settings/audioDeviceEnumeration.test.ts`.
+  - **Cambio de ruta en caliente**: AAudio nunca migra un stream abierto al
+    endpoint nuevo; lo desconecta (`onErrorAfterClose`) y espera que la app
+    abra otro. El backend Oboe lo publica como `fallback_active()`, y quien
+    reabre es el watchdog de dispositivo que ya existía para desktop
+    (`AudioController::device_watchdog_tick`, ~2×/s → `RecoverOutputDevice`).
+    Con "predeterminado del sistema" seleccionado, esa reapertura cae sola en
+    la interfaz recién enchufada. A diferencia de desktop NO hay reloj de
+    respaldo: el transporte se queda quieto esos ~2 s en vez de seguir en
+    silencio.
+  - La salida es **estéreo fija** (`kOutputChannels`), así que la enumeración
+    recorta el número de canales a 2 aunque la interfaz anuncie 4 u 8. Si
+    algún día el backend rinde más canales, hay que subir las dos cosas
+    juntas.
 - **Bungee en Android (pitch/warp real, 2026-07-03)**: upstream no publica
   binario Android, así que se compila DE FUENTE con el NDK (estático + PIC,
   sin .so extra en el APK). Receta (repo en `D:\Repos\bungee`, tag v2.4.24 —
