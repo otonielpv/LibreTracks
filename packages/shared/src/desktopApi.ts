@@ -34,6 +34,7 @@ import type {
   TransportSnapshot,
   WaveformReadyEvent,
   WaveformSummaryDto,
+  WaveformWindowDto,
 } from "./models";
 
 export * from "./models";
@@ -269,6 +270,21 @@ export async function getWaveformSummaries(
   waveformKeys: string[],
 ): Promise<WaveformSummaryDto[]> {
   return invokeCommand<WaveformSummaryDto[]>("get_waveform_summaries", { waveformKeys });
+}
+
+export async function getWaveformWindow(
+  waveformKey: string,
+  startSeconds: number,
+  endSeconds: number,
+  bucketCount: number,
+): Promise<WaveformWindowDto | null> {
+  if (!isTauriApp) return null;
+  return invokeCommand<WaveformWindowDto | null>("get_waveform_window", {
+    waveformKey,
+    startSeconds,
+    endSeconds,
+    bucketCount,
+  });
 }
 
 export async function getLibraryWaveformSummaries(

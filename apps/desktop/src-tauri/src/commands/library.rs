@@ -1,7 +1,8 @@
 use tauri::{AppHandle, State};
 
 use crate::infra::error::DesktopError;
-use crate::models::{LibraryAssetSummary, WaveformSummaryDto};
+use crate::models::view::encode_peaks_base64;
+use crate::models::{LibraryAssetSummary, WaveformSummaryDto, WaveformWindowDto};
 use crate::state::DesktopState;
 
 #[tauri::command]
@@ -98,6 +99,40 @@ pub fn get_waveform_summaries(
     }
 
     result
+}
+
+/// High-resolution peaks for one visible tile. Runs on a blocking worker and
+/// deliberately never acquires `DesktopState::session`: zoom detail is
+/// cosmetic and must not serialize project commands. `None` is the normal
+/// fallback while the source is absent or still streaming.
+#[tauri::command]
+pub async fn get_waveform_window(
+    waveform_key: String,
+    start_seconds: f64,
+    end_seconds: f64,
+    bucket_count: usize,
+    state: State<'_, DesktopState>,
+) -> Result<Option<WaveformWindowDto>, String> {
+    let audio = std::sync::Arc::clone(&state.audio);
+    tauri::async_runtime::spawn_blocking(move || {
+        audio
+            .source_peaks_window(&waveform_key, start_seconds, end_seconds, bucket_count)
+            .map(|window| {
+                let rate = f64::from(window.sample_rate.max(1));
+                WaveformWindowDto {
+                    sample_rate: window.sample_rate,
+                    start_seconds: window.start_frame as f64 / rate,
+                    end_seconds: window.end_frame as f64 / rate,
+                    bucket_count: window.bucket_count,
+                    min_peaks_base64: encode_peaks_base64(&window.min_peaks),
+                    max_peaks_base64: encode_peaks_base64(&window.max_peaks),
+                    min_peaks_right_base64: encode_peaks_base64(&window.min_peaks_right),
+                    max_peaks_right_base64: encode_peaks_base64(&window.max_peaks_right),
+                }
+            })
+    })
+    .await
+    .map_err(|error| format!("waveform window worker failed: {error}"))
 }
 
 #[tauri::command]

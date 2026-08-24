@@ -534,6 +534,17 @@ export type WaveformSummaryDto = {
   lods: WaveformLodDto[];
 };
 
+export type WaveformWindowDto = {
+  sampleRate: number;
+  startSeconds: number;
+  endSeconds: number;
+  bucketCount: number;
+  minPeaksBase64: string;
+  maxPeaksBase64: string;
+  minPeaksRightBase64?: string;
+  maxPeaksRightBase64?: string;
+};
+
 export type WaveformLodDto = {
   resolutionFrames: number;
   bucketCount: number;

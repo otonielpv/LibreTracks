@@ -2536,6 +2536,48 @@ impl AudioController {
         engine.source_peaks(&source_id, resolution_frames).ok()
     }
 
+    /// Exact display-sized peaks for a visible source interval. This only
+    /// takes the audio-controller mutex; callers do not need (and must not
+    /// take) the project session lock while the PCM cache is read.
+    pub fn source_peaks_window(
+        &self,
+        waveform_key: &str,
+        start_seconds: f64,
+        end_seconds: f64,
+        bucket_count: usize,
+    ) -> Option<lt_audio_engine_v2::SourcePeaksWindow> {
+        if !start_seconds.is_finite()
+            || !end_seconds.is_finite()
+            || start_seconds < 0.0
+            || end_seconds <= start_seconds
+            || bucket_count == 0
+        {
+            return None;
+        }
+
+        let mut state = self.state.lock().ok()?;
+        let source_path = {
+            let path = Path::new(waveform_key);
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                state.song_dir.as_ref()?.join(path)
+            }
+        };
+        let source_id = normalize_engine_audio_path(&source_path.to_string_lossy());
+        let engine = state.engine.as_mut()?;
+        let sample_rate = engine.get_snapshot().ok()?.device.sample_rate;
+        if sample_rate <= 0 {
+            return None;
+        }
+        let rate = f64::from(sample_rate);
+        let start_frame = (start_seconds * rate).floor().max(0.0) as i64;
+        let end_frame = (end_seconds * rate).ceil().max(0.0) as i64;
+        engine
+            .source_peaks_window(&source_id, start_frame, end_frame, bucket_count)
+            .ok()
+    }
+
     pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, _song: Song) {
         // Source preparation is owned by the C++ engine after LoadSession.
         // Avoid issuing a second LoadSession immediately before Play; replacing

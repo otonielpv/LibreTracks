@@ -232,6 +232,7 @@ pub fn run() {
             commands::library::get_library_assets,
             commands::library::get_library_folders,
             commands::library::get_waveform_summaries,
+            commands::library::get_waveform_window,
             commands::library::get_library_waveform_summaries,
             audio::engine::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,

@@ -447,6 +447,21 @@ pub struct WaveformSummaryDto {
     pub lods: Vec<WaveformLodDto>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WaveformWindowDto {
+    pub sample_rate: u32,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+    pub bucket_count: usize,
+    pub min_peaks_base64: String,
+    pub max_peaks_base64: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub min_peaks_right_base64: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub max_peaks_right_base64: String,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAssetSummary {
@@ -896,7 +911,7 @@ fn waveform_lod_to_dto(lod: &WaveformLod) -> WaveformLodDto {
     }
 }
 
-fn encode_peaks_base64(values: &[f32]) -> String {
+pub(crate) fn encode_peaks_base64(values: &[f32]) -> String {
     let mut bytes = Vec::with_capacity(values.len() * std::mem::size_of::<f32>());
     for value in values {
         bytes.extend_from_slice(&value.to_le_bytes());
