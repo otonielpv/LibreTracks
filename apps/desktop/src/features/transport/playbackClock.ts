@@ -30,6 +30,11 @@ export type PlaybackVisualAnchor = {
   correctionSeconds: number;
 };
 
+export type VisualVampRange = {
+  startSeconds: number;
+  endSeconds: number;
+};
+
 /** Window over which a clock-drift correction is eased out (ms). Short enough
  * that a genuine change still resolves quickly; drift is only a few ms so the
  * ease is imperceptible. ~15 frames at 60fps. */
@@ -99,6 +104,28 @@ export function resolveVisualPlaybackPosition(
     elapsedSeconds * playbackRate +
     resolveVisualCorrectionSeconds(anchor, nowMs)
   );
+}
+
+/** Mirrors an active VAMP in the frame-by-frame visual clock. The native
+ * engine performs the audio wrap sample-exactly, while transport snapshots
+ * arrive less frequently; wrapping here prevents the playhead and Live marker
+ * matrix from briefly entering the following section before that confirmation
+ * arrives. */
+export function resolveVisualPositionAcrossVamp(
+  positionSeconds: number,
+  activeVamp: VisualVampRange | null | undefined,
+): number {
+  if (!activeVamp || positionSeconds < activeVamp.endSeconds) {
+    return positionSeconds;
+  }
+
+  const durationSeconds = activeVamp.endSeconds - activeVamp.startSeconds;
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return positionSeconds;
+  }
+
+  const overshootSeconds = positionSeconds - activeVamp.endSeconds;
+  return activeVamp.startSeconds + (overshootSeconds % durationSeconds);
 }
 
 /**

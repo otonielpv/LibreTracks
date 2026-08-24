@@ -351,6 +351,7 @@ import {
   CLOCK_RESYNC_MAX_SMOOTH_SECONDS,
   resolveFollowCameraX,
   resolveVisualPlaybackPosition,
+  resolveVisualPositionAcrossVamp,
 } from "./playbackClock";
 import {
   buildAudioRoutingOptions,
@@ -3093,6 +3094,7 @@ export function TransportPanelContent() {
     if (
       !snapshot ||
       !pendingJump ||
+      pendingJump.transition !== "instant" ||
       snapshot.playbackState !== "playing" ||
       positionSeconds < pendingJump.executeAtSeconds
     ) {
@@ -3160,7 +3162,10 @@ export function TransportPanelContent() {
     };
 
     syncLivePosition(
-      isRunning ? anchorPositionSeconds : nextSnapshot.positionSeconds,
+      resolveVisualPositionAcrossVamp(
+        isRunning ? anchorPositionSeconds : nextSnapshot.positionSeconds,
+        nextSnapshot.activeVamp,
+      ),
     );
   }
 
@@ -3173,7 +3178,10 @@ export function TransportPanelContent() {
       songDurationSecondsRef.current;
 
     return clamp(
-      resolveVisualPlaybackPosition(anchor, nowMs),
+      resolveVisualPositionAcrossVamp(
+        resolveVisualPlaybackPosition(anchor, nowMs),
+        snapshotRef.current?.activeVamp,
+      ),
       0,
       durationSeconds || Number.MAX_SAFE_INTEGER,
     );
@@ -4489,7 +4497,10 @@ export function TransportPanelContent() {
 
       const anchor = playbackVisualAnchorRef.current;
       const nextPositionSeconds = resolveVisualPositionAcrossPendingJump(
-        resolveVisualPlaybackPosition(anchor, nowMs),
+        resolveVisualPositionAcrossVamp(
+          resolveVisualPlaybackPosition(anchor, nowMs),
+          snapshotRef.current?.activeVamp,
+        ),
       );
 
       syncLivePosition(nextPositionSeconds);
@@ -7998,7 +8009,7 @@ export function TransportPanelContent() {
                       settings={appSettings}
                       pendingMarkerId={pendingMarkerJump?.targetMarkerId ?? null}
                       pendingMarkerName={pendingMarkerJump?.targetMarkerName ?? null}
-                      isVampActive={Boolean(activeVamp)}
+                      activeVamp={activeVamp}
                       onViewModeChange={setViewMode}
                       onMarkerAction={(marker) => void runAction(() => handleMarkerPrimaryAction(marker))}
                       onSongAction={(region) => handleCompactPlaySong(region.id, region.name)}
@@ -8013,6 +8024,7 @@ export function TransportPanelContent() {
                       onGlobalJumpBarsChange={handleGlobalJumpBarsChange}
                       onSongJumpTriggerChange={handleSongJumpTriggerChange}
                       onSongJumpBarsChange={handleSongJumpBarsChange}
+                      onSongTransitionModeChange={handleSongTransitionModeChange}
                       onVampModeChange={handleVampModeChange}
                       onVampBarsChange={handleVampBarsChange}
                     />

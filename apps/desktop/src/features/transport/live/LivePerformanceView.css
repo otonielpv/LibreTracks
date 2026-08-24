@@ -193,6 +193,32 @@
   background: rgb(87 241 219 / 0.12);
 }
 
+.lt-live-song-transition {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 0.3rem;
+  background: #080a09;
+}
+
+.lt-live-song-transition button {
+  min-height: 1.55rem;
+  padding: 0.25rem 0.38rem;
+  border: 0;
+  border-radius: 0.22rem;
+  color: #778680;
+  background: transparent;
+  font: 700 8px/1 "Space Grotesk", sans-serif;
+  white-space: nowrap;
+}
+
+.lt-live-song-transition button.is-active {
+  color: #66f1dc;
+  background: rgb(87 241 219 / 0.14);
+  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.22);
+}
+
 .lt-live-cue-panel {
   grid-area: cues;
   min-height: 0;
@@ -224,6 +250,9 @@
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(13rem, 1fr));
+  /* Keep the matrix geometry stable when AVISO/AHORA/countdown lines change.
+     Compact layouts restore automatic rows below so content can still grow. */
+  grid-auto-rows: 3.8rem;
   align-content: start;
   gap: 0.42rem;
   padding: 0.3rem 0.55rem 0.55rem;
@@ -278,6 +307,10 @@
 .lt-live-cue-row.is-pending {
   border-color: #f4c95d;
   background: rgb(70 54 13 / 0.38);
+}
+
+.lt-live-cue-row.is-vamp {
+  box-shadow: inset 0 0 0 1px rgb(179 126 255 / 0.34);
 }
 
 .lt-live-cue-row.is-past:not(.is-active) {
@@ -336,6 +369,12 @@
   border-style: solid;
   border-color: rgb(244 201 93 / 0.48);
   color: #f4c95d;
+}
+
+.lt-live-cue-name-line em.is-vamp {
+  border-style: solid;
+  border-color: rgb(179 126 255 / 0.55);
+  color: #cba5ff;
 }
 
 .lt-live-cue-warnings {
@@ -464,6 +503,7 @@
 }
 
 .lt-live-region-row {
+  box-sizing: border-box;
   flex: 0 0 auto;
   max-width: 12rem;
   display: grid;
@@ -676,8 +716,15 @@
     font-size: 7px;
   }
 
+  .lt-live-song-transition button {
+    min-height: 1.3rem;
+    padding-inline: 0.25rem;
+    font-size: 7px;
+  }
+
   .lt-live-cue-grid {
     grid-template-columns: repeat(2, minmax(11rem, 1fr));
+    grid-auto-rows: auto;
     gap: 0.22rem;
     padding: 0.12rem 0.25rem 0.25rem;
   }

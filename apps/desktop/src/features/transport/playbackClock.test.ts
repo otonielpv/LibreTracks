@@ -8,6 +8,7 @@ import {
   resolveFollowCameraX,
   resolveVisualCorrectionSeconds,
   resolveVisualPlaybackPosition,
+  resolveVisualPositionAcrossVamp,
 } from "./playbackClock";
 
 function anchor(overrides: Partial<PlaybackVisualAnchor>): PlaybackVisualAnchor {
@@ -72,6 +73,30 @@ describe("resolveVisualPlaybackPosition", () => {
     });
 
     expect(resolveVisualPlaybackPosition(a, 3_500)).toBe(10);
+  });
+});
+
+describe("resolveVisualPositionAcrossVamp", () => {
+  const vamp = { startSeconds: 10, endSeconds: 20 };
+
+  it("keeps the position inside the section before its end", () => {
+    expect(resolveVisualPositionAcrossVamp(19.999, vamp)).toBe(19.999);
+  });
+
+  it("wraps directly to the VAMP start at the section boundary", () => {
+    expect(resolveVisualPositionAcrossVamp(20, vamp)).toBe(10);
+  });
+
+  it("preserves overshoot without exposing the following section", () => {
+    expect(resolveVisualPositionAcrossVamp(20.125, vamp)).toBeCloseTo(10.125, 6);
+    expect(resolveVisualPositionAcrossVamp(40.125, vamp)).toBeCloseTo(10.125, 6);
+  });
+
+  it("ignores missing or invalid ranges", () => {
+    expect(resolveVisualPositionAcrossVamp(20, null)).toBe(20);
+    expect(
+      resolveVisualPositionAcrossVamp(20, { startSeconds: 20, endSeconds: 20 }),
+    ).toBe(20);
   });
 });
 

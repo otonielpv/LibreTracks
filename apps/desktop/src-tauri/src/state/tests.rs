@@ -1,6 +1,6 @@
 use std::{fs, path::Path, thread, time::Duration};
 
-use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
+use libretracks_audio::{JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType};
 use libretracks_core::{
     source_seconds_at_view, validate_song, warp_timeline_seconds_at, Clip, Marker, MarkerKind,
     Song, SongRegion, TempoMarker, Track, TrackKind,
@@ -15,6 +15,7 @@ use crate::audio::automation::AutomationDocument;
 use crate::models::view::{musical_position_summary, song_to_view};
 use crate::models::LibraryAssetSummary;
 
+use super::automation_runtime::native_region_jump_trigger_view_seconds;
 use super::{
     build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
     place_bundled_audio_and_repoint, realign_regions_after_warp_tempo_change,
@@ -23,6 +24,40 @@ use super::{
     CreateAudioTrackWithClipRequest, CreateClipRequest, DesktopSession, TransportClock,
     WaveformMemoryCache,
 };
+
+#[test]
+fn immediate_fade_native_jump_lands_after_the_fade() {
+    let song = demo_song();
+    let pending = PendingMarkerJump {
+        target_marker_id: "region_1".into(),
+        target_marker_name: "Move Demo".into(),
+        target_digit: None,
+        trigger: JumpTrigger::Immediate,
+        execute_at_seconds: 1.25,
+        transition: TransitionType::FadeOut {
+            duration_seconds: 0.35,
+        },
+    };
+
+    assert!((native_region_jump_trigger_view_seconds(&song, &pending) - 1.6).abs() < 1e-9);
+}
+
+#[test]
+fn delayed_fade_native_jump_keeps_its_musical_trigger() {
+    let song = demo_song();
+    let pending = PendingMarkerJump {
+        target_marker_id: "region_1".into(),
+        target_marker_name: "Move Demo".into(),
+        target_digit: None,
+        trigger: JumpTrigger::AfterBars(2),
+        execute_at_seconds: 4.0,
+        transition: TransitionType::FadeOut {
+            duration_seconds: 0.35,
+        },
+    };
+
+    assert!((native_region_jump_trigger_view_seconds(&song, &pending) - 4.0).abs() < 1e-9);
+}
 
 fn demo_song() -> Song {
     Song {

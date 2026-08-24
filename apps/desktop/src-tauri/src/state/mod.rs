@@ -1944,6 +1944,14 @@ impl DesktopSession {
             self.cancel_native_scheduled_jumps(audio)?;
         }
 
+        if was_playing && trigger == JumpTrigger::Immediate {
+            if let TransitionType::FadeOut { duration_seconds } = &transition {
+                // The jump has now been armed for the end of this fade, so the
+                // audible transition can safely begin.
+                audio.start_master_fade(0.0, *duration_seconds)?;
+            }
+        }
+
         Ok(self.snapshot())
     }
 

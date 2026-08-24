@@ -10,7 +10,7 @@ import { LivePerformanceView } from "./LivePerformanceView";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { name?: string; time?: string }) => {
+    t: (key: string, values?: { name?: string; time?: string; count?: number }) => {
       const messages: Record<string, string> = {
         "liveView.title": "Live View",
         "liveView.selectSong": `Show markers for ${values?.name}`,
@@ -81,7 +81,7 @@ describe("LivePerformanceView", () => {
         settings={DEFAULT_APP_SETTINGS}
         pendingMarkerId={pendingMarkerId}
         pendingMarkerName={pendingMarkerName}
-        isVampActive={false}
+        activeVamp={null}
         onViewModeChange={vi.fn()}
         onMarkerAction={vi.fn()}
         onSongAction={onSongAction}
@@ -91,6 +91,7 @@ describe("LivePerformanceView", () => {
         onGlobalJumpBarsChange={vi.fn()}
         onSongJumpTriggerChange={vi.fn()}
         onSongJumpBarsChange={vi.fn()}
+        onSongTransitionModeChange={vi.fn()}
         onVampModeChange={vi.fn()}
         onVampBarsChange={vi.fn()}
       />
@@ -128,5 +129,47 @@ describe("LivePerformanceView", () => {
       (screen.getByRole("button", { name: "liveView.cancelJump" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it("exposes the song transition and identifies the marker repeated by VAMP", () => {
+    const onSongTransitionModeChange = vi.fn();
+    const settings = {
+      ...DEFAULT_APP_SETTINGS,
+      songTransitionMode: "fade_out" as const,
+      vampMode: "bars" as const,
+      vampBars: 4,
+    };
+
+    const { container } = render(
+      <LivePerformanceView
+        song={song}
+        positionSecondsRef={{ current: 10 }}
+        settings={settings}
+        pendingMarkerId={null}
+        pendingMarkerName={null}
+        activeVamp={{ startSeconds: 10, endSeconds: 18 }}
+        onViewModeChange={vi.fn()}
+        onMarkerAction={vi.fn()}
+        onSongAction={vi.fn()}
+        onToggleVamp={vi.fn()}
+        onCancelPendingJump={vi.fn()}
+        onGlobalJumpModeChange={vi.fn()}
+        onGlobalJumpBarsChange={vi.fn()}
+        onSongJumpTriggerChange={vi.fn()}
+        onSongJumpBarsChange={vi.fn()}
+        onSongTransitionModeChange={onSongTransitionModeChange}
+        onVampModeChange={vi.fn()}
+        onVampBarsChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "liveView.fadeOut" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "liveView.cleanCut" }));
+    expect(onSongTransitionModeChange).toHaveBeenCalledWith("instant");
+    expect(container.querySelector(".lt-live-cue-row.is-vamp")?.textContent)
+      .toContain("liveView.vampBarsBadge");
   });
 });

@@ -13,6 +13,7 @@ import {
   getEffectiveBpmAt,
   markerColor,
   regionEffectiveKey,
+  type ActiveVampSummary,
   type AppSettings,
   type SectionMarkerSummary,
   type SongRegionSummary,
@@ -40,7 +41,7 @@ type LivePerformanceViewProps = {
   settings: AppSettings;
   pendingMarkerId: string | null;
   pendingMarkerName: string | null;
-  isVampActive: boolean;
+  activeVamp: ActiveVampSummary | null;
   onViewModeChange: (mode: ViewMode) => void;
   onMarkerAction: (marker: SectionMarkerSummary) => void;
   onSongAction: (region: SongRegionSummary) => void;
@@ -50,6 +51,7 @@ type LivePerformanceViewProps = {
   onGlobalJumpBarsChange: (bars: number) => void;
   onSongJumpTriggerChange: (trigger: AppSettings["songJumpTrigger"]) => void;
   onSongJumpBarsChange: (bars: number) => void;
+  onSongTransitionModeChange: (mode: AppSettings["songTransitionMode"]) => void;
   onVampModeChange: (mode: AppSettings["vampMode"]) => void;
   onVampBarsChange: (bars: number) => void;
 };
@@ -116,7 +118,7 @@ function LivePerformanceViewComponent({
   settings,
   pendingMarkerId,
   pendingMarkerName,
-  isVampActive,
+  activeVamp,
   onViewModeChange,
   onMarkerAction,
   onSongAction,
@@ -126,6 +128,7 @@ function LivePerformanceViewComponent({
   onGlobalJumpBarsChange,
   onSongJumpTriggerChange,
   onSongJumpBarsChange,
+  onSongTransitionModeChange,
   onVampModeChange,
   onVampBarsChange,
 }: LivePerformanceViewProps) {
@@ -197,6 +200,13 @@ function LivePerformanceViewComponent({
     activeGroup?.startSeconds ?? null,
     nextGroup?.startSeconds ?? selectedRegion?.endSeconds ?? null,
   );
+  const isVampActive = activeVamp !== null;
+  const vampGroupId = useMemo(() => {
+    if (!activeVamp) return null;
+    return [...groups]
+      .reverse()
+      .find((group) => group.startSeconds <= activeVamp.startSeconds + 0.001)?.id ?? null;
+  }, [activeVamp, groups]);
 
   useLiveProgressBars({
     positionSecondsRef,
@@ -245,6 +255,10 @@ function LivePerformanceViewComponent({
     { value: "section", label: t("liveView.section") },
     { value: "bars", label: t("liveView.bars") },
   ];
+  const songTransitionOptions = [
+    { value: "instant", label: t("liveView.cleanCut") },
+    { value: "fade_out", label: t("liveView.fadeOut") },
+  ];
 
   return (
     <main className="lt-live-view" aria-label={t("liveView.title")}>
@@ -279,6 +293,28 @@ function LivePerformanceViewComponent({
           onChange={(value) => onSongJumpTriggerChange(value as AppSettings["songJumpTrigger"])}
           bars={settings.songJumpTrigger === "after_bars" ? settings.songJumpBars : undefined}
           onBarsChange={onSongJumpBarsChange}
+          action={(
+            <span
+              className="lt-live-song-transition"
+              role="group"
+              aria-label={t("liveView.songTransition")}
+            >
+              {songTransitionOptions.map((option) => (
+                <button
+                  type="button"
+                  key={option.value}
+                  className={settings.songTransitionMode === option.value ? "is-active" : ""}
+                  aria-pressed={settings.songTransitionMode === option.value}
+                  title={`${t("liveView.songTransition")}: ${option.label}`}
+                  onClick={() => onSongTransitionModeChange(
+                    option.value as AppSettings["songTransitionMode"],
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </span>
+          )}
         />
         <SettingCard
           label={t("liveView.vampType")}
@@ -321,12 +357,13 @@ function LivePerformanceViewComponent({
               ? groupContainsMarker(group, pendingMarkerId)
               : false;
             const isPast = activeGroupIndex >= 0 && index < activeGroupIndex;
+            const isVampAnchor = group.id === vampGroupId;
             return (
               <button
                 type="button"
                 key={group.id}
                 ref={(node) => { rowRefs.current[group.id] = node; }}
-                className={`lt-live-cue-row${isActive ? " is-active" : ""}${isNext ? " is-next" : ""}${isPending ? " is-pending" : ""}${isPast ? " is-past" : ""}${group.category === "cue" ? " is-cue" : ""}`}
+                className={`lt-live-cue-row${isActive ? " is-active" : ""}${isNext ? " is-next" : ""}${isPending ? " is-pending" : ""}${isPast ? " is-past" : ""}${isVampAnchor ? " is-vamp" : ""}${group.category === "cue" ? " is-cue" : ""}`}
                 style={{ "--lt-live-marker-color": markerColor(group.primary) } as CSSProperties}
                 onClick={() => onMarkerAction(group.primary)}
               >
@@ -337,6 +374,18 @@ function LivePerformanceViewComponent({
                     {group.category === "cue" ? <em>{t("liveView.warning")}</em> : null}
                     {isActive ? <em className="is-now">{t("liveView.now")}</em> : null}
                     {isPending ? <em className="is-queued">{t("liveView.queued")}</em> : null}
+                    {isVampAnchor ? (
+                      <em
+                        className="is-vamp"
+                        title={settings.vampMode === "section"
+                          ? t("liveView.vampSectionFeedback")
+                          : t("liveView.vampBarsFeedback", { count: settings.vampBars })}
+                      >
+                        {settings.vampMode === "section"
+                          ? t("liveView.vampSectionBadge")
+                          : t("liveView.vampBarsBadge", { count: settings.vampBars })}
+                      </em>
+                    ) : null}
                   </span>
                   {group.cues.length > 0 ? (
                     <span className="lt-live-cue-warnings">

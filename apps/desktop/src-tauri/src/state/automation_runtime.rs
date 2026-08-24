@@ -26,6 +26,23 @@ use super::{
     DesktopSession, PendingAutomationJump,
 };
 
+pub(super) fn native_region_jump_trigger_view_seconds(
+    source_song: &Song,
+    pending_jump: &PendingMarkerJump,
+) -> f64 {
+    let execute_at_view_seconds =
+        warp_timeline_seconds_at(source_song, pending_jump.execute_at_seconds);
+    match (&pending_jump.trigger, &pending_jump.transition) {
+        // "Immediate + fade" means start fading now and land when that fade
+        // finishes. Scheduling at execute_at itself races a frame that is
+        // already being rendered, so the native mixer can miss the jump.
+        (JumpTrigger::Immediate, TransitionType::FadeOut { duration_seconds }) => {
+            execute_at_view_seconds + (*duration_seconds).max(0.0)
+        }
+        _ => execute_at_view_seconds,
+    }
+}
+
 impl DesktopSession {
     pub fn upsert_automation_cue(
         &mut self,
@@ -845,8 +862,7 @@ impl DesktopSession {
             .iter()
             .find(|region| region.id == pending_jump.target_marker_id)
             .map(|region| warp_timeline_seconds_at(source_song, region.start_seconds));
-        let trigger_seconds =
-            warp_timeline_seconds_at(source_song, pending_jump.execute_at_seconds);
+        let trigger_seconds = native_region_jump_trigger_view_seconds(source_song, pending_jump);
         if jump_debug_logging_enabled() {
             eprintln!(
                 "[LT_JUMP_DEBUG][state] native_region_schedule target={} source_execute={:.9} view_execute={:.9} view_target={:?}",

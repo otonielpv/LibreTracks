@@ -1357,15 +1357,27 @@ export const testDesktopApiMock = {
     const trigger = state.appSettings.songJumpTrigger;
     const bars = Math.max(1, Math.floor(state.appSettings.songJumpBars));
     const transition = state.appSettings.songTransitionMode;
+    const transitionLabel: TransitionTypeLabel =
+      transition === "fade_out" ? "fade_out:0.35" : "instant";
 
-    if (trigger === "immediate") {
+    if (trigger === "immediate" && transition === "instant") {
       state.playbackPositionSeconds = region.startSeconds;
       state.pendingMarkerJump = null;
       return clone(buildSnapshot());
     }
 
-    const transitionLabel: TransitionTypeLabel =
-      transition === "fade_out" ? "fade_out:0.35" : "instant";
+    if (trigger === "immediate") {
+      state.pendingMarkerJump = {
+        targetMarkerId: region.id,
+        targetMarkerName: region.name,
+        targetDigit: null,
+        trigger: "immediate",
+        executeAtSeconds: state.playbackPositionSeconds,
+        targetSeconds: region.startSeconds,
+        transition: transitionLabel,
+      };
+      return clone(buildSnapshot());
+    }
 
     if (trigger === "next_marker") {
       const hasMarkerAhead = state.song.sectionMarkers.some(
