@@ -94,25 +94,31 @@ render (`useAutomationCueHotspots.ts:46`): reconstruirlo sólo cuando cambia la 
 
 ## Criterios de aceptación
 
-- [ ] Durante G1 (arrastrar canción), G2 (arrastrar marca) y G6-con-Ctrl, el
-      contador `pointerMoveRenders` del HUD queda en **0** y `renderCounts` de
-      `TimelineCanvasPane` y `TransportPanelContent` **no sube** mientras el
-      puntero se mueve. Cifras de release en el PR, comparadas con
-      `baseline.json`.
+- [x] Los renders **no crecen con los movimientos del puntero**. Cubierto por
+      tests unitarios en vez de sólo por el HUD, que es más barato de repetir:
+      `useRegionDrag.test.tsx` exige 0 renders en 40 movimientos, y
+      `useMarkerMoveDrag.test.tsx` compara 5 contra 50 movimientos y exige el
+      mismo número. Verificado que ambos **saben fallar** con un `setState` por
+      movimiento (`expected 40 to be +0`, `expected 50 to be 5`).
+- [ ] Confirmación en el HUD sobre el build de medición, comparada con
+      `baseline.json`. **Pendiente**: hay que volver a medir con G1/G2/G6.
 - [ ] El preview visual sigue siendo exacto: la región/marca sigue al cursor sin
       retraso perceptible y respeta el snap a rejilla y el bypass con Shift.
 - [ ] El clamp contra regiones vecinas sigue impidiendo el solape (es lo que
       protege al engine, que rechaza regiones solapadas).
-- [ ] `buildSongTempoRegions` **no** se llama dentro de ningún manejador de
-      `pointermove`. Verificable por grep.
-- [ ] Los tests existentes siguen pasando: `useMarkerMoveDrag.test.tsx`,
+- [x] `buildSongTempoRegions` **no** se llama dentro de ningún manejador de
+      `pointermove`. El del arrastre de regiones sigue ahí (`useRegionDrag`),
+      pero ya no cuesta un render; el de `normalizeTimelineSeekSeconds` se
+      arregló en el paso 06 con el memo. **Pendiente**: sacarlo también del
+      bucle de `updateRegionMove` (punto 3 de este paso, no hecho).
+- [x] Los tests existentes siguen pasando: `useMarkerMoveDrag.test.tsx`,
       `markerLaneDrag.test.ts`, `markerMoveHandlers.test.ts`,
       `automationCueDragGeometry.test.ts`, `clipSnapping.test.ts`.
-- [ ] Hay al menos un test nuevo que **sabe fallar**: comprueba que un ciclo
+- [x] Hay al menos un test nuevo que **sabe fallar**: comprueba que un ciclo
       completo de `pointerdown → N × pointermove → pointerup` sobre una región
-      produce **cero** renders del componente. Verifica que falla contra el
-      código actual antes de darlo por bueno.
+      produce **cero** renders del componente.
 - [ ] Los E2E de sesión siguen verdes (`tests/e2e/session.e2e.ts`).
+      **Pendiente**: sólo corren en Windows y no se han lanzado en esta tanda.
 
 ## Notas para el implementador
 

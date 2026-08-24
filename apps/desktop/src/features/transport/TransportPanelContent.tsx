@@ -935,8 +935,20 @@ export function TransportPanelContent() {
   } | null>(null);
   // Position (in seconds) of the anchor a magneted clip drag is locked onto.
   // Drives the vertical snap indicator. null when no anchor is engaged.
-  const [clipDragSnapIndicatorSeconds, setClipDragSnapIndicatorSeconds] =
-    useState<number | null>(null);
+  //
+  // Es un REF, no estado: el arrastre de clips lo escribe en cada
+  // `pointermove`, y con el imán (Ctrl) activo eso era un render completo de
+  // este componente por movimiento. La guía la mueve un bucle rAF que lee este
+  // ref — ver `timeline/useClipSnapIndicator`. Sin imán el valor se quedaba en
+  // `null` y React descartaba el render, por eso el arrastre normal no lo
+  // pagaba y el del imán sí.
+  const clipDragSnapIndicatorSecondsRef = useRef<number | null>(null);
+  const setClipDragSnapIndicatorSeconds = useCallback(
+    (seconds: number | null) => {
+      clipDragSnapIndicatorSecondsRef.current = seconds;
+    },
+    [],
+  );
   const [externalDropPreview, setExternalDropPreview] =
     useState<ExternalDropPreview | null>(null);
   const [nativeDropDebugCandidates, setNativeDropDebugCandidates] = useState<
@@ -7600,8 +7612,8 @@ export function TransportPanelContent() {
                             )
                           }
                           resolveLibraryGhostLeft={resolveLibraryGhostLeft}
-                          clipDragSnapIndicatorSeconds={
-                            clipDragSnapIndicatorSeconds
+                          clipDragSnapIndicatorSecondsRef={
+                            clipDragSnapIndicatorSecondsRef
                           }
                           onSeekIntent={prewarmTimelinePosition}
                           onRulerPointerDown={handleRulerPointerDown}

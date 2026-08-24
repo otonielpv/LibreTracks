@@ -4519,6 +4519,10 @@ textarea {
 
 .lt-automation-hotspot {
   position: absolute;
+  /* La posición horizontal viaja por `transform` (la escribe el bucle rAF de
+     useAutomationCueHotspots) para no invalidar layout en cada frame; el
+     origen se ancla aquí. */
+  left: 0;
   /* Target around the diamond only (drawn at the lane centre). Big enough to be
      comfortable to click/right-click, but not so wide it swallows clicks meant
      for the playhead seek on the rest of the lane. Centred on the cue X via

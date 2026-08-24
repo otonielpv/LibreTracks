@@ -11,6 +11,7 @@ import type {
   ActiveVampSummary,
   PendingAutomationCueSummary,
   PendingJumpSummary,
+  MarkerCategory,
   SectionMarkerSummary,
   SongRegionSummary,
   TempoMarkerSummary,
@@ -69,6 +70,19 @@ type RulerCanvasProps = {
   activeVamp: ActiveVampSummary | null;
   playheadSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
+  /**
+   * Arrastre de marca en vuelo, leído por ref y aplicado AL DIBUJAR.
+   *
+   * Mismo contrato que `playheadDragRef`: la posición cambia en cada
+   * `pointermove` y pasarla por props costaría un render del panel por frame.
+   * El bucle sustituye la marca arrastrada por su posición y carril de
+   * previsualización justo antes de pintar.
+   */
+  markerMovePreviewRef?: MutableRefObject<{
+    markerId: string;
+    startSeconds: number;
+    category: MarkerCategory;
+  } | null>;
   interactionContainerRef: RefObject<HTMLDivElement | null>;
   canNativeZoom: boolean;
   navigationScheme: TimelineNavigationScheme;
@@ -235,6 +249,37 @@ function buildWaveformCacheSignature(
     .join("|");
 }
 
+/**
+ * Sustituye la marca arrastrada por su posición y carril de previsualización.
+ *
+ * Se aplica al dibujar y no en props a propósito: la posición cambia en cada
+ * `pointermove` y pasarla por React costaba un render del panel por frame
+ * (144/s medidos, docs/plans/ui-performance/state/01.md).
+ *
+ * Devuelve la MISMA lista cuando no hay arrastre, para no asignar por frame.
+ */
+export function applyMarkerMovePreview(
+  markers: SectionMarkerSummary[],
+  preview: {
+    markerId: string;
+    startSeconds: number;
+    category: MarkerCategory;
+  } | null,
+): SectionMarkerSummary[] {
+  if (!preview) {
+    return markers;
+  }
+  return markers.map((marker) =>
+    marker.id === preview.markerId
+      ? {
+          ...marker,
+          startSeconds: preview.startSeconds,
+          categoryOverride: preview.category,
+        }
+      : marker,
+  );
+}
+
 export function TimelineRulerCanvas({
   width,
   height,
@@ -254,6 +299,7 @@ export function TimelineRulerCanvas({
   activeVamp,
   playheadSecondsRef,
   playheadDragRef,
+  markerMovePreviewRef,
   interactionContainerRef,
   canNativeZoom,
   navigationScheme,
@@ -282,6 +328,7 @@ export function TimelineRulerCanvas({
     pendingAutomationCue,
     activeVamp,
     playheadDragRef,
+    markerMovePreviewRef,
   });
   const sceneVersionRef = useRef(0);
 
@@ -300,6 +347,7 @@ export function TimelineRulerCanvas({
     pendingAutomationCue,
     activeVamp,
     playheadDragRef,
+    markerMovePreviewRef,
   };
 
   const regionsSignature = useMemo(
@@ -430,6 +478,7 @@ export function TimelineRulerCanvas({
     let lastOverlayTransformCameraX = Number.NaN;
     let lastOverlayTransformScaleX = Number.NaN;
     let lastOverlayCurrentMarkerId: string | null = null;
+    let lastOverlayMarkerPreviewKey = "";
     let lastOverlayPulseFrame = -1;
 
     const render = () => {
@@ -549,11 +598,19 @@ export function TimelineRulerCanvas({
             snapshot.markers
               .filter((marker) => playheadSeconds >= marker.startSeconds)
               .at(-1)?.id ?? null;
+          // Arrastre de marca en vuelo: se aplica AQUÍ, no en props, para que
+          // seguir al puntero no cueste un render. Sólo se reconstruye la
+          // lista mientras hay un arrastre, y sólo cuando el preview cambia.
+          const markerPreview = snapshot.markerMovePreviewRef?.current ?? null;
+          const markerPreviewKey = markerPreview
+            ? `${markerPreview.markerId}:${markerPreview.startSeconds}:${markerPreview.category}`
+            : "";
           const shouldRedrawOverlay =
             lastOverlaySceneVersion !== sceneVersionRef.current ||
             lastOverlayCameraX !== roundedCameraX ||
             lastOverlayPixelsPerSecond !== livePixelsPerSecond ||
             lastOverlayCurrentMarkerId !== currentMarkerId ||
+            lastOverlayMarkerPreviewKey !== markerPreviewKey ||
             lastOverlayPulseFrame !== pulseFrame;
 
           if (shouldRedrawOverlay) {
@@ -568,7 +625,7 @@ export function TimelineRulerCanvas({
               height: snapshot.height,
               cameraX: roundedCameraX,
               pixelsPerSecond: livePixelsPerSecond,
-              markers: snapshot.markers,
+              markers: applyMarkerMovePreview(snapshot.markers, markerPreview),
               tempoMarkers: snapshot.tempoMarkers,
               timeSignatureMarkers: snapshot.timeSignatureMarkers,
               pendingMarkerJump: snapshot.pendingMarkerJump,
@@ -582,6 +639,7 @@ export function TimelineRulerCanvas({
             lastOverlayCameraX = roundedCameraX;
             lastOverlayPixelsPerSecond = livePixelsPerSecond;
             lastOverlayCurrentMarkerId = currentMarkerId;
+            lastOverlayMarkerPreviewKey = markerPreviewKey;
             lastOverlayPulseFrame = pulseFrame;
           }
 

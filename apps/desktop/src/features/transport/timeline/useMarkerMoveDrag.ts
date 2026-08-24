@@ -126,11 +126,44 @@ export function useMarkerMoveDrag({
   // onClick to swallow the synthetic click that follows pointer-up (the drag
   // ref is already nulled by then). Reset on the next pointerdown.
   const didDragRef = useRef(false);
-  const [preview, setPreview] = useState<MarkerMovePreview>(null);
-  // Mirror for the rAF hotspot placement, which runs outside React and must see
-  // the in-flight drag position without waiting for a re-render.
-  const previewRef = useRef(preview);
-  previewRef.current = preview;
+  /**
+   * Posición en vuelo del arrastre. Vive en un ref, no en estado, porque se
+   * escribe en cada `pointermove`: medido antes del cambio, eso costaba un
+   * render completo de `TimelineCanvasPane` por frame — 144/s en una pantalla
+   * de 144 Hz (docs/plans/ui-performance/state/01.md).
+   *
+   * Lo leen, fuera de React: el bucle rAF que coloca los hotspots, el que
+   * dibuja el ruler (a través del snapshot, igual que ya hacía el arrastre del
+   * playhead) y las dos guías de caída.
+   */
+  const previewRef = useRef<MarkerMovePreview>(null);
+  /**
+   * Y esto SÍ es estado, a propósito: sólo cambia cuando el arrastre cruza de
+   * carril, que ocurre una o dos veces por gesto, no por píxel. Es lo que
+   * enciende las bandas de "Secciones / Avisos" y marca cuál recibiría la
+   * marca. Separar lo continuo de lo discreto es lo que permite que lo primero
+   * salga de React sin perder lo segundo.
+   */
+  const [previewLane, setPreviewLane] = useState<{
+    markerId: string;
+    category: MarkerCategory;
+  } | null>(null);
+
+  /** Escribe la posición en el ref y sincroniza el carril sólo si cambió. */
+  function publishPreview(next: MarkerMovePreview) {
+    previewRef.current = next;
+    setPreviewLane((current) => {
+      if (!next) return current === null ? current : null;
+      if (
+        current &&
+        current.markerId === next.markerId &&
+        current.category === next.category
+      ) {
+        return current;
+      }
+      return { markerId: next.markerId, category: next.category };
+    });
+  }
 
   function begin(
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -257,7 +290,7 @@ export function useMarkerMoveDrag({
 
     drag.previewStartSeconds = nextStart;
     drag.previewCategory = nextCategory;
-    setPreview({
+    publishPreview({
       markerId: drag.markerId,
       startSeconds: nextStart,
       category: nextCategory,
@@ -284,7 +317,7 @@ export function useMarkerMoveDrag({
       (Math.abs(finalStart - drag.initialStartSeconds) > 1e-6 || laneChanged);
 
     dragRef.current = null;
-    setPreview(null);
+    publishPreview(null);
 
     if (!moved) {
       return;
@@ -301,7 +334,9 @@ export function useMarkerMoveDrag({
   }
 
   return {
-    markerMovePreview: preview,
+    /** Carril previsualizado (discreto). La POSICIÓN no está aquí: va por
+     *  `markerMovePreviewRef`, para no re-renderizar por píxel. */
+    markerMovePreviewLane: previewLane,
     markerMovePreviewRef: previewRef,
     markerDidDragRef: didDragRef,
     beginMarkerMove: begin,

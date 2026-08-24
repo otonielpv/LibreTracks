@@ -1,6 +1,6 @@
 import { createRef, type MutableRefObject } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 
 import type { SongView } from "@libretracks/shared/models";
 import { LANE_CUES, LANE_SECTIONS } from "../Renderer/drawBackground";
@@ -39,8 +39,11 @@ function setup(onMarkerMoveCommit: ReturnType<typeof vi.fn>) {
   const ppsRef = createRef<number>() as MutableRefObject<number>;
   ppsRef.current = 100;
   const rulerRef = createRef<HTMLElement>() as MutableRefObject<HTMLElement | null>;
+  const renders = { count: 0 };
+  const previewRefs: Array<{ current: unknown }> = [];
 
   function Harness() {
+    renders.count += 1;
     const drag = useMarkerMoveDrag({
       song: SONG,
       snapEnabled: false,
@@ -50,9 +53,12 @@ function setup(onMarkerMoveCommit: ReturnType<typeof vi.fn>) {
       pixelsPerSecond: 100,
       onMarkerMoveCommit,
     });
-    // The hotspot's `top` follows the preview, exactly like the real one — this
-    // is what used to break a horizontal-then-vertical drag.
-    const previewCategory = drag.markerMovePreview?.category ?? "section";
+    previewRefs[0] = drag.markerMovePreviewRef;
+    // The hotspot's `top` follows the preview lane, exactly like the real one
+    // — this is what used to break a horizontal-then-vertical drag. El carril
+    // sigue siendo estado (cambia una o dos veces por gesto); la POSICIÓN se
+    // fue a un ref para no re-renderizar por píxel.
+    const previewCategory = drag.markerMovePreviewLane?.category ?? "section";
     const laneTop =
       previewCategory === "cue" ? LANE_CUES.top : LANE_SECTIONS.top;
     return (
@@ -87,7 +93,7 @@ function setup(onMarkerMoveCommit: ReturnType<typeof vi.fn>) {
   Object.defineProperty(hotspot, "offsetWidth", { value: 68 });
   hotspot.setPointerCapture = () => {};
   hotspot.releasePointerCapture = () => {};
-  return { hotspot };
+  return { hotspot, renders, previewRefs };
 }
 
 /**
@@ -127,6 +133,64 @@ function drag(hotspot: HTMLElement, ...waypoints: [number, number][]) {
 }
 
 describe("useMarkerMoveDrag lane changes", () => {
+  /**
+   * Renders provocados por `count` movimientos de puntero dentro del mismo
+   * carril, sin contar los del montaje ni los del `pointerdown`.
+   */
+  function rendersDuringDrag(count: number) {
+    // Dos arneses en el mismo test: hay que desmontar el anterior o el
+    // localizador encuentra dos hotspots.
+    cleanup();
+    const { hotspot, renders, previewRefs } = setup(vi.fn());
+    const y = clientYFor(LANE_SECTIONS);
+    fireEvent(hotspot, pointer("pointerdown", 0, y));
+    const before = renders.count;
+    for (let index = 1; index <= count; index += 1) {
+      fireEvent(hotspot, pointer("pointermove", index * 10, y));
+    }
+    const preview = previewRefs[0].current as { startSeconds: number } | null;
+    return { renders: renders.count - before, preview };
+  }
+
+  it("los renders no crecen con los movimientos del puntero", () => {
+    const pocos = rendersDuringDrag(5);
+    const muchos = rendersDuringDrag(50);
+
+    // Éste es el criterio del paso 02. Antes era un render POR movimiento, así
+    // que 50 movimientos costaban diez veces más que 5.
+    expect(muchos.renders).toBe(pocos.renders);
+    // Y ese número fijo es pequeño: sólo el encendido de las bandas de carril
+    // al arrancar el gesto, que sí es trabajo legítimo de React.
+    expect(muchos.renders).toBeLessThanOrEqual(2);
+
+    // Guarda: si el arrastre no hubiera avanzado, lo de arriba no probaría
+    // nada. 500 px a 100 px/s desde el segundo 4 = 9 s.
+    expect(muchos.preview?.startSeconds).toBeCloseTo(9, 6);
+    expect(pocos.preview?.startSeconds).toBeCloseTo(4.5, 6);
+  });
+
+  it("el cruce de carril sí re-renderiza, y sólo una vez", () => {
+    const onMarkerMoveCommit = vi.fn();
+    const { hotspot, renders } = setup(onMarkerMoveCommit);
+
+    fireEvent(hotspot, pointer("pointerdown", 0, clientYFor(LANE_SECTIONS)));
+    // Asienta el carril inicial antes de medir el cruce.
+    fireEvent(hotspot, pointer("pointermove", 10, clientYFor(LANE_SECTIONS)));
+    const before = renders.count;
+
+    for (let index = 1; index <= 5; index += 1) {
+      fireEvent(
+        hotspot,
+        pointer("pointermove", 10 + index * 10, clientYFor(LANE_CUES)),
+      );
+    }
+
+    // El carril es un cambio DISCRETO: cruzar cuesta un render (más, como
+    // mucho, el de bail-out de React), no uno por movimiento.
+    expect(renders.count - before).toBeLessThanOrEqual(2);
+    expect(renders.count - before).toBeGreaterThanOrEqual(1);
+  });
+
   it("commits the new category when dropped on the cue lane", () => {
     const onMarkerMoveCommit = vi.fn();
     const { hotspot } = setup(onMarkerMoveCommit);

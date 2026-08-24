@@ -42,6 +42,7 @@ import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
+import { useFollowerX } from "./useFollowerX";
 import { regionHotspotBounds } from "./regionHotspotBounds";
 import { useRegionDrag } from "./useRegionDrag";
 import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
@@ -240,7 +241,9 @@ type TimelineCanvasPaneProps = {
     options?: { allowSnap?: boolean },
   ) => number;
   resolveLibraryGhostLeft: (seconds: number) => number;
-  clipDragSnapIndicatorSeconds: number | null;
+  /** Segundos del imán de clips, leídos por ref: la guía se mueve fuera de
+   *  React (ver ./useClipSnapIndicator). */
+  clipDragSnapIndicatorSecondsRef: MutableRefObject<number | null>;
   onRulerPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onMarkerPrimaryAction: (sectionId: string) => void;
@@ -423,7 +426,7 @@ export function TimelineCanvasPane({
   externalDropPreview,
   normalizePositionSeconds,
   resolveLibraryGhostLeft,
-  clipDragSnapIndicatorSeconds,
+  clipDragSnapIndicatorSecondsRef,
   onRulerPointerDown,
   onRulerContextMenu,
   onMarkerPrimaryAction,
@@ -512,6 +515,25 @@ export function TimelineCanvasPane({
       regionLongPressRef.current = null;
     }
   };
+  // Los tres elementos que siguen al puntero durante un arrastre. Todos leen
+  // refs y se mueven fuera de React; ver ./useFollowerX.
+  const clipSnapIndicatorRef = useFollowerX(() => {
+    const seconds = clipDragSnapIndicatorSecondsRef.current;
+    return seconds === null ? null : resolveLibraryGhostLeft(seconds);
+  });
+  // Guía dentro del ruler: coordenadas de CONTENIDO (el envoltorio ya aplica
+  // la cámara), igual que las banderas.
+  const markerDropGuideRulerRef = useFollowerX(() => {
+    const preview = markerMovePreviewRef.current;
+    return preview ? preview.startSeconds * pixelsPerSecond : null;
+  });
+  // Guía sobre las pistas: ahí no hay envoltorio de cámara, así que la
+  // posición se resuelve a pantalla.
+  const markerDropGuideTracksRef = useFollowerX(() => {
+    const preview = markerMovePreviewRef.current;
+    return preview ? resolveLibraryGhostLeft(preview.startSeconds) : null;
+  });
+
   // Arrastre y redimensionado de las bandas de canción. Ver ./useRegionDrag:
   // el preview en vuelo se escribe sobre el elemento, no por `setState`.
   const {
@@ -538,7 +560,7 @@ export function TimelineCanvasPane({
   // See ./useMarkerMoveDrag for why the two marker kinds resolve the pointer
   // in different coordinate spaces.
   const {
-    markerMovePreview,
+    markerMovePreviewLane,
     markerMovePreviewRef,
     markerDidDragRef,
     beginMarkerMove,
@@ -560,20 +582,9 @@ export function TimelineCanvasPane({
   // flag stays in its old row until the drop lands. Only the dragged marker is
   // rewritten, and with no drag in flight the original array passes through
   // untouched, so the common case allocates nothing and keeps its identity.
-  const markersWithLanePreview = useMemo(() => {
-    const markers = song?.sectionMarkers ?? [];
-    const previewId = markerMovePreview?.markerId;
-    if (!previewId) return markers;
-    const previewCategory = markerMovePreview.category;
-    const dragged = markers.find((marker) => marker.id === previewId);
-    // Nothing to show if the marker is already resting in that lane.
-    if (!dragged || markerCategory(dragged) === previewCategory) return markers;
-    return markers.map((marker) =>
-      marker.id === previewId
-        ? { ...marker, categoryOverride: previewCategory }
-        : marker,
-    );
-  }, [song?.sectionMarkers, markerMovePreview]);
+  // El preview del arrastre ya NO se aplica aquí: lo aplica el bucle de
+  // dibujo del ruler leyendo `markerMovePreviewRef`, igual que ya hacía con
+  // `playheadDragRef`. Así la bandera sigue al puntero sin un render por píxel.
 
   // Keeps the cue hit targets glued to the diamonds the canvas paints.
   const midiLane = useMidiLane({
@@ -764,7 +775,8 @@ export function TimelineCanvasPane({
             livePixelsPerSecondRef={livePixelsPerSecondRef}
             timelineGrid={timelineGrid}
             regions={(song?.regions ?? []) as SongRegionSummary[]}
-            markers={markersWithLanePreview}
+            markers={song?.sectionMarkers ?? []}
+            markerMovePreviewRef={markerMovePreviewRef}
             tempoMarkers={song?.tempoMarkers ?? []}
             timeSignatureMarkers={song?.timeSignatureMarkers ?? []}
             selectedRegionId={selectedRegionId}
@@ -981,18 +993,18 @@ export function TimelineCanvasPane({
                 30,
                 Math.min(96, 14 + flagLabelLength * 7),
               );
-              // Optimistic drag preview: the flag follows the pointer.
+              // El carril previsualizado SÍ pasa por React: cambia una o dos
+              // veces por gesto, no por píxel. La posición no: la escribe el
+              // bucle de hotspots leyendo el ref.
               const isDraggingMarker =
-                markerMovePreview?.markerId === section.id;
-              const renderStartSeconds = isDraggingMarker
-                ? markerMovePreview.startSeconds
-                : section.startSeconds;
+                markerMovePreviewLane?.markerId === section.id;
+              const renderStartSeconds = section.startSeconds;
               // Cue markers live in their own lane above the section lane so a
               // cue and a section sharing a position don't stack on one pixel.
               // Mid-drag the hotspot follows the pointer across lanes, so the
               // flag previews the category the drop would apply.
               const renderCategory = isDraggingMarker
-                ? markerMovePreview.category
+                ? markerMovePreviewLane.category
                 : markerCategory(section);
               const lane = renderCategory === "cue" ? LANE_CUES : LANE_SECTIONS;
               return (
@@ -1129,16 +1141,12 @@ export function TimelineCanvasPane({
                 `left: -cameraX` wrapper the marker hotspots use — placing it
                 outside would ignore the camera offset and desync from the
                 flags (the "double bar" bug). */}
-            {markerMovePreview !== null ? (
-              <div
-                aria-hidden="true"
-                className="lt-marker-drop-guide"
-                style={{
-                  left: markerMovePreview.startSeconds * pixelsPerSecond,
-                  height: RULER_HEIGHT,
-                }}
-              />
-            ) : null}
+            <div
+              aria-hidden="true"
+              className="lt-marker-drop-guide"
+              ref={markerDropGuideRulerRef}
+              style={{ left: 0, display: "none", height: RULER_HEIGHT }}
+            />
 
           </TimelineRulerCanvas>
 
@@ -1155,7 +1163,7 @@ export function TimelineCanvasPane({
               positioned ancestor. (The vertical drop guide above is the
               opposite case: it IS content-space, hence its `left` in seconds.)
               See docs/REDESIGN_transport_refs_to_stores.md on the two spaces. */}
-          {markerMovePreview !== null
+          {markerMovePreviewLane !== null
             ? (
                 [
                   {
@@ -1174,7 +1182,7 @@ export function TimelineCanvasPane({
                   label: string;
                 }[]
               ).map(({ category, lane, label }) => {
-                const isTarget = markerMovePreview.category === category;
+                const isTarget = markerMovePreviewLane.category === category;
                 return (
                   <div
                     key={category}
@@ -1266,35 +1274,36 @@ export function TimelineCanvasPane({
             />
           </div>
 
-          {markerMovePreview !== null ? (
-            <div
-              aria-hidden="true"
-              className="lt-marker-drop-guide is-over-tracks"
-              style={{
-                left: resolveLibraryGhostLeft(markerMovePreview.startSeconds),
-              }}
-            />
-          ) : null}
+          <div
+            aria-hidden="true"
+            className="lt-marker-drop-guide is-over-tracks"
+            ref={markerDropGuideTracksRef}
+            style={{ left: 0, display: "none" }}
+          />
 
           <MidiDropGuide {...midiLane.guide(resolveLibraryGhostLeft)} />
 
-          {clipDragSnapIndicatorSeconds !== null ? (
-            <div
-              aria-hidden="true"
-              className="lt-clip-snap-indicator"
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: resolveLibraryGhostLeft(clipDragSnapIndicatorSeconds),
-                width: 1,
-                background: "#ffd166",
-                boxShadow: "0 0 6px 1px rgba(255, 209, 102, 0.65)",
-                pointerEvents: "none",
-                zIndex: 35,
-              }}
-            />
-          ) : null}
+          {/* Siempre montada, oculta con `display`. El bucle rAF de
+              useClipSnapIndicator la muestra y la mueve; montarla y
+              desmontarla costaría un render por gesto, que es justo lo que
+              este cambio viene a quitar. */}
+          <div
+            aria-hidden="true"
+            className="lt-clip-snap-indicator"
+            ref={clipSnapIndicatorRef}
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: 0,
+              display: "none",
+              width: 1,
+              background: "#ffd166",
+              boxShadow: "0 0 6px 1px rgba(255, 209, 102, 0.65)",
+              pointerEvents: "none",
+              zIndex: 35,
+            }}
+          />
 
           {externalDropPreview !== null ? (
             <div
@@ -1437,10 +1446,10 @@ export function TimelineCanvasPane({
                         // Optimistic drag preview: the diamond follows the
                         // pointer while dragging (same contract as section flags).
                         const isDraggingCue =
-                          markerMovePreview?.markerId === cue.id;
-                        const renderAtSeconds = isDraggingCue
-                          ? markerMovePreview.startSeconds
-                          : cue.atSeconds;
+                          markerMovePreviewLane?.markerId === cue.id;
+                        // La posición la lleva el bucle rAF de hotspots desde
+                        // el ref; aquí sólo se siembra el reposo.
+                        const renderAtSeconds = cue.atSeconds;
                         return (
                           <button
                             key={cue.id}
@@ -1455,16 +1464,18 @@ export function TimelineCanvasPane({
                               // Centre a tight hit target on the diamond. The
                               // lane's own onMouseDown handles seek everywhere
                               // else, so the hotspot must not cover the row.
-                              // `left` is owned by the rAF loop above (it must
-                              // track cameraX/live zoom the same way the canvas
-                              // paints the diamond); seed it here so the button
-                              // is positioned on its very first frame.
-                              left: secondsToScreenX(
+                              // La posición horizontal la posee el bucle rAF de
+                              // arriba (tiene que seguir a cameraX y al zoom
+                              // vivo igual que el canvas pinta el diamante), y
+                              // la escribe como `transform` para no invalidar
+                              // layout en cada frame. Aquí se siembra para que
+                              // el botón esté colocado en su primer frame.
+                              transform: `translateX(${secondsToScreenX(
                                 renderAtSeconds,
                                 cameraXRef.current,
                                 livePixelsPerSecondRef.current ??
                                   pixelsPerSecond,
-                              ),
+                              )}px)`,
                               top: trackHeight / 2,
                             }}
                             onMouseDown={(event) => {

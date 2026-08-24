@@ -42,10 +42,18 @@ export function useAutomationCueHotspots({
 }: AutomationCueHotspotDeps) {
   const hotspotsRef = useRef(new Map<string, HTMLButtonElement>());
   const positionsRef = useRef(new Map<string, number>());
-
-  positionsRef.current = new Map(
-    (cues ?? []).map((cue) => [cue.id, cue.atSeconds]),
+  /** Identidad de la lista con la que se construyó `positionsRef`. */
+  const positionsSourceRef = useRef<AutomationCueSummary[] | undefined>(
+    undefined,
   );
+
+  // El mapa se reconstruía en CADA render; sólo cambia cuando cambia la lista.
+  if (positionsSourceRef.current !== cues) {
+    positionsSourceRef.current = cues;
+    positionsRef.current = new Map(
+      (cues ?? []).map((cue) => [cue.id, cue.atSeconds]),
+    );
+  }
 
   const registerHotspot = useCallback(
     (cueId: string, element: HTMLButtonElement | null) => {
@@ -78,7 +86,12 @@ export function useAutomationCueHotspots({
         const left = secondsToScreenX(atSeconds, cameraX, livePixelsPerSecond);
         // Only touch style when it actually changes; this runs every frame.
         if (lastLeftByCue.get(cueId) !== left) {
-          element.style.left = `${left}px`;
+          // `transform`, no `left`: escribir `left` invalida el layout, y esto
+          // corre en cada frame para CADA cue — durante un pan o un zoom
+          // cambian todas a la vez. Una transformación se queda en el
+          // compositor. El `left: 0` lo fija el CSS del hotspot; el centrado
+          // sobre el diamante lo sigue haciendo su `margin-left` negativo.
+          element.style.transform = `translateX(${left}px)`;
           lastLeftByCue.set(cueId, left);
         }
       }
