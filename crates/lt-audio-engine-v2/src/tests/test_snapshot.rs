@@ -127,12 +127,29 @@ fn cpu_diagnostics_round_trip() {
         track_renderer_scratch_resize_in_audio_thread_count: 0,
         track_renderer_block_too_large_count: 0,
         track_renderer_scratch_capacity_frames: 4096,
-        source_cache_miss_frames: 0,
+        source_cache_miss_frames: 9,
+        // Contadores del warp. Valores DISTINTOS y no nulos a proposito: si el
+        // round trip los cruzara o los perdiera, con ceros no se notaria.
+        warp_feed_gap_frames: 11,
+        warp_feed_gap_events: 12,
+        warp_source_frames_fed: 13,
+        warp_output_frames_made: 14,
     };
     let rt = round_trip(&snap);
     assert!((rt.cpu.callback_duration_ms - 1.23).abs() < 1e-9);
     assert_eq!(rt.cpu.callback_count, 1000);
     assert_eq!(rt.cpu.underrun_count, 2);
+    assert_eq!(rt.cpu.source_cache_miss_frames, 9);
+    // Estos cuatro son la UNICA forma de comprobar los invariantes de tiempo
+    // del warp contra un motor en marcha (ver el comentario de CpuDiagnostics):
+    // el feed que el renderer le debe a Bungee tiene que ser contiguo y avanzar
+    // al ratio pedido, y ninguna de las dos propiedades sobrevive a la senal
+    // renderizada. Si no cruzan la serializacion, esa comprobacion se queda
+    // muda sin que nadie se entere.
+    assert_eq!(rt.cpu.warp_feed_gap_frames, 11);
+    assert_eq!(rt.cpu.warp_feed_gap_events, 12);
+    assert_eq!(rt.cpu.warp_source_frames_fed, 13);
+    assert_eq!(rt.cpu.warp_output_frames_made, 14);
 }
 
 #[test]
