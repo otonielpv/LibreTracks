@@ -2150,8 +2150,9 @@ impl DesktopSession {
         }
 
         if should_sync_pitch {
-            self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
-            self.last_source_readiness = Some(audio.source_readiness_summary());
+            let (pitch, source) = audio.pitch_and_source_summary();
+            self.last_runtime_pitch = Some(pitch);
+            self.last_source_readiness = Some(source);
             self.last_transport_pitch_sync_at = Some(now);
         }
 

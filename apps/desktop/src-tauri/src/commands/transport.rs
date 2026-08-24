@@ -8,7 +8,13 @@ use crate::infra::settings::AppSettingsStore;
 use crate::state::DesktopState;
 use libretracks_audio::{JumpTrigger, TransitionType, VampMode};
 
-#[tauri::command]
+// `(async)` keeps this off the main thread. Tauri runs a plain `#[tauri::command]`
+// inline in the IPC handler, which on Linux is the GTK main loop that also drives
+// WebKitGTK's rendering — so a snapshot that waits on the session lock or a slow
+// engine FFI call freezes the whole UI for that long. Windows and macOS hid the
+// problem because WebView2/WKWebView composite out of process. The body stays
+// synchronous; `async` here only chooses the threadpool.
+#[tauri::command(async)]
 pub fn get_transport_snapshot(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
