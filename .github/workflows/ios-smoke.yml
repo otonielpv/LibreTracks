@@ -173,11 +173,15 @@ jobs:
             *) echo "Expected arm64 executable, got: $archs" >&2; exit 1 ;;
           esac
 
-          if ! nm -gU "$app/$executable" | grep -q '_lt_engine_create'; then
+          # Rust references the C ABI internally, so Xcode may localize these
+          # symbols in a stripped release executable. Inspect all symbols, not
+          # only externally visible ones. Avoid grep -q under pipefail: its
+          # early exit can SIGPIPE nm and turn a real match into status 141.
+          if ! nm "$app/$executable" | grep '_lt_engine_create' >/dev/null; then
             echo "IPA executable does not contain the native audio engine C ABI" >&2
             exit 1
           fi
-          if strings "$app/$executable" | grep -q '"error":"no-link"'; then
+          if strings "$app/$executable" | grep '"error":"no-link"' >/dev/null; then
             echo "IPA executable still contains the silent no-link engine" >&2
             exit 1
           fi
