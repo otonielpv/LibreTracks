@@ -1,0 +1,126 @@
+name: iOS Smoke (unsigned IPA)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-unsigned-ipa:
+    name: Build unsigned iPhone IPA
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain for iPhone
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target-ios-ci
+
+      - name: Verify Apple build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          if ! command -v pod >/dev/null 2>&1; then
+            brew install cocoapods
+          fi
+          pod --version
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      # gen/apple is deliberately generated on the macOS runner. Tauri's iOS
+      # project is derived from Cargo.toml, tauri.ios.conf.json and the plugin
+      # set, so keeping generated Xcode files out of git avoids stale projects.
+      - name: Generate Tauri iOS project
+        working-directory: apps/desktop
+        run: npm run tauri -- ios init --ci
+
+      # --no-sign archives the real arm64 device app without requiring an
+      # Apple certificate or provisioning profile. AltStore supplies both when
+      # it re-signs the downloaded IPA with the tester's Apple ID.
+      - name: Build unsigned arm64 IPA
+        working-directory: apps/desktop
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-ios-ci
+        run: npm run tauri -- ios build --ci --target aarch64 --no-sign
+
+      - name: Validate IPA structure and target
+        shell: bash
+        run: |
+          set -euo pipefail
+          ipa="$(find apps/desktop/src-tauri/gen/apple/build/arm64 -maxdepth 1 -name '*.ipa' -print -quit)"
+          if [ -z "$ipa" ]; then
+            echo "Tauri completed but produced no IPA" >&2
+            find apps/desktop/src-tauri/gen/apple/build -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
+          verify_dir="$RUNNER_TEMP/libretracks-ipa-check"
+          mkdir -p "$verify_dir"
+          unzip -q "$ipa" -d "$verify_dir"
+          app="$(find "$verify_dir/Payload" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          if [ -z "$app" ]; then
+            echo "IPA does not contain Payload/<name>.app" >&2
+            exit 1
+          fi
+
+          plist="$app/Info.plist"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
+          minimum_ios="$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$plist")"
+          archs="$(lipo -archs "$app/$executable")"
+
+          test "$bundle_id" = "com.libretracks.ios"
+          test "$minimum_ios" = "15.0"
+          case " $archs " in
+            *" arm64 "*) ;;
+            *) echo "Expected arm64 executable, got: $archs" >&2; exit 1 ;;
+          esac
+
+          echo "IPA: $ipa"
+          echo "Bundle: $bundle_id"
+          echo "Minimum iOS: $minimum_ios"
+          echo "Architectures: $archs"
+          echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreTracks-iOS-unsigned-${{ github.run_number }}
+          path: ${{ env.IPA_PATH }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload generated Apple project on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreTracks-iOS-build-diagnostics-${{ github.run_number }}
+          path: |
+            apps/desktop/src-tauri/gen/apple/project.yml
+            apps/desktop/src-tauri/gen/apple/**/*.plist
+            apps/desktop/src-tauri/gen/apple/**/*.pbxproj
+          if-no-files-found: ignore
+          retention-days: 7

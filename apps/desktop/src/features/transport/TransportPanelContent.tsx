@@ -96,7 +96,7 @@ import {
   importStagedAudioFiles,
   importSongPackageFromPathWithProgress,
   importExternalProjectFromPathWithProgress,
-  isAndroidApp,
+  isMobileApp,
   isTauriApp,
   listenToMidiRawMessage,
   listenToProjectLoadProgress,
@@ -1334,7 +1334,7 @@ export function TransportPanelContent() {
   useEffect(() => {
     // No remote server on Android — the command exists but always errors, so
     // skip the call instead of logging a guaranteed failure on every boot.
-    if (!isTauriApp || isAndroidApp) {
+    if (!isTauriApp || isMobileApp) {
       return;
     }
 
@@ -2284,7 +2284,7 @@ export function TransportPanelContent() {
       // session's audio/ folder (same staged pipeline as a library import),
       // then repoint the clip at that copy. The chooser only opens inside the
       // tap's user-gesture window, so it must come before any await.
-      if (isAndroidApp) {
+      if (isMobileApp) {
         const files = await pickFilesViaWebView("audio/*");
         const picked = files[0];
         if (!picked) {
@@ -4543,7 +4543,7 @@ export function TransportPanelContent() {
         return;
       }
       if (
-        isAndroidApp &&
+        isMobileApp &&
         Date.now() - contextMenuOpenedAtRef.current < 500
       ) {
         return;
@@ -6624,7 +6624,7 @@ export function TransportPanelContent() {
   const handleRulerPointerDown = useTimelineRangeSelection({
     enabled: Boolean(song),
     seekLocked: rulerSeekLocked,
-    isAndroid: isAndroidApp,
+    isAndroid: isMobileApp,
     currentRange: selectedTimelineRange,
     rulerTrackRef,
     contextMenuOpenedAtRef,
@@ -6837,7 +6837,7 @@ export function TransportPanelContent() {
       }),
     },
   ];
-  const settingsTabs = isAndroidApp
+  const settingsTabs = isMobileApp
     ? allSettingsTabs.filter(
         (tab) => !androidHiddenSettingsTabs.includes(tab.id),
       )
@@ -7155,7 +7155,7 @@ export function TransportPanelContent() {
                 }}
               />
               {shouldShowEmptyState ? (
-                isAndroidApp ? (
+                isMobileApp ? (
                   <MobileLanding
                     onCreateSession={handleCreateSongNamed}
                     onCreateSessionFromTemplate={
@@ -7494,7 +7494,7 @@ export function TransportPanelContent() {
                       <div className="lt-timeline-main-grid">
                         <TrackHeadersPane
                           headerActions={
-                            isAndroidApp ? (
+                            isMobileApp ? (
                               <>
                                 <button
                                   type="button"

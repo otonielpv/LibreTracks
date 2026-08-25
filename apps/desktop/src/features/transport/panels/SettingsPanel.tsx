@@ -8,6 +8,7 @@ import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
 import {
   getDecodingCacheInfo,
   isAndroidApp,
+  isMobileApp,
   purgeDecodingCache,
   setDecodingCacheDir,
   setDecodingCacheMaxGb,
@@ -249,7 +250,7 @@ export function SettingsPanel({
                     {/* Android has exactly one audio backend (Oboe/AAudio), so
                         the "Audio System" selector is noise there — hide it and
                         show only the device / rate / buffer controls. */}
-                    {!isAndroidApp ? (
+                    {!isMobileApp ? (
                       <label className="lt-settings-field">
                         <span className="lt-settings-field-label">
                           {t("transport.settingsModal.audioBackend", {

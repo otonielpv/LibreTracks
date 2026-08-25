@@ -7,14 +7,14 @@ import ReactDOM from "react-dom/client";
 import { App } from "./app/App";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import { installGlobalErrorHandlers } from "./shared/errorLogging";
-import { isAndroidApp } from "./features/transport/desktopApi";
+import { isMobileApp } from "./features/transport/desktopApi";
 import "./shared/styles.css";
 
 installGlobalErrorHandlers();
 
-// Root hook for the mobile stylesheet section: everything Android-specific in
-// styles.css is scoped under `.lt-android`, so desktop rendering can't change.
-if (isAndroidApp) {
+// Root hook for the mobile stylesheet section. The historical `.lt-android`
+// class now names the shared touch layout used by both Tauri mobile targets.
+if (isMobileApp) {
   document.documentElement.classList.add("lt-android");
 }
 

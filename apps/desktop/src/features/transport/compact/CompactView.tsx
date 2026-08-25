@@ -25,7 +25,7 @@ import {
 } from "./CompactMixer";
 import { CompactSongHeader } from "./CompactSongHeader";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
-import { isAndroidApp } from "../desktopApi";
+import { isMobileApp } from "../desktopApi";
 import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import {
@@ -336,7 +336,7 @@ function CompactViewComponent({
   // Android: mixer collapsed by default on narrow (phone) screens, visible on
   // tablets; the user's explicit choice persists. Desktop: always visible.
   const [isMixerVisible, setIsMixerVisible] = useState(() => {
-    if (!isAndroidApp) return true;
+    if (!isMobileApp) return true;
     try {
       const saved = window.localStorage.getItem(
         "libretracks.compact.mixerVisible",
@@ -366,7 +366,7 @@ function CompactViewComponent({
   // Android: with the mixer open it takes the WHOLE compact view (pan +
   // routing were unreadable sharing the height with the song columns on a
   // phone); the toggle flips between songs and mixer rather than stacking.
-  const mixerTakesFullHeight = isAndroidApp && isMixerVisible;
+  const mixerTakesFullHeight = isMobileApp && isMixerVisible;
 
   return (
     <div
@@ -462,7 +462,7 @@ function CompactViewComponent({
       {/* Android: the mixer band eats most of a phone's landscape height, so
           it collapses behind a slim toggle. Wide screens (tablets) default to
           visible; the choice persists. Desktop keeps the mixer always on. */}
-      {isAndroidApp ? (
+      {isMobileApp ? (
         <button
           type="button"
           className="lt-compact-mixer-toggle"

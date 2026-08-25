@@ -45,11 +45,13 @@ const tauriWindow = window as Window & {
 
 export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 
-// Android build of the app (Tauri mobile WebView). Features that only make
-// sense on desktop — e.g. the remote-control server, whose point is to
-// control the desktop app FROM a phone — are hidden when this is true.
+// Keep OS-specific flags for audio/device behaviour and a shared mobile flag
+// for the touch layout, sandboxed file flows and desktop-only features.
 export const isAndroidApp =
   isTauriApp && /android/i.test(navigator.userAgent);
+export const isIOSApp =
+  isTauriApp && /iphone|ipad|ipod/i.test(navigator.userAgent);
+export const isMobileApp = isAndroidApp || isIOSApp;
 
 /**
  * Observer notified after every `invokeCommand` call. Exists so the desktop

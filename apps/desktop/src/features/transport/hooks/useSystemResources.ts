@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import {
-  isAndroidApp,
+  isMobileApp,
   isTauriApp,
   type SystemResourceSnapshot,
 } from "@libretracks/shared/desktopApi";
@@ -27,7 +27,7 @@ export function useSystemResources(): SystemResourceSnapshot | null {
   useEffect(() => {
     // Android: no resource meter in the topbar (a desktop diagnostics
     // surface), so don't wake the sampler at 1 Hz for nothing.
-    if (!isTauriApp || isAndroidApp) return;
+    if (!isTauriApp || isMobileApp) return;
 
     let cancelled = false;
     // Guard against overlapping calls if a sample ever takes longer than the

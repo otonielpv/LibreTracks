@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { isAndroidApp } from "@libretracks/shared/desktopApi";
+import { isMobileApp } from "@libretracks/shared/desktopApi";
 import { isNewerVersion, normalizeVersion } from "../../../shared/updateCheck";
 import {
   openUpdateModal,
@@ -14,7 +14,7 @@ import { formatUserFacingError } from "../errors/formatTransportError";
 export function UpdateCheckField() {
   const { t } = useTranslation();
   const { release, error, isChecking, hasCheckedOnce } = useUpdateCheckStore();
-  if (isAndroidApp) return null;
+  if (isMobileApp) return null;
 
   const current = normalizeVersion(
     typeof window !== "undefined"
