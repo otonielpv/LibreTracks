@@ -18,6 +18,14 @@ const systemCommands = readFileSync(
   resolve(tauriDir, "src/commands/system.rs"),
   "utf8",
 );
+const projectCommands = readFileSync(
+  resolve(tauriDir, "src/commands/project.rs"),
+  "utf8",
+);
+const pickerBridge = readFileSync(
+  resolve(tauriDir, "plugins/ios-folder-picker/src/lib.rs"),
+  "utf8",
+);
 
 describe("diagnóstico del selector de carpetas iOS", () => {
   it("expone Documents en Archivos para recuperar el registro", () => {
@@ -37,5 +45,12 @@ describe("diagnóstico del selector de carpetas iOS", () => {
     expect(swift).toContain("presenting picker from");
     expect(swift).toContain("presentation completion");
     expect(swift).toContain("pickerWindowAttached");
+  });
+
+  it("no bloquea el hilo principal mientras Swift espera al usuario", () => {
+    expect(projectCommands).toContain("pub async fn pick_session_folder");
+    expect(projectCommands).toContain("pub async fn start_open_project_from_dialog");
+    expect(pickerBridge).toContain("spawn_blocking");
+    expect(pickerBridge).toContain("run_mobile_plugin");
   });
 });

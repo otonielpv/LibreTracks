@@ -31,8 +31,16 @@ impl<R: Runtime> IosFolderPicker<R> {
     }
 }
 
-pub fn pick_folder<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
-    app.state::<IosFolderPicker<R>>().pick_folder()
+/// `run_mobile_plugin` waits synchronously until Swift resolves its Invoke.
+/// Run that wait away from Tauri's main thread: UIKit needs the main queue to
+/// present UIDocumentPickerViewController, so blocking it here deadlocks the
+/// Rust -> Swift -> UIKit -> Rust round trip on a physical iPhone.
+pub async fn pick_folder<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<IosFolderPicker<R>>().pick_folder()
+    })
+    .await
+    .map_err(|error| format!("iOS folder picker worker failed: {error}"))?
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

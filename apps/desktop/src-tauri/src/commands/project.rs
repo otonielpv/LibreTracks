@@ -668,7 +668,7 @@ fn named_session_target(
 /// to a real path (Drive, the Downloads shortcut…), since the engine streams
 /// audio by path and can't use those.
 #[tauri::command]
-pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String>, String> {
+pub async fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String>, String> {
     let name = sanitize_session_name(&name)?;
 
     #[cfg(target_os = "android")]
@@ -700,7 +700,7 @@ pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String
             "rust",
             "pick_session_folder entered; calling Swift plugin",
         );
-        let result = libretracks_ios_folder_picker::pick_folder(&app);
+        let result = libretracks_ios_folder_picker::pick_folder(app.clone()).await;
         crate::commands::system::write_picker_diagnostic(
             &app,
             "rust",
@@ -1045,7 +1045,7 @@ pub fn get_project_load_progress_snapshot(
 }
 
 #[tauri::command]
-pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
+pub async fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
     // Android: the system picker (which remembers the app's last folder on
     // its own) returns a content:// URI; opening IN PLACE needs the real
     // path — a session is a folder the engine streams by path — so resolve
@@ -1090,7 +1090,7 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
             "rust",
             "start_open_project_from_dialog entered; calling Swift plugin",
         );
-        let picked_folder = libretracks_ios_folder_picker::pick_folder(&app);
+        let picked_folder = libretracks_ios_folder_picker::pick_folder(app.clone()).await;
         crate::commands::system::write_picker_diagnostic(
             &app,
             "rust",
