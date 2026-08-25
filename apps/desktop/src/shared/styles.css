@@ -48,16 +48,15 @@ textarea {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Tauri's iOS WKWebView draws edge-to-edge. Keep the complete DAW inside the
-   device safe area so the landscape notch and home indicator never cover the
-   transport, side rail or timeline. `viewport-fit=cover` in index.html makes
-   these environment insets available; unsupported values fall back to 0. */
-.lt-ios .lt-app-shell {
+/* Mobile webviews may draw edge-to-edge. Keep the complete DAW inside whatever
+   safe area the current device exposes; this is deliberately platform- and
+   model-independent (the env() values are zero when no inset exists). */
+.lt-mobile .lt-app-shell {
   box-sizing: border-box;
   height: 100vh;
   height: 100dvh;
   padding:
-    max(env(safe-area-inset-top, 0px), 0.25rem)
+    env(safe-area-inset-top, 0px)
     env(safe-area-inset-right, 0px)
     env(safe-area-inset-bottom, 0px)
     env(safe-area-inset-left, 0px);
@@ -7759,9 +7758,9 @@ textarea {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   Android (mobile) layout — everything below is scoped under `.lt-android`,
-   a class main.tsx puts on <html> only inside the Android app, so none of
-   it can affect desktop rendering.
+   Mobile touch layout — these legacy rules remain scoped under `.lt-android`,
+   the historical class that main.tsx now applies to both mobile targets
+   alongside the platform-neutral `.lt-mobile`. Desktop remains unaffected.
 
    Design intent (phone/tablet in landscape, modelled on mobile DAWs like
    Playback / Logic for iPad): the timeline owns the vertical space; the
@@ -7884,20 +7883,6 @@ textarea {
 .lt-android .lt-topbar.is-project-empty .lt-tap-tempo-button,
 .lt-android .lt-topbar.is-project-empty .lt-transport-buttons {
   display: none;
-}
-
-/* An iPhone 13 leaves roughly 750 CSS px after both landscape safe-area
-   insets. The split toggles already hide their text on mobile; let their icon
-   buttons use that compact intrinsic width instead of the desktop minimum. */
-@media (max-width: 850px) {
-  .lt-android .lt-transport-buttons .lt-topbar-split button.lt-split-main {
-    min-width: 2rem;
-    padding-inline: 0.3rem;
-  }
-
-  .lt-android .lt-transport-buttons {
-    padding-inline: 0.3rem;
-  }
 }
 
 @media (max-width: 1040px) {
@@ -9291,4 +9276,226 @@ textarea {
 
 .lt-telemetry-policy-link {
   margin-left: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive mobile shell
+
+   These rules describe how the interface consumes AVAILABLE space. They do
+   not target phone or tablet models: flex wrapping handles width, viewport
+   clamps handle height, auto-fit chooses the landing columns, and orientation
+   decides whether navigation belongs beside or below the workspace.
+   -------------------------------------------------------------------------- */
+
+.lt-mobile .lt-app-shell,
+.lt-mobile .lt-daw-shell,
+.lt-mobile .lt-shell-body,
+.lt-mobile .lt-workspace,
+.lt-mobile .lt-workspace-body,
+.lt-mobile .lt-main-stage {
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-mobile .lt-topbar {
+  flex: 0 0 auto;
+  padding:
+    clamp(0.2rem, 1.2vh, 0.4rem)
+    clamp(0.35rem, 1.5vw, 0.75rem);
+  gap: clamp(0.2rem, 1vh, 0.45rem);
+}
+
+.lt-mobile .lt-topbar-main-row,
+.lt-mobile .lt-transport {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Items stay on one row while they genuinely fit and wrap as complete control
+   groups when they do not. Nothing relies on a guessed device width and the
+   BAR/TIME readout can never be clipped by an overflowing transport strip. */
+.lt-mobile .lt-transport {
+  flex-wrap: wrap;
+  overflow: visible;
+  column-gap: clamp(0.2rem, 1vw, 0.45rem);
+  row-gap: clamp(0.2rem, 0.8vh, 0.35rem);
+}
+
+.lt-mobile .lt-bpm-control {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.lt-mobile .lt-bpm-control input {
+  width: clamp(2.6rem, 8vw, 3.4rem);
+}
+
+.lt-mobile .lt-tap-tempo-button {
+  min-width: 2rem;
+}
+
+.lt-mobile .lt-transport-buttons {
+  flex: 1 1 19rem;
+  min-width: min(100%, 17rem);
+  justify-content: center;
+  padding-inline: clamp(0.2rem, 0.8vw, 0.45rem);
+}
+
+.lt-mobile .lt-transport-buttons .lt-topbar-split {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.lt-mobile .lt-transport-buttons .lt-topbar-split button.lt-split-main {
+  width: 2rem;
+  min-width: 2rem;
+  padding-inline: 0.25rem;
+}
+
+.lt-mobile .lt-transport-buttons .lt-topbar-split button.lt-split-caret {
+  width: 1.25rem;
+  flex: 0 0 1.25rem;
+}
+
+.lt-mobile .lt-transport-readout {
+  max-width: 100%;
+  margin-left: auto;
+  gap: clamp(0.35rem, 1.5vw, 0.75rem);
+}
+
+.lt-mobile .lt-readout-block strong {
+  min-width: 0;
+}
+
+/* The rail consumes a bounded fraction of landscape width and its buttons
+   share the available height instead of overflowing on short screens. */
+.lt-mobile .lt-side-nav {
+  width: clamp(2.75rem, 7vw, 3.25rem);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lt-mobile .lt-side-nav button {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-block: clamp(0.3rem, 1.6vh, 0.7rem);
+}
+
+/* Landing content fits its viewport and owns its scrolling. auto-fit changes
+   between one and two catalog columns from actual card width, including safe
+   area insets, split-screen windows and tablet multitasking. */
+.lt-mobile .lt-empty-state {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(0.4rem, 2vmin, 1rem);
+}
+
+.lt-mobile .lt-empty-state-card {
+  box-sizing: border-box;
+  width: min(58rem, 100%);
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding:
+    clamp(0.75rem, 3vh, 1.5rem)
+    clamp(0.75rem, 3vw, 1.5rem);
+  gap: clamp(0.5rem, 1.8vh, 0.85rem);
+}
+
+.lt-mobile .lt-empty-state-card h1 {
+  font-size: clamp(1.35rem, 5vmin, 2.25rem);
+  line-height: 1;
+}
+
+.lt-mobile .lt-empty-state-card p {
+  font-size: clamp(0.78rem, 2.4vmin, 0.98rem);
+  line-height: 1.45;
+}
+
+.lt-mobile .lt-empty-state-actions {
+  width: min(100%, 42rem);
+}
+
+.lt-mobile .lt-empty-state-actions button {
+  flex: 1 1 9rem;
+  min-width: min(8.75rem, 100%);
+}
+
+.lt-mobile .lt-empty-state-columns {
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: clamp(0.75rem, 3vw, 2rem);
+  margin-top: clamp(0.5rem, 2vh, 1rem);
+}
+
+.lt-mobile .lt-empty-state-columns .lt-empty-state-templates {
+  margin-top: 0;
+}
+
+.lt-mobile .lt-mobile-landing-create {
+  width: min(100%, 32rem);
+}
+
+/* Bottom sheets and fixed dialogs live in viewport coordinates, outside the
+   padded app shell, so apply the device insets directly to those surfaces. */
+.lt-mobile .lt-control-popover-panel {
+  padding-bottom: max(1.1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+.lt-mobile .lt-dialog-layer {
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+}
+
+/* Portrait and tall split-screen windows have more vertical than horizontal
+   room: navigation becomes a bottom bar and side panels become overlays. */
+@media (orientation: portrait) {
+  .lt-mobile .lt-shell-body {
+    flex-direction: column;
+  }
+
+  .lt-mobile .lt-workspace {
+    order: 1;
+  }
+
+  .lt-mobile .lt-side-nav {
+    order: 2;
+    width: 100%;
+    flex: 0 0 auto;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.2rem;
+  }
+
+  .lt-mobile .lt-side-nav button {
+    flex: 1 0 3rem;
+    padding: 0.45rem 0.25rem;
+  }
+
+  .lt-mobile .lt-workspace-body {
+    position: relative;
+  }
+
+  .lt-mobile .lt-library-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .lt-mobile .lt-mobile-file-menu {
+    right: 0.5rem;
+    bottom: 3.75rem;
+    left: 0.5rem;
+    min-width: 0;
+  }
 }

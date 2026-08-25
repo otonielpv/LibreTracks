@@ -15,6 +15,9 @@ installGlobalErrorHandlers();
 // Root hook for the mobile stylesheet section. The historical `.lt-android`
 // class now names the shared touch layout used by both Tauri mobile targets.
 if (isMobileApp) {
+  document.documentElement.classList.add("lt-mobile");
+  // Keep the historical hook while the existing touch rules migrate to the
+  // platform-neutral `.lt-mobile` contract.
   document.documentElement.classList.add("lt-android");
 }
 if (isIOSApp) {

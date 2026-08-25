@@ -49,8 +49,11 @@ export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 // for the touch layout, sandboxed file flows and desktop-only features.
 export const isAndroidApp =
   isTauriApp && /android/i.test(navigator.userAgent);
+const isIPadDesktopUserAgent =
+  /macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
 export const isIOSApp =
-  isTauriApp && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  isTauriApp &&
+  (/iphone|ipad|ipod/i.test(navigator.userAgent) || isIPadDesktopUserAgent);
 export const isMobileApp = isAndroidApp || isIOSApp;
 
 /**
