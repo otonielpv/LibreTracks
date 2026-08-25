@@ -1,4 +1,4 @@
-// swift-tools-version:5.3
+// swift-tools-version:5.5
 
 import PackageDescription
 
@@ -21,4 +21,3 @@ let package = Package(
       path: "Sources")
   ]
 )
-
