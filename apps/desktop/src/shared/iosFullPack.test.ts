@@ -54,6 +54,8 @@ describe("iOS full-pack build contract", () => {
       bundle: { resources: Record<string, string> | null };
     };
     expect(config.build.beforeBuildCommand).toContain("build:remote");
+    expect(workflow).toContain("Build bundled remote frontend");
+    expect(workflow).toContain("npm run build:remote");
     expect(config.bundle.resources).not.toBeNull();
     expect(config.bundle.resources?.["resources/voices"]).toBe("voices");
     expect(workflow).toContain("voices/es/counts/1.wav");

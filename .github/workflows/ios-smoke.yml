@@ -57,6 +57,12 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      # Tauri resolves and validates bundle.resources before it executes the
+      # platform beforeBuildCommand. Build this inherited resource up front;
+      # otherwise a clean runner fails before either frontend build can start.
+      - name: Build bundled remote frontend
+        run: npm run build:remote
+
       - name: Cache Bungee iOS build
         id: bungee-cache
         uses: actions/cache@v4
