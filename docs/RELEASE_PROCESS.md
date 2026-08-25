@@ -537,7 +537,7 @@ Hemos sacado una nueva versión v<NEW> estos han sido los cambios:
 - <emoji> <bullet 5 — optional, max ~5 bullets>
 
 Puedes descargar la nueva versión aqui:
-https://libretracks.pages.dev/es/download/
+https://libretracks.com/es/download/
 ```
 
 Notes:
