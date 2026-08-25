@@ -93,6 +93,45 @@ final class IosFolderPickerPlugin: Plugin {
     }
   }
 
+  /// Pick one document for reading while retaining its security-scoped URL.
+  /// Used for portable LibreTracks packages; the Rust side validates the
+  /// extension/archive after selection because document providers frequently
+  /// expose custom files as generic public.data.
+  @objc public func pickFile(_ invoke: Invoke) throws {
+    diagnostic("pickFile received from Rust; mainThread=\(Thread.isMainThread)")
+    retainSelectedURL = true
+    onResult = { event in
+      switch event {
+      case .selected(let url):
+        self.diagnostic("resolving selected file \(url.lastPathComponent)")
+        invoke.resolve(["file": url.path])
+      case .cancelled:
+        self.diagnostic("resolving file cancellation")
+        invoke.resolve(["file": NSNull()])
+      }
+    }
+
+    DispatchQueue.main.async {
+      let picker = UIDocumentPickerViewController(
+        forOpeningContentTypes: [.data],
+        asCopy: false)
+      let delegate = FolderPickerDelegate(plugin: self)
+      self.pickerDelegate = delegate
+      picker.delegate = delegate
+      picker.allowsMultipleSelection = false
+      picker.modalPresentationStyle = .fullScreen
+
+      guard let presenter = self.activeViewController() else {
+        self.diagnostic("FAILED file pick: no active view controller")
+        self.pickerDelegate = nil
+        self.onResult = nil
+        invoke.reject("No se pudo abrir el explorador de archivos de iOS")
+        return
+      }
+      presenter.present(picker, animated: true)
+    }
+  }
+
   /// Present iOS' native export document picker with an already-populated
   /// source file. Unlike a desktop save dialog, iOS chooses the destination
   /// while copying this source into Files/iCloud/another provider.
@@ -178,7 +217,7 @@ final class IosFolderPickerPlugin: Plugin {
   fileprivate func finish(_ event: FolderPickerEvent) {
     switch event {
     case .selected(let url) where retainSelectedURL:
-      diagnostic("delegate selected one folder; starting security-scoped access")
+      diagnostic("delegate selected one document; starting security-scoped access")
       retainAccess(to: url)
     case .selected:
       diagnostic("delegate completed file export")

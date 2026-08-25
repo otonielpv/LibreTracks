@@ -1,5 +1,9 @@
 name: iOS Smoke (unsigned IPA)
 
+env:
+  BUNGEE_VERSION: v2.4.24
+  FFMPEG_VERSION: 7.1.1
+
 on:
   workflow_dispatch:
   push:
@@ -53,12 +57,59 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      - name: Cache Bungee iOS build
+        id: bungee-cache
+        uses: actions/cache@v4
+        with:
+          path: bungee-ios-sdk
+          key: bungee-ios-${{ env.BUNGEE_VERSION }}-arm64-ios15
+
+      - name: Build Bungee for iPhone
+        if: steps.bungee-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$BUNGEE_VERSION" --recurse-submodules \
+            https://github.com/bungee-audio-stretch/bungee.git bungee-ios-src
+          cmake -S bungee-ios-src -B bungee-ios-src/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DBUNGEE_BUILD_SHARED_LIBRARY=OFF \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DBUNGEE_VERSION="${BUNGEE_VERSION#v}"
+          cmake --build bungee-ios-src/build --target bungee_library pffft --parallel 3
+          mkdir -p bungee-ios-sdk/include/bungee bungee-ios-sdk/ios-arm64
+          cp bungee-ios-src/bungee/*.h bungee-ios-sdk/include/bungee/
+          cp bungee-ios-src/build/libbungee.a bungee-ios-src/build/libpffft.a \
+            bungee-ios-sdk/ios-arm64/
+          lipo -info bungee-ios-sdk/ios-arm64/libbungee.a
+          lipo -info bungee-ios-sdk/ios-arm64/libpffft.a
+
+      - name: Cache FFmpeg iOS build
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: vendor/ffmpeg-ios-arm64
+          key: ffmpeg-ios-${{ env.FFMPEG_VERSION }}-arm64-ios15-static-lgpl-v1
+
+      - name: Build LGPL FFmpeg for iPhone
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: bash scripts/build-ffmpeg-ios.sh "$PWD/vendor/ffmpeg-ios-arm64"
+
       - name: Build native audio engine for iPhone
         shell: bash
         run: |
           set -euo pipefail
           build_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-arm64"
           link_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-link"
+          ffmpeg_dir="$GITHUB_WORKSPACE/vendor/ffmpeg-ios-arm64"
+          bungee_dir="$GITHUB_WORKSPACE/bungee-ios-sdk"
+
+          export PKG_CONFIG_PATH="$ffmpeg_dir/lib/pkgconfig"
 
           cmake -S native/audio-engine-v2 -B "$build_dir" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -70,10 +121,11 @@ jobs:
             -DLT_ENGINE_BUILD_BENCHES=OFF \
             -DLT_ENGINE_USE_JUCE=ON \
             -DLT_ENGINE_USE_OBOE=OFF \
-            -DLT_ENGINE_USE_FFMPEG=OFF \
+            -DLT_ENGINE_USE_FFMPEG=ON \
             -DLT_ENGINE_USE_LIBSNDFILE=ON \
             -DLT_ENGINE_USE_R8BRAIN=ON \
-            -DLT_ENGINE_USE_BUNGEE=OFF
+            -DLT_ENGINE_USE_BUNGEE=ON \
+            -DLT_BUNGEE_DIR="$bungee_dir"
           cmake --build "$build_dir" --parallel 3
 
           mkdir -p "$link_dir"
@@ -83,8 +135,22 @@ jobs:
           test -n "$sndfile_archive"
           cp "$engine_archive" "$link_dir/liblt_audio_engine_v2.a"
           cp "$sndfile_archive" "$link_dir/libsndfile.a"
+          cp "$bungee_dir/ios-arm64/libbungee.a" \
+             "$bungee_dir/ios-arm64/libpffft.a" \
+             "$ffmpeg_dir/lib/libavformat.a" \
+             "$ffmpeg_dir/lib/libavcodec.a" \
+             "$ffmpeg_dir/lib/libavutil.a" \
+             "$ffmpeg_dir/lib/libswresample.a" \
+             "$link_dir/"
           lipo -info "$link_dir/liblt_audio_engine_v2.a"
           lipo -info "$link_dir/libsndfile.a"
+          for library in libbungee.a libpffft.a libavformat.a libavcodec.a \
+                         libavutil.a libswresample.a; do
+            lipo -info "$link_dir/$library"
+          done
+
+          grep -q 'LT_ENGINE_USE_BUNGEE:BOOL=ON' "$build_dir/CMakeCache.txt"
+          grep -q 'LT_ENGINE_USE_FFMPEG:BOOL=ON' "$build_dir/CMakeCache.txt"
 
           echo "LT_ENGINE_IOS_LIB_DIR=$link_dir" >> "$GITHUB_ENV"
 
@@ -187,12 +253,18 @@ jobs:
             echo "IPA executable still contains the silent no-link engine" >&2
             exit 1
           fi
+          if ! find "$app" -path '*/voices/es/counts/1.wav' -print -quit \
+            | grep . >/dev/null; then
+            echo "IPA does not contain the bundled voice-guide bank" >&2
+            exit 1
+          fi
 
           echo "IPA: $ipa"
           echo "Bundle: $bundle_id"
           echo "Minimum iOS: $minimum_ios"
           echo "Architectures: $archs"
           echo "Audio engine: native static C++ engine linked"
+          echo "Full pack: Bungee + FFmpeg + voice guide + pads enabled"
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
 
       - name: Upload unsigned IPA

@@ -17,7 +17,13 @@ function touchPointer(
   return event;
 }
 
-function Harness({ onContextMenu }: { onContextMenu: () => void }) {
+function Harness({
+  onContextMenu,
+  onClick = () => undefined,
+}: {
+  onContextMenu: () => void;
+  onClick?: () => void;
+}) {
   const gesture = useTouchContextMenu({ delayMs: 500 });
   return (
     <div
@@ -26,6 +32,9 @@ function Harness({ onContextMenu }: { onContextMenu: () => void }) {
       onPointerMove={gesture.move}
       onPointerUp={gesture.cancel}
       onPointerCancel={gesture.cancel}
+      onClick={() => {
+        if (!gesture.consumeTriggered()) onClick();
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         onContextMenu();
@@ -63,5 +72,22 @@ describe("useTouchContextMenu", () => {
     fireEvent(ruler, touchPointer("pointerup", 6, 10, 10));
     act(() => vi.advanceTimersByTime(500));
     expect(onContextMenu).not.toHaveBeenCalled();
+  });
+
+  it("consumes the click emitted after a completed long-press", () => {
+    vi.useFakeTimers();
+    const onContextMenu = vi.fn();
+    const onClick = vi.fn();
+    const { getByTestId } = render(
+      <Harness onContextMenu={onContextMenu} onClick={onClick} />,
+    );
+    const target = getByTestId("ruler");
+    fireEvent(target, touchPointer("pointerdown", 7, 20, 20));
+    act(() => vi.advanceTimersByTime(500));
+    fireEvent(target, touchPointer("pointerup", 7, 20, 20));
+    fireEvent.click(target);
+
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
   });
 });

@@ -525,6 +525,7 @@ export function TimelineCanvasPane({
         ),
       ),
   });
+  const markerTouchContextMenu = useTouchContextMenu();
   // Los tres elementos que siguen al puntero durante un arrastre. Todos leen
   // refs y se mueven fuera de React; ver ./useFollowerX.
   const clipSnapIndicatorRef = useFollowerX(() => {
@@ -1045,14 +1046,27 @@ export function TimelineCanvasPane({
                 onPointerDown={(event) => {
                   event.stopPropagation();
                   if (event.altKey || event.ctrlKey || event.metaKey) return;
+                  markerTouchContextMenu.begin(event);
                   beginMarkerMove(event, section.id, section.startSeconds);
                 }}
-                onPointerMove={updateMarkerMove}
-                onPointerUp={endMarkerMove}
-                onPointerCancel={endMarkerMove}
+                onPointerMove={(event) => {
+                  markerTouchContextMenu.move(event);
+                  updateMarkerMove(event);
+                }}
+                onPointerUp={(event) => {
+                  markerTouchContextMenu.cancel();
+                  endMarkerMove(event);
+                }}
+                onPointerCancel={(event) => {
+                  markerTouchContextMenu.cancel();
+                  endMarkerMove(event);
+                }}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
+                  if (markerTouchContextMenu.consumeTriggered()) {
+                    return;
+                  }
                   // A drag just finished — swallow the synthetic click so the
                   // marker isn't also triggered/seeked. (The drag ref is
                   // already nulled by pointer-up, hence the separate flag.)
@@ -1112,8 +1126,13 @@ export function TimelineCanvasPane({
                   event.preventDefault();
                   event.stopPropagation();
                 }}
+                onPointerDown={markerTouchContextMenu.begin}
+                onPointerMove={markerTouchContextMenu.move}
+                onPointerUp={markerTouchContextMenu.cancel}
+                onPointerCancel={markerTouchContextMenu.cancel}
                 onClick={(event) => {
                   event.stopPropagation();
+                  markerTouchContextMenu.consumeTriggered();
                 }}
                 onContextMenu={(event) => {
                   event.stopPropagation();
@@ -1140,8 +1159,13 @@ export function TimelineCanvasPane({
                   event.preventDefault();
                   event.stopPropagation();
                 }}
+                onPointerDown={markerTouchContextMenu.begin}
+                onPointerMove={markerTouchContextMenu.move}
+                onPointerUp={markerTouchContextMenu.cancel}
+                onPointerCancel={markerTouchContextMenu.cancel}
                 onClick={(event) => {
                   event.stopPropagation();
+                  markerTouchContextMenu.consumeTriggered();
                 }}
                 onContextMenu={(event) => {
                   event.stopPropagation();

@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -263,7 +264,7 @@ type ControlGroupProps = {
   className?: string;
 };
 
-function ControlGroup({
+export function ControlGroup({
   title,
   summary,
   open,
@@ -273,6 +274,23 @@ function ControlGroup({
   action,
   className,
 }: ControlGroupProps) {
+  const panel = open ? (
+    <div className="lt-control-popover-panel" data-lt-control-popover-panel>
+      <div className="lt-control-popover-header">
+        <span>{title}</span>
+        {summary ? <strong>{summary}</strong> : null}
+      </div>
+      <div className="lt-control-group-body">
+        <div className="lt-control-group-actions">{children}</div>
+        {details ? (
+          <div className="lt-control-group-details">{details}</div>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
+  const renderPanelInDocument =
+    open && document.documentElement.classList.contains("lt-mobile");
+
   return (
     <section className={`lt-control-group ${className ?? ""}`}>
       <div className="lt-control-group-main">
@@ -294,22 +312,17 @@ function ControlGroup({
             <span className="material-symbols-outlined">tune</span>
           </button>
 
-          {open ? (
-            <div className="lt-control-popover-panel">
-              <div className="lt-control-popover-header">
-                <span>{title}</span>
-                {summary ? <strong>{summary}</strong> : null}
-              </div>
-              <div className="lt-control-group-body">
-                <div className="lt-control-group-actions">{children}</div>
-                {details ? (
-                  <div className="lt-control-group-details">{details}</div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+          {renderPanelInDocument ? null : panel}
         </div>
       </div>
+      {renderPanelInDocument
+        ? createPortal(
+            <div className={`lt-control-popover-portal ${className ?? ""}`}>
+              {panel}
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }
@@ -372,6 +385,12 @@ export function TimelineToolbar({
       const root = toolbarRootRef.current;
       if (!root) return;
       if (event.target instanceof Node && root.contains(event.target)) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-lt-control-popover-panel]")
+      ) {
+        return;
+      }
       setOpenGroup(null);
     };
     document.addEventListener("pointerdown", handlePointerDown, true);

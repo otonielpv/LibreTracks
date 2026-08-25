@@ -192,6 +192,14 @@ if(LT_ENGINE_USE_BUNGEE)
         set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/android-${ANDROID_ABI}")
         set(_lt_bungee_lib    "${_lt_bungee_libdir}/libbungee.a")
         set(_lt_bungee_dll    "")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        # Upstream does not publish an iOS binary. CI builds Bungee and pffft
+        # from source as static arm64 archives, mirroring the Android layout.
+        # Keeping them static avoids embedded-framework signing and lets the
+        # unsigned AltStore IPA carry the complete pitch/warp backend.
+        set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/ios-arm64")
+        set(_lt_bungee_lib    "${_lt_bungee_libdir}/libbungee.a")
+        set(_lt_bungee_dll    "")
     elseif(APPLE)
         set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/apple-mac")
         set(_lt_bungee_lib    "${_lt_bungee_libdir}/bungee.framework")
@@ -210,13 +218,13 @@ if(LT_ENGINE_USE_BUNGEE)
     endif()
     target_include_directories(lt_audio_engine_v2 PRIVATE "${LT_BUNGEE_DIR}/include")
     target_link_libraries(lt_audio_engine_v2 PRIVATE "${_lt_bungee_lib}")
-    if(ANDROID)
+    if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
         # bungee_library links pffft PRIVATE, so a static libbungee.a does not
         # carry it — link the companion archive built alongside it.
         target_link_libraries(lt_audio_engine_v2 PRIVATE "${_lt_bungee_libdir}/libpffft.a")
     endif()
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_BUNGEE=1)
-    if(APPLE)
+    if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
         set_target_properties(lt_audio_engine_v2 PROPERTIES
             BUILD_RPATH "@loader_path"
             INSTALL_RPATH "@loader_path"
@@ -227,7 +235,7 @@ if(LT_ENGINE_USE_BUNGEE)
             INSTALL_RPATH "$ORIGIN"
         )
     endif()
-    if(APPLE AND EXISTS "${_lt_bungee_dll}")
+    if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND EXISTS "${_lt_bungee_dll}")
         add_custom_command(TARGET lt_audio_engine_v2 POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${_lt_bungee_dll}"

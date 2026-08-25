@@ -897,10 +897,32 @@ pub async fn assign_pad_key(
             )?;
             (staged.clone(), Some(staged))
         } else {
-            (PathBuf::from(&source_path), None)
+            let src = PathBuf::from(&source_path);
+            let staging_root = app
+                .path()
+                .app_cache_dir()
+                .ok()
+                .map(|path| path.join("import-staging"));
+            let staged = staging_root
+                .filter(|root| src.starts_with(root))
+                .map(|_| src.clone());
+            (src, staged)
         }
     };
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "ios")]
+    let (src, staged) = {
+        let src = PathBuf::from(&source_path);
+        let staging_root = app
+            .path()
+            .app_cache_dir()
+            .ok()
+            .map(|path| path.join("import-staging"));
+        let staged = staging_root
+            .filter(|root| src.starts_with(root))
+            .map(|_| src.clone());
+        (src, staged)
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (src, staged): (PathBuf, Option<PathBuf>) = (PathBuf::from(&source_path), None);
 
     if !src.is_file() {

@@ -6,7 +6,12 @@
     "beforeBuildCommand": "npm run build"
   },
   "bundle": {
-    "resources": null,
+    "resources": {
+      "resources/voices": "voices",
+      "../../../LICENSE": "licenses/LICENSE",
+      "../../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
+      "../../../licenses/*": "licenses"
+    },
     "iOS": {
       "minimumSystemVersion": "15.0"
     }

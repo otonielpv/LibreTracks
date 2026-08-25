@@ -2109,7 +2109,7 @@ pub fn import_session_package_at(
 /// is wired to the empty-state landing screen as well as the menu. Replaces
 /// whatever is currently loaded (it does NOT merge).
 #[tauri::command]
-pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, String> {
+pub async fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     let (package_source, target_song_dir) = {
         // SAF picker for the .ltset.
@@ -2157,7 +2157,39 @@ pub fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, 
         ((picked, picked_name), target_song_dir)
     };
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "ios")]
+    let (package_source, target_song_dir) = {
+        let Some(package_file) =
+            libretracks_ios_folder_picker::pick_file(app.clone()).await?
+        else {
+            return Ok(false);
+        };
+        let package_file = std::path::PathBuf::from(package_file);
+        if package_file
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| !extension.eq_ignore_ascii_case("ltset"))
+            .unwrap_or(true)
+        {
+            return Err("Selecciona un archivo de sesión .ltset".to_string());
+        }
+        let default_name = package_file
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .filter(|name| !name.is_empty())
+            .unwrap_or("sesion-importada")
+            .to_string();
+        let Some(parent_dir) =
+            libretracks_ios_folder_picker::pick_folder(app.clone()).await?
+        else {
+            return Ok(false);
+        };
+        let target_song_dir =
+            unique_session_dir(std::path::Path::new(&parent_dir), &default_name);
+        (package_file, target_song_dir)
+    };
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (package_source, target_song_dir) = {
         let package_file = FileDialog::new()
             .add_filter("LibreTracks Set", &["ltset"])

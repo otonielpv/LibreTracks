@@ -25,6 +25,7 @@ export function useTouchContextMenu({
   ignoreTarget,
 }: TouchContextMenuOptions = {}) {
   const activeRef = useRef<ActiveTouch | null>(null);
+  const triggeredRef = useRef(false);
 
   const cancel = () => {
     const active = activeRef.current;
@@ -38,6 +39,7 @@ export function useTouchContextMenu({
 
   const begin = (event: ReactPointerEvent<HTMLElement>) => {
     cancel();
+    triggeredRef.current = false;
     if (event.pointerType !== "touch" || ignoreTarget?.(event.target)) {
       return;
     }
@@ -56,6 +58,7 @@ export function useTouchContextMenu({
         return;
       }
       activeRef.current = null;
+      triggeredRef.current = true;
       active.target.dispatchEvent(
         new MouseEvent("contextmenu", {
           bubbles: true,
@@ -85,5 +88,13 @@ export function useTouchContextMenu({
     }
   };
 
-  return { begin, move, cancel };
+  /** Returns true once after a long-press fired. Touch targets use this to
+   * swallow the synthetic click WebKit emits when the finger is released. */
+  const consumeTriggered = () => {
+    const triggered = triggeredRef.current;
+    triggeredRef.current = false;
+    return triggered;
+  };
+
+  return { begin, move, cancel, consumeTriggered };
 }

@@ -132,9 +132,23 @@ fn link_ios_static_engine() {
         });
     let engine = lib_dir.join("liblt_audio_engine_v2.a");
     let sndfile = lib_dir.join("libsndfile.a");
-    if !engine.is_file() || !sndfile.is_file() {
+    let static_dependencies = [
+        "libbungee.a",
+        "libpffft.a",
+        "libavformat.a",
+        "libavcodec.a",
+        "libswresample.a",
+        "libavutil.a",
+    ];
+    if !engine.is_file()
+        || !sndfile.is_file()
+        || static_dependencies
+            .iter()
+            .any(|name| !lib_dir.join(name).is_file())
+    {
         panic!(
-            "iOS audio engine link set is incomplete: expected {} and {}",
+            "iOS full audio engine link set is incomplete in {}: expected {}, {}, Bungee and FFmpeg static archives",
+            lib_dir.display(),
             engine.display(),
             sndfile.display()
         );
@@ -145,6 +159,16 @@ fn link_ios_static_engine() {
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=static=lt_audio_engine_v2");
     println!("cargo:rustc-link-lib=static=sndfile");
+    for library in [
+        "bungee",
+        "pffft",
+        "avformat",
+        "avcodec",
+        "swresample",
+        "avutil",
+    ] {
+        println!("cargo:rustc-link-lib=static={library}");
+    }
     println!("cargo:rustc-link-lib=c++");
 
     // Static archives do not carry their framework dependencies. These are

@@ -50,7 +50,22 @@ describe("diagnóstico del selector de carpetas iOS", () => {
   it("no bloquea el hilo principal mientras Swift espera al usuario", () => {
     expect(projectCommands).toContain("pub async fn pick_session_folder");
     expect(projectCommands).toContain("pub async fn start_open_project_from_dialog");
+    expect(projectCommands).toContain(
+      "pub async fn start_import_session_package_from_dialog",
+    );
     expect(pickerBridge).toContain("spawn_blocking");
     expect(pickerBridge).toContain("run_mobile_plugin");
+  });
+
+  it("importa .ltset con un selector de documento nativo en iOS", () => {
+    expect(swift).toContain("@objc public func pickFile");
+    expect(swift).toContain("forOpeningContentTypes: [.data]");
+    expect(pickerBridge).toContain('run_mobile_plugin::<PickFileResponse>("pickFile"');
+    expect(projectCommands).toContain(
+      "libretracks_ios_folder_picker::pick_file(app.clone()).await?",
+    );
+    expect(projectCommands).toContain(
+      "libretracks_ios_folder_picker::pick_folder(app.clone()).await?",
+    );
   });
 });

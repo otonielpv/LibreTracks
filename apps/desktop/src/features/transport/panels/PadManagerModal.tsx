@@ -14,9 +14,14 @@ import {
   getPadsCatalog,
   listenToPadDownloadProgress,
   renameUserPad,
+  isMobileApp,
   type PadDownloadProgressEvent,
 } from "../desktopApi";
 import { formatUserFacingError } from "../errors/formatTransportError";
+import {
+  pickFilesViaWebView,
+  stageFileForImport,
+} from "../library/mobileFilePicker";
 
 type Props = {
   open: boolean;
@@ -232,17 +237,26 @@ function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props)
   const handleAssign = useCallback(
     async (keyIndex: number) => {
       if (!selected) return;
-      const picked = await open({
-        multiple: false,
-        directory: false,
-        filters: [
-          {
-            name: t("pads.audioFilter", { defaultValue: "Audio" }),
-            extensions: AUDIO_EXTENSIONS,
-          },
-        ],
-      });
-      const path = typeof picked === "string" ? picked : null;
+      let path: string | null = null;
+      if (isMobileApp) {
+        // iOS/Android document providers do not reliably return a persistent
+        // filesystem path. Stream the chosen file into our private cache, then
+        // let the backend decode/copy it into the pad's permanent directory.
+        const [file] = await pickFilesViaWebView(undefined, false);
+        if (file) path = await stageFileForImport(file, true);
+      } else {
+        const picked = await open({
+          multiple: false,
+          directory: false,
+          filters: [
+            {
+              name: t("pads.audioFilter", { defaultValue: "Audio" }),
+              extensions: AUDIO_EXTENSIONS,
+            },
+          ],
+        });
+        path = typeof picked === "string" ? picked : null;
+      }
       if (!path) return;
       setBusyKey(keyIndex);
       setError(null);
