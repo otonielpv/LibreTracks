@@ -173,12 +173,14 @@ jobs:
             *) echo "Expected arm64 executable, got: $archs" >&2; exit 1 ;;
           esac
 
-          # Rust references the C ABI internally, so Xcode may localize these
-          # symbols in a stripped release executable. Inspect all symbols, not
-          # only externally visible ones. Avoid grep -q under pipefail: its
-          # early exit can SIGPIPE nm and turn a real match into status 141.
-          if ! nm "$app/$executable" | grep '_lt_engine_create' >/dev/null; then
-            echo "IPA executable does not contain the native audio engine C ABI" >&2
+          # Xcode strips the release executable's local symbol table, including
+          # the internally referenced C ABI names. Use an engine-only runtime
+          # diagnostic as a positive fingerprint that survives stripping.
+          # Avoid grep -q under pipefail: its early exit can SIGPIPE strings and
+          # turn a real match into status 141.
+          if ! strings "$app/$executable" \
+            | grep 'Could not activate the iOS audio session' >/dev/null; then
+            echo "IPA executable does not contain the native iOS audio engine" >&2
             exit 1
           fi
           if strings "$app/$executable" | grep '"error":"no-link"' >/dev/null; then
