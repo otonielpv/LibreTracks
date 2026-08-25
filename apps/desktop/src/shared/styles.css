@@ -57,7 +57,7 @@ textarea {
   height: 100vh;
   height: 100dvh;
   padding:
-    env(safe-area-inset-top, 0px)
+    max(env(safe-area-inset-top, 0px), 0.25rem)
     env(safe-area-inset-right, 0px)
     env(safe-area-inset-bottom, 0px)
     env(safe-area-inset-left, 0px);
@@ -7876,6 +7876,28 @@ textarea {
    left compresses instead. */
 .lt-android .lt-transport-readout {
   flex: 0 0 auto;
+}
+
+/* On the landing screen every transport action is disabled. Removing that
+   dead chrome keeps BAR + TIME fully visible on narrow notched phones instead
+   of starting the horizontally scrollable strip part-way off screen. */
+.lt-android .lt-topbar.is-project-empty .lt-tap-tempo-button,
+.lt-android .lt-topbar.is-project-empty .lt-transport-buttons {
+  display: none;
+}
+
+/* An iPhone 13 leaves roughly 750 CSS px after both landscape safe-area
+   insets. The split toggles already hide their text on mobile; let their icon
+   buttons use that compact intrinsic width instead of the desktop minimum. */
+@media (max-width: 850px) {
+  .lt-android .lt-transport-buttons .lt-topbar-split button.lt-split-main {
+    min-width: 2rem;
+    padding-inline: 0.3rem;
+  }
+
+  .lt-android .lt-transport-buttons {
+    padding-inline: 0.3rem;
+  }
 }
 
 @media (max-width: 1040px) {

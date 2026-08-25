@@ -162,7 +162,9 @@ export function TimelineTopbar({
   };
 
   return (
-    <header className="lt-topbar">
+    <header
+      className={isProjectEmpty ? "lt-topbar is-project-empty" : "lt-topbar"}
+    >
       <div className="lt-topbar-menu-row">
         <div className="lt-brand">
           <span className="lt-brand-title">LIBRETRACKS</span>

@@ -61,8 +61,41 @@ final class IosFolderPickerPlugin: Plugin {
       picker.delegate = delegate
       picker.allowsMultipleSelection = false
       picker.modalPresentationStyle = .fullScreen
-      self.manager.viewController?.present(picker, animated: true)
+
+      guard let presenter = self.activeViewController() else {
+        self.pickerDelegate = nil
+        self.onResult = nil
+        invoke.reject("No se pudo abrir el explorador de archivos de iOS")
+        return
+      }
+
+      presenter.present(picker, animated: true)
     }
+  }
+
+  /// Tauri normally exposes the webview controller through the plugin manager,
+  /// but it can still be detached while iOS is completing an orientation or
+  /// keyboard transition. Resolve the active scene as a fallback instead of
+  /// silently leaving the Rust/JavaScript invocation pending forever.
+  private func activeViewController() -> UIViewController? {
+    let managed = manager.viewController
+    let sceneRoot = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first(where: { $0.isKeyWindow })?
+      .rootViewController
+
+    var current = managed?.viewIfLoaded?.window == nil ? sceneRoot : managed
+    while let presented = current?.presentedViewController {
+      current = presented
+    }
+    if let navigation = current as? UINavigationController {
+      return navigation.visibleViewController ?? navigation
+    }
+    if let tabs = current as? UITabBarController {
+      return tabs.selectedViewController ?? tabs
+    }
+    return current
   }
 
   fileprivate func finish(_ event: FolderPickerEvent) {
