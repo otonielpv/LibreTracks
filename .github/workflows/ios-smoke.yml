@@ -60,9 +60,10 @@ jobs:
         working-directory: apps/desktop
         run: npm run tauri -- ios init --ci
 
-      # Tauri 2.10 does not expose a --no-sign flag for `ios build`. Build the
-      # generated Xcode project with signing disabled, then package Payload/
-      # ourselves. AltStore supplies the signature and provisioning profile.
+      # Tauri 2.10 does not expose a --no-sign flag. Keep `tauri ios build` as
+      # the wrapper because its Xcode script needs Tauri's temporary options
+      # server, but disable signing in the generated project. Exporting may
+      # fail without a profile; the unsigned .app is already in the archive.
       - name: Build unsigned arm64 IPA
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target-ios-ci
@@ -70,24 +71,33 @@ jobs:
         run: |
           set -euo pipefail
           apple_dir="apps/desktop/src-tauri/gen/apple"
-          derived_data="$RUNNER_TEMP/libretracks-derived-data"
           staging_dir="$RUNNER_TEMP/libretracks-ipa"
           ipa_dir="$apple_dir/build/arm64"
+          pbxproj="$apple_dir/libretracks-desktop.xcodeproj/project.pbxproj"
 
-          xcodebuild \
-            -project "$apple_dir/libretracks-desktop.xcodeproj" \
-            -scheme libretracks-desktop_iOS \
-            -configuration release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$derived_data" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY= \
-            build
+          perl -0pi -e 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;/g' "$pbxproj"
+          grep -q 'CODE_SIGNING_ALLOWED = NO' "$pbxproj"
 
-          app="$derived_data/Build/Products/release-iphoneos/LibreTracks.app"
-          test -d "$app"
+          set +e
+          (
+            cd apps/desktop
+            npm run tauri -- ios build --ci --target aarch64
+          )
+          tauri_status=$?
+          set -e
+
+          app="$(find "$apple_dir" "$HOME/Library/Developer/Xcode/Archives" \
+            -type d -path '*.xcarchive/Products/Applications/*.app' \
+            -print -quit 2>/dev/null || true)"
+          if [ -z "$app" ]; then
+            echo "Tauri exited with $tauri_status and produced no archived app" >&2
+            find "$apple_dir" -maxdepth 5 -type d -name '*.app' -print || true
+            if [ "$tauri_status" -eq 0 ]; then
+              tauri_status=1
+            fi
+            exit "$tauri_status"
+          fi
+
           mkdir -p "$staging_dir/Payload" "$ipa_dir"
           ditto "$app" "$staging_dir/Payload/LibreTracks.app"
           (
