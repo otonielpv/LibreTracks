@@ -13,6 +13,8 @@ import {
   exportSessionPackage,
   getProjectLoadProgressSnapshot,
   importSessionPackage,
+  importSongPackageFromPathWithProgress,
+  isMobileApp,
   listenToSessionExportProgress,
   openProject,
   openProjectFromPath,
@@ -24,6 +26,10 @@ import {
   saveSessionAsTemplate,
 } from "../desktopApi";
 import { nextPaint } from "../library/pendingAudioImports";
+import {
+  pickFilesViaWebView,
+  stageFileForImport,
+} from "../library/mobileFilePicker";
 import { pushRecentSession } from "../recentSessions";
 import type { SidebarTab } from "../types";
 import {
@@ -57,6 +63,7 @@ type UseProjectActionsProps = {
   setSessionExportUiState: (
     state: { active: boolean; percent: number; message: string },
   ) => void;
+  getImportPositionSeconds: () => number;
 };
 
 export function useProjectActions({
@@ -72,6 +79,7 @@ export function useProjectActions({
   setActiveSidebarTab,
   setPackageUnpackUiState,
   setSessionExportUiState,
+  getImportPositionSeconds,
 }: UseProjectActionsProps) {
   function applyProjectProgressFeedback(event: ProjectLoadProgressEvent) {
     const detail =
@@ -356,7 +364,30 @@ export function useProjectActions({
       // even though we don't raise the blocking overlay. Cleared in `finally`.
       setPackageUnpackUiState({ active: true, percent: 0 });
       try {
-        const nextSnapshot = await pickAndImportSong();
+        let nextSnapshot: TransportSnapshot | null;
+        if (isMobileApp) {
+          // rfd has no file-dialog implementation on iOS. Use the WebView
+          // document picker while the original tap gesture is still active,
+          // stage its bytes, then feed the normal path-based package importer.
+          // No `accept=.ltpkg`: Files providers often publish custom package
+          // types as generic data and iOS would grey them out.
+          const [packageFile] = await pickFilesViaWebView(undefined, false);
+          if (!packageFile) {
+            return;
+          }
+          if (!packageFile.name.toLowerCase().endsWith(".ltpkg")) {
+            throw new Error(
+              `El archivo "${packageFile.name}" no es una canción .ltpkg de LibreTracks.`,
+            );
+          }
+          const stagedPath = await stageFileForImport(packageFile, true);
+          nextSnapshot = await importSongPackageFromPathWithProgress(
+            stagedPath,
+            getImportPositionSeconds(),
+          );
+        } else {
+          nextSnapshot = await pickAndImportSong();
+        }
         if (!nextSnapshot) {
           return;
         }

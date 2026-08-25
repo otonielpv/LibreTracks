@@ -762,6 +762,24 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
 
     impl_->adaptor = std::make_unique<JuceCallbackAdaptor>(callback);
 
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    // iOS exposes one system-managed route rather than independently openable
+    // desktop-style devices. Asking setAudioDeviceSetup for a persisted device
+    // name/channel mask makes JUCE reject perfectly valid route changes (built-
+    // in speaker <-> headphones/USB). AVAudioSession above owns the policy;
+    // let JUCE open the current system route with its native channel layout.
+    const auto t_setup = clk::now();
+    juce::String err = impl_->juce_manager.initialiseWithDefaultDevices(0, 2);
+    const double setup_ms =
+        std::chrono::duration<double, std::milli>(clk::now() - t_setup).count();
+    device_debug_log(
+        "[LT_AUDIO_DEBUG] open_device iOS default route initialise_ms=%.1f err=\"%s\"\n",
+        setup_ms, err.isEmpty() ? "" : err.toRawUTF8());
+    if (err.isNotEmpty()) {
+        impl_->last_error = err.toStdString();
+        return fail(Result<void>::err(impl_->last_error));
+    }
+#else
     if (!request.device_id.empty()) {
         auto [backend, device_name] = split_device_id(request.device_id);
         if (!backend.empty()) {
@@ -924,6 +942,7 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         impl_->last_error = err.toStdString();
         return fail(Result<void>::err(impl_->last_error));
     }
+#endif
 
     auto* dev = impl_->juce_manager.getCurrentAudioDevice();
     if (!dev)

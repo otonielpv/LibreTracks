@@ -645,6 +645,15 @@ textarea {
 }
 
 /* Output-device health badge (fallback clock active / device restored). */
+.lt-device-status-slot {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  max-width: min(28rem, calc(100vw - 1rem));
+  pointer-events: none;
+}
+
 .lt-device-status-pill {
   display: inline-flex;
   align-items: center;
@@ -655,6 +664,9 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lt-device-status-pill .material-symbols-outlined {

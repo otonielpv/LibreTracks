@@ -2285,7 +2285,7 @@ export function TransportPanelContent() {
       // then repoint the clip at that copy. The chooser only opens inside the
       // tap's user-gesture window, so it must come before any await.
       if (isMobileApp) {
-        const files = await pickFilesViaWebView("audio/*");
+        const files = await pickFilesViaWebView();
         const picked = files[0];
         if (!picked) {
           return;
@@ -4019,6 +4019,7 @@ export function TransportPanelContent() {
     setActiveSidebarTab,
     setPackageUnpackUiState,
     setSessionExportUiState,
+    getImportPositionSeconds: () => snapshotRef.current?.positionSeconds ?? 0,
   });
 
   const {

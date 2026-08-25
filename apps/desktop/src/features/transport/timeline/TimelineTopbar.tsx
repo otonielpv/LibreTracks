@@ -700,6 +700,8 @@ export function TimelineTopbar({
               <strong ref={transportReadoutValueRef}>{readoutPositionSecondsLabel}</strong>
             </div>
             <span className={`transport-pill is-${playbackState}`}>{playbackStateLabel}</span>
+          </div>
+          <div className="lt-device-status-slot">
             <AudioDeviceStatusBadge />
           </div>
         </div>
