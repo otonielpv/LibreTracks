@@ -60,14 +60,40 @@ jobs:
         working-directory: apps/desktop
         run: npm run tauri -- ios init --ci
 
-      # --no-sign archives the real arm64 device app without requiring an
-      # Apple certificate or provisioning profile. AltStore supplies both when
-      # it re-signs the downloaded IPA with the tester's Apple ID.
+      # Tauri 2.10 does not expose a --no-sign flag for `ios build`. Build the
+      # generated Xcode project with signing disabled, then package Payload/
+      # ourselves. AltStore supplies the signature and provisioning profile.
       - name: Build unsigned arm64 IPA
-        working-directory: apps/desktop
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target-ios-ci
-        run: npm run tauri -- ios build --ci --target aarch64 --no-sign
+        shell: bash
+        run: |
+          set -euo pipefail
+          apple_dir="apps/desktop/src-tauri/gen/apple"
+          derived_data="$RUNNER_TEMP/libretracks-derived-data"
+          staging_dir="$RUNNER_TEMP/libretracks-ipa"
+          ipa_dir="$apple_dir/build/arm64"
+
+          xcodebuild \
+            -project "$apple_dir/libretracks-desktop.xcodeproj" \
+            -scheme libretracks-desktop_iOS \
+            -configuration release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$derived_data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            build
+
+          app="$derived_data/Build/Products/release-iphoneos/LibreTracks.app"
+          test -d "$app"
+          mkdir -p "$staging_dir/Payload" "$ipa_dir"
+          ditto "$app" "$staging_dir/Payload/LibreTracks.app"
+          (
+            cd "$staging_dir"
+            zip -qry --symlinks "$GITHUB_WORKSPACE/$ipa_dir/LibreTracks-unsigned.ipa" Payload
+          )
 
       - name: Validate IPA structure and target
         shell: bash
