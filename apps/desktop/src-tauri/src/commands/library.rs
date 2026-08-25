@@ -5,7 +5,7 @@ use crate::models::view::encode_peaks_base64;
 use crate::models::{LibraryAssetSummary, WaveformSummaryDto, WaveformWindowDto};
 use crate::state::DesktopState;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_library_assets(
     state: State<'_, DesktopState>,
 ) -> Result<Vec<LibraryAssetSummary>, String> {
@@ -19,7 +19,7 @@ pub fn get_library_assets(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_library_folders(state: State<'_, DesktopState>) -> Result<Vec<String>, String> {
     let session = state
         .session
@@ -31,7 +31,7 @@ pub fn get_library_folders(state: State<'_, DesktopState>) -> Result<Vec<String>
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_waveform_summaries(
     waveform_keys: Vec<String>,
     app: AppHandle,
@@ -135,7 +135,7 @@ pub async fn get_waveform_window(
     .map_err(|error| format!("waveform window worker failed: {error}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_library_waveform_summaries(
     file_paths: Vec<String>,
     app: tauri::AppHandle,

@@ -517,7 +517,9 @@ unsigned long long purge_source_cache(unsigned int* out_failed) {
 }
 
 SourcePeakOverview analyze_file_peaks(const std::string& file_path,
-                                      int resolution_frames) {
+                                      int resolution_frames,
+                                      PeakProgressFn on_progress,
+                                      void* progress_ctx) {
     SourcePeakOverview overview;
     overview.resolution_frames = std::max(1, resolution_frames);
 
@@ -552,6 +554,16 @@ SourcePeakOverview analyze_file_peaks(const std::string& file_path,
     std::vector<float> data(static_cast<std::size_t>(kChunkFrames)
                             * static_cast<std::size_t>(info.channel_count),
                             0.f);
+
+    // Progress cadence. Long enough that the callback (which crosses the FFI and
+    // emits an IPC event) is never the bottleneck, short enough that the user
+    // sees the waveform growing rather than appearing in two jumps.
+    constexpr auto kProgressInterval = std::chrono::milliseconds(150);
+    // Backdated so the FIRST chunk publishes immediately: the point of this is
+    // that the user sees the waveform start appearing at once, and waiting out
+    // an interval before the first one would leave a short file with no
+    // progress at all.
+    auto last_progress = std::chrono::steady_clock::now() - kProgressInterval;
 
     Frame cursor = 0;
     while (cursor < info.duration_frames) {
@@ -593,6 +605,33 @@ SourcePeakOverview analyze_file_peaks(const std::string& file_path,
         }
 
         cursor += frames_read;
+
+        // Publish what is finished so far. Only COMPLETE buckets are handed
+        // over: the bucket the cursor is sitting inside is still accumulating,
+        // and shipping it would make the waveform's leading edge flicker as its
+        // peak grows.
+        if (on_progress) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - last_progress >= kProgressInterval) {
+                last_progress = now;
+                const std::size_t complete = static_cast<std::size_t>(cursor / bucket_width);
+                if (complete > 0) {
+                    PeakProgress progress;
+                    progress.sample_rate       = overview.sample_rate;
+                    progress.analyzed_frames   = static_cast<long long>(
+                        complete * static_cast<std::size_t>(bucket_width));
+                    progress.total_frames      = static_cast<long long>(info.duration_frames);
+                    progress.resolution_frames = overview.resolution_frames;
+                    progress.min_peaks         = min_peaks.data();
+                    progress.max_peaks         = max_peaks.data();
+                    progress.min_peaks_right   = has_right_channel ? min_peaks_right.data() : nullptr;
+                    progress.max_peaks_right   = has_right_channel ? max_peaks_right.data() : nullptr;
+                    progress.bucket_count      = static_cast<int>(
+                        std::min(complete, bucket_count));
+                    on_progress(progress_ctx, progress);
+                }
+            }
+        }
     }
     decoder->close();
 

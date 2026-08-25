@@ -76,6 +76,26 @@ TEST_CASE("the profile matches the querying thread_policy on desktop") {
     }
 }
 
+TEST_CASE("the waveform pool scales with the machine but stays under Fill") {
+    // Waveform analysis is cosmetic and runs while Decode and Fill are already
+    // busy (an import), so it scales with the box but never leads it. It used
+    // to be a hardcoded single worker on the host side, which made a 25-stem
+    // import analyse strictly one file at a time.
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 2, 8 * kGb) == 1);
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 4, 8 * kGb) == 2);
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 8, 16 * kGb) == 3);
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 16, 32 * kGb) == 4);
+
+    // A low-RAM box gets one regardless of how many cores it reports.
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 16, 4 * kGb) == 1);
+
+    // Never ahead of the I/O pool it shares a disk with.
+    for (int cores : {2, 4, 8, 16}) {
+        CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, cores, 16 * kGb)
+              <= lt_recommend_worker_threads_for(WorkerRole::Fill, cores, 16 * kGb));
+    }
+}
+
 TEST_CASE("desktop never gets a spending budget") {
     // usable_budget_bytes only steers handheld code; leaving it 0 keeps desktop
     // behaviour driven by the existing per-consumer policies.

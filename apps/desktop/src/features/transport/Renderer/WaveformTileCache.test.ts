@@ -141,6 +141,22 @@ describe("WaveformTileCache", () => {
     expect(waveformNamespace).not.toBe(baseNamespace);
   });
 
+  // Los resumenes parciales de `waveform:progress` llegan varias veces con la
+  // MISMA clave y version, cada uno con mas picos. Si no entraran en el
+  // namespace, los tiles del primero se reutilizarian para todos los demas y la
+  // onda dejaria de crecer en pantalla.
+  it("builds different namespaces as a partial waveform grows", () => {
+    const clip = buildClip();
+    const quarter = namespaceOf(clip, buildWaveform({ analyzedSeconds: 2 }));
+    const half = namespaceOf(clip, buildWaveform({ analyzedSeconds: 4 }));
+    const complete = namespaceOf(clip, buildWaveform());
+
+    expect(half).not.toBe(quarter);
+    expect(complete).not.toBe(half);
+    // Y una vez completo la clave es estable: nada obliga a re-rasterizar.
+    expect(namespaceOf(clip, buildWaveform())).toBe(complete);
+  });
+
   it("builds different namespaces for different lane heights", () => {
     // El alto entra en la clave desde el paso 04: un tile rasterizado para un
     // carril de 32 px no sirve para uno de 128, y reutilizarlo lo estiraria.

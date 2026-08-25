@@ -415,6 +415,99 @@ pub fn waveform_summary_from_peaks(
     )
 }
 
+/// Peak arrays covering a whole source, built from the part of it analysed so
+/// far. Every array has the same length and spans `total_frames`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpannedPeaks {
+    /// Frames each output bucket covers.
+    pub resolution_frames: usize,
+    pub min_peaks: Vec<f32>,
+    pub max_peaks: Vec<f32>,
+    /// Empty for mono sources.
+    pub min_peaks_right: Vec<f32>,
+    pub max_peaks_right: Vec<f32>,
+}
+
+/// Fold the buckets analysed so far into at most `target_buckets`, padded with
+/// silence out to `total_frames`.
+///
+/// Two things make this the shape a progressive waveform needs:
+///
+/// - **It always spans the whole source.** Renderers map peaks onto a clip by
+///   ratio over the array length, so an array holding only the analysed part
+///   would be stretched across the full clip and draw the wrong shape, changing
+///   at every update. Zero-filling the tail draws it as silence instead, which
+///   is what an unread stretch should look like.
+/// - **It is coarse.** A base-resolution LOD of a 5-minute stem is ~52 000
+///   buckets, about 1 MB of base64 per update. `target_buckets` keeps an update
+///   small and constant regardless of the file's length; the finished summary
+///   carries the real resolution moments later.
+///
+/// Returns None when the inputs can't place the peaks (no total duration, no
+/// analysed buckets, mismatched channel arrays).
+pub fn downsample_peaks_over_span(
+    min_peaks: &[f32],
+    max_peaks: &[f32],
+    min_peaks_right: &[f32],
+    max_peaks_right: &[f32],
+    source_resolution_frames: usize,
+    total_frames: u64,
+    target_buckets: usize,
+) -> Option<SpannedPeaks> {
+    let analysed = min_peaks.len().min(max_peaks.len());
+    if total_frames == 0 || analysed == 0 || source_resolution_frames == 0 || target_buckets == 0 {
+        return None;
+    }
+
+    let track_right =
+        min_peaks_right.len() >= analysed && max_peaks_right.len() >= analysed;
+    let total_source_buckets = (total_frames as usize)
+        .div_ceil(source_resolution_frames)
+        .max(1);
+    let chunk = total_source_buckets.div_ceil(target_buckets).max(1);
+    let output_len = total_source_buckets.div_ceil(chunk).max(1);
+
+    // Zero = silence, which is what a stretch nobody has read yet should be.
+    let mut out_min = vec![0.0f32; output_len];
+    let mut out_max = vec![0.0f32; output_len];
+    let mut out_min_right = vec![0.0f32; if track_right { output_len } else { 0 }];
+    let mut out_max_right = vec![0.0f32; if track_right { output_len } else { 0 }];
+
+    for index in 0..output_len {
+        let start = index * chunk;
+        if start >= analysed {
+            break;
+        }
+        let end = ((index + 1) * chunk).min(analysed);
+        out_min[index] = min_peaks[start..end]
+            .iter()
+            .copied()
+            .fold(f32::INFINITY, f32::min);
+        out_max[index] = max_peaks[start..end]
+            .iter()
+            .copied()
+            .fold(f32::NEG_INFINITY, f32::max);
+        if track_right {
+            out_min_right[index] = min_peaks_right[start..end]
+                .iter()
+                .copied()
+                .fold(f32::INFINITY, f32::min);
+            out_max_right[index] = max_peaks_right[start..end]
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
+        }
+    }
+
+    Some(SpannedPeaks {
+        resolution_frames: source_resolution_frames.saturating_mul(chunk),
+        min_peaks: out_min,
+        max_peaks: out_max,
+        min_peaks_right: out_min_right,
+        max_peaks_right: out_max_right,
+    })
+}
+
 pub fn waveform_summary_from_channel_peaks(
     sample_rate: u32,
     duration_frames: u64,
@@ -1458,5 +1551,131 @@ mod tests {
         assert!((analyzed.duration_seconds - 1.0).abs() < 0.05);
         assert!(!analyzed.waveform.lods.is_empty());
         assert!(validate_waveform_summary(&analyzed.waveform, "<t>").is_ok());
+    }
+
+    /// A progressive waveform update must describe the WHOLE source even though
+    /// only part of it has been read: renderers place peaks by ratio over the
+    /// array length, so an array holding just the analysed buckets would be
+    /// stretched across the full clip and redraw a different (wrong) shape at
+    /// every update.
+    #[test]
+    fn downsampled_progress_peaks_span_the_whole_source() {
+        let source_resolution = 256usize;
+        let total_frames = 48_000u64 * 10; // 10 s at 48 kHz
+        // Half the file read so far.
+        let analysed = (48_000usize * 5) / source_resolution;
+
+        let spanned = downsample_peaks_over_span(
+            &vec![-0.5; analysed],
+            &vec![0.5; analysed],
+            &[],
+            &[],
+            source_resolution,
+            total_frames,
+            1024,
+        )
+        .expect("a half-read source still produces peaks");
+
+        let covered = (spanned.max_peaks.len() * spanned.resolution_frames) as u64;
+        assert!(
+            covered >= total_frames,
+            "peaks cover {covered} frames of a {total_frames}-frame source"
+        );
+        assert_eq!(spanned.min_peaks.len(), spanned.max_peaks.len());
+
+        let midpoint = spanned.max_peaks.len() / 2;
+        assert!(
+            spanned.max_peaks[..midpoint].iter().all(|peak| *peak > 0.0),
+            "the analysed half carries real peaks"
+        );
+        assert!(
+            spanned.max_peaks[midpoint + 1..].iter().all(|peak| *peak == 0.0),
+            "the unread tail is silent, not stretched data"
+        );
+    }
+
+    /// The whole point of the coarse fold is that one update stays small however
+    /// long the file is — these cross the IPC boundary several times a second.
+    #[test]
+    fn downsampled_progress_peaks_respect_the_bucket_budget() {
+        let source_resolution = 256usize;
+        // 10 minutes: ~112 500 base buckets.
+        let total_frames = 48_000u64 * 600;
+        let analysed = (total_frames as usize) / source_resolution;
+
+        let spanned = downsample_peaks_over_span(
+            &vec![-0.9; analysed],
+            &vec![0.9; analysed],
+            &[],
+            &[],
+            source_resolution,
+            total_frames,
+            1024,
+        )
+        .expect("peaks");
+
+        assert!(
+            spanned.max_peaks.len() <= 1024,
+            "{} buckets exceeds the budget",
+            spanned.max_peaks.len()
+        );
+        // Folding keeps the extremes: a quiet average would flatten the wave.
+        assert!(spanned.max_peaks[0] > 0.89);
+        assert!(spanned.min_peaks[0] < -0.89);
+    }
+
+    #[test]
+    fn downsampled_progress_peaks_keep_both_channels_together() {
+        let analysed = 100usize;
+        let spanned = downsample_peaks_over_span(
+            &vec![-0.4; analysed],
+            &vec![0.4; analysed],
+            &vec![-0.8; analysed],
+            &vec![0.8; analysed],
+            256,
+            256 * 400,
+            64,
+        )
+        .expect("peaks");
+
+        assert_eq!(spanned.min_peaks.len(), spanned.min_peaks_right.len());
+        assert_eq!(spanned.max_peaks.len(), spanned.max_peaks_right.len());
+        assert!(spanned.max_peaks_right[0] > 0.79);
+    }
+
+    /// A mono source must not grow phantom right-channel arrays: consumers read
+    /// an empty right side as "draw one waveform, not two half-height ones".
+    #[test]
+    fn downsampled_progress_peaks_stay_mono_for_a_mono_source() {
+        let spanned = downsample_peaks_over_span(
+            &vec![-0.4; 50],
+            &vec![0.4; 50],
+            &[],
+            &[],
+            256,
+            256 * 200,
+            64,
+        )
+        .expect("peaks");
+
+        assert!(spanned.min_peaks_right.is_empty());
+        assert!(spanned.max_peaks_right.is_empty());
+    }
+
+    /// Without a known duration there is nowhere to put the peaks, so no partial
+    /// update is produced at all (the finished summary still arrives later).
+    #[test]
+    fn downsampled_progress_peaks_need_a_known_duration() {
+        assert!(downsample_peaks_over_span(
+            &vec![-0.4; 50],
+            &vec![0.4; 50],
+            &[],
+            &[],
+            256,
+            0,
+            64,
+        )
+        .is_none());
+        assert!(downsample_peaks_over_span(&[], &[], &[], &[], 256, 48_000, 64).is_none());
     }
 }

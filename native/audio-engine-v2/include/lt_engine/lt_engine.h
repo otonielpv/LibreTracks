@@ -148,6 +148,40 @@ LT_API const char* lt_audio_engine_capture_output_samples(LtEngine* engine);
 LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
                                                       int32_t resolution_frames);
 
+/** Background worker count recommended for `role` on this machine, from the
+ *  same thread policy the engine's own pools use (scaled by cores and RAM).
+ *  Roles: 0 = decode, 1 = fill, 2 = waveform analysis. Unknown roles answer 1.
+ *  Exposed so a host-side pool (the waveform queue) follows one policy instead
+ *  of restating it and drifting. Needs no engine handle. */
+LT_API int32_t lt_audio_engine_recommend_worker_threads(int32_t role);
+
+/** Partial peaks reported while `lt_audio_engine_analyze_file_peaks_progressive`
+ *  is still reading the file. The pointers are the analyser's own buffers and
+ *  are valid ONLY for the duration of the call, for `bucket_count` entries —
+ *  copy what you need before returning. `bucket_count` counts complete buckets
+ *  only. The right-channel pointers are null for mono sources.
+ *  Called on the calling thread; must not block. */
+typedef void (*LtPeakProgressCallback)(void* ctx,
+                                       int32_t sample_rate,
+                                       int64_t analyzed_frames,
+                                       int64_t total_frames,
+                                       int32_t resolution_frames,
+                                       const float* min_peaks,
+                                       const float* max_peaks,
+                                       const float* min_peaks_right,
+                                       const float* max_peaks_right,
+                                       int32_t bucket_count);
+
+/** Same as `lt_audio_engine_analyze_file_peaks`, but reports partial peaks
+ *  every ~150 ms so the host can paint the waveform as it is analysed instead
+ *  of blocking on a placeholder until the whole file is done. Passing a null
+ *  callback is equivalent to the non-progressive call. */
+LT_API const char* lt_audio_engine_analyze_file_peaks_progressive(
+    const char* file_path,
+    int32_t resolution_frames,
+    LtPeakProgressCallback on_progress,
+    void* progress_ctx);
+
 /** Decode a pad key (`<pads_dir>/<pad_id>/<key>.<ext>`) and swap it into the
  *  ambient-pad renderer immediately, on the calling thread. Intended to be
  *  called WITHOUT holding the host's engine lock, so the multi-second MP3

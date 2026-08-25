@@ -28,6 +28,7 @@ import type {
   TransitionTypeLabel,
   TransportLifecycleEvent,
   TransportSnapshot,
+  WaveformProgressEvent,
   WaveformReadyEvent,
   WaveformSummaryDto,
 } from "../features/transport/desktopApi";
@@ -59,6 +60,8 @@ const MOCK_SONG_FILE_PATH = `${MOCK_SONG_DIR}/song.ltsession`;
 let state = buildInitialState();
 let idCounter = 0;
 let waveformReadyListeners: Array<(event: WaveformReadyEvent) => void> = [];
+let waveformProgressListeners: Array<(event: WaveformProgressEvent) => void> =
+  [];
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -771,6 +774,7 @@ export function resetTestDesktopApiMock() {
   idCounter = 0;
   state = buildInitialState();
   waveformReadyListeners = [];
+  waveformProgressListeners = [];
 }
 
 /**
@@ -800,6 +804,34 @@ export function emitWaveformReadyForTest(
   };
 
   for (const listener of waveformReadyListeners) {
+    listener(clone(event));
+  }
+}
+
+/**
+ * Push a PARTIAL waveform, as the backend does every ~150 ms while a file is
+ * still being analysed: real peaks up to `analyzedSeconds`, silence after it.
+ * Unlike `emitWaveformReadyForTest` this does NOT settle the mock's stored
+ * waveform — more progress (and finally a ready event) is still expected.
+ */
+export function emitWaveformProgressForTest(
+  filePath: string,
+  durationSeconds: number,
+  analyzedSeconds: number,
+) {
+  const summary = {
+    ...buildWaveformSummary(filePath, durationSeconds),
+    analyzedSeconds,
+  };
+  const event: WaveformProgressEvent = {
+    songDir: state.songDir,
+    waveformKey: filePath,
+    analyzedSeconds,
+    durationSeconds,
+    summary: clone(summary),
+  };
+
+  for (const listener of waveformProgressListeners) {
     listener(clone(event));
   }
 }
@@ -887,6 +919,16 @@ export const testDesktopApiMock = {
     waveformReadyListeners.push(handler);
     return () => {
       waveformReadyListeners = waveformReadyListeners.filter(
+        (listener) => listener !== handler,
+      );
+    };
+  },
+  listenToWaveformProgress: async (
+    handler: (event: WaveformProgressEvent) => void,
+  ) => {
+    waveformProgressListeners.push(handler);
+    return () => {
+      waveformProgressListeners = waveformProgressListeners.filter(
         (listener) => listener !== handler,
       );
     };

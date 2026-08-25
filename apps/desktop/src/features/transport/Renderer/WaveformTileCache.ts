@@ -266,6 +266,12 @@ export function tileNamespace(request: TileRequest) {
   return [
     request.clip.waveformKey,
     request.waveform.version,
+    // Partial summaries (a file still being analysed) arrive several times with
+    // progressively more peaks under the SAME key and version. Without this the
+    // first partial's tiles would be reused for every later one and the
+    // waveform would stop growing on screen. "full" for a finished summary
+    // keeps the key stable once analysis is done.
+    request.waveform.analyzedSeconds?.toFixed(3) ?? "full",
     channelLayout,
     request.waveform.sampleRate,
     request.waveform.durationSeconds.toFixed(6),

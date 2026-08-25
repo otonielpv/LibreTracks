@@ -1323,3 +1323,86 @@ TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {
     CHECK(best_diff < 1.0e-4);
     CHECK(best_shift == 0);
 }
+
+#if LT_ENGINE_USE_LIBSNDFILE
+TEST_CASE("analyze_file_peaks publishes partial peaks while it reads") {
+    // The host paints a waveform in pieces from these callbacks instead of
+    // showing a static "analyzing" placeholder until the whole file is read.
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr int kResolution = 256;
+    constexpr Frame kFrames = kSampleRate * 3;  // several read chunks
+    const auto wav_path = make_temp_wav_path("peaks_progress");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    struct Capture {
+        int calls = 0;
+        int last_bucket_count = 0;
+        long long last_analyzed = 0;
+        long long total = 0;
+        int resolution = 0;
+        bool monotonic = true;
+        bool had_right = false;
+        std::vector<float> first_max;
+    } capture;
+
+    // No captures, so it converts to the plain function pointer the analyser
+    // takes; the state travels through the ctx pointer.
+    auto on_progress = [](void* ctx, const PeakProgress& progress) {
+        auto* c = static_cast<Capture*>(ctx);
+        if (progress.bucket_count < c->last_bucket_count) c->monotonic = false;
+        c->calls += 1;
+        c->last_bucket_count = progress.bucket_count;
+        c->last_analyzed = progress.analyzed_frames;
+        c->total = progress.total_frames;
+        c->resolution = progress.resolution_frames;
+        c->had_right = progress.max_peaks_right != nullptr;
+        if (c->first_max.empty() && progress.max_peaks && progress.bucket_count > 0) {
+            c->first_max.assign(progress.max_peaks,
+                                progress.max_peaks + progress.bucket_count);
+        }
+    };
+
+    const auto overview =
+        analyze_file_peaks(wav_path, kResolution, on_progress, &capture);
+    std::remove(wav_path.c_str());
+
+    // The first chunk publishes straight away, so even a short file reports.
+    CHECK(capture.calls >= 1);
+    CHECK(capture.monotonic);
+    CHECK(capture.total == static_cast<long long>(kFrames));
+    CHECK(capture.resolution == kResolution);
+    CHECK(capture.had_right);  // stereo source exposes both channels
+    // Only COMPLETE buckets are published: a bucket still accumulating would
+    // make the waveform's leading edge flicker as its peak grew.
+    CHECK(capture.last_analyzed % kResolution == 0);
+    CHECK(capture.last_analyzed <= static_cast<long long>(kFrames));
+
+    // What was published must be a PREFIX of the finished analysis, not a
+    // rescaled preview — the renderer relies on that to place the peaks.
+    REQUIRE(!capture.first_max.empty());
+    REQUIRE(overview.max_peaks.size() >= capture.first_max.size());
+    for (std::size_t index = 0; index < capture.first_max.size(); ++index)
+        CHECK(overview.max_peaks[index] == doctest::Approx(capture.first_max[index]));
+}
+
+TEST_CASE("analyze_file_peaks without a callback behaves exactly as before") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kSampleRate;
+    const auto wav_path = make_temp_wav_path("peaks_no_progress");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    const auto plain = analyze_file_peaks(wav_path, 256);
+    const auto with_null = analyze_file_peaks(wav_path, 256, nullptr, nullptr);
+    std::remove(wav_path.c_str());
+
+    CHECK(plain.duration_frames == with_null.duration_frames);
+    CHECK(plain.max_peaks.size() == with_null.max_peaks.size());
+    REQUIRE(!plain.max_peaks.empty());
+    for (std::size_t index = 0; index < plain.max_peaks.size(); ++index)
+        CHECK(plain.max_peaks[index] == doctest::Approx(with_null.max_peaks[index]));
+}
+#endif

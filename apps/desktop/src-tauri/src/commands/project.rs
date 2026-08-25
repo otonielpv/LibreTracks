@@ -85,7 +85,7 @@ fn pick_export_target(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_song_view(
     state: State<'_, DesktopState>,
     include_waveforms: Option<bool>,
@@ -1231,7 +1231,7 @@ fn spawn_open_project_worker(app: &AppHandle, song_file: std::path::PathBuf) {
     });
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_clip(
     app: AppHandle,
     track_id: String,
@@ -1255,7 +1255,7 @@ pub fn create_clip(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_clips_batch(
     app: AppHandle,
     requests: Vec<CreateClipRequest>,
@@ -1284,7 +1284,7 @@ pub fn create_clips_batch(
 /// Drop one or more audio files into a compact-view song column. The
 /// state layer creates an auto track per file; the file stem becomes
 /// the track name. Used by the compact view's drop handler.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_clips_with_auto_tracks(
     app: AppHandle,
     requests: Vec<CreateClipWithAutoTrackRequest>,
@@ -1314,7 +1314,7 @@ pub fn create_clips_with_auto_tracks(
 /// one persistent audio track per asset (named `track_name`) plus a clip, all
 /// in a single song update — so a batch drop onto an already-populated song
 /// costs one rebuild instead of one per asset.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_audio_tracks_with_clips(
     app: AppHandle,
     requests: Vec<CreateAudioTrackWithClipRequest>,

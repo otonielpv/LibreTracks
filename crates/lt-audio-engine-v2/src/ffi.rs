@@ -9,9 +9,26 @@
 //! take over and the app runs with a silent no-op engine — so a checkout
 //! that never ran the NDK cmake build still compiles.
 
-use std::ffi::c_char;
+use std::ffi::{c_char, c_void};
 
 pub type LtResult = i32;
+
+/// Partial peaks reported while a progressive file analysis is still running.
+/// The pointers are the analyser's own buffers: valid only for the duration of
+/// the call and only for `bucket_count` entries. The right-channel pointers are
+/// null for mono sources. Mirrors `LtPeakProgressCallback` in lt_engine.h.
+pub type LtPeakProgressCallback = unsafe extern "C" fn(
+    ctx: *mut c_void,
+    sample_rate: i32,
+    analyzed_frames: i64,
+    total_frames: i64,
+    resolution_frames: i32,
+    min_peaks: *const f32,
+    max_peaks: *const f32,
+    min_peaks_right: *const f32,
+    max_peaks_right: *const f32,
+    bucket_count: i32,
+);
 
 pub const LT_OK: LtResult = 0;
 pub const LT_ERR_INVALID_HANDLE: LtResult = 1;
@@ -77,6 +94,13 @@ extern "C" {
     pub fn lt_audio_engine_analyze_file_peaks(
         file_path: *const c_char,
         resolution_frames: i32,
+    ) -> *const c_char;
+    pub fn lt_audio_engine_recommend_worker_threads(role: i32) -> i32;
+    pub fn lt_audio_engine_analyze_file_peaks_progressive(
+        file_path: *const c_char,
+        resolution_frames: i32,
+        on_progress: Option<LtPeakProgressCallback>,
+        progress_ctx: *mut c_void,
     ) -> *const c_char;
     pub fn lt_audio_engine_load_pad_clip(
         engine: *mut LtEngine,
@@ -254,6 +278,25 @@ pub unsafe fn lt_audio_engine_capture_output_samples(_: *mut LtEngine) -> *const
     all(target_os = "android", not(lt_engine_android_link))
 ))]
 pub unsafe fn lt_audio_engine_analyze_file_peaks(_: *const c_char, _: i32) -> *const c_char {
+    b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_recommend_worker_threads(_: i32) -> i32 {
+    1
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_analyze_file_peaks_progressive(
+    _: *const c_char,
+    _: i32,
+    _: Option<LtPeakProgressCallback>,
+    _: *mut c_void,
+) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
 }
 #[cfg(any(

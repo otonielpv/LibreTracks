@@ -269,7 +269,7 @@ pub fn get_audio_output_capture(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_desktop_performance_snapshot(
     state: State<'_, DesktopState>,
 ) -> Result<DesktopPerformanceSnapshot, String> {

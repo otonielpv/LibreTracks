@@ -445,6 +445,12 @@ pub struct WaveformSummaryDto {
     pub duration_seconds: f64,
     pub sample_rate: u32,
     pub lods: Vec<WaveformLodDto>,
+    /// How much of the source this summary actually covers, for the partial
+    /// summaries pushed by `waveform:progress` while a file is being analysed.
+    /// `None` means complete — every finished summary omits it, so a consumer
+    /// that ignores the field behaves exactly as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub analyzed_seconds: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -897,6 +903,21 @@ pub(crate) fn waveform_summary_to_dto(
         duration_seconds: summary.duration_seconds,
         sample_rate: summary.sample_rate,
         lods: summary.lods.iter().map(waveform_lod_to_dto).collect(),
+        analyzed_seconds: None,
+    }
+}
+
+/// A summary covering only the first `analyzed_seconds` of the source. Used by
+/// the progressive waveform events so the renderer can paint the analysed part
+/// and leave the rest as placeholder instead of showing nothing at all.
+pub(crate) fn partial_waveform_summary_to_dto(
+    waveform_key: &str,
+    summary: &WaveformSummary,
+    analyzed_seconds: f64,
+) -> WaveformSummaryDto {
+    WaveformSummaryDto {
+        analyzed_seconds: Some(analyzed_seconds.max(0.0)),
+        ..waveform_summary_to_dto(waveform_key, summary)
     }
 }
 

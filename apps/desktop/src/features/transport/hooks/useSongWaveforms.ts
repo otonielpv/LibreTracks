@@ -10,10 +10,37 @@ import {
 /** Max waveform summaries requested per round-trip. */
 const WAVEFORM_REQUEST_BATCH_SIZE = 4;
 /**
- * Generation after a decode is quick; cap the polling so a genuinely
- * ungeneratable source can't spin forever (~30s of 600ms ticks).
+ * Cap the polling so a genuinely ungeneratable source can't spin forever.
+ * With the backoff below, 30 fruitless ticks is a little over a minute — more
+ * headroom than the old flat 600 ms × 50 (~30 s), which a large multitrack on a
+ * slow disk could genuinely outlast.
  */
-const MAX_POLL_ATTEMPTS = 50;
+const MAX_POLL_ATTEMPTS = 30;
+
+/** First retry delay, and the ceiling the backoff climbs to. */
+const POLL_INTERVAL_MS = 600;
+const MAX_POLL_INTERVAL_MS = 2_400;
+
+/**
+ * Back off while nothing is landing.
+ *
+ * Every request takes the backend's session lock, and a 25-stem import means
+ * seven round-trips per tick for the ~30 s the analysis runs — all of it
+ * competing with the transport snapshot that moves the playhead. The waveforms
+ * themselves now arrive over `waveform:progress` / `waveform:ready` as they are
+ * produced, so this poll is only the safety net for the events being missed
+ * (which they can be right after an import, before the frontend knows the new
+ * songDir). A net does not need to be checked four times a second.
+ *
+ * Ticks that DID bring something back reset to the fast interval, so an import
+ * still fills in briskly.
+ */
+function pollDelayMs(consecutiveEmptyPolls: number) {
+  return Math.min(
+    MAX_POLL_INTERVAL_MS,
+    POLL_INTERVAL_MS * 2 ** Math.max(0, consecutiveEmptyPolls - 1),
+  );
+}
 
 export type UseSongWaveformsOptions = {
   song: SongView | null;
@@ -106,7 +133,9 @@ export function useSongWaveforms({
         } else {
           pollAttempts = 0;
         }
-        await new Promise((resolve) => setTimeout(resolve, 600));
+        await new Promise((resolve) =>
+          setTimeout(resolve, pollDelayMs(pollAttempts)),
+        );
       }
     }
 

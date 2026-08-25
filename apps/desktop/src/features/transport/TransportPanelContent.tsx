@@ -419,6 +419,7 @@ import { createCompactSongHandlers } from "./compact/compactSongHandlers";
 import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
+import { useWaveformProgress } from "./hooks/useWaveformProgress";
 import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -4338,6 +4339,7 @@ export function TransportPanelContent() {
   // Waveforms for the song's clips (batched + polling).
   // See ./hooks/useSongWaveforms.
   useSongWaveforms({ song, setWaveformCache });
+  useWaveformProgress({ playbackSongDir, setWaveformCache });
 
   // Clear the meters when playback stops so they don't freeze mid-level.
   useEffect(() => {

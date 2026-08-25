@@ -54,11 +54,40 @@ unsigned long long source_cache_dir_size_bytes();
 // fully-blocked purge is indistinguishable from an already-empty cache.
 unsigned long long purge_source_cache(unsigned int* out_failed = nullptr);
 
+// Partial peaks handed to a PeakProgressFn while a file is still being
+// analysed. The arrays are the analyser's OWN buffers: valid only for the
+// duration of the callback, and only up to `bucket_count` — the buckets past
+// it have not been filled yet. `bucket_count` counts COMPLETE buckets only, so
+// a consumer never sees a bucket that is still accumulating samples.
+// `min_peaks_right` / `max_peaks_right` are null for mono sources.
+struct PeakProgress {
+    int          sample_rate       = 0;
+    long long    analyzed_frames   = 0;
+    long long    total_frames      = 0;
+    int          resolution_frames = 0;
+    const float* min_peaks         = nullptr;
+    const float* max_peaks         = nullptr;
+    const float* min_peaks_right   = nullptr;
+    const float* max_peaks_right   = nullptr;
+    int          bucket_count      = 0;
+};
+
+// Called on the analysing thread at most every ~150 ms. Must not block: the
+// analysis loop is stopped for as long as it runs.
+using PeakProgressFn = void (*)(void* ctx, const PeakProgress& progress);
+
 // Decode an audio file directly and build peak buckets. This is used by the
 // host UI for waveform generation so it follows the same native decoder stack
 // as playback (FFmpeg/libav for compressed formats, fast native paths for WAV).
+//
+// `on_progress` (optional) is what lets the UI paint a waveform in pieces as it
+// is analysed instead of showing a static "analyzing" placeholder for the whole
+// file: the host emits each callback as an event and the renderer draws the
+// portion covered so far.
 SourcePeakOverview analyze_file_peaks(const std::string& file_path,
-                                      int resolution_frames);
+                                      int resolution_frames,
+                                      PeakProgressFn on_progress = nullptr,
+                                      void* progress_ctx = nullptr);
 
 // ---------------------------------------------------------------------------
 // SourceManager — owns all DecodedSources for a session.

@@ -4846,3 +4846,74 @@ fn moving_a_song_region_translates_its_clips_and_markers() {
         );
     }
 }
+
+/// A progress summary must describe the WHOLE source even though only part of
+/// it has been read: the renderer maps peaks onto a clip by ratio over the
+/// array length, so a summary holding only the analysed buckets would be
+/// stretched across the full clip and draw the wrong shape at every tick.
+#[test]
+fn progress_summary_spans_the_whole_source_with_a_silent_tail() {
+    let sample_rate = 48_000u32;
+    let total_frames = i64::from(sample_rate) * 10; // 10 s of audio
+    let resolution_frames = 256usize;
+    let analyzed_frames = i64::from(sample_rate) * 5; // half of it read so far
+    let analyzed_buckets = (analyzed_frames as usize) / resolution_frames;
+
+    let progress = lt_audio_engine_v2::SourcePeaksProgress {
+        sample_rate,
+        analyzed_frames,
+        total_frames,
+        resolution_frames,
+        min_peaks: vec![-0.5; analyzed_buckets],
+        max_peaks: vec![0.5; analyzed_buckets],
+        min_peaks_right: Vec::new(),
+        max_peaks_right: Vec::new(),
+    };
+
+    let (summary, analyzed_seconds) =
+        super::progress_summary_from_peaks(&progress, Path::new("nonexistent.wav"))
+            .expect("a half-read source should still produce a summary");
+
+    assert!((analyzed_seconds - 5.0).abs() < 1e-6);
+    // The duration is the FILE's, not the analysed part's.
+    assert!((summary.duration_seconds - 10.0).abs() < 1e-6);
+
+    let lod = summary.primary_lod().expect("a base lod");
+    // The array covers all 10 s: half real peaks, half silent padding.
+    let covered_seconds =
+        (lod.max_peaks.len() * lod.resolution_frames) as f64 / f64::from(sample_rate);
+    assert!(
+        covered_seconds >= 10.0 - 0.05,
+        "peaks cover {covered_seconds}s of a 10s source"
+    );
+    let midpoint = lod.max_peaks.len() / 2;
+    assert!(
+        lod.max_peaks[..midpoint].iter().all(|peak| *peak > 0.0),
+        "the analysed half must carry real peaks"
+    );
+    assert!(
+        lod.max_peaks[midpoint + 1..].iter().all(|peak| *peak == 0.0),
+        "the unanalysed tail must be silent, not stretched data"
+    );
+}
+
+/// Sources whose duration the decoder can't report yet have nothing to place
+/// the peaks against, so no partial summary is emitted at all (the finished
+/// `waveform:ready` still arrives later).
+#[test]
+fn progress_summary_is_skipped_without_a_known_duration() {
+    let progress = lt_audio_engine_v2::SourcePeaksProgress {
+        sample_rate: 48_000,
+        analyzed_frames: 48_000,
+        total_frames: 0,
+        resolution_frames: 256,
+        min_peaks: vec![-0.5; 187],
+        max_peaks: vec![0.5; 187],
+        min_peaks_right: Vec::new(),
+        max_peaks_right: Vec::new(),
+    };
+
+    assert!(
+        super::progress_summary_from_peaks(&progress, Path::new("nonexistent.wav")).is_none()
+    );
+}

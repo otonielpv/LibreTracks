@@ -32,6 +32,7 @@ import type {
   TrackKind,
   TransportLifecycleEvent,
   TransportSnapshot,
+  WaveformProgressEvent,
   WaveformReadyEvent,
   WaveformSummaryDto,
   WaveformWindowDto,
@@ -215,6 +216,18 @@ export async function listenToWaveformReady(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<WaveformReadyEvent>("waveform:ready", (event) => {
+    handler(event.payload);
+  });
+}
+
+/** Partial waveforms pushed while a file is being analysed. Several fire per
+ * file, each covering more of it, until the matching `waveform:ready` arrives
+ * with the full-resolution summary. */
+export async function listenToWaveformProgress(
+  handler: (event: WaveformProgressEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<WaveformProgressEvent>("waveform:progress", (event) => {
     handler(event.payload);
   });
 }
