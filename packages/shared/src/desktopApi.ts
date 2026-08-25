@@ -43,17 +43,30 @@ const tauriWindow = window as Window & {
   __TAURI_INTERNALS__?: unknown;
 };
 
+declare const __LIBRETRACKS_TAURI_PLATFORM__: string | undefined;
+
+const tauriBuildPlatform =
+  typeof __LIBRETRACKS_TAURI_PLATFORM__ === "string"
+    ? __LIBRETRACKS_TAURI_PLATFORM__
+    : "";
+
 export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 
 // Keep OS-specific flags for audio/device behaviour and a shared mobile flag
 // for the touch layout, sandboxed file flows and desktop-only features.
 export const isAndroidApp =
-  isTauriApp && /android/i.test(navigator.userAgent);
+  isTauriApp &&
+  (/android|androideabi/i.test(tauriBuildPlatform) ||
+    /android/i.test(`${navigator.userAgent} ${navigator.platform ?? ""}`));
 const isIPadDesktopUserAgent =
   /macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
 export const isIOSApp =
   isTauriApp &&
-  (/iphone|ipad|ipod/i.test(navigator.userAgent) || isIPadDesktopUserAgent);
+  (/ios/i.test(tauriBuildPlatform) ||
+    /iphone|ipad|ipod/i.test(
+      `${navigator.userAgent} ${navigator.platform ?? ""}`,
+    ) ||
+    isIPadDesktopUserAgent);
 export const isMobileApp = isAndroidApp || isIOSApp;
 
 /**

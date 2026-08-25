@@ -85,17 +85,23 @@ final class IosFolderPickerPlugin: Plugin {
       .first(where: { $0.isKeyWindow })?
       .rootViewController
 
-    var current = managed?.viewIfLoaded?.window == nil ? sceneRoot : managed
-    while let presented = current?.presentedViewController {
-      current = presented
+    // The controller exposed by Tauri's plugin manager can be a child whose
+    // view is attached but cannot present a full-screen controller on a real
+    // device. Always start at the key window's root hierarchy when available.
+    return topViewController(from: sceneRoot ?? managed)
+  }
+
+  private func topViewController(from controller: UIViewController?) -> UIViewController? {
+    if let presented = controller?.presentedViewController {
+      return topViewController(from: presented)
     }
-    if let navigation = current as? UINavigationController {
-      return navigation.visibleViewController ?? navigation
+    if let navigation = controller as? UINavigationController {
+      return topViewController(from: navigation.visibleViewController ?? navigation)
     }
-    if let tabs = current as? UITabBarController {
-      return tabs.selectedViewController ?? tabs
+    if let tabs = controller as? UITabBarController {
+      return topViewController(from: tabs.selectedViewController ?? tabs)
     }
-    return current
+    return controller
   }
 
   fileprivate func finish(_ event: FolderPickerEvent) {

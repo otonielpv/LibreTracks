@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 const sharedDir = dirname(fileURLToPath(import.meta.url));
 const styles = readFileSync(resolve(sharedDir, "styles.css"), "utf8");
 const main = readFileSync(resolve(sharedDir, "../main.tsx"), "utf8");
+const viteConfig = readFileSync(resolve(sharedDir, "../../vite.config.ts"), "utf8");
 const desktopApi = readFileSync(
   resolve(sharedDir, "../../../../packages/shared/src/desktopApi.ts"),
   "utf8",
@@ -27,18 +28,25 @@ describe("contrato responsive móvil", () => {
     expect(styles).toContain(".lt-mobile .lt-app-shell");
   });
 
-  it("reconoce iPadOS aunque publique un user-agent de escritorio", () => {
+  it("reconoce iOS por el target nativo y mantiene fallbacks de navegador", () => {
+    expect(viteConfig).toContain("TAURI_ENV_PLATFORM");
+    expect(viteConfig).toContain("__LIBRETRACKS_TAURI_PLATFORM__");
+    expect(desktopApi).toContain("tauriBuildPlatform");
+    expect(desktopApi).toContain("navigator.platform");
     expect(desktopApi).toContain("isIPadDesktopUserAgent");
     expect(desktopApi).toContain("navigator.maxTouchPoints > 1");
   });
 
-  it("obtiene los cuatro márgenes seguros del dispositivo", () => {
+  it("mantiene el shell a pantalla completa y protege controles, no el lienzo", () => {
     const shell = declarationsFor(".lt-mobile .lt-app-shell");
+    const topbar = declarationsFor(".lt-mobile .lt-topbar");
+    const sideNav = declarationsFor(".lt-mobile .lt-side-nav");
 
-    expect(shell).toContain("env(safe-area-inset-top");
-    expect(shell).toContain("env(safe-area-inset-right");
-    expect(shell).toContain("env(safe-area-inset-bottom");
-    expect(shell).toContain("env(safe-area-inset-left");
+    expect(shell).not.toContain("padding:");
+    expect(topbar).toContain("env(safe-area-inset-top");
+    expect(topbar).toContain("env(safe-area-inset-right");
+    expect(topbar).toContain("env(safe-area-inset-left");
+    expect(sideNav).toContain("env(safe-area-inset-left");
   });
 
   it("reorganiza grupos completos del transporte sin recortar horizontalmente", () => {

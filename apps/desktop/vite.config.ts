@@ -15,8 +15,15 @@ const legacyWebkitTargets = browserslistToTargets(["safari >= 13"]);
 // Set by the Tauri CLI during `tauri android dev`: the WebView on the phone
 // must reach the Vite dev server over the LAN, not on localhost.
 const tauriDevHost = process.env.TAURI_DEV_HOST;
+// WKWebView user-agent strings are not a reliable way to tell iOS from macOS.
+// Tauri exposes the real compilation platform to its build hook, so bake it
+// into the frontend and keep navigator detection only as a web/dev fallback.
+const tauriPlatform = process.env.TAURI_ENV_PLATFORM ?? "";
 
 export default defineConfig({
+  define: {
+    __LIBRETRACKS_TAURI_PLATFORM__: JSON.stringify(tauriPlatform),
+  },
   plugins: [react()],
   server: tauriDevHost
     ? {

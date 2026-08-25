@@ -48,18 +48,13 @@ textarea {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Mobile webviews may draw edge-to-edge. Keep the complete DAW inside whatever
-   safe area the current device exposes; this is deliberately platform- and
-   model-independent (the env() values are zero when no inset exists). */
+/* Keep the shell itself edge-to-edge. Interactive regions account for the safe
+   area below, so backgrounds and rails do not stop short at the notch, rounded
+   corners or home indicator. */
 .lt-mobile .lt-app-shell {
   box-sizing: border-box;
   height: 100vh;
   height: 100dvh;
-  padding:
-    env(safe-area-inset-top, 0px)
-    env(safe-area-inset-right, 0px)
-    env(safe-area-inset-bottom, 0px)
-    env(safe-area-inset-left, 0px);
 }
 
 .lt-ui-zoom-compensate-viewport .lt-app-shell {
@@ -9301,9 +9296,10 @@ textarea {
 
 .lt-mobile .lt-topbar {
   flex: 0 0 auto;
-  padding:
-    clamp(0.2rem, 1.2vh, 0.4rem)
-    clamp(0.35rem, 1.5vw, 0.75rem);
+  padding-top: max(clamp(0.2rem, 1.2vh, 0.4rem), env(safe-area-inset-top, 0px));
+  padding-right: max(clamp(0.35rem, 1.5vw, 0.75rem), env(safe-area-inset-right, 0px));
+  padding-bottom: clamp(0.2rem, 1.2vh, 0.4rem);
+  padding-left: max(clamp(0.35rem, 1.5vw, 0.75rem), env(safe-area-inset-left, 0px));
   gap: clamp(0.2rem, 1vh, 0.45rem);
 }
 
@@ -9372,8 +9368,9 @@ textarea {
 /* The rail consumes a bounded fraction of landscape width and its buttons
    share the available height instead of overflowing on short screens. */
 .lt-mobile .lt-side-nav {
-  width: clamp(2.75rem, 7vw, 3.25rem);
+  width: calc(clamp(2.75rem, 7vw, 3.25rem) + env(safe-area-inset-left, 0px));
   min-height: 0;
+  padding-left: max(0.25rem, env(safe-area-inset-left, 0px));
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -9474,7 +9471,10 @@ textarea {
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 0.2rem;
+    padding-top: 0.2rem;
+    padding-right: max(0.2rem, env(safe-area-inset-right, 0px));
+    padding-bottom: max(0.2rem, env(safe-area-inset-bottom, 0px));
+    padding-left: max(0.2rem, env(safe-area-inset-left, 0px));
   }
 
   .lt-mobile .lt-side-nav button {
