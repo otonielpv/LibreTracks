@@ -658,7 +658,8 @@ fn named_session_target(
 /// Let the user choose where a new session should be saved and return the
 /// picked PARENT directory as a real filesystem path — the frontend then calls
 /// `start_create_song_named_at` with it, so the session lands in
-/// `<chosen>/<name>/`. Returns `None` when the user cancels.
+/// `<chosen>/<name>/`. Returns `None` when the user cancels. iOS uses a native
+/// directory picker and persists the resulting security-scoped bookmark.
 ///
 /// Android has no folder chooser in the dialog plugin, so this reuses the SAF
 /// create-document dialog (the system "save as" UI): we suggest
@@ -691,9 +692,15 @@ pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String
         }
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "ios")]
     {
         let _ = &name;
+        libretracks_ios_folder_picker::pick_folder(&app)
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _ = (&app, &name);
         let picked = FileDialog::new()
             .set_title("Elige donde guardar la sesion")
             .pick_folder();
@@ -1057,7 +1064,25 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
         path
     };
 
-    #[cfg(not(target_os = "android"))]
+    // A LibreTracks session is a directory, not just its manifest. Selecting
+    // the folder gives iOS recursive security-scoped access to the manifest,
+    // audio and sidecars, and the native plugin bookmarks that grant so recent
+    // sessions remain openable after relaunch.
+    #[cfg(target_os = "ios")]
+    let song_file = {
+        let Some(folder) = libretracks_ios_folder_picker::pick_folder(&app)? else {
+            return Ok(false);
+        };
+        let folder = std::path::PathBuf::from(folder);
+        session_file_in_dir(&folder).ok_or_else(|| {
+            format!(
+                "La carpeta seleccionada no contiene una sesión de LibreTracks (.ltsession): {}",
+                folder.display()
+            )
+        })?
+    };
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let song_file = {
         let song_file = FileDialog::new()
             .add_filter("LibreTracks Session", &["ltsession"])
@@ -2261,12 +2286,15 @@ fn sanitize_saf_name_hint(raw: &str, fallback: &str) -> String {
 /// top level). Used to decide if we can safely inflate a new session directly
 /// into a user-picked folder rather than nesting a subfolder inside it.
 fn dir_holds_session(dir: &std::path::Path) -> bool {
+    session_file_in_dir(dir).is_some()
+}
+
+fn session_file_in_dir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
-        return false;
+        return None;
     };
-    entries.flatten().any(|entry| {
-        entry
-            .path()
+    entries.flatten().map(|entry| entry.path()).find(|path| {
+        path
             .extension()
             .and_then(|ext| ext.to_str())
             .map(|ext| ext.eq_ignore_ascii_case("ltsession"))
@@ -2327,7 +2355,7 @@ pub fn import_external_project(
 
 #[cfg(test)]
 mod export_naming_tests {
-    use super::default_session_package_name;
+    use super::{default_session_package_name, session_file_in_dir};
     use std::path::Path;
 
     #[test]
@@ -2358,5 +2386,19 @@ mod export_naming_tests {
         // `slugify` already guarantees a non-empty result, so this is a guard
         // against that changing under us.
         assert!(!default_session_package_name(Path::new("/"), "").is_empty());
+    }
+
+    #[test]
+    fn selected_ios_session_folder_resolves_its_manifest() {
+        let folder = tempfile::tempdir().expect("temporary session folder");
+        std::fs::write(folder.path().join("Directo.ltsession"), b"{}")
+            .expect("session manifest");
+        std::fs::write(folder.path().join("not-a-session.txt"), b"ignore")
+            .expect("unrelated file");
+
+        assert_eq!(
+            session_file_in_dir(folder.path()),
+            Some(folder.path().join("Directo.ltsession"))
+        );
     }
 }

@@ -60,6 +60,7 @@ rfd = "0.15"
 # feature with the unconditional dependency above only for iOS builds.
 [target.'cfg(target_os = "ios")'.dependencies]
 lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2", features = ["no-link"] }
+libretracks-ios-folder-picker = { path = "plugins/ios-folder-picker" }
 
 # macOS-only. Security-scoped bookmarks let us persist folder access granted
 # by a native open panel, so reopening a saved session (and reading all the

@@ -37,10 +37,10 @@ type MobileLandingProps = {
 };
 
 /**
- * Landing screen for Android, where native file dialogs are limited: sessions
- * are created by name (the user still picks where to save via the folder
- * picker) and opened through the system file picker, which can reach a
- * `.ltsession` anywhere on the device. We deliberately do NOT list the app's
+ * Landing screen for mobile, where native file dialogs are limited: sessions
+ * are created by name and the user picks where to save them. Opening also uses
+ * the system picker, which can reach device or cloud-provider locations. We
+ * deliberately do NOT list the app's
  * default songs folder here — sessions live scattered across the device, so a
  * partial list keyed to one folder is misleading. Replaces the desktop
  * empty-state card, whose flows all go through `rfd` dialogs.

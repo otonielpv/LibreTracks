@@ -2422,6 +2422,7 @@ dependencies = [
  "jni",
  "libretracks-audio",
  "libretracks-core",
+ "libretracks-ios-folder-picker",
  "libretracks-project",
  "libretracks-remote",
  "lt-audio-engine-v2",
@@ -2446,6 +2447,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "zip",
+]
+
+[[package]]
+name = "libretracks-ios-folder-picker"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

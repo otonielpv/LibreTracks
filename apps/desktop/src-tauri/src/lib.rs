@@ -75,6 +75,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(DesktopState::default());
 
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(libretracks_ios_folder_picker::init());
+
     let builder = builder.manage(EngineV2State::new());
 
     builder

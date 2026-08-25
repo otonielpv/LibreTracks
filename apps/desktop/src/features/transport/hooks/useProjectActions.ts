@@ -217,8 +217,8 @@ export function useProjectActions({
     );
   }
 
-  // Android landing flow: no native dialogs there, so sessions are created by
-  // name in the default songs folder and opened from a list of known paths.
+  // Mobile landing flow: sessions are named in-app, while the platform-specific
+  // picker supplies the destination folder and a reopenable filesystem path.
   function handleCreateSongNamed(name: string, parentDir?: string) {
     void runAction(
       async () => {
