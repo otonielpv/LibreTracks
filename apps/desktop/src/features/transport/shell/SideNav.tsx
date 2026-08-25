@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { isAndroidApp } from "../desktopApi";
+import { isMobileApp } from "../desktopApi";
 import type { SidebarTab } from "../types";
 
 type SideNavProps = {
@@ -39,7 +39,7 @@ export function SideNav({
       className="lt-side-nav"
       aria-label={t("transport.shell.navigation")}
     >
-      {isAndroidApp && onSessionsClick ? (
+      {isMobileApp && onSessionsClick ? (
         <button
           type="button"
           aria-label={t("timelineTopbar.mobileSessions", {
@@ -53,7 +53,7 @@ export function SideNav({
           })}
         </button>
       ) : null}
-      {isAndroidApp && onSaveClick ? (
+      {isMobileApp && onSaveClick ? (
         <button
           type="button"
           aria-label={t("timelineTopbar.save")}
@@ -64,7 +64,7 @@ export function SideNav({
           {t("timelineTopbar.saveShort", { defaultValue: "Guardar" })}
         </button>
       ) : null}
-      {isAndroidApp && onFileActionsClick ? (
+      {isMobileApp && onFileActionsClick ? (
         <button
           type="button"
           className={isFileActionsOpen ? "is-active" : ""}
@@ -87,7 +87,7 @@ export function SideNav({
         <span className="material-symbols-outlined">library_music</span>
         {t("transport.shell.library")}
       </button>
-      {!isAndroidApp && (
+      {!isMobileApp && (
         <button
           type="button"
           className={isRemoteModalOpen ? "is-active" : ""}

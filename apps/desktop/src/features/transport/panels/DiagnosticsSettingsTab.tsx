@@ -6,7 +6,7 @@ import type {
   DiagnosticsLogView,
 } from "@libretracks/shared/desktopApi";
 import {
-  isAndroidApp,
+  isMobileApp,
   readDiagnosticsLog,
   readErrorLog,
   revealErrorLog,
@@ -152,7 +152,7 @@ export function DiagnosticsSettingsTab() {
                   defaultValue: "View log",
                 })}
           </button>
-          {!isAndroidApp ? (
+          {!isMobileApp ? (
             <button
               type="button"
               className="lt-secondary-button"

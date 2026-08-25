@@ -9,7 +9,7 @@ type TelemetryState = {
 };
 
 const TELEMETRY_ENDPOINT =
-  "https://libretracks.pages.dev/api/telemetry/events";
+  "https://libretracks.com/api/telemetry/events";
 const TELEMETRY_CONSENT_VERSION = 3;
 const INSTALL_SECRET_KEY = "libretracks.telemetry.install-secret.v1";
 const INSTALL_PROFILE_KEY = "libretracks.telemetry.install-profile.v1";

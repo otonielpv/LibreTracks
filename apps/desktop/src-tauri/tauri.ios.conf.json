@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.libretracks.ios",
+  "build": {
+    "beforeDevCommand": "npm run dev -- --port 1420 --strictPort",
+    "beforeBuildCommand": "npm run build"
+  },
+  "bundle": {
+    "resources": null,
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    }
+  }
+}

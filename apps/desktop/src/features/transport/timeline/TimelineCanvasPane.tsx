@@ -32,7 +32,7 @@ import type {
 import {
   formatBpm,
   formatTransposeSemitones,
-  isAndroidApp,
+  isMobileApp,
 } from "../desktopApi";
 import {
   buildSongTempoRegions,
@@ -82,7 +82,7 @@ import {
 // lane could move below the two-line bar/timecode labels instead of sharing
 // their band. Changing it here alone misaligns the ruler with the track
 // headers — the CSS row heights below must move with it.
-const RULER_HEIGHT = isAndroidApp ? 94 : 134;
+const RULER_HEIGHT = isMobileApp ? 94 : 134;
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
@@ -844,7 +844,7 @@ export function TimelineCanvasPane({
                     // context menu (desktop's right-click equivalent). The
                     // move drag still arms below; the long-press aborts it
                     // when it fires.
-                    if (isAndroidApp) {
+                    if (isMobileApp) {
                       cancelRegionLongPress();
                       const regionId = region.id;
                       const startClientX = event.clientX;
@@ -1018,7 +1018,7 @@ export function TimelineCanvasPane({
                   left: renderStartSeconds * pixelsPerSecond,
                   top: lane.top,
                   height: lane.height,
-                  ...(isAndroidApp
+                  ...(isMobileApp
                     ? { width: androidHotspotWidth, marginLeft: -4 }
                     : {}),
                 }}

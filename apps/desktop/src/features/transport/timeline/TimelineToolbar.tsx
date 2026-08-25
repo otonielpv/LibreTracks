@@ -13,7 +13,6 @@ import {
 import {
   formatBpm,
   formatTransposeSemitones,
-  isAndroidApp,
   type SongRegionSummary,
 } from "../desktopApi";
 import { useTransportStore } from "../store";

@@ -13,10 +13,10 @@ use crate::infra::error::DesktopError;
 use crate::midi::get_midi_input_names;
 use crate::midi::output::{get_midi_output_names, OutboundMidiMessage};
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::remote;
 use crate::state::DesktopState;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use libretracks_remote::RemoteServerInfo;
 
 #[tauri::command]
@@ -324,19 +324,19 @@ pub fn report_ui_render_metric(
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String> {
     Ok(remote::remote_server_info(&app))
 }
 
-/// Android build: there is no embedded remote-control server (the app itself
+/// Mobile build: there is no embedded remote-control server (the app itself
 /// is the handheld device), so the command exists for API parity but always
-/// errors. The frontend hides the remote UI on Android and never calls this.
-#[cfg(target_os = "android")]
+/// errors. The frontend hides the remote UI on mobile and never calls this.
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
 pub fn get_remote_server_info() -> Result<serde_json::Value, String> {
-    Err("remote control server is not available on Android".to_string())
+    Err("remote control server is not available on mobile".to_string())
 }
 
 #[tauri::command]
@@ -653,7 +653,7 @@ pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String
         return Ok(true);
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let _ = &app;
         let Some(target) = rfd::FileDialog::new()
@@ -665,5 +665,11 @@ pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String
         };
         fs::copy(&path, &target).map_err(|error| error.to_string())?;
         Ok(true)
+    }
+
+    #[cfg(target_os = "ios")]
+    {
+        let _ = (&app, &suggested_name);
+        Err("exporting diagnostics is not available in the iOS smoke build".to_string())
     }
 }

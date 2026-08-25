@@ -6,8 +6,8 @@ export const RELEASES_API_URL =
 /** Localized download page: `/download/` for English, `/es/download/` for Spanish. */
 export function downloadsPageUrl(language: AppLanguage): string {
   return language === "es"
-    ? "https://libretracks.pages.dev/es/download/"
-    : "https://libretracks.pages.dev/download/";
+    ? "https://libretracks.com/es/download/"
+    : "https://libretracks.com/download/";
 }
 
 const STORAGE_KEYS = {

@@ -14,7 +14,7 @@ const readDiagnosticsLog = vi.fn();
 const saveDiagnosticsLog = vi.fn();
 
 vi.mock("@libretracks/shared/desktopApi", () => ({
-  isAndroidApp: false,
+  isMobileApp: false,
   readErrorLog: vi.fn(async () => ""),
   revealErrorLog: vi.fn(async () => {}),
   readDiagnosticsLog: (...args: unknown[]) => readDiagnosticsLog(...args),
