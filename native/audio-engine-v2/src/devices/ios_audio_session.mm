@@ -1,4 +1,5 @@
 #include <lt_engine/devices/ios_audio_session.h>
+#include <lt_engine/debug/logging.h>
 
 #import <AVFoundation/AVFoundation.h>
 
@@ -21,15 +22,23 @@ bool configure_ios_playback_session(std::string* error_message) {
     @autoreleasepool {
         AVAudioSession* session = AVAudioSession.sharedInstance;
         NSError* error = nil;
-        const AVAudioSessionCategoryOptions options =
-            AVAudioSessionCategoryOptionAllowBluetoothA2DP |
-            AVAudioSessionCategoryOptionAllowAirPlay;
 
+        // Playback already enables the system-managed A2DP and AirPlay routes.
+        // Apple only permits allowAirPlay to be set explicitly with the
+        // playAndRecord category, so passing it here makes setCategory fail on
+        // a physical iPhone before JUCE can create its RemoteIO device.
         if (![session setCategory:AVAudioSessionCategoryPlayback
                              mode:AVAudioSessionModeDefault
-                          options:options
+                          options:0
                             error:&error]) {
-            if (error_message != nullptr) *error_message = describe_error(error);
+            const std::string message = describe_error(error);
+            lt_debug_log(
+                "[LT_IOS_AUDIO] setCategory(Playback) failed code=%ld "
+                "domain=\"%s\" error=\"%s\"\n",
+                static_cast<long>(error.code),
+                error.domain.UTF8String != nullptr ? error.domain.UTF8String : "",
+                message.c_str());
+            if (error_message != nullptr) *error_message = message;
             return false;
         }
 
@@ -42,7 +51,14 @@ bool configure_ios_playback_session(std::string* error_message) {
 
         error = nil;
         if (![session setActive:YES error:&error]) {
-            if (error_message != nullptr) *error_message = describe_error(error);
+            const std::string message = describe_error(error);
+            lt_debug_log(
+                "[LT_IOS_AUDIO] setActive failed code=%ld domain=\"%s\" "
+                "error=\"%s\"\n",
+                static_cast<long>(error.code),
+                error.domain.UTF8String != nullptr ? error.domain.UTF8String : "",
+                message.c_str());
+            if (error_message != nullptr) *error_message = message;
             return false;
         }
         return true;
