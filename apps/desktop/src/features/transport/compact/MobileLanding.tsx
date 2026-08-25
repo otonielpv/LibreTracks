@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  isIOSApp,
+  listDefaultSessions,
   listSessionTemplates,
   pickSessionFolder,
+  type DefaultSessionSummary,
   type SessionTemplateSummary,
 } from "../desktopApi";
 import {
@@ -60,6 +63,9 @@ export function MobileLanding({
   >(undefined);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [iosSessions, setIosSessions] = useState<DefaultSessionSummary[]>([]);
+  const [iosSessionsLoading, setIosSessionsLoading] = useState(isIOSApp);
+  const [showIosSessions, setShowIosSessions] = useState(false);
   const [templates, setTemplates] = useState<SessionTemplateSummary[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
@@ -89,6 +95,36 @@ export function MobileLanding({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isIOSApp) {
+      return;
+    }
+    let cancelled = false;
+    void listDefaultSessions()
+      .then((sessions) => {
+        if (!cancelled) {
+          setIosSessions(sessions);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setFolderError(
+            typeof error === "string"
+              ? error
+              : ((error as Error)?.message ?? null),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIosSessionsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const trimmedName = sessionName.trim();
 
   const submitCreate = () => {
@@ -96,6 +132,20 @@ export function MobileLanding({
       return;
     }
     const name = trimmedName;
+    // iOS cannot expose a durable writable folder path through the desktop
+    // picker used by the engine. Keep smoke-test sessions in the app-private
+    // songs directory, where the backend can reopen them by real path.
+    if (isIOSApp) {
+      setCreationTemplate(undefined);
+      setSessionName("");
+      setFolderError(null);
+      if (creationTemplate) {
+        onCreateSessionFromTemplate(creationTemplate.path, name);
+      } else {
+        onCreateSession(name);
+      }
+      return;
+    }
     // Ask where to save first; cancelling the folder cancels the whole create
     // (no silent fallback to the app's private folder). Only after we have a
     // destination do we close the form and hand off to the backend.
@@ -187,8 +237,30 @@ export function MobileLanding({
             >
               {t("common.create")}
             </button>
-            {onOpenSessionFromPicker ? (
-              <button type="button" onClick={onOpenSessionFromPicker}>
+            {onOpenSessionFromPicker || (isIOSApp && onOpenSessionFromPath) ? (
+              <button
+                type="button"
+                disabled={isIOSApp && iosSessionsLoading}
+                onClick={() => {
+                  if (!isIOSApp) {
+                    onOpenSessionFromPicker?.();
+                    return;
+                  }
+                  setFolderError(null);
+                  if (iosSessions.length === 1) {
+                    onOpenSessionFromPath?.(iosSessions[0].songFile);
+                  } else {
+                    setShowIosSessions(true);
+                    if (!iosSessionsLoading && iosSessions.length === 0) {
+                      setFolderError(
+                        t("transport.shell.noSavedSessions", {
+                          defaultValue: "Aún no hay sesiones guardadas en este dispositivo.",
+                        }),
+                      );
+                    }
+                  }
+                }}
+              >
                 {t("common.open")}
               </button>
             ) : null}
@@ -201,6 +273,37 @@ export function MobileLanding({
             ) : null}
           </div>
         )}
+
+        {folderError && creationTemplate === undefined ? (
+          <p className="lt-mobile-landing-name-taken" role="alert">
+            {folderError}
+          </p>
+        ) : null}
+
+        {isIOSApp && showIosSessions && iosSessions.length > 1 ? (
+          <div className="lt-empty-state-templates lt-ios-saved-sessions">
+            <div className="lt-empty-state-templates-header">
+              <span>
+                {t("transport.shell.savedSessionsHeading", {
+                  defaultValue: "Sesiones guardadas",
+                })}
+              </span>
+            </div>
+            <ul className="lt-empty-state-template-list">
+              {iosSessions.map((session) => (
+                <li key={session.songFile}>
+                  <button
+                    type="button"
+                    title={session.songFile}
+                    onClick={() => onOpenSessionFromPath?.(session.songFile)}
+                  >
+                    {session.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="lt-empty-state-columns">
           <div className="lt-empty-state-templates">
