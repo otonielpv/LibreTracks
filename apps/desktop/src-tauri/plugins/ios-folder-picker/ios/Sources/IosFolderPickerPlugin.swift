@@ -8,6 +8,10 @@ fileprivate enum FolderPickerEvent {
   case cancelled
 }
 
+private struct ExportFileArgs: Decodable {
+  let sourcePath: String
+}
+
 private final class FolderPickerDelegate: NSObject, UIDocumentPickerDelegate {
   weak var plugin: IosFolderPickerPlugin?
 
@@ -36,6 +40,7 @@ final class IosFolderPickerPlugin: Plugin {
   private var activeURLs: [URL] = []
   private var pickerDelegate: FolderPickerDelegate?
   private var onResult: ((FolderPickerEvent) -> Void)?
+  private var retainSelectedURL = true
 
   override init() {
     super.init()
@@ -45,6 +50,7 @@ final class IosFolderPickerPlugin: Plugin {
 
   @objc public func pickFolder(_ invoke: Invoke) throws {
     diagnostic("pickFolder received from Rust; mainThread=\(Thread.isMainThread)")
+    retainSelectedURL = true
     onResult = { event in
       switch event {
       case .selected(let url):
@@ -87,6 +93,53 @@ final class IosFolderPickerPlugin: Plugin {
     }
   }
 
+  /// Present iOS' native export document picker with an already-populated
+  /// source file. Unlike a desktop save dialog, iOS chooses the destination
+  /// while copying this source into Files/iCloud/another provider.
+  @objc public func exportFile(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(ExportFileArgs.self)
+    let sourceURL = URL(fileURLWithPath: args.sourcePath)
+    diagnostic(
+      "exportFile received from Rust; mainThread=\(Thread.isMainThread); " +
+      "source=\(sourceURL.lastPathComponent)")
+
+    guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+      invoke.reject("El registro de diagnostico ya no existe")
+      return
+    }
+
+    retainSelectedURL = false
+    onResult = { event in
+      switch event {
+      case .selected:
+        self.diagnostic("diagnostics export completed")
+        invoke.resolve(["exported": true])
+      case .cancelled:
+        self.diagnostic("diagnostics export cancelled")
+        invoke.resolve(["exported": false])
+      }
+    }
+
+    DispatchQueue.main.async {
+      self.diagnostic("entered main queue; constructing export document picker")
+      let picker = UIDocumentPickerViewController(url: sourceURL, in: .exportToService)
+      let delegate = FolderPickerDelegate(plugin: self)
+      self.pickerDelegate = delegate
+      picker.delegate = delegate
+      picker.modalPresentationStyle = .fullScreen
+
+      guard let presenter = self.activeViewController() else {
+        self.diagnostic("FAILED export: no active view controller")
+        self.pickerDelegate = nil
+        self.onResult = nil
+        self.retainSelectedURL = true
+        invoke.reject("No se pudo abrir el destino de exportacion de iOS")
+        return
+      }
+      presenter.present(picker, animated: true)
+    }
+  }
+
   /// Tauri normally exposes the webview controller through the plugin manager,
   /// but it can still be detached while iOS is completing an orientation or
   /// keyboard transition. Resolve the active scene as a fallback instead of
@@ -123,15 +176,19 @@ final class IosFolderPickerPlugin: Plugin {
   }
 
   fileprivate func finish(_ event: FolderPickerEvent) {
-    if case .selected(let url) = event {
+    switch event {
+    case .selected(let url) where retainSelectedURL:
       diagnostic("delegate selected one folder; starting security-scoped access")
       retainAccess(to: url)
-    } else {
+    case .selected:
+      diagnostic("delegate completed file export")
+    case .cancelled:
       diagnostic("delegate reported picker cancellation")
     }
     onResult?(event)
     onResult = nil
     pickerDelegate = nil
+    retainSelectedURL = true
   }
 
   private func retainAccess(to url: URL) {

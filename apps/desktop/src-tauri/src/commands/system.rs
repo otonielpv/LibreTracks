@@ -671,7 +671,7 @@ pub fn read_diagnostics_log(
 /// Android this is the only way to get the file out of the app's private
 /// storage. Returns false when the user cancels.
 #[tauri::command]
-pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String> {
+pub async fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String> {
     let path = diagnostics_log_path(&kind)?;
     if !path.is_file() {
         return Err("that log has not been written yet".to_string());
@@ -714,7 +714,25 @@ pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String
 
     #[cfg(target_os = "ios")]
     {
-        let _ = (&app, &suggested_name);
-        Err("exporting diagnostics is not available in the iOS smoke build".to_string())
+        // UIDocumentPicker's export mode takes a REAL, already-populated source
+        // URL and copies it to the destination selected in Files. Give that
+        // source the friendly timestamped filename, then remove the private
+        // scratch copy once UIKit resolves the operation.
+        use tauri::Manager as _;
+        let export_dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|error| error.to_string())?
+            .join("diagnostics-exports");
+        fs::create_dir_all(&export_dir).map_err(|error| error.to_string())?;
+        let export_path = export_dir.join(&suggested_name);
+        fs::copy(&path, &export_path).map_err(|error| error.to_string())?;
+        let result = libretracks_ios_folder_picker::export_file(
+            app.clone(),
+            export_path.to_string_lossy().into_owned(),
+        )
+        .await;
+        let _ = fs::remove_file(&export_path);
+        result
     }
 }

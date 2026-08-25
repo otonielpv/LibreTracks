@@ -7,7 +7,7 @@
 
 #![cfg(target_os = "ios")]
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{
     plugin::{Builder, PluginHandle, TauriPlugin},
     AppHandle, Manager, Runtime,
@@ -20,6 +20,17 @@ struct PickFolderResponse {
     folder: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ExportFileResponse {
+    exported: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportFileArgs<'a> {
+    source_path: &'a str,
+}
+
 pub struct IosFolderPicker<R: Runtime>(PluginHandle<R>);
 
 impl<R: Runtime> IosFolderPicker<R> {
@@ -27,6 +38,16 @@ impl<R: Runtime> IosFolderPicker<R> {
         self.0
             .run_mobile_plugin::<PickFolderResponse>("pickFolder", ())
             .map(|response| response.folder)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn export_file(&self, source_path: &str) -> Result<bool, String> {
+        self.0
+            .run_mobile_plugin::<ExportFileResponse>(
+                "exportFile",
+                ExportFileArgs { source_path },
+            )
+            .map(|response| response.exported)
             .map_err(|error| error.to_string())
     }
 }
@@ -41,6 +62,19 @@ pub async fn pick_folder<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>
     })
     .await
     .map_err(|error| format!("iOS folder picker worker failed: {error}"))?
+}
+
+/// Exporting also waits for a UIKit document picker result, so keep the
+/// synchronous mobile-plugin bridge off the main thread just like pickFolder.
+pub async fn export_file<R: Runtime>(
+    app: AppHandle<R>,
+    source_path: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<IosFolderPicker<R>>().export_file(&source_path)
+    })
+    .await
+    .map_err(|error| format!("iOS diagnostics export worker failed: {error}"))?
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
