@@ -86,6 +86,19 @@ const softwareSchema = {
     url: "https://github.com/otonielpv",
   },
 };
+
+// Google picks the site name it shows above the URL in search results from this
+// schema first, ahead of og:site_name and the <title>. Without it the remaining
+// signals are weak enough that a *.pages.dev subdomain gets labelled with the
+// domain owner's brand ("Cloudflare") instead of ours.
+// `url` is the site home, not the locale home, so the name applies to the whole
+// site rather than to /es/ alone.
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "LibreTracks",
+  url: site.href,
+};
 ---
 
 <!doctype html>
@@ -120,6 +133,9 @@ const softwareSchema = {
     <meta name="twitter:image" content={ogImage.href} />
 
     <link rel="icon" href="/icon.svg" />
+    {schema && !noIndex && (
+      <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
+    )}
     {schema && !noIndex && (
       <script type="application/ld+json" set:html={JSON.stringify(softwareSchema)} />
     )}
