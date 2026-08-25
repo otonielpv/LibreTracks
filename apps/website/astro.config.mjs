@@ -4,7 +4,7 @@ import sitemap from "@astrojs/sitemap";
 import tailwind from "@astrojs/tailwind";
 
 export default defineConfig({
-  site: "https://libretracks.pages.dev",
+  site: "https://libretracks.com",
   i18n: {
     defaultLocale: "en",
     locales: ["en", "es"],

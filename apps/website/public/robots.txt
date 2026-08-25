@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin/
 Disallow: /es/admin/
 
-Sitemap: https://libretracks.pages.dev/sitemap-0.xml
+Sitemap: https://libretracks.com/sitemap-index.xml

@@ -14,7 +14,7 @@ type Props = {
   version: string;
 };
 
-const PRIVACY_URL = "https://libretracks.pages.dev/privacy/";
+const PRIVACY_URL = "https://libretracks.com/privacy/";
 
 export function TelemetryController({ version }: Props) {
   const { t } = useTranslation();

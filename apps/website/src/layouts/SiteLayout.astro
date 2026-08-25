@@ -53,7 +53,7 @@ if (!switchHref.endsWith("/")) switchHref += "/";
 
 // Canonical + hreflang. Without these Google treats /  and /es/ as competing
 // pages for the same product instead of two locales of one page.
-const site = Astro.site ?? new URL("https://libretracks.pages.dev");
+const site = Astro.site ?? new URL("https://libretracks.com");
 const canonical = new URL(currentPath, site);
 const altEn = new URL(isSpanish ? switchHref : currentPath, site);
 const altEs = new URL(isSpanish ? currentPath : switchHref, site);
