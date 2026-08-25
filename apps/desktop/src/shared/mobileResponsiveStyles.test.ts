@@ -65,7 +65,22 @@ describe("contrato responsive móvil", () => {
       /\.lt-mobile \.lt-side-nav\s*\{[^}]*order:\s*2[^}]*flex-direction:\s*row/s,
     );
     expect(styles).toMatch(
-      /\.lt-mobile \.lt-library-panel\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0/s,
+      /\.lt-mobile \.lt-library-panel\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*z-index:\s*50/s,
+    );
+  });
+
+  it("reparte el DAW vertical entre pistas y timeline sin un ancho fijo de dispositivo", () => {
+    expect(styles).toMatch(
+      /\.lt-mobile \.lt-timeline-main-grid,[^{]*\.lt-mobile \.lt-timeline-bottom-grid\s*\{[^}]*grid-template-columns:\s*clamp\(12rem,\s*34vw,\s*16\.25rem\)\s+minmax\(0,\s*1fr\)/s,
+    );
+  });
+
+  it("incluye padding y bordes dentro del ancho de navegacion y modales", () => {
+    expect(styles).toMatch(
+      /\.lt-side-nav\s*\{\s*box-sizing:\s*border-box/,
+    );
+    expect(styles).toMatch(
+      /\.lt-settings-modal\s*\{\s*box-sizing:\s*border-box/,
     );
   });
 

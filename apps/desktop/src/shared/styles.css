@@ -730,6 +730,7 @@ textarea {
 }
 
 .lt-side-nav {
+  box-sizing: border-box;
   width: 5rem;
   flex-shrink: 0;
   display: flex;
@@ -928,6 +929,7 @@ textarea {
 }
 
 .lt-settings-modal {
+  box-sizing: border-box;
   width: min(52rem, 100%);
   display: flex;
   flex-direction: column;
@@ -9484,12 +9486,23 @@ textarea {
     position: relative;
   }
 
+  /* Keep the track controls useful without letting their desktop 260px rail
+     consume most of a narrow portrait canvas. The rail grows continuously
+     with the viewport and reaches its normal desktop width on tablets. */
+  .lt-mobile .lt-timeline-main-grid,
+  .lt-mobile .lt-timeline-bottom-grid {
+    grid-template-columns: clamp(12rem, 34vw, 16.25rem) minmax(0, 1fr);
+  }
+
   .lt-mobile .lt-library-panel {
     position: absolute;
     inset: 0;
-    z-index: 30;
+    /* Timeline track headers are sticky at z-index 30. The open library is a
+       full workspace surface in portrait and must cover those headers too. */
+    z-index: 50;
     width: 100%;
     max-width: 100%;
+    box-sizing: border-box;
   }
 
   .lt-mobile .lt-mobile-file-menu {
