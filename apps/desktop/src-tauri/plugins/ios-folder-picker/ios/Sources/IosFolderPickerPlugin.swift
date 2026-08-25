@@ -80,7 +80,7 @@ final class IosFolderPickerPlugin: Plugin {
 
     do {
       let bookmark = try url.bookmarkData(
-        options: .withSecurityScope,
+        options: .minimalBookmark,
         includingResourceValuesForKeys: nil,
         relativeTo: nil)
       var bookmarks = UserDefaults.standard.array(forKey: bookmarksKey) as? [Data] ?? []
@@ -104,14 +104,14 @@ final class IosFolderPickerPlugin: Plugin {
         var stale = false
         let url = try URL(
           resolvingBookmarkData: bookmark,
-          options: .withSecurityScope,
+          options: [],
           relativeTo: nil,
           bookmarkDataIsStale: &stale)
         _ = url.startAccessingSecurityScopedResource()
         activeURLs.append(url)
         if stale {
           refreshed.append(try url.bookmarkData(
-            options: .withSecurityScope,
+            options: .minimalBookmark,
             includingResourceValuesForKeys: nil,
             relativeTo: nil))
         } else {
