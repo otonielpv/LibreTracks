@@ -93,7 +93,13 @@ else()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_IOS_AUDIO_SESSION=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC
+        LT_ENGINE_IOS_AUDIO_SESSION=1
+        # LibreTracks is a playback app/DAW. Do not let JUCE silently replace
+        # our exclusive Playback session with MixWithOthers when opening its
+        # RemoteIO device; another active app must not duck or mask our output.
+        JUCE_DISABLE_AUDIO_MIXING_WITH_OTHER_APPS=1
+    )
 endif()
 
 if(LT_ENGINE_USE_JUCE)

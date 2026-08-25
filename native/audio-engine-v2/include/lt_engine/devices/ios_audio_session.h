@@ -9,6 +9,10 @@ namespace lt {
 // playback. The actual realtime callback remains owned by JUCE/CoreAudio.
 bool configure_ios_playback_session(std::string* error_message);
 
+// Human-readable runtime state for field diagnostics (route, volume, sample
+// rate and buffer). Never called from the realtime callback.
+std::string describe_ios_playback_session();
+
 struct IosOutputRoute {
     std::string display_name;
     std::string port_type;

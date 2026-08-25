@@ -48,6 +48,7 @@ import { useRegionDrag } from "./useRegionDrag";
 import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
 import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
+import { useTouchContextMenu } from "./useTouchContextMenu";
 import {
   LANE_CUES,
   LANE_REGIONS,
@@ -515,6 +516,15 @@ export function TimelineCanvasPane({
       regionLongPressRef.current = null;
     }
   };
+  const rulerTouchContextMenu = useTouchContextMenu({
+    ignoreTarget: (target) =>
+      target instanceof Element &&
+      Boolean(
+        target.closest(
+          ".lt-region-hotspot, .lt-marker-hotspot, .lt-automation-cue-hotspot",
+        ),
+      ),
+  });
   // Los tres elementos que siguen al puntero durante un arrastre. Todos leen
   // refs y se mueven fuera de React; ver ./useFollowerX.
   const clipSnapIndicatorRef = useFollowerX(() => {
@@ -761,7 +771,13 @@ export function TimelineCanvasPane({
       <div
         className="lt-ruler-track"
         ref={rulerTrackRef}
-        onPointerDown={onRulerPointerDown}
+        onPointerDown={(event) => {
+          rulerTouchContextMenu.begin(event);
+          onRulerPointerDown(event);
+        }}
+        onPointerMove={rulerTouchContextMenu.move}
+        onPointerUp={rulerTouchContextMenu.cancel}
+        onPointerCancel={rulerTouchContextMenu.cancel}
         onMouseDown={(event) => onRulerPointerDown(event as unknown as ReactPointerEvent<HTMLDivElement>)}
         onContextMenu={onRulerContextMenu}
       >

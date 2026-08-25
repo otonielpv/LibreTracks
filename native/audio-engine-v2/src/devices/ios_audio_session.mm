@@ -2,6 +2,8 @@
 
 #import <AVFoundation/AVFoundation.h>
 
+#include <cstdio>
+
 namespace lt {
 
 namespace {
@@ -44,6 +46,24 @@ bool configure_ios_playback_session(std::string* error_message) {
             return false;
         }
         return true;
+    }
+}
+
+std::string describe_ios_playback_session() {
+    @autoreleasepool {
+        AVAudioSession* session = AVAudioSession.sharedInstance;
+        const auto route = current_ios_output_route();
+        char buffer[768]{};
+        std::snprintf(
+            buffer, sizeof(buffer),
+            "route=\"%s\" type=\"%s\" uid=\"%s\" volume=%.3f "
+            "sample_rate=%.0f io_buffer_ms=%.3f other_audio=%d secondary_silenced=%d",
+            route.display_name.c_str(), route.port_type.c_str(), route.uid.c_str(),
+            static_cast<double>(session.outputVolume), session.sampleRate,
+            session.IOBufferDuration * 1000.0,
+            session.otherAudioPlaying ? 1 : 0,
+            session.secondaryAudioShouldBeSilencedHint ? 1 : 0);
+        return buffer;
     }
 }
 

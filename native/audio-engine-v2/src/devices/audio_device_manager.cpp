@@ -111,6 +111,16 @@ public:
                                device_sample_rate_.load(std::memory_order_relaxed));
         }
 
+        // Field-only signal-path probe. Store just one atomic peak; logging is
+        // performed by the monitor thread, never from this realtime callback.
+        if (diag_enabled_) {
+            float peak = 0.0f;
+            for (int ch = 0; ch < num_output_channels; ++ch)
+                for (int frame = 0; frame < num_sample_frames; ++frame)
+                    peak = std::max(peak, std::abs(output_channels[ch][frame]));
+            output_peak_.store(peak, std::memory_order_relaxed);
+        }
+
         auto t1 = std::chrono::steady_clock::now();
         last_callback_end_ = t1;
         double dur_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -159,6 +169,7 @@ public:
     // Diagnostics — read from any thread (relaxed load is fine for display).
     double      callback_duration_ms()  const { return callback_duration_ms_.load(std::memory_order_relaxed); }
     int         callback_count()        const { return callback_count_.load(std::memory_order_relaxed); }
+    float       output_peak()           const { return output_peak_.load(std::memory_order_relaxed); }
     bool        has_error()             const { return error_flag_.load(std::memory_order_relaxed); }
     std::string last_error()            const { return last_error_; }
 
@@ -167,6 +178,7 @@ private:
     std::atomic<double>       device_sample_rate_{48000.0};
     std::atomic<double>       callback_duration_ms_{0.0};
     std::atomic<int>          callback_count_{0};
+    std::atomic<float>        output_peak_{0.0f};
     std::atomic<bool>         error_flag_{false};
     std::string               last_error_;
     std::chrono::steady_clock::time_point last_callback_end_{};
@@ -325,6 +337,7 @@ void AudioDeviceManager::Impl::monitor_main() {
     constexpr int kFreshOpenGraceMs = 3000;
     std::uint64_t last_gen   = 0;
     int           last_count = -1;
+    int           diagnostic_ticks = 0;
     auto          last_change = std::chrono::steady_clock::now();
     const auto ms_between = [](auto a, auto b) {
         return std::chrono::duration<double, std::milli>(b - a).count();
@@ -347,6 +360,17 @@ void AudioDeviceManager::Impl::monitor_main() {
         const std::uint64_t gen = open_generation.load(std::memory_order_relaxed);
         const int  count     = adaptor->callback_count();
         const bool dev_error = adaptor->has_error();
+        if (++diagnostic_ticks >= 4) {
+            diagnostic_ticks = 0;
+            if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+                lt_debug_log(
+                    "[LT_IOS_AUDIO] hardware_callback device=\"%s\" backend=\"%s\" "
+                    "callbacks=%d final_peak=%.6f sr=%d buffer=%d channels=%d\n",
+                    device_name.c_str(), backend.c_str(), count,
+                    static_cast<double>(adaptor->output_peak()), sample_rate,
+                    buffer_size, output_channel_count);
+            }
+        }
         if (gen != last_gen || last_count < 0) {
             last_gen = gen;
             last_count = count;
@@ -947,6 +971,11 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     auto* dev = impl_->juce_manager.getCurrentAudioDevice();
     if (!dev)
         return fail(Result<void>::err("No audio device opened after setup"));
+
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    device_debug_log("[LT_IOS_AUDIO] session %s\n",
+                     describe_ios_playback_session().c_str());
+#endif
 
     impl_->device_name  = dev->getName().toStdString();
     impl_->backend      = dev->getTypeName().toStdString();

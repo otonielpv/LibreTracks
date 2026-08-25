@@ -105,14 +105,18 @@ pub fn run() {
                 }
             }
 
-            // Android field diagnostics: there's no shell environment to set
-            // LIBRETRACKS_AUDIO_DIAG on a phone, and we're actively tuning
-            // playback on low-end devices. ~2 log lines/second while playing.
-            // TODO: gate behind a Settings toggle once Android playback is
-            // considered stable.
-            #[cfg(target_os = "android")]
+            // Mobile field diagnostics: there is no shell environment to set
+            // these flags on a phone. Android records timing while low-end
+            // playback is being tuned; iOS additionally records the active
+            // AVAudioSession route and the final peak handed to RemoteIO.
+            // TODO: gate behind a Settings toggle once mobile playback is stable.
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             if std::env::var_os("LIBRETRACKS_AUDIO_DIAG").is_none() {
                 std::env::set_var("LIBRETRACKS_AUDIO_DIAG", "1");
+            }
+            #[cfg(target_os = "ios")]
+            if std::env::var_os("LIBRETRACKS_AUDIO_DEBUG").is_none() {
+                std::env::set_var("LIBRETRACKS_AUDIO_DEBUG", "1");
             }
 
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
