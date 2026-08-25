@@ -3,7 +3,7 @@
   "identifier": "com.libretracks.ios",
   "build": {
     "beforeDevCommand": "npm run dev -- --port 1420 --strictPort",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm --prefix ../../ run build:remote && npm run build"
   },
   "bundle": {
     "resources": {

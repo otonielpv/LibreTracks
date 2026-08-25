@@ -50,8 +50,10 @@ describe("iOS full-pack build contract", () => {
 
   it("bundles the voice-guide bank instead of nulling iOS resources", () => {
     const config = JSON.parse(iosConfig) as {
+      build: { beforeBuildCommand: string };
       bundle: { resources: Record<string, string> | null };
     };
+    expect(config.build.beforeBuildCommand).toContain("build:remote");
     expect(config.bundle.resources).not.toBeNull();
     expect(config.bundle.resources?.["resources/voices"]).toBe("voices");
     expect(workflow).toContain("voices/es/counts/1.wav");
