@@ -38,6 +38,10 @@
 
 namespace lt {
 
+#ifndef LT_ENGINE_HANDHELD
+#define LT_ENGINE_HANDHELD 0
+#endif
+
 enum class DeviceClass {
     Workstation,    // > 16 GB
     Desktop,        // 8-16 GB
@@ -268,7 +272,7 @@ inline const DeviceProfile& lt_device_profile() {
         probe.available_ram_bytes = lt_available_ram_bytes();
         const unsigned hw = std::thread::hardware_concurrency();
         probe.cores = hw > 0 ? static_cast<int>(hw) : 4;
-#if defined(__ANDROID__)
+#if LT_ENGINE_HANDHELD
         probe.is_handheld = true;
 #else
         probe.is_handheld = false;

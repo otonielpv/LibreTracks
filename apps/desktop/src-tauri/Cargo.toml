@@ -55,11 +55,10 @@ libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
 rfd = "0.15"
 
-# First iOS milestone: build a bootable UI/sandbox smoke IPA before the C++
-# engine is ported as an iOS static library. Cargo unifies this target-specific
-# feature with the unconditional dependency above only for iOS builds.
+# iOS uses the native C++ engine as a static arm64 library. The target-specific
+# plugin below supplies the document picker; the engine dependency itself is
+# declared once above so Cargo cannot accidentally unify in the silent stub.
 [target.'cfg(target_os = "ios")'.dependencies]
-lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2", features = ["no-link"] }
 libretracks-ios-folder-picker = { path = "plugins/ios-folder-picker" }
 
 # macOS-only. Security-scoped bookmarks let us persist folder access granted

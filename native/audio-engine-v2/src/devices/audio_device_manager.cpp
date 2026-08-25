@@ -1,6 +1,10 @@
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/devices/device_channel_layout.h>
 
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+#include <lt_engine/devices/ios_audio_session.h>
+#endif
+
 #if LT_ENGINE_USE_JUCE
 
 // JUCE headers — must come after lt_engine headers to avoid name collisions.
@@ -693,6 +697,24 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
         }
     }
 
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    // JUCE exposes the single system-openable iOS device. Replace its generic
+    // label/channel metadata with AVAudioSession's active physical route so a
+    // connected USB interface, headset, Bluetooth or AirPlay target appears by
+    // its real name. Keep JUCE's id: iOS does not permit opening these outputs
+    // independently like desktop CoreAudio devices.
+    if (!result.empty()) {
+        const auto route = current_ios_output_route();
+        result.front().name = route.display_name;
+        if (!route.channel_names.empty()) {
+            result.front().output_channel_count =
+                static_cast<int>(route.channel_names.size());
+            result.front().output_channel_names = route.channel_names;
+        }
+        result.resize(1);
+    }
+#endif
+
     const double total_ms = std::chrono::duration<double, std::milli>(clk::now() - t_start).count();
     device_debug_log("[LT_AUDIO_DEBUG] list_devices total_ms=%.1f total_devices=%d force=%d\n",
                  total_ms, static_cast<int>(result.size()), force_rescan ? 1 : 0);
@@ -721,6 +743,18 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         impl_->start_pump_locked();
         return r;
     };
+
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    // JUCE owns the CoreAudio device callback, while the host application owns
+    // the iOS audio-session policy. Activate it before JUCE enumerates/opens the
+    // system route; otherwise iOS may leave the app in an ambient, silent, or
+    // high-latency category inherited from the WebView host.
+    std::string audio_session_error;
+    if (!configure_ios_playback_session(&audio_session_error)) {
+        return fail(Result<void>::err(
+            "Could not activate the iOS audio session: " + audio_session_error));
+    }
+#endif
 
     auto init = ensure_initialized(*impl_);
     if (init.is_err())

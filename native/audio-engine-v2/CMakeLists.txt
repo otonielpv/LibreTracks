@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.25)
 project(libretracks_audio_engine_v2 VERSION 0.1.0 LANGUAGES CXX)
 
+# Objective-C++ is only needed for the small AVAudioSession bridge. Enabling it
+# globally would make non-Apple toolchains look for a compiler they do not have.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    enable_language(OBJCXX)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -25,7 +31,7 @@ include(cmake/dependencies.cmake)
 # ---------------------------------------------------------------------------
 # Engine library
 # ---------------------------------------------------------------------------
-if(LT_ENGINE_BUILD_TESTS OR LT_ENGINE_BUILD_BENCHES)
+if(LT_ENGINE_BUILD_TESTS OR LT_ENGINE_BUILD_BENCHES OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
     add_library(lt_audio_engine_v2 STATIC)
 else()
     add_library(lt_audio_engine_v2 SHARED)
@@ -42,7 +48,7 @@ set_target_properties(lt_audio_engine_v2 PROPERTIES
 # `@rpath/liblt_audio_engine_v2.dylib`. The dylib itself must record that as
 # its install_name so the linker stamps the @rpath form into the executable;
 # otherwise Tauri ships a binary that hard-codes the build-time absolute path.
-if(APPLE)
+if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set_target_properties(lt_audio_engine_v2 PROPERTIES
         MACOSX_RPATH ON
         INSTALL_NAME_DIR "@rpath"
@@ -79,6 +85,16 @@ target_compile_definitions(lt_audio_engine_v2 PUBLIC
     LT_ENGINE_ENABLE_E2E_CAPTURE=$<BOOL:${LT_ENGINE_ENABLE_E2E_CAPTURE}>
     _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING
 )
+
+if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HANDHELD=1)
+else()
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HANDHELD=0)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_IOS_AUDIO_SESSION=1)
+endif()
 
 if(LT_ENGINE_USE_JUCE)
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_JUCE=1)

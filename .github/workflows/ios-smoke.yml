@@ -53,6 +53,41 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      - name: Build native audio engine for iPhone
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-arm64"
+          link_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-link"
+
+          cmake -S native/audio-engine-v2 -B "$build_dir" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DLT_ENGINE_BUILD_TESTS=OFF \
+            -DLT_ENGINE_BUILD_BENCHES=OFF \
+            -DLT_ENGINE_USE_JUCE=ON \
+            -DLT_ENGINE_USE_OBOE=OFF \
+            -DLT_ENGINE_USE_FFMPEG=OFF \
+            -DLT_ENGINE_USE_LIBSNDFILE=ON \
+            -DLT_ENGINE_USE_R8BRAIN=ON \
+            -DLT_ENGINE_USE_BUNGEE=OFF
+          cmake --build "$build_dir" --parallel 3
+
+          mkdir -p "$link_dir"
+          engine_archive="$(find "$build_dir" -name 'liblt_audio_engine_v2.a' -print -quit)"
+          sndfile_archive="$(find "$build_dir" -name 'libsndfile.a' -print -quit)"
+          test -n "$engine_archive"
+          test -n "$sndfile_archive"
+          cp "$engine_archive" "$link_dir/liblt_audio_engine_v2.a"
+          cp "$sndfile_archive" "$link_dir/libsndfile.a"
+          lipo -info "$link_dir/liblt_audio_engine_v2.a"
+          lipo -info "$link_dir/libsndfile.a"
+
+          echo "LT_ENGINE_V2_LIB_DIR=$link_dir" >> "$GITHUB_ENV"
+
       # gen/apple is deliberately generated on the macOS runner. Tauri's iOS
       # project is derived from Cargo.toml, tauri.ios.conf.json and the plugin
       # set, so keeping generated Xcode files out of git avoids stale projects.
@@ -138,10 +173,20 @@ jobs:
             *) echo "Expected arm64 executable, got: $archs" >&2; exit 1 ;;
           esac
 
+          if ! nm -gU "$app/$executable" | grep -q '_lt_engine_create'; then
+            echo "IPA executable does not contain the native audio engine C ABI" >&2
+            exit 1
+          fi
+          if strings "$app/$executable" | grep -q '"error":"no-link"'; then
+            echo "IPA executable still contains the silent no-link engine" >&2
+            exit 1
+          fi
+
           echo "IPA: $ipa"
           echo "Bundle: $bundle_id"
           echo "Minimum iOS: $minimum_ios"
           echo "Architectures: $archs"
+          echo "Audio engine: native static C++ engine linked"
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
 
       - name: Upload unsigned IPA

@@ -1,7 +1,7 @@
 // build.rs — links the pre-built (or CMake-built) C++ engine shared library.
 //
 // Environment variables:
-//   LT_ENGINE_V2_LIB_DIR   path to directory containing lt_audio_engine_v2.{dll,so,dylib}
+//   LT_ENGINE_V2_LIB_DIR   path to directory containing lt_audio_engine_v2.{dll,so,dylib,a}
 //                           Defaults to native/audio-engine-v2/build/Release on Windows.
 //
 // Features:
@@ -18,6 +18,14 @@ fn main() {
 
     // Skip linking when the no-link feature is active.
     if std::env::var("CARGO_FEATURE_NO_LINK").is_ok() {
+        return;
+    }
+
+    // iOS embeds the engine and its C dependencies into the application as
+    // static archives. Unlike Android, falling back to a stub is never allowed:
+    // a successful IPA build must contain the real C ABI implementation.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        link_ios_static_engine();
         return;
     }
 
@@ -104,4 +112,45 @@ fn main() {
             lib_dir.display()
         );
     }
+}
+
+fn link_ios_static_engine() {
+    let lib_dir = std::env::var("LT_ENGINE_V2_LIB_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            panic!("LT_ENGINE_V2_LIB_DIR must point to the staged iOS static engine archives")
+        });
+    let engine = lib_dir.join("liblt_audio_engine_v2.a");
+    let sndfile = lib_dir.join("libsndfile.a");
+    if !engine.is_file() || !sndfile.is_file() {
+        panic!(
+            "iOS audio engine link set is incomplete: expected {} and {}",
+            engine.display(),
+            sndfile.display()
+        );
+    }
+
+    println!("cargo:rerun-if-changed={}", engine.display());
+    println!("cargo:rerun-if-changed={}", sndfile.display());
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    println!("cargo:rustc-link-lib=static=lt_audio_engine_v2");
+    println!("cargo:rustc-link-lib=static=sndfile");
+    println!("cargo:rustc-link-lib=c++");
+
+    // Static archives do not carry their framework dependencies. These are
+    // the Apple frameworks used by JUCE's iOS CoreAudio backend, libsndfile,
+    // and the AVAudioSession bridge compiled into the engine.
+    for framework in [
+        "Accelerate",
+        "AudioToolbox",
+        "AVFoundation",
+        "CoreAudio",
+        "CoreMIDI",
+        "Foundation",
+        "Security",
+        "UIKit",
+    ] {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+    println!("cargo:rustc-link-arg=-ObjC");
 }
