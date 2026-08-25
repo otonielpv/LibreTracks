@@ -48,6 +48,21 @@ textarea {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Tauri's iOS WKWebView draws edge-to-edge. Keep the complete DAW inside the
+   device safe area so the landscape notch and home indicator never cover the
+   transport, side rail or timeline. `viewport-fit=cover` in index.html makes
+   these environment insets available; unsupported values fall back to 0. */
+.lt-ios .lt-app-shell {
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
+}
+
 .lt-ui-zoom-compensate-viewport .lt-app-shell {
   width: calc(100vw / var(--lt-ui-zoom, 1));
   height: calc(100vh / var(--lt-ui-zoom, 1));
