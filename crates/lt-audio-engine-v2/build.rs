@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 fn main() {
     println!("cargo:rerun-if-env-changed=LT_ENGINE_V2_LIB_DIR");
+    println!("cargo:rerun-if-env-changed=LT_ENGINE_IOS_LIB_DIR");
     println!("cargo:rerun-if-changed=build.rs");
     // Declared unconditionally so rustc's unexpected_cfgs lint knows the cfg
     // exists on every platform, not just Android builds that set it.
@@ -115,10 +116,19 @@ fn main() {
 }
 
 fn link_ios_static_engine() {
-    let lib_dir = std::env::var("LT_ENGINE_V2_LIB_DIR")
+    // Tauri's Xcode script starts Cargo with a restricted environment. Use a
+    // dedicated override when available, then a deterministic repo-relative
+    // staging directory. Do not consult LT_ENGINE_V2_LIB_DIR here: the shared
+    // workspace .cargo/config.toml sets that to the desktop Bungee build.
+    let lib_dir = std::env::var("LT_ENGINE_IOS_LIB_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
-            panic!("LT_ENGINE_V2_LIB_DIR must point to the staged iOS static engine archives")
+            let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            manifest
+                .ancestors()
+                .nth(2)
+                .expect("engine crate must live below the repository root")
+                .join("native/audio-engine-v2/build-ios-link")
         });
     let engine = lib_dir.join("liblt_audio_engine_v2.a");
     let sndfile = lib_dir.join("libsndfile.a");

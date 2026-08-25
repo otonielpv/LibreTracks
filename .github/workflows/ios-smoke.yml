@@ -86,7 +86,7 @@ jobs:
           lipo -info "$link_dir/liblt_audio_engine_v2.a"
           lipo -info "$link_dir/libsndfile.a"
 
-          echo "LT_ENGINE_V2_LIB_DIR=$link_dir" >> "$GITHUB_ENV"
+          echo "LT_ENGINE_IOS_LIB_DIR=$link_dir" >> "$GITHUB_ENV"
 
       # gen/apple is deliberately generated on the macOS runner. Tauri's iOS
       # project is derived from Cargo.toml, tauri.ios.conf.json and the plugin
