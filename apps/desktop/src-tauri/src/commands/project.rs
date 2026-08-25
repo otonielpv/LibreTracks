@@ -695,7 +695,22 @@ pub fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<String
     #[cfg(target_os = "ios")]
     {
         let _ = &name;
-        libretracks_ios_folder_picker::pick_folder(&app)
+        crate::commands::system::write_picker_diagnostic(
+            &app,
+            "rust",
+            "pick_session_folder entered; calling Swift plugin",
+        );
+        let result = libretracks_ios_folder_picker::pick_folder(&app);
+        crate::commands::system::write_picker_diagnostic(
+            &app,
+            "rust",
+            match &result {
+                Ok(Some(_)) => "Swift plugin returned a selected folder",
+                Ok(None) => "Swift plugin returned cancellation",
+                Err(_) => "Swift plugin returned an error",
+            },
+        );
+        result
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1070,7 +1085,22 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
     // sessions remain openable after relaunch.
     #[cfg(target_os = "ios")]
     let song_file = {
-        let Some(folder) = libretracks_ios_folder_picker::pick_folder(&app)? else {
+        crate::commands::system::write_picker_diagnostic(
+            &app,
+            "rust",
+            "start_open_project_from_dialog entered; calling Swift plugin",
+        );
+        let picked_folder = libretracks_ios_folder_picker::pick_folder(&app);
+        crate::commands::system::write_picker_diagnostic(
+            &app,
+            "rust",
+            match &picked_folder {
+                Ok(Some(_)) => "Swift plugin returned a selected folder for open",
+                Ok(None) => "Swift plugin returned cancellation for open",
+                Err(_) => "Swift plugin returned an error for open",
+            },
+        );
+        let Some(folder) = picked_folder? else {
             return Ok(false);
         };
         let folder = std::path::PathBuf::from(folder);

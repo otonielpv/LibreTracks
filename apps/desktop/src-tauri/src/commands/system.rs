@@ -233,9 +233,7 @@ pub fn get_ownership_diagnostics(
         prearm_take_miss_total: prearm.map(|p| p.take_miss_total).unwrap_or(0),
         prearm_stale_discard_total: prearm.map(|p| p.stale_discard_total).unwrap_or(0),
         prearm_prepared_total: prearm.map(|p| p.prepared_total).unwrap_or(0),
-        prearm_prepare_failed_total: prearm
-            .map(|p| p.prepare_failed_total)
-            .unwrap_or(0),
+        prearm_prepare_failed_total: prearm.map(|p| p.prepare_failed_total).unwrap_or(0),
         prearm_worker_busy: prearm.map(|p| p.worker_busy).unwrap_or(false),
     })
 }
@@ -354,7 +352,11 @@ pub fn get_midi_outputs() -> Result<Vec<String>, String> {
 /// first. Note-on and note-off are queued back to back; the receiving device
 /// sees a blip, which is enough for a MIDI monitor or a "learn" dialog.
 #[tauri::command]
-pub fn send_midi_test_note(state: State<'_, DesktopState>, channel: u8, note: u8) -> Result<(), String> {
+pub fn send_midi_test_note(
+    state: State<'_, DesktopState>,
+    channel: u8,
+    note: u8,
+) -> Result<(), String> {
     if !state.midi_output.is_default_port_open() {
         return Err("no MIDI output device is selected".to_string());
     }
@@ -484,6 +486,49 @@ pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     writeln!(file, "[{timestamp_ms}] {line}").map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+const IOS_PICKER_DIAGNOSTIC_FILE: &str = "LibreTracks-picker.log";
+
+/// Append one step of the iOS document-picker flow to a file that is exposed
+/// through Files > On My iPhone > LibreTracks. Kept separate from the general
+/// error log because an invocation that never resolves is not technically an
+/// error and would otherwise leave us with no evidence from a physical phone.
+pub(crate) fn write_picker_diagnostic(app: &AppHandle, layer: &str, message: &str) {
+    let directory = {
+        #[cfg(target_os = "ios")]
+        {
+            app.path().document_dir().ok()
+        }
+        #[cfg(not(target_os = "ios"))]
+        {
+            app.path().app_data_dir().ok()
+        }
+    };
+    let Some(directory) = directory else {
+        return;
+    };
+    if fs::create_dir_all(&directory).is_err() {
+        return;
+    }
+    let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(directory.join(IOS_PICKER_DIAGNOSTIC_FILE))
+    else {
+        return;
+    };
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    let _ = writeln!(file, "[{timestamp_ms}] [{layer}] {message}");
+}
+
+#[tauri::command]
+pub fn append_picker_diagnostic(app: AppHandle, message: String) -> Result<(), String> {
+    write_picker_diagnostic(&app, "frontend", &message);
     Ok(())
 }
 

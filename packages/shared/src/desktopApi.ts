@@ -426,6 +426,18 @@ export async function appendDebugLog(line: string): Promise<void> {
   await invokeCommand("append_debug_log", { line });
 }
 
+// Best-effort trace for the physical-iOS folder picker. Calls invoke directly
+// so tracing cannot recurse through invokeCommand's error logger or prevent the
+// actual picker command from running.
+async function appendPickerDiagnostic(message: string): Promise<void> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("append_picker_diagnostic", { message });
+  } catch {
+    // Diagnostics must never change the file flow.
+  }
+}
+
 // Best-effort append to the dedicated error log. Calls invoke directly (not
 // invokeCommand) so a failure here can never recurse through the central
 // error-capture wrapper. Always resolves; never throws.
@@ -703,6 +715,9 @@ async function runProjectLoadCommand(
 }
 
 export async function openProject(): Promise<TransportSnapshot | null> {
+  await appendPickerDiagnostic(
+    `openProject requested; ios=${isIOSApp}; mobile=${isMobileApp}; platform=${navigator.platform ?? "unknown"}`,
+  );
   return runProjectLoadCommand("start_open_project_from_dialog");
 }
 
@@ -731,6 +746,9 @@ export async function createSongNamed(
  * Downloads shortcut).
  */
 export async function pickSessionFolder(name: string): Promise<string | null> {
+  await appendPickerDiagnostic(
+    `pickSessionFolder requested; ios=${isIOSApp}; mobile=${isMobileApp}; platform=${navigator.platform ?? "unknown"}`,
+  );
   return invokeCommand<string | null>("pick_session_folder", { name });
 }
 

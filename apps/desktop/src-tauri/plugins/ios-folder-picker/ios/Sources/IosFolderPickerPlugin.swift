@@ -39,20 +39,25 @@ final class IosFolderPickerPlugin: Plugin {
 
   override init() {
     super.init()
+    diagnostic("plugin initialized")
     restoreBookmarks()
   }
 
   @objc public func pickFolder(_ invoke: Invoke) throws {
+    diagnostic("pickFolder received from Rust; mainThread=\(Thread.isMainThread)")
     onResult = { event in
       switch event {
       case .selected(let url):
+        self.diagnostic("resolving selected folder")
         invoke.resolve(["folder": url.path])
       case .cancelled:
+        self.diagnostic("resolving cancellation")
         invoke.resolve(["folder": NSNull()])
       }
     }
 
     DispatchQueue.main.async {
+      self.diagnostic("entered main queue; constructing UIDocumentPickerViewController")
       let picker = UIDocumentPickerViewController(
         forOpeningContentTypes: [.folder],
         asCopy: false)
@@ -63,13 +68,22 @@ final class IosFolderPickerPlugin: Plugin {
       picker.modalPresentationStyle = .fullScreen
 
       guard let presenter = self.activeViewController() else {
+        self.diagnostic("FAILED: no active view controller")
         self.pickerDelegate = nil
         self.onResult = nil
         invoke.reject("No se pudo abrir el explorador de archivos de iOS")
         return
       }
 
-      presenter.present(picker, animated: true)
+      self.diagnostic(
+        "presenting picker from \(type(of: presenter)); " +
+        "viewLoaded=\(presenter.isViewLoaded); windowAttached=\(presenter.viewIfLoaded?.window != nil); " +
+        "alreadyPresented=\(presenter.presentedViewController != nil)")
+      presenter.present(picker, animated: true) {
+        self.diagnostic(
+          "presentation completion; pickerWindowAttached=\(picker.viewIfLoaded?.window != nil); " +
+          "presenterNowShowsPicker=\(presenter.presentedViewController === picker)")
+      }
     }
   }
 
@@ -79,11 +93,15 @@ final class IosFolderPickerPlugin: Plugin {
   /// silently leaving the Rust/JavaScript invocation pending forever.
   private func activeViewController() -> UIViewController? {
     let managed = manager.viewController
-    let sceneRoot = UIApplication.shared.connectedScenes
-      .compactMap { $0 as? UIWindowScene }
-      .flatMap { $0.windows }
-      .first(where: { $0.isKeyWindow })?
-      .rootViewController
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let windows = scenes.flatMap { $0.windows }
+    let keyWindow = windows.first(where: { $0.isKeyWindow })
+    let sceneRoot = keyWindow?.rootViewController
+
+    diagnostic(
+      "resolving presenter; scenes=\(scenes.count); windows=\(windows.count); " +
+      "keyWindow=\(keyWindow != nil); sceneRoot=\(describe(sceneRoot)); " +
+      "managed=\(describe(managed)); managedAttached=\(managed?.viewIfLoaded?.window != nil)")
 
     // The controller exposed by Tauri's plugin manager can be a child whose
     // view is attached but cannot present a full-screen controller on a real
@@ -106,7 +124,10 @@ final class IosFolderPickerPlugin: Plugin {
 
   fileprivate func finish(_ event: FolderPickerEvent) {
     if case .selected(let url) = event {
+      diagnostic("delegate selected one folder; starting security-scoped access")
       retainAccess(to: url)
+    } else {
+      diagnostic("delegate reported picker cancellation")
     }
     onResult?(event)
     onResult = nil
@@ -114,7 +135,8 @@ final class IosFolderPickerPlugin: Plugin {
   }
 
   private func retainAccess(to url: URL) {
-    _ = url.startAccessingSecurityScopedResource()
+    let accessStarted = url.startAccessingSecurityScopedResource()
+    diagnostic("security-scoped access started=\(accessStarted)")
     activeURLs.append(url)
 
     do {
@@ -131,11 +153,13 @@ final class IosFolderPickerPlugin: Plugin {
       // Access remains valid for this process. The user can select the folder
       // again after relaunch if its provider refuses bookmark creation.
       NSLog("[LibreTracks] Could not persist folder bookmark: %@", error.localizedDescription)
+      diagnostic("bookmark persistence failed: \(error.localizedDescription)")
     }
   }
 
   private func restoreBookmarks() {
     let bookmarks = UserDefaults.standard.array(forKey: bookmarksKey) as? [Data] ?? []
+    diagnostic("restoring \(bookmarks.count) persisted folder bookmark(s)")
     var refreshed: [Data] = []
 
     for bookmark in bookmarks {
@@ -158,10 +182,44 @@ final class IosFolderPickerPlugin: Plugin {
         }
       } catch {
         NSLog("[LibreTracks] Could not restore folder bookmark: %@", error.localizedDescription)
+        diagnostic("bookmark restoration failed: \(error.localizedDescription)")
       }
     }
 
     UserDefaults.standard.set(refreshed, forKey: bookmarksKey)
+  }
+
+  private func describe(_ controller: UIViewController?) -> String {
+    guard let controller = controller else { return "nil" }
+    return String(describing: type(of: controller))
+  }
+
+  /// Mirror native-only steps into the same user-accessible file written by
+  /// Rust. This remains useful even if the mobile-plugin invocation never
+  /// returns to Rust/JavaScript.
+  private func diagnostic(_ message: String) {
+    let timestamp = ISO8601DateFormatter().string(from: Date())
+    let line = "[\(timestamp)] [swift] \(message)\n"
+    guard let data = line.data(using: .utf8),
+          let documents = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask).first else {
+      NSLog("[LibreTracks picker] %@", message)
+      return
+    }
+    let url = documents.appendingPathComponent("LibreTracks-picker.log")
+    if !FileManager.default.fileExists(atPath: url.path) {
+      FileManager.default.createFile(atPath: url.path, contents: nil)
+    }
+    do {
+      let handle = try FileHandle(forWritingTo: url)
+      handle.seekToEndOfFile()
+      handle.write(data)
+      handle.closeFile()
+    } catch {
+      NSLog("[LibreTracks picker] log write failed: %@", error.localizedDescription)
+    }
+    NSLog("[LibreTracks picker] %@", message)
   }
 }
 
