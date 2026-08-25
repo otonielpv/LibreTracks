@@ -46,6 +46,10 @@ mod stub {
             None
         }
 
+        pub fn pick_folder(self) -> Option<PathBuf> {
+            None
+        }
+
         pub fn save_file(self) -> Option<PathBuf> {
             None
         }
