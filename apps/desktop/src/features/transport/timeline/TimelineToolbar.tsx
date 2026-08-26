@@ -25,6 +25,7 @@ import type {
   ViewMode,
 } from "../uiStore";
 import { ViewModeSwitcher } from "./ViewModeSwitcher";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 type RegionMasterFaderProps = {
   regionId: string;
@@ -508,6 +509,7 @@ export function TimelineToolbar({
           <button
             type="button"
             className={`lt-icon-button ${snapEnabled ? "is-active" : ""}`}
+            data-lt-tour={TOUR_TARGETS.toolbarSnap}
             aria-label={
               snapEnabled
                 ? t("timelineToolbar.disableSnap")
@@ -584,6 +586,7 @@ export function TimelineToolbar({
               setOpenGroup((current) => (current === "vamp" ? null : "vamp"))
             }
             className="lt-control-group-vamp"
+            data-lt-tour={TOUR_TARGETS.toolbarVamp}
             action={
               <button
                 type="button"
@@ -704,6 +707,7 @@ export function TimelineToolbar({
               setOpenGroup((current) => (current === "jump" ? null : "jump"))
             }
             className="lt-control-group-jump"
+            data-lt-tour={TOUR_TARGETS.toolbarMarkerJump}
             details={
               <>
                 {globalJumpMode === "after_bars" ? (
@@ -831,6 +835,7 @@ export function TimelineToolbar({
               setOpenGroup((current) => (current === "song" ? null : "song"))
             }
             className="lt-control-group-song"
+            data-lt-tour={TOUR_TARGETS.toolbarSongJump}
             details={
               <>
                 {songJumpTrigger === "after_bars" ? (
@@ -996,6 +1001,7 @@ export function TimelineToolbar({
               )
             }
             className="lt-control-group-master"
+            data-lt-tour={TOUR_TARGETS.toolbarMaster}
             details={
               selectedRegion ? (
                 <div className="lt-stepper-control-row lt-master-gain-row">
@@ -1032,6 +1038,7 @@ export function TimelineToolbar({
               )
             }
             className="lt-control-group-region"
+            data-lt-tour={TOUR_TARGETS.toolbarTranspose}
             details={
               selectedRegion ? (
                 <label className="lt-stepper-control">
@@ -1091,6 +1098,7 @@ export function TimelineToolbar({
               setOpenGroup((current) => (current === "warp" ? null : "warp"))
             }
             className="lt-control-group-warp"
+            data-lt-tour={TOUR_TARGETS.toolbarWarp}
             details={
               selectedRegion ? (
                 <>

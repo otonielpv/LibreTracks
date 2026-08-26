@@ -1252,22 +1252,26 @@ const en = {
     checkError: "Could not check for updates: {{message}}",
   },
   tutorial: {
-    launch: "Guide",
-    launchAria: "Open the guide: {{tour}}",
+    launch: "Tutorial",
+    launchAria: "Open the tutorial: {{tour}}",
     progress: "{{tour}} · step {{current}} of {{total}}",
     next: "Next",
     back: "Back",
     finish: "Finish",
-    skip: "Skip guide",
+    skip: "Skip tutorial",
     skipStep: "Skip this step",
-    waiting: "Your turn: use the highlighted control and the guide moves on by itself.",
+    waiting: "Your turn: use the highlighted control and the tutorial moves on by itself.",
     shortcutHint: "Shortcut: {{binding}}",
+    chooseTitle: "Tours",
+    chooseAria: "Choose a tutorial tour",
+    chooseDone: "Finished",
     landing: {
       name: "Getting started",
+      summary: "What a session is, and how to create, open or import one.",
       steps: {
         welcome: {
           title: "Welcome to LibreTracks",
-          body: "LibreTracks plays your backing tracks live: a whole set list, each song with its own tracks, markers and sections, ready to launch without fighting the computer. This guide covers this screen; open a session and it carries on by itself with the work area.",
+          body: "LibreTracks plays your backing tracks live: a whole set list, each song with its own tracks, markers and sections, ready to launch without fighting the computer. This tutorial covers this screen; open a session and it carries on by itself with the work area.",
         },
         create: {
           title: "Create a session",
@@ -1306,12 +1310,13 @@ const en = {
         },
         next: {
           title: "What comes next",
-          body: "You are ready to create or open a session. As soon as you do, the guide carries on by itself with the work area: the library, the timeline, the transport and the three views. If you would rather come back later, this button reopens it.",
+          body: "You are ready to create or open a session. As soon as you do, the tutorial carries on by itself with the work area: the library, the timeline, the transport and the three views. If you would rather come back later, this button reopens it.",
         },
       },
     },
     workspace: {
       name: "The work area",
+      summary: "Where each area lives: library, timeline, views and settings.",
       steps: {
         overview: {
           title: "Your session is open",
@@ -1383,7 +1388,121 @@ const en = {
         },
         done: {
           title: "You are ready",
-          body: "You can reopen this guide any time from the GUIDE button in the side rail. It changes with whatever you have on screen.",
+          body: "You know where everything lives now. Two more tours are waiting behind the TUTORIAL button: \"Building a song\" for the DAW view in depth, and \"Getting ready to play\" for jumps, vamp and warp. Each can be replayed on its own whenever you need it.",
+        },
+      },
+    },
+    daw: {
+      name: "Building a song",
+      summary: "Ruler, regions, markers, tempo, tracks and clip editing.",
+      steps: {
+        intro: {
+          title: "Building a song",
+          body: "The DAW view is where everything gets built: where each song starts and ends, its sections, its tracks and its clips. We are going to walk the whole thing, control by control.",
+        },
+        ruler: {
+          title: "The ruler runs the show",
+          body: "That strip along the top is not just a bar count: it is where songs -- the regions -- and markers live. Nearly everything coming up happens here.",
+        },
+        createSong: {
+          title: "Create a song by hand",
+          body: "Drag across the ruler to select a stretch, then right-click: \"Crear Cancion desde seleccion\". That region IS the song: from then on it has its own name, tempo, key and markers.",
+          bodyMobile: "Drag across the ruler to select a stretch, then press and hold to open the menu: \"Crear Cancion desde seleccion\". On mobile a long press does what right-click does on the desktop. That region IS the song: it has its own name, tempo, key and markers.",
+        },
+        resizeSong: {
+          title: "Make a song longer or shorter",
+          body: "Drag the region's left or right edge. If stretching it would overlap the song next door, LibreTracks refuses and tells you which one is in the way: two songs cannot sit on top of each other.",
+        },
+        moveSong: {
+          title: "Move a song",
+          body: "Drag the region by its middle to put it somewhere else on the timeline. Its clips and markers travel with it, so reordering the set does not scramble anything inside.",
+        },
+        createMarker: {
+          title: "Add markers",
+          body: "Put the playhead where you want it and right-click the ruler: \"Crear Marca\". Markers are what you jump to live and what you read from the music stand, so they are worth placing while you build, not the night before.",
+          bodyMobile: "Put the playhead where you want it and press and hold the ruler to open the menu: \"Crear Marca\". Markers are what you jump to live and what you read from the music stand, so they are worth placing while you build, not the night before.",
+        },
+        markerKinds: {
+          title: "Sections and cues",
+          body: "The \"Tipo de marca...\" menu has two groups, and they are not the same thing. Sections are parts of the song -- intro, verse, chorus, bridge, solo, outro -- and they are for navigating. Cues are instructions for the band -- get ready, build, all in, drums in, break, last time -- and they read at a glance from the stand.",
+        },
+        dragMarkers: {
+          title: "Move markers",
+          body: "No need to delete and redo them: drag them along the ruler. They snap to the grid as you move them, and holding Shift places them freely.",
+          bodyMobile: "No need to delete and redo them: drag them along the ruler with your finger. They snap to the grid as you move them.",
+        },
+        tempo: {
+          title: "BPM belongs to the song",
+          body: "This field changes the tempo of the song under the playhead, not the whole project. Every song carries its own, and that is what lets you chain a set at different speeds without touching anything live.",
+        },
+        timeSignature: {
+          title: "Time signature",
+          body: "Like the BPM, it is per song. It drives the grid, the click, and where jumps set to \"after X bars\" actually land.",
+        },
+        snap: {
+          title: "Snap to grid",
+          body: "With the magnet on, clips and markers stick to the grid as you drag them. Turn it off when something has to sit exactly where it sounds rather than where it tidies up -- an entry that runs a hair early, say.",
+        },
+        tracks: {
+          title: "The tracks",
+          body: "Each row is a track, with its volume, pan, mute, solo and output. Right-click here to add audio tracks or folders, and drag them to reorder.",
+          bodyMobile: "Each row is a track, with its volume, pan, mute, solo and output. Press and hold here to add audio tracks or folders, and drag them to reorder.",
+        },
+        folders: {
+          title: "Track folders",
+          body: "A folder groups tracks and collapses them into a single row: with twenty stems, seeing four groups instead of twenty rows changes a lot. \"Meter en la carpeta anterior\" tucks a track into the one above, and the collapsed state is saved with the project.",
+        },
+        touchControls: {
+          title: "The touch controls",
+          body: "These three buttons only exist on mobile.",
+          bodyMobile: "These three buttons only exist on mobile. The first two raise and lower track height, so you can fit more in or hit them more easily with a finger. The third locks seeking from the ruler: with it on, brushing the screen with your palm mid-rehearsal no longer moves playback.",
+        },
+        clips: {
+          title: "Editing clips",
+          body: "Drag them to move them along the timeline or onto another track. Right-click gives you \"Cortar en cursor\", \"Duplicar\" and delete; the arrow keys nudge the selection and Ctrl+A selects everything.",
+          bodyMobile: "Drag them to move them along the timeline or onto another track. Press and hold a clip to open its menu, with \"Cortar en cursor\", \"Duplicar\" and delete.",
+        },
+        done: {
+          title: "You can build now",
+          body: "The live tour is still waiting in the same TUTORIAL button: jump modes, vamp, master, transpose and warp.",
+        },
+      },
+    },
+    live: {
+      name: "Getting ready to play",
+      summary: "Jump modes, vamp, master, transpose and warp.",
+      steps: {
+        intro: {
+          title: "Getting ready to play",
+          body: "These controls decide what the transport does once you can no longer look at the screen. You set them before the show and then forget about them.",
+        },
+        markerJump: {
+          title: "Marker jump",
+          body: "When you hit a marker while a song is playing, this decides WHEN the jump takes effect: immediately, after X bars, or at the next marker. Immediate cuts wherever you are; the other two wait for a musical point so the jump does not show.",
+        },
+        songJump: {
+          title: "Song jump",
+          body: "The same for moving between songs, with one extra option: at the end of the song, which waits for the current one to finish. Next to it you pick the transition: clean cut or fade out.",
+        },
+        vamp: {
+          title: "Vamp",
+          body: "Loops a stretch until you decide to leave it -- for stretching a moment while someone speaks or a soloist gets going. In Section mode it loops from marker to marker; in Bars mode it loops however many bars you tell it.",
+        },
+        master: {
+          title: "Song master",
+          body: "Turns the selected song down. Worth knowing: it affects the TRACKS only, not the metronome or the voice guide. Pull the song down and the click still reaches your in-ears just as clearly, which is exactly what you want.",
+        },
+        transpose: {
+          title: "Transpose",
+          body: "Moves the selected song up or down in semitones, live. Without warp, changing the key also changes the speed; with warp on, the duration is preserved. That is the difference between transposing for the singer and knocking the click out of line.",
+        },
+        warp: {
+          title: "Warp",
+          body: "Decouples pitch from speed: with warp you can change key without the song speeding up, and change BPM without it going sharp. It needs to know the audio's original BPM -- get that wrong and everything downstream is off.",
+        },
+        done: {
+          title: "Ready for the stage",
+          body: "All of this is saved with the session, so it is a one-time setup. Any tour can be replayed from the TUTORIAL button.",
         },
       },
     },

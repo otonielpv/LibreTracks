@@ -304,9 +304,10 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
     expect(screen.getByText(landing.welcome.title)).toBeTruthy();
   });
 
-  it("con sesión abierta lanza el del área de trabajo", () => {
-    // Este es el reparto que justifica los dos recorridos: hasta que no hay
-    // proyecto cargado no existen ni la línea de tiempo ni las vistas.
+  it("con sesión abierta ofrece los tres recorridos en un menú", () => {
+    // Este es el reparto que justifica partirlos: hasta que no hay proyecto
+    // cargado no existen ni la línea de tiempo ni las vistas, y una vez
+    // cargado hay demasiado que contar para una sola tirada.
     render(
       <>
         <TourLauncherButton />
@@ -320,7 +321,75 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
 
     fireEvent.click(screen.getByText(en.tutorial.launch));
 
-    expect(screen.getByText(workspace.overview.title)).toBeTruthy();
+    const menu = document.querySelector(".lt-tour-menu");
+    expect(menu).not.toBeNull();
+    expect(
+      Array.from(menu?.querySelectorAll("[data-tour-choice]") ?? []).map(
+        (item) => item.getAttribute("data-tour-choice"),
+      ),
+    ).toEqual(["workspace", "daw", "live"]);
+  });
+
+  it("elegir un recorrido en el menú lo lanza y cierra el menú", () => {
+    render(
+      <>
+        <TourLauncherButton />
+        <TourOverlay />
+      </>,
+    );
+    clearProgress();
+    act(() => {
+      useSongStore.setState({ song: { id: "s1" } as never });
+    });
+
+    fireEvent.click(screen.getByText(en.tutorial.launch));
+    fireEvent.click(
+      document.querySelector('[data-tour-choice="daw"]') as Element,
+    );
+
+    expect(
+      document.querySelector(".lt-tour-root")?.getAttribute("data-tour-id"),
+    ).toBe("daw");
+    expect(document.querySelector(".lt-tour-menu")).toBeNull();
+  });
+
+  it("sin sesión no hay menú: el único recorrido arranca directo", () => {
+    render(
+      <>
+        <TourLauncherButton />
+        <TourOverlay />
+      </>,
+    );
+    clearProgress();
+
+    fireEvent.click(screen.getByText(en.tutorial.launch));
+
+    expect(document.querySelector(".lt-tour-menu")).toBeNull();
+    expect(screen.getByText(landing.welcome.title)).toBeTruthy();
+  });
+
+  it("el menú marca los recorridos ya terminados", () => {
+    // Convierte el menú en un índice de por dónde vas, no en una lista suelta.
+    render(
+      <>
+        <TourLauncherButton />
+        <TourOverlay />
+      </>,
+    );
+    act(() => {
+      useTourStore.setState({ progress: { workspace: "completed" } });
+      useSongStore.setState({ song: { id: "s1" } as never });
+    });
+
+    fireEvent.click(screen.getByText(en.tutorial.launch));
+
+    const done = document.querySelectorAll(".lt-tour-menu-done");
+    expect(done.length).toBe(1);
+    expect(
+      document
+        .querySelector('[data-tour-choice="workspace"]')
+        ?.querySelector(".lt-tour-menu-done"),
+    ).not.toBeNull();
   });
 });
 

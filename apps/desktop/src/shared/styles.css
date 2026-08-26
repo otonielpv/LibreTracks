@@ -9813,3 +9813,80 @@ textarea {
      escala en móvil. */
   padding: 0.75rem 1rem;
 }
+
+/* Menú de recorridos del botón GUÍA. El botón sigue heredando el estilo de
+   `.lt-side-nav button` (selector de descendencia), así que el envoltorio sólo
+   aporta el anclaje del popover. */
+.lt-tour-launcher {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-tour-menu {
+  position: absolute;
+  left: calc(100% + 0.35rem);
+  bottom: 0;
+  z-index: 120;
+  width: 17rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.45rem;
+  border: 1px solid rgb(87 241 219 / 0.2);
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(22 25 26 / 0.98), rgb(13 15 16 / 0.98));
+  box-shadow: 0 22px 60px rgb(0 0 0 / 0.5);
+}
+
+.lt-tour-menu-title {
+  padding: 0.2rem 0.35rem 0.35rem;
+  color: rgb(87 241 219 / 0.82);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lt-tour-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #f3f0ef;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.lt-tour-menu button:hover {
+  border-color: rgb(87 241 219 / 0.28);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.lt-tour-menu-name {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: 700 0.85rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-tour-menu-done {
+  color: #57f1db;
+  font-size: 15px;
+}
+
+.lt-tour-menu button small {
+  color: rgb(229 226 225 / 0.62);
+  font: 500 0.75rem/1.35 "Space Grotesk", sans-serif;
+}
+
+/* En móvil el rail está pegado al borde izquierdo y es más estrecho: el menú
+   se despliega sobre el lienzo en vez de colgar del botón. */
+.lt-mobile .lt-tour-menu {
+  left: calc(100% + 0.25rem);
+  width: min(17rem, calc(100vw - 6rem));
+}

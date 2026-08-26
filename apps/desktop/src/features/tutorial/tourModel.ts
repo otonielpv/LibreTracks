@@ -5,17 +5,19 @@ import type { TourTargetId } from "./tourTargets";
 /**
  * Modelo de la guía interactiva.
  *
- * Hay DOS recorridos, no uno, porque hay dos pantallas con vocabularios
- * distintos:
+ * Los recorridos están partidos por pantalla y por tema, no encadenados en uno:
  *
  * - `landing` — sin sesión abierta. Aquí no existen ni la línea de tiempo ni
  *   las tres vistas ni el mezclador; lo único que hay que aprender es qué es
  *   una sesión y cómo crearla, abrirla o importarla.
- * - `workspace` — con la sesión abierta. Aquí sí viven las pistas, los clips,
- *   el transporte y las vistas.
+ * - `workspace` — con la sesión abierta: dónde está cada zona.
+ * - `daw` — montar una canción: regla, regiones, marcas, pistas y clips.
+ * - `live` — preparar el directo: saltos, vamp, master, tono y warp.
  *
  * Un único recorrido que hablara de la línea de tiempo desde la pantalla de
- * inicio describiría cosas que el usuario no tiene delante.
+ * inicio describiría cosas que el usuario no tiene delante; y uno que juntara
+ * los tres del área de trabajo pasaría de treinta pasos, que nadie repasa para
+ * consultar una cosa.
  *
  * Los pasos son DATOS, no JSX. Escritorio y móvil comparten recorrido y solo se
  * separan donde de verdad se diferencian:
@@ -28,8 +30,7 @@ import type { TourTargetId } from "./tourTargets";
 
 export type TourPlatform = "desktop" | "mobile";
 
-/** Cada contexto de pantalla tiene su recorrido; los ids coinciden a propósito. */
-export type TourId = "landing" | "workspace";
+export type TourId = "landing" | "workspace" | "daw" | "live";
 
 /**
  * Cómo terminó un recorrido. La diferencia importa: quien LLEGÓ AL FINAL está
@@ -97,12 +98,22 @@ export type TourDefinition = {
 };
 
 /**
- * Qué recorrido toca según lo que el usuario tiene delante.
+ * Los recorridos que se ofrecen en cada pantalla, en el orden del menú.
  *
- * Pura y aparte del store para poder probar la decisión sin montar la app.
+ * Con sesión abierta son tres, y ese reparto es intencionado: el primero enseña
+ * DÓNDE está cada zona, y los otros dos enseñan a TRABAJAR dentro de ellas.
+ * Encadenarlos en uno solo pasaría de treinta pasos, y nadie repasa el warp
+ * tragándose antes veinte pantallas sobre la biblioteca.
+ *
+ * Puras y aparte del store para poder probar la decisión sin montar la app.
  */
+export function toursForContext(hasOpenSession: boolean): TourId[] {
+  return hasOpenSession ? ["workspace", "daw", "live"] : ["landing"];
+}
+
+/** El recorrido por defecto de la pantalla: el primero de su lista. */
 export function tourIdForContext(hasOpenSession: boolean): TourId {
-  return hasOpenSession ? "workspace" : "landing";
+  return toursForContext(hasOpenSession)[0];
 }
 
 /** Los pasos que esta plataforma llega a ver, en orden. */

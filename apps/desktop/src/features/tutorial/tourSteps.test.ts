@@ -127,6 +127,36 @@ describe("textos de la guía", () => {
     }
   });
 
+  it("los textos no llaman «guía» al tutorial", () => {
+    // La feature se llamó «Guía» y chocaba con la VOZ GUÍA, que es otra cosa
+    // del producto y sale en los mismos párrafos ("la mezcla, el clic y la voz
+    // guía"). Igual en inglés con "voice guide". Este test impide que la
+    // palabra se cuele otra vez al escribir un paso nuevo.
+    for (const [language, bundle, word, allowed] of [
+      ["es", es, /gu[ií]a/i, "voz guía"],
+      ["en", en, /guide/i, "voice guide"],
+    ] as const) {
+      const strings: string[] = [];
+      const walk = (node: unknown): void => {
+        if (typeof node === "string") {
+          strings.push(node);
+        } else if (typeof node === "object" && node !== null) {
+          Object.values(node).forEach(walk);
+        }
+      };
+      walk((bundle as Record<string, unknown>).tutorial);
+
+      for (const value of strings) {
+        const withoutFeature = value.split(allowed).join("");
+        expect(
+          word.test(withoutFeature),
+          `${language}: «${value}» llama "guía" al tutorial. Ese nombre es de ` +
+            `la voz guía; usa "tutorial".`,
+        ).toBe(false);
+      }
+    }
+  });
+
   it("cada recorrido tiene nombre en los dos idiomas", () => {
     for (const tour of allTours) {
       expect(lookup(es, `${tour.i18nKey}.name`)).toBeTypeOf("string");

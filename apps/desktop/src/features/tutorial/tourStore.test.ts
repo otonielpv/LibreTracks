@@ -68,6 +68,76 @@ describe("qué recorrido toca", () => {
     expect(visited).toEqual(new Set(["daw", "compact", "live"]));
   });
 
+  it("el recorrido DAW cubre todo lo que hay que montar", () => {
+    // Lista explícita porque es fácil borrar un paso al reorganizar y no
+    // enterarse: la guía seguiría "funcionando", sólo que sin explicar el
+    // tempo, o las pistas, o los clips.
+    const targets = new Set(TOURS.daw.steps.map((step) => step.target));
+
+    for (const target of [
+      TOUR_TARGETS.timelineRuler,
+      TOUR_TARGETS.topbarTempo,
+      TOUR_TARGETS.topbarTimeSignature,
+      TOUR_TARGETS.toolbarSnap,
+      TOUR_TARGETS.trackHeaders,
+      TOUR_TARGETS.timelineCanvas,
+      TOUR_TARGETS.mobileTouchControls,
+    ]) {
+      expect(targets, `falta ${target} en el recorrido DAW`).toContain(target);
+    }
+
+    // Crear canción, redimensionar, mover, marcas, tipos y arrastre: todos
+    // pasan en la regla, así que se comprueban por id de paso.
+    const ids = TOURS.daw.steps.map((step) => step.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "createSong",
+        "resizeSong",
+        "moveSong",
+        "createMarker",
+        "markerKinds",
+        "dragMarkers",
+        "folders",
+        "clips",
+      ]),
+    );
+  });
+
+  it("el recorrido de directo cubre saltos, vamp, master, tono y warp", () => {
+    const targets = new Set(TOURS.live.steps.map((step) => step.target));
+
+    for (const target of [
+      TOUR_TARGETS.toolbarMarkerJump,
+      TOUR_TARGETS.toolbarSongJump,
+      TOUR_TARGETS.toolbarVamp,
+      TOUR_TARGETS.toolbarMaster,
+      TOUR_TARGETS.toolbarTranspose,
+      TOUR_TARGETS.toolbarWarp,
+    ]) {
+      expect(targets, `falta ${target} en el recorrido de directo`).toContain(
+        target,
+      );
+    }
+  });
+
+  it("los controles táctiles sólo se explican en móvil", () => {
+    // En escritorio no existen: la altura se cambia con Alt+scroll y no hay
+    // palmas que muevan el cabezal.
+    const touchStep = TOURS.daw.steps.find(
+      (step) => step.target === TOUR_TARGETS.mobileTouchControls,
+    );
+
+    expect(touchStep?.platforms).toEqual(["mobile"]);
+  });
+
+  it("los recorridos del área de trabajo fuerzan una vista donde existan sus controles", () => {
+    // La barra de herramientas no se dibuja en la vista Live, así que un paso
+    // de directo sin `viewMode` apuntaría a un control que no está en pantalla.
+    for (const step of TOURS.live.steps) {
+      expect(step.viewMode, `${step.id} sin vista forzada`).toBe("daw");
+    }
+  });
+
   it("la biblioteca explica sus dos botones", () => {
     const targets = TOURS.workspace.steps.map((step) => step.target);
 

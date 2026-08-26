@@ -773,6 +773,7 @@ export function TimelineCanvasPane({
     >
       <div
         className="lt-ruler-track"
+        data-lt-tour={TOUR_TARGETS.timelineRuler}
         ref={rulerTrackRef}
         onPointerDown={(event) => {
           rulerTouchContextMenu.begin(event);

@@ -36,6 +36,18 @@ export const TOUR_TARGETS = {
   topbarFileMenu: "topbar-file-menu",
   topbarTransport: "topbar-transport",
   timelineCanvas: "timeline-canvas",
+  timelineRuler: "timeline-ruler",
+  trackHeaders: "track-headers",
+  mobileTouchControls: "mobile-touch-controls",
+  topbarTempo: "topbar-tempo",
+  topbarTimeSignature: "topbar-time-signature",
+  toolbarSnap: "toolbar-snap",
+  toolbarVamp: "toolbar-vamp",
+  toolbarMarkerJump: "toolbar-marker-jump",
+  toolbarSongJump: "toolbar-song-jump",
+  toolbarMaster: "toolbar-master",
+  toolbarTranspose: "toolbar-transpose",
+  toolbarWarp: "toolbar-warp",
   viewModeSwitcher: "view-mode-switcher",
 } as const;
 

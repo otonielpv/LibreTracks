@@ -5,6 +5,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 import { densityFromHeight } from "../constants";
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
@@ -103,6 +104,7 @@ export function TrackHeadersPane({
   return (
     <div
       className="lt-track-headers-pane"
+      data-lt-tour={TOUR_TARGETS.trackHeaders}
       onContextMenu={(event) => {
         // Show the global track-list menu when the right-click hits empty
         // space inside the pane (below the last header). Header rows and the
@@ -119,7 +121,7 @@ export function TrackHeadersPane({
     >
       <div className="lt-ruler-header">
         {headerActions ? (
-          <div className="lt-ruler-header-actions">{headerActions}</div>
+          <div className="lt-ruler-header-actions" data-lt-tour={TOUR_TARGETS.mobileTouchControls}>{headerActions}</div>
         ) : null}
         <span>Tracks</span>
       </div>

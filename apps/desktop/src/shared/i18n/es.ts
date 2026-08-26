@@ -1283,22 +1283,26 @@ const es = {
     checkError: "No se pudo comprobar actualizaciones: {{message}}",
   },
   tutorial: {
-    launch: "Guía",
-    launchAria: "Abrir la guía: {{tour}}",
+    launch: "Tutorial",
+    launchAria: "Abrir el tutorial: {{tour}}",
     progress: "{{tour}} · paso {{current}} de {{total}}",
     next: "Siguiente",
     back: "Atrás",
     finish: "Terminar",
-    skip: "Saltar guía",
+    skip: "Saltar tutorial",
     skipStep: "Saltar este paso",
-    waiting: "Te toca a ti: pulsa el control iluminado y la guía sigue sola.",
+    waiting: "Te toca a ti: pulsa el control iluminado y el tutorial sigue solo.",
     shortcutHint: "Atajo: {{binding}}",
+    chooseTitle: "Recorridos",
+    chooseAria: "Elegir un recorrido del tutorial",
+    chooseDone: "Terminado",
     landing: {
       name: "Primeros pasos",
+      summary: "Qué es una sesión y cómo crearla, abrirla o importarla.",
       steps: {
         welcome: {
           title: "Bienvenido a LibreTracks",
-          body: "LibreTracks reproduce tus pistas de acompañamiento en directo: un repertorio entero, cada canción con sus pistas, sus marcas y sus secciones, listo para lanzarlo sin pelearte con el ordenador. Esta guía te enseña esta pantalla; cuando abras una sesión, seguirá sola con el área de trabajo.",
+          body: "LibreTracks reproduce tus pistas de acompañamiento en directo: un repertorio entero, cada canción con sus pistas, sus marcas y sus secciones, listo para lanzarlo sin pelearte con el ordenador. Este tutorial te enseña esta pantalla; cuando abras una sesión, seguirá solo con el área de trabajo.",
         },
         create: {
           title: "Crear una sesión",
@@ -1337,12 +1341,13 @@ const es = {
         },
         next: {
           title: "El siguiente paso",
-          body: "Ya puedes crear o abrir una sesión. En cuanto lo hagas, la guía continúa sola con el área de trabajo: la biblioteca, la línea de tiempo, el transporte y las tres vistas. Y si prefieres volver a ella más tarde, este botón la reabre.",
+          body: "Ya puedes crear o abrir una sesión. En cuanto lo hagas, el tutorial continúa solo con el área de trabajo: la biblioteca, la línea de tiempo, el transporte y las tres vistas. Y si prefieres volver a él más tarde, este botón lo reabre.",
         },
       },
     },
     workspace: {
       name: "Área de trabajo",
+      summary: "Dónde está cada zona: biblioteca, línea de tiempo, vistas y ajustes.",
       steps: {
         overview: {
           title: "Ya tienes sesión abierta",
@@ -1414,7 +1419,121 @@ const es = {
         },
         done: {
           title: "Ya puedes empezar",
-          body: "Puedes volver a abrir esta guía cuando quieras desde el botón GUÍA de la barra lateral. Cambia según lo que tengas en pantalla.",
+          body: "Ya sabes dónde está cada cosa. En el botón TUTORIAL te esperan dos recorridos más: «Montar una canción», para la vista DAW a fondo, y «Preparar el directo», con los saltos, el vamp y el warp. Se pueden repetir por separado cuando los necesites.",
+        },
+      },
+    },
+    daw: {
+      name: "Montar una canción",
+      summary: "Regla, regiones, marcas, tempo, pistas y edición de clips.",
+      steps: {
+        intro: {
+          title: "Montar una canción",
+          body: "En la vista DAW se construye todo: dónde empieza y acaba cada canción, sus secciones, sus pistas y sus clips. Vamos a recorrerla entera, control por control.",
+        },
+        ruler: {
+          title: "La regla manda",
+          body: "Esta franja de arriba no es sólo una escala de compases: es donde viven las canciones —las regiones— y las marcas. Casi todo lo que viene ahora pasa aquí.",
+        },
+        createSong: {
+          title: "Crear una canción a mano",
+          body: "Arrastra sobre la regla para seleccionar un tramo y luego haz clic derecho: «Crear Cancion desde seleccion». Esa región ES la canción: a partir de ahí tiene su nombre, su tempo, su tonalidad y sus propias marcas.",
+          bodyMobile: "Arrastra sobre la regla para seleccionar un tramo y luego mantén pulsado para abrir el menú: «Crear Cancion desde seleccion». En el móvil el toque largo hace lo que el clic derecho en el ordenador. Esa región ES la canción: tiene su nombre, su tempo, su tonalidad y sus marcas.",
+        },
+        resizeSong: {
+          title: "Alargar o acortar una canción",
+          body: "Arrastra el borde izquierdo o derecho de la región. Si al estirarla fuese a solaparse con la canción de al lado, LibreTracks lo rechaza y te dice con cuál choca: dos canciones no pueden pisarse.",
+        },
+        moveSong: {
+          title: "Mover una canción",
+          body: "Arrastra la región por el centro para llevarla a otro punto del timeline. Sus clips y sus marcas se mueven con ella, así que reordenar el repertorio no descoloca nada por dentro.",
+        },
+        createMarker: {
+          title: "Añadir marcas",
+          body: "Pon el cursor donde quieras y clic derecho en la regla: «Crear Marca». Las marcas son los puntos a los que saltas en directo y lo que ves desde el atril, así que vale la pena ponerlas mientras montas y no la noche antes.",
+          bodyMobile: "Pon el cursor donde quieras y mantén pulsada la regla para abrir el menú: «Crear Marca». Las marcas son los puntos a los que saltas en directo y lo que ves desde el atril, así que vale la pena ponerlas mientras montas y no la noche antes.",
+        },
+        markerKinds: {
+          title: "Secciones y avisos",
+          body: "En «Tipo de marca…» hay dos grupos, y no son lo mismo. Las Secciones son partes de la canción —intro, estrofa, estribillo, puente, solo, outro— y sirven para navegar. Los Avisos son instrucciones para la banda —preparados, subir, todos dentro, batería entra, parón, última vez— y se leen de un vistazo desde el atril.",
+        },
+        dragMarkers: {
+          title: "Mover marcas",
+          body: "No hace falta borrarlas y rehacerlas: arrástralas por la regla. Se pegan a la rejilla mientras las mueves, y con Shift pulsado las colocas libremente.",
+          bodyMobile: "No hace falta borrarlas y rehacerlas: arrástralas por la regla con el dedo. Se pegan a la rejilla mientras las mueves.",
+        },
+        tempo: {
+          title: "El BPM es de la canción",
+          body: "Este campo cambia el tempo de la canción que hay bajo el cursor, no el del proyecto entero. Cada canción lleva el suyo, y eso es lo que permite encadenar un repertorio a distintas velocidades sin tocar nada en directo.",
+        },
+        timeSignature: {
+          title: "El compás",
+          body: "Igual que el BPM, es por canción. Manda sobre la rejilla, sobre el clic y sobre dónde caen los saltos configurados «tras X compases».",
+        },
+        snap: {
+          title: "Snap to grid",
+          body: "Con el imán activo, clips y marcas se pegan a la rejilla al arrastrarlos. Desactívalo cuando necesites poner algo exactamente donde suena y no donde cuadra — una entrada que va medio pelín adelantada, por ejemplo.",
+        },
+        tracks: {
+          title: "Las pistas",
+          body: "Cada fila es una pista, con su volumen, panorama, mute, solo y a qué salida va. Con el clic derecho aquí añades pistas de audio o carpetas, y las reordenas arrastrándolas.",
+          bodyMobile: "Cada fila es una pista, con su volumen, panorama, mute, solo y a qué salida va. Mantén pulsado aquí para añadir pistas de audio o carpetas, y arrástralas para reordenarlas.",
+        },
+        folders: {
+          title: "Carpetas de pistas",
+          body: "Una carpeta agrupa pistas y las pliega en una sola fila: con veinte stems, ver cuatro grupos en vez de veinte filas cambia mucho. «Meter en la carpeta anterior» mete una pista dentro de la de arriba, y el plegado se guarda con el proyecto.",
+        },
+        touchControls: {
+          title: "Los controles táctiles",
+          body: "Estos tres botones sólo existen en el móvil.",
+          bodyMobile: "Estos tres botones sólo existen en el móvil. Los dos primeros suben y bajan la altura de las pistas, para que quepan más o se vean mejor con el dedo. El tercero bloquea el salto al tocar la regla: con él activado, un roce con la palma durante el ensayo ya no te mueve la reproducción.",
+        },
+        clips: {
+          title: "Editar clips",
+          body: "Arrástralos para moverlos de sitio o de pista. Con el clic derecho tienes «Cortar en cursor», «Duplicar» y borrar; las flechas mueven la selección poco a poco y Ctrl+A la selecciona entera.",
+          bodyMobile: "Arrástralos para moverlos de sitio o de pista. Mantén pulsado un clip para abrir su menú, con «Cortar en cursor», «Duplicar» y borrar.",
+        },
+        done: {
+          title: "Ya sabes montar",
+          body: "Te queda el recorrido de directo, en el mismo botón TUTORIAL: los modos de salto, el vamp, el master, el cambio de tono y el warp.",
+        },
+      },
+    },
+    live: {
+      name: "Preparar el directo",
+      summary: "Modos de salto, vamp, master, cambio de tono y warp.",
+      steps: {
+        intro: {
+          title: "Preparar el directo",
+          body: "Estos controles deciden qué hace el transporte cuando ya no puedes mirar la pantalla. Se dejan configurados antes del concierto y luego se olvidan.",
+        },
+        markerJump: {
+          title: "Salto de marca",
+          body: "Cuando pulsas una marca con la canción sonando, esto decide CUÁNDO se hace efectivo el salto: Inmediato, Tras X compases, o En la siguiente marca. Inmediato corta donde estés; los otros dos esperan a un punto musical para que el salto no se note.",
+        },
+        songJump: {
+          title: "Salto de canción",
+          body: "Lo mismo para pasar de una canción a otra, con una opción más: Al final de la cancion, que espera a que termine la que suena. Al lado eliges la transición: Corte limpio o Fade out.",
+        },
+        vamp: {
+          title: "Vamp",
+          body: "Repite un tramo hasta que decidas salir — para estirar un momento mientras alguien habla o el solista se arranca. En modo Seccion repite de marca a marca; en modo Compases repite el número de compases que le digas.",
+        },
+        master: {
+          title: "Master de la canción",
+          body: "Baja el volumen de la canción seleccionada. Ojo a esto: afecta sólo a las PISTAS, no al metrónomo ni a la voz guía. Si bajas la canción, el clic te sigue llegando igual de claro a los cascos, que es justo lo que quieres.",
+        },
+        transpose: {
+          title: "Cambio de tono",
+          body: "Sube o baja semitonos la canción seleccionada, en caliente. Sin warp, cambiar el tono cambia también la velocidad; con warp activado la duración se conserva. Es la diferencia entre transportar para el cantante y descuadrar el clic.",
+        },
+        warp: {
+          title: "Warp",
+          body: "Desacopla el tono de la velocidad: con warp puedes cambiar de tono sin que la canción se acelere, y cambiar el BPM sin que suba de tono. Necesita saber el BPM original del audio — si ese dato está mal, todo lo demás sale descuadrado.",
+        },
+        done: {
+          title: "Listo para el escenario",
+          body: "Todo esto se guarda con la sesión, así que se configura una vez y ya. Cualquier recorrido se puede repetir desde el botón TUTORIAL.",
         },
       },
     },
