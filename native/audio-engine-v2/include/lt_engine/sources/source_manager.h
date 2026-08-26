@@ -359,6 +359,12 @@ private:
         std::atomic<uint64_t>* open_count = nullptr;
         std::atomic<uint64_t>* open_failures = nullptr;
         std::atomic<uint64_t>* open_max_us = nullptr;
+        // A failed sf_open used to be retried for every queued batch. With a
+        // starving stem that meant hundreds of identical syscalls per second.
+        // Keep the retry state on the per-source reader (worker-owned, no lock).
+        uint64_t    retry_after_ms = 0;
+        unsigned    consecutive_open_failures = 0;
+        uint64_t    last_used = 0;
         ~FillReader();
         void close() noexcept;
         // Rebind to `entry`, reusing the handle when the file is unchanged.

@@ -654,6 +654,38 @@ private:
 
 } // namespace
 
+TEST_CASE("a missing streaming file backs off instead of retrying every batch") {
+    ScopedEnv one_fill_worker("LIBRETRACKS_FILL_THREADS", "1");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 3;
+    const auto wav_path = make_temp_wav_path("fill_open_backoff");
+    REQUIRE(write_wav_pcm_float(
+        wav_path, make_reference_audio(kFrames, kChannels),
+        kChannels, kSampleRate));
+
+    SourceManager manager;
+    const Id source_id = "fill-open-backoff-source";
+    manager.register_source(source_id, wav_path);
+    REQUIRE(manager.try_install_native_file(source_id, kSampleRate));
+    REQUIRE(std::remove(wav_path.c_str()) == 0);
+
+    uint64_t actual_open_attempts = 0;
+    uint64_t actual_open_failures = 0;
+    for (int attempt = 0; attempt < 40; ++attempt) {
+        manager.request_block(source_id, 1, /*urgent=*/true);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        const auto io = manager.take_fill_io_stats();
+        actual_open_attempts += io.open_count;
+        actual_open_failures += io.open_failures;
+    }
+
+    // Forty queue batches span ~200 ms. Exponential 20/40/80/160 ms backoff
+    // should turn them into only a handful of real sf_open calls, not forty.
+    CHECK(actual_open_attempts <= 6);
+    CHECK(actual_open_failures == actual_open_attempts);
+}
+
 TEST_CASE("PCM cache writes go into LIBRETRACKS_CACHE_DIR/source-cache") {
     ScopedCacheDir scope("write_path");
     constexpr int kChannels = 2;
@@ -1223,11 +1255,13 @@ TEST_CASE("a block that stays missing is not re-requested on every callback") {
     CHECK(readahead_requests > 0);
     const int readahead_after_first_window = readahead_requests;
 
-    // It does still re-ask eventually, so a fill that was dropped (a short read,
-    // a range the decode has not reached) cannot silence the track forever.
+    // It does still re-ask the starving block eventually, so a dropped fill
+    // cannot silence the track forever. The 24-block lookahead is not repeated:
+    // doing that for every starving stem recreated thousands of queue entries
+    // and open attempts per second even after the urgent throttle was added.
     REQUIRE(source.read(0, 256, out, 2) == 256);
     CHECK(urgent_requests == 2);
-    CHECK(readahead_requests > readahead_after_first_window);
+    CHECK(readahead_requests == readahead_after_first_window);
 
     // And once the block is finally served, the next miss counts as new and is
     // asked for immediately rather than waiting out the timer.
@@ -1323,6 +1357,72 @@ TEST_CASE("BlockCache diagnostics stay exact across replace eviction and clear")
     diag = cache.diagnostics();
     CHECK(diag.blocks_cached == 0);
     CHECK(diag.bytes_used == 0);
+}
+
+TEST_CASE("streaming cache blocks are readable before the writer finalizes the WAV") {
+    // The importer publishes a DecodedSource while its cache WAV is still open
+    // for writing.  Playback must be able to fetch already-decoded blocks from
+    // that file; otherwise stems which have progressed past their tiny eager
+    // head remain silent (and their meters stay flat) until the whole decode
+    // finishes.
+    ScopedCacheDir scope("progressive_fill_reader");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+    ScopedEnv one_fill_worker("LIBRETRACKS_FILL_THREADS", "1");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = 65536 * 8;
+    constexpr Frame kProbeStart = kDefaultBlockFrames * 8;
+    constexpr int kProbeFrames = 512;
+    const auto wav_path = make_temp_wav_path("progressive_fill_reader");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    SourceManager manager;
+    const Id source_id = "progressive-fill-reader-source";
+    manager.register_source(source_id, wav_path);
+
+    bool probed_while_streaming = false;
+    bool range_became_ready = false;
+    const auto result = manager.decode_and_store_streaming(
+        source_id, wav_path, kSampleRate,
+        [&](int progress) {
+            if (probed_while_streaming || progress < 10 || progress >= 100)
+                return;
+            const auto diagnostics = manager.diagnostics();
+            if (diagnostics.empty() || diagnostics[0].status != "streaming")
+                return;
+
+            probed_while_streaming = true;
+            manager.request_range(source_id, kProbeStart, kProbeFrames);
+            const auto source = manager.get_shared(source_id);
+            REQUIRE(static_cast<bool>(source));
+            for (int spin = 0;
+                 spin < 500 && !source->is_range_ready(kProbeStart, kProbeFrames);
+                 ++spin) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            range_became_ready = source->is_range_ready(kProbeStart, kProbeFrames);
+        });
+
+    std::remove(wav_path.c_str());
+    REQUIRE(result.is_ok());
+    REQUIRE(probed_while_streaming);
+    CHECK(range_became_ready);
+
+    // The same worker now owns a reader opened against the still-growing WAV.
+    // Once sf_close finalizes the header, that retained reader must not keep an
+    // obsolete data length and strand later blocks forever.
+    constexpr Frame kTailStart = kFrames - kDefaultBlockFrames * 2;
+    manager.request_range(source_id, kTailStart, kProbeFrames);
+    const auto finalized_source = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(finalized_source));
+    for (int spin = 0;
+         spin < 500 && !finalized_source->is_range_ready(kTailStart, kProbeFrames);
+         ++spin) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CHECK(finalized_source->is_range_ready(kTailStart, kProbeFrames));
 }
 
 TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {

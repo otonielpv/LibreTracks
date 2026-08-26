@@ -116,7 +116,7 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
             if (request_blocks_) {
                 const int kReadAheadBlocks = streaming_read_ahead_blocks();
                 int previous = read_ahead_anchor_block_.load(std::memory_order_relaxed);
-                bool should_request = reask_starving_block;
+                bool should_request = false;
                 while (!should_request) {
                     should_request = previous < 0 ||
                         block_index > previous ||
@@ -127,9 +127,6 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                             previous, block_index, std::memory_order_relaxed)) {
                         break;
                     }
-                }
-                if (reask_starving_block) {
-                    read_ahead_anchor_block_.store(block_index, std::memory_order_relaxed);
                 }
                 if (should_request) {
                     // Clamp to the source's end, then ask once for the window.

@@ -1834,10 +1834,18 @@ bool SourceManager::FillReader::open_for(const Id& id,
     close();
     generation = gen;
 
+    const uint64_t now_ms = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    if (now_ms < retry_after_ms)
+        return false;
+
     if (open_count)
         open_count->fetch_add(1, std::memory_order_relaxed);
     const auto open_started = std::chrono::steady_clock::now();
-    const auto finish_open = [this, open_started](bool success) {
+    const auto finish_open = [this, &id, &file_path, open_started, now_ms](
+                                 bool success,
+                                 const char* detail) {
         const auto elapsed = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - open_started).count());
@@ -1847,8 +1855,29 @@ bool SourceManager::FillReader::open_for(const Id& id,
                    !open_max_us->compare_exchange_weak(
                        previous, elapsed, std::memory_order_relaxed)) {}
         }
-        if (!success && open_failures)
-            open_failures->fetch_add(1, std::memory_order_relaxed);
+        if (!success) {
+            if (open_failures)
+                open_failures->fetch_add(1, std::memory_order_relaxed);
+            ++consecutive_open_failures;
+            const unsigned shift = std::min(consecutive_open_failures - 1, 5u);
+            const uint64_t delay_ms = std::min<uint64_t>(500, 20ull << shift);
+            retry_after_ms = now_ms + delay_ms;
+            // First failure explains the source/path; powers of two show a
+            // persistent problem without recreating the log storm itself.
+            if ((consecutive_open_failures & (consecutive_open_failures - 1)) == 0) {
+                lt_debug_log(
+                    "[LT_FILL_OPEN_FAIL] source=\"%s\" attempts=%u retry_ms=%llu "
+                    "error=\"%s\" path=\"%s\"\n",
+                    id.c_str(),
+                    consecutive_open_failures,
+                    static_cast<unsigned long long>(delay_ms),
+                    detail ? detail : "unknown",
+                    file_path.c_str());
+            }
+        } else {
+            consecutive_open_failures = 0;
+            retry_after_ms = 0;
+        }
         return success;
     };
 
@@ -1856,16 +1885,16 @@ bool SourceManager::FillReader::open_for(const Id& id,
     SF_INFO info{};
     SNDFILE* sf = lt_sf_open(file_path, SFM_READ, &info);
     if (!sf)
-        return finish_open(false);
+        return finish_open(false, sf_strerror(nullptr));
     if (info.channels != channels) {
         sf_close(sf);
-        return finish_open(false);
+        return finish_open(false, "cache channel count changed");
     }
     handle = sf;
 #else
     auto in = std::make_unique<std::ifstream>(file_path, std::ios::binary);
     if (!in || !*in)
-        return finish_open(false);
+        return finish_open(false, std::strerror(errno));
     handle = in.release();
 #endif
     source_id = id;
@@ -1873,7 +1902,7 @@ bool SourceManager::FillReader::open_for(const Id& id,
     channel_count = channels;
     if (open_counter)
         open_counter->fetch_add(1, std::memory_order_release);
-    return finish_open(true);
+    return finish_open(true, nullptr);
 }
 
 void SourceManager::fill_worker_loop() const {
@@ -1890,11 +1919,12 @@ void SourceManager::fill_worker_loop() const {
     // session paid an open per block instead of an open per file. The pool
     // keeps one handle per source instead.
     //
-    // The bound is a file-descriptor budget, not a memory one: iOS gives a
-    // process 256 descriptors by default and the WebView wants its share, so
-    // two workers must not be able to hold more than a fraction of that.
-    constexpr std::size_t kMaxReadersPerWorker = 32;
+    // The bound is a file-descriptor budget, not a memory one. Keep ample room
+    // for WebKit, imported source files and decode writers on iOS. With two
+    // handheld workers this caps retained cache handles at 32 rather than 64.
+    constexpr std::size_t kMaxReadersPerWorker = 16;
     std::unordered_map<Id, std::unique_ptr<FillReader>> readers;
+    uint64_t reader_clock = 0;
     uint64_t reader_generation = fill_generation_.load(std::memory_order_acquire);
     const auto close_all_readers = [&] {
         for (auto& [id, reader] : readers)
@@ -1958,8 +1988,14 @@ void SourceManager::fill_worker_loop() const {
         }
         auto reader_it = readers.find(key.source_id);
         if (reader_it == readers.end()) {
-            if (readers.size() >= kMaxReadersPerWorker)
-                readers.erase(readers.begin());
+            if (readers.size() >= kMaxReadersPerWorker) {
+                const auto lru = std::min_element(
+                    readers.begin(), readers.end(),
+                    [](const auto& lhs, const auto& rhs) {
+                        return lhs.second->last_used < rhs.second->last_used;
+                    });
+                readers.erase(lru);
+            }
             auto reader = std::make_unique<FillReader>();
             reader->generation = reader_generation;
             reader->open_counter = &fill_readers_open_;
@@ -1968,6 +2004,7 @@ void SourceManager::fill_worker_loop() const {
             reader->open_max_us = &fill_open_max_us_;
             reader_it = readers.emplace(key.source_id, std::move(reader)).first;
         }
+        reader_it->second->last_used = ++reader_clock;
         fill_blocks_from_disk(key.source_id, block_batch, *reader_it->second);
     }
 }
@@ -1994,6 +2031,15 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
     }
     if (entry.cache_file_path.empty() || entry.channel_count <= 0)
         return;
+
+    // A reader opened while libsndfile is still writing the WAV snapshots the
+    // data-chunk length present at open time. Reusing it after the writer's
+    // sf_close leaves later, valid blocks permanently beyond that stale EOF.
+    // Streaming readers are therefore transient; finalized cache files retain
+    // their handle and still get the pool's no-thrashing benefit during play.
+    const bool retain_reader = entry.status == "cache_ready";
+    if (!retain_reader)
+        reader.close();
 
     // Sources were invalidated since this handle was opened — release it before
     // touching disk so the stale cache file can be deleted/replaced.
@@ -2113,6 +2159,8 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
                 block_read_frames);
         }
     }
+    if (!retain_reader)
+        reader.close();
 }
 
 std::string SourceManager::cache_file_for(const Id& source_id,
