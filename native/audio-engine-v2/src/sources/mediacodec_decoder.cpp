@@ -163,11 +163,13 @@ public:
         output_eos_ = false;
         skip_frames_ = 0;
         pending_.clear();
-        lt_debug_log(
-                     "[LT_MEDIACODEC] opened '%s' mime=%s sr=%d ch=%d frames=%lld\n",
-                     file_path.c_str(), mime_type.c_str(),
-                     info_.original_sample_rate, info_.channel_count,
-                     static_cast<long long>(info_.duration_frames));
+        if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+            lt_debug_log(
+                         "[LT_MEDIACODEC] opened '%s' mime=%s sr=%d ch=%d frames=%lld\n",
+                         file_path.c_str(), mime_type.c_str(),
+                         info_.original_sample_rate, info_.channel_count,
+                         static_cast<long long>(info_.duration_frames));
+        }
         return Result<void>::ok();
     }
 

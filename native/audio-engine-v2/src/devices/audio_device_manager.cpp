@@ -920,10 +920,12 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         const auto backend_now = impl_->juce_manager.getCurrentAudioDeviceType().toStdString();
         const int floor_frames = lt_min_buffer_frames_for_backend(backend_now);
         if (floor_frames > 0 && setup.bufferSize < floor_frames) {
-            lt_debug_log(
-                "[LT_DEVICE] buffer %d too small for backend \"%s\"; using %d "
-                "(smaller underruns and plays back sped up on this backend)\n",
-                setup.bufferSize, backend_now.c_str(), floor_frames);
+            if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+                lt_debug_log(
+                    "[LT_DEVICE] buffer %d too small for backend \"%s\"; using %d "
+                    "(smaller underruns and plays back sped up on this backend)\n",
+                    setup.bufferSize, backend_now.c_str(), floor_frames);
+            }
             setup.bufferSize = floor_frames;
         }
     }
@@ -987,7 +989,7 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     // first, so THIS is the floor on how instant a jump can feel — no amount of
     // engine work moves it. Logged at open so "the jump is not instant" can be
     // answered with a number instead of a guess.
-    {
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
         const double sr = impl_->sample_rate > 0
             ? static_cast<double>(impl_->sample_rate) : 48000.0;
         lt_debug_log(

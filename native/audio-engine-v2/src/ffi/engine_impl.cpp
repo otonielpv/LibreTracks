@@ -662,18 +662,11 @@ Result<void> EngineImpl::initialize() {
     if (state_ == State::Initialized)
         return Result<void>::err("Engine already initialized");
 
-    // Session banner. The debug log is append-only across runs (never truncated
-    // in release), so this line — always written, like [LT_STARVATION] — marks
-    // where a fresh audio session begins and pins it to a wall-clock moment,
-    // making it possible to separate one session's dropouts from another's.
-    lt_debug_log("[LT_SESSION] engine initialize at %s\n",
-                 lt_debug_datetime().c_str());
-
-    // What this machine lets us spend. Printed next to the session banner so a
-    // log from a user's phone answers "which budgets was it running with?"
-    // without a debug build — the question that took a USB cable to answer when
-    // a 2 GB .ltset took an Oppo CPH1931 down.
-    {
+    // Session/profile banners are field diagnostics, not errors. Release builds
+    // keep the file quiet unless diagnostics were explicitly enabled.
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log("[LT_SESSION] engine initialize at %s\n",
+                     lt_debug_datetime().c_str());
         const auto& device = lt_device_profile();
         lt_debug_log(
             "[LT_DEVICE] class=%s ram=%.2fGB available=%.2fGB budget=%lluMB "

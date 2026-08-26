@@ -93,7 +93,10 @@ private:
     // the audio thread is silencing right now, so the fill workers serve it
     // before any read-ahead. See SourceManager::request_blocks.
     std::function<void(const Id&, int, int, bool)> request_blocks_;
-    mutable std::atomic<int> read_ahead_anchor_block_{-1};
+    // Furthest block already covered by read-ahead. Advancing playback only
+    // exposes one new edge block; requesting the whole overlapping window on
+    // every block generated hundreds of thousands of redundant queue entries.
+    mutable std::atomic<int> read_ahead_until_block_{-1};
     // The block this source is starving on right now, and for how many
     // callbacks. Re-issuing the urgent request (and the read-ahead burst behind
     // it) on EVERY silenced callback is what turns a transient shortfall into a

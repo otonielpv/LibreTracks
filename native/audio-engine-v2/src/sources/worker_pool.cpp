@@ -229,11 +229,13 @@ DecodeWorkerPool::DecodeWorkerPool(int num_threads)
             num_threads = lt_device_profile().decode_threads;
         }
     }
-    lt_debug_log(
-        "[LT_THREADS] decode pool: %d worker(s) (cores=%u, ram=%.1fGB)\n",
-        num_threads,
-        std::thread::hardware_concurrency(),
-        lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log(
+            "[LT_THREADS] decode pool: %d worker(s) (cores=%u, ram=%.1fGB)\n",
+            num_threads,
+            std::thread::hardware_concurrency(),
+            lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
+    }
     for (int i = 0; i < num_threads; ++i) {
         impl_->threads.emplace_back([this]{ impl_->worker_loop(); });
     }

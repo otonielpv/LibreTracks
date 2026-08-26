@@ -115,31 +115,28 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
             }
             if (request_blocks_) {
                 const int kReadAheadBlocks = streaming_read_ahead_blocks();
-                int previous = read_ahead_anchor_block_.load(std::memory_order_relaxed);
-                bool should_request = false;
-                while (!should_request) {
-                    should_request = previous < 0 ||
-                        block_index > previous ||
-                        block_index + kReadAheadBlocks < previous;
-                    if (!should_request)
+                const int blocks_in_source = static_cast<int>(
+                    (duration_frames_ + cache_->block_frames() - 1) /
+                    cache_->block_frames());
+                const int last_ahead = std::min(block_index + kReadAheadBlocks,
+                                                blocks_in_source - 1);
+                int covered = read_ahead_until_block_.load(std::memory_order_relaxed);
+                while (last_ahead > block_index) {
+                    // Normal forward playback extends the existing window by
+                    // one edge block. A seek outside it rebuilds a full window.
+                    const bool discontinuity =
+                        covered < block_index || covered > last_ahead;
+                    const int first_ahead = discontinuity
+                        ? block_index + 1
+                        : std::max(block_index + 1, covered + 1);
+                    if (first_ahead > last_ahead)
                         break;
-                    if (read_ahead_anchor_block_.compare_exchange_weak(
-                            previous, block_index, std::memory_order_relaxed)) {
-                        break;
-                    }
-                }
-                if (should_request) {
-                    // Clamp to the source's end, then ask once for the window.
-                    const int blocks_in_source = static_cast<int>(
-                        (duration_frames_ + cache_->block_frames() - 1) /
-                        cache_->block_frames());
-                    const int first_ahead = block_index + 1;
-                    const int last_ahead = std::min(block_index + kReadAheadBlocks,
-                                                    blocks_in_source - 1);
-                    if (last_ahead >= first_ahead) {
+                    if (read_ahead_until_block_.compare_exchange_weak(
+                            covered, last_ahead, std::memory_order_relaxed)) {
                         request_blocks_(source_id_, first_ahead,
                                         last_ahead - first_ahead + 1,
                                         /*urgent=*/false);
+                        break;
                     }
                 }
             }

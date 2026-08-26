@@ -105,16 +105,15 @@ pub fn run() {
                 }
             }
 
-            // Mobile field diagnostics: there is no shell environment to set
-            // these flags on a phone. Android records timing while low-end
-            // playback is being tuned; iOS additionally records the active
-            // AVAudioSession route and the final peak handed to RemoteIO.
-            // TODO: gate behind a Settings toggle once mobile playback is stable.
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            // Mobile debug builds keep field diagnostics available. Packaged
+            // release builds leave them opt-in so the engine log contains only
+            // actionable failures (starvation, open/decode errors) and cannot
+            // grow by one timing snapshot every 500 ms.
+            #[cfg(all(any(target_os = "android", target_os = "ios"), debug_assertions))]
             if std::env::var_os("LIBRETRACKS_AUDIO_DIAG").is_none() {
                 std::env::set_var("LIBRETRACKS_AUDIO_DIAG", "1");
             }
-            #[cfg(target_os = "ios")]
+            #[cfg(all(target_os = "ios", debug_assertions))]
             if std::env::var_os("LIBRETRACKS_AUDIO_DEBUG").is_none() {
                 std::env::set_var("LIBRETRACKS_AUDIO_DEBUG", "1");
             }

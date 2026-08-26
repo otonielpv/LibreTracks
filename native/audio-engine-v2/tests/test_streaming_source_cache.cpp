@@ -1151,6 +1151,15 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
 
     REQUIRE(source.read(512, 512, out, 2) == 512);
     CHECK(requested_blocks.size() == 16);
+
+    // Crossing into the next cache block extends the already-covered window
+    // by exactly its new edge. The old implementation requested all 16
+    // overlapping blocks again (756k requests in a 214-second phone trace).
+    auto second_block = make_reference_audio(kDefaultBlockFrames, kChannels);
+    cache.fill(source_id, 1, second_block.data(), kChannels, kDefaultBlockFrames);
+    REQUIRE(source.read(kDefaultBlockFrames, 512, out, 2) == 512);
+    CHECK(requested_blocks.size() == 17);
+    CHECK(requested_blocks.back() == 17);
 }
 
 // The block being silenced right now must claim the urgent lane; the

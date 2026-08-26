@@ -711,11 +711,13 @@ SourceManager::SourceManager()
                    lt::lt_device_profile().protected_blocks_per_source)
 {
     const unsigned count = fill_thread_count_from_env();
-    lt_debug_log(
-        "[LT_THREADS] fill pool: %u worker(s) (cores=%u, ram=%.1fGB)\n",
-        count,
-        std::thread::hardware_concurrency(),
-        lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log(
+            "[LT_THREADS] fill pool: %u worker(s) (cores=%u, ram=%.1fGB)\n",
+            count,
+            std::thread::hardware_concurrency(),
+            lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
+    }
     fill_threads_.reserve(count);
     for (unsigned i = 0; i < count; ++i)
         fill_threads_.emplace_back([this] { fill_worker_loop(); });
@@ -1817,8 +1819,10 @@ std::size_t SourceManager::release_cached_blocks_under_pressure(std::size_t keep
     // would defeat the point of reacting quickly. BlockCache does its own
     // locking, and it is the only thing we touch.
     const std::size_t freed = block_cache_.release_unprotected(keep_per_source);
-    lt_debug_log("[LT_MEMPRESSURE] released %zu MB from the block cache (keep=%zu/source)\n",
-                 freed / (1024 * 1024), keep_per_source);
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log("[LT_MEMPRESSURE] released %zu MB from the block cache (keep=%zu/source)\n",
+                     freed / (1024 * 1024), keep_per_source);
+    }
     return freed;
 }
 
@@ -1982,7 +1986,11 @@ void SourceManager::fill_worker_loop() const {
     // Reader STATE is deliberately not capped: its retry deadline must survive
     // handle rotation, otherwise 27 missing sources continuously reset to
     // attempt #1 and recreate the open/log storm.
-    constexpr std::size_t kMaxReadersPerWorker = 16;
+    // A 27-stem session otherwise rotates through a 16-handle pool on every
+    // callback round (about 70 opens/s in the iPhone trace). Two handheld
+    // workers retain at most 64 descriptors, leaving ample room under iOS's
+    // 256-descriptor process budget while allowing every stem to stay open.
+    constexpr std::size_t kMaxReadersPerWorker = 32;
     std::unordered_map<Id, std::unique_ptr<FillReader>> readers;
     uint64_t reader_clock = 0;
     uint64_t reader_generation = fill_generation_.load(std::memory_order_acquire);
