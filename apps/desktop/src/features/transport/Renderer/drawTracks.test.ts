@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 const waveformTileRequests = vi.hoisted(() => [] as Array<{ pixelsPerSecond: number }>);
+// Un resumen parcial se pinta DIRECTO (drawWaveformSketch), nunca por la cache
+// de tiles; el espia deja comprobar cual de las dos rutas tomo cada clip.
+const sketchCalls = vi.hoisted(
+  () => [] as Array<{ fromRatio: number; toRatio: number; maxBuckets?: number }>,
+);
 
 vi.mock("./WaveformTileCache", () => {
   return {
@@ -8,7 +13,15 @@ vi.mock("./WaveformTileCache", () => {
     getWaveformRenderPixelsPerSecond: (pixelsPerSecond: number) =>
       pixelsPerSecond,
     WAVEFORM_TILE_FRAME_BUDGET_MS: 4,
-    drawWaveformSketch: () => true,
+    drawWaveformSketch: (
+      _context: unknown,
+      _clip: unknown,
+      _waveform: unknown,
+      rect: { fromRatio: number; toRatio: number; maxBuckets?: number },
+    ) => {
+      sketchCalls.push(rect);
+      return true;
+    },
     tileNamespace: () => "ns",
     tileHeightForLane: (height: number) => (height <= 32 ? 32 : 256),
     WaveformTileCache: class {
@@ -201,9 +214,14 @@ describe("drawTrackClipsLayer", () => {
 
     drawTrackClipsLayer(context, createSnapshot(false), viewport);
 
+    // Resolved through i18n like every other clip label — it was the one string
+    // on the canvas hardcoded in English, on the state users see most.
+    const expectedLabel = i18n
+      .t("library.pendingStatus.analyzing")
+      .toUpperCase();
     expect(
       (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
-        ([text]) => text === "ANALYZING WAVEFORM...",
+        ([text]) => text === expectedLabel,
       ),
     ).toBe(true);
     expect(
@@ -244,6 +262,150 @@ describe("drawTrackClipsLayer", () => {
         ([text]) => text === "ANALYZING...",
       ),
     ).toBe(false);
+  });
+
+  // Un resumen parcial (fichero aún analizándose) trae picos reales hasta
+  // `analyzedSeconds` y relleno a cero después. Pintarlo entero como
+  // "ANALIZANDO" era lo que hacía que un análisis lento se leyera como que la
+  // app se ha quedado colgada: el trabajo avanzaba y la UI no lo enseñaba.
+  it("pinta la onda ya analizada y sombrea solo el tramo que falta", () => {
+    sketchCalls.length = 0;
+    const context = createContextSpy();
+    const snapshot = createSnapshot(true);
+    snapshot.waveformCache["audio/lead.wav"] = {
+      ...snapshot.waveformCache["audio/lead.wav"],
+      analyzedSeconds: 5,
+    };
+    snapshot.clipsByTrack["track-1"] = [
+      {
+        ...snapshot.clipsByTrack["track-1"][0],
+        waveformStatus: "analyzing",
+      },
+    ];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    // La parte analizada se dibuja de verdad, y solo hasta donde llega
+    // (5 s de 45 s = 1/9 del clip).
+    expect(sketchCalls).toHaveLength(1);
+    expect(sketchCalls[0].fromRatio).toBe(0);
+    expect(sketchCalls[0].toRatio).toBeCloseTo(5 / 45, 6);
+    // ...y el marcador de "pendiente" empieza justo donde acaba (5 s a 120 px/s)
+    // en vez de cubrir el clip entero.
+    const placeholderRects = (
+      context.fillRect as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    expect(placeholderRects).toContainEqual([600, 0, 600, 80]);
+    expect(
+      placeholderRects.some(([x, , width]) => x === 0 && width === 1200),
+    ).toBe(false);
+  });
+
+  // Un parcial cambia varias veces por segundo. Si pasara por la cache de
+  // tiles, cada actualizacion invalidaria el clip entero mas rapido de lo que
+  // se puede rasterizar y lo que se veria seria el boceto de respaldo
+  // parpadeando: el mismo artefacto que mover el zoom a lo bruto.
+  it("no mete los resúmenes parciales por la caché de tiles", () => {
+    waveformTileRequests.length = 0;
+    const context = createContextSpy();
+    const snapshot = createSnapshot(true);
+    snapshot.waveformCache["audio/lead.wav"] = {
+      ...snapshot.waveformCache["audio/lead.wav"],
+      analyzedSeconds: 20,
+    };
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    expect(waveformTileRequests).toHaveLength(0);
+    expect(context.drawImage as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  // Y en cuanto el analisis termina se vuelve a los tiles, que son los que dan
+  // la definicion buena.
+  it("vuelve a la caché de tiles cuando el resumen ya está completo", () => {
+    waveformTileRequests.length = 0;
+    const context = createContextSpy();
+
+    drawTrackClipsLayer(context, createSnapshot(true), viewport);
+
+    expect(waveformTileRequests.length).toBeGreaterThan(0);
+    expect(context.drawImage as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+  });
+
+  // Un clip con warp se DIBUJA sobre su longitud en la línea de tiempo, pero
+  // los picos van indexados por tiempo de FUENTE. Situar el borde multiplicando
+  // segundos por el zoom lo colocaba mal justo en los clips donde los dos
+  // relojes no coinciden.
+  it("sitúa el borde de lo analizado por fracción del clip, no por segundos", () => {
+    const context = createContextSpy();
+    const snapshot = createSnapshot(true);
+    snapshot.waveformCache["audio/lead.wav"] = {
+      ...snapshot.waveformCache["audio/lead.wav"],
+      analyzedSeconds: 5,
+    };
+    snapshot.clipsByTrack["track-1"] = [
+      {
+        ...snapshot.clipsByTrack["track-1"][0],
+        // 45 s de fuente comprimidos en 22,5 s de línea de tiempo (warp 2x).
+        durationSeconds: 22.5,
+        sourceWindowDurationSeconds: 45,
+        sourceDurationSeconds: 45,
+      },
+    ];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    // 5/45 del ancho dibujado (22,5 s x 120 px/s = 2700 px) = 300 px.
+    // Por segundos habrían salido 600 px: el doble de lejos.
+    const placeholderRects = (
+      context.fillRect as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    expect(placeholderRects.some(([x]) => x === 300)).toBe(true);
+  });
+
+  // Con la onda ya creciendo, la banda sombreada basta: repetir el cartel
+  // encima sólo tapa aquello que describe.
+  it("no repite el cartel sobre la onda que ya se está pintando", () => {
+    const context = createContextSpy();
+    const snapshot = createSnapshot(true);
+    snapshot.waveformCache["audio/lead.wav"] = {
+      ...snapshot.waveformCache["audio/lead.wav"],
+      analyzedSeconds: 5,
+    };
+    snapshot.clipsByTrack["track-1"] = [
+      {
+        ...snapshot.clipsByTrack["track-1"][0],
+        waveformStatus: "analyzing",
+      },
+    ];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    const analyzingLabel = i18n
+      .t("library.pendingStatus.analyzing")
+      .toUpperCase();
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === analyzingLabel,
+      ),
+    ).toBe(false);
+  });
+
+  it("vuelve al marcador de clip completo mientras no hay ningún pico", () => {
+    const context = createContextSpy();
+    const snapshot = createSnapshot(false);
+    snapshot.clipsByTrack["track-1"] = [
+      {
+        ...snapshot.clipsByTrack["track-1"][0],
+        waveformStatus: "analyzing",
+      },
+    ];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    expect(
+      (context.fillRect as ReturnType<typeof vi.fn>).mock.calls,
+    ).toContainEqual([0, 0, 1200, 80]);
   });
 
   it("elige la generación de onda desde el zoom visible, no desde el commit diferido", () => {

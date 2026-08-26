@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { isTauriApp, listenToAudioDeviceStatus } from "./desktopApi";
+import {
+  appendFrontendError,
+  isTauriApp,
+  listenToAudioDeviceStatus,
+} from "./desktopApi";
 
 /**
  * Output-device health badge for the transport bar.
@@ -19,6 +23,7 @@ export function AudioDeviceStatusBadge() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<"ok" | "lost" | "restored">("ok");
   const restoredTimerRef = useRef<number | null>(null);
+  const lastLoggedErrorRef = useRef("");
 
   useEffect(() => {
     if (!isTauriApp) {
@@ -38,6 +43,13 @@ export function AudioDeviceStatusBadge() {
       }
       if (event.fallbackActive) {
         sawOutage = true;
+        const diagnostic = event.lastError || "unknown audio-device error";
+        if (diagnostic !== lastLoggedErrorRef.current) {
+          lastLoggedErrorRef.current = diagnostic;
+          void appendFrontendError(
+            `audio output unavailable; device="${event.deviceName}"; error=${diagnostic}`,
+          ).catch(() => {});
+        }
         setStatus("lost");
         return;
       }
@@ -47,6 +59,7 @@ export function AudioDeviceStatusBadge() {
         return;
       }
       sawOutage = false;
+      lastLoggedErrorRef.current = "";
       setStatus("restored");
       restoredTimerRef.current = window.setTimeout(() => {
         restoredTimerRef.current = null;

@@ -176,6 +176,10 @@ const es = {
       diagnosticsHide: "Ocultar registro",
       diagnosticsSave: "Guardar registro...",
       diagnosticsSaved: "Registro guardado.",
+      diagnosticsClear: "Eliminar registro",
+      diagnosticsClearConfirm:
+        "¿Eliminar todo el registro del motor de audio? Se empezará un archivo nuevo con los próximos diagnósticos.",
+      diagnosticsCleared: "Registro del motor de audio eliminado.",
       diagnosticsRefresh: "Actualizar",
       diagnosticsLogSize: "{{size}} en disco",
       diagnosticsTailOnly: "se muestra el final del archivo",

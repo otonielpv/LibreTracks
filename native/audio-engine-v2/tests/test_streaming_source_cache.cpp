@@ -654,6 +654,38 @@ private:
 
 } // namespace
 
+TEST_CASE("a missing streaming file backs off instead of retrying every batch") {
+    ScopedEnv one_fill_worker("LIBRETRACKS_FILL_THREADS", "1");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 3;
+    const auto wav_path = make_temp_wav_path("fill_open_backoff");
+    REQUIRE(write_wav_pcm_float(
+        wav_path, make_reference_audio(kFrames, kChannels),
+        kChannels, kSampleRate));
+
+    SourceManager manager;
+    const Id source_id = "fill-open-backoff-source";
+    manager.register_source(source_id, wav_path);
+    REQUIRE(manager.try_install_native_file(source_id, kSampleRate));
+    REQUIRE(std::remove(wav_path.c_str()) == 0);
+
+    uint64_t actual_open_attempts = 0;
+    uint64_t actual_open_failures = 0;
+    for (int attempt = 0; attempt < 40; ++attempt) {
+        manager.request_block(source_id, 1, /*urgent=*/true);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        const auto io = manager.take_fill_io_stats();
+        actual_open_attempts += io.open_count;
+        actual_open_failures += io.open_failures;
+    }
+
+    // Forty queue batches span ~200 ms. Exponential 20/40/80/160 ms backoff
+    // should turn them into only a handful of real sf_open calls, not forty.
+    CHECK(actual_open_attempts <= 6);
+    CHECK(actual_open_failures == actual_open_attempts);
+}
+
 TEST_CASE("PCM cache writes go into LIBRETRACKS_CACHE_DIR/source-cache") {
     ScopedCacheDir scope("write_path");
     constexpr int kChannels = 2;
@@ -929,6 +961,43 @@ TEST_CASE("LRU eviction removes oldest .rf64 files when the budget is exceeded")
     CHECK(stats.total_bytes <= 2u * 1024u * 1024u); // slack: latest write is ~1 MiB
 }
 
+TEST_CASE("disk LRU never removes caches referenced by the active session") {
+    ScopedCacheDir scope("lru_active_session");
+    ScopedEnv limit("LIBRETRACKS_SOURCE_DISK_CACHE_MB", "1");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    // Each int16 WAV is about 768 KiB, so two active sources exceed the 1 MiB
+    // soft budget. Playback correctness must win over evicting either one.
+    constexpr Frame kFrames = 65536 * 3;
+    const auto samples = make_reference_audio(kFrames, kChannels);
+
+    SourceManager manager;
+    manager.register_source("active-a", "active-a.wav");
+    REQUIRE(manager.store_decoded_source(
+        "active-a", samples, kChannels, kSampleRate, kFrames).is_ok());
+    manager.register_source("active-b", "active-b.wav");
+    REQUIRE(manager.store_decoded_source(
+        "active-b", samples, kChannels, kSampleRate, kFrames).is_ok());
+
+    const auto stats = stat_cache_dir(
+        scope.path() + std::string(1, kTestPathSep) + "source-cache");
+    CHECK(stats.file_count == 2);
+    CHECK(stats.total_bytes > 1024u * 1024u);
+
+    // Force A to come from disk after B has triggered the eviction sweep. The
+    // old behaviour had unlinked A here, leaving permanent silence/no meter.
+    const Frame tail = kFrames - kDefaultBlockFrames;
+    require_ready_range(manager, "active-a", tail, kDefaultBlockFrames);
+    const auto source = manager.get_shared("active-a");
+    REQUIRE(source);
+    const auto audio = read_planar(*source, tail, kDefaultBlockFrames);
+    CHECK(std::any_of(audio.begin(), audio.end(), [](float sample) {
+        return std::abs(sample) > 0.001f;
+    }));
+}
+
 TEST_CASE("TrackRenderer output is identical for memory and streaming source paths") {
     constexpr int kChannels = 2;
     constexpr int kSampleRate = 48000;
@@ -1057,10 +1126,12 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
         kSampleRate,
         kFrames,
         &cache,
-        [&](const Id& id, int block_index, bool urgent) {
+        [&](const Id& id, int first_block, int block_count, bool urgent) {
             CHECK(id == source_id);
-            requested_blocks.push_back(block_index);
-            requested_urgency.push_back(urgent);
+            for (int i = 0; i < block_count; ++i) {
+                requested_blocks.push_back(first_block + i);
+                requested_urgency.push_back(urgent);
+            }
         });
 
     std::vector<float> left(512, 0.0f);
@@ -1080,6 +1151,15 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
 
     REQUIRE(source.read(512, 512, out, 2) == 512);
     CHECK(requested_blocks.size() == 16);
+
+    // Crossing into the next cache block extends the already-covered window
+    // by exactly its new edge. The old implementation requested all 16
+    // overlapping blocks again (756k requests in a 214-second phone trace).
+    auto second_block = make_reference_audio(kDefaultBlockFrames, kChannels);
+    cache.fill(source_id, 1, second_block.data(), kChannels, kDefaultBlockFrames);
+    REQUIRE(source.read(kDefaultBlockFrames, 512, out, 2) == 512);
+    CHECK(requested_blocks.size() == 17);
+    CHECK(requested_blocks.back() == 17);
 }
 
 // The block being silenced right now must claim the urgent lane; the
@@ -1143,9 +1223,10 @@ TEST_CASE("a silenced block is requested urgently, its read-ahead is not") {
     std::vector<std::pair<int, bool>> requests;
     DecodedSource source(
         source_id, kChannels, kSampleRate, kFrames, &cache,
-        [&](const Id& id, int block_index, bool urgent) {
+        [&](const Id& id, int first_block, int block_count, bool urgent) {
             CHECK(id == source_id);
-            requests.emplace_back(block_index, urgent);
+            for (int i = 0; i < block_count; ++i)
+                requests.emplace_back(first_block + i, urgent);
         });
 
     std::vector<float> left(512, 0.0f), right(512, 0.0f);
@@ -1168,6 +1249,81 @@ TEST_CASE("a silenced block is requested urgently, its read-ahead is not") {
         if (block != 0)
             CHECK_FALSE(urgent);
     }
+}
+
+// Regression for the iOS collapse on a 27-stem session: playback sounded for a
+// few seconds and then went permanently silent, with the diagnostics showing
+// `miss+=2565 hit+=0` half-second after half-second — the fill workers had
+// stopped delivering entirely.
+//
+// The cause was here, on the audio thread. Every silenced callback re-issued
+// the urgent request AND the whole read-ahead window behind it. Each request
+// took the cache mutex (has_block) that the callback reads samples under, took
+// the fill-queue mutex the workers pull work from, and woke a worker: ~127k
+// lock pairs per second at 27 stems, raised BY the audio thread AGAINST the
+// threads meant to feed it. The workers could no longer hold the queue long
+// enough to deliver a block, so every block stayed missing, so every callback
+// re-asked — the shortfall fed itself and never recovered.
+//
+// The block is already queued after the first ask. Re-asking is only a hedge
+// against a dropped fill, so it belongs on a slow timer, not on every callback.
+TEST_CASE("a block that stays missing is not re-requested on every callback") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 64;
+    const Id source_id = "starving-source";
+
+    // Nothing is ever filled, so every read silences on block 0 — the state the
+    // engine was stuck in.
+    BlockCache cache(kDefaultBlockFrames, 64);
+
+    int urgent_requests = 0;
+    int readahead_requests = 0;
+    DecodedSource source(
+        source_id, kChannels, kSampleRate, kFrames, &cache,
+        [&](const Id& id, int first_block, int block_count, bool urgent) {
+            CHECK(id == source_id);
+            if (urgent)
+                urgent_requests += block_count;
+            else
+                readahead_requests += block_count;
+        });
+
+    std::vector<float> left(256, 0.0f), right(256, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+
+    // 32 callbacks' worth of the same starving block (~170 ms at this buffer).
+    for (int callback = 0; callback < 32; ++callback)
+        REQUIRE(source.read(0, 256, out, 2) == 256);
+
+    // One ask for the starving block and one read-ahead window — not 32 of each.
+    CHECK(urgent_requests == 1);
+    CHECK(readahead_requests > 0);
+    const int readahead_after_first_window = readahead_requests;
+
+    // It does still re-ask the starving block eventually, so a dropped fill
+    // cannot silence the track forever. The 24-block lookahead is not repeated:
+    // doing that for every starving stem recreated thousands of queue entries
+    // and open attempts per second even after the urgent throttle was added.
+    REQUIRE(source.read(0, 256, out, 2) == 256);
+    CHECK(urgent_requests == 2);
+    CHECK(readahead_requests == readahead_after_first_window);
+
+    // And once the block is finally served, the next miss counts as new and is
+    // asked for immediately rather than waiting out the timer.
+    auto block = make_reference_audio(kDefaultBlockFrames, kChannels);
+    cache.fill(source_id, 0, block.data(), kChannels, kDefaultBlockFrames);
+    REQUIRE(source.read(0, 256, out, 2) == 256);
+    CHECK(urgent_requests == 2);  // served: no ask at all
+
+    BlockCache empty_again(kDefaultBlockFrames, 64);
+    DecodedSource fresh(
+        source_id, kChannels, kSampleRate, kFrames, &empty_again,
+        [&](const Id&, int, int block_count, bool urgent) {
+            if (urgent) urgent_requests += block_count;
+        });
+    REQUIRE(fresh.read(0, 256, out, 2) == 256);
+    CHECK(urgent_requests == 3);
 }
 
 TEST_CASE("BlockCache protects each source's recent window from cross-source eviction") {
@@ -1249,6 +1405,72 @@ TEST_CASE("BlockCache diagnostics stay exact across replace eviction and clear")
     CHECK(diag.bytes_used == 0);
 }
 
+TEST_CASE("streaming cache blocks are readable before the writer finalizes the WAV") {
+    // The importer publishes a DecodedSource while its cache WAV is still open
+    // for writing.  Playback must be able to fetch already-decoded blocks from
+    // that file; otherwise stems which have progressed past their tiny eager
+    // head remain silent (and their meters stay flat) until the whole decode
+    // finishes.
+    ScopedCacheDir scope("progressive_fill_reader");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+    ScopedEnv one_fill_worker("LIBRETRACKS_FILL_THREADS", "1");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = 65536 * 8;
+    constexpr Frame kProbeStart = kDefaultBlockFrames * 8;
+    constexpr int kProbeFrames = 512;
+    const auto wav_path = make_temp_wav_path("progressive_fill_reader");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    SourceManager manager;
+    const Id source_id = "progressive-fill-reader-source";
+    manager.register_source(source_id, wav_path);
+
+    bool probed_while_streaming = false;
+    bool range_became_ready = false;
+    const auto result = manager.decode_and_store_streaming(
+        source_id, wav_path, kSampleRate,
+        [&](int progress) {
+            if (probed_while_streaming || progress < 10 || progress >= 100)
+                return;
+            const auto diagnostics = manager.diagnostics();
+            if (diagnostics.empty() || diagnostics[0].status != "streaming")
+                return;
+
+            probed_while_streaming = true;
+            manager.request_range(source_id, kProbeStart, kProbeFrames);
+            const auto source = manager.get_shared(source_id);
+            REQUIRE(static_cast<bool>(source));
+            for (int spin = 0;
+                 spin < 500 && !source->is_range_ready(kProbeStart, kProbeFrames);
+                 ++spin) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            range_became_ready = source->is_range_ready(kProbeStart, kProbeFrames);
+        });
+
+    std::remove(wav_path.c_str());
+    REQUIRE(result.is_ok());
+    REQUIRE(probed_while_streaming);
+    CHECK(range_became_ready);
+
+    // The same worker now owns a reader opened against the still-growing WAV.
+    // Once sf_close finalizes the header, that retained reader must not keep an
+    // obsolete data length and strand later blocks forever.
+    constexpr Frame kTailStart = kFrames - kDefaultBlockFrames * 2;
+    manager.request_range(source_id, kTailStart, kProbeFrames);
+    const auto finalized_source = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(finalized_source));
+    for (int spin = 0;
+         spin < 500 && !finalized_source->is_range_ready(kTailStart, kProbeFrames);
+         ++spin) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CHECK(finalized_source->is_range_ready(kTailStart, kProbeFrames));
+}
+
 TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {
     // Write a 44.1k WAV and decode it to 48k both ways; the streamed cache must
     // match the whole-file cache frame-for-frame (within float tolerance), so
@@ -1323,3 +1545,86 @@ TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {
     CHECK(best_diff < 1.0e-4);
     CHECK(best_shift == 0);
 }
+
+#if LT_ENGINE_USE_LIBSNDFILE
+TEST_CASE("analyze_file_peaks publishes partial peaks while it reads") {
+    // The host paints a waveform in pieces from these callbacks instead of
+    // showing a static "analyzing" placeholder until the whole file is read.
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr int kResolution = 256;
+    constexpr Frame kFrames = kSampleRate * 3;  // several read chunks
+    const auto wav_path = make_temp_wav_path("peaks_progress");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    struct Capture {
+        int calls = 0;
+        int last_bucket_count = 0;
+        long long last_analyzed = 0;
+        long long total = 0;
+        int resolution = 0;
+        bool monotonic = true;
+        bool had_right = false;
+        std::vector<float> first_max;
+    } capture;
+
+    // No captures, so it converts to the plain function pointer the analyser
+    // takes; the state travels through the ctx pointer.
+    auto on_progress = [](void* ctx, const PeakProgress& progress) {
+        auto* c = static_cast<Capture*>(ctx);
+        if (progress.bucket_count < c->last_bucket_count) c->monotonic = false;
+        c->calls += 1;
+        c->last_bucket_count = progress.bucket_count;
+        c->last_analyzed = progress.analyzed_frames;
+        c->total = progress.total_frames;
+        c->resolution = progress.resolution_frames;
+        c->had_right = progress.max_peaks_right != nullptr;
+        if (c->first_max.empty() && progress.max_peaks && progress.bucket_count > 0) {
+            c->first_max.assign(progress.max_peaks,
+                                progress.max_peaks + progress.bucket_count);
+        }
+    };
+
+    const auto overview =
+        analyze_file_peaks(wav_path, kResolution, on_progress, &capture);
+    std::remove(wav_path.c_str());
+
+    // The first chunk publishes straight away, so even a short file reports.
+    CHECK(capture.calls >= 1);
+    CHECK(capture.monotonic);
+    CHECK(capture.total == static_cast<long long>(kFrames));
+    CHECK(capture.resolution == kResolution);
+    CHECK(capture.had_right);  // stereo source exposes both channels
+    // Only COMPLETE buckets are published: a bucket still accumulating would
+    // make the waveform's leading edge flicker as its peak grew.
+    CHECK(capture.last_analyzed % kResolution == 0);
+    CHECK(capture.last_analyzed <= static_cast<long long>(kFrames));
+
+    // What was published must be a PREFIX of the finished analysis, not a
+    // rescaled preview — the renderer relies on that to place the peaks.
+    REQUIRE(!capture.first_max.empty());
+    REQUIRE(overview.max_peaks.size() >= capture.first_max.size());
+    for (std::size_t index = 0; index < capture.first_max.size(); ++index)
+        CHECK(overview.max_peaks[index] == doctest::Approx(capture.first_max[index]));
+}
+
+TEST_CASE("analyze_file_peaks without a callback behaves exactly as before") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kSampleRate;
+    const auto wav_path = make_temp_wav_path("peaks_no_progress");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    const auto plain = analyze_file_peaks(wav_path, 256);
+    const auto with_null = analyze_file_peaks(wav_path, 256, nullptr, nullptr);
+    std::remove(wav_path.c_str());
+
+    CHECK(plain.duration_frames == with_null.duration_frames);
+    CHECK(plain.max_peaks.size() == with_null.max_peaks.size());
+    REQUIRE(!plain.max_peaks.empty());
+    for (std::size_t index = 0; index < plain.max_peaks.size(); ++index)
+        CHECK(plain.max_peaks[index] == doctest::Approx(with_null.max_peaks[index]));
+}
+#endif

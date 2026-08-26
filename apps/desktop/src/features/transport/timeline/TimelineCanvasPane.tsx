@@ -32,7 +32,7 @@ import type {
 import {
   formatBpm,
   formatTransposeSemitones,
-  isAndroidApp,
+  isMobileApp,
 } from "../desktopApi";
 import {
   buildSongTempoRegions,
@@ -48,6 +48,7 @@ import { useRegionDrag } from "./useRegionDrag";
 import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
 import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
+import { useTouchContextMenu } from "./useTouchContextMenu";
 import {
   LANE_CUES,
   LANE_REGIONS,
@@ -82,7 +83,7 @@ import {
 // lane could move below the two-line bar/timecode labels instead of sharing
 // their band. Changing it here alone misaligns the ruler with the track
 // headers — the CSS row heights below must move with it.
-const RULER_HEIGHT = isAndroidApp ? 94 : 134;
+const RULER_HEIGHT = isMobileApp ? 94 : 134;
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
@@ -515,6 +516,16 @@ export function TimelineCanvasPane({
       regionLongPressRef.current = null;
     }
   };
+  const rulerTouchContextMenu = useTouchContextMenu({
+    ignoreTarget: (target) =>
+      target instanceof Element &&
+      Boolean(
+        target.closest(
+          ".lt-region-hotspot, .lt-marker-hotspot, .lt-automation-cue-hotspot",
+        ),
+      ),
+  });
+  const markerTouchContextMenu = useTouchContextMenu();
   // Los tres elementos que siguen al puntero durante un arrastre. Todos leen
   // refs y se mueven fuera de React; ver ./useFollowerX.
   const clipSnapIndicatorRef = useFollowerX(() => {
@@ -761,7 +772,13 @@ export function TimelineCanvasPane({
       <div
         className="lt-ruler-track"
         ref={rulerTrackRef}
-        onPointerDown={onRulerPointerDown}
+        onPointerDown={(event) => {
+          rulerTouchContextMenu.begin(event);
+          onRulerPointerDown(event);
+        }}
+        onPointerMove={rulerTouchContextMenu.move}
+        onPointerUp={rulerTouchContextMenu.cancel}
+        onPointerCancel={rulerTouchContextMenu.cancel}
         onMouseDown={(event) => onRulerPointerDown(event as unknown as ReactPointerEvent<HTMLDivElement>)}
         onContextMenu={onRulerContextMenu}
       >
@@ -844,7 +861,7 @@ export function TimelineCanvasPane({
                     // context menu (desktop's right-click equivalent). The
                     // move drag still arms below; the long-press aborts it
                     // when it fires.
-                    if (isAndroidApp) {
+                    if (isMobileApp) {
                       cancelRegionLongPress();
                       const regionId = region.id;
                       const startClientX = event.clientX;
@@ -1018,7 +1035,7 @@ export function TimelineCanvasPane({
                   left: renderStartSeconds * pixelsPerSecond,
                   top: lane.top,
                   height: lane.height,
-                  ...(isAndroidApp
+                  ...(isMobileApp
                     ? { width: androidHotspotWidth, marginLeft: -4 }
                     : {}),
                 }}
@@ -1029,14 +1046,27 @@ export function TimelineCanvasPane({
                 onPointerDown={(event) => {
                   event.stopPropagation();
                   if (event.altKey || event.ctrlKey || event.metaKey) return;
+                  markerTouchContextMenu.begin(event);
                   beginMarkerMove(event, section.id, section.startSeconds);
                 }}
-                onPointerMove={updateMarkerMove}
-                onPointerUp={endMarkerMove}
-                onPointerCancel={endMarkerMove}
+                onPointerMove={(event) => {
+                  markerTouchContextMenu.move(event);
+                  updateMarkerMove(event);
+                }}
+                onPointerUp={(event) => {
+                  markerTouchContextMenu.cancel();
+                  endMarkerMove(event);
+                }}
+                onPointerCancel={(event) => {
+                  markerTouchContextMenu.cancel();
+                  endMarkerMove(event);
+                }}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
+                  if (markerTouchContextMenu.consumeTriggered()) {
+                    return;
+                  }
                   // A drag just finished — swallow the synthetic click so the
                   // marker isn't also triggered/seeked. (The drag ref is
                   // already nulled by pointer-up, hence the separate flag.)
@@ -1096,8 +1126,13 @@ export function TimelineCanvasPane({
                   event.preventDefault();
                   event.stopPropagation();
                 }}
+                onPointerDown={markerTouchContextMenu.begin}
+                onPointerMove={markerTouchContextMenu.move}
+                onPointerUp={markerTouchContextMenu.cancel}
+                onPointerCancel={markerTouchContextMenu.cancel}
                 onClick={(event) => {
                   event.stopPropagation();
+                  markerTouchContextMenu.consumeTriggered();
                 }}
                 onContextMenu={(event) => {
                   event.stopPropagation();
@@ -1124,8 +1159,13 @@ export function TimelineCanvasPane({
                   event.preventDefault();
                   event.stopPropagation();
                 }}
+                onPointerDown={markerTouchContextMenu.begin}
+                onPointerMove={markerTouchContextMenu.move}
+                onPointerUp={markerTouchContextMenu.cancel}
+                onPointerCancel={markerTouchContextMenu.cancel}
                 onClick={(event) => {
                   event.stopPropagation();
+                  markerTouchContextMenu.consumeTriggered();
                 }}
                 onContextMenu={(event) => {
                   event.stopPropagation();
@@ -1246,6 +1286,7 @@ export function TimelineCanvasPane({
               livePixelsPerSecondRef={livePixelsPerSecondRef}
               scrollViewportRef={scrollViewportRef}
               interactionContainerRef={laneAreaRef}
+              rulerHeight={RULER_HEIGHT}
               timelineGrid={timelineGrid}
               selectedClipId={selectedClipId}
               selectedClipIds={selectedClipIds}

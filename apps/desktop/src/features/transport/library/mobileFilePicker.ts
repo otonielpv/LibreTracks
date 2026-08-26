@@ -77,12 +77,22 @@ export async function stageFileForImport(
   return stagedPath;
 }
 
-export function pickFilesViaWebView(accept: string): Promise<File[]> {
+export function pickFilesViaWebView(
+  accept?: string,
+  multiple = true,
+): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.multiple = true;
-    input.accept = accept;
+    input.multiple = multiple;
+    // Do not set an empty `accept` attribute. In particular, iOS Files treats
+    // `audio/*` more strictly than Android and can disable otherwise supported
+    // WAV/MP3/M4A documents whose provider reports a generic content type.
+    // Mobile audio callers therefore leave this unset and validate/import the
+    // selected document inside LibreTracks.
+    if (accept) {
+      input.accept = accept;
+    }
     input.style.display = "none";
     document.body.appendChild(input);
 

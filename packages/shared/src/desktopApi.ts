@@ -32,6 +32,7 @@ import type {
   TrackKind,
   TransportLifecycleEvent,
   TransportSnapshot,
+  WaveformProgressEvent,
   WaveformReadyEvent,
   WaveformSummaryDto,
   WaveformWindowDto,
@@ -43,13 +44,31 @@ const tauriWindow = window as Window & {
   __TAURI_INTERNALS__?: unknown;
 };
 
+declare const __LIBRETRACKS_TAURI_PLATFORM__: string | undefined;
+
+const tauriBuildPlatform =
+  typeof __LIBRETRACKS_TAURI_PLATFORM__ === "string"
+    ? __LIBRETRACKS_TAURI_PLATFORM__
+    : "";
+
 export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 
-// Android build of the app (Tauri mobile WebView). Features that only make
-// sense on desktop — e.g. the remote-control server, whose point is to
-// control the desktop app FROM a phone — are hidden when this is true.
+// Keep OS-specific flags for audio/device behaviour and a shared mobile flag
+// for the touch layout, sandboxed file flows and desktop-only features.
 export const isAndroidApp =
-  isTauriApp && /android/i.test(navigator.userAgent);
+  isTauriApp &&
+  (/android|androideabi/i.test(tauriBuildPlatform) ||
+    /android/i.test(`${navigator.userAgent} ${navigator.platform ?? ""}`));
+const isIPadDesktopUserAgent =
+  /macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+export const isIOSApp =
+  isTauriApp &&
+  (/ios/i.test(tauriBuildPlatform) ||
+    /iphone|ipad|ipod/i.test(
+      `${navigator.userAgent} ${navigator.platform ?? ""}`,
+    ) ||
+    isIPadDesktopUserAgent);
+export const isMobileApp = isAndroidApp || isIOSApp;
 
 /**
  * Observer notified after every `invokeCommand` call. Exists so the desktop
@@ -197,6 +216,18 @@ export async function listenToWaveformReady(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<WaveformReadyEvent>("waveform:ready", (event) => {
+    handler(event.payload);
+  });
+}
+
+/** Partial waveforms pushed while a file is being analysed. Several fire per
+ * file, each covering more of it, until the matching `waveform:ready` arrives
+ * with the full-resolution summary. */
+export async function listenToWaveformProgress(
+  handler: (event: WaveformProgressEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<WaveformProgressEvent>("waveform:progress", (event) => {
     handler(event.payload);
   });
 }
@@ -408,6 +439,18 @@ export async function appendDebugLog(line: string): Promise<void> {
   await invokeCommand("append_debug_log", { line });
 }
 
+// Best-effort trace for the physical-iOS folder picker. Calls invoke directly
+// so tracing cannot recurse through invokeCommand's error logger or prevent the
+// actual picker command from running.
+async function appendPickerDiagnostic(message: string): Promise<void> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("append_picker_diagnostic", { message });
+  } catch {
+    // Diagnostics must never change the file flow.
+  }
+}
+
 // Best-effort append to the dedicated error log. Calls invoke directly (not
 // invokeCommand) so a failure here can never recurse through the central
 // error-capture wrapper. Always resolves; never throws.
@@ -453,6 +496,11 @@ export async function readDiagnosticsLog(
     kind,
     maxBytes,
   });
+}
+
+/** Delete the accumulated contents; the logger recreates the file on demand. */
+export async function clearDiagnosticsLog(kind: DiagnosticsLogKind): Promise<void> {
+  await invokeCommand("clear_diagnostics_log", { kind });
 }
 
 /** Save the WHOLE log wherever the user picks. False when they cancel. */
@@ -685,6 +733,9 @@ async function runProjectLoadCommand(
 }
 
 export async function openProject(): Promise<TransportSnapshot | null> {
+  await appendPickerDiagnostic(
+    `openProject requested; ios=${isIOSApp}; mobile=${isMobileApp}; platform=${navigator.platform ?? "unknown"}`,
+  );
   return runProjectLoadCommand("start_open_project_from_dialog");
 }
 
@@ -713,6 +764,9 @@ export async function createSongNamed(
  * Downloads shortcut).
  */
 export async function pickSessionFolder(name: string): Promise<string | null> {
+  await appendPickerDiagnostic(
+    `pickSessionFolder requested; ios=${isIOSApp}; mobile=${isMobileApp}; platform=${navigator.platform ?? "unknown"}`,
+  );
   return invokeCommand<string | null>("pick_session_folder", { name });
 }
 

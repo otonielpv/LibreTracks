@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { isAndroidApp } from "@libretracks/shared/desktopApi";
+import { isMobileApp } from "@libretracks/shared/desktopApi";
 
 import type { ShortcutActionId } from "./actions";
 import { formatBindingForDisplay, isMacPlatform } from "./keybinding";
@@ -15,7 +15,7 @@ export function useShortcutHint(): (actionId: ShortcutActionId) => string {
   const overrides = useKeybindingStore((state) => state.overrides);
   return useCallback(
     (actionId: ShortcutActionId) => {
-      if (isAndroidApp) {
+      if (isMobileApp) {
         return "";
       }
       const binding = resolveBindings(overrides)[actionId] ?? null;

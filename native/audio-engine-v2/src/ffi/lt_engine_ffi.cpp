@@ -8,6 +8,7 @@
 #include <lt_engine/lt_engine.h>
 #include <lt_engine/engine_impl.h>
 #include <lt_engine/sources/source_manager.h>
+#include <lt_engine/core/thread_policy.h>
 #include <nlohmann/json.hpp>
 #include <cstring>
 #include <vector>
@@ -201,6 +202,66 @@ LT_API const char* lt_audio_engine_analyze_file_peaks(const char* file_path,
         buf = peaks_to_json(lt::analyze_file_peaks(
             file_path,
             static_cast<int>(resolution_frames)));
+    } catch (...) {
+        buf = "{\"ok\":false,\"error\":\"native waveform analysis failed\"}";
+    }
+    return buf.c_str();
+}
+
+LT_API int32_t lt_audio_engine_recommend_worker_threads(int32_t role) {
+    lt::WorkerRole worker_role;
+    switch (role) {
+        case 0:  worker_role = lt::WorkerRole::Decode;   break;
+        case 1:  worker_role = lt::WorkerRole::Fill;     break;
+        case 2:  worker_role = lt::WorkerRole::Waveform; break;
+        default: return 1;
+    }
+    try {
+        return static_cast<int32_t>(lt::lt_recommend_worker_threads(worker_role));
+    } catch (...) {
+        return 1;
+    }
+}
+
+namespace {
+// Adapts the C callback pair (fn, ctx) to the C++ PeakProgressFn the analyser
+// takes. Lives on the analysing thread's stack for the duration of the call.
+struct PeakProgressBridge {
+    LtPeakProgressCallback fn  = nullptr;
+    void*                  ctx = nullptr;
+};
+
+void forward_peak_progress(void* bridge_ptr, const lt::PeakProgress& progress) {
+    auto* bridge = static_cast<PeakProgressBridge*>(bridge_ptr);
+    if (!bridge || !bridge->fn)
+        return;
+    bridge->fn(bridge->ctx,
+               static_cast<int32_t>(progress.sample_rate),
+               static_cast<int64_t>(progress.analyzed_frames),
+               static_cast<int64_t>(progress.total_frames),
+               static_cast<int32_t>(progress.resolution_frames),
+               progress.min_peaks,
+               progress.max_peaks,
+               progress.min_peaks_right,
+               progress.max_peaks_right,
+               static_cast<int32_t>(progress.bucket_count));
+}
+}  // namespace
+
+LT_API const char* lt_audio_engine_analyze_file_peaks_progressive(
+    const char* file_path,
+    int32_t resolution_frames,
+    LtPeakProgressCallback on_progress,
+    void* progress_ctx) {
+    if (!file_path) return "{\"ok\":false,\"error\":\"invalid file path\"}";
+    thread_local std::string buf;
+    PeakProgressBridge bridge{on_progress, progress_ctx};
+    try {
+        buf = peaks_to_json(lt::analyze_file_peaks(
+            file_path,
+            static_cast<int>(resolution_frames),
+            on_progress ? &forward_peak_progress : nullptr,
+            &bridge));
     } catch (...) {
         buf = "{\"ok\":false,\"error\":\"native waveform analysis failed\"}";
     }

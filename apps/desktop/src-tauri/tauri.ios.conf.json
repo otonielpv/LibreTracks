@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.libretracks.ios",
+  "build": {
+    "beforeDevCommand": "npm run dev -- --port 1420 --strictPort",
+    "beforeBuildCommand": "npm --prefix ../../ run build:remote && npm run build"
+  },
+  "bundle": {
+    "resources": {
+      "resources/voices": "voices",
+      "../../../LICENSE": "licenses/LICENSE",
+      "../../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
+      "../../../licenses/*": "licenses"
+    },
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    }
+  }
+}

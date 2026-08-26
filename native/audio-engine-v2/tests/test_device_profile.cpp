@@ -36,6 +36,12 @@ DeviceProbe handheld_probe(std::uint64_t ram_bytes, std::uint64_t available_byte
     return probe;
 }
 
+DeviceProbe ios_probe(std::uint64_t ram_bytes, int cores) {
+    DeviceProbe probe = handheld_probe(ram_bytes, 0, cores);
+    probe.is_ios = true;
+    return probe;
+}
+
 }  // namespace
 
 TEST_CASE("desktop source cache budget is unchanged by the handheld work") {
@@ -73,6 +79,26 @@ TEST_CASE("the profile matches the querying thread_policy on desktop") {
             CHECK(profile.fill_threads ==
                   lt_recommend_worker_threads_for(WorkerRole::Fill, cores, ram));
         }
+    }
+}
+
+TEST_CASE("the waveform pool scales with the machine but stays under Fill") {
+    // Waveform analysis is cosmetic and runs while Decode and Fill are already
+    // busy (an import), so it scales with the box but never leads it. It used
+    // to be a hardcoded single worker on the host side, which made a 25-stem
+    // import analyse strictly one file at a time.
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 2, 8 * kGb) == 1);
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 4, 8 * kGb) == 2);
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 8, 16 * kGb) == 3);
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 16, 32 * kGb) == 4);
+
+    // A low-RAM box gets one regardless of how many cores it reports.
+    CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, 16, 4 * kGb) == 1);
+
+    // Never ahead of the I/O pool it shares a disk with.
+    for (int cores : {2, 4, 8, 16}) {
+        CHECK(lt_recommend_worker_threads_for(WorkerRole::Waveform, cores, 16 * kGb)
+              <= lt_recommend_worker_threads_for(WorkerRole::Fill, cores, 16 * kGb));
     }
 }
 
@@ -183,6 +209,38 @@ TEST_CASE("a handheld with unknown available memory falls back to a quarter of p
 
     CHECK(profile.device_class == DeviceClass::Constrained);  // 512 MB < 1.5 GB
     CHECK(profile.source_cache_mb == 128);
+}
+
+TEST_CASE("iOS uses a physical-memory fallback without throttling an iPhone 13") {
+    // iOS cannot report MemAvailable. A 4 GB iPhone 13 used to fall back to a
+    // quarter of physical (1 GB) and was therefore permanently Constrained.
+    const auto iphone13 = lt_device_profile_for(ios_probe(4 * kGb, 6));
+
+    CHECK(iphone13.device_class == DeviceClass::Handheld);
+    CHECK(iphone13.decode_threads == 3);
+    CHECK(iphone13.fill_threads == 2);
+    CHECK(iphone13.source_cache_mb == 192);
+    CHECK(iphone13.protected_blocks_per_source == 24);
+
+    // The fallback must remain safe for older 2 GB devices.
+    const auto old_iphone = lt_device_profile_for(ios_probe(2 * kGb, 4));
+    CHECK(old_iphone.device_class == DeviceClass::Constrained);
+    CHECK(old_iphone.source_cache_mb == 128);
+}
+
+TEST_CASE("handheld first-play prefetch stays inside the shared cache") {
+    const auto iphone13 = lt_device_profile_for(ios_probe(4 * kGb, 6));
+    const int requested = 48000 * 20;
+    const int capped = lt_playback_prefetch_window_frames(
+        iphone13, 48000, 27, requested);
+
+    CHECK(capped < requested);
+    CHECK(capped >= 48000 * 2);
+    CHECK(capped == 559240);
+
+    const auto desktop = lt_device_profile_for(desktop_probe(16 * kGb, 8));
+    CHECK(lt_playback_prefetch_window_frames(
+              desktop, 48000, 27, requested) == requested);
 }
 
 TEST_CASE("unknown core count does not produce a zero-thread pool") {

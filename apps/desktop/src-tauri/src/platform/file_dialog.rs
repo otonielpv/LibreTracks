@@ -1,16 +1,16 @@
 //! Platform shim over the synchronous native file dialogs.
 //!
-//! Desktop re-exports `rfd::FileDialog` unchanged. Android has no
-//! desktop-style modal file dialogs (and `rfd` has no Android backend), so
+//! Desktop re-exports `rfd::FileDialog` unchanged. Mobile has no
+//! desktop-style modal file dialogs wired through `rfd`, so
 //! the stub mirrors the subset of the builder API this app uses and answers
 //! every pick as if the user cancelled. Mobile file flows should go through
 //! `tauri-plugin-dialog` / the Storage Access Framework instead, which will
 //! land with the mobile UI work.
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use rfd::FileDialog;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 mod stub {
     use std::path::{Path, PathBuf};
 
@@ -46,11 +46,15 @@ mod stub {
             None
         }
 
+        pub fn pick_folder(self) -> Option<PathBuf> {
+            None
+        }
+
         pub fn save_file(self) -> Option<PathBuf> {
             None
         }
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub use stub::FileDialog;

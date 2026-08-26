@@ -13,10 +13,10 @@ use crate::infra::error::DesktopError;
 use crate::midi::get_midi_input_names;
 use crate::midi::output::{get_midi_output_names, OutboundMidiMessage};
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::remote;
 use crate::state::DesktopState;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use libretracks_remote::RemoteServerInfo;
 
 #[tauri::command]
@@ -233,9 +233,7 @@ pub fn get_ownership_diagnostics(
         prearm_take_miss_total: prearm.map(|p| p.take_miss_total).unwrap_or(0),
         prearm_stale_discard_total: prearm.map(|p| p.stale_discard_total).unwrap_or(0),
         prearm_prepared_total: prearm.map(|p| p.prepared_total).unwrap_or(0),
-        prearm_prepare_failed_total: prearm
-            .map(|p| p.prepare_failed_total)
-            .unwrap_or(0),
+        prearm_prepare_failed_total: prearm.map(|p| p.prepare_failed_total).unwrap_or(0),
         prearm_worker_busy: prearm.map(|p| p.worker_busy).unwrap_or(false),
     })
 }
@@ -271,7 +269,7 @@ pub fn get_audio_output_capture(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_desktop_performance_snapshot(
     state: State<'_, DesktopState>,
 ) -> Result<DesktopPerformanceSnapshot, String> {
@@ -324,19 +322,19 @@ pub fn report_ui_render_metric(
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String> {
     Ok(remote::remote_server_info(&app))
 }
 
-/// Android build: there is no embedded remote-control server (the app itself
+/// Mobile build: there is no embedded remote-control server (the app itself
 /// is the handheld device), so the command exists for API parity but always
-/// errors. The frontend hides the remote UI on Android and never calls this.
-#[cfg(target_os = "android")]
+/// errors. The frontend hides the remote UI on mobile and never calls this.
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
 pub fn get_remote_server_info() -> Result<serde_json::Value, String> {
-    Err("remote control server is not available on Android".to_string())
+    Err("remote control server is not available on mobile".to_string())
 }
 
 #[tauri::command]
@@ -354,7 +352,11 @@ pub fn get_midi_outputs() -> Result<Vec<String>, String> {
 /// first. Note-on and note-off are queued back to back; the receiving device
 /// sees a blip, which is enough for a MIDI monitor or a "learn" dialog.
 #[tauri::command]
-pub fn send_midi_test_note(state: State<'_, DesktopState>, channel: u8, note: u8) -> Result<(), String> {
+pub fn send_midi_test_note(
+    state: State<'_, DesktopState>,
+    channel: u8,
+    note: u8,
+) -> Result<(), String> {
     if !state.midi_output.is_default_port_open() {
         return Err("no MIDI output device is selected".to_string());
     }
@@ -484,6 +486,49 @@ pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     writeln!(file, "[{timestamp_ms}] {line}").map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+const IOS_PICKER_DIAGNOSTIC_FILE: &str = "LibreTracks-picker.log";
+
+/// Append one step of the iOS document-picker flow to a file that is exposed
+/// through Files > On My iPhone > LibreTracks. Kept separate from the general
+/// error log because an invocation that never resolves is not technically an
+/// error and would otherwise leave us with no evidence from a physical phone.
+pub(crate) fn write_picker_diagnostic(app: &AppHandle, layer: &str, message: &str) {
+    let directory = {
+        #[cfg(target_os = "ios")]
+        {
+            app.path().document_dir().ok()
+        }
+        #[cfg(not(target_os = "ios"))]
+        {
+            app.path().app_data_dir().ok()
+        }
+    };
+    let Some(directory) = directory else {
+        return;
+    };
+    if fs::create_dir_all(&directory).is_err() {
+        return;
+    }
+    let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(directory.join(IOS_PICKER_DIAGNOSTIC_FILE))
+    else {
+        return;
+    };
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    let _ = writeln!(file, "[{timestamp_ms}] [{layer}] {message}");
+}
+
+#[tauri::command]
+pub fn append_picker_diagnostic(app: AppHandle, message: String) -> Result<(), String> {
+    write_picker_diagnostic(&app, "frontend", &message);
     Ok(())
 }
 
@@ -621,12 +666,25 @@ pub fn read_diagnostics_log(
     })
 }
 
+/// Remove the accumulated contents of a diagnostics log. The audio engine
+/// opens its file in append mode for each individual entry, so deleting it is
+/// safe while the engine is running; the next entry simply creates a new file.
+#[tauri::command]
+pub fn clear_diagnostics_log(kind: String) -> Result<(), String> {
+    let path = diagnostics_log_path(&kind)?;
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// Save a diagnostics log wherever the user wants it, so they can attach the
 /// WHOLE file to a bug report instead of pasting a clipboard excerpt. On
 /// Android this is the only way to get the file out of the app's private
 /// storage. Returns false when the user cancels.
 #[tauri::command]
-pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String> {
+pub async fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String> {
     let path = diagnostics_log_path(&kind)?;
     if !path.is_file() {
         return Err("that log has not been written yet".to_string());
@@ -653,7 +711,7 @@ pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String
         return Ok(true);
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let _ = &app;
         let Some(target) = rfd::FileDialog::new()
@@ -665,5 +723,29 @@ pub fn save_diagnostics_log(app: AppHandle, kind: String) -> Result<bool, String
         };
         fs::copy(&path, &target).map_err(|error| error.to_string())?;
         Ok(true)
+    }
+
+    #[cfg(target_os = "ios")]
+    {
+        // UIDocumentPicker's export mode takes a REAL, already-populated source
+        // URL and copies it to the destination selected in Files. Give that
+        // source the friendly timestamped filename, then remove the private
+        // scratch copy once UIKit resolves the operation.
+        use tauri::Manager as _;
+        let export_dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|error| error.to_string())?
+            .join("diagnostics-exports");
+        fs::create_dir_all(&export_dir).map_err(|error| error.to_string())?;
+        let export_path = export_dir.join(&suggested_name);
+        fs::copy(&path, &export_path).map_err(|error| error.to_string())?;
+        let result = libretracks_ios_folder_picker::export_file(
+            app.clone(),
+            export_path.to_string_lossy().into_owned(),
+        )
+        .await;
+        let _ = fs::remove_file(&export_path);
+        result
     }
 }

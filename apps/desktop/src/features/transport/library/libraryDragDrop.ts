@@ -18,7 +18,7 @@ import {
   importExternalProjectFromPathWithProgress,
   importSongPackageFromPathWithProgress,
   importStagedAudioFiles,
-  isAndroidApp,
+  isMobileApp,
   isTauriApp,
   pickLibraryFiles,
 } from "../desktopApi";
@@ -1753,8 +1753,11 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     // usual mobile intent behind importing a song's multitracks). NOTE: the
     // chooser only opens inside the tap's user-gesture window, so the pick
     // must be the first thing this function does — no awaits before it.
-    if (isAndroidApp) {
-      const files = await pickFilesViaWebView("audio/*");
+    if (isMobileApp) {
+      // iOS Files may expose valid audio documents with a generic content type;
+      // `audio/*` then greys them out. Leave the native filter unrestricted and
+      // let the existing import pipeline validate the selected formats.
+      const files = await pickFilesViaWebView();
       if (!files.length) {
         return; // user cancelled
       }

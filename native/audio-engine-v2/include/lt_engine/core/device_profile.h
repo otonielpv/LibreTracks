@@ -38,6 +38,10 @@
 
 namespace lt {
 
+#ifndef LT_ENGINE_HANDHELD
+#define LT_ENGINE_HANDHELD 0
+#endif
+
 enum class DeviceClass {
     Workstation,    // > 16 GB
     Desktop,        // 8-16 GB
@@ -74,6 +78,11 @@ struct DeviceProbe {
     std::uint64_t available_ram_bytes = 0;  // 0 = unknown
     int cores = 0;
     bool is_handheld = false;
+    // Apple does not expose Linux's MemAvailable equivalent. On iOS, using the
+    // generic "one quarter of physical" fallback classifies a 4 GB iPhone 13
+    // as Constrained forever, even while the app is otherwise idle. Keep this
+    // explicit in the probe so the pure policy remains directly testable.
+    bool is_ios = false;
 };
 
 // Below this much AVAILABLE memory a handheld is treated as Constrained. The
@@ -101,10 +110,16 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
                               : 8.0;  // same "assume a middling 8GB" as thread_policy
 
     if (probe.is_handheld) {
-        // Trust available memory when we have it; fall back to a quarter of
-        // physical when we don't (better than assuming a desktop's headroom).
+        // Trust available memory when we have it. Android normally supplies
+        // MemAvailable; unknown non-iOS handhelds keep the deliberately strict
+        // quarter-of-physical fallback used for low-end devices. iOS has no
+        // equivalent probe, so reserve half of physical for iOS/WebKit and rate
+        // the other half as usable system headroom. That keeps a 2 GB iPhone in
+        // Constrained while allowing a 4 GB iPhone 13 to use the middle tier.
         const std::uint64_t available =
-            probe.available_ram_bytes > 0 ? probe.available_ram_bytes : probe.physical_ram_bytes / 4;
+            probe.available_ram_bytes > 0
+                ? probe.available_ram_bytes
+                : probe.physical_ram_bytes / (probe.is_ios ? 2 : 4);
 
         if (available < kConstrainedAvailableBytes)      profile.device_class = DeviceClass::Constrained;
         else if (available >= kRoomyAvailableBytes)      profile.device_class = DeviceClass::RoomyHandheld;
@@ -196,6 +211,34 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
     return profile;
 }
 
+// A wide first-play request is useful only while it fits alongside the live
+// cache. If a handheld queues more PCM than the cache can retain, the LRU keeps
+// the clip head and the far end of the request but evicts the middle. Playback
+// then sounds briefly and falls into a deterministic silent gap. Reserve 40%
+// for Bungee, live read-ahead and other clips, and cap only handhelds; desktop
+// keeps the user-configured window unchanged.
+inline int lt_playback_prefetch_window_frames(const DeviceProfile& profile,
+                                              int sample_rate,
+                                              std::size_t active_sources,
+                                              int requested_frames) {
+    if (requested_frames <= 0 || active_sources == 0 ||
+        profile.device_class == DeviceClass::Desktop)
+        return requested_frames;
+
+    const std::uint64_t cache_bytes =
+        static_cast<std::uint64_t>(profile.source_cache_mb) * 1024ULL * 1024ULL;
+    const std::uint64_t usable_bytes = cache_bytes * 3ULL / 5ULL;
+    constexpr std::uint64_t kStereoFloatBytesPerFrame = 2ULL * sizeof(float);
+    const std::uint64_t frames_that_fit =
+        usable_bytes /
+        (static_cast<std::uint64_t>(active_sources) * kStereoFloatBytesPerFrame);
+    const int safe_rate = sample_rate > 0 ? sample_rate : 48000;
+    const int minimum = safe_rate * 2;
+    const int capped = static_cast<int>(std::min<std::uint64_t>(
+        frames_that_fit, static_cast<std::uint64_t>(requested_frames)));
+    return std::min(requested_frames, std::max(minimum, capped));
+}
+
 // PCM disk-cache budget, in bytes, from the free space on the cache volume.
 //
 // Desktop policy (unchanged): 10% of free space, but never below 4 GiB, so a
@@ -268,10 +311,13 @@ inline const DeviceProfile& lt_device_profile() {
         probe.available_ram_bytes = lt_available_ram_bytes();
         const unsigned hw = std::thread::hardware_concurrency();
         probe.cores = hw > 0 ? static_cast<int>(hw) : 4;
-#if defined(__ANDROID__)
+#if LT_ENGINE_HANDHELD
         probe.is_handheld = true;
 #else
         probe.is_handheld = false;
+#endif
+#if defined(__APPLE__) && LT_ENGINE_HANDHELD
+        probe.is_ios = true;
 #endif
         return lt_device_profile_for(probe);
     }();

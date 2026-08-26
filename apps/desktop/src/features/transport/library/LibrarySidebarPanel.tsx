@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import { isAndroidApp, type LibraryImportProgressEvent } from "../desktopApi";
+import { isMobileApp, type LibraryImportProgressEvent } from "../desktopApi";
 import { DRAG_THRESHOLD_PX } from "../constants";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
@@ -261,7 +261,7 @@ export function LibrarySidebarPanel({
     // Android has no Ctrl/Shift: every tap toggles, so multi-select builds
     // up naturally (Google Files / Photos pattern) and the action bar below
     // offers the bulk actions.
-    if (isAndroidApp) {
+    if (isMobileApp) {
       updateAssetSelection(asset, true);
       return;
     }
@@ -370,7 +370,7 @@ export function LibrarySidebarPanel({
     // No pointer-drag to the timeline on Android: it fights touch scrolling,
     // and the selection action bar covers the "take these to the timeline"
     // flow instead.
-    if (isAndroidApp) {
+    if (isMobileApp) {
       return;
     }
     if (event.button !== 0 || asset.isPending) {
@@ -684,7 +684,7 @@ export function LibrarySidebarPanel({
         ) : null}
       </div>
 
-      {isAndroidApp && selectedAssets.length > 0 && onAddSelectionToTimeline ? (
+      {isMobileApp && selectedAssets.length > 0 && onAddSelectionToTimeline ? (
         <div className="lt-library-mobile-actionbar">
           <span className="lt-library-mobile-actionbar-count">
             {t("library.selectedCount", { count: selectedAssets.length })}

@@ -33,6 +33,32 @@ struct SourceDiagnostics {
     std::string storage_kind;
 };
 
+// Disk-fill telemetry sampled by the release-visible audio diagnostics. The
+// counters reset when read, except active_readers (a point-in-time gauge).
+// Keeping this separate from BlockCache::LockStats distinguishes slow file I/O
+// from contention on the in-memory cache mutex.
+struct FillIoStats {
+    uint64_t open_count       = 0;
+    uint64_t open_failures    = 0;
+    uint64_t open_max_us      = 0;
+    uint64_t read_count       = 0;
+    uint64_t read_failures    = 0;
+    uint64_t read_max_us      = 0;
+    uint64_t frames_read      = 0;
+    // request_block() calls and how many of them actually queued work. A large
+    // gap means the audio thread is re-asking for blocks already in flight.
+    uint64_t requests         = 0;
+    uint64_t enqueued         = 0;
+    // Queue depths, split. The urgent lane is what the playhead is waiting on;
+    // the normal lane holds read-ahead and the first-play prefetch. A normal
+    // lane in the thousands means near-playhead read-ahead is queued BEHIND
+    // seconds of far-future material for other stems, which starves playback
+    // even when the disk is keeping up.
+    size_t   queue_urgent     = 0;
+    size_t   queue_normal     = 0;
+    unsigned active_readers   = 0;
+};
+
 using SourceReadyCallback = std::function<void(const Id&)>;
 using SourceStoreProgressCallback = std::function<void(int progress_pct)>;
 
@@ -54,11 +80,40 @@ unsigned long long source_cache_dir_size_bytes();
 // fully-blocked purge is indistinguishable from an already-empty cache.
 unsigned long long purge_source_cache(unsigned int* out_failed = nullptr);
 
+// Partial peaks handed to a PeakProgressFn while a file is still being
+// analysed. The arrays are the analyser's OWN buffers: valid only for the
+// duration of the callback, and only up to `bucket_count` — the buckets past
+// it have not been filled yet. `bucket_count` counts COMPLETE buckets only, so
+// a consumer never sees a bucket that is still accumulating samples.
+// `min_peaks_right` / `max_peaks_right` are null for mono sources.
+struct PeakProgress {
+    int          sample_rate       = 0;
+    long long    analyzed_frames   = 0;
+    long long    total_frames      = 0;
+    int          resolution_frames = 0;
+    const float* min_peaks         = nullptr;
+    const float* max_peaks         = nullptr;
+    const float* min_peaks_right   = nullptr;
+    const float* max_peaks_right   = nullptr;
+    int          bucket_count      = 0;
+};
+
+// Called on the analysing thread at most every ~150 ms. Must not block: the
+// analysis loop is stopped for as long as it runs.
+using PeakProgressFn = void (*)(void* ctx, const PeakProgress& progress);
+
 // Decode an audio file directly and build peak buckets. This is used by the
 // host UI for waveform generation so it follows the same native decoder stack
 // as playback (FFmpeg/libav for compressed formats, fast native paths for WAV).
+//
+// `on_progress` (optional) is what lets the UI paint a waveform in pieces as it
+// is analysed instead of showing a static "analyzing" placeholder for the whole
+// file: the host emits each callback as an event and the renderer draws the
+// portion covered so far.
 SourcePeakOverview analyze_file_peaks(const std::string& file_path,
-                                      int resolution_frames);
+                                      int resolution_frames,
+                                      PeakProgressFn on_progress = nullptr,
+                                      void* progress_ctx = nullptr);
 
 // ---------------------------------------------------------------------------
 // SourceManager — owns all DecodedSources for a session.
@@ -137,12 +192,22 @@ public:
     void request_block(const Id& source_id,
                        int block_index,
                        bool urgent = false) const noexcept;
+    // `block_count` consecutive blocks in ONE pass over the queue. The audio
+    // thread's read-ahead asks for a whole window at a time; doing it block by
+    // block meant a mutex acquisition AND a copy of the source id (a heap
+    // allocation on the audio thread, ids being longer than the small-string
+    // buffer) for each one.
+    void request_blocks(const Id& source_id,
+                        int first_block,
+                        int block_count,
+                        bool urgent) const noexcept;
     void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
     CacheDiagnostics cache_diagnostics() const;
 
     // Diagnostics (LIBRETRACKS_AUDIO_DIAG): pending fill requests and the
     // block-cache lock-contention stats (resets the latter on read).
     size_t fill_queue_depth() const noexcept;
+    FillIoStats take_fill_io_stats() noexcept;
     // ── Preload ──────────────────────────────────────────────────────────
     //
     // Keep the first block of each given (source, source_start_frame) resident,
@@ -291,6 +356,15 @@ private:
         // Counts handles currently open across all workers; owned by the
         // SourceManager so clear() can wait for them to reach zero.
         std::atomic<unsigned>* open_counter = nullptr;
+        std::atomic<uint64_t>* open_count = nullptr;
+        std::atomic<uint64_t>* open_failures = nullptr;
+        std::atomic<uint64_t>* open_max_us = nullptr;
+        // A failed sf_open used to be retried for every queued batch. With a
+        // starving stem that meant hundreds of identical syscalls per second.
+        // Keep the retry state on the per-source reader (worker-owned, no lock).
+        uint64_t    retry_after_ms = 0;
+        unsigned    consecutive_open_failures = 0;
+        uint64_t    last_used = 0;
         ~FillReader();
         void close() noexcept;
         // Rebind to `entry`, reusing the handle when the file is unchanged.
@@ -303,6 +377,15 @@ private:
     // can return knowing no cache file is still held open.
     mutable std::condition_variable fill_idle_cv_;
     mutable std::atomic<unsigned>   fill_readers_open_{0};
+    mutable std::atomic<uint64_t>   fill_open_count_{0};
+    mutable std::atomic<uint64_t>   fill_open_failures_{0};
+    mutable std::atomic<uint64_t>   fill_open_max_us_{0};
+    mutable std::atomic<uint64_t>   fill_read_count_{0};
+    mutable std::atomic<uint64_t>   fill_read_failures_{0};
+    mutable std::atomic<uint64_t>   fill_read_max_us_{0};
+    mutable std::atomic<uint64_t>   fill_frames_read_{0};
+    mutable std::atomic<uint64_t>   fill_requests_{0};
+    mutable std::atomic<uint64_t>   fill_enqueued_{0};
 
     void fill_blocks_from_disk(const Id& source_id,
                                const std::vector<int>& block_indices,

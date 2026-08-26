@@ -341,7 +341,8 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     // explicit selection they should match, and a mismatch (e.g. the endpoint
     // vanished and AAudio fell back to default) is exactly what we want visible
     // when validating device switching without the hardware in hand.
-    lt_debug_log("[LT_AUDIO_DIAG] oboe stream open sr=%d burst=%d buffer=%d "
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log("[LT_AUDIO_DIAG] oboe stream open sr=%d burst=%d buffer=%d "
                  "capacity=%d latency_samples=%d api=%s requested_device_id=%d "
                  "actual_device_id=%d low_latency=%d mode=%s\n",
                  impl_->sample_rate, burst,
@@ -353,8 +354,9 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
                  requested_device_id,
                  impl_->stream->getDeviceId(),
                  request.low_latency ? 1 : 0,
-                 impl_->stream->getPerformanceMode() == oboe::PerformanceMode::LowLatency
-                     ? "LowLatency" : "None");
+                     impl_->stream->getPerformanceMode() == oboe::PerformanceMode::LowLatency
+                         ? "LowLatency" : "None");
+    }
     return Result<void>::ok();
 }
 

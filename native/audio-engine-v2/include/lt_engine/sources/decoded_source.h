@@ -57,7 +57,7 @@ public:
                   int                sample_rate,
                   Frame              duration_frames,
                   BlockCache*        cache,
-                  std::function<void(const Id&, int, bool)> request_block);
+                  std::function<void(const Id&, int, int, bool)> request_blocks);
 
     // Read `frame_count` frames starting at `offset_frames` into `out`.
     // `out` is pre-allocated: out[ch] points to a buffer of frame_count floats.
@@ -89,11 +89,27 @@ private:
     Id                 source_id_;
     std::vector<float> samples_;
     BlockCache*        cache_ = nullptr;
-    // (source_id, block_index, urgent). `urgent` marks the block the audio
-    // thread is silencing right now, so the fill workers serve it before any
-    // read-ahead. See SourceManager::request_block.
-    std::function<void(const Id&, int, bool)> request_block_;
-    mutable std::atomic<int> read_ahead_anchor_block_{-1};
+    // (source_id, first_block, block_count, urgent). `urgent` marks the block
+    // the audio thread is silencing right now, so the fill workers serve it
+    // before any read-ahead. See SourceManager::request_blocks.
+    std::function<void(const Id&, int, int, bool)> request_blocks_;
+    // Furthest block already covered by read-ahead. Advancing playback only
+    // exposes one new edge block; requesting the whole overlapping window on
+    // every block generated hundreds of thousands of redundant queue entries.
+    mutable std::atomic<int> read_ahead_until_block_{-1};
+    // The block this source is starving on right now, and for how many
+    // callbacks. Re-issuing the urgent request (and the read-ahead burst behind
+    // it) on EVERY silenced callback is what turns a transient shortfall into a
+    // permanent one: each request takes the cache mutex the audio thread also
+    // reads under, takes the fill-queue mutex the workers need to pull work
+    // from, and wakes a worker. At 27 stems x 188 callbacks/s x 25 requests
+    // that is ~127k lock pairs per second issued FROM the audio thread, so the
+    // fill workers never hold the queue long enough to deliver a block and the
+    // starvation feeds itself. The block is already queued after the first
+    // request; re-ask only occasionally, in case a fill was dropped (a short
+    // read, or a range the decode has not reached yet).
+    mutable std::atomic<int> starving_block_{-1};
+    mutable std::atomic<int> starving_repeats_{0};
     mutable std::atomic<Frame> cache_miss_frames_{0};
     int    channel_count_   = 0;
     int    sample_rate_      = 0;

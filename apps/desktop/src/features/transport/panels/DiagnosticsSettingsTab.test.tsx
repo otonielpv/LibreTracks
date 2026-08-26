@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
 
@@ -12,16 +12,27 @@ vi.mock("react-i18next", () => ({
 
 const readDiagnosticsLog = vi.fn();
 const saveDiagnosticsLog = vi.fn();
+const clearDiagnosticsLog = vi.fn();
+const confirmDialog = vi.fn();
 
 vi.mock("@libretracks/shared/desktopApi", () => ({
-  isAndroidApp: false,
+  isMobileApp: false,
   readErrorLog: vi.fn(async () => ""),
   revealErrorLog: vi.fn(async () => {}),
   readDiagnosticsLog: (...args: unknown[]) => readDiagnosticsLog(...args),
   saveDiagnosticsLog: (...args: unknown[]) => saveDiagnosticsLog(...args),
+  clearDiagnosticsLog: (...args: unknown[]) => clearDiagnosticsLog(...args),
+}));
+
+vi.mock("../../../shared/dialog/dialogService", () => ({
+  confirmDialog: (...args: unknown[]) => confirmDialog(...args),
 }));
 
 describe("DiagnosticsSettingsTab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("shows the error log inside the app instead of only offering the clipboard", async () => {
     readDiagnosticsLog.mockResolvedValue({
       path: "/data/logs/errors.log",
@@ -69,5 +80,29 @@ describe("DiagnosticsSettingsTab", () => {
       expect(screen.getByText("Log saved.")).toBeTruthy();
     });
     expect(saveDiagnosticsLog).toHaveBeenCalledWith("engine");
+  });
+
+  it("deletes the accumulated engine log after confirmation", async () => {
+    confirmDialog.mockResolvedValue(true);
+    clearDiagnosticsLog.mockResolvedValue(undefined);
+
+    render(<DiagnosticsSettingsTab />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete log" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Audio engine log deleted.")).toBeTruthy();
+    });
+    expect(confirmDialog).toHaveBeenCalledOnce();
+    expect(clearDiagnosticsLog).toHaveBeenCalledWith("engine");
+  });
+
+  it("keeps the engine log when deletion is cancelled", async () => {
+    confirmDialog.mockResolvedValue(false);
+
+    render(<DiagnosticsSettingsTab />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete log" }));
+
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledOnce());
+    expect(clearDiagnosticsLog).not.toHaveBeenCalled();
   });
 });

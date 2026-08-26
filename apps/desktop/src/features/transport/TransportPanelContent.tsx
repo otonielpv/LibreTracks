@@ -96,7 +96,7 @@ import {
   importStagedAudioFiles,
   importSongPackageFromPathWithProgress,
   importExternalProjectFromPathWithProgress,
-  isAndroidApp,
+  isMobileApp,
   isTauriApp,
   listenToMidiRawMessage,
   listenToProjectLoadProgress,
@@ -277,6 +277,7 @@ import {
   type SourcesPrepareUiState,
 } from "./sourcesPrepare";
 import { useProjectActions } from "./hooks/useProjectActions";
+import { useProjectAudioPreparation } from "./hooks/useProjectAudioPreparation";
 import { useE2ETestHooks } from "./hooks/useE2ETestHooks";
 import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
 import { useTimelineActions } from "./timeline/useTimelineActions";
@@ -419,6 +420,7 @@ import { createCompactSongHandlers } from "./compact/compactSongHandlers";
 import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
+import { useWaveformProgress } from "./hooks/useWaveformProgress";
 import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -777,6 +779,14 @@ export function TransportPanelContent() {
   const [sourcesPrepareUiState, setSourcesPrepareUiState] =
     useState<SourcesPrepareUiState>(SOURCES_PREPARE_INITIAL);
   const [sourcesPreparing, setSourcesPreparing] = useState(false);
+  const {
+    uiState: projectAudioPreparationUiState,
+    begin: beginProjectAudioPreparation,
+    cancel: cancelProjectAudioPreparation,
+  } = useProjectAudioPreparation();
+  const audioPreparationUiState = projectAudioPreparationUiState.active
+    ? projectAudioPreparationUiState
+    : sourcesPrepareUiState;
   // Non-modal "Descomprimiendo paquete…" indicator for the non-blocking .ltpkg
   // import (same style as the "Preparing audio…" indicator). The import no
   // longer raises the shell overlay, so without this the user sees nothing
@@ -1334,7 +1344,7 @@ export function TransportPanelContent() {
   useEffect(() => {
     // No remote server on Android — the command exists but always errors, so
     // skip the call instead of logging a guaranteed failure on every boot.
-    if (!isTauriApp || isAndroidApp) {
+    if (!isTauriApp || isMobileApp) {
       return;
     }
 
@@ -2284,8 +2294,8 @@ export function TransportPanelContent() {
       // session's audio/ folder (same staged pipeline as a library import),
       // then repoint the clip at that copy. The chooser only opens inside the
       // tap's user-gesture window, so it must come before any await.
-      if (isAndroidApp) {
-        const files = await pickFilesViaWebView("audio/*");
+      if (isMobileApp) {
+        const files = await pickFilesViaWebView();
         const picked = files[0];
         if (!picked) {
           return;
@@ -4019,6 +4029,9 @@ export function TransportPanelContent() {
     setActiveSidebarTab,
     setPackageUnpackUiState,
     setSessionExportUiState,
+    getImportPositionSeconds: () => snapshotRef.current?.positionSeconds ?? 0,
+    beginProjectAudioPreparation,
+    cancelProjectAudioPreparation,
   });
 
   const {
@@ -4337,6 +4350,7 @@ export function TransportPanelContent() {
   // Waveforms for the song's clips (batched + polling).
   // See ./hooks/useSongWaveforms.
   useSongWaveforms({ song, setWaveformCache });
+  useWaveformProgress({ playbackSongDir, setWaveformCache });
 
   // Clear the meters when playback stops so they don't freeze mid-level.
   useEffect(() => {
@@ -4519,7 +4533,7 @@ export function TransportPanelContent() {
     playbackState,
     applyPlaybackSnapshot,
     pitchPreparing: pitchPrepareUiState.active,
-    sourcesPreparing,
+    sourcesPreparing: sourcesPreparing || projectAudioPreparationUiState.active,
   });
 
   // Android long-press opens context menus while the finger is still down;
@@ -4543,7 +4557,7 @@ export function TransportPanelContent() {
         return;
       }
       if (
-        isAndroidApp &&
+        isMobileApp &&
         Date.now() - contextMenuOpenedAtRef.current < 500
       ) {
         return;
@@ -6624,7 +6638,7 @@ export function TransportPanelContent() {
   const handleRulerPointerDown = useTimelineRangeSelection({
     enabled: Boolean(song),
     seekLocked: rulerSeekLocked,
-    isAndroid: isAndroidApp,
+    isAndroid: isMobileApp,
     currentRange: selectedTimelineRange,
     rulerTrackRef,
     contextMenuOpenedAtRef,
@@ -6837,7 +6851,7 @@ export function TransportPanelContent() {
       }),
     },
   ];
-  const settingsTabs = isAndroidApp
+  const settingsTabs = isMobileApp
     ? allSettingsTabs.filter(
         (tab) => !androidHiddenSettingsTabs.includes(tab.id),
       )
@@ -7155,7 +7169,7 @@ export function TransportPanelContent() {
                 }}
               />
               {shouldShowEmptyState ? (
-                isAndroidApp ? (
+                isMobileApp ? (
                   <MobileLanding
                     onCreateSession={handleCreateSongNamed}
                     onCreateSessionFromTemplate={
@@ -7494,7 +7508,7 @@ export function TransportPanelContent() {
                       <div className="lt-timeline-main-grid">
                         <TrackHeadersPane
                           headerActions={
-                            isAndroidApp ? (
+                            isMobileApp ? (
                               <>
                                 <button
                                   type="button"
@@ -8313,14 +8327,14 @@ export function TransportPanelContent() {
               </div>
             ) : null}
 
-            {sourcesPrepareUiState.active ? (
+            {audioPreparationUiState.active ? (
               <div
                 className="lt-source-prep-indicator"
                 aria-live="polite"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={Math.round(sourcesPrepareUiState.percent)}
+                aria-valuenow={Math.round(audioPreparationUiState.percent)}
               >
                 <div className="lt-source-prep-line">
                   <span className="lt-source-prep-label">
@@ -8328,23 +8342,23 @@ export function TransportPanelContent() {
                   </span>
                   <span className="lt-source-prep-detail">
                     {t("transport.status.tracksReady", {
-                      ready: sourcesPrepareUiState.readyCount,
-                      total: sourcesPrepareUiState.total,
+                      ready: audioPreparationUiState.readyCount,
+                      total: audioPreparationUiState.total,
                     })}{" "}
-                    {Math.round(sourcesPrepareUiState.percent)}%
+                    {Math.round(audioPreparationUiState.percent)}%
                   </span>
                 </div>
                 <div className="lt-source-prep-bar">
                   <span
                     style={{
-                      width: `${Math.max(0, Math.min(100, sourcesPrepareUiState.percent))}%`,
+                      width: `${Math.max(0, Math.min(100, audioPreparationUiState.percent))}%`,
                     }}
                   />
                 </div>
-                {sourcesPrepareUiState.failedCount > 0 ? (
+                {audioPreparationUiState.failedCount > 0 ? (
                   <span className="lt-source-prep-failed">
                     {t("transport.status.sourcesFailed", {
-                      count: sourcesPrepareUiState.failedCount,
+                      count: audioPreparationUiState.failedCount,
                     })}
                   </span>
                 ) : null}

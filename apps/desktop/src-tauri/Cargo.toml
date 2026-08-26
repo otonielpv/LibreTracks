@@ -45,15 +45,21 @@ tauri-plugin-fs = "2.5.1"
 [dependencies.libretracks-core]
 path = "../../../crates/libretracks-core"
 
-# Desktop-only dependencies. The Android build excludes:
+# Desktop-only dependencies. Mobile builds exclude:
 # - libretracks-remote: the app IS the device on mobile; no remote-control server.
-# - midir: no Android backend.
-# - rfd: desktop-style native file dialogs don't exist on Android (see
+# - midir: no mobile backend wired into LibreTracks yet.
+# - rfd: desktop-style native file dialogs don't exist on Android/iOS (see
 #   src/file_dialog.rs for the stub; mobile flows will use tauri-plugin-dialog).
-[target.'cfg(not(target_os = "android"))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
 rfd = "0.15"
+
+# iOS uses the native C++ engine as a static arm64 library. The target-specific
+# plugin below supplies the document picker; the engine dependency itself is
+# declared once above so Cargo cannot accidentally unify in the silent stub.
+[target.'cfg(target_os = "ios")'.dependencies]
+libretracks-ios-folder-picker = { path = "plugins/ios-folder-picker" }
 
 # macOS-only. Security-scoped bookmarks let us persist folder access granted
 # by a native open panel, so reopening a saved session (and reading all the

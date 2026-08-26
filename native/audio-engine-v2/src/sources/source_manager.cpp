@@ -14,8 +14,11 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #if defined(_WIN32)
@@ -403,13 +406,37 @@ std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
     return out;
 }
 
-// Ensure cache dir + the projected new file size stay below the configured
-// budget. Deletes the oldest .rf64 files (by mtime) until the projected total
-// fits. Always preserves the file at `protect_path` — the one we're about to
-// reuse — so a re-open can't evict its own cache mid-flight.
+// Cache writes and eviction share this registry. A writer publishes its Entry
+// before releasing the lease, so an eviction always sees the path either as
+// in-progress or as part of the active session. The disk budget is therefore
+// soft for files in use: exceeding it is preferable to silencing a track.
+std::mutex g_cache_eviction_mtx;
+std::unordered_map<std::string, std::size_t> g_cache_writes_in_progress;
+
+class CacheWriteLease {
+public:
+    explicit CacheWriteLease(std::string path) : path_(std::move(path)) {
+        std::lock_guard lock(g_cache_eviction_mtx);
+        ++g_cache_writes_in_progress[path_];
+    }
+
+    ~CacheWriteLease() {
+        std::lock_guard lock(g_cache_eviction_mtx);
+        const auto it = g_cache_writes_in_progress.find(path_);
+        if (it != g_cache_writes_in_progress.end() && --it->second == 0)
+            g_cache_writes_in_progress.erase(it);
+    }
+
+    CacheWriteLease(const CacheWriteLease&) = delete;
+    CacheWriteLease& operator=(const CacheWriteLease&) = delete;
+
+private:
+    std::string path_;
+};
+
 void evict_cache_lru(const std::string& dir,
                       size_t projected_new_bytes,
-                      const std::string& protect_path) {
+                      const std::unordered_set<std::string>& protected_paths) {
     const size_t limit = source_disk_cache_limit_bytes();
     if (limit == 0)
         return; // user-disabled (LIBRETRACKS_SOURCE_DISK_CACHE_MB=0)
@@ -426,7 +453,7 @@ void evict_cache_lru(const std::string& dir,
     for (const auto& e : entries) {
         if (total <= static_cast<long long>(limit))
             break;
-        if (!protect_path.empty() && e.path == protect_path)
+        if (protected_paths.find(e.path) != protected_paths.end())
             continue;
         if (std::remove(e.path.c_str()) == 0)
             total -= e.size_bytes;
@@ -517,7 +544,9 @@ unsigned long long purge_source_cache(unsigned int* out_failed) {
 }
 
 SourcePeakOverview analyze_file_peaks(const std::string& file_path,
-                                      int resolution_frames) {
+                                      int resolution_frames,
+                                      PeakProgressFn on_progress,
+                                      void* progress_ctx) {
     SourcePeakOverview overview;
     overview.resolution_frames = std::max(1, resolution_frames);
 
@@ -552,6 +581,18 @@ SourcePeakOverview analyze_file_peaks(const std::string& file_path,
     std::vector<float> data(static_cast<std::size_t>(kChunkFrames)
                             * static_cast<std::size_t>(info.channel_count),
                             0.f);
+
+    // Progress cadence. A stem takes on the order of 260 ms to analyse, so at
+    // 150 ms the waveform arrived in two jumps — technically progressive, and
+    // indistinguishable from appearing at once. 60 ms gives a handful of steps
+    // on a short file and a steady sweep on a long one, while staying far above
+    // the cost of one callback (a coarse summary over the FFI, ~15 KB).
+    constexpr auto kProgressInterval = std::chrono::milliseconds(60);
+    // Backdated so the FIRST chunk publishes immediately: the point of this is
+    // that the user sees the waveform start appearing at once, and waiting out
+    // an interval before the first one would leave a short file with no
+    // progress at all.
+    auto last_progress = std::chrono::steady_clock::now() - kProgressInterval;
 
     Frame cursor = 0;
     while (cursor < info.duration_frames) {
@@ -593,6 +634,33 @@ SourcePeakOverview analyze_file_peaks(const std::string& file_path,
         }
 
         cursor += frames_read;
+
+        // Publish what is finished so far. Only COMPLETE buckets are handed
+        // over: the bucket the cursor is sitting inside is still accumulating,
+        // and shipping it would make the waveform's leading edge flicker as its
+        // peak grows.
+        if (on_progress) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - last_progress >= kProgressInterval) {
+                last_progress = now;
+                const std::size_t complete = static_cast<std::size_t>(cursor / bucket_width);
+                if (complete > 0) {
+                    PeakProgress progress;
+                    progress.sample_rate       = overview.sample_rate;
+                    progress.analyzed_frames   = static_cast<long long>(
+                        complete * static_cast<std::size_t>(bucket_width));
+                    progress.total_frames      = static_cast<long long>(info.duration_frames);
+                    progress.resolution_frames = overview.resolution_frames;
+                    progress.min_peaks         = min_peaks.data();
+                    progress.max_peaks         = max_peaks.data();
+                    progress.min_peaks_right   = has_right_channel ? min_peaks_right.data() : nullptr;
+                    progress.max_peaks_right   = has_right_channel ? max_peaks_right.data() : nullptr;
+                    progress.bucket_count      = static_cast<int>(
+                        std::min(complete, bucket_count));
+                    on_progress(progress_ctx, progress);
+                }
+            }
+        }
     }
     decoder->close();
 
@@ -643,11 +711,13 @@ SourceManager::SourceManager()
                    lt::lt_device_profile().protected_blocks_per_source)
 {
     const unsigned count = fill_thread_count_from_env();
-    lt_debug_log(
-        "[LT_THREADS] fill pool: %u worker(s) (cores=%u, ram=%.1fGB)\n",
-        count,
-        std::thread::hardware_concurrency(),
-        lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log(
+            "[LT_THREADS] fill pool: %u worker(s) (cores=%u, ram=%.1fGB)\n",
+            count,
+            std::thread::hardware_concurrency(),
+            lt_physical_ram_bytes() / (1024.0 * 1024.0 * 1024.0));
+    }
     fill_threads_.reserve(count);
     for (unsigned i = 0; i < count; ++i)
         fill_threads_.emplace_back([this] { fill_worker_loop(); });
@@ -793,6 +863,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
 
     const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
     const size_t projected_bytes = samples.size() * sizeof(float);
+    CacheWriteLease cache_write_lease(cache_file);
     try {
         report_progress(86);
         if (!create_directories_compat(parent_path_compat(cache_file)))
@@ -800,7 +871,21 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         // Keep the on-disk cache under the configured budget before we add
         // another file to it. Protects the path we're about to write so it
         // can't be evicted by itself if it happened to be the oldest entry.
-        evict_cache_lru(parent_path_compat(cache_file), projected_bytes, cache_file);
+        {
+            std::lock_guard eviction_lock(g_cache_eviction_mtx);
+            std::unordered_set<std::string> protected_paths;
+            for (const auto& [path, count] : g_cache_writes_in_progress) {
+                (void)count;
+                protected_paths.insert(path);
+            }
+            for (const auto& [id, entry] : *load_entries()) {
+                (void)id;
+                if (!entry.cache_file_path.empty())
+                    protected_paths.insert(entry.cache_file_path);
+            }
+            evict_cache_lru(parent_path_compat(cache_file), projected_bytes,
+                            protected_paths);
+        }
 #if LT_ENGINE_USE_LIBSNDFILE
         SF_INFO info{};
         info.channels = channel_count;
@@ -903,8 +988,8 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
             sample_rate,
             duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index, bool urgent) {
-                request_block(id, block_index, urgent);
+            [this](const Id& id, int first_block, int block_count, bool urgent) {
+                request_blocks(id, first_block, block_count, urgent);
             });
         entry.status = "cache_ready";
         entry.error_message.clear();
@@ -944,6 +1029,7 @@ Result<void> SourceManager::decode_and_store_streaming(
         channel_count, fi.original_sample_rate, target_sample_rate);
 
     const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
+    CacheWriteLease cache_write_lease(cache_file);
     // Rough projected size for the LRU pre-eviction (output frames ~ input *
     // ratio); good enough to keep the budget honoured.
     const double ratio = fi.original_sample_rate > 0
@@ -955,7 +1041,21 @@ Result<void> SourceManager::decode_and_store_streaming(
 
     if (!create_directories_compat(parent_path_compat(cache_file)))
         return Result<void>::err("Could not create PCM cache directory: " + cache_file);
-    evict_cache_lru(parent_path_compat(cache_file), projected_bytes, cache_file);
+    {
+        std::lock_guard eviction_lock(g_cache_eviction_mtx);
+        std::unordered_set<std::string> protected_paths;
+        for (const auto& [path, count] : g_cache_writes_in_progress) {
+            (void)count;
+            protected_paths.insert(path);
+        }
+        for (const auto& [id, entry] : *load_entries()) {
+            (void)id;
+            if (!entry.cache_file_path.empty())
+                protected_paths.insert(entry.cache_file_path);
+        }
+        evict_cache_lru(parent_path_compat(cache_file), projected_bytes,
+                        protected_paths);
+    }
 
     SF_INFO info{};
     info.channels = channel_count;
@@ -1001,8 +1101,8 @@ Result<void> SourceManager::decode_and_store_streaming(
         entry.source = std::make_shared<DecodedSource>(
             source_id, channel_count, sample_rate, projected_out_frames,
             &block_cache_,
-            [this](const Id& id, int block_index, bool urgent) {
-                request_block(id, block_index, urgent);
+            [this](const Id& id, int first_block, int block_count, bool urgent) {
+                request_blocks(id, first_block, block_count, urgent);
             });
         entry.status = "streaming";
         entry.error_message.clear();
@@ -1199,8 +1299,8 @@ Result<void> SourceManager::decode_and_store_streaming(
         entry.source = std::make_shared<DecodedSource>(
             source_id, channel_count, sample_rate, duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index, bool urgent) {
-                request_block(id, block_index, urgent);
+            [this](const Id& id, int first_block, int block_count, bool urgent) {
+                request_blocks(id, first_block, block_count, urgent);
             });
         // R5: the cache file is now closed and finalized — open the disk gate to
         // the full length so the fill worker can fetch any (incl. evicted) block.
@@ -1223,31 +1323,67 @@ Result<void> SourceManager::decode_and_store_streaming(
 void SourceManager::request_block(const Id& source_id,
                                   int block_index,
                                   bool urgent) const noexcept {
-    if (block_index < 0 || block_cache_.has_block(source_id, block_index))
+    request_blocks(source_id, block_index, 1, urgent);
+}
+
+void SourceManager::request_blocks(const Id& source_id,
+                                   int first_block,
+                                   int block_count,
+                                   bool urgent) const noexcept {
+    if (first_block < 0 || block_count <= 0)
         return;
-    CacheKey key{source_id, block_index};
+    fill_requests_.fetch_add(static_cast<uint64_t>(block_count),
+                             std::memory_order_relaxed);
+
+    // Deliberately NOT calling block_cache_.has_block() here. Most callers are
+    // the AUDIO THREAD (DecodedSource::read read-ahead), and has_block takes
+    // the very mutex the callback reads its samples under — one extra
+    // acquisition per read-ahead block, on every track, forever. The
+    // already-cached blocks that now reach the queue are dropped by
+    // fill_blocks_from_disk, which filters a whole batch under a single lock
+    // held off the audio thread.
+    //
+    // One CacheKey is reused across the window so the source id is copied once
+    // rather than per block: Id is a std::string longer than the small-string
+    // buffer, so a copy per block is a malloc per block on the audio thread.
+    CacheKey key{source_id, first_block};
+    int enqueued = 0;
     {
         std::lock_guard lock(fill_mtx_);
-        auto it = queued_blocks_.find(key);
-        if (it != queued_blocks_.end()) {
-            // Already queued. If it was read-ahead and the audio thread is now
-            // starving for it, promote it: push onto the urgent side and leave
-            // the read-ahead entry where it is. The stale entry costs nothing —
-            // fill_blocks_from_disk filters out blocks that are already cached
-            // by the time it runs.
-            if (!urgent || it->second)
-                return;
-            it->second = true;
-            fill_queue_urgent_.push_back(key);
-        } else {
+        for (int offset = 0; offset < block_count; ++offset) {
+            key.block_index = first_block + offset;
+            auto it = queued_blocks_.find(key);
+            if (it != queued_blocks_.end()) {
+                // Already queued. If it was read-ahead and the audio thread is
+                // now starving for it, promote it: push onto the urgent side
+                // and leave the read-ahead entry where it is. The stale entry
+                // costs nothing — fill_blocks_from_disk filters out blocks that
+                // are already cached by the time it runs.
+                if (!urgent || it->second)
+                    continue;
+                it->second = true;
+                fill_queue_urgent_.push_back(key);
+                ++enqueued;
+                continue;
+            }
             queued_blocks_[key] = urgent;
             if (urgent)
                 fill_queue_urgent_.push_back(key);
             else
                 fill_queue_.push(key);
+            ++enqueued;
+            fill_enqueued_.fetch_add(1, std::memory_order_relaxed);
         }
     }
-    fill_cv_.notify_one();
+    // Only when there is new work. The unconditional notify woke a worker for
+    // every already-queued block too, which on a starving session is a futex
+    // storm raised by the audio thread against the very threads meant to feed
+    // it. A whole window's worth of new work wakes the entire pool, though:
+    // waking one would leave the other workers asleep on work they could take.
+    if (enqueued > 1)
+        fill_cv_.notify_all();
+    else if (enqueued == 1)
+        fill_cv_.notify_one();
 }
 
 void SourceManager::request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept {
@@ -1289,6 +1425,26 @@ void SourceManager::request_range(const Id& source_id, Frame source_frame, int f
 
 CacheDiagnostics SourceManager::cache_diagnostics() const {
     return block_cache_.diagnostics();
+}
+
+FillIoStats SourceManager::take_fill_io_stats() noexcept {
+    FillIoStats stats;
+    stats.open_count = fill_open_count_.exchange(0, std::memory_order_relaxed);
+    stats.open_failures = fill_open_failures_.exchange(0, std::memory_order_relaxed);
+    stats.open_max_us = fill_open_max_us_.exchange(0, std::memory_order_relaxed);
+    stats.read_count = fill_read_count_.exchange(0, std::memory_order_relaxed);
+    stats.read_failures = fill_read_failures_.exchange(0, std::memory_order_relaxed);
+    stats.read_max_us = fill_read_max_us_.exchange(0, std::memory_order_relaxed);
+    stats.frames_read = fill_frames_read_.exchange(0, std::memory_order_relaxed);
+    stats.requests = fill_requests_.exchange(0, std::memory_order_relaxed);
+    stats.enqueued = fill_enqueued_.exchange(0, std::memory_order_relaxed);
+    {
+        std::lock_guard lock(fill_mtx_);
+        stats.queue_urgent = fill_queue_urgent_.size();
+        stats.queue_normal = fill_queue_.size();
+    }
+    stats.active_readers = fill_readers_open_.load(std::memory_order_acquire);
+    return stats;
 }
 
 void SourceManager::preload_clip_heads(
@@ -1663,8 +1819,10 @@ std::size_t SourceManager::release_cached_blocks_under_pressure(std::size_t keep
     // would defeat the point of reacting quickly. BlockCache does its own
     // locking, and it is the only thing we touch.
     const std::size_t freed = block_cache_.release_unprotected(keep_per_source);
-    lt_debug_log("[LT_MEMPRESSURE] released %zu MB from the block cache (keep=%zu/source)\n",
-                 freed / (1024 * 1024), keep_per_source);
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log("[LT_MEMPRESSURE] released %zu MB from the block cache (keep=%zu/source)\n",
+                     freed / (1024 * 1024), keep_per_source);
+    }
     return freed;
 }
 
@@ -1737,20 +1895,67 @@ bool SourceManager::FillReader::open_for(const Id& id,
     close();
     generation = gen;
 
+    const uint64_t now_ms = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    if (now_ms < retry_after_ms)
+        return false;
+
+    if (open_count)
+        open_count->fetch_add(1, std::memory_order_relaxed);
+    const auto open_started = std::chrono::steady_clock::now();
+    const auto finish_open = [this, &id, &file_path, open_started, now_ms](
+                                 bool success,
+                                 const char* detail) {
+        const auto elapsed = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - open_started).count());
+        if (open_max_us) {
+            uint64_t previous = open_max_us->load(std::memory_order_relaxed);
+            while (previous < elapsed &&
+                   !open_max_us->compare_exchange_weak(
+                       previous, elapsed, std::memory_order_relaxed)) {}
+        }
+        if (!success) {
+            if (open_failures)
+                open_failures->fetch_add(1, std::memory_order_relaxed);
+            ++consecutive_open_failures;
+            const unsigned shift = std::min(consecutive_open_failures - 1, 5u);
+            const uint64_t delay_ms = std::min<uint64_t>(500, 20ull << shift);
+            retry_after_ms = now_ms + delay_ms;
+            // First failure explains the source/path; powers of two show a
+            // persistent problem without recreating the log storm itself.
+            if ((consecutive_open_failures & (consecutive_open_failures - 1)) == 0) {
+                lt_debug_log(
+                    "[LT_FILL_OPEN_FAIL] source=\"%s\" attempts=%u retry_ms=%llu "
+                    "error=\"%s\" path=\"%s\"\n",
+                    id.c_str(),
+                    consecutive_open_failures,
+                    static_cast<unsigned long long>(delay_ms),
+                    detail ? detail : "unknown",
+                    file_path.c_str());
+            }
+        } else {
+            consecutive_open_failures = 0;
+            retry_after_ms = 0;
+        }
+        return success;
+    };
+
 #if LT_ENGINE_USE_LIBSNDFILE
     SF_INFO info{};
     SNDFILE* sf = lt_sf_open(file_path, SFM_READ, &info);
     if (!sf)
-        return false;
+        return finish_open(false, sf_strerror(nullptr));
     if (info.channels != channels) {
         sf_close(sf);
-        return false;
+        return finish_open(false, "cache channel count changed");
     }
     handle = sf;
 #else
     auto in = std::make_unique<std::ifstream>(file_path, std::ios::binary);
     if (!in || !*in)
-        return false;
+        return finish_open(false, std::strerror(errno));
     handle = in.release();
 #endif
     source_id = id;
@@ -1758,7 +1963,7 @@ bool SourceManager::FillReader::open_for(const Id& id,
     channel_count = channels;
     if (open_counter)
         open_counter->fetch_add(1, std::memory_order_release);
-    return true;
+    return finish_open(true, nullptr);
 }
 
 void SourceManager::fill_worker_loop() const {
@@ -1769,20 +1974,43 @@ void SourceManager::fill_worker_loop() const {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 #endif
     // Owned by this thread only — see FillReader's comment.
-    FillReader reader;
-    reader.open_counter = &fill_readers_open_;
+    //
+    // A single retained handle thrashes when the queue alternates across stems:
+    // every switch closed one cache file and opened another, so a 27-stem
+    // session paid an open per block instead of an open per file. The pool
+    // keeps one handle per source instead.
+    //
+    // The bound is a file-descriptor budget, not a memory one. Keep ample room
+    // for WebKit, imported source files and decode writers on iOS. With two
+    // handheld workers this caps retained cache handles at 32 rather than 64.
+    // Reader STATE is deliberately not capped: its retry deadline must survive
+    // handle rotation, otherwise 27 missing sources continuously reset to
+    // attempt #1 and recreate the open/log storm.
+    // A 27-stem session otherwise rotates through a 16-handle pool on every
+    // callback round (about 70 opens/s in the iPhone trace). Two handheld
+    // workers retain at most 64 descriptors, leaving ample room under iOS's
+    // 256-descriptor process budget while allowing every stem to stay open.
+    constexpr std::size_t kMaxReadersPerWorker = 32;
+    std::unordered_map<Id, std::unique_ptr<FillReader>> readers;
+    uint64_t reader_clock = 0;
+    uint64_t reader_generation = fill_generation_.load(std::memory_order_acquire);
+    const auto close_all_readers = [&] {
+        for (auto& [id, reader] : readers)
+            reader->close();
+        readers.clear();
+    };
     while (true) {
         CacheKey key;
         std::vector<int> block_batch;
         {
             std::unique_lock lock(fill_mtx_);
-            fill_cv_.wait(lock, [this, &reader] {
+            fill_cv_.wait(lock, [this, &reader_generation] {
                 return fill_stop_ || !fill_queue_urgent_.empty() || !fill_queue_.empty()
-                    || reader.generation !=
+                    || reader_generation !=
                            fill_generation_.load(std::memory_order_acquire);
             });
             if (fill_stop_ && fill_queue_urgent_.empty() && fill_queue_.empty()) {
-                reader.close();
+                close_all_readers();
                 return;
             }
             // Sources were invalidated (clear()): drop the handle NOW, while we
@@ -1792,9 +2020,9 @@ void SourceManager::fill_worker_loop() const {
             // promptly — on Windows an open handle blocks the unlink outright.
             const uint64_t generation =
                 fill_generation_.load(std::memory_order_acquire);
-            if (reader.generation != generation) {
-                reader.close();
-                reader.generation = generation;
+            if (reader_generation != generation) {
+                close_all_readers();
+                reader_generation = generation;
                 fill_idle_cv_.notify_all();
                 if (fill_queue_urgent_.empty() && fill_queue_.empty())
                     continue;
@@ -1826,7 +2054,35 @@ void SourceManager::fill_worker_loop() const {
                 }
             }
         }
-        fill_blocks_from_disk(key.source_id, block_batch, reader);
+        auto reader_it = readers.find(key.source_id);
+        if (reader_it == readers.end()) {
+            auto reader = std::make_unique<FillReader>();
+            reader->generation = reader_generation;
+            reader->open_counter = &fill_readers_open_;
+            reader->open_count = &fill_open_count_;
+            reader->open_failures = &fill_open_failures_;
+            reader->open_max_us = &fill_open_max_us_;
+            reader_it = readers.emplace(key.source_id, std::move(reader)).first;
+        }
+        reader_it->second->last_used = ++reader_clock;
+        if (!reader_it->second->handle) {
+            const std::size_t open_handles = static_cast<std::size_t>(std::count_if(
+                readers.begin(), readers.end(),
+                [](const auto& item) { return item.second->handle != nullptr; }));
+            if (open_handles >= kMaxReadersPerWorker) {
+                FillReader* lru = nullptr;
+                for (const auto& [id, candidate] : readers) {
+                    (void)id;
+                    if (!candidate->handle || candidate.get() == reader_it->second.get())
+                        continue;
+                    if (!lru || candidate->last_used < lru->last_used)
+                        lru = candidate.get();
+                }
+                if (lru)
+                    lru->close();
+            }
+        }
+        fill_blocks_from_disk(key.source_id, block_batch, *reader_it->second);
     }
 }
 
@@ -1852,6 +2108,15 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
     }
     if (entry.cache_file_path.empty() || entry.channel_count <= 0)
         return;
+
+    // A reader opened while libsndfile is still writing the WAV snapshots the
+    // data-chunk length present at open time. Reusing it after the writer's
+    // sf_close leaves later, valid blocks permanently beyond that stale EOF.
+    // Streaming readers are therefore transient; finalized cache files retain
+    // their handle and still get the pool's no-thrashing benefit during play.
+    const bool retain_reader = entry.status == "cache_ready";
+    if (!retain_reader)
+        reader.close();
 
     // Sources were invalidated since this handle was opened — release it before
     // touching disk so the stale cache file can be deleted/replaced.
@@ -1907,6 +2172,7 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
         std::vector<float> data(
             static_cast<std::size_t>(frames) * entry.channel_count, 0.f);
         int frames_read = 0;
+        const auto read_started = std::chrono::steady_clock::now();
         // Reopen if a failed read above dropped the handle mid-batch.
         if (!reader.handle
             && !reader.open_for(source_id, entry.cache_file_path, entry.channel_count))
@@ -1934,6 +2200,21 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
         if (frames_read <= 0)
             reader.close();
 #endif
+        {
+            const auto elapsed = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - read_started).count());
+            fill_read_count_.fetch_add(1, std::memory_order_relaxed);
+            uint64_t previous = fill_read_max_us_.load(std::memory_order_relaxed);
+            while (previous < elapsed &&
+                   !fill_read_max_us_.compare_exchange_weak(
+                       previous, elapsed, std::memory_order_relaxed)) {}
+            if (frames_read <= 0)
+                fill_read_failures_.fetch_add(1, std::memory_order_relaxed);
+            else
+                fill_frames_read_.fetch_add(static_cast<uint64_t>(frames_read),
+                                            std::memory_order_relaxed);
+        }
         if (frames_read <= 0)
             continue;
 
@@ -1955,6 +2236,8 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
                 block_read_frames);
         }
     }
+    if (!retain_reader)
+        reader.close();
 }
 
 std::string SourceManager::cache_file_for(const Id& source_id,
@@ -2050,8 +2333,8 @@ bool SourceManager::try_install_native_file(const Id& source_id,
             engine_sample_rate,
             duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index, bool urgent) {
-                request_block(id, block_index, urgent);
+            [this](const Id& id, int first_block, int block_count, bool urgent) {
+                request_blocks(id, first_block, block_count, urgent);
             });
         entry.status = "cache_ready";
         entry.error_message.clear();
@@ -2143,8 +2426,8 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
             engine_sample_rate,
             duration_frames,
             &block_cache_,
-            [this](const Id& id, int block_index, bool urgent) {
-                request_block(id, block_index, urgent);
+            [this](const Id& id, int first_block, int block_count, bool urgent) {
+                request_blocks(id, first_block, block_count, urgent);
             });
         entry.status = "cache_ready";
         entry.error_message.clear();

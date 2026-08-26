@@ -51,6 +51,10 @@ import {
 } from "../constants";
 import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
+import {
+  timelineCanvasPixelRatio,
+  timelineVisibleTrackHeight,
+} from "../Renderer/canvasPixelRatio";
 
 type RulerCanvasProps = {
   width: number;
@@ -114,6 +118,8 @@ type TrackCanvasProps = {
   livePixelsPerSecondRef: MutableRefObject<number>;
   scrollViewportRef: RefObject<HTMLDivElement | null>;
   interactionContainerRef: RefObject<HTMLDivElement | null>;
+  /** Height of the sticky ruler row, which shares the scroll viewport. */
+  rulerHeight: number;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
   selectedClipIds: string[];
@@ -153,7 +159,7 @@ function setupCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
     return null;
   }
 
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = timelineCanvasPixelRatio();
   const displayWidth = Math.max(1, Math.round(width));
   const displayHeight = Math.max(1, Math.round(height));
   const nextWidth = Math.max(1, Math.round(displayWidth * dpr));
@@ -513,7 +519,7 @@ export function TimelineRulerCanvas({
       // is at most half a device pixel, well under the 1px stepping this trick
       // exists to avoid.
       const roundedCameraX = Math.round(cameraX);
-      const devicePixelRatio = window.devicePixelRatio || 1;
+      const devicePixelRatio = timelineCanvasPixelRatio();
       const subpixelOffsetX =
         Math.round((cameraX - roundedCameraX) * devicePixelRatio) /
         devicePixelRatio;
@@ -709,6 +715,7 @@ export function TimelineTrackCanvas({
   livePixelsPerSecondRef,
   scrollViewportRef,
   interactionContainerRef,
+  rulerHeight,
   timelineGrid,
   selectedClipId,
   selectedClipIds,
@@ -850,12 +857,26 @@ export function TimelineTrackCanvas({
       foregroundCanvas,
       foregroundContext,
       {
-        getViewportMetrics: (): TimelineViewportMetrics => ({
-          scrollTop: scrollViewportRef.current?.scrollTop ?? 0,
-          height:
-            scrollViewportRef.current?.clientHeight ??
-            snapshotRef.current.height,
-        }),
+        getViewportMetrics: (): TimelineViewportMetrics => {
+          const scrollViewport = scrollViewportRef.current;
+          if (!scrollViewport) {
+            return { scrollTop: 0, height: snapshotRef.current.height };
+          }
+
+          // The ruler row is sticky at the top of this same scroll viewport, so
+          // the band of track lanes the user can actually see is the viewport
+          // minus the ruler. Measuring the lane cell instead would report the
+          // whole scene (it is CSS-stretched to its content once the tracks
+          // overflow), which is exactly the full-height backing store this
+          // slice exists to avoid.
+          return {
+            scrollTop: scrollViewport.scrollTop,
+            height: timelineVisibleTrackHeight(
+              scrollViewport.clientHeight,
+              rulerHeight,
+            ),
+          };
+        },
         renderBackground: (context, snapshot) => {
           drawTrackCanvasBackground(context, snapshot);
           drawGridLines(
@@ -882,7 +903,7 @@ export function TimelineTrackCanvas({
         rendererRef.current = null;
       }
     };
-  }, [scrollViewportRef]);
+  }, [rulerHeight, scrollViewportRef]);
 
   useEffect(() => {
     snapshotRef.current = {

@@ -1,7 +1,7 @@
 // build.rs — links the pre-built (or CMake-built) C++ engine shared library.
 //
 // Environment variables:
-//   LT_ENGINE_V2_LIB_DIR   path to directory containing lt_audio_engine_v2.{dll,so,dylib}
+//   LT_ENGINE_V2_LIB_DIR   path to directory containing lt_audio_engine_v2.{dll,so,dylib,a}
 //                           Defaults to native/audio-engine-v2/build/Release on Windows.
 //
 // Features:
@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 fn main() {
     println!("cargo:rerun-if-env-changed=LT_ENGINE_V2_LIB_DIR");
+    println!("cargo:rerun-if-env-changed=LT_ENGINE_IOS_LIB_DIR");
     println!("cargo:rerun-if-changed=build.rs");
     // Declared unconditionally so rustc's unexpected_cfgs lint knows the cfg
     // exists on every platform, not just Android builds that set it.
@@ -18,6 +19,14 @@ fn main() {
 
     // Skip linking when the no-link feature is active.
     if std::env::var("CARGO_FEATURE_NO_LINK").is_ok() {
+        return;
+    }
+
+    // iOS embeds the engine and its C dependencies into the application as
+    // static archives. Unlike Android, falling back to a stub is never allowed:
+    // a successful IPA build must contain the real C ABI implementation.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        link_ios_static_engine();
         return;
     }
 
@@ -104,4 +113,78 @@ fn main() {
             lib_dir.display()
         );
     }
+}
+
+fn link_ios_static_engine() {
+    // Tauri's Xcode script starts Cargo with a restricted environment. Use a
+    // dedicated override when available, then a deterministic repo-relative
+    // staging directory. Do not consult LT_ENGINE_V2_LIB_DIR here: the shared
+    // workspace .cargo/config.toml sets that to the desktop Bungee build.
+    let lib_dir = std::env::var("LT_ENGINE_IOS_LIB_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            manifest
+                .ancestors()
+                .nth(2)
+                .expect("engine crate must live below the repository root")
+                .join("native/audio-engine-v2/build-ios-link")
+        });
+    let engine = lib_dir.join("liblt_audio_engine_v2.a");
+    let sndfile = lib_dir.join("libsndfile.a");
+    let static_dependencies = [
+        "libbungee.a",
+        "libpffft.a",
+        "libavformat.a",
+        "libavcodec.a",
+        "libswresample.a",
+        "libavutil.a",
+    ];
+    if !engine.is_file()
+        || !sndfile.is_file()
+        || static_dependencies
+            .iter()
+            .any(|name| !lib_dir.join(name).is_file())
+    {
+        panic!(
+            "iOS full audio engine link set is incomplete in {}: expected {}, {}, Bungee and FFmpeg static archives",
+            lib_dir.display(),
+            engine.display(),
+            sndfile.display()
+        );
+    }
+
+    println!("cargo:rerun-if-changed={}", engine.display());
+    println!("cargo:rerun-if-changed={}", sndfile.display());
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    println!("cargo:rustc-link-lib=static=lt_audio_engine_v2");
+    println!("cargo:rustc-link-lib=static=sndfile");
+    for library in [
+        "bungee",
+        "pffft",
+        "avformat",
+        "avcodec",
+        "swresample",
+        "avutil",
+    ] {
+        println!("cargo:rustc-link-lib=static={library}");
+    }
+    println!("cargo:rustc-link-lib=c++");
+
+    // Static archives do not carry their framework dependencies. These are
+    // the Apple frameworks used by JUCE's iOS CoreAudio backend, libsndfile,
+    // and the AVAudioSession bridge compiled into the engine.
+    for framework in [
+        "Accelerate",
+        "AudioToolbox",
+        "AVFoundation",
+        "CoreAudio",
+        "CoreMIDI",
+        "Foundation",
+        "Security",
+        "UIKit",
+    ] {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+    println!("cargo:rustc-link-arg=-ObjC");
 }

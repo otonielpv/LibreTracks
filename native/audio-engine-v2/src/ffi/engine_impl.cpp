@@ -393,7 +393,35 @@ void request_playback_audio_window(SourceManager& sources,
                                    int window_frames) noexcept {
     if (window_frames <= 0)
         return;
-    const Frame end_frame = start_frame + static_cast<Frame>(window_frames);
+    std::unordered_set<Id> active_sources;
+    const Frame requested_end = start_frame + static_cast<Frame>(window_frames);
+    for (const auto& song : session.songs) {
+        if (start_frame < song.start_frame || start_frame >= song.end_frame)
+            continue;
+        for (const auto& track : song.tracks) {
+            if (track.kind != TrackKind::Audio)
+                continue;
+            for (const auto& clip : track.clips) {
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                if (clip_end > start_frame && clip.timeline_start_frame < requested_end)
+                    active_sources.insert(clip.source_id);
+            }
+        }
+        break;
+    }
+    const int effective_window = lt_playback_prefetch_window_frames(
+        lt_device_profile(),
+        session.sample_rate,
+        active_sources.size(),
+        window_frames);
+    const Frame end_frame = start_frame + static_cast<Frame>(effective_window);
+    if (effective_window < window_frames &&
+        lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log(
+            "[LT_PREFETCH_CAP] requested=%d effective=%d active_sources=%zu cache=%zuMB\n",
+            window_frames, effective_window, active_sources.size(),
+            lt_device_profile().source_cache_mb);
+    }
     for (const auto& song : session.songs) {
         // Only the song that CONTAINS the start frame is urgent. A wide window
         // spills into the next song(s), and pulling their clips in makes the
@@ -564,6 +592,15 @@ bool session_sources_ready(const Session& session, const SourceManager& sources)
     return true;
 }
 
+std::vector<std::pair<Id, Frame>> session_clip_heads(const Session& session) {
+    std::vector<std::pair<Id, Frame>> clip_heads;
+    for (const auto& song : session.songs)
+        for (const auto& track : song.tracks)
+            for (const auto& clip : track.clips)
+                clip_heads.emplace_back(clip.source_id, clip.source_start_frame);
+    return clip_heads;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -625,18 +662,11 @@ Result<void> EngineImpl::initialize() {
     if (state_ == State::Initialized)
         return Result<void>::err("Engine already initialized");
 
-    // Session banner. The debug log is append-only across runs (never truncated
-    // in release), so this line — always written, like [LT_STARVATION] — marks
-    // where a fresh audio session begins and pins it to a wall-clock moment,
-    // making it possible to separate one session's dropouts from another's.
-    lt_debug_log("[LT_SESSION] engine initialize at %s\n",
-                 lt_debug_datetime().c_str());
-
-    // What this machine lets us spend. Printed next to the session banner so a
-    // log from a user's phone answers "which budgets was it running with?"
-    // without a debug build — the question that took a USB cable to answer when
-    // a 2 GB .ltset took an Oppo CPH1931 down.
-    {
+    // Session/profile banners are field diagnostics, not errors. Release builds
+    // keep the file quiet unless diagnostics were explicitly enabled.
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log("[LT_SESSION] engine initialize at %s\n",
+                     lt_debug_datetime().c_str());
         const auto& device = lt_device_profile();
         lt_debug_log(
             "[LT_DEVICE] class=%s ram=%.2fGB available=%.2fGB budget=%lluMB "
@@ -662,6 +692,12 @@ Result<void> EngineImpl::initialize() {
             return;
 
         const bool all_ready = session_sources_ready(*current_session, *source_manager_);
+        // LoadSession asks for these heads before cold sources have been
+        // published, so that first pass can legitimately pin 0/N. Retry as each
+        // source becomes available: preload_clip_heads replaces the set and
+        // therefore progressively retains every head that can now be served.
+        // The final callback leaves the complete first-play working set pinned.
+        source_manager_->preload_clip_heads(session_clip_heads(*current_session));
         // Rebuild as sources land, not only once the LAST one is decoded.
         //
         // This used to wait for `all_ready`, which on a big session means the
@@ -1204,6 +1240,11 @@ std::string EngineImpl::get_snapshot() const {
             const double cb_work_ms = device_manager_
                 ? device_manager_->take_callback_work_max_ms() : 0.0;
             const auto ph = mixer_->take_phase_max_us();
+            // Disk side of the same window. `hit=0 miss=N` says the audio
+            // thread got nothing; these say whether the fill workers were
+            // reading at all, how much that cost, and whether the audio thread
+            // was re-asking for work already in flight (req >> enq).
+            const auto io = source_manager_->take_fill_io_stats();
             lt_debug_log(
                 "[LT_AUDIO_DIAG] cb_max_ms=%.2f cbgap_ms=%.2f cbwork_ms=%.2f "
                 "phase_us[load=%llu sched=%llu tracks=%llu post=%llu] sched_lock_us=%llu "
@@ -1212,7 +1253,9 @@ std::string EngineImpl::get_snapshot() const {
                 "read_wait_us=%llu (n=%llu) fill_hold_us=%llu fill_q=%zu "
                 "evict+=%llu miss+=%zu hit+=%zu playing=%d | path[dir+=%llu "
                 "vari+=%llu str+=%llu] resize_at+=%llu too_big+=%llu "
-                "miss_voice+=%llu scratch_cap=%llu\n",
+                "miss_voice+=%llu scratch_cap=%llu | "
+                "io[open+=%llu(fail=%llu,max=%lluus) read+=%llu(fail=%llu,max=%lluus) "
+                "frames+=%llu readers=%u req+=%llu enq+=%llu q[u=%zu n=%zu]]\n",
                 mixer_->take_callback_duration_max_ms(),
                 cb_gap_ms, cb_work_ms,
                 static_cast<unsigned long long>(ph.load),
@@ -1235,7 +1278,19 @@ std::string EngineImpl::get_snapshot() const {
                 static_cast<unsigned long long>(resize_d),
                 static_cast<unsigned long long>(toobig_d),
                 static_cast<unsigned long long>(missv_d),
-                static_cast<unsigned long long>(tr.scratch_capacity_frames));
+                static_cast<unsigned long long>(tr.scratch_capacity_frames),
+                static_cast<unsigned long long>(io.open_count),
+                static_cast<unsigned long long>(io.open_failures),
+                static_cast<unsigned long long>(io.open_max_us),
+                static_cast<unsigned long long>(io.read_count),
+                static_cast<unsigned long long>(io.read_failures),
+                static_cast<unsigned long long>(io.read_max_us),
+                static_cast<unsigned long long>(io.frames_read),
+                io.active_readers,
+                static_cast<unsigned long long>(io.requests),
+                static_cast<unsigned long long>(io.enqueued),
+                io.queue_urgent,
+                io.queue_normal);
         }
     }
     // RubberBand / PitchCache diagnostics removed (Bungee-only pipeline; the
@@ -1648,13 +1703,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // hundred milliseconds of [LT_STARVATION] logged right after a
             // session loads. One block per clip, so a 39-clip song costs 1.2 MB.
             if (source_manager_) {
-                std::vector<std::pair<Id, Frame>> clip_heads;
-                for (const auto& song : next_session->songs)
-                    for (const auto& track : song.tracks)
-                        for (const auto& clip : track.clips)
-                            clip_heads.emplace_back(clip.source_id,
-                                                    clip.source_start_frame);
-                source_manager_->preload_clip_heads(clip_heads);
+                source_manager_->preload_clip_heads(session_clip_heads(*next_session));
             }
             // Source data may not be decoded yet — voices for unloaded sources are
             // skipped and rebuilt later when sources become ready.

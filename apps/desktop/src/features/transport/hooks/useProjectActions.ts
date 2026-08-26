@@ -13,6 +13,8 @@ import {
   exportSessionPackage,
   getProjectLoadProgressSnapshot,
   importSessionPackage,
+  importSongPackageFromPathWithProgress,
+  isMobileApp,
   listenToSessionExportProgress,
   openProject,
   openProjectFromPath,
@@ -24,6 +26,10 @@ import {
   saveSessionAsTemplate,
 } from "../desktopApi";
 import { nextPaint } from "../library/pendingAudioImports";
+import {
+  pickFilesViaWebView,
+  stageFileForImport,
+} from "../library/mobileFilePicker";
 import { pushRecentSession } from "../recentSessions";
 import type { SidebarTab } from "../types";
 import {
@@ -57,6 +63,9 @@ type UseProjectActionsProps = {
   setSessionExportUiState: (
     state: { active: boolean; percent: number; message: string },
   ) => void;
+  getImportPositionSeconds: () => number;
+  beginProjectAudioPreparation: (startedAtUnixMs: number) => void;
+  cancelProjectAudioPreparation: () => void;
 };
 
 export function useProjectActions({
@@ -72,6 +81,9 @@ export function useProjectActions({
   setActiveSidebarTab,
   setPackageUnpackUiState,
   setSessionExportUiState,
+  getImportPositionSeconds,
+  beginProjectAudioPreparation,
+  cancelProjectAudioPreparation,
 }: UseProjectActionsProps) {
   function applyProjectProgressFeedback(event: ProjectLoadProgressEvent) {
     const detail =
@@ -140,10 +152,10 @@ export function useProjectActions({
     );
   }
 
-  // Shared body for the two flows that REPLACE the loaded session and wait for
-  // the engine to finish preparing audio: "Open project" and "Import session
-  // (.ltset)". Both raise the blocking hydrate overlay with live progress, then
-  // resolve only once the backend has decoded all sources and prearmed voices.
+  // Shared body for the two flows that REPLACE the loaded session: "Open
+  // project" and "Import session (.ltset)". The blocking overlay lasts until
+  // the model is ready; the persistent preparation indicator remains visible
+  // until the backend emits the final audio-ready event.
   // `loadingMessage` lets the import flow say "Importando sesión…" instead.
   function runProjectLoadFlow(
     loader: () => Promise<TransportSnapshot | null>,
@@ -155,19 +167,19 @@ export function useProjectActions({
         let unlistenProjectProgress: (() => void) | null = null;
         let stopProjectProgressPolling: (() => void) | null = null;
         const progressStartedAt = Date.now();
+        beginProjectAudioPreparation(progressStartedAt);
         setProjectViewHydrating(true);
         setBusyFeedback({ message: loadingMessage, percent: 2 });
         try {
           unlistenProjectProgress = await registerProjectLoadProgressListener();
           stopProjectProgressPolling = startProjectProgressPolling(progressStartedAt);
           await nextPaint();
-          // The loader returns null if the user cancels the native dialog.
-          // Otherwise it returns only after the backend has finished decoding
-          // all sources AND prearmed Bungee voices; see
-          // wait_for_project_audio_preparation in state.rs. So by the time we
-          // continue, the engine is ready to Play instantly.
+          // The loader returns null if the user cancels the native dialog. A
+          // non-null result means the model can be shown, while audio may keep
+          // preparing in the background under useProjectAudioPreparation.
           const nextSnapshot = await loader();
           if (!nextSnapshot) {
+            cancelProjectAudioPreparation();
             setProjectViewHydrating(false);
             setBusyFeedback(null);
             return;
@@ -192,6 +204,7 @@ export function useProjectActions({
           await nextPaint();
           setProjectViewHydrating(false);
         } catch (error) {
+          cancelProjectAudioPreparation();
           if (successEvent === "project_opened") {
             recordProductEvent("project_open_failed");
           }
@@ -217,8 +230,8 @@ export function useProjectActions({
     );
   }
 
-  // Android landing flow: no native dialogs there, so sessions are created by
-  // name in the default songs folder and opened from a list of known paths.
+  // Mobile landing flow: sessions are named in-app, while the platform-specific
+  // picker supplies the destination folder and a reopenable filesystem path.
   function handleCreateSongNamed(name: string, parentDir?: string) {
     void runAction(
       async () => {
@@ -356,7 +369,30 @@ export function useProjectActions({
       // even though we don't raise the blocking overlay. Cleared in `finally`.
       setPackageUnpackUiState({ active: true, percent: 0 });
       try {
-        const nextSnapshot = await pickAndImportSong();
+        let nextSnapshot: TransportSnapshot | null;
+        if (isMobileApp) {
+          // rfd has no file-dialog implementation on iOS. Use the WebView
+          // document picker while the original tap gesture is still active,
+          // stage its bytes, then feed the normal path-based package importer.
+          // No `accept=.ltpkg`: Files providers often publish custom package
+          // types as generic data and iOS would grey them out.
+          const [packageFile] = await pickFilesViaWebView(undefined, false);
+          if (!packageFile) {
+            return;
+          }
+          if (!packageFile.name.toLowerCase().endsWith(".ltpkg")) {
+            throw new Error(
+              `El archivo "${packageFile.name}" no es una canción .ltpkg de LibreTracks.`,
+            );
+          }
+          const stagedPath = await stageFileForImport(packageFile, true);
+          nextSnapshot = await importSongPackageFromPathWithProgress(
+            stagedPath,
+            getImportPositionSeconds(),
+          );
+        } else {
+          nextSnapshot = await pickAndImportSong();
+        }
         if (!nextSnapshot) {
           return;
         }

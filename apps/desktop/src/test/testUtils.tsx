@@ -80,6 +80,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     listenToLibraryImportProgress: vi.fn(testDesktopApiMock.listenToLibraryImportProgress),
     listenToProjectLoadProgress: vi.fn(testDesktopApiMock.listenToProjectLoadProgress),
     listenToWaveformReady: vi.fn(testDesktopApiMock.listenToWaveformReady),
+    listenToWaveformProgress: vi.fn(testDesktopApiMock.listenToWaveformProgress),
     listenToSettingsUpdated: vi.fn(testDesktopApiMock.listenToSettingsUpdated),
     listenToMidiRawMessage: vi.fn(testDesktopApiMock.listenToMidiRawMessage),
     getTransportSnapshot: vi.fn(testDesktopApiMock.getTransportSnapshot),

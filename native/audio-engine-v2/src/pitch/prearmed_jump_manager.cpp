@@ -1,5 +1,6 @@
 #include <lt_engine/pitch/prearmed_jump_manager.h>
 
+#include <lt_engine/core/device_profile.h>
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
 #include <lt_engine/pitch/voice_priming.h>
@@ -89,6 +90,11 @@ int prearm_build_threads() {
             if (parsed >= 1 && parsed <= 16)
                 return parsed;
         }
+        const auto device_class = lt_device_profile().device_class;
+        if (device_class == DeviceClass::Constrained ||
+            device_class == DeviceClass::Handheld ||
+            device_class == DeviceClass::RoomyHandheld)
+            return 1;
         const unsigned hc = std::thread::hardware_concurrency();
         if (hc >= 8) return 4;
         if (hc >= 4) return 2;
@@ -297,6 +303,12 @@ struct PrearmedJumpManager::Impl {
         if (const char* v = std::getenv("LIBRETRACKS_PREARM_MAX_TARGETS")) {
             const int n = std::atoi(v);
             if (n > 0 && n < 1024) return n;
+        }
+        switch (lt_device_profile().device_class) {
+            case DeviceClass::Constrained:    return 1;
+            case DeviceClass::Handheld:       return 2;
+            case DeviceClass::RoomyHandheld:  return 4;
+            default:                          break;
         }
         return 16;
     }();
@@ -561,9 +573,6 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         target_total += 1;
     }
     tasks.reserve(static_cast<std::size_t>(target_total));
-    impl_->active_target_total.store(target_total, std::memory_order_release);
-    impl_->active_target_completed.store(0, std::memory_order_release);
-
     auto add_task = [&](PrearmTargetKind kind,
                         const Song& song,
                         const Id& target_id,
@@ -586,6 +595,30 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
             add_task(PrearmTargetKind::RegionStart, song, region.id, region.start_frame);
         add_task(PrearmTargetKind::SongStart, song, song.id, song.start_frame);
     }
+
+    // A prepared target owns one Bungee voice per affected clip. On a phone,
+    // building every marker/region and evicting all but the cache limit wastes
+    // tens of seconds of CPU and leaves WebKit competing for memory. Only build
+    // what this device can retain; any other target still uses the existing
+    // synchronous/on-demand fallback when the user invokes it.
+    const auto device_class = lt_device_profile().device_class;
+    const bool handheld = device_class == DeviceClass::Constrained ||
+                          device_class == DeviceClass::Handheld ||
+                          device_class == DeviceClass::RoomyHandheld;
+    const std::size_t requested_target_total = tasks.size();
+    if (handheld && tasks.size() > static_cast<std::size_t>(impl_->max_prepared_targets))
+        tasks.resize(static_cast<std::size_t>(impl_->max_prepared_targets));
+    target_total = static_cast<std::uint64_t>(tasks.size());
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log(
+            "[LT_PREARM_POLICY] device=%s requested_targets=%zu selected_targets=%llu "
+            "cache_limit=%d workers=%d\n",
+            lt_device_class_name(device_class), requested_target_total,
+            static_cast<unsigned long long>(target_total),
+            impl_->max_prepared_targets, prearm_build_threads());
+    }
+    impl_->active_target_total.store(target_total, std::memory_order_release);
+    impl_->active_target_completed.store(0, std::memory_order_release);
 
     std::unordered_set<PrearmTargetKey, PrearmTargetKeyHash> kept;
     kept.reserve(tasks.size());

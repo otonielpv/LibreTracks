@@ -48,6 +48,15 @@ textarea {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Keep the shell itself edge-to-edge. Interactive regions account for the safe
+   area below, so backgrounds and rails do not stop short at the notch, rounded
+   corners or home indicator. */
+.lt-mobile .lt-app-shell {
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+}
+
 .lt-ui-zoom-compensate-viewport .lt-app-shell {
   width: calc(100vw / var(--lt-ui-zoom, 1));
   height: calc(100vh / var(--lt-ui-zoom, 1));
@@ -636,6 +645,15 @@ textarea {
 }
 
 /* Output-device health badge (fallback clock active / device restored). */
+.lt-device-status-slot {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  max-width: min(28rem, calc(100vw - 1rem));
+  pointer-events: none;
+}
+
 .lt-device-status-pill {
   display: inline-flex;
   align-items: center;
@@ -646,6 +664,9 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lt-device-status-pill .material-symbols-outlined {
@@ -716,6 +737,7 @@ textarea {
 }
 
 .lt-side-nav {
+  box-sizing: border-box;
   width: 5rem;
   flex-shrink: 0;
   display: flex;
@@ -914,6 +936,7 @@ textarea {
 }
 
 .lt-settings-modal {
+  box-sizing: border-box;
   width: min(52rem, 100%);
   display: flex;
   flex-direction: column;
@@ -3357,11 +3380,18 @@ textarea {
   pointer-events: none;
 }
 
+/* The three track canvases inside only hold the visible vertical slice and are
+   absolutely positioned, so their boxes take part in the scroll container's
+   scrollable overflow. Clipping to this layer (which is exactly the painted
+   scene) stops that propagation: a slice that ever lands past the scene can no
+   longer add scroll, raise the max scrollTop and push the next slice further
+   down — the endless vertical scroll behind a growing black band. */
 .lt-track-canvas-layer {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
+  overflow: hidden;
   pointer-events: none;
   z-index: 0;
 }
@@ -7744,9 +7774,9 @@ textarea {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   Android (mobile) layout — everything below is scoped under `.lt-android`,
-   a class main.tsx puts on <html> only inside the Android app, so none of
-   it can affect desktop rendering.
+   Mobile touch layout — these legacy rules remain scoped under `.lt-android`,
+   the historical class that main.tsx now applies to both mobile targets
+   alongside the platform-neutral `.lt-mobile`. Desktop remains unaffected.
 
    Design intent (phone/tablet in landscape, modelled on mobile DAWs like
    Playback / Logic for iPad): the timeline owns the vertical space; the
@@ -7861,6 +7891,14 @@ textarea {
    left compresses instead. */
 .lt-android .lt-transport-readout {
   flex: 0 0 auto;
+}
+
+/* On the landing screen every transport action is disabled. Removing that
+   dead chrome keeps BAR + TIME fully visible on narrow notched phones instead
+   of starting the horizontally scrollable strip part-way off screen. */
+.lt-android .lt-topbar.is-project-empty .lt-tap-tempo-button,
+.lt-android .lt-topbar.is-project-empty .lt-transport-buttons {
+  display: none;
 }
 
 @media (max-width: 1040px) {
@@ -9254,4 +9292,242 @@ textarea {
 
 .lt-telemetry-policy-link {
   margin-left: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive mobile shell
+
+   These rules describe how the interface consumes AVAILABLE space. They do
+   not target phone or tablet models: flex wrapping handles width, viewport
+   clamps handle height, auto-fit chooses the landing columns, and orientation
+   decides whether navigation belongs beside or below the workspace.
+   -------------------------------------------------------------------------- */
+
+.lt-mobile .lt-app-shell,
+.lt-mobile .lt-daw-shell,
+.lt-mobile .lt-shell-body,
+.lt-mobile .lt-workspace,
+.lt-mobile .lt-workspace-body,
+.lt-mobile .lt-main-stage {
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-mobile .lt-topbar {
+  flex: 0 0 auto;
+  padding-top: max(clamp(0.2rem, 1.2vh, 0.4rem), env(safe-area-inset-top, 0px));
+  padding-right: max(clamp(0.35rem, 1.5vw, 0.75rem), env(safe-area-inset-right, 0px));
+  padding-bottom: clamp(0.2rem, 1.2vh, 0.4rem);
+  padding-left: max(clamp(0.35rem, 1.5vw, 0.75rem), env(safe-area-inset-left, 0px));
+  gap: clamp(0.2rem, 1vh, 0.45rem);
+}
+
+.lt-mobile .lt-topbar-main-row,
+.lt-mobile .lt-transport {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Items stay on one row while they genuinely fit and wrap as complete control
+   groups when they do not. Nothing relies on a guessed device width and the
+   BAR/TIME readout can never be clipped by an overflowing transport strip. */
+.lt-mobile .lt-transport {
+  flex-wrap: wrap;
+  overflow: visible;
+  column-gap: clamp(0.2rem, 1vw, 0.45rem);
+  row-gap: clamp(0.2rem, 0.8vh, 0.35rem);
+}
+
+.lt-mobile .lt-bpm-control {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.lt-mobile .lt-bpm-control input {
+  width: clamp(2.6rem, 8vw, 3.4rem);
+}
+
+.lt-mobile .lt-tap-tempo-button {
+  min-width: 2rem;
+}
+
+.lt-mobile .lt-transport-buttons {
+  flex: 1 1 19rem;
+  min-width: min(100%, 17rem);
+  justify-content: center;
+  padding-inline: clamp(0.2rem, 0.8vw, 0.45rem);
+}
+
+.lt-mobile .lt-transport-buttons .lt-topbar-split {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.lt-mobile .lt-transport-buttons .lt-topbar-split button.lt-split-main {
+  width: 2rem;
+  min-width: 2rem;
+  padding-inline: 0.25rem;
+}
+
+.lt-mobile .lt-transport-buttons .lt-topbar-split button.lt-split-caret {
+  width: 1.25rem;
+  flex: 0 0 1.25rem;
+}
+
+.lt-mobile .lt-transport-readout {
+  max-width: 100%;
+  margin-left: auto;
+  gap: clamp(0.35rem, 1.5vw, 0.75rem);
+}
+
+.lt-mobile .lt-readout-block strong {
+  min-width: 0;
+}
+
+/* The rail consumes a bounded fraction of landscape width and its buttons
+   share the available height instead of overflowing on short screens. */
+.lt-mobile .lt-side-nav {
+  width: calc(clamp(2.75rem, 7vw, 3.25rem) + env(safe-area-inset-left, 0px));
+  min-height: 0;
+  padding-left: max(0.25rem, env(safe-area-inset-left, 0px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lt-mobile .lt-side-nav button {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-block: clamp(0.3rem, 1.6vh, 0.7rem);
+}
+
+/* Landing content fits its viewport and owns its scrolling. auto-fit changes
+   between one and two catalog columns from actual card width, including safe
+   area insets, split-screen windows and tablet multitasking. */
+.lt-mobile .lt-empty-state {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(0.4rem, 2vmin, 1rem);
+}
+
+.lt-mobile .lt-empty-state-card {
+  box-sizing: border-box;
+  width: min(58rem, 100%);
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding:
+    clamp(0.75rem, 3vh, 1.5rem)
+    clamp(0.75rem, 3vw, 1.5rem);
+  gap: clamp(0.5rem, 1.8vh, 0.85rem);
+}
+
+.lt-mobile .lt-empty-state-card h1 {
+  font-size: clamp(1.35rem, 5vmin, 2.25rem);
+  line-height: 1;
+}
+
+.lt-mobile .lt-empty-state-card p {
+  font-size: clamp(0.78rem, 2.4vmin, 0.98rem);
+  line-height: 1.45;
+}
+
+.lt-mobile .lt-empty-state-actions {
+  width: min(100%, 42rem);
+}
+
+.lt-mobile .lt-empty-state-actions button {
+  flex: 1 1 9rem;
+  min-width: min(8.75rem, 100%);
+}
+
+.lt-mobile .lt-empty-state-columns {
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: clamp(0.75rem, 3vw, 2rem);
+  margin-top: clamp(0.5rem, 2vh, 1rem);
+}
+
+.lt-mobile .lt-empty-state-columns .lt-empty-state-templates {
+  margin-top: 0;
+}
+
+.lt-mobile .lt-mobile-landing-create {
+  width: min(100%, 32rem);
+}
+
+/* Bottom sheets and fixed dialogs live in viewport coordinates, outside the
+   padded app shell, so apply the device insets directly to those surfaces. */
+.lt-mobile .lt-control-popover-panel {
+  padding-bottom: max(1.1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+.lt-mobile .lt-dialog-layer {
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+}
+
+/* Portrait and tall split-screen windows have more vertical than horizontal
+   room: navigation becomes a bottom bar and side panels become overlays. */
+@media (orientation: portrait) {
+  .lt-mobile .lt-shell-body {
+    flex-direction: column;
+  }
+
+  .lt-mobile .lt-workspace {
+    order: 1;
+  }
+
+  .lt-mobile .lt-side-nav {
+    order: 2;
+    width: 100%;
+    flex: 0 0 auto;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-top: 0.2rem;
+    padding-right: max(0.2rem, env(safe-area-inset-right, 0px));
+    padding-bottom: max(0.2rem, env(safe-area-inset-bottom, 0px));
+    padding-left: max(0.2rem, env(safe-area-inset-left, 0px));
+  }
+
+  .lt-mobile .lt-side-nav button {
+    flex: 1 0 3rem;
+    padding: 0.45rem 0.25rem;
+  }
+
+  .lt-mobile .lt-workspace-body {
+    position: relative;
+  }
+
+  /* Keep the track controls useful without letting their desktop 260px rail
+     consume most of a narrow portrait canvas. The rail grows continuously
+     with the viewport and reaches its normal desktop width on tablets. */
+  .lt-mobile .lt-timeline-main-grid,
+  .lt-mobile .lt-timeline-bottom-grid {
+    grid-template-columns: clamp(12rem, 34vw, 16.25rem) minmax(0, 1fr);
+  }
+
+  .lt-mobile .lt-library-panel {
+    position: absolute;
+    inset: 0;
+    /* Timeline track headers are sticky at z-index 30. The open library is a
+       full workspace surface in portrait and must cover those headers too. */
+    z-index: 50;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .lt-mobile .lt-mobile-file-menu {
+    right: 0.5rem;
+    bottom: 3.75rem;
+    left: 0.5rem;
+    min-width: 0;
+  }
 }

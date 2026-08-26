@@ -444,6 +444,109 @@ pub fn file_peaks(file_path: &str, resolution_frames: usize) -> Result<SourcePea
     source_peaks_from_json(ptr)
 }
 
+/// Background worker roles the engine's thread policy knows about. The numbers
+/// are the C ABI contract of `lt_audio_engine_recommend_worker_threads`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerRole {
+    Decode = 0,
+    Fill = 1,
+    /// Peak analysis for the UI's waveforms.
+    Waveform = 2,
+}
+
+/// How many background workers this machine should run for `role`, from the
+/// engine's own thread policy (scaled by core count and RAM). Hosts that keep
+/// their own pool use this instead of restating the rule, so the two can't
+/// drift. Always at least 1, including when the engine isn't linked.
+pub fn recommended_worker_threads(role: WorkerRole) -> usize {
+    let count = unsafe { lt_audio_engine_recommend_worker_threads(role as i32) };
+    count.max(1) as usize
+}
+
+/// Peaks for the part of a file analysed so far, handed to the progress
+/// callback of [`file_peaks_progressive`]. Owned copies: the analyser's buffers
+/// are only valid inside the callback, so they are cloned before it returns.
+#[derive(Debug, Clone)]
+pub struct SourcePeaksProgress {
+    pub sample_rate: u32,
+    /// Frames covered by `min_peaks`/`max_peaks` so far.
+    pub analyzed_frames: i64,
+    /// Frames the file is expected to have in total (0 when unknown).
+    pub total_frames: i64,
+    pub resolution_frames: usize,
+    pub min_peaks: Vec<f32>,
+    pub max_peaks: Vec<f32>,
+    pub min_peaks_right: Vec<f32>,
+    pub max_peaks_right: Vec<f32>,
+}
+
+/// Trampoline handed to C. `ctx` is a `*mut &mut dyn FnMut(SourcePeaksProgress)`.
+///
+/// # Safety
+/// Called by the C++ analyser with pointers into its own live buffers; they are
+/// copied into owned `Vec`s before the closure runs, so nothing escapes.
+unsafe extern "C" fn peak_progress_trampoline(
+    ctx: *mut std::ffi::c_void,
+    sample_rate: i32,
+    analyzed_frames: i64,
+    total_frames: i64,
+    resolution_frames: i32,
+    min_peaks: *const f32,
+    max_peaks: *const f32,
+    min_peaks_right: *const f32,
+    max_peaks_right: *const f32,
+    bucket_count: i32,
+) {
+    if ctx.is_null() || bucket_count <= 0 {
+        return;
+    }
+    let count = bucket_count as usize;
+    let copy = |ptr: *const f32| -> Vec<f32> {
+        if ptr.is_null() {
+            Vec::new()
+        } else {
+            unsafe { std::slice::from_raw_parts(ptr, count) }.to_vec()
+        }
+    };
+    let progress = SourcePeaksProgress {
+        sample_rate: sample_rate.max(0) as u32,
+        analyzed_frames,
+        total_frames,
+        resolution_frames: resolution_frames.max(1) as usize,
+        min_peaks: copy(min_peaks),
+        max_peaks: copy(max_peaks),
+        min_peaks_right: copy(min_peaks_right),
+        max_peaks_right: copy(max_peaks_right),
+    };
+    // The callback runs on the analysing thread. A panic here would unwind
+    // across the C++ frame (UB), so it is contained.
+    let callback = unsafe { &mut *(ctx as *mut &mut dyn FnMut(SourcePeaksProgress)) };
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(progress)));
+}
+
+/// Same as [`file_peaks`], but calls `on_progress` roughly every 150 ms with
+/// the peaks completed so far. Lets a host paint a waveform while it is being
+/// analysed instead of showing a placeholder until the whole file is read.
+pub fn file_peaks_progressive(
+    file_path: &str,
+    resolution_frames: usize,
+    on_progress: &mut dyn FnMut(SourcePeaksProgress),
+) -> Result<SourcePeaks, EngineError> {
+    let file_path =
+        std::ffi::CString::new(file_path).map_err(|e| EngineError::Serialization(e.to_string()))?;
+    let mut callback: &mut dyn FnMut(SourcePeaksProgress) = on_progress;
+    let ctx = &mut callback as *mut &mut dyn FnMut(SourcePeaksProgress);
+    let ptr = unsafe {
+        lt_audio_engine_analyze_file_peaks_progressive(
+            file_path.as_ptr(),
+            resolution_frames.min(i32::MAX as usize) as i32,
+            Some(peak_progress_trampoline),
+            ctx.cast(),
+        )
+    };
+    source_peaks_from_json(ptr)
+}
+
 /// Total bytes occupied by the on-disk decoded-PCM cache (.rf64 files).
 pub fn decoding_cache_size_bytes() -> u64 {
     unsafe { lt_audio_engine_source_cache_size_bytes() }

@@ -174,6 +174,10 @@ const en = {
       diagnosticsHide: "Hide log",
       diagnosticsSave: "Save log...",
       diagnosticsSaved: "Log saved.",
+      diagnosticsClear: "Delete log",
+      diagnosticsClearConfirm:
+        "Delete the entire audio engine log? A new file will start with the next diagnostics.",
+      diagnosticsCleared: "Audio engine log deleted.",
       diagnosticsRefresh: "Refresh",
       diagnosticsLogSize: "{{size}} on disk",
       diagnosticsTailOnly: "showing the end of the file",

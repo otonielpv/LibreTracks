@@ -1,6 +1,6 @@
 import {
   formatBpm,
-  isAndroidApp,
+  isMobileApp,
   transposeKey,
   type ActiveVampSummary,
   type SectionMarkerSummary,
@@ -57,7 +57,7 @@ const MIN_LABEL_WIDTH_PX = 112;
 // the .lt-android ruler CSS heights in sync with the mobile bottom edge.
 type RulerLane = { readonly top: number; readonly height: number };
 
-const MOBILE_RULER = isAndroidApp;
+const MOBILE_RULER = isMobileApp;
 
 export const LANE_REGIONS: RulerLane = MOBILE_RULER
   ? { top: 0, height: 18 }

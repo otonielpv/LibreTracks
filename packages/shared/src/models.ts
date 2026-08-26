@@ -532,6 +532,12 @@ export type WaveformSummaryDto = {
   durationSeconds: number;
   sampleRate: number;
   lods: WaveformLodDto[];
+  /** Set only on the partial summaries pushed by `waveform:progress` while a
+   * file is still being analysed: how many seconds of the source the peaks
+   * actually cover. The peaks past that point are zero-filled padding, so the
+   * renderer draws the waveform up to here and marks the rest as pending.
+   * Absent on a finished summary. */
+  analyzedSeconds?: number;
 };
 
 export type WaveformWindowDto = {
@@ -1446,6 +1452,18 @@ export type PadDownloadProgressEvent = {
 export type WaveformReadyEvent = {
   songDir: string;
   waveformKey: string;
+  summary: WaveformSummaryDto;
+};
+
+/** Pushed repeatedly while a waveform is being analysed, carrying the peaks
+ * completed so far so the clip paints in pieces instead of sitting on a static
+ * "analyzing" placeholder. A `WaveformReadyEvent` for the same key always
+ * follows and supersedes it. */
+export type WaveformProgressEvent = {
+  songDir: string;
+  waveformKey: string;
+  analyzedSeconds: number;
+  durationSeconds: number;
   summary: WaveformSummaryDto;
 };
 

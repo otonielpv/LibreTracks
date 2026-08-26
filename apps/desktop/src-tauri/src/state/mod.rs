@@ -16,7 +16,7 @@ use libretracks_core::{
     region_warp_ratio_in_song, source_seconds_at_view, warp_timeline_seconds_at, Song, TempoMarker,
 };
 use libretracks_project::{
-    append_wav_files_to_song, global_waveform_file_path,
+    append_wav_files_to_song, downsample_peaks_over_span, global_waveform_file_path,
     import_song_package as import_song_package_into_project, load_global_waveform,
     load_or_generate_global_waveform, merge_extracted_song_package,
     waveform_summary_from_channel_peaks, write_global_waveform, ExtractedSongPackage,
@@ -43,8 +43,8 @@ use crate::models::view::{
     active_vamp_to_summary, active_vamp_to_warped_summary, automation_cues_to_summary,
     automation_jump_target_to_summary, empty_musical_position_summary, marker_to_warped_summary,
     mix_scenes_to_summary, musical_position_summary, pending_jump_to_summary,
-    pending_jump_to_warped_summary, song_to_view, waveform_key_for_file_path,
-    waveform_summary_to_dto, PendingAutomationCueSummary,
+    partial_waveform_summary_to_dto, pending_jump_to_warped_summary, song_to_view,
+    waveform_key_for_file_path, waveform_summary_to_dto, PendingAutomationCueSummary,
 };
 use crate::models::{
     DesktopPerformanceSnapshot, PitchPrepareSummary, SongPackageImportResponse, SongView,
@@ -87,6 +87,7 @@ const LIBRARY_IMPORT_PROGRESS_EVENT: &str = "library:import-progress";
 const PROJECT_LOAD_PROGRESS_EVENT: &str = "project:load-progress";
 const SESSION_EXPORT_PROGRESS_EVENT: &str = "session:export-progress";
 pub const WAVEFORM_READY_EVENT: &str = "waveform:ready";
+pub const WAVEFORM_PROGRESS_EVENT: &str = "waveform:progress";
 const TRANSPORT_RUNTIME_SYNC_INTERVAL: Duration = Duration::from_millis(250);
 const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
 const MIDI_RUNTIME_TICK_INTERVAL: Duration = Duration::from_millis(10);
@@ -165,6 +166,22 @@ pub struct AudioFilePathImportPayload {
 pub struct WaveformReadyEvent {
     pub song_dir: String,
     pub waveform_key: String,
+    pub summary: WaveformSummaryDto,
+}
+
+/// Emitted repeatedly while a waveform is being analysed, carrying the peaks
+/// completed so far. The renderer paints that part and leaves the remainder as
+/// placeholder, so a slow file reads as "still working" instead of "frozen".
+/// A `waveform:ready` for the same key always follows and supersedes it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WaveformProgressEvent {
+    pub song_dir: String,
+    pub waveform_key: String,
+    /// Seconds of source covered so far.
+    pub analyzed_seconds: f64,
+    /// Total seconds expected (0 when the decoder could not report a duration).
+    pub duration_seconds: f64,
     pub summary: WaveformSummaryDto,
 }
 
@@ -601,18 +618,65 @@ impl WaveformGenerationQueue {
     }
 }
 
+/// Waveform worker threads, scaled to the machine by the engine's own thread
+/// policy (`WorkerRole::Waveform`) rather than a second rule that could drift
+/// from it.
+///
+/// This queue used to run ONE worker, so waveforms were analysed strictly one
+/// after another: 25 stems at ~260 ms each are ~7 s of sequential work, and the
+/// last clip only started once the 24 before it had finished — which is what
+/// made a multitrack import look stuck.
+///
+/// `LIBRETRACKS_WAVEFORM_WORKERS` overrides it for A/B testing.
+fn waveform_worker_count() -> usize {
+    if let Ok(raw) = std::env::var("LIBRETRACKS_WAVEFORM_WORKERS") {
+        if let Ok(count) = raw.trim().parse::<usize>() {
+            return count.clamp(1, 8);
+        }
+    }
+    lt_audio_engine_v2::recommended_worker_threads(lt_audio_engine_v2::WorkerRole::Waveform)
+}
+
 impl Default for WaveformGenerationQueue {
     fn default() -> Self {
         let (sender, receiver) = mpsc::channel::<WaveformTask>();
         let in_flight = Arc::new(Mutex::new(HashSet::new()));
-        let worker_in_flight = Arc::clone(&in_flight);
         let primed = Arc::new(Mutex::new(HashSet::new()));
-        let worker_primed = Arc::clone(&primed);
         let audio: Arc<Mutex<Option<Arc<AudioController>>>> = Arc::new(Mutex::new(None));
-        let worker_audio = Arc::clone(&audio);
+        // Shared across workers: mpsc has a single consumer, so the receiver is
+        // handed round under a mutex. Each worker holds it only long enough to
+        // take one task, never across the analysis itself.
+        let receiver = Arc::new(Mutex::new(receiver));
 
-        thread::spawn(move || {
-            while let Ok(task) = receiver.recv() {
+        let queue = Self {
+            sender,
+            in_flight,
+            primed,
+            audio,
+        };
+
+        for _ in 0..waveform_worker_count() {
+            // A clone of the queue itself, because a Prime task queues the
+            // per-source jobs it finds (and so needs the same dedup bookkeeping
+            // any other caller uses). It also keeps a sender alive, so the
+            // workers park on recv() for the life of the process rather than
+            // exiting the moment the app drops its handle.
+            let worker_queue = queue.clone();
+            let worker_in_flight = Arc::clone(&queue.in_flight);
+            let worker_primed = Arc::clone(&queue.primed);
+            let worker_audio = Arc::clone(&queue.audio);
+            let worker_receiver = Arc::clone(&receiver);
+            thread::spawn(move || loop {
+                let task = {
+                    let Ok(receiver) = worker_receiver.lock() else {
+                        return;
+                    };
+                    match receiver.recv() {
+                        Ok(task) => task,
+                        // Sender dropped: the app is shutting down.
+                        Err(_) => return,
+                    }
+                };
                 let audio = worker_audio.lock().ok().and_then(|g| g.clone());
                 match task {
                     WaveformTask::Generate(job) => {
@@ -627,10 +691,15 @@ impl Default for WaveformGenerationQueue {
                         song_dir,
                         song,
                     } => {
-                        let ready = audio
-                            .as_deref()
-                            .map(|audio| prime_waveforms_from_engine_peaks(&song_dir, &song, audio))
-                            .unwrap_or_default();
+                        // Dispatches one job per uncached source so the pool
+                        // analyses them in parallel, each publishing as it
+                        // finishes instead of all of them at the very end.
+                        prime_waveforms_from_engine_peaks(
+                            &app,
+                            &song_dir,
+                            &song,
+                            &worker_queue,
+                        );
                         let key = prime_job_key(&song_dir);
                         // Mark done BEFORE clearing in_flight: needs_prime()
                         // checks in_flight first, so this ordering leaves no
@@ -642,23 +711,12 @@ impl Default for WaveformGenerationQueue {
                         if let Ok(mut in_flight) = worker_in_flight.lock() {
                             in_flight.remove(&key);
                         }
-                        // Publish typed payloads. The old `()` invalidation was
-                        // serialized as null, but the frontend listener expects
-                        // WaveformReadyEvent and immediately reads `songDir`.
-                        for payload in ready {
-                            let _ = app.emit(WAVEFORM_READY_EVENT, payload);
-                        }
                     }
                 }
-            }
-        });
-
-        Self {
-            sender,
-            in_flight,
-            primed,
-            audio,
+            });
         }
+
+        queue
     }
 }
 
@@ -735,6 +793,93 @@ pub(super) fn unique_waveform_keys(song: &Song) -> Vec<String> {
     keys
 }
 
+/// Buckets a progress summary is downsampled to before crossing the IPC
+/// boundary. The full-resolution base LOD of a 5-minute stem is ~52 000 buckets
+/// — about 1 MB of base64 per event, many times a second, per file being
+/// analysed. A coarse level is all the progressive paint needs (the final
+/// `waveform:ready` carries the real resolution moments later): 512 buckets is
+/// already about one per pixel of a full-width clip, and it keeps each event to
+/// a few KB regardless of how long the file is.
+const WAVEFORM_PROGRESS_BUCKETS: usize = 512;
+
+/// Build a partial summary from the peaks analysed so far.
+///
+/// The summary always spans the WHOLE source, zero-filled past
+/// `analyzed_frames`: the renderer maps peaks onto a clip by ratio over the
+/// array length, so a short array would be stretched across the full clip and
+/// draw the wrong shape. The zero tail reads as silence, and the returned
+/// `analyzed_seconds` tells the renderer where the real data stops so it can
+/// mark the rest as still-analysing.
+///
+/// Returns None when the decoder has not reported enough to place the peaks
+/// (no sample rate, or an unknown total duration).
+fn progress_summary_from_peaks(
+    progress: &lt_audio_engine_v2::SourcePeaksProgress,
+    source_path: &Path,
+) -> Option<(WaveformSummary, f64)> {
+    let sample_rate = progress.sample_rate;
+    let total_frames = u64::try_from(progress.total_frames.max(0)).unwrap_or(0);
+    if sample_rate == 0 || total_frames == 0 || progress.min_peaks.is_empty() {
+        return None;
+    }
+
+    let spanned = downsample_peaks_over_span(
+        &progress.min_peaks,
+        &progress.max_peaks,
+        &progress.min_peaks_right,
+        &progress.max_peaks_right,
+        progress.resolution_frames.max(1),
+        total_frames,
+        WAVEFORM_PROGRESS_BUCKETS,
+    )?;
+
+    let summary = waveform_summary_from_channel_peaks(
+        sample_rate,
+        total_frames,
+        spanned.resolution_frames,
+        spanned.min_peaks,
+        spanned.max_peaks,
+        spanned.min_peaks_right,
+        spanned.max_peaks_right,
+        source_path,
+    )
+    .ok()?;
+    let analyzed_seconds = progress.analyzed_frames.max(0) as f64 / f64::from(sample_rate);
+    Some((summary, analyzed_seconds))
+}
+
+/// Emit one `waveform:progress` event for the peaks analysed so far. Failure is
+/// silent by design: progress is cosmetic, and the finished `waveform:ready`
+/// always follows.
+fn emit_waveform_progress(
+    app: &AppHandle,
+    song_dir: &Path,
+    waveform_key: &str,
+    source_path: &Path,
+    progress: &lt_audio_engine_v2::SourcePeaksProgress,
+) {
+    let Some((summary, analyzed_seconds)) = progress_summary_from_peaks(progress, source_path)
+    else {
+        return;
+    };
+    if crate::infra::waveform_diag::is_enabled() {
+        crate::infra::waveform_diag::log(format!(
+            "      progress({waveform_key}) {analyzed_seconds:.2}s / {:.2}s",
+            summary.duration_seconds
+        ));
+    }
+    let _ = app.emit(
+        WAVEFORM_PROGRESS_EVENT,
+        WaveformProgressEvent {
+            song_dir: song_dir.to_string_lossy().replace('\\', "/"),
+            waveform_key: waveform_key.to_string(),
+            analyzed_seconds,
+            duration_seconds: summary.duration_seconds,
+            summary: partial_waveform_summary_to_dto(waveform_key, &summary, analyzed_seconds),
+        },
+    );
+}
+
 /// Generate a waveform with the native decoder stack (FFmpeg/libav for
 /// compressed formats, native fast paths where available) and write it to the
 /// global on-disk cache. This is independent of playback session state, so it
@@ -742,12 +887,30 @@ pub(super) fn unique_waveform_keys(song: &Song) -> Vec<String> {
 fn generate_native_waveform(
     song_dir: &Path,
     waveform_key: &str,
+    progress_app: Option<&AppHandle>,
 ) -> Result<WaveformSummary, DesktopError> {
     let source_path = resolve_audio_file_path(song_dir, waveform_key);
     let source_path_string = source_path.to_string_lossy().to_string();
-    let peaks =
-        lt_audio_engine_v2::file_peaks(&source_path_string, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    // With an AppHandle the analysis reports partial peaks as it reads, so the
+    // clip paints in pieces instead of sitting on "analyzing" until the whole
+    // file is done. Without one (tests, paths with no UI to notify) it is the
+    // same single-pass analysis as before.
+    let peaks = match progress_app {
+        Some(app) => {
+            let mut on_progress = |progress: lt_audio_engine_v2::SourcePeaksProgress| {
+                emit_waveform_progress(app, song_dir, waveform_key, &source_path, &progress);
+            };
+            lt_audio_engine_v2::file_peaks_progressive(
+                &source_path_string,
+                ENGINE_WAVEFORM_RESOLUTION_FRAMES,
+                &mut on_progress,
+            )
+        }
+        None => {
+            lt_audio_engine_v2::file_peaks(&source_path_string, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
+        }
+    }
+    .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
     let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
     let summary = waveform_summary_from_channel_peaks(
         peaks.sample_rate,
@@ -763,85 +926,58 @@ fn generate_native_waveform(
     Ok(summary)
 }
 
-/// Build the global waveform cache for a song's sources from the peaks the
-/// streaming decode ALREADY computed (AudioController::source_peaks), instead of
-/// re-decoding each file. Run after sources are ready, on the command thread
-/// (which owns the engine). Best-effort per file: a miss just leaves the normal
-/// background waveform job to generate it. This is what removes the second
-/// full decode that was contending with playback during import.
+/// Queue one job per source of a song that has no waveform on disk yet.
+///
+/// This used to analyse all of them here, inline, in the order they appear —
+/// one file at a time, publishing nothing until the last one was done. For a
+/// 25-stem import that is several seconds during which the timeline shows only
+/// "ANALYZING WAVEFORM..." on every clip, which is indistinguishable, while you
+/// are waiting, from the app having hung.
+///
+/// Dispatching instead means the worker pool picks the sources up in parallel,
+/// each publishing its own waveform (and its partial peaks along the way) as
+/// soon as it has one. The per-source work itself is unchanged and still lives
+/// in `process_waveform_job`, which already knows to prefer the peaks the
+/// engine's own decode produces over re-reading the file.
+///
+/// Sources already cached are skipped rather than queued: the frontend asks for
+/// those through `get_waveform_summaries`, and re-publishing them here would put
+/// a full-resolution summary per clip back over the IPC boundary for nothing.
 fn prime_waveforms_from_engine_peaks(
+    app: &AppHandle,
     song_dir: &Path,
     song: &Song,
-    audio: &AudioController,
-) -> Vec<WaveformReadyEvent> {
+    jobs: &WaveformGenerationQueue,
+) {
     use crate::infra::waveform_diag as diag;
 
     let cache_root = decoding_cache_root();
     let keys = unique_waveform_keys(song);
-    // This runs UNDER the session lock (see get_waveform_summaries), so its
-    // total is what the UI is blocked on. Per-key timing separates a cheap
-    // cache hit from a source_peaks() call that falls through to reading and
-    // analysing the whole file (~260 ms per 200 MB stem, measured).
     let _span = diag::Span::new(format!(
         "    prime_waveforms_from_engine_peaks(sources={})",
         keys.len()
     ));
     let mut cache_hits = 0usize;
-    let mut no_peaks = 0usize;
-    let mut primed = 0usize;
-    let mut ready = Vec::new();
+    let mut queued = 0usize;
 
     for key in keys {
-        // The source id the engine knows is the resolved audio file path.
-        let source_path = resolve_audio_file_path(song_dir, &key);
-        let source_id = source_path.to_string_lossy().to_string();
-        // Skip if a cache already exists (cheap check).
         if load_global_waveform(&cache_root, song_dir, Path::new(&key)).is_ok() {
             cache_hits += 1;
             continue;
         }
-        // Anything over ~50 ms here means the engine had no same-pass peaks and
-        // source_peaks() read the file instead — the native-WAV route never
-        // populates cached_peaks, so this is where the freeze accumulates.
-        let peaks_span = diag::Span::slow_only(format!("      source_peaks({key})"), 50);
-        let peaks = audio.source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES);
-        drop(peaks_span);
-        let Some(peaks) = peaks else {
-            no_peaks += 1;
-            continue; // not loaded yet / no same-pass peaks → retry will hit
-        };
-        primed += 1;
-        let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
-        if duration_frames == 0 {
-            continue;
+        if jobs
+            .enqueue(app.clone(), song_dir.to_path_buf(), key.clone())
+            .is_ok()
+        {
+            queued += 1;
         }
-        let Ok(summary) = waveform_summary_from_channel_peaks(
-            peaks.sample_rate,
-            duration_frames,
-            peaks.resolution_frames,
-            peaks.min_peaks,
-            peaks.max_peaks,
-            peaks.min_peaks_right,
-            peaks.max_peaks_right,
-            &source_path,
-        ) else {
-            continue;
-        };
-        let _ = write_global_waveform(&cache_root, &source_path, &summary);
-        ready.push(WaveformReadyEvent {
-            song_dir: song_dir.to_string_lossy().replace('\\', "/"),
-            waveform_key: key.clone(),
-            summary: waveform_summary_to_dto(&key, &summary),
-        });
     }
 
     if diag::is_enabled() {
         diag::log(format!(
-            "    prime summary: {cache_hits} cache hits, {primed} primed from engine, \
-             {no_peaks} without peaks"
+            "    prime summary: {cache_hits} cache hits, {queued} queued for analysis"
         ));
     }
-    ready
 }
 
 /// Build a waveform summary for one source from the engine's same-pass peaks
@@ -990,19 +1126,34 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
         }
         got
     } else {
-        waveform_from_engine_peaks(&song_dir, &waveform_key, audio)
+        // The engine will NEVER hand over peaks for this source: it streams the
+        // file in place (a native WAV at the device rate) or reinstalled a PCM
+        // cache, so no decode runs and nothing computes them as a side effect.
+        //
+        // Asking `source_peaks` anyway does not fail — it goes and analyses the
+        // whole file itself, in one blocking call, and returns a finished
+        // result. That is the same work `generate_native_waveform` does below,
+        // except done silently: the waveform can only appear complete or not at
+        // all. It is exactly why a native-WAV multitrack still showed a static
+        // "analyzing" label and then snapped to a full waveform.
+        //
+        // So don't ask. Let the progressive path do the work and report partial
+        // peaks while it reads.
+        None
     };
 
     let summary = match load_global_waveform(&cache_root, &song_dir, Path::new(&waveform_key)) {
         Ok(summary) => Some(summary),
         Err(_) if engine_peaks.is_some() => engine_peaks,
         Err(cache_error) => match {
-            // The expensive fallback: a full decode of the file just to draw
-            // its waveform (~260 ms per 200 MB stem, measured).
+            // A full read of the file just to draw its waveform (~260 ms per
+            // 200 MB stem, measured). This is also the ONLY route that reports
+            // partial peaks as it goes, so the clip paints in pieces — every
+            // other route can only produce a finished waveform.
             let _span = crate::infra::waveform_diag::Span::new(format!(
-                "  generate_native_waveform({waveform_key}) FULL DECODE"
+                "  generate_native_waveform({waveform_key}) FULL DECODE (progressive)"
             ));
-            generate_native_waveform(&song_dir, &waveform_key)
+            generate_native_waveform(&song_dir, &waveform_key, Some(&app))
         } {
             Ok(summary) => Some(summary),
             Err(native_error) => {

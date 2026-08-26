@@ -1,6 +1,10 @@
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/devices/device_channel_layout.h>
 
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+#include <lt_engine/devices/ios_audio_session.h>
+#endif
+
 #if LT_ENGINE_USE_JUCE
 
 // JUCE headers — must come after lt_engine headers to avoid name collisions.
@@ -107,6 +111,16 @@ public:
                                device_sample_rate_.load(std::memory_order_relaxed));
         }
 
+        // Field-only signal-path probe. Store just one atomic peak; logging is
+        // performed by the monitor thread, never from this realtime callback.
+        if (diag_enabled_) {
+            float peak = 0.0f;
+            for (int ch = 0; ch < num_output_channels; ++ch)
+                for (int frame = 0; frame < num_sample_frames; ++frame)
+                    peak = std::max(peak, std::abs(output_channels[ch][frame]));
+            output_peak_.store(peak, std::memory_order_relaxed);
+        }
+
         auto t1 = std::chrono::steady_clock::now();
         last_callback_end_ = t1;
         double dur_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -155,6 +169,7 @@ public:
     // Diagnostics — read from any thread (relaxed load is fine for display).
     double      callback_duration_ms()  const { return callback_duration_ms_.load(std::memory_order_relaxed); }
     int         callback_count()        const { return callback_count_.load(std::memory_order_relaxed); }
+    float       output_peak()           const { return output_peak_.load(std::memory_order_relaxed); }
     bool        has_error()             const { return error_flag_.load(std::memory_order_relaxed); }
     std::string last_error()            const { return last_error_; }
 
@@ -163,6 +178,7 @@ private:
     std::atomic<double>       device_sample_rate_{48000.0};
     std::atomic<double>       callback_duration_ms_{0.0};
     std::atomic<int>          callback_count_{0};
+    std::atomic<float>        output_peak_{0.0f};
     std::atomic<bool>         error_flag_{false};
     std::string               last_error_;
     std::chrono::steady_clock::time_point last_callback_end_{};
@@ -321,6 +337,7 @@ void AudioDeviceManager::Impl::monitor_main() {
     constexpr int kFreshOpenGraceMs = 3000;
     std::uint64_t last_gen   = 0;
     int           last_count = -1;
+    int           diagnostic_ticks = 0;
     auto          last_change = std::chrono::steady_clock::now();
     const auto ms_between = [](auto a, auto b) {
         return std::chrono::duration<double, std::milli>(b - a).count();
@@ -343,6 +360,17 @@ void AudioDeviceManager::Impl::monitor_main() {
         const std::uint64_t gen = open_generation.load(std::memory_order_relaxed);
         const int  count     = adaptor->callback_count();
         const bool dev_error = adaptor->has_error();
+        if (++diagnostic_ticks >= 4) {
+            diagnostic_ticks = 0;
+            if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+                lt_debug_log(
+                    "[LT_IOS_AUDIO] hardware_callback device=\"%s\" backend=\"%s\" "
+                    "callbacks=%d final_peak=%.6f sr=%d buffer=%d channels=%d\n",
+                    device_name.c_str(), backend.c_str(), count,
+                    static_cast<double>(adaptor->output_peak()), sample_rate,
+                    buffer_size, output_channel_count);
+            }
+        }
         if (gen != last_gen || last_count < 0) {
             last_gen = gen;
             last_count = count;
@@ -693,6 +721,24 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
         }
     }
 
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    // JUCE exposes the single system-openable iOS device. Replace its generic
+    // label/channel metadata with AVAudioSession's active physical route so a
+    // connected USB interface, headset, Bluetooth or AirPlay target appears by
+    // its real name. Keep JUCE's id: iOS does not permit opening these outputs
+    // independently like desktop CoreAudio devices.
+    if (!result.empty()) {
+        const auto route = current_ios_output_route();
+        result.front().name = route.display_name;
+        if (!route.channel_names.empty()) {
+            result.front().output_channel_count =
+                static_cast<int>(route.channel_names.size());
+            result.front().output_channel_names = route.channel_names;
+        }
+        result.resize(1);
+    }
+#endif
+
     const double total_ms = std::chrono::duration<double, std::milli>(clk::now() - t_start).count();
     device_debug_log("[LT_AUDIO_DEBUG] list_devices total_ms=%.1f total_devices=%d force=%d\n",
                  total_ms, static_cast<int>(result.size()), force_rescan ? 1 : 0);
@@ -722,12 +768,42 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         return r;
     };
 
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    // JUCE owns the CoreAudio device callback, while the host application owns
+    // the iOS audio-session policy. Activate it before JUCE enumerates/opens the
+    // system route; otherwise iOS may leave the app in an ambient, silent, or
+    // high-latency category inherited from the WebView host.
+    std::string audio_session_error;
+    if (!configure_ios_playback_session(&audio_session_error)) {
+        return fail(Result<void>::err(
+            "Could not activate the iOS audio session: " + audio_session_error));
+    }
+#endif
+
     auto init = ensure_initialized(*impl_);
     if (init.is_err())
         return fail(init);
 
     impl_->adaptor = std::make_unique<JuceCallbackAdaptor>(callback);
 
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    // iOS exposes one system-managed route rather than independently openable
+    // desktop-style devices. Asking setAudioDeviceSetup for a persisted device
+    // name/channel mask makes JUCE reject perfectly valid route changes (built-
+    // in speaker <-> headphones/USB). AVAudioSession above owns the policy;
+    // let JUCE open the current system route with its native channel layout.
+    const auto t_setup = clk::now();
+    juce::String err = impl_->juce_manager.initialiseWithDefaultDevices(0, 2);
+    const double setup_ms =
+        std::chrono::duration<double, std::milli>(clk::now() - t_setup).count();
+    device_debug_log(
+        "[LT_AUDIO_DEBUG] open_device iOS default route initialise_ms=%.1f err=\"%s\"\n",
+        setup_ms, err.isEmpty() ? "" : err.toRawUTF8());
+    if (err.isNotEmpty()) {
+        impl_->last_error = err.toStdString();
+        return fail(Result<void>::err(impl_->last_error));
+    }
+#else
     if (!request.device_id.empty()) {
         auto [backend, device_name] = split_device_id(request.device_id);
         if (!backend.empty()) {
@@ -844,10 +920,12 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         const auto backend_now = impl_->juce_manager.getCurrentAudioDeviceType().toStdString();
         const int floor_frames = lt_min_buffer_frames_for_backend(backend_now);
         if (floor_frames > 0 && setup.bufferSize < floor_frames) {
-            lt_debug_log(
-                "[LT_DEVICE] buffer %d too small for backend \"%s\"; using %d "
-                "(smaller underruns and plays back sped up on this backend)\n",
-                setup.bufferSize, backend_now.c_str(), floor_frames);
+            if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+                lt_debug_log(
+                    "[LT_DEVICE] buffer %d too small for backend \"%s\"; using %d "
+                    "(smaller underruns and plays back sped up on this backend)\n",
+                    setup.bufferSize, backend_now.c_str(), floor_frames);
+            }
             setup.bufferSize = floor_frames;
         }
     }
@@ -890,10 +968,16 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         impl_->last_error = err.toStdString();
         return fail(Result<void>::err(impl_->last_error));
     }
+#endif
 
     auto* dev = impl_->juce_manager.getCurrentAudioDevice();
     if (!dev)
         return fail(Result<void>::err("No audio device opened after setup"));
+
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    device_debug_log("[LT_IOS_AUDIO] session %s\n",
+                     describe_ios_playback_session().c_str());
+#endif
 
     impl_->device_name  = dev->getName().toStdString();
     impl_->backend      = dev->getTypeName().toStdString();
@@ -905,7 +989,7 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     // first, so THIS is the floor on how instant a jump can feel — no amount of
     // engine work moves it. Logged at open so "the jump is not instant" can be
     // answered with a number instead of a guess.
-    {
+    if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
         const double sr = impl_->sample_rate > 0
             ? static_cast<double>(impl_->sample_rate) : 48000.0;
         lt_debug_log(

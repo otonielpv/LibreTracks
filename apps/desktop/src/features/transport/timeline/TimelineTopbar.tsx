@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   getSongBaseBpm,
-  isAndroidApp,
+  isMobileApp,
   type PlaybackState,
 } from "../desktopApi";
 import { useSongStore } from "../songStore";
@@ -162,7 +162,9 @@ export function TimelineTopbar({
   };
 
   return (
-    <header className="lt-topbar">
+    <header
+      className={isProjectEmpty ? "lt-topbar is-project-empty" : "lt-topbar"}
+    >
       <div className="lt-topbar-menu-row">
         <div className="lt-brand">
           <span className="lt-brand-title">LIBRETRACKS</span>
@@ -171,7 +173,7 @@ export function TimelineTopbar({
         {/* Android: no FILE menu here — its two mobile entries (Sessions…,
             Save) live in the side nav rail instead, so the transport strip
             gets the full width on narrow phone screens. */}
-        {!isAndroidApp ? (
+        {!isMobileApp ? (
         <nav className="lt-menu-bar" aria-label={t("timelineTopbar.mainMenu")} ref={menuBarRef}>
           <div className={`lt-top-menu ${openTopMenu === "file" ? "is-open" : ""}`}>
             <button
@@ -191,7 +193,7 @@ export function TimelineTopbar({
               <span className="material-symbols-outlined" aria-hidden="true">arrow_drop_down</span>
             </button>
 
-            {canOpenFileMenu && openTopMenu === "file" && isAndroidApp ? (
+            {canOpenFileMenu && openTopMenu === "file" && isMobileApp ? (
               <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
                 <button
                   type="button"
@@ -215,7 +217,7 @@ export function TimelineTopbar({
                 </button>
               </div>
             ) : null}
-            {canOpenFileMenu && openTopMenu === "file" && !isAndroidApp ? (
+            {canOpenFileMenu && openTopMenu === "file" && !isMobileApp ? (
               <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
                 <button
                   type="button"
@@ -698,6 +700,8 @@ export function TimelineTopbar({
               <strong ref={transportReadoutValueRef}>{readoutPositionSecondsLabel}</strong>
             </div>
             <span className={`transport-pill is-${playbackState}`}>{playbackStateLabel}</span>
+          </div>
+          <div className="lt-device-status-slot">
             <AudioDeviceStatusBadge />
           </div>
         </div>

@@ -13,15 +13,15 @@ mod models;
 mod platform;
 mod state;
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod midi;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[path = "midi/android.rs"]
 mod midi;
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod remote;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[path = "remote/android.rs"]
 mod remote;
 
@@ -75,6 +75,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(DesktopState::default());
 
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(libretracks_ios_folder_picker::init());
+
     let builder = builder.manage(EngineV2State::new());
 
     builder
@@ -102,14 +105,17 @@ pub fn run() {
                 }
             }
 
-            // Android field diagnostics: there's no shell environment to set
-            // LIBRETRACKS_AUDIO_DIAG on a phone, and we're actively tuning
-            // playback on low-end devices. ~2 log lines/second while playing.
-            // TODO: gate behind a Settings toggle once Android playback is
-            // considered stable.
-            #[cfg(target_os = "android")]
+            // Mobile debug builds keep field diagnostics available. Packaged
+            // release builds leave them opt-in so the engine log contains only
+            // actionable failures (starvation, open/decode errors) and cannot
+            // grow by one timing snapshot every 500 ms.
+            #[cfg(all(any(target_os = "android", target_os = "ios"), debug_assertions))]
             if std::env::var_os("LIBRETRACKS_AUDIO_DIAG").is_none() {
                 std::env::set_var("LIBRETRACKS_AUDIO_DIAG", "1");
+            }
+            #[cfg(all(target_os = "ios", debug_assertions))]
+            if std::env::var_os("LIBRETRACKS_AUDIO_DEBUG").is_none() {
+                std::env::set_var("LIBRETRACKS_AUDIO_DEBUG", "1");
             }
 
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
@@ -126,19 +132,19 @@ pub fn run() {
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             state.start_midi_runtime();
             let initial_device = initial_settings.selected_output_device_id.clone();
             let apply_result = state.audio.apply_settings(initial_settings);
             // Desktop: a failure to apply the initial audio settings is fatal.
-            // Android: the engine is a no-op stub for now, so tolerate errors
-            // and let the app boot without audio instead of aborting startup.
-            #[cfg(not(target_os = "android"))]
+            // Mobile: tolerate an unavailable output so Android can recover its
+            // route and the first iOS smoke build can boot with the no-link engine.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             apply_result.map_err(|error| std::io::Error::other(error.to_string()))?;
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             if let Err(error) = apply_result {
                 eprintln!(
-                    "[libretracks-audio] android: initial audio settings not applied: {error}"
+                    "[libretracks-audio] mobile: initial audio settings not applied: {error}"
                 );
             }
             // If apply_settings nulled out the saved output device (because
@@ -242,10 +248,12 @@ pub fn run() {
             commands::system::get_system_resource_snapshot,
             commands::system::get_ownership_diagnostics,
             commands::system::append_debug_log,
+            commands::system::append_picker_diagnostic,
             commands::system::read_error_log,
             commands::system::append_frontend_error,
             commands::system::reveal_error_log,
             commands::system::read_diagnostics_log,
+            commands::system::clear_diagnostics_log,
             commands::system::save_diagnostics_log,
             commands::system::fetch_latest_release,
             commands::system::report_ui_render_metric,

@@ -40,8 +40,9 @@ extern "C" __declspec(dllimport) int __stdcall GlobalMemoryStatusEx(_MEMORYSTATU
 namespace lt {
 
 enum class WorkerRole {
-    Decode,  // MP3/etc → WAV cache: CPU + I/O + RAM bound.
-    Fill,    // repopulate evicted WAV blocks for playing tracks: disk I/O bound.
+    Decode,    // MP3/etc → WAV cache: CPU + I/O + RAM bound.
+    Fill,      // repopulate evicted WAV blocks for playing tracks: disk I/O bound.
+    Waveform,  // peak analysis for the UI: disk I/O bound, negligible RAM.
 };
 
 // Total physical RAM in bytes, 0 if it can't be determined.
@@ -117,6 +118,30 @@ inline int lt_recommend_worker_threads_for(WorkerRole role, int cores_in, std::u
         // audio thread keeps a core to itself.
         const int floor = low_core ? 1 : 2;
         return std::clamp(n, floor, 6);
+    }
+
+    if (role == WorkerRole::Waveform) {
+        // Waveform analysis is COSMETIC: it reads a file end to end and keeps
+        // only a min/max per bucket. Cheap per thread, but it runs at exactly
+        // the moment Decode and Fill are busiest — an import — and a late
+        // waveform costs the user nothing while a late audio block is a
+        // dropout. So this pool scales with the machine but stays deliberately
+        // smaller than the other two.
+        //
+        // One worker was the old behaviour and it showed: 25 stems at ~260 ms
+        // of analysis each are ~7 s of strictly sequential work, with the last
+        // clip only starting once the 24 before it finished.
+        //
+        // Scales with the machine, but stays deliberately below Fill's cap:
+        // during an import the Decode and Fill pools are already running, and
+        // this must not be the pool that tips the box over.
+        int cap;
+        if (cores <= 3)       cap = 1;
+        else if (cores <= 7)  cap = 2;
+        else if (cores <= 15) cap = 3;
+        else                  cap = 4;
+        if (ram_gb <= 4.5) cap = 1;
+        return std::clamp(std::min(spare, cap), 1, 4);
     }
 
     // Fill: disk-I/O bound, ~no per-thread RAM. The useful parallelism is set by
