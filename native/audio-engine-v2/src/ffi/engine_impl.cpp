@@ -564,6 +564,15 @@ bool session_sources_ready(const Session& session, const SourceManager& sources)
     return true;
 }
 
+std::vector<std::pair<Id, Frame>> session_clip_heads(const Session& session) {
+    std::vector<std::pair<Id, Frame>> clip_heads;
+    for (const auto& song : session.songs)
+        for (const auto& track : song.tracks)
+            for (const auto& clip : track.clips)
+                clip_heads.emplace_back(clip.source_id, clip.source_start_frame);
+    return clip_heads;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -662,6 +671,12 @@ Result<void> EngineImpl::initialize() {
             return;
 
         const bool all_ready = session_sources_ready(*current_session, *source_manager_);
+        // LoadSession asks for these heads before cold sources have been
+        // published, so that first pass can legitimately pin 0/N. Retry as each
+        // source becomes available: preload_clip_heads replaces the set and
+        // therefore progressively retains every head that can now be served.
+        // The final callback leaves the complete first-play working set pinned.
+        source_manager_->preload_clip_heads(session_clip_heads(*current_session));
         // Rebuild as sources land, not only once the LAST one is decoded.
         //
         // This used to wait for `all_ready`, which on a big session means the
@@ -1648,13 +1663,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // hundred milliseconds of [LT_STARVATION] logged right after a
             // session loads. One block per clip, so a 39-clip song costs 1.2 MB.
             if (source_manager_) {
-                std::vector<std::pair<Id, Frame>> clip_heads;
-                for (const auto& song : next_session->songs)
-                    for (const auto& track : song.tracks)
-                        for (const auto& clip : track.clips)
-                            clip_heads.emplace_back(clip.source_id,
-                                                    clip.source_start_frame);
-                source_manager_->preload_clip_heads(clip_heads);
+                source_manager_->preload_clip_heads(session_clip_heads(*next_session));
             }
             // Source data may not be decoded yet — voices for unloaded sources are
             // skipped and rebuilt later when sources become ready.

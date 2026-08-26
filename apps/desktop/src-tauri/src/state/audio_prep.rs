@@ -537,8 +537,8 @@ impl DesktopSession {
                 (prepared_snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
             emit_project_load_progress(
                 app,
-                99,
-                "Audio preparado. Construyendo vista del proyecto...".into(),
+                100,
+                "Proyecto listo para reproducir.".into(),
                 ready,
                 total,
                 ram_cache_mb,
@@ -548,8 +548,8 @@ impl DesktopSession {
         }
         emit_project_load_progress(
             app,
-            99,
-            "Audio preparado. Construyendo vista del proyecto...".into(),
+            100,
+            "Proyecto listo para reproducir.".into(),
             ready,
             total,
             ram_cache_mb,

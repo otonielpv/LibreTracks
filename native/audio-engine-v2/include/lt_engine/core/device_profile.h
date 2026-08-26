@@ -78,6 +78,11 @@ struct DeviceProbe {
     std::uint64_t available_ram_bytes = 0;  // 0 = unknown
     int cores = 0;
     bool is_handheld = false;
+    // Apple does not expose Linux's MemAvailable equivalent. On iOS, using the
+    // generic "one quarter of physical" fallback classifies a 4 GB iPhone 13
+    // as Constrained forever, even while the app is otherwise idle. Keep this
+    // explicit in the probe so the pure policy remains directly testable.
+    bool is_ios = false;
 };
 
 // Below this much AVAILABLE memory a handheld is treated as Constrained. The
@@ -105,10 +110,16 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
                               : 8.0;  // same "assume a middling 8GB" as thread_policy
 
     if (probe.is_handheld) {
-        // Trust available memory when we have it; fall back to a quarter of
-        // physical when we don't (better than assuming a desktop's headroom).
+        // Trust available memory when we have it. Android normally supplies
+        // MemAvailable; unknown non-iOS handhelds keep the deliberately strict
+        // quarter-of-physical fallback used for low-end devices. iOS has no
+        // equivalent probe, so reserve half of physical for iOS/WebKit and rate
+        // the other half as usable system headroom. That keeps a 2 GB iPhone in
+        // Constrained while allowing a 4 GB iPhone 13 to use the middle tier.
         const std::uint64_t available =
-            probe.available_ram_bytes > 0 ? probe.available_ram_bytes : probe.physical_ram_bytes / 4;
+            probe.available_ram_bytes > 0
+                ? probe.available_ram_bytes
+                : probe.physical_ram_bytes / (probe.is_ios ? 2 : 4);
 
         if (available < kConstrainedAvailableBytes)      profile.device_class = DeviceClass::Constrained;
         else if (available >= kRoomyAvailableBytes)      profile.device_class = DeviceClass::RoomyHandheld;
@@ -276,6 +287,9 @@ inline const DeviceProfile& lt_device_profile() {
         probe.is_handheld = true;
 #else
         probe.is_handheld = false;
+#endif
+#if defined(__APPLE__) && LT_ENGINE_HANDHELD
+        probe.is_ios = true;
 #endif
         return lt_device_profile_for(probe);
     }();

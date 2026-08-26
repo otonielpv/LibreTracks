@@ -36,6 +36,12 @@ DeviceProbe handheld_probe(std::uint64_t ram_bytes, std::uint64_t available_byte
     return probe;
 }
 
+DeviceProbe ios_probe(std::uint64_t ram_bytes, int cores) {
+    DeviceProbe probe = handheld_probe(ram_bytes, 0, cores);
+    probe.is_ios = true;
+    return probe;
+}
+
 }  // namespace
 
 TEST_CASE("desktop source cache budget is unchanged by the handheld work") {
@@ -203,6 +209,23 @@ TEST_CASE("a handheld with unknown available memory falls back to a quarter of p
 
     CHECK(profile.device_class == DeviceClass::Constrained);  // 512 MB < 1.5 GB
     CHECK(profile.source_cache_mb == 128);
+}
+
+TEST_CASE("iOS uses a physical-memory fallback without throttling an iPhone 13") {
+    // iOS cannot report MemAvailable. A 4 GB iPhone 13 used to fall back to a
+    // quarter of physical (1 GB) and was therefore permanently Constrained.
+    const auto iphone13 = lt_device_profile_for(ios_probe(4 * kGb, 6));
+
+    CHECK(iphone13.device_class == DeviceClass::Handheld);
+    CHECK(iphone13.decode_threads == 3);
+    CHECK(iphone13.fill_threads == 2);
+    CHECK(iphone13.source_cache_mb == 192);
+    CHECK(iphone13.protected_blocks_per_source == 24);
+
+    // The fallback must remain safe for older 2 GB devices.
+    const auto old_iphone = lt_device_profile_for(ios_probe(2 * kGb, 4));
+    CHECK(old_iphone.device_class == DeviceClass::Constrained);
+    CHECK(old_iphone.source_cache_mb == 128);
 }
 
 TEST_CASE("unknown core count does not produce a zero-thread pool") {

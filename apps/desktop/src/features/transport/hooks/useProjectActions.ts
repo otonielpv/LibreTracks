@@ -64,6 +64,8 @@ type UseProjectActionsProps = {
     state: { active: boolean; percent: number; message: string },
   ) => void;
   getImportPositionSeconds: () => number;
+  beginProjectAudioPreparation: (startedAtUnixMs: number) => void;
+  cancelProjectAudioPreparation: () => void;
 };
 
 export function useProjectActions({
@@ -80,6 +82,8 @@ export function useProjectActions({
   setPackageUnpackUiState,
   setSessionExportUiState,
   getImportPositionSeconds,
+  beginProjectAudioPreparation,
+  cancelProjectAudioPreparation,
 }: UseProjectActionsProps) {
   function applyProjectProgressFeedback(event: ProjectLoadProgressEvent) {
     const detail =
@@ -148,10 +152,10 @@ export function useProjectActions({
     );
   }
 
-  // Shared body for the two flows that REPLACE the loaded session and wait for
-  // the engine to finish preparing audio: "Open project" and "Import session
-  // (.ltset)". Both raise the blocking hydrate overlay with live progress, then
-  // resolve only once the backend has decoded all sources and prearmed voices.
+  // Shared body for the two flows that REPLACE the loaded session: "Open
+  // project" and "Import session (.ltset)". The blocking overlay lasts until
+  // the model is ready; the persistent preparation indicator remains visible
+  // until the backend emits the final audio-ready event.
   // `loadingMessage` lets the import flow say "Importando sesión…" instead.
   function runProjectLoadFlow(
     loader: () => Promise<TransportSnapshot | null>,
@@ -163,19 +167,19 @@ export function useProjectActions({
         let unlistenProjectProgress: (() => void) | null = null;
         let stopProjectProgressPolling: (() => void) | null = null;
         const progressStartedAt = Date.now();
+        beginProjectAudioPreparation(progressStartedAt);
         setProjectViewHydrating(true);
         setBusyFeedback({ message: loadingMessage, percent: 2 });
         try {
           unlistenProjectProgress = await registerProjectLoadProgressListener();
           stopProjectProgressPolling = startProjectProgressPolling(progressStartedAt);
           await nextPaint();
-          // The loader returns null if the user cancels the native dialog.
-          // Otherwise it returns only after the backend has finished decoding
-          // all sources AND prearmed Bungee voices; see
-          // wait_for_project_audio_preparation in state.rs. So by the time we
-          // continue, the engine is ready to Play instantly.
+          // The loader returns null if the user cancels the native dialog. A
+          // non-null result means the model can be shown, while audio may keep
+          // preparing in the background under useProjectAudioPreparation.
           const nextSnapshot = await loader();
           if (!nextSnapshot) {
+            cancelProjectAudioPreparation();
             setProjectViewHydrating(false);
             setBusyFeedback(null);
             return;
@@ -200,6 +204,7 @@ export function useProjectActions({
           await nextPaint();
           setProjectViewHydrating(false);
         } catch (error) {
+          cancelProjectAudioPreparation();
           if (successEvent === "project_opened") {
             recordProductEvent("project_open_failed");
           }

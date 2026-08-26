@@ -277,6 +277,7 @@ import {
   type SourcesPrepareUiState,
 } from "./sourcesPrepare";
 import { useProjectActions } from "./hooks/useProjectActions";
+import { useProjectAudioPreparation } from "./hooks/useProjectAudioPreparation";
 import { useE2ETestHooks } from "./hooks/useE2ETestHooks";
 import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
 import { useTimelineActions } from "./timeline/useTimelineActions";
@@ -778,6 +779,14 @@ export function TransportPanelContent() {
   const [sourcesPrepareUiState, setSourcesPrepareUiState] =
     useState<SourcesPrepareUiState>(SOURCES_PREPARE_INITIAL);
   const [sourcesPreparing, setSourcesPreparing] = useState(false);
+  const {
+    uiState: projectAudioPreparationUiState,
+    begin: beginProjectAudioPreparation,
+    cancel: cancelProjectAudioPreparation,
+  } = useProjectAudioPreparation();
+  const audioPreparationUiState = projectAudioPreparationUiState.active
+    ? projectAudioPreparationUiState
+    : sourcesPrepareUiState;
   // Non-modal "Descomprimiendo paquete…" indicator for the non-blocking .ltpkg
   // import (same style as the "Preparing audio…" indicator). The import no
   // longer raises the shell overlay, so without this the user sees nothing
@@ -4021,6 +4030,8 @@ export function TransportPanelContent() {
     setPackageUnpackUiState,
     setSessionExportUiState,
     getImportPositionSeconds: () => snapshotRef.current?.positionSeconds ?? 0,
+    beginProjectAudioPreparation,
+    cancelProjectAudioPreparation,
   });
 
   const {
@@ -4522,7 +4533,7 @@ export function TransportPanelContent() {
     playbackState,
     applyPlaybackSnapshot,
     pitchPreparing: pitchPrepareUiState.active,
-    sourcesPreparing,
+    sourcesPreparing: sourcesPreparing || projectAudioPreparationUiState.active,
   });
 
   // Android long-press opens context menus while the finger is still down;
@@ -8316,14 +8327,14 @@ export function TransportPanelContent() {
               </div>
             ) : null}
 
-            {sourcesPrepareUiState.active ? (
+            {audioPreparationUiState.active ? (
               <div
                 className="lt-source-prep-indicator"
                 aria-live="polite"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={Math.round(sourcesPrepareUiState.percent)}
+                aria-valuenow={Math.round(audioPreparationUiState.percent)}
               >
                 <div className="lt-source-prep-line">
                   <span className="lt-source-prep-label">
@@ -8331,23 +8342,23 @@ export function TransportPanelContent() {
                   </span>
                   <span className="lt-source-prep-detail">
                     {t("transport.status.tracksReady", {
-                      ready: sourcesPrepareUiState.readyCount,
-                      total: sourcesPrepareUiState.total,
+                      ready: audioPreparationUiState.readyCount,
+                      total: audioPreparationUiState.total,
                     })}{" "}
-                    {Math.round(sourcesPrepareUiState.percent)}%
+                    {Math.round(audioPreparationUiState.percent)}%
                   </span>
                 </div>
                 <div className="lt-source-prep-bar">
                   <span
                     style={{
-                      width: `${Math.max(0, Math.min(100, sourcesPrepareUiState.percent))}%`,
+                      width: `${Math.max(0, Math.min(100, audioPreparationUiState.percent))}%`,
                     }}
                   />
                 </div>
-                {sourcesPrepareUiState.failedCount > 0 ? (
+                {audioPreparationUiState.failedCount > 0 ? (
                   <span className="lt-source-prep-failed">
                     {t("transport.status.sourcesFailed", {
-                      count: sourcesPrepareUiState.failedCount,
+                      count: audioPreparationUiState.failedCount,
                     })}
                   </span>
                 ) : null}
