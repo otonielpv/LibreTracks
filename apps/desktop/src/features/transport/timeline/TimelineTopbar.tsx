@@ -423,8 +423,7 @@ export function TimelineTopbar({
 
       <div className="lt-topbar-main-row">
         <div className="lt-transport">
-          <label className="lt-bpm-control">
-            data-lt-tour={TOUR_TARGETS.topbarTempo}
+          <label className="lt-bpm-control" data-lt-tour={TOUR_TARGETS.topbarTempo}>
             <span>{t("timelineTopbar.bpmLabel")}</span>
             <input
               aria-label={t("timelineTopbar.songBpmAria")}
@@ -473,8 +472,7 @@ export function TimelineTopbar({
             <span>{t("timelineTopbar.tapTempoShort")}</span>
           </button>
 
-          <label className="lt-bpm-control">
-            data-lt-tour={TOUR_TARGETS.topbarTimeSignature}
+          <label className="lt-bpm-control" data-lt-tour={TOUR_TARGETS.topbarTimeSignature}>
             <span>Compas</span>
             <input
               aria-label="Compas de la cancion"

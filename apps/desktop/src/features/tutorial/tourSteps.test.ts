@@ -85,6 +85,27 @@ describe("anclajes de la guía", () => {
     }
   });
 
+  it("ningún anclaje se cuela como texto en vez de como atributo", () => {
+    // Pasó de verdad: al insertar el anclaje detrás de `<label className="...">`
+    // —una etiqueta que ya cerraba con `>`— cayó DENTRO del elemento, y la
+    // barra superior mostraba «data-lt-tour=topbar-tempo» escrito en pantalla.
+    //
+    // El escaneo de anclajes de arriba no lo veía: busca el texto en el fuente
+    // y lo encuentra igual sea atributo o contenido. Esto mira qué hay justo
+    // antes; si es `>`, el anclaje está fuera de la etiqueta.
+    for (const file of collectComponentFiles(srcRoot)) {
+      const contents = readFileSync(file, "utf8");
+      for (const match of contents.matchAll(ANCHOR_PATTERN)) {
+        const before = contents.slice(0, match.index).trimEnd();
+        expect(
+          before.endsWith(">"),
+          `${file}: "${match[0]}" está fuera de su etiqueta y se pintará como ` +
+            `texto en la interfaz. Métela dentro del tag.`,
+        ).toBe(false);
+      }
+    }
+  });
+
   it("no quedan anclajes muertos en el catálogo", () => {
     for (const key of Object.keys(TOUR_TARGETS)) {
       expect(

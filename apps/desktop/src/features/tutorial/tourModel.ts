@@ -166,11 +166,17 @@ export function shouldAutoStartLandingTour(options: {
 }
 
 /**
- * Si la guía del área de trabajo debe continuar sola al abrir una sesión.
+ * Si el tutorial del área de trabajo debe continuar solo al abrir una sesión.
  *
- * Es la continuación natural: quien acaba de terminar la guía de inicio se
- * encuentra la sesión abierta y el recorrido sigue sin tener que buscar el
- * botón. Sólo pasa si TERMINÓ la de inicio —no si la saltó— y sólo una vez.
+ * Es la continuación natural: te encuentras la sesión abierta y el recorrido
+ * sigue, sin tener que volver a buscar el botón. Dispara UNA vez —en cuanto el
+ * recorrido del área de trabajo tiene un resultado guardado deja de ofrecerse—
+ * y nunca encima de un recorrido en marcha.
+ *
+ * Antes exigía además haber TERMINADO el de la pantalla de inicio, con la idea
+ * de no insistirle a quien lo había saltado. Se quitó a petición: el caso real
+ * es abrir una sesión y querer seguir aprendiendo, no tener que acordarse del
+ * botón. Quien no lo quiera lo salta una vez y no vuelve a salir.
  */
 export function shouldAutoContinueWorkspaceTour(options: {
   progress: TourProgress;
@@ -181,6 +187,5 @@ export function shouldAutoContinueWorkspaceTour(options: {
   if (options.isWebDriver || options.isTestRun) return false;
   // No interrumpimos un recorrido en marcha.
   if (options.isTourActive) return false;
-  if (options.progress.landing !== "completed") return false;
   return options.progress.workspace === undefined;
 }

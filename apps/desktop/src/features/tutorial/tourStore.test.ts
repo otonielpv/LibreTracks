@@ -369,30 +369,20 @@ describe("arranque automático", () => {
 describe("continuación automática al abrir sesión", () => {
   const base = { isTourActive: false, isWebDriver: false, isTestRun: false };
 
-  it("continúa si terminó la guía de inicio", () => {
-    expect(
-      shouldAutoContinueWorkspaceTour({
-        ...base,
-        progress: { landing: "completed" },
-      }),
-    ).toBe(true);
-  });
-
-  it("no continúa si la saltó", () => {
-    // Ya dijo que no una vez; volver a saltarle encima al abrir la sesión es
-    // insistir.
-    expect(
-      shouldAutoContinueWorkspaceTour({
-        ...base,
-        progress: { landing: "dismissed" },
-      }),
-    ).toBe(false);
-  });
-
-  it("no continúa si nunca vio la de inicio", () => {
-    expect(
-      shouldAutoContinueWorkspaceTour({ ...base, progress: {} }),
-    ).toBe(false);
+  it("continúa sin depender de cómo acabó el de la pantalla de inicio", () => {
+    // El caso real es abrir una sesión y querer seguir aprendiendo, no tener
+    // que acordarse del botón TUTORIAL. Da igual si el de inicio se terminó,
+    // se saltó o no se vio nunca.
+    for (const progress of [
+      { landing: "completed" } as const,
+      { landing: "dismissed" } as const,
+      {} as const,
+    ]) {
+      expect(
+        shouldAutoContinueWorkspaceTour({ ...base, progress }),
+        `no continuó con progress=${JSON.stringify(progress)}`,
+      ).toBe(true);
+    }
   });
 
   it("no se repite una vez vista el área de trabajo", () => {

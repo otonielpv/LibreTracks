@@ -416,9 +416,30 @@ describe("continuación al abrir una sesión", () => {
     unsubscribe();
   });
 
-  it("no sigue sola si el usuario había saltado la guía de inicio", () => {
+  it("sigue sola aunque el usuario hubiera saltado el de la pantalla de inicio", () => {
     act(() => {
       useTourStore.setState({ progress: { landing: "dismissed" } });
+      useSongStore.setState({ song: null });
+    });
+    const unsubscribe = subscribeWorkspaceContinuation({
+      isWebDriver: false,
+      isTestRun: false,
+    });
+
+    render(<TourOverlay />);
+    act(() => {
+      useSongStore.setState({ song: { id: "s1" } as never });
+    });
+
+    expect(screen.getByText(workspace.overview.title)).toBeTruthy();
+    unsubscribe();
+  });
+
+  it("no vuelve a salir una vez que el del área de trabajo tiene resultado", () => {
+    // El freno que queda: quien lo salta una vez no se lo encuentra otra vez en
+    // cada sesión que abra.
+    act(() => {
+      useTourStore.setState({ progress: { workspace: "dismissed" } });
       useSongStore.setState({ song: null });
     });
     const unsubscribe = subscribeWorkspaceContinuation({

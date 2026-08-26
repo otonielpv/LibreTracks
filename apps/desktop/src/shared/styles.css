@@ -9755,12 +9755,16 @@ textarea {
 }
 
 .lt-tour-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.1);
   background: rgb(255 255 255 / 0.05);
   color: #f3f0ef;
   padding: 0.55rem 0.9rem;
   font: 700 0.8rem/1 "Space Grotesk", sans-serif;
+  text-align: center;
 }
 
 .lt-tour-actions button:hover {
@@ -9774,12 +9778,13 @@ textarea {
   color: #57f1db;
 }
 
-/* "Saltar guía" no compite con la acción principal. */
+/* "Saltar tutorial" no compite con la acción principal: pierde el marco y el
+   fondo, pero conserva el mismo relleno que los demás. Quitarle el
+   `padding-left` dejaba su texto descolocado respecto a los otros dos. */
 .lt-tour-actions .lt-tour-skip {
   border-color: transparent;
   background: transparent;
   color: rgb(186 202 197 / 0.55);
-  padding-left: 0;
 }
 
 /* ── Móvil ────────────────────────────────────────────────────────────────
