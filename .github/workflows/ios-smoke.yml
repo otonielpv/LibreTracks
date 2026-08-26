@@ -5,10 +5,9 @@ env:
   FFMPEG_VERSION: 7.1.1
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - feature/ios-smoke-ci
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
