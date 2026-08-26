@@ -292,9 +292,17 @@ export function TourOverlay() {
     targetRect !== null &&
     targetRect.bottom > window.innerHeight * 0.55;
 
+  // El alto máximo NO es decorativo: sin él la tarjeta se sale por debajo del
+  // borde de la ventana (medido: 1022px de fondo en una ventana de 1009) y sus
+  // botones quedan fuera de alcance. El cuerpo hace scroll y la fila de
+  // acciones se queda siempre visible.
   const cardStyle: CSSProperties =
     !isDocked && anchor
-      ? { top: `${anchor.top}px`, left: `${anchor.left}px` }
+      ? {
+          top: `${anchor.top}px`,
+          left: `${anchor.left}px`,
+          maxHeight: `${anchor.maxHeight}px`,
+        }
       : {};
 
   const cardClassName = [
