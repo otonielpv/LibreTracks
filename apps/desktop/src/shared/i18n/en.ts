@@ -1265,6 +1265,8 @@ const en = {
     chooseTitle: "Tours",
     chooseAria: "Choose a tutorial tour",
     chooseDone: "Finished",
+    resetProgress: "Start over",
+    resetProgressHint: "Forget what you have seen and offer the tours again when a session opens.",
     landing: {
       name: "Getting started",
       summary: "What a session is, and how to create, open or import one.",
@@ -1284,8 +1286,9 @@ const en = {
           bodyMobile: "Open an existing session by picking its .ltsession file. The system picker reaches cloud storage too, so you can open one you keep elsewhere.",
         },
         import: {
-          title: "Import a package",
-          body: "If someone hands you a packaged session (.ltset) or a single song (.ltpkg), this unpacks it into a new session. It is how set lists get shared between musicians.",
+          title: "Import a session",
+          body: "If someone hands you a packaged session (.ltset), this unpacks it into a new session. It is how a whole set list gets shared between musicians. Note that only sessions come in here: a single song (.ltpkg) is imported INTO a session that is already open, from the FILE menu.",
+          bodyMobile: "If someone hands you a packaged session (.ltset), this unpacks it into a new session. It is how a whole set list gets shared between musicians. Note that only sessions come in here: a single song (.ltpkg) is imported INTO a session that is already open, from FILE in the side rail.",
         },
         importExternal: {
           title: "Bring a set over from Reaper or Ableton",
@@ -1343,11 +1346,23 @@ const en = {
         timeline: {
           title: "The timeline",
           body: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and section markers live. To bring audio in, drag it from the file manager straight onto the timeline, or route it through the library first if you would rather keep it organised. Dropping a .ltpkg brings in a whole song, and so does a Reaper (.rpp) or Ableton (.als) project; whole sessions (.ltset) are imported from the start screen or the FILE menu. Right-click anything to open its menu.",
-          bodyMobile: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and markers live. On mobile audio comes in through the library, and you drag it from there onto a track; songs (.ltpkg) and sessions (.ltset) are imported from FILE and from the start screen. Press and hold a clip or a song region to open its menu - a long press does what right-click does on the desktop.",
+          bodyMobile: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and markers live. On mobile audio comes in through the library, and you drag it from there onto a track; single songs (.ltpkg) are imported from FILE once a session is open, and whole sessions (.ltset) from the start screen. Press and hold a clip or a song region to open its menu - a long press does what right-click does on the desktop.",
         },
         transport: {
           title: "Play and stop",
-          body: "These buttons move the playhead. The tempo and time signature next to them belong to the song under the playhead, not to the whole project: every song carries its own.",
+          body: "Back to the start, stop, play, pause, and skip to the next song. What you hear follows the playhead, not whatever happens to be selected.",
+        },
+        metronome: {
+          title: "The click",
+          body: "Turns the metronome on and off, and its dropdown picks the sound, the level and which output it takes. Usually you send it to one set of in-ears only: it follows the tempo of the song under the playhead, and the song master does not turn it down.",
+        },
+        voiceGuide: {
+          title: "The voice guide",
+          body: "Calls out the section coming up and counts you in. It takes whichever route you give it, so it can reach the in-ears without leaking into the front-of-house mix. It runs off the markers you placed: the better they sit, the more use it is.",
+        },
+        pads: {
+          title: "Ambient pads",
+          body: "A held note underneath in the song's key, so there is no silence between numbers. They install as packs and only the active key is held in memory. One difference from the click worth knowing: pads keep sounding with the transport stopped.",
         },
         viewDaw: {
           title: "DAW view: building",
@@ -1363,7 +1378,7 @@ const en = {
         },
         fileMenu: {
           title: "Saving and sharing",
-          body: "The FILE menu saves the session, imports individual songs, and exports the whole thing so you can move it to another machine or hand it to another musician.",
+          body: "The FILE menu saves the session and imports single songs (.ltpkg) into it -- the thing you could not do from the start screen. It exports too: one song as a .ltpkg, or the whole session as a .ltset to move to another machine or hand to another musician.",
         },
         fileActionsMobile: {
           title: "Saving and sharing",

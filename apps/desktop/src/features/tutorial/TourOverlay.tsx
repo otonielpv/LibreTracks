@@ -15,7 +15,7 @@ import { placeTourCard, type CardPosition } from "./tourCardPlacement";
 import { isWaitSatisfied, shouldAutoStartLandingTour, stepBodyKeys } from "./tourModel";
 import {
   currentTourPlatform,
-  subscribeWorkspaceContinuation,
+  subscribeSessionTourOffer,
   useTourStore,
 } from "./tourStore";
 import { TOURS } from "./tours";
@@ -101,12 +101,12 @@ export function TourOverlay() {
     store.startTour("landing");
   }, []);
 
-  // Continuación automática: quien termina la guía de inicio y abre una sesión
-  // sigue aprendiendo sin tener que buscar el botón GUÍA otra vez. La lógica
-  // vive en el store para que se pueda probar sin montar la app.
+  // Al cargar una sesión se despliega el menú con los recorridos que quedan,
+  // para no tener que acordarse del botón. La lógica vive en el store para que
+  // se pueda probar sin montar la app.
   useEffect(
     () =>
-      subscribeWorkspaceContinuation({
+      subscribeSessionTourOffer({
         isWebDriver: isWebDriverSession(),
         isTestRun: import.meta.env.MODE === "test",
       }),

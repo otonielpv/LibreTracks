@@ -9895,3 +9895,16 @@ textarea {
   left: calc(100% + 0.25rem);
   width: min(17rem, calc(100vw - 6rem));
 }
+
+/* "Empezar de cero" cierra el menú: no es un recorrido, es la salida para
+   volver a recibir la oferta automática. */
+.lt-tour-menu .lt-tour-menu-reset {
+  margin-top: 0.2rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 0;
+  color: rgb(186 202 197 / 0.6);
+}
+
+.lt-tour-menu .lt-tour-menu-reset .lt-tour-menu-name {
+  font-weight: 600;
+}

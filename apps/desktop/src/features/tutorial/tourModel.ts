@@ -166,26 +166,34 @@ export function shouldAutoStartLandingTour(options: {
 }
 
 /**
- * Si el tutorial del área de trabajo debe continuar solo al abrir una sesión.
+ * Si al abrir una sesión hay que ofrecer los recorridos del área de trabajo.
  *
- * Es la continuación natural: te encuentras la sesión abierta y el recorrido
- * sigue, sin tener que volver a buscar el botón. Dispara UNA vez —en cuanto el
- * recorrido del área de trabajo tiene un resultado guardado deja de ofrecerse—
- * y nunca encima de un recorrido en marcha.
+ * Abre el MENÚ, no un recorrido: con la sesión abierta hay tres y elegir es del
+ * usuario. Lanzar dieciséis pasos sin preguntar es una emboscada; enseñar la
+ * lista es una invitación.
  *
- * Antes exigía además haber TERMINADO el de la pantalla de inicio, con la idea
- * de no insistirle a quien lo había saltado. Se quitó a petición: el caso real
- * es abrir una sesión y querer seguir aprendiendo, no tener que acordarse del
- * botón. Quien no lo quiera lo salta una vez y no vuelve a salir.
+ * Se ofrece mientras quede alguno SIN VER — no basta con que falte el del área
+ * de trabajo. Quien ya lo hizo pero no ha tocado los de montaje o directo sigue
+ * teniendo algo que descubrir, y ése es justo el momento de contárselo.
+ *
+ * Dos frenos: nunca encima de un recorrido en marcha, y una sola vez por
+ * arranque de la app (`alreadyOffered`), para que abrir tres sesiones seguidas
+ * no saque el menú tres veces.
+ *
+ * Antes esto lanzaba directamente el recorrido del área de trabajo y sólo si se
+ * había TERMINADO el de la pantalla de inicio. Las dos condiciones se cayeron
+ * por lo mismo: en la práctica no salía nunca.
  */
-export function shouldAutoContinueWorkspaceTour(options: {
+export function shouldOfferToursOnSessionOpen(options: {
   progress: TourProgress;
   isTourActive: boolean;
+  alreadyOffered: boolean;
   isWebDriver: boolean;
   isTestRun: boolean;
 }): boolean {
   if (options.isWebDriver || options.isTestRun) return false;
-  // No interrumpimos un recorrido en marcha.
-  if (options.isTourActive) return false;
-  return options.progress.workspace === undefined;
+  if (options.isTourActive || options.alreadyOffered) return false;
+  return toursForContext(true).some(
+    (tourId) => options.progress[tourId] === undefined,
+  );
 }

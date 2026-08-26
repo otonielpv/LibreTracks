@@ -64,6 +64,24 @@ export const workspaceTour: TourDefinition = {
       i18nKey: "tutorial.workspace.steps.transport",
     },
     {
+      // Las tres voces auxiliares de la barra superior. Van cada una por su
+      // lado porque hacen cosas distintas y se enrutan por separado, que es
+      // justo lo que hay que entender antes del primer ensayo.
+      id: "metronome",
+      target: TOUR_TARGETS.topbarMetronome,
+      i18nKey: "tutorial.workspace.steps.metronome",
+    },
+    {
+      id: "voiceGuide",
+      target: TOUR_TARGETS.topbarVoiceGuide,
+      i18nKey: "tutorial.workspace.steps.voiceGuide",
+    },
+    {
+      id: "pads",
+      target: TOUR_TARGETS.topbarPads,
+      i18nKey: "tutorial.workspace.steps.pads",
+    },
+    {
       // Las tres vistas, una por paso y cambiando de verdad a cada una. El
       // selector existe en las tres: en DAW y Compacta lo pinta la barra de
       // herramientas, y en Live la propia vista.

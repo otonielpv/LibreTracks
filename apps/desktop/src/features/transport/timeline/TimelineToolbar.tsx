@@ -263,6 +263,14 @@ type ControlGroupProps = {
   details?: ReactNode;
   action?: ReactNode;
   className?: string;
+  /**
+   * Anclaje del tutorial. Lleva el nombre del atributo DOM a propósito: los
+   * grupos de la barra son componentes, no `<div>`s, y un `data-lt-tour` puesto
+   * en la llamada se quedaba en props sin llegar nunca al DOM — el recorrido de
+   * directo no resaltaba nada. Este componente lo reenvía a su raíz, y
+   * `tourSteps.test.ts` lo tiene en su lista de reenviadores comprobados.
+   */
+  "data-lt-tour"?: string;
 };
 
 export function ControlGroup({
@@ -274,6 +282,7 @@ export function ControlGroup({
   details,
   action,
   className,
+  "data-lt-tour": tourTarget,
 }: ControlGroupProps) {
   const panel = open ? (
     <div className="lt-control-popover-panel" data-lt-control-popover-panel>
@@ -293,7 +302,10 @@ export function ControlGroup({
     open && document.documentElement.classList.contains("lt-mobile");
 
   return (
-    <section className={`lt-control-group ${className ?? ""}`}>
+    <section
+      className={`lt-control-group ${className ?? ""}`}
+      data-lt-tour={tourTarget}
+    >
       <div className="lt-control-group-main">
         <div className="lt-control-group-copy">
           <span className="lt-control-group-title">{title}</span>

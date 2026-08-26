@@ -281,13 +281,19 @@ beforeEach(async () => {
   });
   // La guia interactiva arranca sola la primera vez y su store sobrevive al
   // desmontaje: sin marcarla como vista, el overlay taparia la UI en cada test
-  // que renderice <App />. `shouldAutoStartGettingStarted` tambien mira
+  // que renderice <App />. `shouldAutoStartLandingTour` tambien mira
   // import.meta.env.MODE, pero este reset es la red que no depende del entorno.
   useTourStore.setState({
     activeTourId: null,
     stepIndex: 0,
     steps: [],
-    progress: { landing: "dismissed", workspace: "dismissed" },
+    progress: {
+      landing: "dismissed",
+      workspace: "dismissed",
+      daw: "dismissed",
+      live: "dismissed",
+    },
+    isMenuOpen: false,
   });
   vi.clearAllMocks();
   vi.restoreAllMocks();

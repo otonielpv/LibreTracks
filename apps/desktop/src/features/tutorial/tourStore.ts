@@ -4,7 +4,7 @@ import { isMobileApp } from "@libretracks/shared/desktopApi";
 
 import { useSongStore } from "../transport/songStore";
 import {
-  shouldAutoContinueWorkspaceTour,
+  shouldOfferToursOnSessionOpen,
   tourIdForContext,
   visibleSteps,
   type TourId,
@@ -107,6 +107,21 @@ type TourState = {
    */
   steps: TourStep[];
   progress: TourProgress;
+  /**
+   * Si el menú de recorridos está desplegado. Vive en el store y no dentro de
+   * `TourLauncherButton` porque también lo abre la app al cargar una sesión.
+   */
+  isMenuOpen: boolean;
+  setMenuOpen: (open: boolean) => void;
+  /**
+   * Olvida lo visto y vuelve a ofrecerlo todo desde cero.
+   *
+   * Existe porque el olvido no tiene otra puerta: los recorridos se dejan de
+   * ofrecer solos en cuanto tienen resultado, y sin esto la única forma de
+   * recuperar la oferta automática sería borrar el localStorage a mano — que
+   * en una build de release ni siquiera es posible sin DevTools.
+   */
+  resetProgress: () => void;
   startTour: (tourId: TourId, platform?: TourPlatform) => void;
   /** `dismissed` por defecto: salir sin llegar al final no es terminarla. */
   endTour: (outcome?: TourOutcome) => void;
@@ -119,11 +134,19 @@ export const useTourStore = create<TourState>()((set, get) => ({
   stepIndex: 0,
   steps: [],
   progress: readProgress(),
+  isMenuOpen: false,
+  setMenuOpen: (isMenuOpen) => set({ isMenuOpen }),
+  resetProgress: () => {
+    persistProgress({});
+    set({ progress: {} });
+  },
   startTour: (tourId, platform = currentTourPlatform()) => {
     const tour = TOURS[tourId];
     const steps = visibleSteps(tour, platform);
     if (steps.length === 0) return;
-    set({ activeTourId: tourId, stepIndex: 0, steps });
+    // Arrancar un recorrido cierra el menú: no tiene sentido dejarlo abierto
+    // debajo del escudo.
+    set({ activeTourId: tourId, stepIndex: 0, steps, isMenuOpen: false });
   },
   endTour: (outcome = "dismissed") => {
     const { activeTourId, progress } = get();
@@ -158,7 +181,10 @@ export function hasSeenTour(tourId: TourId): boolean {
 }
 
 /**
- * Continúa sola la guía del área de trabajo en cuanto se abre una sesión.
+ * Ofrece los recorridos del área de trabajo en cuanto se carga una sesión.
+ *
+ * Abre el menú del botón TUTORIAL en vez de lanzar un recorrido: con la sesión
+ * abierta hay tres y elegir es del usuario.
  *
  * Vive aquí y no dentro del overlay para que el cableado se pueda probar: con
  * `isTestRun` calculado en el componente, la suscripción sería letra muerta en
@@ -166,28 +192,32 @@ export function hasSeenTour(tourId: TourId): boolean {
  *
  * Devuelve la función para cancelar la suscripción.
  */
-export function subscribeWorkspaceContinuation(options: {
+export function subscribeSessionTourOffer(options: {
   isWebDriver: boolean;
   isTestRun: boolean;
 }): () => void {
+  // Una sola oferta por arranque: abrir varias sesiones seguidas no debe sacar
+  // el menú una y otra vez.
+  let alreadyOffered = false;
   return useSongStore.subscribe(
     (state) => state.song !== null,
     (hasSession, hadSession) => {
-      // Sólo el flanco de subida: reabrir otra sesión más tarde no vuelve a
-      // ofrecer nada (y `progress` ya lo impediría de todos modos).
+      // Sólo el flanco de subida: cerrar y reabrir no cuenta como novedad.
       if (!hasSession || hadSession) return;
       const store = useTourStore.getState();
       if (
-        !shouldAutoContinueWorkspaceTour({
+        !shouldOfferToursOnSessionOpen({
           progress: store.progress,
           isTourActive: store.activeTourId !== null,
+          alreadyOffered,
           isWebDriver: options.isWebDriver,
           isTestRun: options.isTestRun,
         })
       ) {
         return;
       }
-      store.startTour("workspace");
+      alreadyOffered = true;
+      store.setMenuOpen(true);
     },
   );
 }

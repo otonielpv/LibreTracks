@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useSongStore } from "../transport/songStore";
@@ -8,7 +8,7 @@ import { TOURS } from "./tours";
 import { TOUR_TARGETS } from "./tourTargets";
 
 /**
- * Botón GUÍA del rail lateral, y su menú de recorridos.
+ * Botón TUTORIAL del rail lateral, y su menú de recorridos.
  *
  * Lo que se ofrece depende de lo que hay en pantalla: en la pantalla de inicio
  * sólo hay un recorrido y el botón lo lanza directamente; con la sesión abierta
@@ -23,13 +23,20 @@ import { TOUR_TARGETS } from "./tourTargets";
 export function TourLauncherButton() {
   const { t } = useTranslation();
   const startTour = useTourStore((state) => state.startTour);
+  const resetProgress = useTourStore((state) => state.resetProgress);
   const progress = useTourStore((state) => state.progress);
   const hasOpenSession = useSongStore((state) => state.song !== null);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // El menú vive en el store porque también lo abre la app al cargar una
+  // sesión, no sólo este botón.
+  const isMenuOpen = useTourStore((state) => state.isMenuOpen);
+  const setMenuOpen = useTourStore((state) => state.setMenuOpen);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   const available = toursForContext(hasOpenSession);
   const onlyTour = available.length === 1 ? available[0] : null;
+  const someTourSeen = available.some(
+    (tourId) => progress[tourId] !== undefined,
+  );
 
   // Cerrar al pulsar fuera o con Escape, como los demás menús del rail.
   useEffect(() => {
@@ -37,11 +44,11 @@ export function TourLauncherButton() {
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (target && !wrapperRef.current?.contains(target)) {
-        setIsMenuOpen(false);
+        setMenuOpen(false);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsMenuOpen(false);
+      if (event.key === "Escape") setMenuOpen(false);
     };
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
@@ -49,7 +56,7 @@ export function TourLauncherButton() {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [isMenuOpen]);
+  }, [isMenuOpen, setMenuOpen]);
 
   return (
     <div className="lt-tour-launcher" ref={wrapperRef}>
@@ -71,7 +78,7 @@ export function TourLauncherButton() {
             startTour(onlyTour);
             return;
           }
-          setIsMenuOpen((open) => !open);
+          setMenuOpen(!isMenuOpen);
         }}
       >
         <span className="material-symbols-outlined">school</span>
@@ -92,7 +99,7 @@ export function TourLauncherButton() {
               role="menuitem"
               data-tour-choice={tourId}
               onClick={() => {
-                setIsMenuOpen(false);
+                setMenuOpen(false);
                 startTour(tourId);
               }}
             >
@@ -112,6 +119,27 @@ export function TourLauncherButton() {
               <small>{t(`${TOURS[tourId].i18nKey}.summary`)}</small>
             </button>
           ))}
+
+          {/* El tutorial deja de ofrecerse solo en cuanto todo tiene resultado.
+              Sin esta salida, recuperarlo exigiría borrar el localStorage a
+              mano — imposible en release sin DevTools. */}
+          {someTourSeen ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="lt-tour-menu-reset"
+              data-tour-choice="reset"
+              onClick={() => {
+                resetProgress();
+                setMenuOpen(false);
+              }}
+            >
+              <span className="lt-tour-menu-name">
+                {t("tutorial.resetProgress")}
+              </span>
+              <small>{t("tutorial.resetProgressHint")}</small>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

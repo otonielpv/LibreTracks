@@ -536,7 +536,7 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">pause</span>
             </button>
-            <div className="lt-topbar-split">
+            <div className="lt-topbar-split" data-lt-tour={TOUR_TARGETS.topbarMetronome}>
               <button
                 type="button"
                 ref={metronomeButtonRef}
@@ -580,7 +580,7 @@ export function TimelineTopbar({
                 </span>
               </button>
             </div>
-            <div className="lt-topbar-split">
+            <div className="lt-topbar-split" data-lt-tour={TOUR_TARGETS.topbarVoiceGuide}>
               <button
                 type="button"
                 ref={voiceGuideButtonRef}
@@ -624,7 +624,7 @@ export function TimelineTopbar({
                 </span>
               </button>
             </div>
-            <div className="lt-topbar-split">
+            <div className="lt-topbar-split" data-lt-tour={TOUR_TARGETS.topbarPads}>
               <button
                 type="button"
                 ref={padButtonRef}

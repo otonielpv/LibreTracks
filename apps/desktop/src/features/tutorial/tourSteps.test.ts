@@ -106,6 +106,38 @@ describe("anclajes de la guía", () => {
     }
   });
 
+  it("todo anclaje acaba en un elemento del DOM, no en props de un componente", () => {
+    // Pasó de verdad, y es el fallo más silencioso de todos: los grupos de la
+    // barra del timeline son `<ControlGroup>`, no `<div>`. El `data-lt-tour`
+    // se quedaba en las props del componente y no llegaba nunca al DOM, así
+    // que el recorrido de directo no resaltaba ni uno de sus seis controles —
+    // y todos los tests pasaban, porque el anclaje SÍ estaba en el fuente.
+    //
+    // Un componente puede llevar anclaje, pero tiene que reenviarlo a su raíz.
+    // Los que lo hacen van aquí, y cada uno tiene su test de que lo reenvía.
+    const FORWARDING_COMPONENTS = new Set(["ControlGroup"]);
+    const openingTag = /<([A-Za-z][\w.]*)/g;
+
+    for (const file of collectComponentFiles(srcRoot)) {
+      const contents = readFileSync(file, "utf8");
+      for (const match of contents.matchAll(ANCHOR_PATTERN)) {
+        const before = contents.slice(0, match.index);
+        const tags = [...before.matchAll(openingTag)];
+        const owner = tags.at(-1)?.[1] ?? "?";
+        const reachesDom =
+          owner[0] === owner[0].toLowerCase() ||
+          FORWARDING_COMPONENTS.has(owner);
+        expect(
+          reachesDom,
+          `${file}: "${match[0]}" cuelga de <${owner}>, que es un componente. ` +
+            `El atributo se queda en sus props y no llega al DOM: o lo pones ` +
+            `en un elemento real, o haces que <${owner}> lo reenvíe y lo ` +
+            `añades a FORWARDING_COMPONENTS con su test.`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("no quedan anclajes muertos en el catálogo", () => {
     for (const key of Object.keys(TOUR_TARGETS)) {
       expect(

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSongStore } from "../transport/songStore";
 import {
   isWaitSatisfied,
-  shouldAutoContinueWorkspaceTour,
+  shouldOfferToursOnSessionOpen,
   shouldAutoStartLandingTour,
   tourIdForContext,
 } from "./tourModel";
@@ -366,60 +366,80 @@ describe("arranque automático", () => {
   });
 });
 
-describe("continuación automática al abrir sesión", () => {
-  const base = { isTourActive: false, isWebDriver: false, isTestRun: false };
+describe("oferta de recorridos al abrir una sesión", () => {
+  const base = {
+    isTourActive: false,
+    alreadyOffered: false,
+    isWebDriver: false,
+    isTestRun: false,
+  };
 
-  it("continúa sin depender de cómo acabó el de la pantalla de inicio", () => {
-    // El caso real es abrir una sesión y querer seguir aprendiendo, no tener
-    // que acordarse del botón TUTORIAL. Da igual si el de inicio se terminó,
-    // se saltó o no se vio nunca.
+  it("se ofrece sin depender de cómo acabara el de la pantalla de inicio", () => {
+    // El caso real es abrir una sesión y querer seguir, no acordarse del botón.
+    // Da igual si el de inicio se terminó, se saltó o no se vio nunca.
     for (const progress of [
       { landing: "completed" } as const,
       { landing: "dismissed" } as const,
       {} as const,
     ]) {
       expect(
-        shouldAutoContinueWorkspaceTour({ ...base, progress }),
-        `no continuó con progress=${JSON.stringify(progress)}`,
+        shouldOfferToursOnSessionOpen({ ...base, progress }),
+        `no se ofreció con progress=${JSON.stringify(progress)}`,
       ).toBe(true);
     }
   });
 
-  it("no se repite una vez vista el área de trabajo", () => {
-    for (const outcome of ["completed", "dismissed"] as const) {
-      expect(
-        shouldAutoContinueWorkspaceTour({
-          ...base,
-          progress: { landing: "completed", workspace: outcome },
-        }),
-      ).toBe(false);
-    }
+  it("basta con que quede uno sin ver, no tiene que ser el del área de trabajo", () => {
+    // Quien ya hizo el general pero no ha tocado montaje ni directo sigue
+    // teniendo algo que descubrir, y ése es el momento de contárselo.
+    expect(
+      shouldOfferToursOnSessionOpen({
+        ...base,
+        progress: { workspace: "completed" },
+      }),
+    ).toBe(true);
+  });
+
+  it("calla cuando ya se han visto los tres", () => {
+    expect(
+      shouldOfferToursOnSessionOpen({
+        ...base,
+        progress: {
+          workspace: "completed",
+          daw: "dismissed",
+          live: "completed",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("sólo una vez por arranque de la app", () => {
+    // Abrir tres sesiones seguidas no debe sacar el menú tres veces.
+    expect(
+      shouldOfferToursOnSessionOpen({
+        ...base,
+        alreadyOffered: true,
+        progress: {},
+      }),
+    ).toBe(false);
   });
 
   it("no interrumpe un recorrido en marcha", () => {
     expect(
-      shouldAutoContinueWorkspaceTour({
+      shouldOfferToursOnSessionOpen({
         ...base,
         isTourActive: true,
-        progress: { landing: "completed" },
+        progress: {},
       }),
     ).toBe(false);
   });
 
   it("no dispara bajo WebDriver ni en tests", () => {
     expect(
-      shouldAutoContinueWorkspaceTour({
-        ...base,
-        isWebDriver: true,
-        progress: { landing: "completed" },
-      }),
+      shouldOfferToursOnSessionOpen({ ...base, isWebDriver: true, progress: {} }),
     ).toBe(false);
     expect(
-      shouldAutoContinueWorkspaceTour({
-        ...base,
-        isTestRun: true,
-        progress: { landing: "completed" },
-      }),
+      shouldOfferToursOnSessionOpen({ ...base, isTestRun: true, progress: {} }),
     ).toBe(false);
   });
 });

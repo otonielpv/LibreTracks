@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { act, en, fireEvent, render, screen, waitFor } from "../../test/testUtils";
+import { ControlGroup } from "../transport/timeline/TimelineToolbar";
 import { useSongStore } from "../transport/songStore";
+import {
+  shouldOfferToursOnSessionOpen,
+  type TourProgress,
+} from "./tourModel";
 import { TourLauncherButton } from "./TourLauncherButton";
 import { TourOverlay } from "./TourOverlay";
-import { subscribeWorkspaceContinuation, useTourStore } from "./tourStore";
+import { subscribeSessionTourOffer, useTourStore } from "./tourStore";
 import { TOUR_TARGETS } from "./tourTargets";
 
 const landing = en.tutorial.landing.steps;
@@ -393,66 +398,146 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
   });
 });
 
-describe("continuación al abrir una sesión", () => {
-  it("sigue sola con el área de trabajo sin volver a pulsar GUÍA", () => {
-    // El cableado real: la suscripción escucha al store de canciones. Se prueba
-    // con `isTestRun: false` porque en un test todos los arranques automáticos
-    // están desactivados a propósito.
-    act(() => {
-      useTourStore.setState({ progress: { landing: "completed" } });
-      useSongStore.setState({ song: null });
-    });
-    const unsubscribe = subscribeWorkspaceContinuation({
-      isWebDriver: false,
-      isTestRun: false,
-    });
-
-    render(<TourOverlay />);
+describe("empezar de cero", () => {
+  it("aparece sólo cuando hay algo que olvidar", () => {
+    render(
+      <>
+        <TourLauncherButton />
+        <TourOverlay />
+      </>,
+    );
+    clearProgress();
     act(() => {
       useSongStore.setState({ song: { id: "s1" } as never });
     });
 
-    expect(screen.getByText(workspace.overview.title)).toBeTruthy();
-    unsubscribe();
+    fireEvent.click(screen.getByText(en.tutorial.launch));
+    expect(document.querySelector('[data-tour-choice="reset"]')).toBeNull();
   });
 
-  it("sigue sola aunque el usuario hubiera saltado el de la pantalla de inicio", () => {
+  it("olvida lo visto y vuelve a ofrecerse al abrir una sesión", () => {
+    // Sin esto, quien los ha visto todos no tiene forma de recuperar la oferta
+    // automática: en una build de release no hay DevTools para vaciar el
+    // localStorage a mano.
+    render(
+      <>
+        <TourLauncherButton />
+        <TourOverlay />
+      </>,
+    );
     act(() => {
-      useTourStore.setState({ progress: { landing: "dismissed" } });
-      useSongStore.setState({ song: null });
-    });
-    const unsubscribe = subscribeWorkspaceContinuation({
-      isWebDriver: false,
-      isTestRun: false,
-    });
-
-    render(<TourOverlay />);
-    act(() => {
+      useTourStore.setState({
+        progress: {
+          workspace: "completed",
+          daw: "completed",
+          live: "completed",
+        },
+      });
       useSongStore.setState({ song: { id: "s1" } as never });
     });
 
-    expect(screen.getByText(workspace.overview.title)).toBeTruthy();
-    unsubscribe();
+    fireEvent.click(screen.getByText(en.tutorial.launch));
+    fireEvent.click(
+      document.querySelector('[data-tour-choice="reset"]') as Element,
+    );
+
+    expect(useTourStore.getState().progress).toEqual({});
+    expect(
+      shouldOfferToursOnSessionOpen({
+        progress: useTourStore.getState().progress,
+        isTourActive: false,
+        alreadyOffered: false,
+        isWebDriver: false,
+        isTestRun: false,
+      }),
+    ).toBe(true);
   });
+});
 
-  it("no vuelve a salir una vez que el del área de trabajo tiene resultado", () => {
-    // El freno que queda: quien lo salta una vez no se lo encuentra otra vez en
-    // cada sesión que abra.
+describe("componentes que reenvían el anclaje", () => {
+  it("ControlGroup lo saca hasta el DOM", () => {
+    // `tourSteps.test.ts` permite colgar un anclaje de <ControlGroup> porque
+    // está en su lista de reenviadores. Esto es lo que respalda esa excepción:
+    // si alguien deja de pasarlo a la raíz, los seis controles del recorrido
+    // de directo dejan de resaltarse sin que nada más se entere.
+    render(
+      <ControlGroup
+        title="Vamp"
+        open={false}
+        onToggleOpen={() => undefined}
+        data-lt-tour={TOUR_TARGETS.toolbarVamp}
+      />,
+    );
+
+    expect(
+      document.querySelector(`[data-lt-tour="${TOUR_TARGETS.toolbarVamp}"]`),
+    ).not.toBeNull();
+  });
+});
+
+describe("oferta al abrir una sesión", () => {
+  /**
+   * El cableado real: la suscripción escucha al store de canciones. Se prueba
+   * con `isTestRun: false` porque en un test todos los arranques automáticos
+   * están desactivados a propósito.
+   */
+  function openSessionWith(progress: TourProgress): () => void {
     act(() => {
-      useTourStore.setState({ progress: { workspace: "dismissed" } });
+      useTourStore.setState({ progress, isMenuOpen: false });
       useSongStore.setState({ song: null });
     });
-    const unsubscribe = subscribeWorkspaceContinuation({
+    const unsubscribe = subscribeSessionTourOffer({
       isWebDriver: false,
       isTestRun: false,
     });
-
-    render(<TourOverlay />);
+    render(
+      <>
+        <TourLauncherButton />
+        <TourOverlay />
+      </>,
+    );
     act(() => {
       useSongStore.setState({ song: { id: "s1" } as never });
     });
+    return unsubscribe;
+  }
 
+  it("despliega el menú sin volver a pulsar TUTORIAL", () => {
+    const unsubscribe = openSessionWith({});
+
+    const menu = document.querySelector(".lt-tour-menu");
+    expect(menu).not.toBeNull();
+    expect(
+      Array.from(menu?.querySelectorAll("[data-tour-choice]") ?? []).length,
+    ).toBe(3);
+    // Ofrece, no impone: no arranca ningún recorrido por su cuenta.
     expect(document.querySelector(".lt-tour-root")).toBeNull();
+    unsubscribe();
+  });
+
+  it("se ofrece aunque el usuario hubiera saltado el de la pantalla de inicio", () => {
+    const unsubscribe = openSessionWith({ landing: "dismissed" });
+
+    expect(document.querySelector(".lt-tour-menu")).not.toBeNull();
+    unsubscribe();
+  });
+
+  it("sigue ofreciéndose si queda alguno por ver", () => {
+    // Haber hecho el general no agota los de montaje y directo.
+    const unsubscribe = openSessionWith({ workspace: "completed" });
+
+    expect(document.querySelector(".lt-tour-menu")).not.toBeNull();
+    unsubscribe();
+  });
+
+  it("calla cuando ya se han visto los tres", () => {
+    const unsubscribe = openSessionWith({
+      workspace: "completed",
+      daw: "dismissed",
+      live: "completed",
+    });
+
+    expect(document.querySelector(".lt-tour-menu")).toBeNull();
     unsubscribe();
   });
 });

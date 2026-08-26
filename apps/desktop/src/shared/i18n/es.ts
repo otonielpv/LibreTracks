@@ -1296,6 +1296,8 @@ const es = {
     chooseTitle: "Recorridos",
     chooseAria: "Elegir un recorrido del tutorial",
     chooseDone: "Terminado",
+    resetProgress: "Empezar de cero",
+    resetProgressHint: "Olvida lo visto y vuelve a ofrecerte los recorridos al abrir una sesión.",
     landing: {
       name: "Primeros pasos",
       summary: "Qué es una sesión y cómo crearla, abrirla o importarla.",
@@ -1315,8 +1317,9 @@ const es = {
           bodyMobile: "Abre una sesión existente buscando su archivo .ltsession. El selector del sistema llega también a la nube, así que puedes abrir la que tengas guardada en otro sitio.",
         },
         import: {
-          title: "Importar un paquete",
-          body: "Si alguien te pasa una sesión empaquetada (.ltset) o una canción suelta (.ltpkg), esto la descomprime y la deja lista como sesión nueva. Es la forma de compartir repertorio entre músicos.",
+          title: "Importar una sesión",
+          body: "Si alguien te pasa una sesión empaquetada (.ltset), esto la descomprime y la deja lista como sesión nueva. Es la forma de compartir un repertorio entero entre músicos. Ojo, aquí sólo entran sesiones: una canción suelta (.ltpkg) se importa DENTRO de una sesión ya abierta, desde el menú ARCHIVO.",
+          bodyMobile: "Si alguien te pasa una sesión empaquetada (.ltset), esto la descomprime y la deja lista como sesión nueva. Es la forma de compartir un repertorio entero entre músicos. Ojo, aquí sólo entran sesiones: una canción suelta (.ltpkg) se importa DENTRO de una sesión ya abierta, desde ARCHIVO en la barra lateral.",
         },
         importExternal: {
           title: "Traer un montaje de Reaper o Ableton",
@@ -1374,11 +1377,23 @@ const es = {
         timeline: {
           title: "La línea de tiempo",
           body: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí viven las canciones y las marcas de sección. Para meter audio puedes arrastrarlo desde el explorador directamente aquí, o pasarlo antes por la biblioteca si prefieres tenerlo ordenado. Soltando un .ltpkg entra una canción entera, y lo mismo con un proyecto de Reaper (.rpp) o Ableton (.als); las sesiones completas (.ltset) se importan desde la pantalla de inicio o el menú ARCHIVO. Con el clic derecho abres el menú de aquello que toques.",
-          bodyMobile: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí viven las canciones y las marcas. En el móvil el audio entra por la biblioteca y desde ahí lo arrastras a una pista; las canciones (.ltpkg) y las sesiones (.ltset) se importan desde ARCHIVO y desde la pantalla de inicio. Mantén pulsado un clip o una región para abrir su menú: el toque largo hace lo que el clic derecho en el ordenador.",
+          bodyMobile: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí viven las canciones y las marcas. En el móvil el audio entra por la biblioteca y desde ahí lo arrastras a una pista; las canciones sueltas (.ltpkg) se importan desde ARCHIVO con la sesión ya abierta, y las sesiones enteras (.ltset) desde la pantalla de inicio. Mantén pulsado un clip o una región para abrir su menú: el toque largo hace lo que el clic derecho en el ordenador.",
         },
         transport: {
           title: "Reproducir y parar",
-          body: "Estos botones mueven el cabezal de reproducción. El tempo y el compás de al lado son los de la canción que hay bajo el cabezal, no los del proyecto entero: cada canción lleva los suyos.",
+          body: "Ir al principio, parar, reproducir, pausar y saltar a la canción siguiente. Lo que suena depende de dónde esté el cabezal, no de qué tengas seleccionado.",
+        },
+        metronome: {
+          title: "El clic",
+          body: "Enciende y apaga el metrónomo, y en su desplegable eliges el sonido, el volumen y por qué salida sale. Lo habitual es mandarlo sólo a unos cascos: sigue el tempo de la canción que hay bajo el cabezal, y el master de la canción no lo baja.",
+        },
+        voiceGuide: {
+          title: "La voz guía",
+          body: "Anuncia en voz alta la sección que viene y hace el conteo de entrada. Sale por la ruta que tú le digas, así que puede ir a los cascos sin colarse en la mezcla de sala. Se apoya en las marcas que hayas puesto: cuanto mejor colocadas, más útil es.",
+        },
+        pads: {
+          title: "Los pads de ambiente",
+          body: "Una nota tenida de fondo en la tonalidad de la canción, para que no haya silencio entre temas. Se instalan por packs y sólo se carga en memoria la tonalidad activa. Ojo a la diferencia con el clic: los pads suenan aunque el transporte esté parado.",
         },
         viewDaw: {
           title: "Vista DAW: montar",
@@ -1394,7 +1409,7 @@ const es = {
         },
         fileMenu: {
           title: "Guardar y compartir",
-          body: "El menú ARCHIVO guarda la sesión, importa canciones sueltas y exporta el conjunto entero para llevártelo a otro equipo o pasárselo a otro músico.",
+          body: "El menú ARCHIVO guarda la sesión e importa canciones sueltas (.ltpkg) dentro de ella — que es lo que no se podía hacer desde la pantalla de inicio. También exporta: una canción como .ltpkg, o la sesión entera como .ltset para llevártela a otro equipo o pasársela a otro músico.",
         },
         fileActionsMobile: {
           title: "Guardar y compartir",
