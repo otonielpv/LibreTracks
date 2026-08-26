@@ -56,6 +56,25 @@ describe("qué recorrido toca", () => {
     expect(landingTargets).not.toContain(TOUR_TARGETS.viewModeSwitcher);
   });
 
+  it("el área de trabajo recorre las tres vistas, no las resume", () => {
+    // Contarlas en un párrafo desde la DAW no enseña nada: cada vista tiene su
+    // paso y la guía cambia a ella de verdad.
+    const visited = new Set(
+      TOURS.workspace.steps
+        .map((step) => step.viewMode)
+        .filter((mode): mode is NonNullable<typeof mode> => Boolean(mode)),
+    );
+
+    expect(visited).toEqual(new Set(["daw", "compact", "live"]));
+  });
+
+  it("la biblioteca explica sus dos botones", () => {
+    const targets = TOURS.workspace.steps.map((step) => step.target);
+
+    expect(targets).toContain(TOUR_TARGETS.libraryImport);
+    expect(targets).toContain(TOUR_TARGETS.libraryNewFolder);
+  });
+
   it("el recorrido de inicio ilumina crear, abrir e importar", () => {
     const landingTargets = TOURS.landing.steps.map((step) => step.target);
 

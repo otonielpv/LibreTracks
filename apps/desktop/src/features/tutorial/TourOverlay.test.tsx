@@ -125,18 +125,19 @@ describe("TourOverlay", () => {
     expect(document.querySelector(".lt-tour-dim")).not.toBeNull();
   });
 
-  it("la tarjeta anclada se acota al hueco disponible", () => {
-    // Sin `max-height` la tarjeta se sale por debajo del borde de la ventana y
-    // sus botones quedan fuera de alcance. Medido en la app real: 1022px de
-    // fondo en una ventana de 1009 en el paso de plantillas, a 13px de dejar de
-    // poder pulsar "Siguiente" — y mucho peor en un portátil de 13".
+  it("coloca la tarjeta junto al control, no centrada", () => {
+    // El cableado con `placeTourCard`. Que la tarjeta quepa entera en el lado
+    // elegido —y no se estruje contra la franja que quede— se prueba en
+    // `tourCardPlacement.test.ts`: aquí los rectángulos de jsdom son todos
+    // cero y no darían para nada.
     mountAnchor(TOUR_TARGETS.landingCreate);
     render(<TourOverlay />);
     startTour("landing");
     fireEvent.click(screen.getByText(en.tutorial.next));
 
     const card = document.querySelector<HTMLElement>(".lt-tour-card");
-    expect(card?.style.maxHeight).toMatch(/^\d+(\.\d+)?px$/);
+    expect(card?.style.top).toMatch(/^\d+(\.\d+)?px$/);
+    expect(card?.className).not.toContain("is-centred");
   });
 
   it("el foco no se anima al aparecer, sólo al moverse", async () => {

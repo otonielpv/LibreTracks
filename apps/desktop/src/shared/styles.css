@@ -9652,9 +9652,10 @@ textarea {
     linear-gradient(180deg, rgb(22 25 26 / 0.98), rgb(13 15 16 / 0.98));
   box-shadow: 0 28px 80px rgb(0 0 0 / 0.5);
   pointer-events: auto;
-  /* El overlay le pone un max-height calculado contra el hueco disponible.
-     Recorta aquí y deja que scrollee el cuerpo, para que la fila de botones
-     nunca se vaya fuera de la ventana. */
+  /* `placeTourCard` sólo la coloca donde cabe entera, así que esto es la red
+     de seguridad para una ventana absurdamente baja: recorta aquí y deja que
+     scrollee el cuerpo, con la fila de botones siempre visible. */
+  max-height: calc(100vh - 1.5rem);
   overflow: hidden;
 }
 

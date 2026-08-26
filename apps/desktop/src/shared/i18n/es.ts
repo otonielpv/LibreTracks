@@ -1354,8 +1354,17 @@ const es = {
         },
         libraryContents: {
           title: "Esto es la biblioteca",
-          body: "Cada fila es un archivo importado a la sesión, y las carpetas te dejan ordenarlos como quieras. Arrastra archivos desde el explorador para importarlos, y arrastra uno de aquí a una pista para crear un clip. Un archivo puede usarse en varias canciones sin duplicarse.",
-          bodyMobile: "Cada fila es un archivo importado a la sesión, y las carpetas te dejan ordenarlos como quieras. Con el botón de importar traes archivos del teléfono o de la nube, y arrastrando uno de aquí a una pista creas un clip. Un archivo puede usarse en varias canciones sin duplicarse.",
+          body: "Cada fila es un archivo de audio de la sesión, con su duración. Un mismo archivo puede usarse en varias canciones sin duplicarse: arrástralo a una pista y creas un clip. Arriba tienes las dos acciones del panel, que vemos ahora.",
+          bodyMobile: "Cada fila es un archivo de audio de la sesión, con su duración. Un mismo archivo puede usarse en varias canciones sin duplicarse: arrástralo a una pista y creas un clip. Arriba tienes las dos acciones del panel, que vemos ahora.",
+        },
+        libraryImport: {
+          title: "Importar audio",
+          body: "Trae archivos a la sesión. Se copian dentro de su carpeta, así que la sesión sigue siendo autocontenida y puedes llevártela a otro equipo sin dejarte nada suelto. Acepta wav, mp3, flac, ogg, aiff y m4a.",
+          bodyMobile: "Trae archivos a la sesión desde el teléfono o la nube. Se copian dentro de su carpeta, así que la sesión sigue siendo autocontenida y puedes moverla sin dejarte nada suelto. Acepta wav, mp3, flac, ogg, aiff y m4a.",
+        },
+        libraryFolders: {
+          title: "Carpeta",
+          body: "Crea carpetas para ordenar la biblioteca: por canción, por instrumento, como te sirva. Es organización tuya y nada más — no cambia la mezcla ni las pistas, solo dónde encuentras las cosas cuando hay cien archivos.",
         },
         timeline: {
           title: "La línea de tiempo",
@@ -1366,9 +1375,17 @@ const es = {
           title: "Reproducir y parar",
           body: "Estos botones mueven el cabezal de reproducción. El tempo y el compás de al lado son los de la canción que hay bajo el cabezal, no los del proyecto entero: cada canción lleva los suyos.",
         },
-        views: {
-          title: "Tres vistas del mismo proyecto",
-          body: "DAW para montar, Compacta para repasar el repertorio canción a canción, y Live para el escenario: botones grandes, saltos y vamp. Cambias de vista cuando quieras y el audio no se detiene.",
+        viewDaw: {
+          title: "Vista DAW: montar",
+          body: "Es donde estás ahora. Aquí se construye: pistas, clips, marcas de sección y las regiones que delimitan cada canción. Es la vista de trabajo, la de antes del ensayo. Vamos a pasar por las otras dos.",
+        },
+        viewCompact: {
+          title: "Vista Compacta: repasar el repertorio",
+          body: "Una columna por canción, con el mezclador al lado. Sirve para ver el conjunto de un vistazo, ajustar niveles canción a canción y reordenar el repertorio sin pelearte con el zoom de la línea de tiempo.",
+        },
+        viewLive: {
+          title: "Vista Live: el escenario",
+          body: "Botones grandes, pensados para acertar con prisa y poca luz: lanzar la siguiente canción, saltar a una marca, activar el vamp para repetir una sección hasta que decidas salir. Es la que dejas puesta durante el concierto. Cambiar de vista nunca detiene el audio.",
         },
         fileMenu: {
           title: "Guardar y compartir",

@@ -551,6 +551,7 @@ export function LibrarySidebarPanel({
           <button
             type="button"
             className="lt-library-folder-button"
+            data-lt-tour={TOUR_TARGETS.libraryNewFolder}
             onClick={onCreateFolder}
             disabled={!canImport || isImporting}
           >
@@ -560,6 +561,7 @@ export function LibrarySidebarPanel({
           <button
             type="button"
             className="lt-library-import-button"
+            data-lt-tour={TOUR_TARGETS.libraryImport}
             onClick={onImport}
             disabled={!canImport || isImporting}
           >

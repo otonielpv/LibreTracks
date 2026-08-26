@@ -1323,8 +1323,17 @@ const en = {
         },
         libraryContents: {
           title: "This is the library",
-          body: "Each row is a file imported into the session, and folders let you organise them however you like. Drag files in from the file manager to import them, and drag one from here onto a track to create a clip. One file can be used by several songs without being duplicated.",
-          bodyMobile: "Each row is a file imported into the session, and folders let you organise them however you like. The import button brings in files from the phone or the cloud, and dragging one onto a track creates a clip. One file can be used by several songs without being duplicated.",
+          body: "Each row is one of the session's audio files, with its duration. The same file can be used by several songs without being duplicated: drag it onto a track and you get a clip. The two panel actions are up top, and we will look at them now.",
+          bodyMobile: "Each row is one of the session's audio files, with its duration. The same file can be used by several songs without being duplicated: drag it onto a track and you get a clip. The two panel actions are up top, and we will look at them now.",
+        },
+        libraryImport: {
+          title: "Import audio",
+          body: "Brings files into the session. They are copied inside its folder, so the session stays self-contained and you can move it to another machine without leaving anything behind. Takes wav, mp3, flac, ogg, aiff and m4a.",
+          bodyMobile: "Brings files into the session from the phone or the cloud. They are copied inside its folder, so the session stays self-contained and you can move it without leaving anything behind. Takes wav, mp3, flac, ogg, aiff and m4a.",
+        },
+        libraryFolders: {
+          title: "New folder",
+          body: "Create folders to organise the library: by song, by instrument, whatever suits you. It is your filing and nothing more - it changes neither the mix nor the tracks, only how you find things once there are a hundred files.",
         },
         timeline: {
           title: "The timeline",
@@ -1335,9 +1344,17 @@ const en = {
           title: "Play and stop",
           body: "These buttons move the playhead. The tempo and time signature next to them belong to the song under the playhead, not to the whole project: every song carries its own.",
         },
-        views: {
-          title: "Three views of the same project",
-          body: "DAW to build, Compact to run through the set song by song, and Live for the stage: big buttons, jumps and vamp. Switch views whenever you like - the audio keeps playing.",
+        viewDaw: {
+          title: "DAW view: building",
+          body: "This is where you are now. Here is where things get built: tracks, clips, section markers and the regions that bound each song. It is the working view, the one for before the rehearsal. Let us pass through the other two.",
+        },
+        viewCompact: {
+          title: "Compact view: running the set",
+          body: "One column per song, with the mixer alongside. Good for seeing the whole set at a glance, trimming levels song by song and reordering the running order without fighting the timeline zoom.",
+        },
+        viewLive: {
+          title: "Live view: the stage",
+          body: "Big buttons, meant to be hit in a hurry and in bad light: launch the next song, jump to a marker, start a vamp to loop a section until you decide to leave it. This is the one you leave up during the show. Switching views never stops the audio.",
         },
         fileMenu: {
           title: "Saving and sharing",

@@ -29,6 +29,8 @@ export const TOUR_TARGETS = {
   landingCatalog: "landing-catalog",
   // Área de trabajo, con sesión abierta.
   libraryPanel: "library-panel",
+  libraryNewFolder: "library-new-folder",
+  libraryImport: "library-import",
   settingsModal: "settings-modal",
   settingsClose: "settings-close",
   topbarFileMenu: "topbar-file-menu",

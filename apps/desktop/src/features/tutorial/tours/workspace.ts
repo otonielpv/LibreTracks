@@ -9,8 +9,12 @@ import { TOUR_TARGETS } from "../tourTargets";
  * qué esto no puede vivir en el recorrido de la pantalla de inicio.
  *
  * La biblioteca y los ajustes se enseñan ABRIÉNDOLOS: el usuario pulsa, el
- * panel aparece y el paso siguiente explica lo que tiene delante. Un panel
- * cerrado descrito de memoria no se recuerda igual que uno abierto.
+ * panel aparece y los pasos siguientes explican lo que tiene delante, botón a
+ * botón. Un panel cerrado descrito de memoria no se recuerda igual.
+ *
+ * Las tres vistas se recorren de verdad: cada paso cambia a la suya (`viewMode`)
+ * y cuenta para qué sirve, en vez de describirlas en un párrafo desde la DAW. El
+ * overlay devuelve al usuario a la vista en la que estaba al terminar.
  *
  * El orden sigue el camino de trabajo real (dónde está el audio → dónde se
  * coloca → cómo se escucha → cómo se toca en directo), no el orden en que están
@@ -38,8 +42,16 @@ export const workspaceTour: TourDefinition = {
       i18nKey: "tutorial.workspace.steps.libraryContents",
     },
     {
-      // Único paso que fuerza una vista: el lienzo solo existe en la DAW. El
-      // overlay devuelve al usuario a su vista original al terminar.
+      id: "libraryImport",
+      target: TOUR_TARGETS.libraryImport,
+      i18nKey: "tutorial.workspace.steps.libraryImport",
+    },
+    {
+      id: "libraryFolders",
+      target: TOUR_TARGETS.libraryNewFolder,
+      i18nKey: "tutorial.workspace.steps.libraryFolders",
+    },
+    {
       id: "timeline",
       target: TOUR_TARGETS.timelineCanvas,
       viewMode: "daw",
@@ -52,21 +64,41 @@ export const workspaceTour: TourDefinition = {
       i18nKey: "tutorial.workspace.steps.transport",
     },
     {
-      id: "views",
+      // Las tres vistas, una por paso y cambiando de verdad a cada una. El
+      // selector existe en las tres: en DAW y Compacta lo pinta la barra de
+      // herramientas, y en Live la propia vista.
+      id: "viewDaw",
       target: TOUR_TARGETS.viewModeSwitcher,
-      i18nKey: "tutorial.workspace.steps.views",
+      viewMode: "daw",
+      i18nKey: "tutorial.workspace.steps.viewDaw",
     },
     {
+      id: "viewCompact",
+      target: TOUR_TARGETS.viewModeSwitcher,
+      viewMode: "compact",
+      i18nKey: "tutorial.workspace.steps.viewCompact",
+    },
+    {
+      id: "viewLive",
+      target: TOUR_TARGETS.viewModeSwitcher,
+      viewMode: "live",
+      i18nKey: "tutorial.workspace.steps.viewLive",
+    },
+    {
+      // Vuelve a la DAW antes de seguir: el resto del recorrido señala la barra
+      // superior y el rail, y se leen mejor con el montaje delante.
       // El menú ARCHIVO no se dibuja en móvil: guardar, importar y exportar
       // viven en el rail lateral.
       id: "fileMenu",
       target: TOUR_TARGETS.topbarFileMenu,
+      viewMode: "daw",
       platforms: ["desktop"],
       i18nKey: "tutorial.workspace.steps.fileMenu",
     },
     {
       id: "fileActionsMobile",
       target: TOUR_TARGETS.sideNavSessions,
+      viewMode: "daw",
       platforms: ["mobile"],
       i18nKey: "tutorial.workspace.steps.fileActionsMobile",
     },

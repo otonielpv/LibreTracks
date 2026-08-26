@@ -9,12 +9,9 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
-import {
-  calculatePopoverAnchor,
-  type PopoverAnchor,
-} from "../transport/panels/popoverPosition";
 import { useShortcutHint } from "../transport/keyboard/shortcutHint";
 import { useTimelineUIStore, type ViewMode } from "../transport/uiStore";
+import { placeTourCard, type CardPosition } from "./tourCardPlacement";
 import { isWaitSatisfied, shouldAutoStartLandingTour, stepBodyKeys } from "./tourModel";
 import {
   currentTourPlatform,
@@ -83,7 +80,7 @@ export function TourOverlay() {
 
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
-  const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
+  const [cardPosition, setCardPosition] = useState<CardPosition | null>(null);
   const [spotlightSettled, setSpotlightSettled] = useState(false);
   const [waitSatisfied, setWaitSatisfied] = useState(false);
   const restoreViewModeRef = useRef<ViewMode | null>(null);
@@ -222,17 +219,18 @@ export function TourOverlay() {
   // hace falta calcular nada.
   useLayoutEffect(() => {
     if (!activeTourId || platform === "mobile" || !targetRect) {
-      setAnchor(null);
+      setCardPosition(null);
       return;
     }
     const card = cardRef.current;
-    setAnchor(
-      calculatePopoverAnchor(
+    setCardPosition(
+      placeTourCard(
         targetRect,
-        card?.offsetWidth || FALLBACK_CARD_WIDTH,
-        card?.scrollHeight || FALLBACK_CARD_HEIGHT,
-        window.innerWidth,
-        window.innerHeight,
+        {
+          width: card?.offsetWidth || FALLBACK_CARD_WIDTH,
+          height: card?.scrollHeight || FALLBACK_CARD_HEIGHT,
+        },
+        { width: window.innerWidth, height: window.innerHeight },
       ),
     );
   }, [activeTourId, platform, targetRect, stepIndex]);
@@ -292,23 +290,19 @@ export function TourOverlay() {
     targetRect !== null &&
     targetRect.bottom > window.innerHeight * 0.55;
 
-  // El alto máximo NO es decorativo: sin él la tarjeta se sale por debajo del
-  // borde de la ventana (medido: 1022px de fondo en una ventana de 1009) y sus
-  // botones quedan fuera de alcance. El cuerpo hace scroll y la fila de
-  // acciones se queda siempre visible.
+  // `placeTourCard` sólo devuelve una posición donde la tarjeta cabe ENTERA;
+  // si no cabe en ningún lado devuelve null y se centra a su tamaño natural.
+  // Por eso aquí no hay `maxHeight`: recortarla contra el hueco disponible es
+  // lo que dejaba el texto en una línea cuando el objetivo era grande.
   const cardStyle: CSSProperties =
-    !isDocked && anchor
-      ? {
-          top: `${anchor.top}px`,
-          left: `${anchor.left}px`,
-          maxHeight: `${anchor.maxHeight}px`,
-        }
+    !isDocked && cardPosition
+      ? { top: `${cardPosition.top}px`, left: `${cardPosition.left}px` }
       : {};
 
   const cardClassName = [
     "lt-tour-card",
     isDocked ? (dockTop ? "is-docked-top" : "is-docked-bottom") : null,
-    !isDocked && !anchor ? "is-centred" : null,
+    !isDocked && !cardPosition ? "is-centred" : null,
   ]
     .filter(Boolean)
     .join(" ");
