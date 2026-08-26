@@ -666,6 +666,19 @@ pub fn read_diagnostics_log(
     })
 }
 
+/// Remove the accumulated contents of a diagnostics log. The audio engine
+/// opens its file in append mode for each individual entry, so deleting it is
+/// safe while the engine is running; the next entry simply creates a new file.
+#[tauri::command]
+pub fn clear_diagnostics_log(kind: String) -> Result<(), String> {
+    let path = diagnostics_log_path(&kind)?;
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// Save a diagnostics log wherever the user wants it, so they can attach the
 /// WHOLE file to a bug report instead of pasting a clipboard excerpt. On
 /// Android this is the only way to get the file out of the app's private

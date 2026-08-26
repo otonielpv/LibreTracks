@@ -961,6 +961,43 @@ TEST_CASE("LRU eviction removes oldest .rf64 files when the budget is exceeded")
     CHECK(stats.total_bytes <= 2u * 1024u * 1024u); // slack: latest write is ~1 MiB
 }
 
+TEST_CASE("disk LRU never removes caches referenced by the active session") {
+    ScopedCacheDir scope("lru_active_session");
+    ScopedEnv limit("LIBRETRACKS_SOURCE_DISK_CACHE_MB", "1");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    // Each int16 WAV is about 768 KiB, so two active sources exceed the 1 MiB
+    // soft budget. Playback correctness must win over evicting either one.
+    constexpr Frame kFrames = 65536 * 3;
+    const auto samples = make_reference_audio(kFrames, kChannels);
+
+    SourceManager manager;
+    manager.register_source("active-a", "active-a.wav");
+    REQUIRE(manager.store_decoded_source(
+        "active-a", samples, kChannels, kSampleRate, kFrames).is_ok());
+    manager.register_source("active-b", "active-b.wav");
+    REQUIRE(manager.store_decoded_source(
+        "active-b", samples, kChannels, kSampleRate, kFrames).is_ok());
+
+    const auto stats = stat_cache_dir(
+        scope.path() + std::string(1, kTestPathSep) + "source-cache");
+    CHECK(stats.file_count == 2);
+    CHECK(stats.total_bytes > 1024u * 1024u);
+
+    // Force A to come from disk after B has triggered the eviction sweep. The
+    // old behaviour had unlinked A here, leaving permanent silence/no meter.
+    const Frame tail = kFrames - kDefaultBlockFrames;
+    require_ready_range(manager, "active-a", tail, kDefaultBlockFrames);
+    const auto source = manager.get_shared("active-a");
+    REQUIRE(source);
+    const auto audio = read_planar(*source, tail, kDefaultBlockFrames);
+    CHECK(std::any_of(audio.begin(), audio.end(), [](float sample) {
+        return std::abs(sample) > 0.001f;
+    }));
+}
+
 TEST_CASE("TrackRenderer output is identical for memory and streaming source paths") {
     constexpr int kChannels = 2;
     constexpr int kSampleRate = 48000;

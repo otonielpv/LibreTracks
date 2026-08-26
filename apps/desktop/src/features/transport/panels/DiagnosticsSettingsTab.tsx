@@ -6,12 +6,14 @@ import type {
   DiagnosticsLogView,
 } from "@libretracks/shared/desktopApi";
 import {
+  clearDiagnosticsLog,
   isMobileApp,
   readDiagnosticsLog,
   readErrorLog,
   revealErrorLog,
   saveDiagnosticsLog,
 } from "@libretracks/shared/desktopApi";
+import { confirmDialog } from "../../../shared/dialog/dialogService";
 import { formatUserFacingError } from "../errors/formatTransportError";
 
 function formatLogBytes(bytes: number) {
@@ -77,6 +79,37 @@ export function DiagnosticsSettingsTab() {
         );
       } catch (error) {
         showError(error);
+      }
+    })();
+  };
+
+  const handleClearEngineLog = () => {
+    void (async () => {
+      const confirmed = await confirmDialog(
+        t("transport.settingsModal.diagnosticsClearConfirm", {
+          defaultValue:
+            "Delete the entire audio engine log? A new file will start with the next diagnostics.",
+        }),
+      );
+      if (!confirmed) return;
+
+      setIsLoadingLog(true);
+      try {
+        await clearDiagnosticsLog("engine");
+        if (openLog === "engine") {
+          setLogView(await readDiagnosticsLog("engine"));
+        }
+        setStatus(
+          <small className="lt-update-check-status lt-update-check-status--new">
+            {t("transport.settingsModal.diagnosticsCleared", {
+              defaultValue: "Audio engine log deleted.",
+            })}
+          </small>,
+        );
+      } catch (error) {
+        showError(error);
+      } finally {
+        setIsLoadingLog(false);
       }
     })();
   };
@@ -218,6 +251,16 @@ export function DiagnosticsSettingsTab() {
           >
             {t("transport.settingsModal.diagnosticsSave", {
               defaultValue: "Save log…",
+            })}
+          </button>
+          <button
+            type="button"
+            className="lt-secondary-button"
+            disabled={isLoadingLog}
+            onClick={handleClearEngineLog}
+          >
+            {t("transport.settingsModal.diagnosticsClear", {
+              defaultValue: "Delete log",
             })}
           </button>
         </div>

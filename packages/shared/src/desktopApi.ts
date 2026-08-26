@@ -498,6 +498,11 @@ export async function readDiagnosticsLog(
   });
 }
 
+/** Delete the accumulated contents; the logger recreates the file on demand. */
+export async function clearDiagnosticsLog(kind: DiagnosticsLogKind): Promise<void> {
+  await invokeCommand("clear_diagnostics_log", { kind });
+}
+
 /** Save the WHOLE log wherever the user picks. False when they cancel. */
 export async function saveDiagnosticsLog(
   kind: DiagnosticsLogKind,

@@ -14,8 +14,11 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #if defined(_WIN32)
@@ -403,13 +406,37 @@ std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
     return out;
 }
 
-// Ensure cache dir + the projected new file size stay below the configured
-// budget. Deletes the oldest .rf64 files (by mtime) until the projected total
-// fits. Always preserves the file at `protect_path` — the one we're about to
-// reuse — so a re-open can't evict its own cache mid-flight.
+// Cache writes and eviction share this registry. A writer publishes its Entry
+// before releasing the lease, so an eviction always sees the path either as
+// in-progress or as part of the active session. The disk budget is therefore
+// soft for files in use: exceeding it is preferable to silencing a track.
+std::mutex g_cache_eviction_mtx;
+std::unordered_map<std::string, std::size_t> g_cache_writes_in_progress;
+
+class CacheWriteLease {
+public:
+    explicit CacheWriteLease(std::string path) : path_(std::move(path)) {
+        std::lock_guard lock(g_cache_eviction_mtx);
+        ++g_cache_writes_in_progress[path_];
+    }
+
+    ~CacheWriteLease() {
+        std::lock_guard lock(g_cache_eviction_mtx);
+        const auto it = g_cache_writes_in_progress.find(path_);
+        if (it != g_cache_writes_in_progress.end() && --it->second == 0)
+            g_cache_writes_in_progress.erase(it);
+    }
+
+    CacheWriteLease(const CacheWriteLease&) = delete;
+    CacheWriteLease& operator=(const CacheWriteLease&) = delete;
+
+private:
+    std::string path_;
+};
+
 void evict_cache_lru(const std::string& dir,
                       size_t projected_new_bytes,
-                      const std::string& protect_path) {
+                      const std::unordered_set<std::string>& protected_paths) {
     const size_t limit = source_disk_cache_limit_bytes();
     if (limit == 0)
         return; // user-disabled (LIBRETRACKS_SOURCE_DISK_CACHE_MB=0)
@@ -426,7 +453,7 @@ void evict_cache_lru(const std::string& dir,
     for (const auto& e : entries) {
         if (total <= static_cast<long long>(limit))
             break;
-        if (!protect_path.empty() && e.path == protect_path)
+        if (protected_paths.find(e.path) != protected_paths.end())
             continue;
         if (std::remove(e.path.c_str()) == 0)
             total -= e.size_bytes;
@@ -834,6 +861,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
 
     const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
     const size_t projected_bytes = samples.size() * sizeof(float);
+    CacheWriteLease cache_write_lease(cache_file);
     try {
         report_progress(86);
         if (!create_directories_compat(parent_path_compat(cache_file)))
@@ -841,7 +869,21 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         // Keep the on-disk cache under the configured budget before we add
         // another file to it. Protects the path we're about to write so it
         // can't be evicted by itself if it happened to be the oldest entry.
-        evict_cache_lru(parent_path_compat(cache_file), projected_bytes, cache_file);
+        {
+            std::lock_guard eviction_lock(g_cache_eviction_mtx);
+            std::unordered_set<std::string> protected_paths;
+            for (const auto& [path, count] : g_cache_writes_in_progress) {
+                (void)count;
+                protected_paths.insert(path);
+            }
+            for (const auto& [id, entry] : *load_entries()) {
+                (void)id;
+                if (!entry.cache_file_path.empty())
+                    protected_paths.insert(entry.cache_file_path);
+            }
+            evict_cache_lru(parent_path_compat(cache_file), projected_bytes,
+                            protected_paths);
+        }
 #if LT_ENGINE_USE_LIBSNDFILE
         SF_INFO info{};
         info.channels = channel_count;
@@ -985,6 +1027,7 @@ Result<void> SourceManager::decode_and_store_streaming(
         channel_count, fi.original_sample_rate, target_sample_rate);
 
     const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
+    CacheWriteLease cache_write_lease(cache_file);
     // Rough projected size for the LRU pre-eviction (output frames ~ input *
     // ratio); good enough to keep the budget honoured.
     const double ratio = fi.original_sample_rate > 0
@@ -996,7 +1039,21 @@ Result<void> SourceManager::decode_and_store_streaming(
 
     if (!create_directories_compat(parent_path_compat(cache_file)))
         return Result<void>::err("Could not create PCM cache directory: " + cache_file);
-    evict_cache_lru(parent_path_compat(cache_file), projected_bytes, cache_file);
+    {
+        std::lock_guard eviction_lock(g_cache_eviction_mtx);
+        std::unordered_set<std::string> protected_paths;
+        for (const auto& [path, count] : g_cache_writes_in_progress) {
+            (void)count;
+            protected_paths.insert(path);
+        }
+        for (const auto& [id, entry] : *load_entries()) {
+            (void)id;
+            if (!entry.cache_file_path.empty())
+                protected_paths.insert(entry.cache_file_path);
+        }
+        evict_cache_lru(parent_path_compat(cache_file), projected_bytes,
+                        protected_paths);
+    }
 
     SF_INFO info{};
     info.channels = channel_count;
@@ -1914,7 +1971,7 @@ void SourceManager::fill_worker_loop() const {
 #endif
     // Owned by this thread only — see FillReader's comment.
     //
-    // A single retained reader thrashes when the queue alternates across stems:
+    // A single retained handle thrashes when the queue alternates across stems:
     // every switch closed one cache file and opened another, so a 27-stem
     // session paid an open per block instead of an open per file. The pool
     // keeps one handle per source instead.
@@ -1922,6 +1979,9 @@ void SourceManager::fill_worker_loop() const {
     // The bound is a file-descriptor budget, not a memory one. Keep ample room
     // for WebKit, imported source files and decode writers on iOS. With two
     // handheld workers this caps retained cache handles at 32 rather than 64.
+    // Reader STATE is deliberately not capped: its retry deadline must survive
+    // handle rotation, otherwise 27 missing sources continuously reset to
+    // attempt #1 and recreate the open/log storm.
     constexpr std::size_t kMaxReadersPerWorker = 16;
     std::unordered_map<Id, std::unique_ptr<FillReader>> readers;
     uint64_t reader_clock = 0;
@@ -1988,14 +2048,6 @@ void SourceManager::fill_worker_loop() const {
         }
         auto reader_it = readers.find(key.source_id);
         if (reader_it == readers.end()) {
-            if (readers.size() >= kMaxReadersPerWorker) {
-                const auto lru = std::min_element(
-                    readers.begin(), readers.end(),
-                    [](const auto& lhs, const auto& rhs) {
-                        return lhs.second->last_used < rhs.second->last_used;
-                    });
-                readers.erase(lru);
-            }
             auto reader = std::make_unique<FillReader>();
             reader->generation = reader_generation;
             reader->open_counter = &fill_readers_open_;
@@ -2005,6 +2057,23 @@ void SourceManager::fill_worker_loop() const {
             reader_it = readers.emplace(key.source_id, std::move(reader)).first;
         }
         reader_it->second->last_used = ++reader_clock;
+        if (!reader_it->second->handle) {
+            const std::size_t open_handles = static_cast<std::size_t>(std::count_if(
+                readers.begin(), readers.end(),
+                [](const auto& item) { return item.second->handle != nullptr; }));
+            if (open_handles >= kMaxReadersPerWorker) {
+                FillReader* lru = nullptr;
+                for (const auto& [id, candidate] : readers) {
+                    (void)id;
+                    if (!candidate->handle || candidate.get() == reader_it->second.get())
+                        continue;
+                    if (!lru || candidate->last_used < lru->last_used)
+                        lru = candidate.get();
+                }
+                if (lru)
+                    lru->close();
+            }
+        }
         fill_blocks_from_disk(key.source_id, block_batch, *reader_it->second);
     }
 }
