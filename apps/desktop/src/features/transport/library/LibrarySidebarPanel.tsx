@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 import { isMobileApp, type LibraryImportProgressEvent } from "../desktopApi";
 import { DRAG_THRESHOLD_PX } from "../constants";
@@ -539,7 +540,7 @@ export function LibrarySidebarPanel({
   };
 
   return (
-    <aside className="lt-library-panel" aria-label={t("library.panelAria")}>
+    <aside className="lt-library-panel" data-lt-tour={TOUR_TARGETS.libraryPanel} aria-label={t("library.panelAria")}>
       <div className="lt-library-panel-header">
         <div>
           <span className="lt-library-panel-eyebrow">{t("library.eyebrow")}</span>

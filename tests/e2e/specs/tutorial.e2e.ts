@@ -5,25 +5,43 @@ import AppPage from "../pageobjects/app.page.js";
  * The guided tour, driven through the real app.
  *
  * This is the layer jsdom cannot reach. The unit tests prove the step data, the
- * store and the context split; what they cannot prove is that a step actually
- * finds its control on screen and gets a usable rectangle back — jsdom returns
- * all-zero rects for everything, so a spotlight "renders" there even when it is
- * anchored to nothing. Here the geometry is real, and the spotlight is checked
- * against the button it claims to be highlighting.
+ * store, the context split and the wait conditions; what they cannot prove is
+ * that a step finds its control on screen and gets a usable rectangle back
+ * (jsdom returns all-zero rects, so a spotlight "renders" even when anchored to
+ * nothing), nor that a real click actually reaches a control through the hole
+ * the shield opens for it.
  *
- * Selectors go through `data-lt-tour` / `data-tour-id`, not aria-labels or
+ * Selectors go through `data-lt-tour` / `data-tour-*`, not aria-labels or
  * visible copy: those are the tour's own contract and, unlike the labels, they
  * do not change with the UI language (this app boots in Spanish on the runner).
  *
- * The tour is exercised from the side-rail button on purpose. Auto-start is
- * suppressed under WebDriver — otherwise it would cover the landing screen and
- * take every other spec down with it — and the first assertion here is that
- * this suppression actually holds.
+ * Auto-start is suppressed under WebDriver — otherwise it would cover the
+ * landing screen and take every other spec down with it — and the first
+ * assertion here is that this suppression holds.
  *
  * Everything below runs with NO session open, so it covers the landing tour.
  * The work-area tour is the same machinery pointed at controls that only exist
  * once a project is loaded; its step data is covered by the unit tests.
  */
+
+/** Clicks the card's main button, whatever it currently says. */
+async function advance(): Promise<void> {
+  const buttons = await $$(".lt-tour-actions-main button").getElements();
+  await buttons[buttons.length - 1].click();
+}
+
+/** Walks the tour forward until it reaches `stepId`. */
+async function advanceUntil(stepId: string): Promise<void> {
+  for (let guard = 0; guard < 20; guard += 1) {
+    const current = await (await $(".lt-tour-root")).getAttribute(
+      "data-tour-step",
+    );
+    if (current === stepId) return;
+    await advance();
+  }
+  throw new Error(`The tour never reached the "${stepId}" step`);
+}
+
 describe("Guided tour", () => {
   before(async () => {
     await AppPage.waitUntilBooted();
@@ -62,7 +80,7 @@ describe("Guided tour", () => {
   });
 
   it("spotlights the real Create button, not an approximation", async () => {
-    await (await $(".lt-tour-actions button.is-primary")).click();
+    await advance();
 
     const root = await $(".lt-tour-root");
     await expect(root).toHaveAttribute("data-tour-step", "create");
@@ -75,9 +93,14 @@ describe("Guided tour", () => {
         "visible element",
     });
 
-    // The cut-out must actually sit over the Create button — a spotlight in the
-    // wrong place still "exists", which is exactly the failure jsdom cannot see.
-    // The overlay insets the hole by SPOTLIGHT_PADDING (6px) on every side.
+    // The cut-out must sit over the Create button — a spotlight in the wrong
+    // place still "exists", which is exactly the failure jsdom cannot see. The
+    // overlay insets the hole by SPOTLIGHT_PADDING (6px) on every side.
+    //
+    // Measured with no settling wait on purpose: the first spotlight must NOT
+    // animate into place. It used to, flying in from the corner over 160ms
+    // because the CSS transition also applied to its first paint, and this
+    // assertion is what caught it.
     const padding = 6;
     const button = await $('[data-lt-tour="landing-create"]');
     const buttonBox = await button.getLocation();
@@ -95,15 +118,60 @@ describe("Guided tour", () => {
     ).toBeLessThan(2);
   });
 
+  it("lets the user actually open the settings, and moves on by itself", async () => {
+    await advanceUntil("openSettings");
+
+    const root = await $(".lt-tour-root");
+    await expect(root).toHaveAttribute("data-tour-awaiting", "true");
+
+    // The click has to pass THROUGH the overlay: on an interactive step the
+    // shield is split into four bands around the control instead of covering
+    // the screen. If that hole were missing this click would hit the shield and
+    // the tour would sit here forever.
+    await (await $('[data-lt-tour="side-nav-settings"]')).click();
+
+    await browser.waitUntil(
+      async () =>
+        (await (await $(".lt-tour-root")).getAttribute("data-tour-step")) ===
+        "settingsTour",
+      {
+        timeout: 10_000,
+        timeoutMsg:
+          "Opening the settings did not advance the tour: either the click " +
+          "never reached the button or the wait condition is not observing it",
+      },
+    );
+    await expect($('[data-lt-tour="settings-modal"]')).toBeDisplayed();
+
+    // And closing it again releases the next step, which is the mirror
+    // condition (`present: false`).
+    await advance();
+    await expect(await $(".lt-tour-root")).toHaveAttribute(
+      "data-tour-step",
+      "closeSettings",
+    );
+    await (await $('[data-lt-tour="settings-close"]')).click();
+
+    await browser.waitUntil(
+      async () =>
+        (await (await $(".lt-tour-root")).getAttribute("data-tour-step")) ===
+        "next",
+      {
+        timeout: 10_000,
+        timeoutMsg: "Closing the settings did not advance the tour",
+      },
+    );
+  });
+
   it("walks to the end and closes itself", async () => {
-    // One dot per step the platform actually sees, so the walk does not hardcode
-    // a count that changes whenever a step is added.
+    // One dot per step the platform actually sees, so the walk does not
+    // hardcode a count that changes whenever a step is added.
     const totalSteps = (await $$(".lt-tour-dots span").getElements()).length;
     expect(totalSteps).toBeGreaterThan(1);
 
-    // The tour is already on step 2 from the previous test.
-    for (let remaining = totalSteps - 1; remaining > 0; remaining -= 1) {
-      await (await $(".lt-tour-actions button.is-primary")).click();
+    for (let guard = 0; guard < totalSteps; guard += 1) {
+      if (!(await $(".lt-tour-root").isExisting())) break;
+      await advance();
     }
 
     await $(".lt-tour-root").waitForExist({

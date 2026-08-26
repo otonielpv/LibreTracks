@@ -287,7 +287,7 @@ beforeEach(async () => {
     activeTourId: null,
     stepIndex: 0,
     steps: [],
-    seenTours: ["landing", "workspace"],
+    progress: { landing: "dismissed", workspace: "dismissed" },
   });
   vi.clearAllMocks();
   vi.restoreAllMocks();

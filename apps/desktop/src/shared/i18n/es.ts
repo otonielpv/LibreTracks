@@ -1290,13 +1290,15 @@ const es = {
     back: "Atrás",
     finish: "Terminar",
     skip: "Saltar guía",
+    skipStep: "Saltar este paso",
+    waiting: "Te toca a ti: pulsa el control iluminado y la guía sigue sola.",
     shortcutHint: "Atajo: {{binding}}",
     landing: {
       name: "Primeros pasos",
       steps: {
         welcome: {
           title: "Bienvenido a LibreTracks",
-          body: "LibreTracks reproduce tus pistas de acompañamiento en directo: un repertorio entero, cada canción con sus pistas, sus marcas y sus secciones, listo para lanzarlo sin pelearte con el ordenador. Esta guía te enseña esta pantalla; hay otra para el área de trabajo cuando abras una sesión.",
+          body: "LibreTracks reproduce tus pistas de acompañamiento en directo: un repertorio entero, cada canción con sus pistas, sus marcas y sus secciones, listo para lanzarlo sin pelearte con el ordenador. Esta guía te enseña esta pantalla; cuando abras una sesión, seguirá sola con el área de trabajo.",
         },
         create: {
           title: "Crear una sesión",
@@ -1320,14 +1322,22 @@ const es = {
           title: "Plantillas y sesiones recientes",
           body: "Una plantilla lleva solo la estructura —pistas, carpetas y rutas de salida— sin audio ni mezcla: úsala para que cada montaje nuevo salga igual. Debajo tienes las últimas sesiones que has abierto, a un toque.",
         },
-        audio: {
-          title: "Configura el audio antes del ensayo",
-          body: "Merece la pena entrar aquí antes de montar nada: eliges la tarjeta de sonido y a qué salidas va cada cosa, porque la mezcla, el clic y la voz guía pueden ir por caminos distintos y así el clic solo lo oye quien lleva los cascos.",
-          bodyMobile: "Merece la pena entrar aquí antes de montar nada: eliges la salida de audio y a qué destino va cada cosa, porque la mezcla, el clic y la voz guía pueden ir por caminos distintos. Si conectas una interfaz por USB, revísalo aquí.",
+        openSettings: {
+          title: "Abre la configuración",
+          body: "Antes de montar nada conviene dejar el audio listo. Ábrela y le echamos un vistazo por dentro.",
+        },
+        settingsTour: {
+          title: "Qué hay aquí dentro",
+          body: "En Audio eliges la tarjeta de sonido y a qué salidas va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos, y por eso el clic solo lo oye quien lleva los cascos. En MIDI conectas pedaleras y controladores, y en Atajos cambias las teclas a tu gusto.",
+          bodyMobile: "En Audio eliges la salida y a qué destino va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos. Si conectas una interfaz por USB, es aquí donde aparece. En MIDI conectas pedaleras y controladores.",
+        },
+        closeSettings: {
+          title: "Ciérrala para seguir",
+          body: "Cuando la cierres continuamos. Puedes volver a esta pantalla siempre que quieras desde el mismo botón.",
         },
         next: {
           title: "El siguiente paso",
-          body: "Cuando tengas una sesión abierta, vuelve a pulsar GUÍA: el recorrido cambia y te enseña el área de trabajo —la biblioteca, la línea de tiempo, el transporte y las tres vistas—, que ahora mismo no existe todavía.",
+          body: "Ya puedes crear o abrir una sesión. En cuanto lo hagas, la guía continúa sola con el área de trabajo: la biblioteca, la línea de tiempo, el transporte y las tres vistas. Y si prefieres volver a ella más tarde, este botón la reabre.",
         },
       },
     },
@@ -1336,17 +1346,21 @@ const es = {
       steps: {
         overview: {
           title: "Ya tienes sesión abierta",
-          body: "Una sesión contiene varias canciones puestas una detrás de otra en la misma línea de tiempo. Cada canción tiene sus pistas, su tempo, su tonalidad y sus marcas de sección. Este recorrido te enseña dónde está cada cosa.",
+          body: "Una sesión contiene varias canciones puestas una detrás de otra en la misma línea de tiempo. Cada canción tiene sus pistas, su tempo, su tonalidad y sus marcas de sección. Vamos a ver dónde está cada cosa, abriendo los paneles sobre la marcha.",
         },
-        library: {
-          title: "La biblioteca guarda tu audio",
-          body: "Aquí vive el audio de la sesión, separado de las canciones que lo usan. Arrastra archivos desde el explorador para importarlos y después suéltalos sobre una pista para crear un clip.",
-          bodyMobile: "Aquí vive el audio de la sesión, separado de las canciones que lo usan. Usa el botón de importar para traer archivos del teléfono o de la nube y después arrástralos a una pista para crear un clip.",
+        openLibrary: {
+          title: "Abre la biblioteca",
+          body: "El audio de la sesión vive en la biblioteca, separado de las canciones que lo usan. Ábrela y vemos qué hay dentro.",
+        },
+        libraryContents: {
+          title: "Esto es la biblioteca",
+          body: "Cada fila es un archivo importado a la sesión, y las carpetas te dejan ordenarlos como quieras. Arrastra archivos desde el explorador para importarlos, y arrastra uno de aquí a una pista para crear un clip. Un archivo puede usarse en varias canciones sin duplicarse.",
+          bodyMobile: "Cada fila es un archivo importado a la sesión, y las carpetas te dejan ordenarlos como quieras. Con el botón de importar traes archivos del teléfono o de la nube, y arrastrando uno de aquí a una pista creas un clip. Un archivo puede usarse en varias canciones sin duplicarse.",
         },
         timeline: {
           title: "La línea de tiempo",
-          body: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí es donde viven las canciones y las marcas de sección. Con el clic derecho abres el menú de aquello que toques.",
-          bodyMobile: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí viven las canciones y las marcas. Mantén pulsado un clip o una región para abrir su menú: el toque largo hace lo que el clic derecho en el ordenador.",
+          body: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí viven las canciones y las marcas de sección. Para meter audio puedes arrastrarlo desde el explorador directamente aquí, o pasarlo antes por la biblioteca si prefieres tenerlo ordenado. Soltando un .ltpkg entra una canción entera, y lo mismo con un proyecto de Reaper (.rpp) o Ableton (.als); las sesiones completas (.ltset) se importan desde la pantalla de inicio o el menú ARCHIVO. Con el clic derecho abres el menú de aquello que toques.",
+          bodyMobile: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí viven las canciones y las marcas. En el móvil el audio entra por la biblioteca y desde ahí lo arrastras a una pista; las canciones (.ltpkg) y las sesiones (.ltset) se importan desde ARCHIVO y desde la pantalla de inicio. Mantén pulsado un clip o una región para abrir su menú: el toque largo hace lo que el clic derecho en el ordenador.",
         },
         transport: {
           title: "Reproducir y parar",
@@ -1364,10 +1378,18 @@ const es = {
           title: "Guardar y compartir",
           body: "En el rail tienes SESIONES para volver a la pantalla de inicio, GUARDAR y ARCHIVO, que es desde donde importas canciones y exportas la sesión entera.",
         },
-        settings: {
+        openSettings: {
+          title: "Abre la configuración",
+          body: "Aquí es donde se prepara el equipo antes de tocar. Ábrela y la vemos por dentro.",
+        },
+        settingsTour: {
           title: "Audio, MIDI y atajos",
-          body: "Elige la tarjeta de sonido y a qué salidas va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos. Aquí están también el MIDI y los atajos de teclado, que puedes cambiar a tu gusto.",
-          bodyMobile: "Elige la salida de audio y a qué destino va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos. Si conectas una interfaz por USB, revisa esta pantalla antes de empezar.",
+          body: "En Audio eliges la tarjeta de sonido y a qué salidas va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos, y por eso el clic solo lo oye quien lleva los cascos. En MIDI conectas pedaleras y controladores, y en Atajos cambias las teclas a tu gusto.",
+          bodyMobile: "En Audio eliges la salida y a qué destino va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos. Si conectas una interfaz por USB, es aquí donde aparece. En MIDI conectas pedaleras y controladores.",
+        },
+        closeSettings: {
+          title: "Ciérrala para seguir",
+          body: "Cuando la cierres continuamos con lo que queda del recorrido.",
         },
         remote: {
           title: "El móvil como mando",

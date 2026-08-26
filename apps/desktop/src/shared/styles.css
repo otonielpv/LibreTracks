@@ -9549,11 +9549,22 @@ textarea {
 }
 
 /* Traga los clics para que un toque perdido durante la guía no edite el
-   proyecto. Va debajo del foco y de la tarjeta. */
+   proyecto. Va debajo del foco y de la tarjeta.
+
+   En los pasos interactivos NO se pinta uno solo a pantalla completa: el
+   overlay dibuja cuatro bandas alrededor del control iluminado y le deja el
+   hueco, que es lo que permite pulsarlo de verdad. Por eso la posición la fija
+   el inline style y `inset: 0` vive en el modificador. */
 .lt-tour-shield {
   position: absolute;
-  inset: 0;
   pointer-events: auto;
+}
+
+.lt-tour-shield.is-full {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
 }
 
 /* Oscurecido plano, para los pasos sin elemento que iluminar. */
@@ -9574,11 +9585,56 @@ textarea {
     0 0 0 1px rgb(87 241 219 / 0.55),
     0 0 0 9999px rgb(4 7 8 / 0.76);
   pointer-events: none;
+}
+
+/* El foco se desliza al pasar de un control a otro, pero NO al aparecer: con la
+   transición puesta desde el primer pintado entraba volando desde la esquina
+   (0,0), porque su posición inicial computada es `auto`. El overlay añade esta
+   clase un frame después de colocarlo. */
+.lt-tour-spotlight.is-settled {
   transition:
     top 160ms ease,
     left 160ms ease,
     width 160ms ease,
     height 160ms ease;
+}
+
+/* Paso interactivo esperando al usuario: el anillo late para que se vea que
+   hay que pulsar ahí. En un pseudo-elemento y no en el box-shadow del foco,
+   que arrastra una sombra de 9999px y repintaría media pantalla por frame. */
+.lt-tour-spotlight.is-awaiting::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  bottom: -4px;
+  left: -4px;
+  border: 2px solid #57f1db;
+  border-radius: 6px;
+  animation: lt-tour-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes lt-tour-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.03);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-tour-spotlight.is-settled {
+    transition: none;
+  }
+
+  .lt-tour-spotlight.is-awaiting::after {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 
 .lt-tour-card {
@@ -9636,6 +9692,24 @@ textarea {
   color: rgb(87 241 219 / 0.9);
   font: 700 0.72rem/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.06em;
+}
+
+/* "Te toca a ti": el aviso de que el paso espera una acción real. */
+.lt-tour-waiting {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid rgb(87 241 219 / 0.3);
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.1);
+  color: #57f1db;
+  font: 600 0.82rem/1.35 "Space Grotesk", sans-serif;
+}
+
+.lt-tour-waiting .material-symbols-outlined {
+  font-size: 16px;
 }
 
 .lt-tour-dots {

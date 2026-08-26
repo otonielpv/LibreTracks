@@ -1259,13 +1259,15 @@ const en = {
     back: "Back",
     finish: "Finish",
     skip: "Skip guide",
+    skipStep: "Skip this step",
+    waiting: "Your turn: use the highlighted control and the guide moves on by itself.",
     shortcutHint: "Shortcut: {{binding}}",
     landing: {
       name: "Getting started",
       steps: {
         welcome: {
           title: "Welcome to LibreTracks",
-          body: "LibreTracks plays your backing tracks live: a whole set list, each song with its own tracks, markers and sections, ready to launch without fighting the computer. This guide covers this screen; there is another one for the work area once you open a session.",
+          body: "LibreTracks plays your backing tracks live: a whole set list, each song with its own tracks, markers and sections, ready to launch without fighting the computer. This guide covers this screen; open a session and it carries on by itself with the work area.",
         },
         create: {
           title: "Create a session",
@@ -1289,14 +1291,22 @@ const en = {
           title: "Templates and recent sessions",
           body: "A template carries only the structure - tracks, folders and output routing - with no audio and no mix, so every new build starts the same way. Below it are the sessions you opened most recently, one click away.",
         },
-        audio: {
-          title: "Set up audio before the rehearsal",
-          body: "Worth a visit before you build anything: pick the sound card and where each thing goes, because the mix, the click and the voice guide can take separate outputs - that is how only the person wearing in-ears hears the click.",
-          bodyMobile: "Worth a visit before you build anything: pick the audio output and where each thing goes, because the mix, the click and the voice guide can take separate destinations. If you plug in a USB interface, check it here.",
+        openSettings: {
+          title: "Open the settings",
+          body: "Worth getting audio ready before you build anything. Open it and we will look inside.",
+        },
+        settingsTour: {
+          title: "What lives in here",
+          body: "Audio is where you pick the sound card and where each thing goes: the mix, the click and the voice guide can take separate outputs, which is how only the person wearing in-ears hears the click. MIDI is where footswitches and controllers connect, and Shortcuts lets you rebind the keys.",
+          bodyMobile: "Audio is where you pick the output and where each thing goes: the mix, the click and the voice guide can take separate destinations. A USB interface shows up here. MIDI is where footswitches and controllers connect.",
+        },
+        closeSettings: {
+          title: "Close it to carry on",
+          body: "We continue once you close it. You can come back to this screen any time from the same button.",
         },
         next: {
           title: "What comes next",
-          body: "Once a session is open, press GUIDE again: the tour changes and walks you through the work area - the library, the timeline, the transport and the three views - none of which exists yet.",
+          body: "You are ready to create or open a session. As soon as you do, the guide carries on by itself with the work area: the library, the timeline, the transport and the three views. If you would rather come back later, this button reopens it.",
         },
       },
     },
@@ -1305,17 +1315,21 @@ const en = {
       steps: {
         overview: {
           title: "Your session is open",
-          body: "A session holds several songs laid out one after another on the same timeline. Each song has its own tracks, tempo, key and section markers. This tour shows you where everything lives.",
+          body: "A session holds several songs laid out one after another on the same timeline. Each song has its own tracks, tempo, key and section markers. Let us look at where everything lives, opening the panels as we go.",
         },
-        library: {
-          title: "The library holds your audio",
-          body: "This is where the session audio lives, kept separate from the songs that use it. Drag files in from the file manager to import them, then drop them onto a track to create a clip.",
-          bodyMobile: "This is where the session audio lives, kept separate from the songs that use it. Use the import button to bring in files from the phone or the cloud, then drag them onto a track to create a clip.",
+        openLibrary: {
+          title: "Open the library",
+          body: "The session audio lives in the library, kept separate from the songs that use it. Open it and we will see what is inside.",
+        },
+        libraryContents: {
+          title: "This is the library",
+          body: "Each row is a file imported into the session, and folders let you organise them however you like. Drag files in from the file manager to import them, and drag one from here onto a track to create a clip. One file can be used by several songs without being duplicated.",
+          bodyMobile: "Each row is a file imported into the session, and folders let you organise them however you like. The import button brings in files from the phone or the cloud, and dragging one onto a track creates a clip. One file can be used by several songs without being duplicated.",
         },
         timeline: {
           title: "The timeline",
-          body: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and section markers live. Right-click anything to open its menu.",
-          bodyMobile: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and markers live. Press and hold a clip or a song region to open its menu - a long press does what right-click does on the desktop.",
+          body: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and section markers live. To bring audio in, drag it from the file manager straight onto the timeline, or route it through the library first if you would rather keep it organised. Dropping a .ltpkg brings in a whole song, and so does a Reaper (.rpp) or Ableton (.als) project; whole sessions (.ltset) are imported from the start screen or the FILE menu. Right-click anything to open its menu.",
+          bodyMobile: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and markers live. On mobile audio comes in through the library, and you drag it from there onto a track; songs (.ltpkg) and sessions (.ltset) are imported from FILE and from the start screen. Press and hold a clip or a song region to open its menu - a long press does what right-click does on the desktop.",
         },
         transport: {
           title: "Play and stop",
@@ -1333,10 +1347,18 @@ const en = {
           title: "Saving and sharing",
           body: "The rail carries SESSIONS to get back to the start screen, SAVE, and FILE - where you import songs and export the whole session.",
         },
-        settings: {
+        openSettings: {
+          title: "Open the settings",
+          body: "This is where the rig gets set up before you play. Open it and we will look inside.",
+        },
+        settingsTour: {
           title: "Audio, MIDI and shortcuts",
-          body: "Pick the sound card and where each thing goes: the mix, the click and the voice guide can take separate outputs. MIDI and the keyboard shortcuts live here too, and the shortcuts are yours to change.",
-          bodyMobile: "Pick the audio output and where each thing goes: the mix, the click and the voice guide can take separate destinations. If you plug in a USB interface, check this screen before you start.",
+          body: "Audio is where you pick the sound card and where each thing goes: the mix, the click and the voice guide can take separate outputs, which is how only the person wearing in-ears hears the click. MIDI is where footswitches and controllers connect, and Shortcuts lets you rebind the keys.",
+          bodyMobile: "Audio is where you pick the output and where each thing goes: the mix, the click and the voice guide can take separate destinations. A USB interface shows up here. MIDI is where footswitches and controllers connect.",
+        },
+        closeSettings: {
+          title: "Close it to carry on",
+          body: "We pick up the rest of the tour once you close it.",
         },
         remote: {
           title: "Your phone as the remote",

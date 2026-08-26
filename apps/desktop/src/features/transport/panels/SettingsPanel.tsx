@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
 import { AUTO_SAVE_INTERVAL_PRESETS } from "@libretracks/shared/models";
@@ -184,6 +185,7 @@ export function SettingsPanel({
     <div className="lt-modal-backdrop">
       <section
         className="lt-settings-modal lt-settings-modal--fixed"
+        data-lt-tour={TOUR_TARGETS.settingsModal}
         role="dialog"
         aria-modal="true"
         aria-labelledby="lt-settings-modal-title"
@@ -202,6 +204,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="lt-settings-modal-close"
+            data-lt-tour={TOUR_TARGETS.settingsClose}
             onClick={onClose}
           >
             <span className="material-symbols-outlined">close</span>

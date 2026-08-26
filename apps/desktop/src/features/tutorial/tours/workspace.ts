@@ -8,6 +8,10 @@ import { TOUR_TARGETS } from "../tourTargets";
  * vistas— existe únicamente cuando hay proyecto cargado, que es exactamente por
  * qué esto no puede vivir en el recorrido de la pantalla de inicio.
  *
+ * La biblioteca y los ajustes se enseñan ABRIÉNDOLOS: el usuario pulsa, el
+ * panel aparece y el paso siguiente explica lo que tiene delante. Un panel
+ * cerrado descrito de memoria no se recuerda igual que uno abierto.
+ *
  * El orden sigue el camino de trabajo real (dónde está el audio → dónde se
  * coloca → cómo se escucha → cómo se toca en directo), no el orden en que están
  * los controles en pantalla.
@@ -21,9 +25,17 @@ export const workspaceTour: TourDefinition = {
       i18nKey: "tutorial.workspace.steps.overview",
     },
     {
-      id: "library",
+      id: "openLibrary",
       target: TOUR_TARGETS.sideNavLibrary,
-      i18nKey: "tutorial.workspace.steps.library",
+      waitFor: { target: TOUR_TARGETS.libraryPanel },
+      i18nKey: "tutorial.workspace.steps.openLibrary",
+    },
+    {
+      // El panel se queda abierto durante el resto del recorrido: es una barra
+      // lateral, no un modal, así que la línea de tiempo sigue a la vista.
+      id: "libraryContents",
+      target: TOUR_TARGETS.libraryPanel,
+      i18nKey: "tutorial.workspace.steps.libraryContents",
     },
     {
       // Único paso que fuerza una vista: el lienzo solo existe en la DAW. El
@@ -59,9 +71,23 @@ export const workspaceTour: TourDefinition = {
       i18nKey: "tutorial.workspace.steps.fileActionsMobile",
     },
     {
-      id: "settings",
+      id: "openSettings",
       target: TOUR_TARGETS.sideNavSettings,
-      i18nKey: "tutorial.workspace.steps.settings",
+      waitFor: { target: TOUR_TARGETS.settingsModal },
+      i18nKey: "tutorial.workspace.steps.openSettings",
+    },
+    {
+      id: "settingsTour",
+      target: TOUR_TARGETS.settingsModal,
+      i18nKey: "tutorial.workspace.steps.settingsTour",
+    },
+    {
+      // Hay que cerrarlo: el modal tapa el rail al que apuntan los dos últimos
+      // pasos.
+      id: "closeSettings",
+      target: TOUR_TARGETS.settingsClose,
+      waitFor: { target: TOUR_TARGETS.settingsModal, present: false },
+      i18nKey: "tutorial.workspace.steps.closeSettings",
     },
     {
       id: "remote",

@@ -15,8 +15,7 @@ import type { TourTargetId } from "./tourTargets";
  *   el transporte y las vistas.
  *
  * Un único recorrido que hablara de la línea de tiempo desde la pantalla de
- * inicio describiría cosas que el usuario no tiene delante — que es justo lo
- * que hacía la primera versión.
+ * inicio describiría cosas que el usuario no tiene delante.
  *
  * Los pasos son DATOS, no JSX. Escritorio y móvil comparten recorrido y solo se
  * separan donde de verdad se diferencian:
@@ -32,7 +31,33 @@ export type TourPlatform = "desktop" | "mobile";
 /** Cada contexto de pantalla tiene su recorrido; los ids coinciden a propósito. */
 export type TourId = "landing" | "workspace";
 
+/**
+ * Cómo terminó un recorrido. La diferencia importa: quien LLEGÓ AL FINAL está
+ * aprendiendo y agradece que la guía siga sola al abrir la sesión; quien pulsó
+ * "Saltar guía" ya ha dicho que no, y volver a saltarle encima es insistir.
+ */
+export type TourOutcome = "completed" | "dismissed";
+
+export type TourProgress = Partial<Record<TourId, TourOutcome>>;
+
 const ALL_PLATFORMS: readonly TourPlatform[] = ["desktop", "mobile"];
+
+/**
+ * Condición que completa un paso interactivo: la guía espera a que el usuario
+ * abra (o cierre) algo de verdad en vez de limitarse a describirlo.
+ *
+ * Se expresa contra el DOM —la aparición o desaparición de un anclaje— y no
+ * contra el estado de React a propósito: el panel de biblioteca y el modal de
+ * ajustes se abren desde `useState` dentro de `TransportPanelContent`, y
+ * sacarlos de ahí para que la guía los lea sería mover estado del hot path por
+ * una feature secundaria. Mirar el DOM reutiliza el contrato de anclajes que ya
+ * existe, y `tourSteps.test.ts` lo vigila igual que los demás.
+ */
+export type TourWaitCondition = {
+  target: TourTargetId;
+  /** `false` espera a que DESAPAREZCA (cerrar un panel). Por defecto `true`. */
+  present?: boolean;
+};
 
 export type TourStep = {
   id: string;
@@ -41,6 +66,12 @@ export type TourStep = {
    * como tarjeta centrada sin foco.
    */
   target?: TourTargetId;
+  /**
+   * Convierte el paso en interactivo: el usuario tiene que hacer algo y la guía
+   * avanza sola al conseguirlo. Mientras espera, el escudo abre un hueco sobre
+   * el control iluminado para que se pueda pulsar de verdad.
+   */
+  waitFor?: TourWaitCondition;
   /** Plataformas donde aplica el paso. Omitido = las dos. */
   platforms?: readonly TourPlatform[];
   /** Vista a la que la guía cambia antes de mostrar el paso. */
@@ -84,6 +115,14 @@ export function visibleSteps(
   );
 }
 
+/** Si la condición de un paso interactivo se cumple ahora mismo. */
+export function isWaitSatisfied(
+  waitFor: TourWaitCondition,
+  isPresent: (target: TourTargetId) => boolean,
+): boolean {
+  return isPresent(waitFor.target) === (waitFor.present ?? true);
+}
+
 /**
  * Claves del cuerpo del paso, de la más específica a la de reserva. La primera
  * que exista es la que se pinta.
@@ -97,12 +136,6 @@ export function stepBodyKeys(step: TourStep, platform: TourPlatform): string[] {
 /**
  * Si la guía de la pantalla de inicio debe arrancar sola.
  *
- * Solo arranca sola la de `landing`, que es donde empieza todo el mundo. La de
- * `workspace` NO se lanza al abrir la primera sesión: ese es justo el momento
- * en que el usuario quiere empezar a trabajar, y un modal encima se lee como un
- * estorbo. Se ofrece desde el botón GUÍA, y el último paso de la guía de inicio
- * avisa de que está ahí.
- *
  * Función pura y aparte del efecto a propósito: es la única lógica del arranque
  * automático que merece un test, y comprobarla contra el DOM real costaría
  * montar la app entera.
@@ -113,10 +146,30 @@ export function stepBodyKeys(step: TourStep, platform: TourPlatform): string[] {
  * desconcertante.
  */
 export function shouldAutoStartLandingTour(options: {
-  seenTours: readonly TourId[];
+  progress: TourProgress;
   isWebDriver: boolean;
   isTestRun: boolean;
 }): boolean {
   if (options.isWebDriver || options.isTestRun) return false;
-  return !options.seenTours.includes("landing");
+  return options.progress.landing === undefined;
+}
+
+/**
+ * Si la guía del área de trabajo debe continuar sola al abrir una sesión.
+ *
+ * Es la continuación natural: quien acaba de terminar la guía de inicio se
+ * encuentra la sesión abierta y el recorrido sigue sin tener que buscar el
+ * botón. Sólo pasa si TERMINÓ la de inicio —no si la saltó— y sólo una vez.
+ */
+export function shouldAutoContinueWorkspaceTour(options: {
+  progress: TourProgress;
+  isTourActive: boolean;
+  isWebDriver: boolean;
+  isTestRun: boolean;
+}): boolean {
+  if (options.isWebDriver || options.isTestRun) return false;
+  // No interrumpimos un recorrido en marcha.
+  if (options.isTourActive) return false;
+  if (options.progress.landing !== "completed") return false;
+  return options.progress.workspace === undefined;
 }

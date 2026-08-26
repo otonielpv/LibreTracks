@@ -28,6 +28,9 @@ export const TOUR_TARGETS = {
   landingImportExternal: "landing-import-external",
   landingCatalog: "landing-catalog",
   // Área de trabajo, con sesión abierta.
+  libraryPanel: "library-panel",
+  settingsModal: "settings-modal",
+  settingsClose: "settings-close",
   topbarFileMenu: "topbar-file-menu",
   topbarTransport: "topbar-transport",
   timelineCanvas: "timeline-canvas",

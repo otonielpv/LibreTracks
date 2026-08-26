@@ -1,11 +1,18 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSongStore } from "../transport/songStore";
-import { shouldAutoStartLandingTour, tourIdForContext } from "./tourModel";
+import {
+  isWaitSatisfied,
+  shouldAutoContinueWorkspaceTour,
+  shouldAutoStartLandingTour,
+  tourIdForContext,
+} from "./tourModel";
 import { tourForCurrentContext, useTourStore } from "./tourStore";
 import { TOURS } from "./tours";
+import { TOUR_TARGETS } from "./tourTargets";
 
-const STORAGE_KEY = "lt.tutorial.v1";
+const STORAGE_KEY = "lt.tutorial.v2";
+const LEGACY_STORAGE_KEY = "lt.tutorial.v1";
 
 function stepIds(): string[] {
   return useTourStore.getState().steps.map((step) => step.id);
@@ -13,12 +20,13 @@ function stepIds(): string[] {
 
 beforeEach(() => {
   window.localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   useSongStore.setState({ song: null });
   useTourStore.setState({
     activeTourId: null,
     stepIndex: 0,
     steps: [],
-    seenTours: [],
+    progress: {},
   });
 });
 
@@ -43,17 +51,68 @@ describe("qué recorrido toca", () => {
     // paso que los ilumine describiría algo que el usuario no tiene delante.
     const landingTargets = TOURS.landing.steps.map((step) => step.target);
 
-    expect(landingTargets).not.toContain("timeline-canvas");
-    expect(landingTargets).not.toContain("topbar-transport");
-    expect(landingTargets).not.toContain("view-mode-switcher");
+    expect(landingTargets).not.toContain(TOUR_TARGETS.timelineCanvas);
+    expect(landingTargets).not.toContain(TOUR_TARGETS.topbarTransport);
+    expect(landingTargets).not.toContain(TOUR_TARGETS.viewModeSwitcher);
   });
 
   it("el recorrido de inicio ilumina crear, abrir e importar", () => {
     const landingTargets = TOURS.landing.steps.map((step) => step.target);
 
-    expect(landingTargets).toContain("landing-create");
-    expect(landingTargets).toContain("landing-open");
-    expect(landingTargets).toContain("landing-import");
+    expect(landingTargets).toContain(TOUR_TARGETS.landingCreate);
+    expect(landingTargets).toContain(TOUR_TARGETS.landingOpen);
+    expect(landingTargets).toContain(TOUR_TARGETS.landingImport);
+  });
+});
+
+describe("pasos interactivos", () => {
+  it("la condición se cumple cuando el anclaje aparece", () => {
+    expect(
+      isWaitSatisfied({ target: TOUR_TARGETS.libraryPanel }, () => true),
+    ).toBe(true);
+    expect(
+      isWaitSatisfied({ target: TOUR_TARGETS.libraryPanel }, () => false),
+    ).toBe(false);
+  });
+
+  it("con `present: false` la condición se cumple al desaparecer", () => {
+    // Es como se pide cerrar el modal de ajustes, que si no tapa el rail al
+    // que apuntan los pasos siguientes.
+    const closing = { target: TOUR_TARGETS.settingsModal, present: false };
+
+    expect(isWaitSatisfied(closing, () => false)).toBe(true);
+    expect(isWaitSatisfied(closing, () => true)).toBe(false);
+  });
+
+  it("los dos recorridos hacen abrir algo de verdad", () => {
+    for (const tour of [TOURS.landing, TOURS.workspace]) {
+      const interactive = tour.steps.filter((step) => step.waitFor);
+      expect(
+        interactive.length,
+        `${tour.id} no tiene ningún paso interactivo`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("todo lo que se abre se vuelve a cerrar", () => {
+    // Un modal abierto y nunca cerrado taparía los pasos siguientes. El panel
+    // de biblioteca es una barra lateral y no cuenta: deja ver el timeline.
+    for (const tour of [TOURS.landing, TOURS.workspace]) {
+      const opensSettings = tour.steps.some(
+        (step) =>
+          step.waitFor?.target === TOUR_TARGETS.settingsModal &&
+          step.waitFor.present !== false,
+      );
+      const closesSettings = tour.steps.some(
+        (step) =>
+          step.waitFor?.target === TOUR_TARGETS.settingsModal &&
+          step.waitFor.present === false,
+      );
+      expect(
+        closesSettings,
+        `${tour.id} abre los ajustes y no pide cerrarlos`,
+      ).toBe(opensSettings);
+    }
   });
 });
 
@@ -110,53 +169,58 @@ describe("navegación", () => {
     expect(useTourStore.getState().stepIndex).toBe(0);
   });
 
-  it("avanzar en el último paso termina el recorrido", () => {
+  it("llegar al final cuenta como terminado", () => {
     const total = useTourStore.getState().steps.length;
     for (let index = 0; index < total; index += 1) {
       useTourStore.getState().nextStep();
     }
 
     expect(useTourStore.getState().activeTourId).toBeNull();
-    expect(useTourStore.getState().seenTours).toContain("landing");
+    expect(useTourStore.getState().progress.landing).toBe("completed");
   });
 
-  it("salir a medias también cuenta como visto", () => {
-    // Si no, la guía volvería a saltar en el siguiente arranque justo a quien
-    // ya ha dicho que no la quiere.
+  it("salir a medias cuenta como descartado, no como terminado", () => {
+    // La diferencia decide si la guía continúa sola al abrir la sesión: quien
+    // la salta ya ha dicho que no quiere que le expliquen la app.
     useTourStore.getState().nextStep();
     useTourStore.getState().endTour();
 
-    expect(useTourStore.getState().seenTours).toContain("landing");
+    expect(useTourStore.getState().progress.landing).toBe("dismissed");
   });
 });
 
 describe("persistencia", () => {
-  it("guarda los recorridos vistos, no el paso en curso", () => {
+  it("guarda cómo terminó cada recorrido, no el paso en curso", () => {
     useTourStore.getState().startTour("landing", "desktop");
     useTourStore.getState().nextStep();
-    useTourStore.getState().endTour();
+    useTourStore.getState().endTour("completed");
 
-    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]")).toEqual(
-      ["landing"],
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}")).toEqual(
+      { landing: "completed" },
     );
   });
 
   it("los recorridos se marcan por separado", () => {
-    // Haber visto la pantalla de inicio no cuenta como haber visto el área de
-    // trabajo, que es lo que hace que el segundo recorrido siga teniendo
-    // sentido más adelante.
     useTourStore.getState().startTour("landing", "desktop");
-    useTourStore.getState().endTour();
+    useTourStore.getState().endTour("completed");
 
-    expect(useTourStore.getState().seenTours).toEqual(["landing"]);
+    expect(useTourStore.getState().progress.workspace).toBeUndefined();
   });
 
-  it("no repite un recorrido ya marcado como visto", () => {
-    useTourStore.setState({ seenTours: ["landing"] });
-    useTourStore.getState().startTour("landing", "desktop");
-    useTourStore.getState().endTour();
+  it("migra el formato v1 tratándolo como descartado", async () => {
+    // v1 era un array de ids vistos y no distinguía cómo acabaron. Darlos por
+    // descartados es lo conservador: como mucho no ofrecemos la continuación,
+    // nunca insistimos de más a quien ya la había saltado.
+    window.localStorage.setItem(
+      LEGACY_STORAGE_KEY,
+      JSON.stringify(["landing"]),
+    );
+    vi.resetModules();
+    const fresh = await import("./tourStore");
 
-    expect(useTourStore.getState().seenTours).toEqual(["landing"]);
+    expect(fresh.useTourStore.getState().progress).toEqual({
+      landing: "dismissed",
+    });
   });
 });
 
@@ -164,31 +228,23 @@ describe("arranque automático", () => {
   it("arranca la guía de inicio la primera vez", () => {
     expect(
       shouldAutoStartLandingTour({
-        seenTours: [],
+        progress: {},
         isWebDriver: false,
         isTestRun: false,
       }),
     ).toBe(true);
   });
 
-  it("no arranca si ya se vio", () => {
-    expect(
-      shouldAutoStartLandingTour({
-        seenTours: ["landing"],
-        isWebDriver: false,
-        isTestRun: false,
-      }),
-    ).toBe(false);
-  });
-
-  it("haber visto el área de trabajo no cuenta como haber visto la de inicio", () => {
-    expect(
-      shouldAutoStartLandingTour({
-        seenTours: ["workspace"],
-        isWebDriver: false,
-        isTestRun: false,
-      }),
-    ).toBe(true);
+  it("no arranca si ya se vio, se terminara o no", () => {
+    for (const outcome of ["completed", "dismissed"] as const) {
+      expect(
+        shouldAutoStartLandingTour({
+          progress: { landing: outcome },
+          isWebDriver: false,
+          isTestRun: false,
+        }),
+      ).toBe(false);
+    }
   });
 
   it("no arranca bajo WebDriver", () => {
@@ -196,7 +252,7 @@ describe("arranque automático", () => {
     // pantalla de inicio y se llevaría por delante todos los flujos.
     expect(
       shouldAutoStartLandingTour({
-        seenTours: [],
+        progress: {},
         isWebDriver: true,
         isTestRun: false,
       }),
@@ -206,7 +262,7 @@ describe("arranque automático", () => {
   it("no arranca en los tests", () => {
     expect(
       shouldAutoStartLandingTour({
-        seenTours: [],
+        progress: {},
         isWebDriver: false,
         isTestRun: true,
       }),
@@ -218,5 +274,73 @@ describe("arranque automático", () => {
     // ponerlo a "test", la guardia de arriba sería letra muerta y el fallo
     // aparecería como un overlay misterioso en tests ajenos.
     expect(import.meta.env.MODE).toBe("test");
+  });
+});
+
+describe("continuación automática al abrir sesión", () => {
+  const base = { isTourActive: false, isWebDriver: false, isTestRun: false };
+
+  it("continúa si terminó la guía de inicio", () => {
+    expect(
+      shouldAutoContinueWorkspaceTour({
+        ...base,
+        progress: { landing: "completed" },
+      }),
+    ).toBe(true);
+  });
+
+  it("no continúa si la saltó", () => {
+    // Ya dijo que no una vez; volver a saltarle encima al abrir la sesión es
+    // insistir.
+    expect(
+      shouldAutoContinueWorkspaceTour({
+        ...base,
+        progress: { landing: "dismissed" },
+      }),
+    ).toBe(false);
+  });
+
+  it("no continúa si nunca vio la de inicio", () => {
+    expect(
+      shouldAutoContinueWorkspaceTour({ ...base, progress: {} }),
+    ).toBe(false);
+  });
+
+  it("no se repite una vez vista el área de trabajo", () => {
+    for (const outcome of ["completed", "dismissed"] as const) {
+      expect(
+        shouldAutoContinueWorkspaceTour({
+          ...base,
+          progress: { landing: "completed", workspace: outcome },
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("no interrumpe un recorrido en marcha", () => {
+    expect(
+      shouldAutoContinueWorkspaceTour({
+        ...base,
+        isTourActive: true,
+        progress: { landing: "completed" },
+      }),
+    ).toBe(false);
+  });
+
+  it("no dispara bajo WebDriver ni en tests", () => {
+    expect(
+      shouldAutoContinueWorkspaceTour({
+        ...base,
+        isWebDriver: true,
+        progress: { landing: "completed" },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoContinueWorkspaceTour({
+        ...base,
+        isTestRun: true,
+        progress: { landing: "completed" },
+      }),
+    ).toBe(false);
   });
 });
