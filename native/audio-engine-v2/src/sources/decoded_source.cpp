@@ -36,10 +36,10 @@ DecodedSource::DecodedSource(Id                 source_id,
                              int                sample_rate,
                              Frame              duration_frames,
                              BlockCache*        cache,
-                             std::function<void(const Id&, int, bool)> request_block)
+                             std::function<void(const Id&, int, int, bool)> request_blocks)
     : source_id_(std::move(source_id))
     , cache_(cache)
-    , request_block_(std::move(request_block))
+    , request_blocks_(std::move(request_blocks))
     , channel_count_(channel_count)
     , sample_rate_(sample_rate)
     , duration_frames_(duration_frames)
@@ -63,7 +63,7 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
             const int block_offset = cache_->offset_in_block(absolute);
             const int chunk = std::min(readable - copied,
                                        cache_->block_frames() - block_offset);
-            bool missed_current_block = false;
+            bool reask_starving_block = false;
             float* shifted[32];
             const int channels = std::min(out_channels, 32);
             for (int ch = 0; ch < channels; ++ch)
@@ -79,21 +79,44 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                         block_offset,
                         chunk);
                 }
-                if (request_block_) {
-                    // URGENT: this is the block being silenced right now.
-                    request_block_(source_id_, block_index, /*urgent=*/true);
+                if (request_blocks_) {
+                    // URGENT: this is the block being silenced right now — but
+                    // ask once per starving BLOCK, not once per silenced
+                    // callback. See starving_block_ for why that difference
+                    // decides whether the engine recovers or collapses.
+                    const int previous_starving =
+                        starving_block_.exchange(block_index, std::memory_order_relaxed);
+                    int repeats = 0;
+                    if (previous_starving == block_index) {
+                        repeats = starving_repeats_.fetch_add(
+                                      1, std::memory_order_relaxed) + 1;
+                    } else {
+                        starving_repeats_.store(0, std::memory_order_relaxed);
+                    }
+                    // ~170 ms between re-asks at a 256-frame buffer: soon
+                    // enough that a dropped fill still recovers, rare enough
+                    // that it cannot crowd the workers out of the queue.
+                    constexpr int kStarveReaskCallbacks = 32;
+                    reask_starving_block =
+                        repeats == 0 || (repeats % kStarveReaskCallbacks) == 0;
+                    if (reask_starving_block)
+                        request_blocks_(source_id_, block_index, 1, /*urgent=*/true);
                 }
                 for (int ch = 0; ch < out_channels; ++ch)
                     std::fill(out[ch] + copied, out[ch] + copied + chunk, 0.f);
                 // Count the silenced frames (streaming starvation) so the
                 // snapshot can surface it in release builds.
                 cache_miss_frames_.fetch_add(chunk, std::memory_order_relaxed);
-                missed_current_block = true;
+            } else if (starving_block_.load(std::memory_order_relaxed) == block_index) {
+                // Served again: clear the starvation state so the next miss on
+                // this block counts as new and is re-asked immediately.
+                starving_block_.store(-1, std::memory_order_relaxed);
+                starving_repeats_.store(0, std::memory_order_relaxed);
             }
-            if (request_block_) {
+            if (request_blocks_) {
                 const int kReadAheadBlocks = streaming_read_ahead_blocks();
                 int previous = read_ahead_anchor_block_.load(std::memory_order_relaxed);
-                bool should_request = missed_current_block;
+                bool should_request = reask_starving_block;
                 while (!should_request) {
                     should_request = previous < 0 ||
                         block_index > previous ||
@@ -105,17 +128,21 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                         break;
                     }
                 }
-                if (missed_current_block) {
+                if (reask_starving_block) {
                     read_ahead_anchor_block_.store(block_index, std::memory_order_relaxed);
                 }
                 if (should_request) {
-                    for (int ahead = 1; ahead <= kReadAheadBlocks; ++ahead) {
-                        const int next_block = block_index + ahead;
-                        const Frame next_start =
-                            static_cast<Frame>(next_block) * cache_->block_frames();
-                        if (next_start >= duration_frames_)
-                            break;
-                        request_block_(source_id_, next_block, /*urgent=*/false);
+                    // Clamp to the source's end, then ask once for the window.
+                    const int blocks_in_source = static_cast<int>(
+                        (duration_frames_ + cache_->block_frames() - 1) /
+                        cache_->block_frames());
+                    const int first_ahead = block_index + 1;
+                    const int last_ahead = std::min(block_index + kReadAheadBlocks,
+                                                    blocks_in_source - 1);
+                    if (last_ahead >= first_ahead) {
+                        request_blocks_(source_id_, first_ahead,
+                                        last_ahead - first_ahead + 1,
+                                        /*urgent=*/false);
                     }
                 }
             }

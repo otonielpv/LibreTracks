@@ -1057,10 +1057,12 @@ TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
         kSampleRate,
         kFrames,
         &cache,
-        [&](const Id& id, int block_index, bool urgent) {
+        [&](const Id& id, int first_block, int block_count, bool urgent) {
             CHECK(id == source_id);
-            requested_blocks.push_back(block_index);
-            requested_urgency.push_back(urgent);
+            for (int i = 0; i < block_count; ++i) {
+                requested_blocks.push_back(first_block + i);
+                requested_urgency.push_back(urgent);
+            }
         });
 
     std::vector<float> left(512, 0.0f);
@@ -1143,9 +1145,10 @@ TEST_CASE("a silenced block is requested urgently, its read-ahead is not") {
     std::vector<std::pair<int, bool>> requests;
     DecodedSource source(
         source_id, kChannels, kSampleRate, kFrames, &cache,
-        [&](const Id& id, int block_index, bool urgent) {
+        [&](const Id& id, int first_block, int block_count, bool urgent) {
             CHECK(id == source_id);
-            requests.emplace_back(block_index, urgent);
+            for (int i = 0; i < block_count; ++i)
+                requests.emplace_back(first_block + i, urgent);
         });
 
     std::vector<float> left(512, 0.0f), right(512, 0.0f);
@@ -1168,6 +1171,79 @@ TEST_CASE("a silenced block is requested urgently, its read-ahead is not") {
         if (block != 0)
             CHECK_FALSE(urgent);
     }
+}
+
+// Regression for the iOS collapse on a 27-stem session: playback sounded for a
+// few seconds and then went permanently silent, with the diagnostics showing
+// `miss+=2565 hit+=0` half-second after half-second — the fill workers had
+// stopped delivering entirely.
+//
+// The cause was here, on the audio thread. Every silenced callback re-issued
+// the urgent request AND the whole read-ahead window behind it. Each request
+// took the cache mutex (has_block) that the callback reads samples under, took
+// the fill-queue mutex the workers pull work from, and woke a worker: ~127k
+// lock pairs per second at 27 stems, raised BY the audio thread AGAINST the
+// threads meant to feed it. The workers could no longer hold the queue long
+// enough to deliver a block, so every block stayed missing, so every callback
+// re-asked — the shortfall fed itself and never recovered.
+//
+// The block is already queued after the first ask. Re-asking is only a hedge
+// against a dropped fill, so it belongs on a slow timer, not on every callback.
+TEST_CASE("a block that stays missing is not re-requested on every callback") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 64;
+    const Id source_id = "starving-source";
+
+    // Nothing is ever filled, so every read silences on block 0 — the state the
+    // engine was stuck in.
+    BlockCache cache(kDefaultBlockFrames, 64);
+
+    int urgent_requests = 0;
+    int readahead_requests = 0;
+    DecodedSource source(
+        source_id, kChannels, kSampleRate, kFrames, &cache,
+        [&](const Id& id, int first_block, int block_count, bool urgent) {
+            CHECK(id == source_id);
+            if (urgent)
+                urgent_requests += block_count;
+            else
+                readahead_requests += block_count;
+        });
+
+    std::vector<float> left(256, 0.0f), right(256, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+
+    // 32 callbacks' worth of the same starving block (~170 ms at this buffer).
+    for (int callback = 0; callback < 32; ++callback)
+        REQUIRE(source.read(0, 256, out, 2) == 256);
+
+    // One ask for the starving block and one read-ahead window — not 32 of each.
+    CHECK(urgent_requests == 1);
+    CHECK(readahead_requests > 0);
+    const int readahead_after_first_window = readahead_requests;
+
+    // It does still re-ask eventually, so a fill that was dropped (a short read,
+    // a range the decode has not reached) cannot silence the track forever.
+    REQUIRE(source.read(0, 256, out, 2) == 256);
+    CHECK(urgent_requests == 2);
+    CHECK(readahead_requests > readahead_after_first_window);
+
+    // And once the block is finally served, the next miss counts as new and is
+    // asked for immediately rather than waiting out the timer.
+    auto block = make_reference_audio(kDefaultBlockFrames, kChannels);
+    cache.fill(source_id, 0, block.data(), kChannels, kDefaultBlockFrames);
+    REQUIRE(source.read(0, 256, out, 2) == 256);
+    CHECK(urgent_requests == 2);  // served: no ask at all
+
+    BlockCache empty_again(kDefaultBlockFrames, 64);
+    DecodedSource fresh(
+        source_id, kChannels, kSampleRate, kFrames, &empty_again,
+        [&](const Id&, int, int block_count, bool urgent) {
+            if (urgent) urgent_requests += block_count;
+        });
+    REQUIRE(fresh.read(0, 256, out, 2) == 256);
+    CHECK(urgent_requests == 3);
 }
 
 TEST_CASE("BlockCache protects each source's recent window from cross-source eviction") {

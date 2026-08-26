@@ -1247,6 +1247,11 @@ std::string EngineImpl::get_snapshot() const {
             const double cb_work_ms = device_manager_
                 ? device_manager_->take_callback_work_max_ms() : 0.0;
             const auto ph = mixer_->take_phase_max_us();
+            // Disk side of the same window. `hit=0 miss=N` says the audio
+            // thread got nothing; these say whether the fill workers were
+            // reading at all, how much that cost, and whether the audio thread
+            // was re-asking for work already in flight (req >> enq).
+            const auto io = source_manager_->take_fill_io_stats();
             lt_debug_log(
                 "[LT_AUDIO_DIAG] cb_max_ms=%.2f cbgap_ms=%.2f cbwork_ms=%.2f "
                 "phase_us[load=%llu sched=%llu tracks=%llu post=%llu] sched_lock_us=%llu "
@@ -1255,7 +1260,9 @@ std::string EngineImpl::get_snapshot() const {
                 "read_wait_us=%llu (n=%llu) fill_hold_us=%llu fill_q=%zu "
                 "evict+=%llu miss+=%zu hit+=%zu playing=%d | path[dir+=%llu "
                 "vari+=%llu str+=%llu] resize_at+=%llu too_big+=%llu "
-                "miss_voice+=%llu scratch_cap=%llu\n",
+                "miss_voice+=%llu scratch_cap=%llu | "
+                "io[open+=%llu(fail=%llu,max=%lluus) read+=%llu(fail=%llu,max=%lluus) "
+                "frames+=%llu readers=%u req+=%llu enq+=%llu q[u=%zu n=%zu]]\n",
                 mixer_->take_callback_duration_max_ms(),
                 cb_gap_ms, cb_work_ms,
                 static_cast<unsigned long long>(ph.load),
@@ -1278,7 +1285,19 @@ std::string EngineImpl::get_snapshot() const {
                 static_cast<unsigned long long>(resize_d),
                 static_cast<unsigned long long>(toobig_d),
                 static_cast<unsigned long long>(missv_d),
-                static_cast<unsigned long long>(tr.scratch_capacity_frames));
+                static_cast<unsigned long long>(tr.scratch_capacity_frames),
+                static_cast<unsigned long long>(io.open_count),
+                static_cast<unsigned long long>(io.open_failures),
+                static_cast<unsigned long long>(io.open_max_us),
+                static_cast<unsigned long long>(io.read_count),
+                static_cast<unsigned long long>(io.read_failures),
+                static_cast<unsigned long long>(io.read_max_us),
+                static_cast<unsigned long long>(io.frames_read),
+                io.active_readers,
+                static_cast<unsigned long long>(io.requests),
+                static_cast<unsigned long long>(io.enqueued),
+                io.queue_urgent,
+                io.queue_normal);
         }
     }
     // RubberBand / PitchCache diagnostics removed (Bungee-only pipeline; the
