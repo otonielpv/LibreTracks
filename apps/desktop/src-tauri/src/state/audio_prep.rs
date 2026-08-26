@@ -12,8 +12,8 @@ use libretracks_project::{ImportedSong, SONG_FILE_NAME};
 
 use tauri::AppHandle;
 
-use crate::audio::engine::AudioController;
 use crate::audio::automation::load_automation;
+use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 
@@ -441,18 +441,53 @@ impl DesktopSession {
             }
 
             if total > 0 && ready >= total {
+                // Waveform/model preparation needs the session, but the long
+                // native prearm wait does not. Holding this mutex while polling
+                // made every transport/model command stall at 92% on large
+                // mobile sessions, which looked like a frozen WebView. Release
+                // it before waiting so the already-open project stays usable.
+                let preparation_revision = {
+                    let mut session = state
+                        .session
+                        .lock()
+                        .map_err(|_| DesktopError::StatePoisoned)?;
+                    session.prepare_project_audio_before_prearm(
+                        app,
+                        audio,
+                        ready,
+                        total,
+                        ram_cache_mb,
+                        disk_cache_mb,
+                    )?
+                };
+                if preparation_revision.is_some() {
+                    Self::wait_for_prearm_idle(app, audio, ready, total)?;
+                }
                 let mut session = state
                     .session
                     .lock()
                     .map_err(|_| DesktopError::StatePoisoned)?;
-                session.finish_project_audio_preparation(
-                    app,
-                    audio,
-                    ready,
-                    total,
-                    ram_cache_mb,
-                    disk_cache_mb,
-                )?;
+                // A different project may have been opened while the mutex was
+                // released. Never let this worker dismiss the newer project's
+                // progress indicator with a stale 100% event.
+                if preparation_revision
+                    .map(|revision| revision == session.project_revision)
+                    .unwrap_or(true)
+                {
+                    if preparation_revision.is_some() {
+                        Self::emit_project_audio_ready(app, audio, ready, total)?;
+                    } else {
+                        emit_project_load_progress(
+                            app,
+                            100,
+                            "Proyecto listo para reproducir.".into(),
+                            ready,
+                            total,
+                            ram_cache_mb,
+                            disk_cache_mb,
+                        );
+                    }
+                }
                 return Ok(session.snapshot());
             }
 
@@ -486,6 +521,42 @@ impl DesktopSession {
         ram_cache_mb: usize,
         disk_cache_mb: usize,
     ) -> Result<(), DesktopError> {
+        if self
+            .prepare_project_audio_before_prearm(
+                app,
+                audio,
+                ready,
+                total,
+                ram_cache_mb,
+                disk_cache_mb,
+            )?
+            .is_some()
+        {
+            Self::wait_for_prearm_idle(app, audio, ready, total)?;
+            Self::emit_project_audio_ready(app, audio, ready, total)?;
+            return Ok(());
+        }
+        emit_project_load_progress(
+            app,
+            100,
+            "Proyecto listo para reproducir.".into(),
+            ready,
+            total,
+            ram_cache_mb,
+            disk_cache_mb,
+        );
+        Ok(())
+    }
+
+    fn prepare_project_audio_before_prearm(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+        ready: usize,
+        total: usize,
+        ram_cache_mb: usize,
+        disk_cache_mb: usize,
+    ) -> Result<Option<u64>, DesktopError> {
         let song_opt = self.engine.song().cloned();
         if let Some(song) = song_opt {
             let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
@@ -529,23 +600,21 @@ impl DesktopSession {
                 ram_cache_mb,
                 disk_cache_mb,
             );
-            self.wait_for_prearm_idle(app, audio, ready, total)?;
-            let prepared_snapshot = audio.engine_snapshot()?;
-            let ram_cache_mb =
-                (prepared_snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
-            let disk_cache_mb =
-                (prepared_snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
-            emit_project_load_progress(
-                app,
-                100,
-                "Proyecto listo para reproducir.".into(),
-                ready,
-                total,
-                ram_cache_mb,
-                disk_cache_mb,
-            );
-            return Ok(());
+            return Ok(Some(self.project_revision));
         }
+        Ok(None)
+    }
+
+    fn emit_project_audio_ready(
+        app: &AppHandle,
+        audio: &AudioController,
+        ready: usize,
+        total: usize,
+    ) -> Result<(), DesktopError> {
+        let prepared_snapshot = audio.engine_snapshot()?;
+        let ram_cache_mb = (prepared_snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+        let disk_cache_mb =
+            (prepared_snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
         emit_project_load_progress(
             app,
             100,
@@ -559,7 +628,6 @@ impl DesktopSession {
     }
 
     fn wait_for_prearm_idle(
-        &self,
         app: &AppHandle,
         audio: &AudioController,
         ready: usize,
