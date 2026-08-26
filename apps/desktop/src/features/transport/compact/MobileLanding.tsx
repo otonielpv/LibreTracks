@@ -12,6 +12,7 @@ import {
   removeRecentSession,
   type RecentSessionEntry,
 } from "../recentSessions";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 type MobileLandingProps = {
   /** Create the session under `parentDir` (a folder the user picked) — the
@@ -183,17 +184,18 @@ export function MobileLanding({
             <button
               type="button"
               className="is-primary"
+              data-lt-tour={TOUR_TARGETS.landingCreate}
               onClick={() => setCreationTemplate(null)}
             >
               {t("common.create")}
             </button>
             {onOpenSessionFromPicker ? (
-              <button type="button" onClick={onOpenSessionFromPicker}>
+              <button type="button" data-lt-tour={TOUR_TARGETS.landingOpen} onClick={onOpenSessionFromPicker}>
                 {t("common.open")}
               </button>
             ) : null}
             {onImportSession ? (
-              <button type="button" onClick={onImportSession}>
+              <button type="button" data-lt-tour={TOUR_TARGETS.landingImport} onClick={onImportSession}>
                 {t("transport.shell.importSession", {
                   defaultValue: "Importar sesión",
                 })}
@@ -202,7 +204,7 @@ export function MobileLanding({
           </div>
         )}
 
-        <div className="lt-empty-state-columns">
+        <div className="lt-empty-state-columns" data-lt-tour={TOUR_TARGETS.landingCatalog}>
           <div className="lt-empty-state-templates">
             <div className="lt-empty-state-templates-header">
               <span>{t("transport.shell.templatesHeading")}</span>

@@ -1282,6 +1282,104 @@ const es = {
     viewDetails: "Ver detalles",
     checkError: "No se pudo comprobar actualizaciones: {{message}}",
   },
+  tutorial: {
+    launch: "Guía",
+    launchAria: "Abrir la guía: {{tour}}",
+    progress: "{{tour}} · paso {{current}} de {{total}}",
+    next: "Siguiente",
+    back: "Atrás",
+    finish: "Terminar",
+    skip: "Saltar guía",
+    shortcutHint: "Atajo: {{binding}}",
+    landing: {
+      name: "Primeros pasos",
+      steps: {
+        welcome: {
+          title: "Bienvenido a LibreTracks",
+          body: "LibreTracks reproduce tus pistas de acompañamiento en directo: un repertorio entero, cada canción con sus pistas, sus marcas y sus secciones, listo para lanzarlo sin pelearte con el ordenador. Esta guía te enseña esta pantalla; hay otra para el área de trabajo cuando abras una sesión.",
+        },
+        create: {
+          title: "Crear una sesión",
+          body: "Una sesión es la carpeta donde vive tu repertorio: las canciones, el audio y la mezcla, todo junto. Este botón crea una vacía y te deja elegir dónde guardarla.",
+          bodyMobile: "Una sesión es la carpeta donde vive tu repertorio: las canciones, el audio y la mezcla, todo junto. Pulsa aquí, ponle nombre y elige dónde guardarla; si la dejas en la nube podrás abrirla desde otro dispositivo.",
+        },
+        open: {
+          title: "Abrir una que ya tengas",
+          body: "Abre una sesión existente buscando su archivo .ltsession. Como una sesión es una carpeta entera, puedes copiarla a otro equipo y abrirla allí tal cual.",
+          bodyMobile: "Abre una sesión existente buscando su archivo .ltsession. El selector del sistema llega también a la nube, así que puedes abrir la que tengas guardada en otro sitio.",
+        },
+        import: {
+          title: "Importar un paquete",
+          body: "Si alguien te pasa una sesión empaquetada (.ltset) o una canción suelta (.ltpkg), esto la descomprime y la deja lista como sesión nueva. Es la forma de compartir repertorio entre músicos.",
+        },
+        importExternal: {
+          title: "Traer un montaje de Reaper o Ableton",
+          body: "Si el repertorio ya lo tienes montado en otro programa, esto lee el proyecto y se trae las pistas con su colocación, para no empezar de cero.",
+        },
+        catalog: {
+          title: "Plantillas y sesiones recientes",
+          body: "Una plantilla lleva solo la estructura —pistas, carpetas y rutas de salida— sin audio ni mezcla: úsala para que cada montaje nuevo salga igual. Debajo tienes las últimas sesiones que has abierto, a un toque.",
+        },
+        audio: {
+          title: "Configura el audio antes del ensayo",
+          body: "Merece la pena entrar aquí antes de montar nada: eliges la tarjeta de sonido y a qué salidas va cada cosa, porque la mezcla, el clic y la voz guía pueden ir por caminos distintos y así el clic solo lo oye quien lleva los cascos.",
+          bodyMobile: "Merece la pena entrar aquí antes de montar nada: eliges la salida de audio y a qué destino va cada cosa, porque la mezcla, el clic y la voz guía pueden ir por caminos distintos. Si conectas una interfaz por USB, revísalo aquí.",
+        },
+        next: {
+          title: "El siguiente paso",
+          body: "Cuando tengas una sesión abierta, vuelve a pulsar GUÍA: el recorrido cambia y te enseña el área de trabajo —la biblioteca, la línea de tiempo, el transporte y las tres vistas—, que ahora mismo no existe todavía.",
+        },
+      },
+    },
+    workspace: {
+      name: "Área de trabajo",
+      steps: {
+        overview: {
+          title: "Ya tienes sesión abierta",
+          body: "Una sesión contiene varias canciones puestas una detrás de otra en la misma línea de tiempo. Cada canción tiene sus pistas, su tempo, su tonalidad y sus marcas de sección. Este recorrido te enseña dónde está cada cosa.",
+        },
+        library: {
+          title: "La biblioteca guarda tu audio",
+          body: "Aquí vive el audio de la sesión, separado de las canciones que lo usan. Arrastra archivos desde el explorador para importarlos y después suéltalos sobre una pista para crear un clip.",
+          bodyMobile: "Aquí vive el audio de la sesión, separado de las canciones que lo usan. Usa el botón de importar para traer archivos del teléfono o de la nube y después arrástralos a una pista para crear un clip.",
+        },
+        timeline: {
+          title: "La línea de tiempo",
+          body: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí es donde viven las canciones y las marcas de sección. Con el clic derecho abres el menú de aquello que toques.",
+          bodyMobile: "Cada pista es una capa de la mezcla y cada clip un trozo de audio colocado en el tiempo. Arriba, la regla marca los compases: ahí viven las canciones y las marcas. Mantén pulsado un clip o una región para abrir su menú: el toque largo hace lo que el clic derecho en el ordenador.",
+        },
+        transport: {
+          title: "Reproducir y parar",
+          body: "Estos botones mueven el cabezal de reproducción. El tempo y el compás de al lado son los de la canción que hay bajo el cabezal, no los del proyecto entero: cada canción lleva los suyos.",
+        },
+        views: {
+          title: "Tres vistas del mismo proyecto",
+          body: "DAW para montar, Compacta para repasar el repertorio canción a canción, y Live para el escenario: botones grandes, saltos y vamp. Cambias de vista cuando quieras y el audio no se detiene.",
+        },
+        fileMenu: {
+          title: "Guardar y compartir",
+          body: "El menú ARCHIVO guarda la sesión, importa canciones sueltas y exporta el conjunto entero para llevártelo a otro equipo o pasárselo a otro músico.",
+        },
+        fileActionsMobile: {
+          title: "Guardar y compartir",
+          body: "En el rail tienes SESIONES para volver a la pantalla de inicio, GUARDAR y ARCHIVO, que es desde donde importas canciones y exportas la sesión entera.",
+        },
+        settings: {
+          title: "Audio, MIDI y atajos",
+          body: "Elige la tarjeta de sonido y a qué salidas va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos. Aquí están también el MIDI y los atajos de teclado, que puedes cambiar a tu gusto.",
+          bodyMobile: "Elige la salida de audio y a qué destino va cada cosa: la mezcla, el clic y la voz guía pueden ir por caminos distintos. Si conectas una interfaz por USB, revisa esta pantalla antes de empezar.",
+        },
+        remote: {
+          title: "El móvil como mando",
+          body: "Abre Remote y escanea el código con el móvil o la tablet: en la misma red tendrás el transporte, las canciones y las marcas en la mano. Es lo que usarás desde el atril, con el ordenador a un lado.",
+        },
+        done: {
+          title: "Ya puedes empezar",
+          body: "Puedes volver a abrir esta guía cuando quieras desde el botón GUÍA de la barra lateral. Cambia según lo que tengas en pantalla.",
+        },
+      },
+    },
+  },
 } as const;
 
 export default es;

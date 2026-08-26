@@ -1251,6 +1251,104 @@ const en = {
     viewDetails: "View details",
     checkError: "Could not check for updates: {{message}}",
   },
+  tutorial: {
+    launch: "Guide",
+    launchAria: "Open the guide: {{tour}}",
+    progress: "{{tour}} · step {{current}} of {{total}}",
+    next: "Next",
+    back: "Back",
+    finish: "Finish",
+    skip: "Skip guide",
+    shortcutHint: "Shortcut: {{binding}}",
+    landing: {
+      name: "Getting started",
+      steps: {
+        welcome: {
+          title: "Welcome to LibreTracks",
+          body: "LibreTracks plays your backing tracks live: a whole set list, each song with its own tracks, markers and sections, ready to launch without fighting the computer. This guide covers this screen; there is another one for the work area once you open a session.",
+        },
+        create: {
+          title: "Create a session",
+          body: "A session is the folder your set list lives in: the songs, the audio and the mix, all together. This button creates an empty one and lets you choose where it goes.",
+          bodyMobile: "A session is the folder your set list lives in: the songs, the audio and the mix, all together. Tap here, give it a name and choose where to store it - keep it in the cloud and you can open it from another device.",
+        },
+        open: {
+          title: "Open one you already have",
+          body: "Open an existing session by picking its .ltsession file. Because a session is a whole folder, you can copy it to another machine and open it there as-is.",
+          bodyMobile: "Open an existing session by picking its .ltsession file. The system picker reaches cloud storage too, so you can open one you keep elsewhere.",
+        },
+        import: {
+          title: "Import a package",
+          body: "If someone hands you a packaged session (.ltset) or a single song (.ltpkg), this unpacks it into a new session. It is how set lists get shared between musicians.",
+        },
+        importExternal: {
+          title: "Bring a set over from Reaper or Ableton",
+          body: "If the set is already built in another program, this reads the project and brings the tracks over with their placement, so you do not start from scratch.",
+        },
+        catalog: {
+          title: "Templates and recent sessions",
+          body: "A template carries only the structure - tracks, folders and output routing - with no audio and no mix, so every new build starts the same way. Below it are the sessions you opened most recently, one click away.",
+        },
+        audio: {
+          title: "Set up audio before the rehearsal",
+          body: "Worth a visit before you build anything: pick the sound card and where each thing goes, because the mix, the click and the voice guide can take separate outputs - that is how only the person wearing in-ears hears the click.",
+          bodyMobile: "Worth a visit before you build anything: pick the audio output and where each thing goes, because the mix, the click and the voice guide can take separate destinations. If you plug in a USB interface, check it here.",
+        },
+        next: {
+          title: "What comes next",
+          body: "Once a session is open, press GUIDE again: the tour changes and walks you through the work area - the library, the timeline, the transport and the three views - none of which exists yet.",
+        },
+      },
+    },
+    workspace: {
+      name: "The work area",
+      steps: {
+        overview: {
+          title: "Your session is open",
+          body: "A session holds several songs laid out one after another on the same timeline. Each song has its own tracks, tempo, key and section markers. This tour shows you where everything lives.",
+        },
+        library: {
+          title: "The library holds your audio",
+          body: "This is where the session audio lives, kept separate from the songs that use it. Drag files in from the file manager to import them, then drop them onto a track to create a clip.",
+          bodyMobile: "This is where the session audio lives, kept separate from the songs that use it. Use the import button to bring in files from the phone or the cloud, then drag them onto a track to create a clip.",
+        },
+        timeline: {
+          title: "The timeline",
+          body: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and section markers live. Right-click anything to open its menu.",
+          bodyMobile: "Each track is a layer of the mix and each clip a piece of audio placed in time. The ruler above counts the bars: that is where songs and markers live. Press and hold a clip or a song region to open its menu - a long press does what right-click does on the desktop.",
+        },
+        transport: {
+          title: "Play and stop",
+          body: "These buttons move the playhead. The tempo and time signature next to them belong to the song under the playhead, not to the whole project: every song carries its own.",
+        },
+        views: {
+          title: "Three views of the same project",
+          body: "DAW to build, Compact to run through the set song by song, and Live for the stage: big buttons, jumps and vamp. Switch views whenever you like - the audio keeps playing.",
+        },
+        fileMenu: {
+          title: "Saving and sharing",
+          body: "The FILE menu saves the session, imports individual songs, and exports the whole thing so you can move it to another machine or hand it to another musician.",
+        },
+        fileActionsMobile: {
+          title: "Saving and sharing",
+          body: "The rail carries SESSIONS to get back to the start screen, SAVE, and FILE - where you import songs and export the whole session.",
+        },
+        settings: {
+          title: "Audio, MIDI and shortcuts",
+          body: "Pick the sound card and where each thing goes: the mix, the click and the voice guide can take separate outputs. MIDI and the keyboard shortcuts live here too, and the shortcuts are yours to change.",
+          bodyMobile: "Pick the audio output and where each thing goes: the mix, the click and the voice guide can take separate destinations. If you plug in a USB interface, check this screen before you start.",
+        },
+        remote: {
+          title: "Your phone as the remote",
+          body: "Open Remote and scan the code with a phone or tablet: on the same network you get the transport, the songs and the markers in your hand. That is what you use from the music stand, with the computer off to one side.",
+        },
+        done: {
+          title: "You are ready",
+          body: "You can reopen this guide any time from the GUIDE button in the side rail. It changes with whatever you have on screen.",
+        },
+      },
+    },
+  },
 } as const;
 
 export default en;

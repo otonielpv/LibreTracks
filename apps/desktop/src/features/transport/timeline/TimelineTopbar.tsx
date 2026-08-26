@@ -13,6 +13,7 @@ import {
   loadRecentSessions,
   type RecentSessionEntry,
 } from "../recentSessions";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { ResourceMeter } from "../panels/ResourceMeter";
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 
@@ -174,7 +175,7 @@ export function TimelineTopbar({
             Save) live in the side nav rail instead, so the transport strip
             gets the full width on narrow phone screens. */}
         {!isMobileApp ? (
-        <nav className="lt-menu-bar" aria-label={t("timelineTopbar.mainMenu")} ref={menuBarRef}>
+        <nav className="lt-menu-bar" data-lt-tour={TOUR_TARGETS.topbarFileMenu} aria-label={t("timelineTopbar.mainMenu")} ref={menuBarRef}>
           <div className={`lt-top-menu ${openTopMenu === "file" ? "is-open" : ""}`}>
             <button
               type="button"
@@ -485,7 +486,7 @@ export function TimelineTopbar({
             <small>{displayedTimeSignature}</small>
           </label>
 
-          <div className="lt-transport-buttons">
+          <div className="lt-transport-buttons" data-lt-tour={TOUR_TARGETS.topbarTransport}>
             <button type="button" aria-label={t("timelineTopbar.previous")} disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_previous</span>
             </button>

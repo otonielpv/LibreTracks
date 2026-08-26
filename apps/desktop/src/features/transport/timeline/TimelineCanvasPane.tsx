@@ -48,6 +48,7 @@ import { useRegionDrag } from "./useRegionDrag";
 import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
 import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useTouchContextMenu } from "./useTouchContextMenu";
 import {
   LANE_CUES,
@@ -765,6 +766,7 @@ export function TimelineCanvasPane({
   return (
     <div
       className="lt-timeline-canvas-pane"
+      data-lt-tour={TOUR_TARGETS.timelineCanvas}
       onDragOver={handleExternalDragOver}
       onDragLeave={handleExternalDragLeave}
       onDrop={handleExternalDrop}

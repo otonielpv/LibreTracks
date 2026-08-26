@@ -6,6 +6,7 @@ import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
 import { TelemetryController } from "../features/telemetry/TelemetryController";
+import { TourOverlay } from "../features/tutorial/TourOverlay";
 import { DialogHost } from "../shared/dialog/DialogHost";
 import {
   dispatchUiZoomStatus,
@@ -139,6 +140,7 @@ export function App() {
         />
       ) : null}
       <DialogHost />
+      <TourOverlay />
       <TelemetryController version={currentVersion} />
     </main>
   );

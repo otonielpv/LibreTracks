@@ -22,6 +22,7 @@ import {
   useTimelineUIStore,
 } from "../features/transport/uiStore";
 import { App as AppComponent } from "../app/App";
+import { useTourStore } from "../features/tutorial/tourStore";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
 export type MockWebviewDragDropEvent =
@@ -277,6 +278,16 @@ beforeEach(async () => {
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
     viewMode: DEFAULT_VIEW_MODE,
+  });
+  // La guia interactiva arranca sola la primera vez y su store sobrevive al
+  // desmontaje: sin marcarla como vista, el overlay taparia la UI en cada test
+  // que renderice <App />. `shouldAutoStartGettingStarted` tambien mira
+  // import.meta.env.MODE, pero este reset es la red que no depende del entorno.
+  useTourStore.setState({
+    activeTourId: null,
+    stepIndex: 0,
+    steps: [],
+    seenTours: ["landing", "workspace"],
   });
   vi.clearAllMocks();
   vi.restoreAllMocks();

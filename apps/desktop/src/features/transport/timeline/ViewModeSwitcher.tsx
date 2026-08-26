@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import type { ViewMode } from "../uiStore";
 
 type ViewModeSwitcherProps = {
@@ -19,6 +20,7 @@ export function ViewModeSwitcher({ value, onChange }: ViewModeSwitcherProps) {
   return (
     <div
       className="lt-view-mode-switcher lt-bottom-controls"
+      data-lt-tour={TOUR_TARGETS.viewModeSwitcher}
       role="group"
       aria-label={t("liveView.chooseView")}
     >

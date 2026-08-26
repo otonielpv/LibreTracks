@@ -9531,3 +9531,202 @@ textarea {
     min-width: 0;
   }
 }
+
+/* ── Guía interactiva (features/tutorial) ──────────────────────────────────
+   Foco sobre el control real + tarjeta que lo explica. Va por portal a
+   document.body, así que estas reglas viven fuera de cualquier contenedor de
+   la app y se posicionan contra el viewport.
+
+   El z-index queda por encima de los modales (60), los popovers (90) y los
+   desplegables del menú superior (120): la guía tiene que poder señalar un
+   control con Configuración abierta. */
+.lt-tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  /* El contenedor no intercepta nada; los hijos que deben hacerlo lo activan. */
+  pointer-events: none;
+}
+
+/* Traga los clics para que un toque perdido durante la guía no edite el
+   proyecto. Va debajo del foco y de la tarjeta. */
+.lt-tour-shield {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+/* Oscurecido plano, para los pasos sin elemento que iluminar. */
+.lt-tour-dim {
+  position: absolute;
+  inset: 0;
+  background: rgb(4 7 8 / 0.78);
+  backdrop-filter: blur(8px);
+}
+
+/* El agujero del foco. La sombra desbordada hace de oscurecido, así que estos
+   pasos NO llevan .lt-tour-dim: sale gratis y deja el hueco perfectamente
+   recortado sin máscaras SVG. */
+.lt-tour-spotlight {
+  position: fixed;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgb(87 241 219 / 0.55),
+    0 0 0 9999px rgb(4 7 8 / 0.76);
+  pointer-events: none;
+  transition:
+    top 160ms ease,
+    left 160ms ease,
+    width 160ms ease,
+    height 160ms ease;
+}
+
+.lt-tour-card {
+  position: fixed;
+  box-sizing: border-box;
+  width: min(23rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1.1rem;
+  border: 1px solid rgb(87 241 219 / 0.22);
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at top left, rgb(87 241 219 / 0.12), transparent 45%),
+    linear-gradient(180deg, rgb(22 25 26 / 0.98), rgb(13 15 16 / 0.98));
+  box-shadow: 0 28px 80px rgb(0 0 0 / 0.5);
+  pointer-events: auto;
+}
+
+/* Pasos sin foco: la tarjeta manda, centrada en pantalla. */
+.lt-tour-card.is-centred {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(30rem, calc(100vw - 2rem));
+}
+
+.lt-tour-eyebrow {
+  color: rgb(87 241 219 / 0.82);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lt-tour-card h2 {
+  margin: 0;
+  color: #f3f0ef;
+  font: 800 1.25rem/1.15 "Space Grotesk", sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.lt-tour-body {
+  margin: 0;
+  color: rgb(229 226 225 / 0.78);
+  font: 500 0.9rem/1.55 "Space Grotesk", sans-serif;
+}
+
+.lt-tour-shortcut {
+  margin: 0;
+  align-self: flex-start;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.04);
+  color: rgb(87 241 219 / 0.9);
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.lt-tour-dots {
+  display: flex;
+  gap: 0.28rem;
+  margin-top: 0.2rem;
+}
+
+.lt-tour-dots span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.14);
+}
+
+.lt-tour-dots span.is-done {
+  background: rgb(87 241 219 / 0.4);
+}
+
+.lt-tour-dots span.is-current {
+  background: #57f1db;
+}
+
+.lt-tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+}
+
+.lt-tour-actions-main {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lt-tour-actions button {
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: #f3f0ef;
+  padding: 0.55rem 0.9rem;
+  font: 700 0.8rem/1 "Space Grotesk", sans-serif;
+}
+
+.lt-tour-actions button:hover {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+
+.lt-tour-actions button.is-primary {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.14);
+  color: #57f1db;
+}
+
+/* "Saltar guía" no compite con la acción principal. */
+.lt-tour-actions .lt-tour-skip {
+  border-color: transparent;
+  background: transparent;
+  color: rgb(186 202 197 / 0.55);
+  padding-left: 0;
+}
+
+/* ── Móvil ────────────────────────────────────────────────────────────────
+   Nada de tarjetas flotantes en una pantalla estrecha: se ancla a un borde y
+   ocupa todo el ancho. El overlay elige arriba o abajo según dónde caiga el
+   foco, para no taparlo. */
+.lt-tour-card.is-docked-bottom,
+.lt-tour-card.is-docked-top {
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: 100%;
+  gap: 0.5rem;
+}
+
+.lt-tour-card.is-docked-bottom {
+  bottom: 0;
+  border-bottom: 0;
+  padding-bottom: max(1.1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.lt-tour-card.is-docked-top {
+  top: 0;
+  border-top: 0;
+  padding-top: max(1.1rem, env(safe-area-inset-top, 0px));
+}
+
+.lt-mobile .lt-tour-actions button {
+  /* Objetivo táctil cómodo; el rail y los botones de la app usan la misma
+     escala en móvil. */
+  padding: 0.75rem 1rem;
+}

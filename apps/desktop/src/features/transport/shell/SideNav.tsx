@@ -1,4 +1,6 @@
 import { useTranslation } from "react-i18next";
+import { TourLauncherButton } from "../../tutorial/TourLauncherButton";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { isMobileApp } from "../desktopApi";
 import type { SidebarTab } from "../types";
 
@@ -42,6 +44,7 @@ export function SideNav({
       {isMobileApp && onSessionsClick ? (
         <button
           type="button"
+          data-lt-tour={TOUR_TARGETS.sideNavSessions}
           aria-label={t("timelineTopbar.mobileSessions", {
             defaultValue: "Sesiones…",
           })}
@@ -81,6 +84,7 @@ export function SideNav({
       <button
         type="button"
         className={activeSidebarTab === "library" ? "is-active" : ""}
+        data-lt-tour={TOUR_TARGETS.sideNavLibrary}
         aria-label={t("transport.shell.library")}
         onClick={onLibraryToggle}
       >
@@ -91,6 +95,7 @@ export function SideNav({
         <button
           type="button"
           className={isRemoteModalOpen ? "is-active" : ""}
+          data-lt-tour={TOUR_TARGETS.sideNavRemote}
           aria-label={t("transport.shell.remote")}
           onClick={onRemoteClick}
         >
@@ -101,12 +106,14 @@ export function SideNav({
       <button
         type="button"
         className={isSettingsModalOpen ? "is-active" : ""}
+        data-lt-tour={TOUR_TARGETS.sideNavSettings}
         aria-label={t("transport.shell.settings")}
         onClick={onSettingsClick}
       >
         <span className="material-symbols-outlined">settings</span>
         {t("transport.shell.settings")}
       </button>
+      <TourLauncherButton />
     </aside>
   );
 }

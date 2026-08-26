@@ -249,6 +249,7 @@ import { createMidiClipHandlers } from "./midi/midiClipHandlers";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { MobileLanding } from "./compact/MobileLanding";
+import { TOUR_TARGETS } from "../tutorial/tourTargets";
 import {
   LANDING_RECENT_SESSIONS_LIMIT,
   loadRecentSessions,
@@ -7191,26 +7192,28 @@ export function TransportPanelContent() {
                       <button
                         type="button"
                         className="is-primary"
+                        data-lt-tour={TOUR_TARGETS.landingCreate}
                         onClick={handleCreateSongClick}
                       >
                         {t("common.create")}
                       </button>
-                      <button type="button" onClick={handleOpenProjectClick}>
+                      <button type="button" data-lt-tour={TOUR_TARGETS.landingOpen} onClick={handleOpenProjectClick}>
                         {t("common.open")}
                       </button>
-                      <button type="button" onClick={handleImportSessionClick}>
+                      <button type="button" data-lt-tour={TOUR_TARGETS.landingImport} onClick={handleImportSessionClick}>
                         {t("transport.shell.importSession", {
                           defaultValue: "Importar sesión",
                         })}
                       </button>
                       <button
                         type="button"
+                        data-lt-tour={TOUR_TARGETS.landingImportExternal}
                         onClick={handleImportExternalProjectWizardClick}
                       >
                         {t("timelineTopbar.importExternalProject")}
                       </button>
                     </div>
-                    <div className="lt-empty-state-columns">
+                    <div className="lt-empty-state-columns" data-lt-tour={TOUR_TARGETS.landingCatalog}>
                     <div className="lt-empty-state-templates">
                       <div className="lt-empty-state-templates-header">
                         <span>
