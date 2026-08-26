@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   timelineCanvasPixelRatio,
   timelineCanvasViewport,
+  timelineVisibleTrackHeight,
 } from "./canvasPixelRatio";
 
 describe("timelineCanvasPixelRatio", () => {
@@ -47,5 +48,16 @@ describe("timelineCanvasPixelRatio", () => {
     const slice = timelineCanvasViewport(281.7, 420.9, scene);
     expect(slice).toEqual({ top: 280, height: 420 });
     expect(slice.top + slice.height).toBeLessThanOrEqual(scene);
+  });
+
+  // The lanes share their scroll viewport with the sticky ruler, so the band
+  // that is actually visible is a ruler shorter. Measuring the lane cell
+  // instead reports the whole scene once the tracks overflow, which is the
+  // full-height backing store the slice exists to avoid.
+  it("discounts the sticky ruler from the visible lane band", () => {
+    expect(timelineVisibleTrackHeight(600, 134)).toBe(466);
+    expect(timelineVisibleTrackHeight(600, 94)).toBe(506);
+    expect(timelineVisibleTrackHeight(100, 134)).toBe(1);
+    expect(timelineVisibleTrackHeight(Number.NaN, 134)).toBe(1);
   });
 });

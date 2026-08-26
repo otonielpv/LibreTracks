@@ -51,7 +51,10 @@ import {
 } from "../constants";
 import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
-import { timelineCanvasPixelRatio } from "../Renderer/canvasPixelRatio";
+import {
+  timelineCanvasPixelRatio,
+  timelineVisibleTrackHeight,
+} from "../Renderer/canvasPixelRatio";
 
 type RulerCanvasProps = {
   width: number;
@@ -115,6 +118,8 @@ type TrackCanvasProps = {
   livePixelsPerSecondRef: MutableRefObject<number>;
   scrollViewportRef: RefObject<HTMLDivElement | null>;
   interactionContainerRef: RefObject<HTMLDivElement | null>;
+  /** Height of the sticky ruler row, which shares the scroll viewport. */
+  rulerHeight: number;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
   selectedClipIds: string[];
@@ -710,6 +715,7 @@ export function TimelineTrackCanvas({
   livePixelsPerSecondRef,
   scrollViewportRef,
   interactionContainerRef,
+  rulerHeight,
   timelineGrid,
   selectedClipId,
   selectedClipIds,
@@ -852,19 +858,23 @@ export function TimelineTrackCanvas({
       foregroundContext,
       {
         getViewportMetrics: (): TimelineViewportMetrics => {
-          // The scroll viewport also holds the sticky ruler row, so its
-          // clientHeight overshoots the visible track area by RULER_HEIGHT.
-          // The lane cell (.lt-track-list) is CSS-stretched to exactly that
-          // area, so measure it and only fall back to the viewport while it is
-          // still detached.
-          const laneAreaHeight = interactionContainerRef.current?.clientHeight ?? 0;
+          const scrollViewport = scrollViewportRef.current;
+          if (!scrollViewport) {
+            return { scrollTop: 0, height: snapshotRef.current.height };
+          }
+
+          // The ruler row is sticky at the top of this same scroll viewport, so
+          // the band of track lanes the user can actually see is the viewport
+          // minus the ruler. Measuring the lane cell instead would report the
+          // whole scene (it is CSS-stretched to its content once the tracks
+          // overflow), which is exactly the full-height backing store this
+          // slice exists to avoid.
           return {
-            scrollTop: scrollViewportRef.current?.scrollTop ?? 0,
-            height:
-              laneAreaHeight > 0
-                ? laneAreaHeight
-                : scrollViewportRef.current?.clientHeight ??
-                  snapshotRef.current.height,
+            scrollTop: scrollViewport.scrollTop,
+            height: timelineVisibleTrackHeight(
+              scrollViewport.clientHeight,
+              rulerHeight,
+            ),
           };
         },
         renderBackground: (context, snapshot) => {
@@ -893,7 +903,7 @@ export function TimelineTrackCanvas({
         rendererRef.current = null;
       }
     };
-  }, [interactionContainerRef, scrollViewportRef]);
+  }, [rulerHeight, scrollViewportRef]);
 
   useEffect(() => {
     snapshotRef.current = {

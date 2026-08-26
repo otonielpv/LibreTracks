@@ -49,3 +49,22 @@ export function timelineCanvasViewport(
     height,
   };
 }
+
+/**
+ * Band of track lanes the user can actually see, in pixels.
+ *
+ * The ruler row is sticky at the top of the same scroll viewport as the lanes,
+ * so it permanently covers `rulerHeight` of it. Feeding the raw viewport height
+ * to the slice makes every canvas a ruler taller than it needs to be — the
+ * backing store this slice exists to shrink.
+ */
+export function timelineVisibleTrackHeight(
+  scrollViewportHeight: number,
+  rulerHeight: number,
+) {
+  const safeViewport = Number.isFinite(scrollViewportHeight)
+    ? scrollViewportHeight
+    : 0;
+  const safeRuler = Number.isFinite(rulerHeight) ? Math.max(0, rulerHeight) : 0;
+  return Math.max(1, Math.floor(safeViewport - safeRuler));
+}

@@ -3380,11 +3380,18 @@ textarea {
   pointer-events: none;
 }
 
+/* The three track canvases inside only hold the visible vertical slice and are
+   absolutely positioned, so their boxes take part in the scroll container's
+   scrollable overflow. Clipping to this layer (which is exactly the painted
+   scene) stops that propagation: a slice that ever lands past the scene can no
+   longer add scroll, raise the max scrollTop and push the next slice further
+   down — the endless vertical scroll behind a growing black band. */
 .lt-track-canvas-layer {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
+  overflow: hidden;
   pointer-events: none;
   z-index: 0;
 }

@@ -1286,6 +1286,7 @@ export function TimelineCanvasPane({
               livePixelsPerSecondRef={livePixelsPerSecondRef}
               scrollViewportRef={scrollViewportRef}
               interactionContainerRef={laneAreaRef}
+              rulerHeight={RULER_HEIGHT}
               timelineGrid={timelineGrid}
               selectedClipId={selectedClipId}
               selectedClipIds={selectedClipIds}
