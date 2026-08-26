@@ -555,10 +555,12 @@ SourcePeakOverview analyze_file_peaks(const std::string& file_path,
                             * static_cast<std::size_t>(info.channel_count),
                             0.f);
 
-    // Progress cadence. Long enough that the callback (which crosses the FFI and
-    // emits an IPC event) is never the bottleneck, short enough that the user
-    // sees the waveform growing rather than appearing in two jumps.
-    constexpr auto kProgressInterval = std::chrono::milliseconds(150);
+    // Progress cadence. A stem takes on the order of 260 ms to analyse, so at
+    // 150 ms the waveform arrived in two jumps — technically progressive, and
+    // indistinguishable from appearing at once. 60 ms gives a handful of steps
+    // on a short file and a steady sweep on a long one, while staying far above
+    // the cost of one callback (a coarse summary over the FFI, ~15 KB).
+    constexpr auto kProgressInterval = std::chrono::milliseconds(60);
     // Backdated so the FIRST chunk publishes immediately: the point of this is
     // that the user sees the waveform start appearing at once, and waiting out
     // an interval before the first one would leave a short file with no

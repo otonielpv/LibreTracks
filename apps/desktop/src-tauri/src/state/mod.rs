@@ -795,11 +795,12 @@ pub(super) fn unique_waveform_keys(song: &Song) -> Vec<String> {
 
 /// Buckets a progress summary is downsampled to before crossing the IPC
 /// boundary. The full-resolution base LOD of a 5-minute stem is ~52 000 buckets
-/// — about 1 MB of base64 per event, several times a second, per file being
+/// — about 1 MB of base64 per event, many times a second, per file being
 /// analysed. A coarse level is all the progressive paint needs (the final
-/// `waveform:ready` carries the real resolution moments later), and it keeps
-/// each event around 20 KB regardless of how long the file is.
-const WAVEFORM_PROGRESS_BUCKETS: usize = 1024;
+/// `waveform:ready` carries the real resolution moments later): 512 buckets is
+/// already about one per pixel of a full-width clip, and it keeps each event to
+/// a few KB regardless of how long the file is.
+const WAVEFORM_PROGRESS_BUCKETS: usize = 512;
 
 /// Build a partial summary from the peaks analysed so far.
 ///
@@ -861,6 +862,12 @@ fn emit_waveform_progress(
     else {
         return;
     };
+    if crate::infra::waveform_diag::is_enabled() {
+        crate::infra::waveform_diag::log(format!(
+            "      progress({waveform_key}) {analyzed_seconds:.2}s / {:.2}s",
+            summary.duration_seconds
+        ));
+    }
     let _ = app.emit(
         WAVEFORM_PROGRESS_EVENT,
         WaveformProgressEvent {
@@ -1119,17 +1126,32 @@ fn process_waveform_job(job: WaveformJob, audio: Option<&AudioController>) {
         }
         got
     } else {
-        waveform_from_engine_peaks(&song_dir, &waveform_key, audio)
+        // The engine will NEVER hand over peaks for this source: it streams the
+        // file in place (a native WAV at the device rate) or reinstalled a PCM
+        // cache, so no decode runs and nothing computes them as a side effect.
+        //
+        // Asking `source_peaks` anyway does not fail — it goes and analyses the
+        // whole file itself, in one blocking call, and returns a finished
+        // result. That is the same work `generate_native_waveform` does below,
+        // except done silently: the waveform can only appear complete or not at
+        // all. It is exactly why a native-WAV multitrack still showed a static
+        // "analyzing" label and then snapped to a full waveform.
+        //
+        // So don't ask. Let the progressive path do the work and report partial
+        // peaks while it reads.
+        None
     };
 
     let summary = match load_global_waveform(&cache_root, &song_dir, Path::new(&waveform_key)) {
         Ok(summary) => Some(summary),
         Err(_) if engine_peaks.is_some() => engine_peaks,
         Err(cache_error) => match {
-            // The expensive fallback: a full decode of the file just to draw
-            // its waveform (~260 ms per 200 MB stem, measured).
+            // A full read of the file just to draw its waveform (~260 ms per
+            // 200 MB stem, measured). This is also the ONLY route that reports
+            // partial peaks as it goes, so the clip paints in pieces — every
+            // other route can only produce a finished waveform.
             let _span = crate::infra::waveform_diag::Span::new(format!(
-                "  generate_native_waveform({waveform_key}) FULL DECODE"
+                "  generate_native_waveform({waveform_key}) FULL DECODE (progressive)"
             ));
             generate_native_waveform(&song_dir, &waveform_key, Some(&app))
         } {

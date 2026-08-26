@@ -266,12 +266,6 @@ export function tileNamespace(request: TileRequest) {
   return [
     request.clip.waveformKey,
     request.waveform.version,
-    // Partial summaries (a file still being analysed) arrive several times with
-    // progressively more peaks under the SAME key and version. Without this the
-    // first partial's tiles would be reused for every later one and the
-    // waveform would stop growing on screen. "full" for a finished summary
-    // keeps the key stable once analysis is done.
-    request.waveform.analyzedSeconds?.toFixed(3) ?? "full",
     channelLayout,
     request.waveform.sampleRate,
     request.waveform.durationSeconds.toFixed(6),
@@ -512,6 +506,19 @@ export type SketchRect = {
   width: number;
   top: number;
   height: number;
+  /**
+   * Columnas a dibujar. Por defecto `SKETCH_BUCKETS`, que es deliberadamente
+   * bajo: como relleno de un tile que llega en milisegundos, lo que importa es
+   * que cueste poco.
+   *
+   * El pintado progresivo lo sube a ~1 columna por píxel. Ahí el dibujo directo
+   * NO es un relleno momentáneo sino lo único que se ve durante todo el
+   * análisis, y a 64 columnas la onda se veía como una silueta tosca que
+   * cambiaba de forma en cada actualización. Sigue siendo barato: sólo los
+   * clips que se están analizando en ese instante (uno por worker) toman esta
+   * ruta; el resto ya va por tiles.
+   */
+  maxBuckets?: number;
 };
 
 type DetailWindowEntry = {
@@ -615,9 +622,13 @@ export function drawWaveformSketch(
     return false;
   }
 
+  // Sin `maxBuckets` se conserva exactamente el relleno de siempre: tope de 64
+  // y como mucho una columna cada 3 px. Con él, el techo es una por píxel.
   const buckets = Math.max(
     2,
-    Math.min(SKETCH_BUCKETS, Math.floor(rect.width / 3)),
+    rect.maxBuckets === undefined
+      ? Math.min(SKETCH_BUCKETS, Math.floor(rect.width / 3))
+      : Math.min(rect.maxBuckets, Math.floor(rect.width)),
   );
   // LOD elegido para la resolución del boceto, no para la del zoom.
   const lod = selectWaveformLod(waveform, buckets / windowSeconds);

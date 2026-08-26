@@ -248,13 +248,24 @@ function clipScreenBounds(
  * shaded band already says "not analysed yet". */
 const PLACEHOLDER_LABEL_MIN_WIDTH_PX = 96;
 
+/** The placeholder's own caption, in the user's language.
+ *
+ * This used to be a hardcoded English default while every other pending label
+ * went through i18n, so a Spanish session read "ANALYZING WAVEFORM..." on the
+ * one clip state the user sees most. Resolved per call (not hoisted to a
+ * constant) so it follows a language change without a reload, like the rest of
+ * the canvas text. */
+function analyzingWaveformLabel() {
+  return getPendingClipLabel("analyzing", (key) => i18n.t(key));
+}
+
 function drawWaveformPlaceholder(
   context: CanvasRenderingContext2D,
   left: number,
   width: number,
   top: number,
   height: number,
-  label = "ANALYZING WAVEFORM...",
+  label = analyzingWaveformLabel(),
   showLabel = true,
 ) {
   context.save();
@@ -821,6 +832,10 @@ export function drawTrackClipsLayer(
             )
           : null;
       const waveform = snapshot.waveformCache[clip.waveformKey];
+      // Fraction of the clip that already has real peaks; null once the summary
+      // is complete. Non-null means the file is still being analysed and this
+      // clip takes the progressive path below instead of the tile cache.
+      const analyzedRatio = analyzedClipRatio(clip, waveform);
       // A partial summary (one still being analysed) is drawn like any other:
       // the peaks it has are real, and the stretch past `analyzedSeconds` gets
       // the placeholder band below. Showing the full-clip "ANALYZING" label on
@@ -828,6 +843,56 @@ export function drawTrackClipsLayer(
       // as a freeze — the work was visibly progressing and the UI hid it.
       if (pendingLabel && !waveform) {
         drawWaveformPlaceholder(context, clippedLeft, visibleWidth, clipTop, clipHeight, pendingLabel);
+      } else if (waveform && analyzedRatio !== null) {
+        // A file still being analysed: draw it DIRECTLY, never through the tile
+        // cache.
+        //
+        // The peaks change every few dozen milliseconds while the analysis
+        // runs, and a tile is only worth rasterising if it will be reused.
+        // Feeding partials to the cache invalidated every tile of the clip on
+        // each update, far faster than the frame budget could re-rasterise
+        // them, so what actually got painted was the 64-column fallback sketch
+        // — flickering between that and the real tiles, with the shape
+        // changing each time. It is the same artefact as scrubbing the zoom
+        // quickly, and for the same reason.
+        //
+        // Drawing straight to the canvas at ~one column per pixel is both
+        // steadier and sharper here, and costs nothing to throw away: only the
+        // clips under analysis right now (one per worker) take this path.
+        context.save();
+        context.beginPath();
+        context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
+        context.clip();
+        if (analyzedRatio > 0) {
+          const analysedWidth = width * analyzedRatio;
+          drawWaveformSketch(context, clip, waveform, {
+            fromRatio: 0,
+            toRatio: analyzedRatio,
+            left,
+            width: analysedWidth,
+            top: clipTop,
+            height: clipHeight,
+            maxBuckets: Math.ceil(analysedWidth),
+          });
+        }
+        context.restore();
+
+        // Shade the stretch that has not been read yet. No caption: the
+        // waveform visibly growing already says the rest is on its way.
+        const pendingLeft = left + analyzedRatio * width;
+        const clippedPendingLeft = clamp(pendingLeft, clippedLeft, clippedRight);
+        const pendingWidth = clippedRight - clippedPendingLeft;
+        if (pendingWidth > 0.5) {
+          drawWaveformPlaceholder(
+            context,
+            clippedPendingLeft,
+            pendingWidth,
+            clipTop,
+            clipHeight,
+            pendingLabel ?? analyzingWaveformLabel(),
+            /*showLabel=*/ false,
+          );
+        }
       } else if (waveform) {
         context.save();
         context.beginPath();
@@ -925,26 +990,6 @@ export function drawTrackClipsLayer(
           });
         }
         context.restore();
-
-        // Shade whatever has not been analysed yet, so the boundary between
-        // "real waveform" and "not read from disk yet" is visible and keeps
-        // moving to the right while the analysis runs.
-        const analyzedRatio = analyzedClipRatio(clip, waveform);
-        if (analyzedRatio !== null) {
-          const pendingLeft = left + analyzedRatio * width;
-          const clippedPendingLeft = clamp(pendingLeft, clippedLeft, clippedRight);
-          const pendingWidth = clippedRight - clippedPendingLeft;
-          if (pendingWidth > 0.5) {
-            drawWaveformPlaceholder(
-              context,
-              clippedPendingLeft,
-              pendingWidth,
-              clipTop,
-              clipHeight,
-              pendingLabel ?? getPendingClipLabel("analyzing", (key) => i18n.t(key)),
-            );
-          }
-        }
 
         if (clip.color || track.color) {
           context.save();

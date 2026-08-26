@@ -141,20 +141,22 @@ describe("WaveformTileCache", () => {
     expect(waveformNamespace).not.toBe(baseNamespace);
   });
 
-  // Los resumenes parciales de `waveform:progress` llegan varias veces con la
-  // MISMA clave y version, cada uno con mas picos. Si no entraran en el
-  // namespace, los tiles del primero se reutilizarian para todos los demas y la
-  // onda dejaria de crecer en pantalla.
-  it("builds different namespaces as a partial waveform grows", () => {
+  // Cuanto lleva analizado un fichero NO entra en la clave, a proposito: un
+  // resumen parcial no pasa por esta cache (drawTracks lo pinta directo). Si
+  // entrara, cada actualizacion —varias por segundo— invalidaria todos los
+  // tiles del clip mucho mas rapido de lo que el presupuesto de frame puede
+  // re-rasterizarlos, y lo que se veria seria el boceto de respaldo parpadeando
+  // contra los tiles buenos: el mismo artefacto que mover el zoom a lo bruto.
+  it("keeps the namespace stable while a waveform is still being analysed", () => {
     const clip = buildClip();
-    const quarter = namespaceOf(clip, buildWaveform({ analyzedSeconds: 2 }));
-    const half = namespaceOf(clip, buildWaveform({ analyzedSeconds: 4 }));
     const complete = namespaceOf(clip, buildWaveform());
 
-    expect(half).not.toBe(quarter);
-    expect(complete).not.toBe(half);
-    // Y una vez completo la clave es estable: nada obliga a re-rasterizar.
-    expect(namespaceOf(clip, buildWaveform())).toBe(complete);
+    expect(namespaceOf(clip, buildWaveform({ analyzedSeconds: 2 }))).toBe(
+      complete,
+    );
+    expect(namespaceOf(clip, buildWaveform({ analyzedSeconds: 4 }))).toBe(
+      complete,
+    );
   });
 
   it("builds different namespaces for different lane heights", () => {
