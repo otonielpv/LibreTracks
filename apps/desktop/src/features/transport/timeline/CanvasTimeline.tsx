@@ -851,12 +851,22 @@ export function TimelineTrackCanvas({
       foregroundCanvas,
       foregroundContext,
       {
-        getViewportMetrics: (): TimelineViewportMetrics => ({
-          scrollTop: scrollViewportRef.current?.scrollTop ?? 0,
-          height:
-            scrollViewportRef.current?.clientHeight ??
-            snapshotRef.current.height,
-        }),
+        getViewportMetrics: (): TimelineViewportMetrics => {
+          // The scroll viewport also holds the sticky ruler row, so its
+          // clientHeight overshoots the visible track area by RULER_HEIGHT.
+          // The lane cell (.lt-track-list) is CSS-stretched to exactly that
+          // area, so measure it and only fall back to the viewport while it is
+          // still detached.
+          const laneAreaHeight = interactionContainerRef.current?.clientHeight ?? 0;
+          return {
+            scrollTop: scrollViewportRef.current?.scrollTop ?? 0,
+            height:
+              laneAreaHeight > 0
+                ? laneAreaHeight
+                : scrollViewportRef.current?.clientHeight ??
+                  snapshotRef.current.height,
+          };
+        },
         renderBackground: (context, snapshot) => {
           drawTrackCanvasBackground(context, snapshot);
           drawGridLines(
@@ -883,7 +893,7 @@ export function TimelineTrackCanvas({
         rendererRef.current = null;
       }
     };
-  }, [scrollViewportRef]);
+  }, [interactionContainerRef, scrollViewportRef]);
 
   useEffect(() => {
     snapshotRef.current = {

@@ -17,10 +17,35 @@ describe("timelineCanvasPixelRatio", () => {
   });
 
   it("sizes the backing store to the viewport rather than all track rows", () => {
-    expect(timelineCanvasViewport(640, 420)).toEqual({
+    expect(timelineCanvasViewport(640, 420, 4000)).toEqual({
       top: 640,
       height: 420,
     });
-    expect(timelineCanvasViewport(-10, 0)).toEqual({ top: 0, height: 1 });
+    expect(timelineCanvasViewport(-10, 0, 4000)).toEqual({ top: 0, height: 1 });
+  });
+
+  // The canvases are absolutely positioned inside the track layer, so a slice
+  // hanging below the scene extends the scroll container's scrollable overflow.
+  // That raises the max scrollTop, which pushes the next slice further down:
+  // endless vertical scroll trailing empty black space.
+  it("never lets the slice hang below the painted scene", () => {
+    expect(timelineCanvasViewport(560, 420, 700)).toEqual({
+      top: 280,
+      height: 420,
+    });
+    // Fewer tracks than the viewport fits: the slice is the whole scene and
+    // stays pinned at the top, adding no scroll of its own.
+    expect(timelineCanvasViewport(0, 900, 500)).toEqual({ top: 0, height: 500 });
+    expect(timelineCanvasViewport(300, 900, 500)).toEqual({
+      top: 0,
+      height: 500,
+    });
+  });
+
+  it("floors fractional metrics so rounding cannot re-open the scroll loop", () => {
+    const scene = 700.4;
+    const slice = timelineCanvasViewport(281.7, 420.9, scene);
+    expect(slice).toEqual({ top: 280, height: 420 });
+    expect(slice.top + slice.height).toBeLessThanOrEqual(scene);
   });
 });

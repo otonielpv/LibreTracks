@@ -220,6 +220,7 @@ export class TimelineRenderer {
     const canvasViewport = timelineCanvasViewport(
       viewport.scrollTop,
       viewport.height,
+      snapshot.height,
     );
     const viewportHeight = canvasViewport.height;
     if (!prepareCanvas(canvas, context, snapshot.width, viewportHeight)) {
@@ -230,6 +231,10 @@ export class TimelineRenderer {
     // song on an iPhone previously allocated three full-height DPR-3 canvases;
     // horizontal pan then cleared and repainted all of those pixels every
     // frame, even though drawTracks already culled the rows outside viewport.
+    // The slice is clamped to the scene by timelineCanvasViewport: these
+    // canvases are absolutely positioned, so a slice hanging past the scene
+    // would extend the scroll container's scrollable overflow and feed itself
+    // more scroll every frame.
     const canvasTop = `${canvasViewport.top}px`;
     if (canvas.style.top !== canvasTop) {
       canvas.style.top = canvasTop;
@@ -237,7 +242,12 @@ export class TimelineRenderer {
     context.clearRect(0, 0, snapshot.width, viewportHeight);
     context.save();
     context.translate(0, -canvasViewport.top);
-    render?.(context, snapshot, viewport);
+    // Draw with the clamped slice so the row culling in drawTracks matches the
+    // rows this backing store actually covers.
+    render?.(context, snapshot, {
+      scrollTop: canvasViewport.top,
+      height: viewportHeight,
+    });
     context.restore();
   }
 
