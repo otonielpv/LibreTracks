@@ -51,6 +51,7 @@ import {
 } from "../constants";
 import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
+import { timelineCanvasPixelRatio } from "../Renderer/canvasPixelRatio";
 
 type RulerCanvasProps = {
   width: number;
@@ -153,7 +154,7 @@ function setupCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
     return null;
   }
 
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = timelineCanvasPixelRatio();
   const displayWidth = Math.max(1, Math.round(width));
   const displayHeight = Math.max(1, Math.round(height));
   const nextWidth = Math.max(1, Math.round(displayWidth * dpr));
@@ -513,7 +514,7 @@ export function TimelineRulerCanvas({
       // is at most half a device pixel, well under the 1px stepping this trick
       // exists to avoid.
       const roundedCameraX = Math.round(cameraX);
-      const devicePixelRatio = window.devicePixelRatio || 1;
+      const devicePixelRatio = timelineCanvasPixelRatio();
       const subpixelOffsetX =
         Math.round((cameraX - roundedCameraX) * devicePixelRatio) /
         devicePixelRatio;

@@ -393,7 +393,35 @@ void request_playback_audio_window(SourceManager& sources,
                                    int window_frames) noexcept {
     if (window_frames <= 0)
         return;
-    const Frame end_frame = start_frame + static_cast<Frame>(window_frames);
+    std::unordered_set<Id> active_sources;
+    const Frame requested_end = start_frame + static_cast<Frame>(window_frames);
+    for (const auto& song : session.songs) {
+        if (start_frame < song.start_frame || start_frame >= song.end_frame)
+            continue;
+        for (const auto& track : song.tracks) {
+            if (track.kind != TrackKind::Audio)
+                continue;
+            for (const auto& clip : track.clips) {
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                if (clip_end > start_frame && clip.timeline_start_frame < requested_end)
+                    active_sources.insert(clip.source_id);
+            }
+        }
+        break;
+    }
+    const int effective_window = lt_playback_prefetch_window_frames(
+        lt_device_profile(),
+        session.sample_rate,
+        active_sources.size(),
+        window_frames);
+    const Frame end_frame = start_frame + static_cast<Frame>(effective_window);
+    if (effective_window < window_frames &&
+        lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
+        lt_debug_log(
+            "[LT_PREFETCH_CAP] requested=%d effective=%d active_sources=%zu cache=%zuMB\n",
+            window_frames, effective_window, active_sources.size(),
+            lt_device_profile().source_cache_mb);
+    }
     for (const auto& song : session.songs) {
         // Only the song that CONTAINS the start frame is urgent. A wide window
         // spills into the next song(s), and pulling their clips in makes the

@@ -228,6 +228,21 @@ TEST_CASE("iOS uses a physical-memory fallback without throttling an iPhone 13")
     CHECK(old_iphone.source_cache_mb == 128);
 }
 
+TEST_CASE("handheld first-play prefetch stays inside the shared cache") {
+    const auto iphone13 = lt_device_profile_for(ios_probe(4 * kGb, 6));
+    const int requested = 48000 * 20;
+    const int capped = lt_playback_prefetch_window_frames(
+        iphone13, 48000, 27, requested);
+
+    CHECK(capped < requested);
+    CHECK(capped >= 48000 * 2);
+    CHECK(capped == 559240);
+
+    const auto desktop = lt_device_profile_for(desktop_probe(16 * kGb, 8));
+    CHECK(lt_playback_prefetch_window_frames(
+              desktop, 48000, 27, requested) == requested);
+}
+
 TEST_CASE("unknown core count does not produce a zero-thread pool") {
     // hardware_concurrency() may return 0; the pools must still be usable.
     CHECK(lt_device_profile_for(desktop_probe(8 * kGb, 0)).decode_threads >= 1);

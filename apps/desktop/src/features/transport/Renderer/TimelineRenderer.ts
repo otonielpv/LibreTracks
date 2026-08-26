@@ -4,6 +4,10 @@ import type { SongView, WaveformSummaryDto } from "../desktopApi";
 import type { TimelineClipSummary, TimelineTrackSummary } from "../library/pendingAudioImports";
 import { recordCanvasRender } from "../perf/perfMetrics";
 import type { TimelineGrid } from "../timeline/timelineMath";
+import {
+  timelineCanvasPixelRatio,
+  timelineCanvasViewport,
+} from "./canvasPixelRatio";
 
 export type TrackSceneSnapshot = {
   width: number;
@@ -77,7 +81,7 @@ function prepareCanvas(
     return false;
   }
 
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = timelineCanvasPixelRatio();
   const displayWidth = Math.max(1, Math.round(width));
   const displayHeight = Math.max(1, Math.round(height));
   const nextWidth = Math.max(1, Math.round(displayWidth * dpr));
@@ -213,12 +217,28 @@ export class TimelineRenderer {
       | undefined,
     viewport: TimelineViewportMetrics,
   ) {
-    if (!prepareCanvas(canvas, context, snapshot.width, snapshot.height)) {
+    const canvasViewport = timelineCanvasViewport(
+      viewport.scrollTop,
+      viewport.height,
+    );
+    const viewportHeight = canvasViewport.height;
+    if (!prepareCanvas(canvas, context, snapshot.width, viewportHeight)) {
       return;
     }
 
-    context.clearRect(0, 0, snapshot.width, snapshot.height);
+    // Keep only the visible vertical slice in the GPU backing store. A 27-track
+    // song on an iPhone previously allocated three full-height DPR-3 canvases;
+    // horizontal pan then cleared and repainted all of those pixels every
+    // frame, even though drawTracks already culled the rows outside viewport.
+    const canvasTop = `${canvasViewport.top}px`;
+    if (canvas.style.top !== canvasTop) {
+      canvas.style.top = canvasTop;
+    }
+    context.clearRect(0, 0, snapshot.width, viewportHeight);
+    context.save();
+    context.translate(0, -canvasViewport.top);
     render?.(context, snapshot, viewport);
+    context.restore();
   }
 
   private render = () => {
@@ -239,6 +259,10 @@ export class TimelineRenderer {
         previewClipState !== this.lastPreviewClipState ||
         previewTrackState !== this.lastPreviewTrackState
       ) {
+        if (viewportChanged) {
+          this.dirtyBackground = true;
+          this.dirtyForeground = true;
+        }
         this.dirtyTracks = true;
         this.lastViewportScrollTop = viewport.scrollTop;
         this.lastViewportHeight = viewport.height;
@@ -258,7 +282,7 @@ export class TimelineRenderer {
         // compositor resample the bitmap and softens the grid. Both layers use
         // the same quantisation so their grids stay aligned with each other.
         const roundedCameraX = Math.round(snapshot.cameraX);
-        const devicePixelRatio = window.devicePixelRatio || 1;
+        const devicePixelRatio = timelineCanvasPixelRatio();
         const backgroundSubpixelOffsetX =
           Math.round((snapshot.cameraX - roundedCameraX) * devicePixelRatio) /
           devicePixelRatio;

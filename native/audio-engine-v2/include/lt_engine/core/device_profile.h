@@ -211,6 +211,34 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
     return profile;
 }
 
+// A wide first-play request is useful only while it fits alongside the live
+// cache. If a handheld queues more PCM than the cache can retain, the LRU keeps
+// the clip head and the far end of the request but evicts the middle. Playback
+// then sounds briefly and falls into a deterministic silent gap. Reserve 40%
+// for Bungee, live read-ahead and other clips, and cap only handhelds; desktop
+// keeps the user-configured window unchanged.
+inline int lt_playback_prefetch_window_frames(const DeviceProfile& profile,
+                                              int sample_rate,
+                                              std::size_t active_sources,
+                                              int requested_frames) {
+    if (requested_frames <= 0 || active_sources == 0 ||
+        profile.device_class == DeviceClass::Desktop)
+        return requested_frames;
+
+    const std::uint64_t cache_bytes =
+        static_cast<std::uint64_t>(profile.source_cache_mb) * 1024ULL * 1024ULL;
+    const std::uint64_t usable_bytes = cache_bytes * 3ULL / 5ULL;
+    constexpr std::uint64_t kStereoFloatBytesPerFrame = 2ULL * sizeof(float);
+    const std::uint64_t frames_that_fit =
+        usable_bytes /
+        (static_cast<std::uint64_t>(active_sources) * kStereoFloatBytesPerFrame);
+    const int safe_rate = sample_rate > 0 ? sample_rate : 48000;
+    const int minimum = safe_rate * 2;
+    const int capped = static_cast<int>(std::min<std::uint64_t>(
+        frames_that_fit, static_cast<std::uint64_t>(requested_frames)));
+    return std::min(requested_frames, std::max(minimum, capped));
+}
+
 // PCM disk-cache budget, in bytes, from the free space on the cache volume.
 //
 // Desktop policy (unchanged): 10% of free space, but never below 4 GiB, so a
