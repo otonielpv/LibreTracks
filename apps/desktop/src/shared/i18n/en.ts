@@ -1480,7 +1480,7 @@ const en = {
           bodyMobile: "Press and hold this panel to add the automation track, then place actions on the timeline. LibreTracks can automatically run jumps, mix changes, scenes and pads at exactly the moment you choose, without touching the screen during a show.",
         },
         touchControls: {
-          title: "The touch controls",
+          title: "Track height and lock",
           body: "These controls only exist on mobile.",
           bodyMobile: "These controls only exist on mobile. The height buttons fit more tracks on screen or make them easier to hit. The lock prevents ruler seeking, so brushing the screen with your palm no longer moves playback.",
         },

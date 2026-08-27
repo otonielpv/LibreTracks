@@ -1511,7 +1511,7 @@ const es = {
           bodyMobile: "Mantén pulsado este panel para añadir la pista de automatismos y coloca acciones en el timeline. LibreTracks puede ejecutar automáticamente saltos, cambios de mezcla, escenas y pads justo en el momento que decidas, sin tocar la pantalla durante el directo.",
         },
         touchControls: {
-          title: "Los controles táctiles",
+          title: "Altura de pistas y bloqueo",
           body: "Estos controles sólo existen en el móvil.",
           bodyMobile: "Estos controles sólo existen en el móvil. Los botones de altura hacen que quepan más pistas o que se vean mejor con el dedo. El candado bloquea el salto al tocar la regla: con él activado, un roce con la palma durante el ensayo ya no mueve la reproducción.",
         },

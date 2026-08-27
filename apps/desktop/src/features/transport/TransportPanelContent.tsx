@@ -7516,57 +7516,62 @@ export function TransportPanelContent() {
                             isMobileApp ? (
                               <>
                                 <MobileTrackReorderToggle />
-                                <button
-                                  type="button"
-                                  className="lt-icon-button"
-                                  aria-label={t(
-                                    "timelineToolbar.trackHeightDecrease",
-                                    { defaultValue: "Pistas más bajas" },
-                                  )}
-                                  onClick={() =>
-                                    applyTrackHeight(
-                                      trackHeight - TRACK_HEIGHT_STEP,
-                                    )
-                                  }
+                                <span
+                                  className="lt-mobile-track-view-controls"
+                                  data-lt-tour={TOUR_TARGETS.mobileTouchControls}
                                 >
-                                  <span className="material-symbols-outlined">
-                                    unfold_less
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="lt-icon-button"
-                                  aria-label={t(
-                                    "timelineToolbar.trackHeightIncrease",
-                                    { defaultValue: "Pistas más altas" },
-                                  )}
-                                  onClick={() =>
-                                    applyTrackHeight(
-                                      trackHeight + TRACK_HEIGHT_STEP,
-                                    )
-                                  }
-                                >
-                                  <span className="material-symbols-outlined">
-                                    unfold_more
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`lt-icon-button ${rulerSeekLocked ? "is-active" : ""}`}
-                                  aria-label={t(
-                                    "timelineToolbar.rulerSeekLock",
-                                    {
-                                      defaultValue:
-                                        "Bloquear salto al tocar el ruler",
-                                    },
-                                  )}
-                                  aria-pressed={rulerSeekLocked}
-                                  onClick={toggleRulerSeekLock}
-                                >
-                                  <span className="material-symbols-outlined">
-                                    {rulerSeekLocked ? "lock" : "lock_open"}
-                                  </span>
-                                </button>
+                                  <button
+                                    type="button"
+                                    className="lt-icon-button"
+                                    aria-label={t(
+                                      "timelineToolbar.trackHeightDecrease",
+                                      { defaultValue: "Pistas más bajas" },
+                                    )}
+                                    onClick={() =>
+                                      applyTrackHeight(
+                                        trackHeight - TRACK_HEIGHT_STEP,
+                                      )
+                                    }
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      unfold_less
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="lt-icon-button"
+                                    aria-label={t(
+                                      "timelineToolbar.trackHeightIncrease",
+                                      { defaultValue: "Pistas más altas" },
+                                    )}
+                                    onClick={() =>
+                                      applyTrackHeight(
+                                        trackHeight + TRACK_HEIGHT_STEP,
+                                      )
+                                    }
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      unfold_more
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`lt-icon-button ${rulerSeekLocked ? "is-active" : ""}`}
+                                    aria-label={t(
+                                      "timelineToolbar.rulerSeekLock",
+                                      {
+                                        defaultValue:
+                                          "Bloquear salto al tocar el ruler",
+                                      },
+                                    )}
+                                    aria-pressed={rulerSeekLocked}
+                                    onClick={toggleRulerSeekLock}
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      {rulerSeekLocked ? "lock" : "lock_open"}
+                                    </span>
+                                  </button>
+                                </span>
                               </>
                             ) : undefined
                           }

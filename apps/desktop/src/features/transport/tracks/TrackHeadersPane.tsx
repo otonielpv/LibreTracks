@@ -148,7 +148,7 @@ export function TrackHeadersPane({
     >
       <div className="lt-ruler-header">
         {headerActions ? (
-          <div className="lt-ruler-header-actions" data-lt-tour={TOUR_TARGETS.mobileTouchControls}>{headerActions}</div>
+          <div className="lt-ruler-header-actions">{headerActions}</div>
         ) : null}
         <span>Tracks</span>
       </div>
