@@ -1,9 +1,17 @@
-import { useEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { useSongStore } from "../transport/songStore";
 import { toursForContext } from "./tourModel";
-import { useTourStore } from "./tourStore";
+import { currentTourPlatform, useTourStore } from "./tourStore";
 import { TOURS } from "./tours";
 import { TOUR_TARGETS } from "./tourTargets";
 
@@ -31,6 +39,12 @@ export function TourLauncherButton() {
   const isMenuOpen = useTourStore((state) => state.isMenuOpen);
   const setMenuOpen = useTourStore((state) => state.setMenuOpen);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const isMobile = currentTourPlatform() === "mobile";
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   const available = toursForContext(hasOpenSession);
   const onlyTour = available.length === 1 ? available[0] : null;
@@ -38,12 +52,56 @@ export function TourLauncherButton() {
     (tourId) => progress[tourId] !== undefined,
   );
 
+  const positionDesktopMenu = useCallback(() => {
+    if (isMobile) return;
+    const anchor = wrapperRef.current?.getBoundingClientRect();
+    if (!anchor) return;
+    const menu = menuRef.current;
+    const width = menu?.offsetWidth || 272;
+    const height = menu?.scrollHeight || 280;
+    const margin = 12;
+    const gap = 6;
+    const roomOnRight = window.innerWidth - anchor.right - gap - margin;
+    const left =
+      roomOnRight >= width
+        ? anchor.right + gap
+        : Math.max(margin, anchor.left - gap - width);
+    const top = Math.min(
+      Math.max(margin, anchor.bottom - height),
+      Math.max(margin, window.innerHeight - height - margin),
+    );
+    setMenuPosition({ top, left });
+  }, [isMobile]);
+
+  // El menú va por portal para que el overflow del rail no recorte sus tres
+  // opciones. En escritorio conserva el anclaje al botón; en móvil CSS lo
+  // convierte en una hoja contenida dentro del viewport y las áreas seguras.
+  useLayoutEffect(() => {
+    if (!isMenuOpen || isMobile) {
+      setMenuPosition(null);
+      return;
+    }
+    positionDesktopMenu();
+    const frame = requestAnimationFrame(positionDesktopMenu);
+    window.addEventListener("resize", positionDesktopMenu);
+    window.addEventListener("scroll", positionDesktopMenu, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", positionDesktopMenu);
+      window.removeEventListener("scroll", positionDesktopMenu, true);
+    };
+  }, [isMenuOpen, isMobile, positionDesktopMenu]);
+
   // Cerrar al pulsar fuera o con Escape, como los demás menús del rail.
   useEffect(() => {
     if (!isMenuOpen) return;
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
-      if (target && !wrapperRef.current?.contains(target)) {
+      if (
+        target &&
+        !wrapperRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setMenuOpen(false);
       }
     };
@@ -57,6 +115,77 @@ export function TourLauncherButton() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [isMenuOpen, setMenuOpen]);
+
+  const menuStyle: CSSProperties | undefined = isMobile
+    ? undefined
+    : menuPosition
+      ? { top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }
+      : { visibility: "hidden" };
+
+  const menu =
+    isMenuOpen && !onlyTour
+      ? createPortal(
+          <div
+            ref={menuRef}
+            className="lt-tour-menu"
+            role="menu"
+            aria-label={t("tutorial.chooseAria")}
+            style={menuStyle}
+          >
+            <span className="lt-tour-menu-title">
+              {t("tutorial.chooseTitle")}
+            </span>
+            {available.map((tourId) => (
+              <button
+                key={tourId}
+                type="button"
+                role="menuitem"
+                data-tour-choice={tourId}
+                onClick={() => {
+                  setMenuOpen(false);
+                  startTour(tourId);
+                }}
+              >
+                <span className="lt-tour-menu-name">
+                  {t(`${TOURS[tourId].i18nKey}.name`)}
+                  {/* Marcar lo ya terminado convierte el menú en un índice de por
+                      dónde vas, no en una lista de opciones sueltas. */}
+                  {progress[tourId] === "completed" ? (
+                    <span
+                      className="material-symbols-outlined lt-tour-menu-done"
+                      aria-label={t("tutorial.chooseDone")}
+                    >
+                      check
+                    </span>
+                  ) : null}
+                </span>
+                <small>{t(`${TOURS[tourId].i18nKey}.summary`)}</small>
+              </button>
+            ))}
+
+            {/* Un descarte detiene todas las ofertas automáticas. Esta salida
+                permite recuperarlas sin borrar el localStorage a mano. */}
+            {someTourSeen ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="lt-tour-menu-reset"
+                data-tour-choice="reset"
+                onClick={() => {
+                  resetProgress();
+                  setMenuOpen(false);
+                }}
+              >
+                <span className="lt-tour-menu-name">
+                  {t("tutorial.resetProgress")}
+                </span>
+                <small>{t("tutorial.resetProgressHint")}</small>
+              </button>
+            ) : null}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div className="lt-tour-launcher" ref={wrapperRef}>
@@ -85,63 +214,7 @@ export function TourLauncherButton() {
         {t("tutorial.launch")}
       </button>
 
-      {isMenuOpen && !onlyTour ? (
-        <div
-          className="lt-tour-menu"
-          role="menu"
-          aria-label={t("tutorial.chooseAria")}
-        >
-          <span className="lt-tour-menu-title">{t("tutorial.chooseTitle")}</span>
-          {available.map((tourId) => (
-            <button
-              key={tourId}
-              type="button"
-              role="menuitem"
-              data-tour-choice={tourId}
-              onClick={() => {
-                setMenuOpen(false);
-                startTour(tourId);
-              }}
-            >
-              <span className="lt-tour-menu-name">
-                {t(`${TOURS[tourId].i18nKey}.name`)}
-                {/* Marcar lo ya terminado convierte el menú en un índice de por
-                    dónde vas, no en una lista de opciones sueltas. */}
-                {progress[tourId] === "completed" ? (
-                  <span
-                    className="material-symbols-outlined lt-tour-menu-done"
-                    aria-label={t("tutorial.chooseDone")}
-                  >
-                    check
-                  </span>
-                ) : null}
-              </span>
-              <small>{t(`${TOURS[tourId].i18nKey}.summary`)}</small>
-            </button>
-          ))}
-
-          {/* El tutorial deja de ofrecerse solo en cuanto todo tiene resultado.
-              Sin esta salida, recuperarlo exigiría borrar el localStorage a
-              mano — imposible en release sin DevTools. */}
-          {someTourSeen ? (
-            <button
-              type="button"
-              role="menuitem"
-              className="lt-tour-menu-reset"
-              data-tour-choice="reset"
-              onClick={() => {
-                resetProgress();
-                setMenuOpen(false);
-              }}
-            >
-              <span className="lt-tour-menu-name">
-                {t("tutorial.resetProgress")}
-              </span>
-              <small>{t("tutorial.resetProgressHint")}</small>
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {menu}
     </div>
   );
 }

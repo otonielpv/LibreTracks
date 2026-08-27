@@ -37,7 +37,7 @@ function clearProgress(): void {
   });
 }
 
-function startTour(tourId: "landing" | "workspace"): void {
+function startTour(tourId: "landing" | "workspace" | "live"): void {
   clearProgress();
   act(() => {
     useTourStore.getState().startTour(tourId, "desktop");
@@ -143,6 +143,35 @@ describe("TourOverlay", () => {
     const card = document.querySelector<HTMLElement>(".lt-tour-card");
     expect(card?.style.top).toMatch(/^\d+(\.\d+)?px$/);
     expect(card?.className).not.toContain("is-centred");
+  });
+
+  it("cierra la biblioteca antes de explicar el timeline", () => {
+    const libraryToggle = mountAnchor(TOUR_TARGETS.sideNavLibrary);
+    const click = vi.spyOn(libraryToggle, "click");
+    mountAnchor(TOUR_TARGETS.libraryPanel);
+    mountAnchor(TOUR_TARGETS.timelineCanvas);
+    render(<TourOverlay />);
+    startTour("workspace");
+
+    goToStep("timeline");
+
+    expect(click).toHaveBeenCalledOnce();
+  });
+
+  it("desplaza hasta una herramienta que está fuera del tramo visible", () => {
+    const target = mountAnchor(TOUR_TARGETS.toolbarMaster);
+    const scrollIntoView = vi.fn();
+    target.scrollIntoView = scrollIntoView;
+    render(<TourOverlay />);
+    startTour("live");
+
+    goToStep("master");
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "auto",
+      block: "nearest",
+      inline: "nearest",
+    });
   });
 
   it("el foco no se anima al aparecer, sólo al moverse", async () => {
@@ -348,9 +377,15 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
     });
 
     fireEvent.click(screen.getByText(en.tutorial.launch));
-    fireEvent.click(
-      document.querySelector('[data-tour-choice="daw"]') as Element,
-    );
+    const menu = document.querySelector(".lt-tour-menu");
+    const choice = document.querySelector('[data-tour-choice="daw"]') as Element;
+
+    // El rail móvil tiene overflow para poder desplazarse en pantallas bajas.
+    // El portal evita que ese contenedor recorte las opciones del tutorial.
+    expect(menu?.parentElement).toBe(document.body);
+    fireEvent.mouseDown(choice);
+    expect(document.querySelector(".lt-tour-menu")).not.toBeNull();
+    fireEvent.click(choice);
 
     expect(
       document.querySelector(".lt-tour-root")?.getAttribute("data-tour-id"),

@@ -92,6 +92,25 @@ describe("contrato responsive móvil", () => {
     );
   });
 
+  it("adapta el tutorial a teléfonos, apaisado y tablets", () => {
+    const mobileCard = declarationsFor(".lt-mobile .lt-tour-card");
+    expect(mobileCard).toContain("clamp(18rem, 37.5vw, 18.75rem)");
+    expect(mobileCard).toContain("env(safe-area-inset-left");
+    expect(mobileCard).toContain("env(safe-area-inset-right");
+    expect(mobileCard).toContain("58dvh");
+    expect(styles).toContain("--lt-safe-area-top");
+    expect(styles).toContain("--lt-safe-area-right");
+    expect(styles).toContain("--lt-safe-area-bottom");
+    expect(styles).toContain("--lt-safe-area-left");
+    expect(styles).toMatch(
+      /\.lt-mobile \.lt-tour-menu\s*\{[^}]*position|\.lt-tour-menu\s*\{[^}]*position:\s*fixed/s,
+    );
+    const mobileMenu = declarationsFor(".lt-mobile .lt-tour-menu");
+    expect(mobileMenu).toContain("env(safe-area-inset-left");
+    expect(mobileMenu).toContain("env(safe-area-inset-right");
+    expect(mobileMenu).toContain("100dvh");
+  });
+
   it("no vuelve a introducir ajustes ligados a modelos concretos", () => {
     expect(styles).not.toMatch(/iPhone\s*13/i);
     expect(styles).not.toContain("@media (max-width: 850px)");

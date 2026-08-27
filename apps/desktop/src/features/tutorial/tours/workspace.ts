@@ -35,8 +35,8 @@ export const workspaceTour: TourDefinition = {
       i18nKey: "tutorial.workspace.steps.openLibrary",
     },
     {
-      // El panel se queda abierto durante el resto del recorrido: es una barra
-      // lateral, no un modal, así que la línea de tiempo sigue a la vista.
+      // El overlay mantiene el panel durante este bloque y lo cierra antes del
+      // timeline para devolver todo el espacio al área que va a explicar.
       id: "libraryContents",
       target: TOUR_TARGETS.libraryPanel,
       i18nKey: "tutorial.workspace.steps.libraryContents",

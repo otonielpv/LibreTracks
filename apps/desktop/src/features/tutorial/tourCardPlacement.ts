@@ -9,10 +9,11 @@
  * 140px libres, y la tarjeta salía con el texto reducido a una línea con
  * scroll — inservible en algo cuyo único trabajo es que se lea.
  *
- * Esta función mira los cuatro lados, se queda con el primero donde la tarjeta
- * quepa ENTERA, y si no cabe en ninguno devuelve null para que se centre en
- * pantalla a su tamaño natural. Tapar parte de un objetivo enorme se lee mejor
- * que espachurrar la explicación.
+ * Esta función mira los cuatro lados y se queda con el primero donde la tarjeta
+ * quepa ENTERA. Cuando ninguno basta, prueba las cuatro posiciones recortadas
+ * contra el viewport y elige la que MENOS se solape con el objetivo. Centrarla
+ * a ciegas era especialmente malo en móvil apaisado: tapaba justo el control
+ * que el marco pretendía enseñar aunque quedara una esquina mucho mejor.
  */
 
 export type PlacementRect = {
@@ -39,6 +40,24 @@ type Side = "below" | "above" | "right" | "left";
 function clamp(value: number, min: number, max: number): number {
   if (max < min) return min;
   return Math.min(max, Math.max(min, value));
+}
+
+function overlapArea(
+  position: CardPosition,
+  card: PlacementSize,
+  target: PlacementRect,
+): number {
+  const overlapWidth = Math.max(
+    0,
+    Math.min(position.left + card.width, target.left + target.width) -
+      Math.max(position.left, target.left),
+  );
+  const overlapHeight = Math.max(
+    0,
+    Math.min(position.top + card.height, target.top + target.height) -
+      Math.max(position.top, target.top),
+  );
+  return overlapWidth * overlapHeight;
 }
 
 export function placeTourCard(
@@ -73,34 +92,49 @@ export function placeTourCard(
   const order: Side[] = ["below", "above", "right", "left"];
   const chosen = order.find((side) => fits[side]);
 
-  if (!chosen) return null;
-
   const maxLeft = viewport.width - card.width - MARGIN;
   const maxTop = viewport.height - card.height - MARGIN;
+  // Si ni siquiera cabe dentro del viewport, CSS la centra y limita su alto;
+  // no hay una posición numérica honesta que podamos devolver aquí.
+  if (maxLeft < MARGIN || maxTop < MARGIN) return null;
   // Centrada sobre el eje libre y recortada contra los bordes.
   const centredLeft = target.left + target.width / 2 - card.width / 2;
   const centredTop = target.top + target.height / 2 - card.height / 2;
 
-  switch (chosen) {
-    case "below":
-      return {
-        top: targetBottom + GAP,
-        left: clamp(centredLeft, MARGIN, maxLeft),
-      };
-    case "above":
-      return {
-        top: target.top - GAP - card.height,
-        left: clamp(centredLeft, MARGIN, maxLeft),
-      };
-    case "right":
-      return {
-        top: clamp(centredTop, MARGIN, maxTop),
-        left: targetRight + GAP,
-      };
-    case "left":
-      return {
-        top: clamp(centredTop, MARGIN, maxTop),
-        left: target.left - GAP - card.width,
-      };
-  }
+  const candidates: Record<Side, CardPosition> = {
+    below: {
+      top: clamp(targetBottom + GAP, MARGIN, maxTop),
+      left: clamp(centredLeft, MARGIN, maxLeft),
+    },
+    above: {
+      top: clamp(target.top - GAP - card.height, MARGIN, maxTop),
+      left: clamp(centredLeft, MARGIN, maxLeft),
+    },
+    right: {
+      top: clamp(centredTop, MARGIN, maxTop),
+      left: clamp(targetRight + GAP, MARGIN, maxLeft),
+    },
+    left: {
+      top: clamp(centredTop, MARGIN, maxTop),
+      left: clamp(target.left - GAP - card.width, MARGIN, maxLeft),
+    },
+  };
+
+  if (chosen) return candidates[chosen];
+
+  // Ningún lado puede alojarla entera. Elegimos la alternativa que conserve
+  // más objetivo visible; en empate, más espacio real en ese lado y por último
+  // el orden natural debajo/encima/derecha/izquierda.
+  return order
+    .map((side, priority) => ({
+      side,
+      priority,
+      position: candidates[side],
+      overlap: overlapArea(candidates[side], card, target),
+      room: room[side],
+    }))
+    .sort(
+      (a, b) =>
+        a.overlap - b.overlap || b.room - a.room || a.priority - b.priority,
+    )[0].position;
 }

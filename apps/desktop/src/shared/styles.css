@@ -10,6 +10,12 @@
 
 :root {
   color-scheme: dark;
+  /* Legibles también desde JS: el posicionador del tutorial trabaja contra
+     el viewport seguro, no debajo del notch o las barras del sistema. */
+  --lt-safe-area-top: env(safe-area-inset-top, 0px);
+  --lt-safe-area-right: env(safe-area-inset-right, 0px);
+  --lt-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --lt-safe-area-left: env(safe-area-inset-left, 0px);
 }
 
 html,
@@ -9788,29 +9794,60 @@ textarea {
 }
 
 /* ── Móvil ────────────────────────────────────────────────────────────────
-   Nada de tarjetas flotantes en una pantalla estrecha: se ancla a un borde y
-   ocupa todo el ancho. El overlay elige arriba o abajo según dónde caiga el
-   foco, para no taparlo. */
-.lt-tour-card.is-docked-bottom,
-.lt-tour-card.is-docked-top {
-  left: 0;
-  right: 0;
-  width: 100%;
-  max-width: 100%;
-  max-height: 60vh;
-  gap: 0.5rem;
+   Tarjeta compacta también en apaisado: el posicionador puede moverla a los
+   cuatro lados del foco y conservar visible lo que está explicando. */
+.lt-mobile .lt-tour-card {
+  width: min(
+    clamp(18rem, 37.5vw, 18.75rem),
+    calc(
+      100vw - 1.5rem - env(safe-area-inset-left, 0px) -
+        env(safe-area-inset-right, 0px)
+    )
+  );
+  max-height: min(
+    58vh,
+    calc(
+      100vh - 1.5rem - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
+    )
+  );
+  max-height: min(
+    58dvh,
+    calc(
+      100dvh - 1.5rem - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
+    )
+  );
+  gap: 0.35rem;
+  padding: 0.75rem;
 }
 
-.lt-tour-card.is-docked-bottom {
-  bottom: 0;
-  border-bottom: 0;
-  padding-bottom: max(1.1rem, env(safe-area-inset-bottom, 0px));
+.lt-mobile .lt-tour-eyebrow {
+  font-size: 9px;
 }
 
-.lt-tour-card.is-docked-top {
-  top: 0;
-  border-top: 0;
-  padding-top: max(1.1rem, env(safe-area-inset-top, 0px));
+.lt-mobile .lt-tour-card h2 {
+  font-size: 1.05rem;
+}
+
+.lt-mobile .lt-tour-body {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.lt-mobile .lt-tour-actions {
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.lt-mobile .lt-tour-actions-main {
+  gap: 0.3rem;
+}
+
+.lt-mobile .lt-tour-actions button {
+  padding-right: 0.6rem;
+  padding-left: 0.6rem;
+  font-size: 0.72rem;
 }
 
 .lt-mobile .lt-tour-actions button {
@@ -9829,11 +9866,15 @@ textarea {
 }
 
 .lt-tour-menu {
-  position: absolute;
-  left: calc(100% + 0.35rem);
-  bottom: 0;
-  z-index: 120;
-  width: 17rem;
+  position: fixed;
+  /* Por portal, en la misma capa superior que la guía. Algunos lienzos y
+     menús de clips llegan a 200; quedar por debajo hacía que el botón se
+     marcara activo pero las opciones no aparecieran sobre una sesión. */
+  z-index: 220;
+  box-sizing: border-box;
+  width: min(17rem, calc(100vw - 1.5rem));
+  max-height: calc(100vh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -9842,6 +9883,9 @@ textarea {
   border-radius: 2px;
   background: linear-gradient(180deg, rgb(22 25 26 / 0.98), rgb(13 15 16 / 0.98));
   box-shadow: 0 22px 60px rgb(0 0 0 / 0.5);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .lt-tour-menu-title {
@@ -9854,8 +9898,10 @@ textarea {
 
 .lt-tour-menu button {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-start;
+  width: 100%;
   gap: 0.15rem;
   padding: 0.5rem 0.55rem;
   border: 1px solid transparent;
@@ -9889,11 +9935,31 @@ textarea {
   font: 500 0.75rem/1.35 "Space Grotesk", sans-serif;
 }
 
-/* En móvil el rail está pegado al borde izquierdo y es más estrecho: el menú
-   se despliega sobre el lienzo en vez de colgar del botón. */
+/* En móvil es una hoja independiente del rail. Al vivir por portal no la
+   recorta el `overflow` que permite desplazar la navegación en pantallas bajas. */
 .lt-mobile .lt-tour-menu {
-  left: calc(100% + 0.25rem);
-  width: min(17rem, calc(100vw - 6rem));
+  top: auto;
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  left: max(0.75rem, env(safe-area-inset-left, 0px));
+  width: min(
+    24rem,
+    calc(
+      100vw - 1.5rem - env(safe-area-inset-left, 0px) -
+        env(safe-area-inset-right, 0px)
+    )
+  );
+  max-width: 24rem;
+  max-height: calc(
+    100vh - 1.5rem - env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px)
+  );
+  max-height: calc(
+    100dvh - 1.5rem - env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px)
+  );
+  margin-right: auto;
+  margin-left: auto;
 }
 
 /* "Empezar de cero" cierra el menú: no es un recorrido, es la salida para

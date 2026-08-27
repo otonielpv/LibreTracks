@@ -19,7 +19,11 @@ import {
   useTourStore,
 } from "./tourStore";
 import { TOURS } from "./tours";
-import { findTourTarget, type TourTargetId } from "./tourTargets";
+import {
+  findTourTarget,
+  TOUR_TARGETS,
+  type TourTargetId,
+} from "./tourTargets";
 
 /**
  * La guía interactiva: un foco sobre el control real y una tarjeta que lo
@@ -45,6 +49,30 @@ type TargetRect = {
   width: number;
   height: number;
 };
+
+type ViewportSize = { width: number; height: number };
+
+type SafeViewport = ViewportSize & { top: number; left: number };
+
+function cssPixelVariable(name: string): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+/** Viewport realmente utilizable, descontando notch y barras del sistema. */
+function safeTourViewport(): SafeViewport {
+  const top = cssPixelVariable("--lt-safe-area-top");
+  const right = cssPixelVariable("--lt-safe-area-right");
+  const bottom = cssPixelVariable("--lt-safe-area-bottom");
+  const left = cssPixelVariable("--lt-safe-area-left");
+  return {
+    top,
+    left,
+    width: Math.max(0, window.innerWidth - left - right),
+    height: Math.max(0, window.innerHeight - top - bottom),
+  };
+}
 
 function sameRect(a: TargetRect | null, b: TargetRect | null): boolean {
   if (a === null || b === null) return a === b;
@@ -83,6 +111,10 @@ export function TourOverlay() {
   const [cardPosition, setCardPosition] = useState<CardPosition | null>(null);
   const [spotlightSettled, setSpotlightSettled] = useState(false);
   const [waitSatisfied, setWaitSatisfied] = useState(false);
+  const [viewportSize, setViewportSize] = useState<ViewportSize>(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
   const restoreViewModeRef = useRef<ViewMode | null>(null);
 
   // Arranque automático la primera vez que se abre la app. Siempre el
@@ -136,6 +168,12 @@ export function TourOverlay() {
 
   // Medida del elemento iluminado.
   const measure = useCallback(() => {
+    setViewportSize((current) => {
+      const next = { width: window.innerWidth, height: window.innerHeight };
+      return current.width === next.width && current.height === next.height
+        ? current
+        : next;
+    });
     const element = targetId ? findTourTarget(targetId) : null;
     if (!element) {
       setTargetRect((current) => (current === null ? current : null));
@@ -152,13 +190,26 @@ export function TourOverlay() {
     setTargetRect((current) => (sameRect(current, next) ? current : next));
   }, [targetId]);
 
+  const revealAndMeasure = useCallback(() => {
+    const element = targetId ? findTourTarget(targetId) : null;
+    // Varias herramientas (Master, tono y Warp en móvil) viven en una barra
+    // horizontal desplazable. Mostrar un paso sin traer antes su control al
+    // tramo visible dejaba la pantalla oscura pero sin ningún marco útil.
+    element?.scrollIntoView?.({
+      behavior: "auto",
+      block: "nearest",
+      inline: "nearest",
+    });
+    measure();
+  }, [measure, targetId]);
+
   useLayoutEffect(() => {
     if (!activeTourId) return;
-    measure();
+    revealAndMeasure();
     // Un paso puede cambiar de vista (el del timeline pide la DAW) y el
     // elemento no existe hasta el frame siguiente. Una sola remedida basta:
     // esto no es un bucle de sondeo.
-    const frame = requestAnimationFrame(measure);
+    const frame = requestAnimationFrame(revealAndMeasure);
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
     return () => {
@@ -166,7 +217,29 @@ export function TourOverlay() {
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [activeTourId, measure, stepIndex]);
+  }, [activeTourId, measure, revealAndMeasure, stepIndex]);
+
+  // La biblioteca es necesaria durante sus tres explicaciones, pero en móvil
+  // ocupa el lienzo entero y en escritorio estrecha el timeline. La cerramos
+  // al terminar ese bloque; si el usuario vuelve atrás, la abrimos otra vez.
+  useEffect(() => {
+    if (activeTourId !== "workspace" || !step) return;
+    const libraryIsOpen = Boolean(findTourTarget(TOUR_TARGETS.libraryPanel));
+    const isLibraryDetail = [
+      "libraryContents",
+      "libraryImport",
+      "libraryFolders",
+    ].includes(step.id);
+    const shouldToggle =
+      (step.id === "timeline" && libraryIsOpen) ||
+      (isLibraryDetail && !libraryIsOpen);
+    if (!shouldToggle) return;
+
+    findTourTarget(TOUR_TARGETS.sideNavLibrary)?.click();
+    // El panel se desmonta y el timeline recupera ancho en el siguiente render.
+    const frame = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(frame);
+  }, [activeTourId, measure, step]);
 
   // El foco se anima al MOVERSE de un control a otro, pero no al aparecer: sin
   // esto entra volando desde la esquina (0,0) hasta su sitio, porque la
@@ -215,25 +288,46 @@ export function TourOverlay() {
     };
   }, [activeTourId, waitFor, stepIndex, nextStep]);
 
-  // Colocación de la tarjeta en escritorio. En móvil se ancla a un borde y no
-  // hace falta calcular nada.
+  // La misma colocación geométrica sirve en escritorio, tablet y móvil. La
+  // plataforma sólo cambia el tamaño mediante CSS: decidir "móvil = borde" sin
+  // mirar el objetivo hacía que el texto tapara vistas y timelines enteros.
   useLayoutEffect(() => {
-    if (!activeTourId || platform === "mobile" || !targetRect) {
+    if (!activeTourId || !targetRect) {
       setCardPosition(null);
       return;
     }
     const card = cardRef.current;
-    setCardPosition(
-      placeTourCard(
-        targetRect,
-        {
-          width: card?.offsetWidth || FALLBACK_CARD_WIDTH,
-          height: card?.scrollHeight || FALLBACK_CARD_HEIGHT,
-        },
-        { width: window.innerWidth, height: window.innerHeight },
-      ),
+    const viewport = safeTourViewport();
+    const position = placeTourCard(
+      {
+        top: targetRect.top - viewport.top,
+        left: targetRect.left - viewport.left,
+        width: targetRect.width,
+        height: targetRect.height,
+      },
+      {
+        width: card?.offsetWidth || FALLBACK_CARD_WIDTH,
+        // La altura pintada, no `scrollHeight`: CSS limita el cuerpo y deja los
+        // botones fijos cuando el texto necesita desplazarse.
+        height: card?.offsetHeight || FALLBACK_CARD_HEIGHT,
+      },
+      viewport,
     );
-  }, [activeTourId, platform, targetRect, stepIndex]);
+    setCardPosition(
+      position
+        ? {
+            top: position.top + viewport.top,
+            left: position.left + viewport.left,
+          }
+        : null,
+    );
+  }, [
+    activeTourId,
+    targetRect,
+    stepIndex,
+    viewportSize.height,
+    viewportSize.width,
+  ]);
 
   // Teclado, en captura y cortando la propagación: las flechas son
   // `edit.nudge*` en el timeline, así que sin esto avanzar de paso movería los
@@ -282,27 +376,17 @@ export function TourOverlay() {
         }
       : null;
 
-  // En móvil la tarjeta ocupa el borde inferior salvo que el foco esté en la
-  // mitad baja de la pantalla, donde lo taparía.
-  const isDocked = platform === "mobile";
-  const dockTop =
-    isDocked &&
-    targetRect !== null &&
-    targetRect.bottom > window.innerHeight * 0.55;
-
-  // `placeTourCard` sólo devuelve una posición donde la tarjeta cabe ENTERA;
-  // si no cabe en ningún lado devuelve null y se centra a su tamaño natural.
-  // Por eso aquí no hay `maxHeight`: recortarla contra el hueco disponible es
-  // lo que dejaba el texto en una línea cuando el objetivo era grande.
+  // Si ni la tarjeta limitada por CSS cabe en el viewport, `placeTourCard`
+  // devuelve null y se centra. Cuando no cabe junto al objetivo, el algoritmo
+  // conserva visible la mayor porción posible en vez de centrarla encima.
   const cardStyle: CSSProperties =
-    !isDocked && cardPosition
+    cardPosition
       ? { top: `${cardPosition.top}px`, left: `${cardPosition.left}px` }
       : {};
 
   const cardClassName = [
     "lt-tour-card",
-    isDocked ? (dockTop ? "is-docked-top" : "is-docked-bottom") : null,
-    !isDocked && !cardPosition ? "is-centred" : null,
+    !cardPosition ? "is-centred" : null,
   ]
     .filter(Boolean)
     .join(" ");
