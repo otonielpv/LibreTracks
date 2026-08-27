@@ -515,10 +515,10 @@ describe("oferta al abrir una sesión", () => {
     unsubscribe();
   });
 
-  it("se ofrece aunque el usuario hubiera saltado el de la pantalla de inicio", () => {
+  it("no se ofrece si el usuario saltó el de la pantalla de inicio", () => {
     const unsubscribe = openSessionWith({ landing: "dismissed" });
 
-    expect(document.querySelector(".lt-tour-menu")).not.toBeNull();
+    expect(document.querySelector(".lt-tour-menu")).toBeNull();
     unsubscribe();
   });
 
@@ -533,7 +533,7 @@ describe("oferta al abrir una sesión", () => {
   it("calla cuando ya se han visto los tres", () => {
     const unsubscribe = openSessionWith({
       workspace: "completed",
-      daw: "dismissed",
+      daw: "completed",
       live: "completed",
     });
 

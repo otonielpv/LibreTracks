@@ -374,18 +374,30 @@ describe("oferta de recorridos al abrir una sesión", () => {
     isTestRun: false,
   };
 
-  it("se ofrece sin depender de cómo acabara el de la pantalla de inicio", () => {
-    // El caso real es abrir una sesión y querer seguir, no acordarse del botón.
-    // Da igual si el de inicio se terminó, se saltó o no se vio nunca.
-    for (const progress of [
-      { landing: "completed" } as const,
-      { landing: "dismissed" } as const,
-      {} as const,
-    ]) {
+  it("se ofrece si el recorrido de inicio se terminó o no llegó a verse", () => {
+    // Terminar el de inicio invita a continuar; no haberlo visto tampoco
+    // equivale a rechazar el tutorial.
+    for (const progress of [{ landing: "completed" } as const, {} as const]) {
       expect(
         shouldOfferToursOnSessionOpen({ ...base, progress }),
         `no se ofreció con progress=${JSON.stringify(progress)}`,
       ).toBe(true);
+    }
+  });
+
+  it("un recorrido saltado rechaza la oferta de todos los demás", () => {
+    // "Saltar tutorial" es un no explícito, también cuando se pulsa en la
+    // pantalla de inicio y los tres recorridos de la sesión siguen sin ver.
+    for (const progress of [
+      { landing: "dismissed" } as const,
+      { workspace: "dismissed" } as const,
+      { daw: "dismissed" } as const,
+      { live: "dismissed" } as const,
+    ]) {
+      expect(
+        shouldOfferToursOnSessionOpen({ ...base, progress }),
+        `se ofreció con progress=${JSON.stringify(progress)}`,
+      ).toBe(false);
     }
   });
 
@@ -406,7 +418,7 @@ describe("oferta de recorridos al abrir una sesión", () => {
         ...base,
         progress: {
           workspace: "completed",
-          daw: "dismissed",
+          daw: "completed",
           live: "completed",
         },
       }),

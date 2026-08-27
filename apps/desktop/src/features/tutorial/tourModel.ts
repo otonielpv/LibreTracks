@@ -172,17 +172,21 @@ export function shouldAutoStartLandingTour(options: {
  * usuario. Lanzar dieciséis pasos sin preguntar es una emboscada; enseñar la
  * lista es una invitación.
  *
- * Se ofrece mientras quede alguno SIN VER — no basta con que falte el del área
- * de trabajo. Quien ya lo hizo pero no ha tocado los de montaje o directo sigue
- * teniendo algo que descubrir, y ése es justo el momento de contárselo.
+ * Dos condiciones, y la segunda es la que de verdad importa:
  *
- * Dos frenos: nunca encima de un recorrido en marcha, y una sola vez por
- * arranque de la app (`alreadyOffered`), para que abrir tres sesiones seguidas
- * no saque el menú tres veces.
+ * 1. Queda algo por ver. Quien ya hizo el general pero no ha tocado montaje ni
+ *    directo sigue teniendo algo que descubrir.
+ * 2. NADIE ha dicho que no todavía. Un "Saltar tutorial" —el de la pantalla de
+ *    inicio incluido— es un no explícito, y vale para todos: quien cierra el
+ *    primero no quiere que le abramos un menú cada vez que carga una sesión.
+ *    Sin esta regla pasaba justo eso, porque saltar el de inicio dejaba los
+ *    otros tres "sin ver" y el menú reaparecía una y otra vez.
  *
- * Antes esto lanzaba directamente el recorrido del área de trabajo y sólo si se
- * había TERMINADO el de la pantalla de inicio. Las dos condiciones se cayeron
- * por lo mismo: en la práctica no salía nunca.
+ * Y dos frenos más: nunca encima de un recorrido en marcha, y una sola vez por
+ * arranque de la app (`alreadyOffered`).
+ *
+ * "Empezar de cero" borra el progreso entero, así que también devuelve la
+ * oferta a quien la apagó y se arrepintió.
  */
 export function shouldOfferToursOnSessionOpen(options: {
   progress: TourProgress;
@@ -193,6 +197,7 @@ export function shouldOfferToursOnSessionOpen(options: {
 }): boolean {
   if (options.isWebDriver || options.isTestRun) return false;
   if (options.isTourActive || options.alreadyOffered) return false;
+  if (Object.values(options.progress).includes("dismissed")) return false;
   return toursForContext(true).some(
     (tourId) => options.progress[tourId] === undefined,
   );
