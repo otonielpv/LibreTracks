@@ -1467,6 +1467,16 @@ const en = {
           title: "Track folders",
           body: "A folder groups tracks and collapses them into a single row: with twenty stems, seeing four groups instead of twenty rows changes a lot. \"Meter en la carpeta anterior\" tucks a track into the one above, and the collapsed state is saved with the project.",
         },
+        midiTracks: {
+          title: "MIDI tracks",
+          body: "Right-click this panel to add a MIDI track. Its clips contain no audio: they send notes, control changes and program changes to a MIDI port and channel, for example to trigger lights, lyrics or an external instrument.",
+          bodyMobile: "Press and hold this panel to add a MIDI track. Its clips contain no audio: they send notes, control changes and program changes to a MIDI port and channel, for example to trigger lights, lyrics or an external instrument.",
+        },
+        automationTracks: {
+          title: "Automation track",
+          body: "Add it by right-clicking this panel, then place actions on the timeline. LibreTracks can automatically run jumps, mix changes, scenes and pads at exactly the moment you choose, without touching the screen during a show.",
+          bodyMobile: "Press and hold this panel to add the automation track, then place actions on the timeline. LibreTracks can automatically run jumps, mix changes, scenes and pads at exactly the moment you choose, without touching the screen during a show.",
+        },
         touchControls: {
           title: "The touch controls",
           body: "These three buttons only exist on mobile.",

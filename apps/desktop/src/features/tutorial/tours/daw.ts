@@ -99,6 +99,18 @@ export const dawTour: TourDefinition = {
       i18nKey: "tutorial.daw.steps.folders",
     },
     {
+      id: "midiTracks",
+      target: TOUR_TARGETS.trackHeaders,
+      viewMode: "daw",
+      i18nKey: "tutorial.daw.steps.midiTracks",
+    },
+    {
+      id: "automationTracks",
+      target: TOUR_TARGETS.trackHeaders,
+      viewMode: "daw",
+      i18nKey: "tutorial.daw.steps.automationTracks",
+    },
+    {
       // Sólo móvil: en escritorio la altura se cambia con Alt+scroll y no hay
       // riesgo de mover el cabezal con la palma de la mano.
       id: "touchControls",

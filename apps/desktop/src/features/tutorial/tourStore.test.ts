@@ -98,6 +98,8 @@ describe("qué recorrido toca", () => {
         "markerKinds",
         "dragMarkers",
         "folders",
+        "midiTracks",
+        "automationTracks",
         "clips",
       ]),
     );

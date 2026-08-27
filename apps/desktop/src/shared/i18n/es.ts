@@ -1498,6 +1498,16 @@ const es = {
           title: "Carpetas de pistas",
           body: "Una carpeta agrupa pistas y las pliega en una sola fila: con veinte stems, ver cuatro grupos en vez de veinte filas cambia mucho. «Meter en la carpeta anterior» mete una pista dentro de la de arriba, y el plegado se guarda con el proyecto.",
         },
+        midiTracks: {
+          title: "Pistas MIDI",
+          body: "Con el clic derecho en este panel puedes añadir una pista MIDI. Sus clips no contienen audio: envían notas, cambios de control y de programa a un puerto y canal MIDI, por ejemplo para disparar luces, letras o un instrumento externo.",
+          bodyMobile: "Mantén pulsado este panel para añadir una pista MIDI. Sus clips no contienen audio: envían notas, cambios de control y de programa a un puerto y canal MIDI, por ejemplo para disparar luces, letras o un instrumento externo.",
+        },
+        automationTracks: {
+          title: "Pista de automatismos",
+          body: "Añádela con el clic derecho en este panel y coloca acciones en el timeline. LibreTracks puede ejecutar automáticamente saltos, cambios de mezcla, escenas y pads justo en el momento que decidas, sin tener que tocar la pantalla durante el directo.",
+          bodyMobile: "Mantén pulsado este panel para añadir la pista de automatismos y coloca acciones en el timeline. LibreTracks puede ejecutar automáticamente saltos, cambios de mezcla, escenas y pads justo en el momento que decidas, sin tocar la pantalla durante el directo.",
+        },
         touchControls: {
           title: "Los controles táctiles",
           body: "Estos tres botones sólo existen en el móvil.",
