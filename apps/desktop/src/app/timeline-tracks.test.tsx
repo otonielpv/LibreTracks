@@ -43,6 +43,26 @@ import {
 } from "../test/testUtils";
 import { useTimelineUIStore as useTimelineUIStoreForTest } from "../features/transport/uiStore";
 
+function touchPointer(
+  type: "pointerdown" | "pointermove" | "pointerup",
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+) {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    clientX,
+    clientY,
+  });
+  Object.defineProperties(event, {
+    pointerType: { value: "touch" },
+    pointerId: { value: pointerId },
+  });
+  return event;
+}
+
 describe("App / timeline-tracks", () => {
   it("keeps folder tracks integrated in the same timeline box", async () => {
     const { container } = await renderApp();
@@ -402,6 +422,27 @@ describe("App / timeline-tracks", () => {
     });
 
     expect(await screen.findByText(textMatcher(interpolate(en.transport.status.tracksReordered, { count: 1 })))).toBeTruthy();
+  });
+
+  it("reorders tracks with a touch pointer on mobile WebViews", async () => {
+    const { container } = await renderApp();
+    mockTrackRowDragGeometry(container);
+    const keysHeader = getTrackHeader(container, "Keys");
+    useTimelineUIStoreForTest.getState().setTrackReorderMode(true);
+
+    await act(async () => {
+      fireEvent(keysHeader, touchPointer("pointerdown", 41, 80, 470));
+      fireEvent(window, touchPointer("pointermove", 41, 80, 380));
+      fireEvent(window, touchPointer("pointerup", 41, 80, 380));
+    });
+
+    expect(
+      await screen.findByText(
+        textMatcher(
+          interpolate(en.transport.status.tracksReordered, { count: 1 }),
+        ),
+      ),
+    ).toBeTruthy();
   });
 
 });

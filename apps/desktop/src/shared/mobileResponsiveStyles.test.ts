@@ -49,6 +49,12 @@ describe("contrato responsive móvil", () => {
     expect(sideNav).toContain("env(safe-area-inset-left");
   });
 
+  it("fija el documento iOS para que WKWebView no cree scroll exterior", () => {
+    expect(styles).toMatch(
+      /html\.lt-ios,[^{]*html\.lt-ios body\s*\{[^}]*position:\s*fixed[^}]*overflow:\s*hidden/s,
+    );
+  });
+
   it("reorganiza grupos completos del transporte sin recortar horizontalmente", () => {
     const transport = declarationsFor(".lt-mobile .lt-transport");
 

@@ -1,8 +1,12 @@
 import type { TrackSummary, TransportSnapshot } from "@libretracks/shared/models";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 
 import type { OptimisticMixState } from "../store";
 import type { TrackDragState } from "../types";
+import { useTimelineUIStore } from "../uiStore";
 import {
   offsetGainByDb,
   resolveEditTargets,
@@ -171,11 +175,24 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
   };
 
   const handleTrackHeaderDragStart = (
-    event: ReactMouseEvent<HTMLElement>,
+    event: ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>,
     trackId: string,
   ) => {
     if (event.button !== 0) {
       return;
+    }
+    if (
+      "pointerType" in event &&
+      event.pointerType === "touch" &&
+      !useTimelineUIStore.getState().trackReorderMode
+    ) {
+      return;
+    }
+
+    if ("pointerType" in event && event.pointerType === "touch") {
+      // Suppress the compatibility mousedown: it would replace the real touch
+      // pointer id and make the following pointermove look unrelated.
+      event.preventDefault();
     }
 
     event.stopPropagation();
@@ -196,7 +213,7 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     const scaleBounds = scaleElement.getBoundingClientRect();
     trackDragRef.current = {
       trackId,
-      pointerId: 1,
+      pointerId: "pointerId" in event ? event.pointerId : 1,
       startClientX: event.clientX,
       startClientY: event.clientY,
       pointerScaleX: getElementScaleX(scaleBounds, scaleElement.offsetWidth),

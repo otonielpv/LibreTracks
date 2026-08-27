@@ -50,6 +50,7 @@ import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useTouchContextMenu } from "./useTouchContextMenu";
+import { useBoundedTimelineScroll } from "./useBoundedTimelineScroll";
 import {
   LANE_CUES,
   LANE_REGIONS,
@@ -725,6 +726,10 @@ export function TimelineCanvasPane({
   const trackCanvasHeight = Math.max(
     visibleTrackAreaHeight,
     visibleTracks.length * trackHeight,
+  );
+  useBoundedTimelineScroll(
+    scrollViewportRef,
+    RULER_HEIGHT + trackCanvasHeight,
   );
 
   // The canvas draws cue diamonds from song.automationCues. Exhausted cues come

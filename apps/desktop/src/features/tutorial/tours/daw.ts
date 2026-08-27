@@ -120,6 +120,13 @@ export const dawTour: TourDefinition = {
       i18nKey: "tutorial.daw.steps.touchControls",
     },
     {
+      id: "trackReorderMode",
+      target: TOUR_TARGETS.mobileTrackReorder,
+      platforms: ["mobile"],
+      viewMode: "daw",
+      i18nKey: "tutorial.daw.steps.trackReorderMode",
+    },
+    {
       id: "clips",
       target: TOUR_TARGETS.timelineCanvas,
       viewMode: "daw",

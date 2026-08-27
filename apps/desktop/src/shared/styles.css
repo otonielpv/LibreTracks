@@ -63,6 +63,40 @@ textarea {
   height: 100dvh;
 }
 
+/* Track headers scroll vertically by default. Reorder mode temporarily claims
+   that same gesture for dragging; controls and long-press remain interactive. */
+.lt-mobile .lt-track-header {
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+}
+
+.lt-mobile .lt-compact-mixer-strip-name {
+  touch-action: pan-x;
+  -webkit-touch-callout: none;
+}
+
+.lt-mobile .lt-track-headers-pane.is-track-reorder-mode .lt-track-header,
+.lt-mobile .lt-compact-mixer.is-track-reorder-mode .lt-compact-mixer-strip-name {
+  touch-action: none;
+  cursor: grab;
+}
+
+.lt-mobile .lt-track-headers-pane {
+  -webkit-touch-callout: none;
+}
+
+/* WKWebView can rubber-band the document even when body says overflow:hidden.
+   Pinning the document viewport keeps all scrolling inside the explicit DAW
+   scrollers and prevents an unbounded blank page below the app shell. */
+html.lt-ios,
+html.lt-ios body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
 .lt-ui-zoom-compensate-viewport .lt-app-shell {
   width: calc(100vw / var(--lt-ui-zoom, 1));
   height: calc(100vh / var(--lt-ui-zoom, 1));

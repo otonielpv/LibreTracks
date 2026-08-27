@@ -191,6 +191,7 @@ import { PadsPopover } from "./panels/PadsPopover";
 import { MetronomePopover } from "./panels/MetronomePopover";
 import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
+import { MobileTrackReorderToggle } from "./tracks/MobileTrackReorderToggle";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
   clampGroupRowDelta,
@@ -5596,6 +5597,7 @@ export function TransportPanelContent() {
     clipSelectionAnchorRef,
     clipSelectionPendingCollapseRef,
     suppressTrackClickRef,
+    trackScrollViewportRef: timelineScrollViewportRef,
     restoreConfirmedTransportVisualRef,
     performSeekRef,
     snapEnabled,
@@ -7513,6 +7515,7 @@ export function TransportPanelContent() {
                           headerActions={
                             isMobileApp ? (
                               <>
+                                <MobileTrackReorderToggle />
                                 <button
                                   type="button"
                                   className="lt-icon-button"

@@ -1,4 +1,10 @@
-import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  memo,
+  useRef,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -74,7 +80,7 @@ type TrackHeaderItemProps = {
   onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onStartTrackDrag: (
-    event: ReactMouseEvent<HTMLElement>,
+    event: ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>,
     trackId: string,
   ) => void;
   onToggleFolder: (trackId: string) => void;
@@ -124,6 +130,7 @@ function TrackHeaderItemComponent({
   onAudioToChange,
 }: TrackHeaderItemProps) {
   const { t } = useTranslation();
+  const lastTouchPointerDownAtRef = useRef(0);
   const optimisticMix = useTransportStore((state) => state.optimisticMix[trackId] ?? null);
   const effectivePanValue = optimisticMix?.pan ?? panValue;
   const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
@@ -139,11 +146,27 @@ function TrackHeaderItemComponent({
     onCommit: () => onCommitVolume(trackId),
   });
   const panFill = `${(((effectivePanValue + 1) * 0.5) * 100).toFixed(2)}%`;
-  const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (isOwnControlTarget(event.target)) {
       return;
     }
 
+    if (event.pointerType === "touch") {
+      lastTouchPointerDownAtRef.current = Date.now();
+    }
+    onStartTrackDrag(event, trackId);
+  };
+
+  const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+    // iOS emits a compatibility mousedown after the touch finishes. The touch
+    // Pointer Event already armed (and may have completed) the drag, so do not
+    // create a second stale drag on release.
+    if (Date.now() - lastTouchPointerDownAtRef.current < 1000) {
+      return;
+    }
+    if (isOwnControlTarget(event.target)) {
+      return;
+    }
     onStartTrackDrag(event, trackId);
   };
 
@@ -183,6 +206,7 @@ function TrackHeaderItemComponent({
       style={headerStyle}
       role="button"
       tabIndex={0}
+      onPointerDown={handlePointerDown}
       onMouseDown={handleMouseDown}
       onClick={handleClick}
       onContextMenu={(event) => onOpenContextMenu(event, trackId)}

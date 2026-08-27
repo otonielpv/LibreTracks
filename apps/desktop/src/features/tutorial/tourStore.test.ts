@@ -82,6 +82,7 @@ describe("qué recorrido toca", () => {
       TOUR_TARGETS.trackHeaders,
       TOUR_TARGETS.timelineCanvas,
       TOUR_TARGETS.mobileTouchControls,
+      TOUR_TARGETS.mobileTrackReorder,
     ]) {
       expect(targets, `falta ${target} en el recorrido DAW`).toContain(target);
     }
@@ -130,6 +131,10 @@ describe("qué recorrido toca", () => {
     );
 
     expect(touchStep?.platforms).toEqual(["mobile"]);
+    const reorderStep = TOURS.daw.steps.find(
+      (step) => step.target === TOUR_TARGETS.mobileTrackReorder,
+    );
+    expect(reorderStep?.platforms).toEqual(["mobile"]);
   });
 
   it("los recorridos del área de trabajo fuerzan una vista donde existan sus controles", () => {

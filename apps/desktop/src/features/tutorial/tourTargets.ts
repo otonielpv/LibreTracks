@@ -42,6 +42,7 @@ export const TOUR_TARGETS = {
   timelineRuler: "timeline-ruler",
   trackHeaders: "track-headers",
   mobileTouchControls: "mobile-touch-controls",
+  mobileTrackReorder: "mobile-track-reorder",
   topbarTempo: "topbar-tempo",
   topbarTimeSignature: "topbar-time-signature",
   toolbarSnap: "toolbar-snap",

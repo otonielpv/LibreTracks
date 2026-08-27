@@ -43,6 +43,22 @@ function Harness({
   );
 }
 
+function DelegatedHarness({ onTarget }: { onTarget: (target: EventTarget | null) => void }) {
+  const gesture = useTouchContextMenu({ delayMs: 500 });
+  return (
+    <div
+      data-testid="pane"
+      onPointerDownCapture={gesture.begin}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onTarget(event.target);
+      }}
+    >
+      <span data-testid="track-name">Keys</span>
+    </div>
+  );
+}
+
 describe("useTouchContextMenu", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -89,5 +105,16 @@ describe("useTouchContextMenu", () => {
 
     expect(onContextMenu).toHaveBeenCalledTimes(1);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("preserves the element under the finger for delegated pane menus", () => {
+    vi.useFakeTimers();
+    const onTarget = vi.fn();
+    const { getByTestId } = render(<DelegatedHarness onTarget={onTarget} />);
+    const trackName = getByTestId("track-name");
+    fireEvent(trackName, touchPointer("pointerdown", 8, 20, 20));
+    act(() => vi.advanceTimersByTime(500));
+
+    expect(onTarget).toHaveBeenCalledWith(trackName);
   });
 });

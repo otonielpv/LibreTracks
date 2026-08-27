@@ -50,7 +50,11 @@ export function useTouchContextMenu({
       startY: event.clientY,
       clientX: event.clientX,
       clientY: event.clientY,
-      target: event.currentTarget,
+      // Keep the element under the finger as the synthetic event target. This
+      // lets a single capture listener cover a whole pane while normal
+      // contextmenu bubbling still selects the specific track/empty area.
+      target:
+        event.target instanceof HTMLElement ? event.target : event.currentTarget,
       timerId: 0,
     };
     active.timerId = window.setTimeout(() => {

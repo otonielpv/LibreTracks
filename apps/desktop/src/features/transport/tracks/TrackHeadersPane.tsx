@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,6 +13,11 @@ import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import { useSongStore } from "../songStore";
 import { TrackHeaderItem } from "./TrackHeaderItem";
 import { MidiTrackHeader } from "../midi/MidiTrackHeader";
+import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
+import { useTimelineUIStore } from "../uiStore";
+
+const TRACK_HEADER_CONTROL_SELECTOR =
+  "button, input, label, textarea, select, .lt-track-toggle-group, .lt-track-volume, .lt-track-pan";
 
 /** Grouped so the MIDI/automation lane controls travel as a single prop. */
 export type MidiLaneControls = {
@@ -39,7 +45,10 @@ type TrackHeadersPaneProps = {
   onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onEmptyAreaContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  onStartTrackDrag: (event: ReactMouseEvent<HTMLElement>, trackId: string) => void;
+  onStartTrackDrag: (
+    event: ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>,
+    trackId: string,
+  ) => void;
   onToggleFolder: (trackId: string) => void;
   onToggleMute: (trackId: string) => void;
   onToggleSolo: (trackId: string) => void;
@@ -88,6 +97,14 @@ export function TrackHeadersPane({
   // so it no longer re-renders on every unrelated mutation of `song`.
   const hasSong = useSongStore((state) => state.song !== null);
   const headersListRef = useRef<HTMLDivElement | null>(null);
+  const trackReorderMode = useTimelineUIStore(
+    (state) => state.trackReorderMode,
+  );
+  const touchContextMenu = useTouchContextMenu({
+    ignoreTarget: (target) =>
+      target instanceof Element &&
+      target.closest(TRACK_HEADER_CONTROL_SELECTOR) !== null,
+  });
 
   useEffect(() => {
     const headersList = headersListRef.current;
@@ -103,8 +120,18 @@ export function TrackHeadersPane({
 
   return (
     <div
-      className="lt-track-headers-pane"
+      className={`lt-track-headers-pane ${trackReorderMode ? "is-track-reorder-mode" : ""}`}
       data-lt-tour={TOUR_TARGETS.trackHeaders}
+      onPointerDownCapture={touchContextMenu.begin}
+      onPointerMoveCapture={touchContextMenu.move}
+      onPointerUpCapture={touchContextMenu.cancel}
+      onPointerCancelCapture={touchContextMenu.cancel}
+      onClickCapture={(event) => {
+        if (touchContextMenu.consumeTriggered()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onContextMenu={(event) => {
         // Show the global track-list menu when the right-click hits empty
         // space inside the pane (below the last header). Header rows and the
@@ -152,6 +179,7 @@ export function TrackHeadersPane({
                   role="button"
                   tabIndex={0}
                   aria-label={t("transport.automation.trackHeaderAria")}
+                  onPointerDown={(event) => onStartTrackDrag(event, track.id)}
                   onMouseDown={(event) => onStartTrackDrag(event, track.id)}
                   onClick={(event) =>
                     onSelectTrack(

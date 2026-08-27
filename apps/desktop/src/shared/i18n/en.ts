@@ -1029,6 +1029,8 @@ const en = {
     hint: "Updated every second. Use this to tell whether a slowdown is LibreTracks or the whole machine. \"Audio load\" is the share of the audio buffer budget in use — over 100% causes dropouts.",
   },
   timelineToolbar: {
+    enableTrackReorder: "Enable track reorder mode",
+    disableTrackReorder: "Exit track reorder mode",
     disableSnap: "Disable snap to grid",
     enableSnap: "Enable snap to grid",
     snapTitle: "Snap to Grid ({{subdivision}}/1)",
@@ -1461,7 +1463,7 @@ const en = {
         tracks: {
           title: "The tracks",
           body: "Each row is a track, with its volume, pan, mute, solo and output. Right-click here to add audio tracks or folders, and drag them to reorder.",
-          bodyMobile: "Each row is a track, with its volume, pan, mute, solo and output. Press and hold here to add audio tracks or folders, and drag them to reorder.",
+          bodyMobile: "Each row is a track, with its volume, pan, mute, solo and output. Press and hold here to add audio tracks or folders. To change their order, use the reorder button covered next.",
         },
         folders: {
           title: "Track folders",
@@ -1479,8 +1481,13 @@ const en = {
         },
         touchControls: {
           title: "The touch controls",
-          body: "These three buttons only exist on mobile.",
-          bodyMobile: "These three buttons only exist on mobile. The first two raise and lower track height, so you can fit more in or hit them more easily with a finger. The third locks seeking from the ruler: with it on, brushing the screen with your palm mid-rehearsal no longer moves playback.",
+          body: "These controls only exist on mobile.",
+          bodyMobile: "These controls only exist on mobile. The height buttons fit more tracks on screen or make them easier to hit. The lock prevents ruler seeking, so brushing the screen with your palm no longer moves playback.",
+        },
+        trackReorderMode: {
+          title: "Track reorder mode",
+          body: "This button enables touch track reordering.",
+          bodyMobile: "Vertical scrolling is the normal gesture over tracks. Enable this button only when you want to reorder them: drag up or down, hold at an edge to auto-scroll, and drop in the middle of a folder to put the track inside it. Press it again when you are done.",
         },
         clips: {
           title: "Editing clips",

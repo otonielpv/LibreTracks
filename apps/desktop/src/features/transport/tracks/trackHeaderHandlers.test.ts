@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 
 import type {
   SongView,
@@ -11,6 +14,7 @@ import {
   createTrackHeaderHandlers,
   type TrackHeaderHandlerDeps,
 } from "./trackHeaderHandlers";
+import { useTimelineUIStore } from "../uiStore";
 
 const snapshot = (revision: number) =>
   ({ projectRevision: revision }) as unknown as TransportSnapshot;
@@ -193,6 +197,7 @@ describe("createTrackHeaderHandlers", () => {
         button: 0,
         clientX: 100,
         clientY: 200,
+        preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
         currentTarget: {
           closest: closestImpl,
@@ -258,6 +263,25 @@ describe("createTrackHeaderHandlers", () => {
       expect(trackDragRef.current?.originSurface).toBe("daw");
       expect(trackDragRef.current?.headerElement).toBe(header);
       expect(trackDragRef.current?.rowElement).toBe(row);
+    });
+
+    it("requires reorder mode for touch, while mouse remains immediate", () => {
+      const { handlers, trackDragRef } = setup();
+      const touch = {
+        ...dragEvent(() => null),
+        pointerType: "touch",
+        pointerId: 7,
+      } as unknown as ReactPointerEvent<HTMLElement>;
+
+      useTimelineUIStore.getState().setTrackReorderMode(false);
+      handlers.handleTrackHeaderDragStart(touch, "t1");
+      expect(trackDragRef.current).toBeNull();
+
+      useTimelineUIStore.getState().setTrackReorderMode(true);
+      handlers.handleTrackHeaderDragStart(touch, "t1");
+      expect(trackDragRef.current?.pointerId).toBe(7);
+      expect(touch.preventDefault).toHaveBeenCalledOnce();
+      useTimelineUIStore.getState().setTrackReorderMode(false);
     });
   });
 

@@ -30,6 +30,7 @@ function reset() {
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
+    trackReorderMode: false,
     viewMode: DEFAULT_VIEW_MODE,
   });
 }
@@ -46,6 +47,7 @@ describe("useTimelineUIStore", () => {
     expect(initial.followPlayheadEnabled).toBe(
       TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     );
+    expect(initial.trackReorderMode).toBe(false);
     expect(initial.viewMode).toBe(DEFAULT_VIEW_MODE);
   });
 
@@ -87,6 +89,13 @@ describe("useTimelineUIStore", () => {
 
       expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
+  });
+
+  it("toggles the mobile track reorder mode", () => {
+    get().toggleTrackReorderMode();
+    expect(get().trackReorderMode).toBe(true);
+    get().setTrackReorderMode(false);
+    expect(get().trackReorderMode).toBe(false);
   });
 
   describe("cameraX", () => {

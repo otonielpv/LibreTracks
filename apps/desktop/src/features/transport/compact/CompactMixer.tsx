@@ -28,6 +28,7 @@ const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
 import type { TrackSummary } from "../desktopApi";
 import { TrackMeter } from "../tracks/TrackMeter";
 import { useTransportStore, type OptimisticMixState } from "../store";
+import { useTimelineUIStore } from "../uiStore";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -210,6 +211,9 @@ function CompactMixerComponent({
   collapsedFolders,
   onToggleFolder,
 }: CompactMixerProps) {
+  const trackReorderMode = useTimelineUIStore(
+    (state) => state.trackReorderMode,
+  );
   // Build a (childTrackId → parent colour / parent name) lookup once so each
   // strip can render its Reaper-style folder cue (a thin coloured ribbon on
   // the left edge + a tiny "↳ Parent" hint under the strip name) without
@@ -246,7 +250,9 @@ function CompactMixerComponent({
   );
 
   return (
-    <div className="lt-compact-mixer">
+    <div
+      className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""}`}
+    >
       <div className="lt-compact-mixer-strips">
         {visibleTracks.map((track) => (
           <CompactMixerStrip
@@ -285,7 +291,9 @@ type CompactMixerProps_DragSelection = {
   ) => void;
   /** Pointer-down on a strip handle starts the reorder drag. */
   onTrackDragStart: (
-    event: ReactMouseEvent<HTMLDivElement>,
+    event:
+      | ReactMouseEvent<HTMLDivElement>
+      | ReactPointerEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
 };
@@ -317,7 +325,9 @@ type CompactMixerStripProps = {
    * enough to count as a drag (vs. plain click). Same contract the
    * DAW track header uses. */
   onDragStart: (
-    event: ReactMouseEvent<HTMLDivElement>,
+    event:
+      | ReactMouseEvent<HTMLDivElement>
+      | ReactPointerEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
   /** Only meaningful on a folder strip: whether its children are folded. */
@@ -462,6 +472,7 @@ function CompactMixerStripComponent({
   // the slider, the way Ableton overlays the numeric value next to the
   // thumb. Set on pointerdown, cleared on pointerup/cancel.
   const [isPanDragging, setIsPanDragging] = useState(false);
+  const lastTouchPointerDownAtRef = useRef(0);
 
   const handleAudioToChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
@@ -485,8 +496,21 @@ function CompactMixerStripComponent({
 
   const handleStripMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (Date.now() - lastTouchPointerDownAtRef.current < 1000) return;
       if (event.button !== 0) return;
       if (!isSelectableTarget(event.target)) return;
+      onDragStart(event, track.id);
+    },
+    [onDragStart, track.id],
+  );
+
+  const handleStripPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      if (!isSelectableTarget(event.target)) return;
+      if (event.pointerType === "touch") {
+        lastTouchPointerDownAtRef.current = Date.now();
+      }
       onDragStart(event, track.id);
     },
     [onDragStart, track.id],
@@ -517,6 +541,7 @@ function CompactMixerStripComponent({
             : null),
         } as React.CSSProperties
       }
+      onPointerDown={handleStripPointerDown}
       onMouseDown={handleStripMouseDown}
       onClick={handleStripClick}
       onContextMenu={(event) => onContextMenu(event, track.id)}
@@ -554,6 +579,7 @@ function CompactMixerStripComponent({
             // drag handle — without stopping mousedown, pressing the chevron
             // would arm a reorder drag instead of folding.
             onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
               onToggleFolder(track.id);
@@ -578,6 +604,7 @@ function CompactMixerStripComponent({
           // identically-named controls on the same strip.
           title={t("trackHeader.expand", { name: track.name })}
           onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             onToggleFolder(track.id);

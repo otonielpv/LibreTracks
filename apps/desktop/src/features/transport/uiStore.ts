@@ -35,6 +35,7 @@ type TimelineUIState = {
   snapEnabled: boolean;
   followPlayheadEnabled: boolean;
   midiLearnMode: string | null;
+  trackReorderMode: boolean;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
@@ -58,6 +59,8 @@ type TimelineUIState = {
   ) => void;
   toggleFollowPlayheadEnabled: () => void;
   setMidiLearnMode: (midiLearnMode: string | null) => void;
+  setTrackReorderMode: (enabled: boolean) => void;
+  toggleTrackReorderMode: () => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -72,6 +75,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
+    trackReorderMode: false,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);
@@ -202,6 +206,12 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     setMidiLearnMode: (midiLearnMode) => {
       set({ midiLearnMode });
+    },
+    setTrackReorderMode: (trackReorderMode) => {
+      set({ trackReorderMode });
+    },
+    toggleTrackReorderMode: () => {
+      set((state) => ({ trackReorderMode: !state.trackReorderMode }));
     },
   })),
 );

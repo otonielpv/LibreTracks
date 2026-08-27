@@ -1059,6 +1059,8 @@ const es = {
     hint: "Se actualiza cada segundo. Sirve para saber si una ralentización es de LibreTracks o de toda la máquina. La «carga de audio» es el porcentaje del presupuesto del búfer en uso: por encima del 100 % se producen cortes.",
   },
   timelineToolbar: {
+    enableTrackReorder: "Activar modo de reordenar pistas",
+    disableTrackReorder: "Salir del modo de reordenar pistas",
     disableSnap: "Desactivar snap to grid",
     enableSnap: "Activar snap to grid",
     snapTitle: "Snap to Grid ({{subdivision}}/1)",
@@ -1492,7 +1494,7 @@ const es = {
         tracks: {
           title: "Las pistas",
           body: "Cada fila es una pista, con su volumen, panorama, mute, solo y a qué salida va. Con el clic derecho aquí añades pistas de audio o carpetas, y las reordenas arrastrándolas.",
-          bodyMobile: "Cada fila es una pista, con su volumen, panorama, mute, solo y a qué salida va. Mantén pulsado aquí para añadir pistas de audio o carpetas, y arrástralas para reordenarlas.",
+          bodyMobile: "Cada fila es una pista, con su volumen, panorama, mute, solo y a qué salida va. Mantén pulsado aquí para añadir pistas de audio o carpetas. Para cambiar su orden usa el botón de reordenación que veremos a continuación.",
         },
         folders: {
           title: "Carpetas de pistas",
@@ -1510,8 +1512,13 @@ const es = {
         },
         touchControls: {
           title: "Los controles táctiles",
-          body: "Estos tres botones sólo existen en el móvil.",
-          bodyMobile: "Estos tres botones sólo existen en el móvil. Los dos primeros suben y bajan la altura de las pistas, para que quepan más o se vean mejor con el dedo. El tercero bloquea el salto al tocar la regla: con él activado, un roce con la palma durante el ensayo ya no te mueve la reproducción.",
+          body: "Estos controles sólo existen en el móvil.",
+          bodyMobile: "Estos controles sólo existen en el móvil. Los botones de altura hacen que quepan más pistas o que se vean mejor con el dedo. El candado bloquea el salto al tocar la regla: con él activado, un roce con la palma durante el ensayo ya no mueve la reproducción.",
+        },
+        trackReorderMode: {
+          title: "Modo de reordenar pistas",
+          body: "Este botón activa el modo de reordenación táctil.",
+          bodyMobile: "El scroll vertical es el gesto normal sobre las pistas. Activa este botón sólo cuando quieras reordenarlas: arrastra hacia arriba o abajo, mantenla en un borde para hacer auto-scroll y suéltala en el centro de una carpeta para meterla dentro. Vuelve a pulsarlo al terminar.",
         },
         clips: {
           title: "Editar clips",

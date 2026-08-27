@@ -34,6 +34,7 @@ import type {
   TrackDragState,
   TrackDropState,
 } from "../types";
+import { trackDragAutoScrollVelocity } from "../tracks/trackDragAutoScroll";
 
 export type UseDragListenersOptions = {
   // --- Live state, read through refs so the listeners never re-subscribe ---
@@ -53,6 +54,7 @@ export type UseDragListenersOptions = {
   clipSelectionAnchorRef: { current: string | null };
   clipSelectionPendingCollapseRef: { current: string | null };
   suppressTrackClickRef: { current: boolean };
+  trackScrollViewportRef: { current: HTMLDivElement | null };
 
   // --- Hoisted component functions, passed by ref (declared further down) ---
   restoreConfirmedTransportVisualRef: { current: (() => void) | null };
@@ -110,6 +112,7 @@ export function useDragListeners({
   clipSelectionAnchorRef,
   clipSelectionPendingCollapseRef,
   suppressTrackClickRef,
+  trackScrollViewportRef,
   restoreConfirmedTransportVisualRef,
   performSeekRef,
   snapEnabled,
@@ -128,6 +131,90 @@ export function useDragListeners({
   t,
 }: UseDragListenersOptions) {
   useEffect(() => {
+    let trackAutoScrollFrameId = 0;
+    let trackAutoScrollVelocity = 0;
+
+    const stopTrackAutoScroll = () => {
+      trackAutoScrollVelocity = 0;
+      if (trackAutoScrollFrameId !== 0) {
+        window.cancelAnimationFrame(trackAutoScrollFrameId);
+        trackAutoScrollFrameId = 0;
+      }
+    };
+
+    const paintTrackDropAtPointer = (
+      trackDrag: NonNullable<TrackDragState>,
+    ) => {
+      const currentSong = songRef.current;
+      if (!currentSong) return;
+      const dropState =
+        trackDrag.originSurface === "compact"
+          ? resolveCompactTrackDropState(
+              currentSong,
+              trackDrag.trackId,
+              trackDrag.currentClientX,
+              trackDrag.currentClientY,
+            )
+          : resolveTrackDropState(
+              currentSong,
+              trackDrag.trackId,
+              trackDrag.currentClientX,
+              trackDrag.currentClientY,
+            );
+      applyTrackDragVisuals(trackDrag, dropState);
+    };
+
+    const runTrackAutoScrollFrame = () => {
+      trackAutoScrollFrameId = 0;
+      const trackDrag = trackDragRef.current;
+      const viewport = trackScrollViewportRef.current;
+      if (
+        !trackDrag?.isDragging ||
+        trackDrag.originSurface !== "daw" ||
+        !viewport ||
+        trackAutoScrollVelocity === 0
+      ) {
+        stopTrackAutoScroll();
+        return;
+      }
+      const previousScrollTop = viewport.scrollTop;
+      viewport.scrollTop += trackAutoScrollVelocity;
+      if (viewport.scrollTop === previousScrollTop) {
+        stopTrackAutoScroll();
+        return;
+      }
+      paintTrackDropAtPointer(trackDrag);
+      trackAutoScrollFrameId = window.requestAnimationFrame(
+        runTrackAutoScrollFrame,
+      );
+    };
+
+    const updateTrackAutoScroll = (
+      trackDrag: NonNullable<TrackDragState>,
+    ) => {
+      const viewport = trackScrollViewportRef.current;
+      if (trackDrag.originSurface !== "daw" || !viewport) {
+        stopTrackAutoScroll();
+        return;
+      }
+      const bounds = viewport.getBoundingClientRect();
+      const rulerBottom = viewport
+        .querySelector<HTMLElement>(".lt-ruler-header")
+        ?.getBoundingClientRect().bottom;
+      trackAutoScrollVelocity = trackDragAutoScrollVelocity(
+        trackDrag.currentClientY,
+        rulerBottom ?? bounds.top,
+        bounds.bottom,
+      );
+      if (trackAutoScrollVelocity === 0) {
+        stopTrackAutoScroll();
+      } else if (trackAutoScrollFrameId === 0) {
+        trackAutoScrollFrameId = window.requestAnimationFrame(
+          runTrackAutoScrollFrame,
+        );
+      }
+    };
+
     const onMouseMove = (event: MouseEvent) => {
       const clipDrag = clipDragRef.current;
       const effectSong = songRef.current;
@@ -299,24 +386,11 @@ export function useDragListeners({
         trackDragRef.current = nextDrag;
 
         if (!isDraggingNow) {
+          stopTrackAutoScroll();
           return;
         }
-
-        const dropState =
-          trackDrag.originSurface === "compact"
-            ? resolveCompactTrackDropState(
-                songRef.current,
-                trackDrag.trackId,
-                event.clientX,
-                event.clientY,
-              )
-            : resolveTrackDropState(
-                songRef.current,
-                trackDrag.trackId,
-                event.clientX,
-                event.clientY,
-              );
-        applyTrackDragVisuals(nextDrag, dropState);
+        paintTrackDropAtPointer(nextDrag);
+        updateTrackAutoScroll(nextDrag);
       }
     };
 
@@ -324,6 +398,7 @@ export function useDragListeners({
       if (event.button !== 0) {
         return;
       }
+      stopTrackAutoScroll();
 
       const activeClipDrag = clipDragRef.current;
       clipDragRef.current = null;
@@ -498,12 +573,61 @@ export function useDragListeners({
       timelinePanRef.current = null;
     };
 
+    // WebKit and Android WebView do not synthesize the mousemove/mouseup
+    // sequence needed by a real touch drag. Keep the established mouse hot
+    // path intact and forward only touch Pointer Events into it.
+    const onTouchPointerMove = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") {
+        return;
+      }
+      const activeTrackDrag = trackDragRef.current;
+      if (activeTrackDrag?.pointerId !== event.pointerId) {
+        return;
+      }
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      onMouseMove(event);
+    };
+
+    const onTouchPointerUp = (event: PointerEvent) => {
+      if (
+        event.pointerType !== "touch" ||
+        trackDragRef.current?.pointerId !== event.pointerId
+      ) {
+        return;
+      }
+      onMouseUp(event);
+    };
+
+    const onTouchPointerCancel = (event: PointerEvent) => {
+      if (
+        event.pointerType !== "touch" ||
+        trackDragRef.current?.pointerId !== event.pointerId
+      ) {
+        return;
+      }
+      trackDragRef.current = null;
+      suppressTrackClickRef.current = true;
+      stopTrackAutoScroll();
+      clearTrackDragVisuals();
+    };
+
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("pointermove", onTouchPointerMove, {
+      passive: false,
+    });
+    window.addEventListener("pointerup", onTouchPointerUp);
+    window.addEventListener("pointercancel", onTouchPointerCancel);
 
     return () => {
+      stopTrackAutoScroll();
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("pointermove", onTouchPointerMove);
+      window.removeEventListener("pointerup", onTouchPointerUp);
+      window.removeEventListener("pointercancel", onTouchPointerCancel);
     };
     // NOTE: live zoom and selection are NOT deps on purpose — they are read
     // through refs / useTimelineUIStore.getState() so the listeners never have

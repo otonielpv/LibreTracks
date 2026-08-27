@@ -1,4 +1,9 @@
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -32,7 +37,7 @@ export type MidiTrackHeaderProps = {
     trackId: string,
   ) => void;
   onStartTrackDrag: (
-    event: ReactMouseEvent<HTMLElement>,
+    event: ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>,
     trackId: string,
   ) => void;
   onToggleEnabled: (trackId: string) => void;
@@ -58,6 +63,7 @@ export function MidiTrackHeader({
   onEditRoute,
 }: MidiTrackHeaderProps) {
   const { t } = useTranslation();
+  const lastTouchPointerDownAtRef = useRef(0);
 
   const headerStyle = {
     height: trackHeight,
@@ -65,7 +71,21 @@ export function MidiTrackHeader({
     ...(trackColor ? { "--lt-track-color": trackColor } : {}),
   } as CSSProperties;
 
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest("button")) {
+      return;
+    }
+    if (event.pointerType === "touch") {
+      lastTouchPointerDownAtRef.current = Date.now();
+    }
+    onStartTrackDrag(event, trackId);
+  };
+
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (Date.now() - lastTouchPointerDownAtRef.current < 1000) {
+      return;
+    }
     const target = event.target;
     if (target instanceof Element && target.closest("button")) {
       return;
@@ -86,6 +106,7 @@ export function MidiTrackHeader({
       style={headerStyle}
       role="button"
       tabIndex={0}
+      onPointerDown={handlePointerDown}
       onMouseDown={handleMouseDown}
       onClick={(event) => onSelectTrack(trackId, trackName, event)}
       onContextMenu={(event) => onOpenContextMenu(event, trackId)}
