@@ -692,7 +692,11 @@ static unsigned fill_thread_count_from_env() {
     if (std::string raw = read_env("LIBRETRACKS_FILL_THREADS"); !raw.empty()) {
         try {
             int n = std::stoi(raw);
-            if (n >= 1) return static_cast<unsigned>(n);
+            // 0 is legal and means "no fill pool": nothing ever drains the
+            // queue, so a test can assert which lane a request landed on
+            // without racing the workers. Never set it on a real session —
+            // streaming sources would never reach RAM.
+            if (n >= 0) return static_cast<unsigned>(n);
         } catch (...) {
         }
     }
@@ -1386,7 +1390,10 @@ void SourceManager::request_blocks(const Id& source_id,
         fill_cv_.notify_one();
 }
 
-void SourceManager::request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept {
+void SourceManager::request_range(const Id& source_id,
+                                  Frame source_frame,
+                                  int frame_count,
+                                  bool urgent) const noexcept {
     if (frame_count <= 0)
         return;
     const auto source = get_shared(source_id);
@@ -1407,20 +1414,44 @@ void SourceManager::request_range(const Id& source_id, Frame source_frame, int f
     if (missing_blocks.empty())
         return;
 
-    bool queued_any = false;
-    {
-        std::lock_guard lock(fill_mtx_);
-        for (int block : missing_blocks) {
-            CacheKey key{source_id, block};
-            if (queued_blocks_.find(key) != queued_blocks_.end())
-                continue;
-            queued_blocks_[key] = true;
-            fill_queue_.push(key);
-            queued_any = true;
+    // Hand each contiguous run to request_blocks rather than pushing onto the
+    // queue here. This used to enqueue by hand and recorded every block as
+    // `queued_blocks_[key] = true` — the flag that means "already on the urgent
+    // lane" — while actually pushing onto the read-ahead lane. The promotion
+    // branch in request_blocks then believed each of those blocks was already
+    // urgent and skipped it, so a block first seen as read-ahead could NEVER be
+    // promoted when the audio thread later starved for it. Since every
+    // prefetched and jump-target block comes through here, that disabled the
+    // urgent lane for practically the whole session.
+    std::size_t run_start = 0;
+    while (run_start < missing_blocks.size()) {
+        std::size_t run_end = run_start + 1;
+        while (run_end < missing_blocks.size()
+               && missing_blocks[run_end] == missing_blocks[run_end - 1] + 1) {
+            ++run_end;
         }
+        request_blocks(source_id,
+                       missing_blocks[run_start],
+                       static_cast<int>(run_end - run_start),
+                       urgent);
+        run_start = run_end;
     }
-    if (queued_any)
-        fill_cv_.notify_one();
+}
+
+size_t SourceManager::drop_pending_readahead() const noexcept {
+    std::lock_guard lock(fill_mtx_);
+    const size_t dropped = fill_queue_.size();
+    while (!fill_queue_.empty()) {
+        const CacheKey& key = fill_queue_.front();
+        auto it = queued_blocks_.find(key);
+        // `true` means the block was ALSO promoted onto the urgent lane, where
+        // a copy still waits. Keep the map entry so that copy stays deduped;
+        // the worker erases it when it pops it.
+        if (it != queued_blocks_.end() && !it->second)
+            queued_blocks_.erase(it);
+        fill_queue_.pop();
+    }
+    return dropped;
 }
 
 CacheDiagnostics SourceManager::cache_diagnostics() const {

@@ -20,6 +20,8 @@ type Props = {
   routeOptions: RouteOption[];
   onClose: () => void;
   onChange: (patch: Partial<AppSettings>) => void;
+  onVolumeDraftChange: (volume: number) => void;
+  onCommitVolume: (volume: number) => void;
 };
 
 function VoiceGuidePopoverImpl({
@@ -29,6 +31,8 @@ function VoiceGuidePopoverImpl({
   routeOptions,
   onClose,
   onChange,
+  onVolumeDraftChange,
+  onCommitVolume,
 }: Props) {
   const { t } = useTranslation();
 
@@ -176,12 +180,25 @@ function VoiceGuidePopoverImpl({
                   defaultValue: "Voice volume",
                 })}
                 onChange={(event) =>
-                  onChange({
-                    voiceGuideVolume: positionToGain(
-                      Number(event.target.value),
+                  onVolumeDraftChange(
+                    positionToGain(Number(event.target.value), AUX_FADER_SCALE),
+                  )
+                }
+                onPointerUp={(event) =>
+                  onCommitVolume(
+                    positionToGain(
+                      Number(event.currentTarget.value),
                       AUX_FADER_SCALE,
                     ),
-                  })
+                  )
+                }
+                onBlur={(event) =>
+                  onCommitVolume(
+                    positionToGain(
+                      Number(event.currentTarget.value),
+                      AUX_FADER_SCALE,
+                    ),
+                  )
                 }
               />
             </div>

@@ -37,6 +37,8 @@ type Props = {
   onToggleEnabled: (next: boolean) => void;
   /** Apply a pad settings patch (key/volume/route/pad id). */
   onPadChange: (patch: Partial<AppSettings>) => void;
+  onVolumeDraftChange: (volume: number) => void;
+  onCommitVolume: (volume: number) => void;
 };
 
 // The 12 keys, in chromatic order. Display uses the sharp glyph; the stored
@@ -64,6 +66,8 @@ function PadsPopoverImpl({
   onClose,
   onToggleEnabled,
   onPadChange,
+  onVolumeDraftChange,
+  onCommitVolume,
 }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -349,12 +353,25 @@ function PadsPopoverImpl({
               value={faderPosition}
               aria-label={t("pads.volume", { defaultValue: "Volumen" })}
               onChange={(event) =>
-                onPadChange({
-                  padVolume: positionToGain(
-                    Number(event.target.value),
+                onVolumeDraftChange(
+                  positionToGain(Number(event.target.value), AUX_FADER_SCALE),
+                )
+              }
+              onPointerUp={(event) =>
+                onCommitVolume(
+                  positionToGain(
+                    Number(event.currentTarget.value),
                     AUX_FADER_SCALE,
                   ),
-                })
+                )
+              }
+              onBlur={(event) =>
+                onCommitVolume(
+                  positionToGain(
+                    Number(event.currentTarget.value),
+                    AUX_FADER_SCALE,
+                  ),
+                )
               }
             />
           </div>

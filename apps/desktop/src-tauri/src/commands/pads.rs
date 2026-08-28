@@ -10,6 +10,16 @@
 //! Downloaded pads live under `app_local_data_dir()/pads/<pad_id>/<key>.<ext>`,
 //! mirroring how the voice-guide bank resolves its assets. The engine decodes
 //! the currently selected key on demand (see `load_pad_clip`).
+//!
+//! Every command in this file is `(async)`. Going back to a plain
+//! `#[tauri::command]` is a regression, not a style choice.
+//!
+//! Tauri runs a plain command inline in the IPC handler, i.e. on the main
+//! thread: the GTK main loop that also drives WebKitGTK's rendering on Linux,
+//! and the loop that owns the WebView2 host window on Windows. `(async)` only
+//! picks the threadpool; the bodies stay synchronous.
+//!
+//! Why it matters here: these download and unzip pad packs and decode audio.
 
 use std::{
     fs,
@@ -243,10 +253,6 @@ fn emit_pad_progress(
 }
 
 // ── Commands ─────────────────────────────────────────────────────────────────
-
-/// Fetch the remote pad catalog and cross-reference it with what's installed
-/// locally. On a network failure the manifest is skipped and only locally
-/// installed pads are returned (so offline users can still use/remove them).
 #[tauri::command]
 pub async fn get_pads_catalog(app: AppHandle) -> Result<PadsCatalog, String> {
     let installed = installed_pad_states(&app);
@@ -804,7 +810,7 @@ fn entry_for_pad_dir(pad_dir: &Path, id: &str) -> PadCatalogEntry {
 /// Create a new, empty user pad from a display name. Returns its catalog entry
 /// (with no keys yet). The user then assigns audio to individual tonalities via
 /// `assign_pad_key`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_user_pad(app: AppHandle, name: String) -> Result<PadCatalogEntry, String> {
     let name = name.trim();
     if name.is_empty() {
@@ -834,7 +840,7 @@ pub fn create_user_pad(app: AppHandle, name: String) -> Result<PadCatalogEntry, 
 }
 
 /// Rename a user pad (updates its `pad.json`). Only user pads can be renamed.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_user_pad(
     app: AppHandle,
     pad_id: String,
@@ -956,7 +962,7 @@ pub async fn assign_pad_key(
 }
 
 /// Remove the audio assigned to one tonality of a user pad (leaves the rest).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_pad_key(
     app: AppHandle,
     pad_id: String,
@@ -984,7 +990,7 @@ pub fn clear_pad_key(
 
 /// Delete an installed pad from disk (to free space). If it is the currently
 /// selected pad, the selection is cleared and the pad disabled.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_pad(
     app: AppHandle,
     pad_id: String,
@@ -1017,7 +1023,7 @@ pub fn delete_pad(
 /// must never touch the disk decoder: decoding a ~15-minute MP3 here is what
 /// froze playback on every fader tick / toggle. Selecting a new key or pad is a
 /// separate call (`load_pad_key`) that decodes off the command path.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_pad_config_realtime(
     app: AppHandle,
     settings: AppSettings,
@@ -1037,6 +1043,18 @@ pub fn set_pad_config_realtime(
         .map_err(|e| e.to_string())?;
     save_app_settings(&app, &settings).map_err(|e| e.to_string())?;
     Ok(settings)
+}
+
+/// Fader hot path: engine-only, with no decoder or settings-file access.
+#[tauri::command(async)]
+pub fn set_pad_volume_realtime(
+    volume: f64,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .audio
+        .set_pad_volume_realtime(volume)
+        .map_err(|error| error.to_string())
 }
 
 /// Decode the selected key of the current pad and swap it into the renderer.

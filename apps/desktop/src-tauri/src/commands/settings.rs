@@ -1,3 +1,19 @@
+//! Every command in this file is `(async)`. Going back to a plain
+//! `#[tauri::command]` is a regression, not a style choice.
+//!
+//! Tauri runs a plain command inline in the IPC handler, i.e. on the main
+//! thread: the GTK main loop that also drives WebKitGTK's rendering on Linux,
+//! and the loop that owns the WebView2 host window on Windows. `(async)` only
+//! picks the threadpool; the bodies stay synchronous.
+//!
+//! Why it matters here: `update_audio_settings` reopens the audio device
+//! (measured at 2.5-7s), and the metronome / voice-guide / pad realtime
+//! commands reach the engine under its lock.
+//!
+//! The realtime ones are streamed from sliders, so two can now be in flight
+//! at once. The Settings handlers serialize them (newest value wins); see
+//! `apps/desktop/src/features/transport/latestWinsStream.ts`.
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
@@ -7,13 +23,12 @@ use crate::infra::settings::{
     AppSettingsStore,
 };
 use crate::state::DesktopState;
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_settings(settings_store: State<'_, AppSettingsStore>) -> Result<AppSettings, String> {
     settings_store.current().map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_settings(
     app: AppHandle,
     settings: AppSettings,
@@ -33,7 +48,7 @@ pub fn save_settings(
     Ok(settings)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_audio_settings(
     app: AppHandle,
     settings: AppSettings,
@@ -84,7 +99,7 @@ pub fn update_audio_settings(
     Ok(next_settings)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_metronome_enabled_realtime(
     enabled: bool,
     state: State<'_, DesktopState>,
@@ -95,7 +110,7 @@ pub fn set_metronome_enabled_realtime(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_metronome_volume_realtime(
     volume: f64,
     state: State<'_, DesktopState>,
@@ -106,10 +121,22 @@ pub fn set_metronome_volume_realtime(
         .map_err(|error| error.to_string())
 }
 
+/// Fader hot path: engine-only, with no voice-bank reload or settings write.
+#[tauri::command(async)]
+pub fn set_voice_guide_volume_realtime(
+    volume: f64,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .audio
+        .set_voice_guide_volume_realtime(volume)
+        .map_err(|error| error.to_string())
+}
+
 /// Apply metronome sound settings (presets, pitch, subdivision) live without
 /// reopening the audio device, and persist them. Used so tweaking the click
 /// sound never pauses playback.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_metronome_sound_realtime(
     app: AppHandle,
     settings: AppSettings,
@@ -171,7 +198,7 @@ fn voice_guide_voices_dir(app: &AppHandle) -> Option<String> {
 
 /// Apply voice-guide settings live (enabled/volume/lead bars/count-in/language)
 /// and (re)load the clip bank for the selected language. Persists settings.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_voice_guide_config_realtime(
     app: AppHandle,
     settings: AppSettings,
@@ -236,7 +263,7 @@ fn persist_settings(
     Ok(next)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_decoding_cache_info(
     app: AppHandle,
     settings_store: State<'_, AppSettingsStore>,
@@ -253,7 +280,7 @@ pub fn get_decoding_cache_info(
 /// Set (or clear, with `None`) the decoding-cache folder. Existing files in the
 /// old folder are left untouched (matches Ableton Live) — they are reclaimed by
 /// LRU eviction or a manual purge.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_decoding_cache_dir(
     app: AppHandle,
     dir: Option<String>,
@@ -273,7 +300,7 @@ pub fn set_decoding_cache_dir(
 }
 
 /// Set (or clear, with `None` = automatic) the decoding-cache size cap in GiB.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_decoding_cache_max_gb(
     app: AppHandle,
     max_gb: Option<u32>,
@@ -361,7 +388,7 @@ pub struct PurgeCacheResult {
 /// the old signature reported "0 bytes freed", which reads as "nothing to
 /// clean" — the user clicks Clear cache, sees no change, and concludes the
 /// button is broken. It isn't; the files are in use.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn purge_decoding_cache() -> Result<PurgeCacheResult, String> {
     let (pcm_freed, pcm_failed) = lt_audio_engine_v2::purge_decoding_cache_detailed();
     let (wave_freed, wave_failed) = purge_waveform_cache();

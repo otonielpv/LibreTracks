@@ -1,3 +1,22 @@
+//! Commands in this file are `(async)` unless the note below names them as
+//! an exception. Turning one back into a plain `#[tauri::command]` is a
+//! regression, not a style choice.
+//!
+//! Tauri runs a plain command inline in the IPC handler, i.e. on the main
+//! thread: the GTK main loop that also drives WebKitGTK's rendering on Linux,
+//! and the loop that owns the WebView2 host window on Windows. `(async)` only
+//! picks the threadpool; the bodies stay synchronous.
+//!
+//! Why it matters here: import, export, save and template flows are file I/O
+//! measured in seconds.
+//!
+//! The commands kept inline all open a native modal dialog (rfd) and then
+//! hand the heavy work to `spawn_project_work`, so the threadpool would buy
+//! them nothing. The two whose tail was NOT offloaded
+//! (`pick_and_import_external_project_from_dialog`,
+//! `export_region_rendered_audio`) are `(async)`; the note on each says why
+//! opening rfd off the main thread is safe here.
+
 use std::thread;
 
 use tauri::{AppHandle, Manager, State};
@@ -84,7 +103,6 @@ fn pick_export_target(
         Ok(Some(ExportTarget::Saf { temp, target }))
     }
 }
-
 #[tauri::command(async)]
 pub fn get_song_view(
     state: State<'_, DesktopState>,
@@ -169,7 +187,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
 /// import flow on a worker thread so the compact import shows real progress
 /// (percent + source readiness) instead of a frozen "Aplicando cambios"
 /// overlay — the old `import_song_package` command emitted nothing.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_import_song_package_from_path(
     app: AppHandle,
     package_path: String,
@@ -239,7 +257,7 @@ fn import_package_off_lock(
 /// dropped project lands at `insert_at_seconds` (the drop X) UNLESS that would
 /// overlap an existing song, in which case it appends after the setlist (a
 /// whole project becomes song region(s), and the engine rejects overlap).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_import_external_project_from_path(
     app: AppHandle,
     project_path: String,
@@ -286,7 +304,12 @@ fn import_external_project_off_lock(
     Ok(response.snapshot)
 }
 
-#[tauri::command]
+// Two dialogs, then the WHOLE import inline: parse the .rpp/.als, decode
+// every source, wait for preparation and save-as. `(async)` because that
+// tail is seconds to minutes of work and it ran on the main thread. The
+// rfd pickers above run off the main thread too, which is already how
+// export_region_as_package (an `async fn` command) has always opened them.
+#[tauri::command(async)]
 pub fn pick_and_import_external_project_from_dialog(
     app: AppHandle,
     state: State<'_, DesktopState>,
@@ -568,7 +591,7 @@ fn sanitize_session_name(raw: &str) -> Result<String, String> {
 /// native save dialog. This is the Android landing flow (`rfd` has no Android
 /// backend), but it works on any platform. Same worker + progress events as
 /// `start_create_song`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_create_song_named(app: AppHandle, name: String) -> Result<bool, String> {
     start_create_song_named_at(app, name, None)
 }
@@ -579,7 +602,7 @@ pub fn start_create_song_named(app: AppHandle, name: String) -> Result<bool, Str
 /// when `Some`, the session folder is placed under that directory (collisions
 /// get a `-2`, `-3`… suffix so we never clobber an existing session). Same
 /// worker + progress events as `start_create_song`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_create_song_named_at(
     app: AppHandle,
     name: String,
@@ -726,14 +749,14 @@ pub async fn pick_session_folder(app: AppHandle, name: String) -> Result<Option<
 /// List the sessions living in the default songs folder (most recently
 /// modified first) so the Android landing screen can offer them without a
 /// native "open file" dialog.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_default_sessions(app: AppHandle) -> Result<Vec<crate::state::SessionSummary>, String> {
     Ok(crate::state::list_default_sessions(&app))
 }
 
 /// List the reusable `.lttemplate` files in the default templates folder so the
 /// landing screen can offer them when creating a new session.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_session_templates(app: AppHandle) -> Result<Vec<crate::state::TemplateSummary>, String> {
     Ok(crate::state::list_default_templates(&app))
 }
@@ -830,7 +853,7 @@ pub fn start_save_session_as_template(
 /// the native save dialog. Mirrors `start_save_session_as_template` but takes
 /// the target path directly — used by the E2E automation seam, which cannot
 /// pilot the native file dialog. Not wired into any production UI.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_session_as_template_at(
     state: State<'_, DesktopState>,
     template_path: String,
@@ -848,7 +871,7 @@ pub fn save_session_as_template_at(
 }
 
 /// Create a named session from a known template without a desktop save dialog.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_create_song_from_template_named_at(
     app: AppHandle,
     template_path: String,
@@ -947,7 +970,7 @@ pub fn start_create_song_from_template_file(app: AppHandle) -> Result<bool, Stri
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -959,7 +982,7 @@ pub fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot,
         .map_err(|error| crate::infra::error_log::log_command_err("save_project", error))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn resolve_missing_file(
     old_path: String,
     new_path: String,
@@ -1033,7 +1056,7 @@ pub fn open_project_from_dialog(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_project_load_progress_snapshot(
     state: State<'_, DesktopState>,
 ) -> Result<Option<ProjectLoadProgressEvent>, String> {
@@ -1143,7 +1166,7 @@ pub async fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, Stri
 /// Open a session whose `.ltsession` path is already known — the Android
 /// landing screen picks from `list_default_sessions` instead of a native
 /// file dialog. Same worker + progress events as the dialog flow.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_open_project_from_path(app: AppHandle, song_file: String) -> Result<bool, String> {
     let song_file = std::path::PathBuf::from(song_file);
     if !song_file.is_file() {
@@ -1607,7 +1630,7 @@ pub async fn import_staged_audio_files(
 /// IPC through the string bridge there, so `tauri::ipc::Request` never sees
 /// `InvokeBody::Raw` on Android (verified: the raw variant failed with
 /// "expected a raw byte body" while desktop worked).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stage_imported_audio_chunk(
     app: AppHandle,
     file_id: String,
@@ -1773,7 +1796,10 @@ pub async fn export_region_as_package_at(
     Ok(true)
 }
 
-#[tauri::command]
+// `(async)`: the render after the save dialog writes a whole region to WAV
+// on the calling thread, which was the main thread. Same rfd-off-main-thread
+// note as pick_and_import_external_project_from_dialog.
+#[tauri::command(async)]
 pub fn export_region_rendered_audio(
     app: AppHandle,
     region_id: String,
@@ -1822,7 +1848,7 @@ pub fn export_region_rendered_audio(
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_song_package(
     app: AppHandle,
     package_path: String,
@@ -2032,7 +2058,7 @@ pub async fn export_session_package_at(
 /// off-lock extract + locked open on a worker thread and ends with the same
 /// `project:load-complete` event, so the frontend load flow runs identically.
 /// Used by the E2E automation seam. Not wired into any UI.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_session_package_at(
     app: AppHandle,
     package_path: String,
@@ -2399,7 +2425,7 @@ fn session_dir_from_pick(target_pick: &std::path::Path) -> Result<std::path::Pat
     Ok(parent_dir.join(project_name))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_external_project(
     project_path: String,
     insert_at_seconds: f64,

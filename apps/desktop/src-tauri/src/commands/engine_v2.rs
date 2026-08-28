@@ -2,6 +2,17 @@
 //!
 //! This is now the desktop audio command surface; the old Rust runtime was
 //! removed during the C++ engine v2 cutover.
+//!
+//! Every command in this file is `(async)`. Going back to a plain
+//! `#[tauri::command]` is a regression, not a style choice.
+//!
+//! Tauri runs a plain command inline in the IPC handler, i.e. on the main
+//! thread: the GTK main loop that also drives WebKitGTK's rendering on Linux,
+//! and the loop that owns the WebView2 host window on Windows. `(async)` only
+//! picks the threadpool; the bodies stay synchronous.
+//!
+//! Why it matters here: `initialize` / `load_session` decode a whole session
+//! before returning.
 
 use lt_audio_engine_v2::{Engine, EngineCommand, EngineError, EngineSnapshot};
 use std::sync::Mutex;
@@ -36,8 +47,7 @@ where
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_initialize(state: State<'_, EngineV2State>) -> Result<String, String> {
     let engine = Engine::new().map_err(|e| e.to_string())?;
     engine.initialize().map_err(|e| e.to_string())?;
@@ -46,7 +56,7 @@ pub fn engine_v2_initialize(state: State<'_, EngineV2State>) -> Result<String, S
     Ok(version)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_shutdown(state: State<'_, EngineV2State>) -> Result<(), String> {
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(engine) = guard.as_ref() {
@@ -56,17 +66,17 @@ pub fn engine_v2_shutdown(state: State<'_, EngineV2State>) -> Result<(), String>
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_get_version(state: State<'_, EngineV2State>) -> Result<String, String> {
     with_engine(&state, |e| Ok(e.version()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_get_snapshot(state: State<'_, EngineV2State>) -> Result<EngineSnapshot, String> {
     with_engine(&state, |e| e.get_snapshot().map_err(|err| err)).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_send_command(
     state: State<'_, EngineV2State>,
     command: EngineCommand,
@@ -74,14 +84,14 @@ pub fn engine_v2_send_command(
     with_engine(&state, |e| e.send_command(&command)).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_poll_events(
     state: State<'_, EngineV2State>,
 ) -> Result<Vec<lt_audio_engine_v2::EngineEvent>, String> {
     with_engine(&state, |e| Ok(e.drain_events())).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_list_devices(
     state: State<'_, EngineV2State>,
 ) -> Result<Vec<lt_audio_engine_v2::DeviceInfo>, String> {
@@ -97,14 +107,14 @@ pub fn engine_v2_list_devices(
     Ok(devices)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_get_diagnostics(state: State<'_, EngineV2State>) -> Result<String, String> {
     with_engine(&state, |e| Ok(e.diagnostics())).map_err(|e| e.to_string())
 }
 
 /// Load a session from a serialized libretracks-project JSON string.
 /// Decodes all sources and installs the Mixer callback.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_v2_load_session(
     state: State<'_, EngineV2State>,
     project_json: String,

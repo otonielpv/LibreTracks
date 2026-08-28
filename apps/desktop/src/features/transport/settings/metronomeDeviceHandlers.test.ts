@@ -52,6 +52,8 @@ function setup(overrides: Partial<MetronomeDeviceHandlerDeps> = {}) {
     setMetronomeSoundRealtime: vi.fn(async (s: AppSettings) => s),
     setMetronomeEnabledRealtime: vi.fn(async () => {}),
     setMetronomeVolumeRealtime: vi.fn(async () => {}),
+    setVoiceGuideVolumeRealtime: vi.fn(async () => {}),
+    setPadVolumeRealtime: vi.fn(async () => {}),
     setVoiceGuideConfigRealtime: vi.fn(async (s: AppSettings) => s),
     setPadConfigRealtime: vi.fn(async (s: AppSettings) => s),
     loadPadKey: vi.fn(async (s: AppSettings) => s),
@@ -60,6 +62,10 @@ function setup(overrides: Partial<MetronomeDeviceHandlerDeps> = {}) {
   };
 
   return { handlers: createMetronomeDeviceHandlers(deps), deps, appSettingsRef };
+}
+
+function flushMicrotasks() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe("createMetronomeDeviceHandlers", () => {
@@ -86,16 +92,47 @@ describe("createMetronomeDeviceHandlers", () => {
     expect(deps.saveSettings).not.toHaveBeenCalled();
   });
 
-  it("volume draft clamps to [0, +20 dB headroom]", () => {
+  it("volume draft clamps to [0, +20 dB headroom]", async () => {
     const { handlers, deps } = setup();
     // The click fader reaches +20 dB (linear gain ≈ 10); values within that
     // headroom pass through, values above it clamp to it.
+    //
+    // Awaiting between moves is not incidental: the draft path runs through a
+    // last-wins stream (see ../latestWinsStream), so back-to-back moves are
+    // deliberately coalesced into one backend call. Let each one land before
+    // asserting on the next.
     handlers.handleMetronomeVolumeDraftChange(5);
+    await flushMicrotasks();
     expect(deps.setMetronomeVolumeRealtime).toHaveBeenLastCalledWith(5);
     handlers.handleMetronomeVolumeDraftChange(50);
+    await flushMicrotasks();
     expect(deps.setMetronomeVolumeRealtime).toHaveBeenLastCalledWith(10);
     handlers.handleMetronomeVolumeDraftChange(-2);
+    await flushMicrotasks();
     expect(deps.setMetronomeVolumeRealtime).toHaveBeenLastCalledWith(0);
+  });
+
+  it("coalesces a volume drag into one backend call at a time", async () => {
+    // A drag emits an event per pointer move. Each one takes the session lock
+    // and reaches the engine, and `(async)` commands can be applied out of
+    // order, so only one may be outstanding: first value out, last value last.
+    let releaseFirst: (() => void) | undefined;
+    const setMetronomeVolumeRealtime = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<void>((resolve) => (releaseFirst = resolve)),
+      )
+      .mockImplementation(() => Promise.resolve());
+    const { handlers } = setup({ setMetronomeVolumeRealtime });
+
+    handlers.handleMetronomeVolumeDraftChange(0.2);
+    handlers.handleMetronomeVolumeDraftChange(0.4);
+    handlers.handleMetronomeVolumeDraftChange(0.6);
+    expect(setMetronomeVolumeRealtime.mock.calls).toEqual([[0.2]]);
+
+    releaseFirst?.();
+    await flushMicrotasks();
+    expect(setMetronomeVolumeRealtime.mock.calls).toEqual([[0.2], [0.6]]);
   });
 
   it("stale realtime volume responses are ignored (request-id guard)", async () => {
@@ -118,6 +155,81 @@ describe("createMetronomeDeviceHandlers", () => {
     await Promise.resolve();
     // No error surfaced from the superseded request.
     expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not let an old voice-guide response move the optimistic slider backwards", async () => {
+    let resolveFirst!: (settings: AppSettings) => void;
+    const first = new Promise<AppSettings>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const setVoiceGuideConfigRealtime = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockImplementation(async (settings: AppSettings) => settings);
+    const { handlers, appSettingsRef } = setup({ setVoiceGuideConfigRealtime });
+
+    handlers.handleVoiceGuideChange({ voiceGuideVolume: 0.2 });
+    handlers.handleVoiceGuideChange({ voiceGuideVolume: 0.8 });
+    resolveFirst({ ...DEFAULT_APP_SETTINGS, voiceGuideVolume: 0.2 });
+    await flushMicrotasks();
+
+    expect(appSettingsRef.current.voiceGuideVolume).toBe(0.8);
+    expect(setVoiceGuideConfigRealtime.mock.calls.map(([s]) => s.voiceGuideVolume)).toEqual([
+      0.2,
+      0.8,
+    ]);
+  });
+
+  it.each([
+    {
+      name: "voice guide",
+      draft: (handlers: ReturnType<typeof createMetronomeDeviceHandlers>, value: number) =>
+        handlers.handleVoiceGuideVolumeDraftChange(value),
+      commit: (handlers: ReturnType<typeof createMetronomeDeviceHandlers>, value: number) =>
+        handlers.commitVoiceGuideVolumeDraft(value),
+      fastKey: "setVoiceGuideVolumeRealtime" as const,
+      fullKey: "setVoiceGuideConfigRealtime" as const,
+      settingKey: "voiceGuideVolume" as const,
+    },
+    {
+      name: "pad",
+      draft: (handlers: ReturnType<typeof createMetronomeDeviceHandlers>, value: number) =>
+        handlers.handlePadVolumeDraftChange(value),
+      commit: (handlers: ReturnType<typeof createMetronomeDeviceHandlers>, value: number) =>
+        handlers.commitPadVolumeDraft(value),
+      fastKey: "setPadVolumeRealtime" as const,
+      fullKey: "setPadConfigRealtime" as const,
+      settingKey: "padVolume" as const,
+    },
+  ])("keeps $name volume live moves engine-only and persists the final value once", async ({
+    draft,
+    commit,
+    fastKey,
+    fullKey,
+    settingKey,
+  }) => {
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const fast = vi.fn().mockReturnValueOnce(first).mockResolvedValue(undefined);
+    const { handlers, deps, appSettingsRef } = setup({ [fastKey]: fast });
+
+    draft(handlers, 0.2);
+    draft(handlers, 0.4);
+    commit(handlers, 0.7);
+
+    expect(fast).toHaveBeenCalledTimes(1);
+    expect(deps[fullKey]).not.toHaveBeenCalled();
+    expect(appSettingsRef.current[settingKey]).toBe(0.7);
+
+    releaseFirst();
+    await flushMicrotasks();
+
+    expect(fast).toHaveBeenCalledTimes(1);
+    expect(deps[fullKey]).toHaveBeenCalledTimes(1);
+    expect((deps[fullKey] as ReturnType<typeof vi.fn>).mock.calls[0][0][settingKey]).toBe(0.7);
+    expect(deps.saveSettings).not.toHaveBeenCalled();
   });
 
   it("enabling a selected pad decodes its clip via loadPadKey (not just realtime config)", async () => {

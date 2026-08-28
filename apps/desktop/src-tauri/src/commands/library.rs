@@ -1,10 +1,19 @@
+//! Every command in this file is `(async)`. Going back to a plain
+//! `#[tauri::command]` is a regression, not a style choice.
+//!
+//! Tauri runs a plain command inline in the IPC handler, i.e. on the main
+//! thread: the GTK main loop that also drives WebKitGTK's rendering on Linux,
+//! and the loop that owns the WebView2 host window on Windows. `(async)` only
+//! picks the threadpool; the bodies stay synchronous.
+//!
+//! Why it matters here: these walk and mutate the library folder on disk.
+
 use tauri::{AppHandle, State};
 
 use crate::infra::error::DesktopError;
 use crate::models::view::encode_peaks_base64;
 use crate::models::{LibraryAssetSummary, WaveformSummaryDto, WaveformWindowDto};
 use crate::state::DesktopState;
-
 #[tauri::command(async)]
 pub fn get_library_assets(
     state: State<'_, DesktopState>,
@@ -151,7 +160,7 @@ pub fn get_library_waveform_summaries(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_library_asset(
     file_path: String,
     state: State<'_, DesktopState>,
@@ -169,7 +178,7 @@ pub fn delete_library_asset(
 /// Roll a library import back out of the manifest after its timeline placement
 /// was rejected. Never deletes audio from disk — see
 /// `DesktopSession::forget_library_assets`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn forget_library_assets(
     file_paths: Vec<String>,
     state: State<'_, DesktopState>,
@@ -184,7 +193,7 @@ pub fn forget_library_assets(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_library_asset(
     file_path: String,
     new_folder_path: Option<String>,
@@ -200,7 +209,7 @@ pub fn move_library_asset(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_library_folder(
     folder_path: String,
     state: State<'_, DesktopState>,
@@ -215,7 +224,7 @@ pub fn create_library_folder(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_library_folder(
     old_folder_path: String,
     new_folder_path: String,
@@ -231,7 +240,7 @@ pub fn rename_library_folder(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_library_folder(
     folder_path: String,
     state: State<'_, DesktopState>,

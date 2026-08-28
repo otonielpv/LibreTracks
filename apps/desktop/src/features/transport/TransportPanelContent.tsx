@@ -121,7 +121,9 @@ import {
   setMetronomeEnabledRealtime,
   setMetronomeVolumeRealtime,
   setMetronomeSoundRealtime,
+  setVoiceGuideVolumeRealtime,
   setVoiceGuideConfigRealtime,
+  setPadVolumeRealtime,
   setPadConfigRealtime,
   loadPadKey,
   getPadsCatalog,
@@ -193,6 +195,11 @@ import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
 import { MobileTrackReorderToggle } from "./tracks/MobileTrackReorderToggle";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
+import {
+  createSeekCoalescer,
+  type CoalescedSeek,
+} from "./timeline/seekCoalescer";
+import { createKeyedLatestWinsStreams } from "./latestWinsStream";
 import {
   clampGroupRowDelta,
   resolveMemberTargetTrackId,
@@ -2091,6 +2098,8 @@ export function TransportPanelContent() {
         setMetronomeSoundRealtime,
         setMetronomeEnabledRealtime,
         setMetronomeVolumeRealtime,
+        setVoiceGuideVolumeRealtime,
+        setPadVolumeRealtime,
         setVoiceGuideConfigRealtime,
         setPadConfigRealtime,
         loadPadKey,
@@ -2102,9 +2111,13 @@ export function TransportPanelContent() {
     handleRefreshAudioDevices,
     handleMetronomeSoundChange,
     handleVoiceGuideChange,
+    handleVoiceGuideVolumeDraftChange,
+    commitVoiceGuideVolumeDraft,
     handleMetronomeEnabledChange,
     handleVoiceGuideEnabledChange,
     handlePadChange,
+    handlePadVolumeDraftChange,
+    commitPadVolumeDraft,
     handlePadEnabledChange,
     handleMetronomeVolumeDraftChange,
     commitMetronomeVolumeDraft,
@@ -3540,6 +3553,19 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, refreshSongView, runAction, selectedRegion, song],
   );
 
+  // One last-wins stream per region so a master-gain drag never has two
+  // update_live_region_master_gain calls in flight: the command is `(async)`
+  // on the Rust side and takes the session lock, so overlapping calls could
+  // land out of order and leave the engine on a stale gain mid-drag. Two
+  // different regions still stream independently. See ./latestWinsStream.
+  const liveRegionMasterGainStream = useMemo(
+    () =>
+      createKeyedLatestWinsStreams<number>((regionId, gain) =>
+        updateLiveRegionMasterGain(regionId, gain),
+      ),
+    [],
+  );
+
   // Master gain handlers follow the track-volume pattern: during drag the
   // slider writes an optimistic value to the store (so the thumb tracks the
   // pointer with no IPC delay) and streams realtime updates to the engine;
@@ -3552,7 +3578,7 @@ export function TransportPanelContent() {
       useTransportStore
         .getState()
         .setOptimisticRegionMaster(targetRegionId, clamped);
-      void updateLiveRegionMasterGain(targetRegionId, clamped).catch(() => {
+      void liveRegionMasterGainStream(targetRegionId, clamped).catch(() => {
         // Realtime stream is best-effort; commit on pointer-up will
         // reconcile the truth.
       });
@@ -3669,7 +3695,7 @@ export function TransportPanelContent() {
       useTransportStore
         .getState()
         .setOptimisticRegionMaster(regionId, clamped);
-      void updateLiveRegionMasterGain(regionId, clamped).catch(() => {
+      void liveRegionMasterGainStream(regionId, clamped).catch(() => {
         // best-effort; commit reconciles
       });
     },
@@ -5133,8 +5159,10 @@ export function TransportPanelContent() {
     syncLivePosition(0);
   }
 
-  async function performSeek(positionSeconds: number) {
-    previewSeek(positionSeconds);
+  // The backend half of a seek, one at a time. performSeek below is what
+  // callers use; it previews every click and lets the coalescer decide which
+  // of them actually reach the engine.
+  async function runSeek(positionSeconds: number) {
     forceReanchorOnNextSnapshotRef.current = true;
 
     try {
@@ -5164,8 +5192,23 @@ export function TransportPanelContent() {
     }
   }
 
-  // Point the drag listeners' refs at the two declarations above. No dep array:
-  // both close over per-render values, so the refs must track the latest
+  function performSeek(positionSeconds: number) {
+    // Always preview: the playhead follows the click even when the coalescer
+    // drops this click's backend seek in favour of a later one.
+    previewSeek(positionSeconds);
+    if (!seekCoalescerRef.current) {
+      // Built once and reads runSeek through a ref, so the coalescer survives
+      // every re-render while still calling the current closure. The ref is
+      // pointed at runSeek during render, so the fallback is unreachable.
+      seekCoalescerRef.current = createSeekCoalescer(
+        (seconds) => runSeekRef.current?.(seconds) ?? Promise.resolve(),
+      );
+    }
+    return seekCoalescerRef.current(positionSeconds);
+  }
+
+  // Point the drag listeners' refs at the declarations above. No dep array:
+  // they close over per-render values, so the refs must track the latest
   // version on every render. See ./hooks/useDragListeners.
   useEffect(() => {
     restoreConfirmedTransportVisualRef.current = restoreConfirmedTransportVisual;
@@ -5615,6 +5658,17 @@ export function TransportPanelContent() {
   const performSeekRef = useRef<
     ((positionSeconds: number) => Promise<void>) | null
   >(null);
+  // performSeek's backend half + the coalescer that serializes it. See
+  // ./timeline/seekCoalescer for why a burst of clicks must not become a burst
+  // of engine seeks.
+  const runSeekRef = useRef<
+    ((positionSeconds: number) => Promise<void>) | null
+  >(null);
+  const seekCoalescerRef = useRef<CoalescedSeek | null>(null);
+  // Assigned during render, not in an effect: performSeek is reachable from a
+  // handler that fires before the first effect flush, and a null runSeekRef
+  // there would swallow the seek.
+  runSeekRef.current = runSeek;
   useWindowTitle();
   useDragListeners({
     songRef,
@@ -7082,6 +7136,8 @@ export function TransportPanelContent() {
           routeOptions={audioRoutingOptions}
           onClose={() => setIsVoiceGuidePopoverOpen(false)}
           onChange={handleVoiceGuideChange}
+          onVolumeDraftChange={handleVoiceGuideVolumeDraftChange}
+          onCommitVolume={commitVoiceGuideVolumeDraft}
         />
 
         <PadsPopover
@@ -7092,6 +7148,8 @@ export function TransportPanelContent() {
           onClose={() => setIsPadsPopoverOpen(false)}
           onToggleEnabled={handlePadEnabledChange}
           onPadChange={handlePadChange}
+          onVolumeDraftChange={handlePadVolumeDraftChange}
+          onCommitVolume={commitPadVolumeDraft}
         />
 
         <div className={`lt-shell-body ${isShellBusy ? "is-hidden" : ""}`}>

@@ -1665,6 +1665,10 @@ export async function setMetronomeVolumeRealtime(volume: number): Promise<void> 
   await invokeCommand("set_metronome_volume_realtime", { volume });
 }
 
+export async function setVoiceGuideVolumeRealtime(volume: number): Promise<void> {
+  await invokeCommand("set_voice_guide_volume_realtime", { volume });
+}
+
 export async function setMetronomeSoundRealtime(
   settings: AppSettings,
 ): Promise<AppSettings> {
@@ -1732,6 +1736,10 @@ export async function setPadConfigRealtime(
   settings: AppSettings,
 ): Promise<AppSettings> {
   return invokeCommand<AppSettings>("set_pad_config_realtime", { settings });
+}
+
+export async function setPadVolumeRealtime(volume: number): Promise<void> {
+  await invokeCommand("set_pad_volume_realtime", { volume });
 }
 
 // Decodes and swaps in the selected key — call ONLY when the pad id or key

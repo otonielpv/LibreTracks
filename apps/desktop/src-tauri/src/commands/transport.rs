@@ -8,12 +8,19 @@ use crate::infra::settings::AppSettingsStore;
 use crate::state::DesktopState;
 use libretracks_audio::{JumpTrigger, TransitionType, VampMode};
 
-// `(async)` keeps this off the main thread. Tauri runs a plain `#[tauri::command]`
-// inline in the IPC handler, which on Linux is the GTK main loop that also drives
-// WebKitGTK's rendering — so a snapshot that waits on the session lock or a slow
-// engine FFI call freezes the whole UI for that long. Windows and macOS hid the
-// problem because WebView2/WKWebView composite out of process. The body stays
-// synchronous; `async` here only chooses the threadpool.
+// Every command in this file is `(async)`, and none of them may go back to a
+// plain `#[tauri::command]`.
+//
+// Tauri runs a plain command inline in the IPC handler, i.e. on the main
+// thread. On Linux that is the GTK main loop which also drives WebKitGTK's
+// rendering; on Windows it is the loop that owns the WebView2 host window.
+// Every command here takes the session lock, and the transport ones reach the
+// engine FFI, where a seek blocks until the destination audio is in RAM
+// (LIBRETRACKS_SEEK_SOURCE_WAIT_MS, 750ms by default). Inline, that is 750ms of
+// frozen window per click — which is exactly what clicking around the timeline
+// during playback produced on a slow disk.
+//
+// `(async)` only chooses the threadpool; the bodies stay synchronous.
 #[tauri::command(async)]
 pub fn get_transport_snapshot(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -26,7 +33,7 @@ pub fn get_transport_snapshot(state: State<'_, DesktopState>) -> Result<Transpor
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn play_transport(
     app: AppHandle,
     state: State<'_, DesktopState>,
@@ -45,7 +52,7 @@ pub fn play_transport(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pause_transport(
     app: AppHandle,
     state: State<'_, DesktopState>,
@@ -62,7 +69,7 @@ pub fn pause_transport(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stop_transport(
     app: AppHandle,
     state: State<'_, DesktopState>,
@@ -79,7 +86,7 @@ pub fn stop_transport(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn seek_transport(
     app: AppHandle,
     position_seconds: f64,
@@ -97,7 +104,7 @@ pub fn seek_transport(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn prewarm_timeline_seek(
     position_seconds: f64,
     state: State<'_, DesktopState>,
@@ -112,7 +119,7 @@ pub fn prewarm_timeline_seek(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedule_marker_jump(
     target_marker_id: String,
     settings_store: State<'_, AppSettingsStore>,
@@ -143,7 +150,7 @@ pub fn schedule_marker_jump(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedule_region_jump(
     target_region_id: String,
     settings_store: State<'_, AppSettingsStore>,
@@ -176,7 +183,7 @@ pub fn schedule_region_jump(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn cancel_marker_jump(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -188,7 +195,7 @@ pub fn cancel_marker_jump(state: State<'_, DesktopState>) -> Result<TransportSna
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn toggle_vamp(
     mode: String,
     bars: Option<u32>,

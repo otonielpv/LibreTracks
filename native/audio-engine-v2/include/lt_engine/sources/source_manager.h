@@ -201,7 +201,25 @@ public:
                         int first_block,
                         int block_count,
                         bool urgent) const noexcept;
-    void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
+    // Same lanes as request_blocks, addressed in frames. `urgent` is for the
+    // window a caller is about to BLOCK on (the jump target): without it the
+    // gate waits behind whatever read-ahead is already queued, which after a
+    // couple of jumps is tens of seconds x every track.
+    void request_range(const Id& source_id,
+                       Frame source_frame,
+                       int frame_count,
+                       bool urgent = false) const noexcept;
+    // Drops read-ahead nobody wants any more and returns how many blocks went.
+    //
+    // Read-ahead is queued per position: a jump makes every block queued for
+    // the previous one dead weight, yet the workers still read all of it from
+    // disk before reaching the new position's blocks. Clicking around while
+    // playing therefore piles up windows faster than the pool drains them —
+    // seconds of disk at 100% and a jump gate that times out because its own
+    // blocks are at the back of the queue.
+    //
+    // The urgent lane is left untouched: those blocks are wanted right now.
+    size_t drop_pending_readahead() const noexcept;
     CacheDiagnostics cache_diagnostics() const;
 
     // Diagnostics (LIBRETRACKS_AUDIO_DIAG): pending fill requests and the

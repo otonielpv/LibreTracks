@@ -2166,6 +2166,12 @@ export const testDesktopApiMock = {
   setMetronomeVolumeRealtime: async (volume: number) => {
     state.appSettings = { ...state.appSettings, metronomeVolume: volume };
   },
+  setVoiceGuideVolumeRealtime: async (volume: number) => {
+    state.appSettings = { ...state.appSettings, voiceGuideVolume: volume };
+  },
+  setPadVolumeRealtime: async (volume: number) => {
+    state.appSettings = { ...state.appSettings, padVolume: volume };
+  },
   getPadsCatalog: async () => ({ pads: [], orphanInstalled: [], offline: false }),
   downloadPad: async (_padId: string) => {},
   deletePad: async (_padId: string) => clone(state.appSettings),

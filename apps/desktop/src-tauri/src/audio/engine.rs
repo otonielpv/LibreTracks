@@ -1449,6 +1449,23 @@ impl AudioController {
         })
     }
 
+    /// Update only the live voice-guide gain while a fader is moving. This
+    /// deliberately does not replace or persist settings; pointer-up commits
+    /// the full config once, matching the metronome volume path.
+    pub fn set_voice_guide_volume_realtime(&self, volume: f64) -> Result<(), DesktopError> {
+        let settings = self.current_settings()?;
+        self.with_engine_state("set_voice_guide_volume_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetVoiceGuideConfig {
+                enabled: settings.voice_guide_enabled,
+                volume: volume.clamp(0.0, 10.0) as f32,
+                route: settings.voice_guide_output.clone(),
+                lead_bars: settings.voice_guide_lead_bars,
+                count_in_enabled: settings.voice_guide_count_in_enabled,
+            })?;
+            Ok(())
+        })
+    }
+
     /// Decode and install the voice-guide clip bank for a language. `voices_dir`
     /// is the bundled resources path (resolved by the command layer from the
     /// Tauri app handle). Decoding happens on the engine command thread.
@@ -1469,6 +1486,25 @@ impl AudioController {
             engine.send_command(&EngineCommand::SetPadConfig {
                 enabled: settings.pad_enabled,
                 volume: settings.pad_volume as f32,
+                route: settings.pad_output.clone(),
+                key: settings.pad_key,
+                pad_id: settings.pad_id.clone(),
+                fade_in_seconds: settings.pad_fade_in_seconds as f32,
+                fade_out_seconds: settings.pad_fade_out_seconds as f32,
+                stop_with_transport: settings.pad_stop_with_transport,
+            })?;
+            Ok(())
+        })
+    }
+
+    /// Update only the live pad gain while a fader is moving. The full pad
+    /// settings are replaced and persisted once when the gesture commits.
+    pub fn set_pad_volume_realtime(&self, volume: f64) -> Result<(), DesktopError> {
+        let settings = self.current_settings()?;
+        self.with_engine_state("set_pad_volume_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetPadConfig {
+                enabled: settings.pad_enabled,
+                volume: volume.clamp(0.0, 10.0) as f32,
                 route: settings.pad_output.clone(),
                 key: settings.pad_key,
                 pad_id: settings.pad_id.clone(),
@@ -2750,6 +2786,8 @@ impl AudioController {
                 | "set_region_transpose"
                 | "set_metronome_enabled_realtime"
                 | "set_metronome_volume_realtime"
+                | "set_voice_guide_volume_realtime"
+                | "set_pad_volume_realtime"
         );
         if should_service_control {
             engine.service_control_thread();

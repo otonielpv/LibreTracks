@@ -1,3 +1,21 @@
+//! Every command in this file is `(async)`. Going back to a plain
+//! `#[tauri::command]` is a regression, not a style choice.
+//!
+//! Tauri runs a plain command inline in the IPC handler, i.e. on the main
+//! thread: the GTK main loop that also drives WebKitGTK's rendering on Linux,
+//! and the loop that owns the WebView2 host window on Windows. `(async)` only
+//! picks the threadpool; the bodies stay synchronous.
+//!
+//! Why it matters here: every command takes the session lock, and most of
+//! them persist the project to disk and push a command to the engine, so
+//! inline they froze the window for as long as that took.
+//!
+//! The `*_live` / `*_realtime` commands are streamed from a drag, so two of
+//! them can now be in flight at once. Their callers serialize them on the JS
+//! side — one call outstanding, newest value wins; see
+//! `apps/desktop/src/features/transport/latestWinsStream.ts`. A new streamed
+//! command needs the same treatment.
+
 use tauri::State;
 
 use crate::audio::automation::{AutomationCue, MixScene};
@@ -13,8 +31,7 @@ pub struct DuplicateClipPlacement {
     clip_id: String,
     timeline_start_seconds: f64,
 }
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_clip(
     clip_id: String,
     timeline_start_seconds: f64,
@@ -33,7 +50,7 @@ pub fn move_clip(
 /// Reassign a clip to a different track. Backs the compact view's right-
 /// click "Mover a track…" submenu. If the original track was auto-created
 /// and loses its only clip in the process, it is removed automatically.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_clip_to_track(
     clip_id: String,
     target_track_id: String,
@@ -49,7 +66,7 @@ pub fn move_clip_to_track(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_clip_live(
     clip_id: String,
     timeline_start_seconds: f64,
@@ -65,7 +82,7 @@ pub fn move_clip_live(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_clips_batch(
     moves: Vec<ClipMoveRequest>,
     state: State<'_, DesktopState>,
@@ -80,7 +97,7 @@ pub fn move_clips_batch(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_clips_live_batch(
     moves: Vec<ClipMoveRequest>,
     state: State<'_, DesktopState>,
@@ -95,7 +112,7 @@ pub fn move_clips_live_batch(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_clip(
     clip_id: String,
     state: State<'_, DesktopState>,
@@ -110,7 +127,7 @@ pub fn delete_clip(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_clips(
     clip_ids: Vec<String>,
     state: State<'_, DesktopState>,
@@ -125,7 +142,7 @@ pub fn delete_clips(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_clip_window(
     clip_id: String,
     timeline_start_seconds: f64,
@@ -149,7 +166,7 @@ pub fn update_clip_window(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_clip_color(
     clip_id: String,
     color: Option<String>,
@@ -165,7 +182,7 @@ pub fn update_clip_color(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn duplicate_clip(
     clip_id: String,
     timeline_start_seconds: f64,
@@ -181,7 +198,7 @@ pub fn duplicate_clip(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn duplicate_clips(
     placements: Vec<DuplicateClipPlacement>,
     state: State<'_, DesktopState>,
@@ -200,7 +217,7 @@ pub fn duplicate_clips(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn split_clip(
     clip_id: String,
     split_seconds: f64,
@@ -216,7 +233,7 @@ pub fn split_clip(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn split_clips(
     clip_ids: Vec<String>,
     split_seconds: f64,
@@ -232,7 +249,7 @@ pub fn split_clips(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn undo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -247,7 +264,7 @@ pub fn undo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, 
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn redo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -262,7 +279,7 @@ pub fn redo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, 
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_section_marker(
     start_seconds: f64,
     kind: Option<MarkerKind>,
@@ -280,7 +297,7 @@ pub fn create_section_marker(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_section_marker(
     section_id: String,
     name: String,
@@ -306,7 +323,7 @@ pub fn update_section_marker(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_section_marker(
     section_id: String,
     state: State<'_, DesktopState>,
@@ -321,7 +338,7 @@ pub fn delete_section_marker(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_song_region(
     start_seconds: f64,
     end_seconds: f64,
@@ -342,7 +359,7 @@ pub fn create_song_region(
 /// previous one's end (or at t=0 for the first song) and is itself one
 /// bar wide so it's visible in the DAW view immediately; it resizes to
 /// fit the first clip dropped into it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_empty_song(
     name: Option<String>,
     state: State<'_, DesktopState>,
@@ -357,7 +374,7 @@ pub fn create_empty_song(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_song_region(
     region_id: String,
     name: String,
@@ -375,7 +392,7 @@ pub fn update_song_region(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_song_region(
     region_id: String,
     delta_seconds: f64,
@@ -391,7 +408,7 @@ pub fn move_song_region(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_song_region_transpose(
     region_id: String,
     transpose_semitones: i32,
@@ -407,7 +424,7 @@ pub fn update_song_region_transpose(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_song_region_warp(
     region_id: String,
     warp_enabled: bool,
@@ -427,7 +444,7 @@ pub fn update_song_region_warp(
 /// Realtime master-gain stream during drag. Bridge-only: pushes the value to
 /// the engine and returns immediately. No model write, no snapshot, no undo.
 /// Use `update_song_region_master_gain` on pointer-up to commit the value.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_live_region_master_gain(
     region_id: String,
     master_gain: f64,
@@ -442,7 +459,7 @@ pub fn update_live_region_master_gain(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_song_region_master_gain(
     region_id: String,
     master_gain: f64,
@@ -458,7 +475,7 @@ pub fn update_song_region_master_gain(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_song_region(
     region_id: String,
     state: State<'_, DesktopState>,
@@ -473,7 +490,7 @@ pub fn delete_song_region(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn split_song_region(
     region_id: String,
     split_seconds: f64,
@@ -489,7 +506,7 @@ pub fn split_song_region(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn upsert_midi_clip(
     clip: MidiClip,
     state: State<'_, DesktopState>,
@@ -507,7 +524,7 @@ pub fn upsert_midi_clip(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_midi_clip(
     clip_id: String,
     state: State<'_, DesktopState>,
@@ -522,7 +539,7 @@ pub fn delete_midi_clip(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_midi_clip(
     clip_id: String,
     timeline_start_seconds: f64,
@@ -544,7 +561,7 @@ pub fn move_midi_clip(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_midi_clip(clip: MidiClip, state: State<'_, DesktopState>) -> Result<(), String> {
     let mut session = state
         .session
@@ -556,7 +573,7 @@ pub fn preview_midi_clip(clip: MidiClip, state: State<'_, DesktopState>) -> Resu
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_midi_track_routing(
     track_id: String,
     port: Option<String>,
@@ -573,7 +590,7 @@ pub fn set_midi_track_routing(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_midi_track_enabled(
     track_id: String,
     enabled: bool,
@@ -592,7 +609,7 @@ pub fn set_midi_track_enabled(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_automation_track_enabled(
     enabled: bool,
     state: State<'_, DesktopState>,
@@ -607,7 +624,7 @@ pub fn set_automation_track_enabled(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn upsert_automation_cue(
     cue: AutomationCue,
     state: State<'_, DesktopState>,
@@ -622,7 +639,7 @@ pub fn upsert_automation_cue(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_automation_cue(
     cue_id: String,
     state: State<'_, DesktopState>,
@@ -637,7 +654,7 @@ pub fn delete_automation_cue(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn add_automation_track(
     after_track_id: Option<String>,
     state: State<'_, DesktopState>,
@@ -652,7 +669,7 @@ pub fn add_automation_track(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn remove_automation_track(
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
@@ -666,7 +683,7 @@ pub fn remove_automation_track(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_automation_track_position(
     after_track_id: Option<String>,
     state: State<'_, DesktopState>,
@@ -681,7 +698,7 @@ pub fn set_automation_track_position(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn upsert_mix_scene(
     scene: MixScene,
     state: State<'_, DesktopState>,
@@ -696,7 +713,7 @@ pub fn upsert_mix_scene(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_mix_scene(
     scene_id: String,
     state: State<'_, DesktopState>,
@@ -711,7 +728,7 @@ pub fn delete_mix_scene(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn assign_section_marker_digit(
     section_id: String,
     digit: Option<u8>,
@@ -727,7 +744,7 @@ pub fn assign_section_marker_digit(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_section_marker_kind(
     section_id: String,
     kind: MarkerKind,
@@ -744,7 +761,7 @@ pub fn set_section_marker_kind(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_section_marker_color(
     section_id: String,
     color: Option<String>,
@@ -760,7 +777,7 @@ pub fn set_section_marker_color(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_song_tempo(
     bpm: f64,
     state: State<'_, DesktopState>,
@@ -775,7 +792,7 @@ pub fn update_song_tempo(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_song_region_key(
     region_id: String,
     key: Option<String>,
@@ -794,7 +811,7 @@ pub fn update_song_region_key(
 /// Persists the width of a song's column in the compact view. Pure view
 /// state — see `set_song_region_compact_width`. `width_rem: None` restores
 /// the default width.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_song_region_compact_width(
     region_id: String,
     width_rem: Option<f64>,
@@ -810,7 +827,7 @@ pub fn set_song_region_compact_width(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn upsert_song_tempo_marker(
     start_seconds: f64,
     bpm: f64,
@@ -826,7 +843,7 @@ pub fn upsert_song_tempo_marker(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_song_tempo_marker(
     marker_id: String,
     state: State<'_, DesktopState>,
@@ -841,7 +858,7 @@ pub fn delete_song_tempo_marker(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_song_time_signature(
     signature: String,
     state: State<'_, DesktopState>,
@@ -856,7 +873,7 @@ pub fn update_song_time_signature(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn upsert_song_time_signature_marker(
     start_seconds: f64,
     signature: String,
@@ -872,7 +889,7 @@ pub fn upsert_song_time_signature_marker(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_song_time_signature_marker(
     marker_id: String,
     state: State<'_, DesktopState>,
@@ -887,7 +904,7 @@ pub fn delete_song_time_signature_marker(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_track(
     name: String,
     kind: TrackKind,
@@ -911,7 +928,7 @@ pub fn create_track(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn move_track(
     track_id: String,
     insert_after_track_id: Option<String>,
@@ -937,7 +954,7 @@ pub fn move_track(
 
 /// RuntimeUpdateKind: ModelOnly — only name/metadata changes are accepted here.
 /// Mix fields (volume/pan/muted/solo/audioTo) must use `commit_track_mix_change`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_track(
     track_id: String,
     name: Option<String>,
@@ -954,7 +971,7 @@ pub fn update_track(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_track_color(
     track_id: String,
     color: Option<String>,
@@ -970,7 +987,7 @@ pub fn update_track_color(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_track_collapsed(
     track_id: String,
     collapsed: bool,
@@ -986,7 +1003,7 @@ pub fn update_track_collapsed(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_track_transpose_enabled(
     track_id: String,
     transpose_enabled: bool,
@@ -1002,7 +1019,7 @@ pub fn update_track_transpose_enabled(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_track_mix_realtime(
     track_id: String,
     volume: Option<f64>,
@@ -1017,7 +1034,7 @@ pub fn update_track_mix_realtime(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn commit_track_mix_change(
     track_id: String,
     volume: Option<f64>,
@@ -1045,7 +1062,7 @@ pub fn commit_track_mix_change(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_track(
     track_id: String,
     state: State<'_, DesktopState>,
@@ -1063,7 +1080,7 @@ pub fn delete_track(
 /// Delete a multi-track selection in one transaction (single engine sync +
 /// snapshot + history entry), instead of the frontend looping `delete_track`
 /// per id, which made the tracks disappear one by one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_tracks(
     track_ids: Vec<String>,
     state: State<'_, DesktopState>,

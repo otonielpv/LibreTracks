@@ -9,6 +9,7 @@ import {
   positionToGain,
 } from "@libretracks/shared/faderScale";
 import { recordProductEvent } from "../../telemetry/telemetry";
+import { createLatestWinsStream } from "../latestWinsStream";
 
 /**
  * Dependencies for the metronome / audio-device / MIDI-input settings handlers.
@@ -60,6 +61,8 @@ export type MetronomeDeviceHandlerDeps = {
   setMetronomeSoundRealtime: (settings: AppSettings) => Promise<AppSettings>;
   setMetronomeEnabledRealtime: (enabled: boolean) => Promise<void>;
   setMetronomeVolumeRealtime: (volume: number) => Promise<void>;
+  setVoiceGuideVolumeRealtime: (volume: number) => Promise<void>;
+  setPadVolumeRealtime: (volume: number) => Promise<void>;
   setVoiceGuideConfigRealtime: (settings: AppSettings) => Promise<AppSettings>;
   setPadConfigRealtime: (settings: AppSettings) => Promise<AppSettings>;
   loadPadKey: (settings: AppSettings) => Promise<AppSettings>;
@@ -109,11 +112,103 @@ export function createMetronomeDeviceHandlers(
     setMetronomeSoundRealtime,
     setMetronomeEnabledRealtime,
     setMetronomeVolumeRealtime,
+    setVoiceGuideVolumeRealtime,
+    setPadVolumeRealtime,
     setVoiceGuideConfigRealtime,
     setPadConfigRealtime,
     loadPadKey,
     saveSettings,
   } = deps;
+
+  // Sliders in this panel (metronome volume, pad volume, pad fades) stream
+  // their value on every pointer move. The commands they call are `(async)` on
+  // the Rust side, so two in flight at once can be applied out of order and
+  // leave the engine on a stale value — and they can also queue behind the
+  // session lock. One stream per control keeps the newest value last and never
+  // has more than one call outstanding. See ../latestWinsStream.
+  const metronomeVolumeStream = createLatestWinsStream<number>((volume) =>
+    setMetronomeVolumeRealtime(volume),
+  );
+
+  const voiceGuideStream = createLatestWinsStream<AppSettings>((nextSettings) =>
+    setVoiceGuideConfigRealtime(nextSettings),
+  );
+
+  // Only a pad/key change decodes audio (loadPadKey); volume and routing take
+  // the cheap realtime path. The flag is sticky rather than carried in the
+  // streamed value: if the event that needed the decode is the one the stream
+  // dropped, the decode must still happen on the value that survives.
+  let padNeedsKeyLoad = false;
+  const padStream = createLatestWinsStream<AppSettings>(async (nextSettings) => {
+    const needsKeyLoad = padNeedsKeyLoad;
+    padNeedsKeyLoad = false;
+    await (needsKeyLoad
+      ? loadPadKey(nextSettings)
+      : setPadConfigRealtime(nextSettings));
+  });
+
+  type VolumeUpdate = {
+    volume: number;
+    commitSettings?: AppSettings;
+    requestId: number;
+  };
+  let voiceGuideVolumeRequestId = 0;
+  let padVolumeRequestId = 0;
+
+  // Volume gestures follow the metronome's two-phase contract: pointer moves
+  // touch only the engine; pointer-up/blur persists the full settings once.
+  // Keeping commit in the SAME stream as drafts prevents an older in-flight
+  // draft from landing after the persisted final value.
+  const voiceGuideVolumeStream = createLatestWinsStream<VolumeUpdate>(
+    async ({ volume, commitSettings, requestId }) => {
+      try {
+        if (!commitSettings) {
+          await setVoiceGuideVolumeRealtime(volume);
+          return;
+        }
+        const savedSettings = normalizeAppSettings(
+          await setVoiceGuideConfigRealtime(commitSettings),
+        );
+        if (voiceGuideVolumeRequestId !== requestId) return;
+        appSettingsRef.current = savedSettings;
+        setAppSettings(savedSettings);
+        setStatus(
+          t("transport.status.voiceGuideUpdated", {
+            defaultValue: "Voice guide updated.",
+          }),
+        );
+      } catch (error) {
+        if (voiceGuideVolumeRequestId === requestId) {
+          setStatus(formatErrorStatus(error));
+        }
+      }
+    },
+    (a, b) =>
+      a.volume === b.volume && Boolean(a.commitSettings) === Boolean(b.commitSettings),
+  );
+
+  const padVolumeStream = createLatestWinsStream<VolumeUpdate>(
+    async ({ volume, commitSettings, requestId }) => {
+      try {
+        if (!commitSettings) {
+          await setPadVolumeRealtime(volume);
+          return;
+        }
+        const savedSettings = normalizeAppSettings(
+          await setPadConfigRealtime(commitSettings),
+        );
+        if (padVolumeRequestId !== requestId) return;
+        appSettingsRef.current = savedSettings;
+        setAppSettings(savedSettings);
+      } catch (error) {
+        if (padVolumeRequestId === requestId) {
+          setStatus(formatErrorStatus(error));
+        }
+      }
+    },
+    (a, b) =>
+      a.volume === b.volume && Boolean(a.commitSettings) === Boolean(b.commitSettings),
+  );
 
   /** Apply a settings patch locally (state + ref) and return the normalized result. */
   const applyLocal = (patch: Partial<AppSettings>) => {
@@ -188,11 +283,7 @@ export function createMetronomeDeviceHandlers(
 
       void runAction(async () => {
         try {
-          const savedSettings = normalizeAppSettings(
-            await setVoiceGuideConfigRealtime(nextSettings),
-          );
-          appSettingsRef.current = savedSettings;
-          setAppSettings(savedSettings);
+          await voiceGuideStream(nextSettings);
           setStatus(
             t("transport.status.voiceGuideUpdated", {
               defaultValue: "Voice guide updated.",
@@ -201,6 +292,24 @@ export function createMetronomeDeviceHandlers(
         } catch (error) {
           setStatus(formatErrorStatus(error));
         }
+      });
+    },
+
+    handleVoiceGuideVolumeDraftChange(nextValue: number) {
+      const volume = clampVolume(nextValue);
+      voiceGuideVolumeRequestId += 1;
+      applyLocal({ voiceGuideVolume: volume });
+      void voiceGuideVolumeStream({ volume, requestId: voiceGuideVolumeRequestId });
+    },
+
+    commitVoiceGuideVolumeDraft(nextValue: number) {
+      const volume = clampVolume(nextValue);
+      const commitSettings = applyLocal({ voiceGuideVolume: volume });
+      voiceGuideVolumeRequestId += 1;
+      void voiceGuideVolumeStream({
+        volume,
+        commitSettings,
+        requestId: voiceGuideVolumeRequestId,
       });
     },
 
@@ -232,12 +341,8 @@ export function createMetronomeDeviceHandlers(
 
       void runAction(async () => {
         try {
-          const savedSettings = normalizeAppSettings(
-            await setVoiceGuideConfigRealtime(nextSettings),
-          );
+          await voiceGuideStream(nextSettings);
           if (nextValue) recordProductEvent("feature_voice_guide");
-          appSettingsRef.current = savedSettings;
-          setAppSettings(savedSettings);
           setStatus(
             nextValue
               ? t("transport.status.voiceGuideEnabled")
@@ -259,19 +364,32 @@ export function createMetronomeDeviceHandlers(
       const keyChanged =
         nextSettings.padId !== before.padId ||
         nextSettings.padKey !== before.padKey;
+      if (keyChanged) padNeedsKeyLoad = true;
       void runAction(async () => {
         try {
-          const savedSettings = normalizeAppSettings(
-            keyChanged
-              ? await loadPadKey(nextSettings)
-              : await setPadConfigRealtime(nextSettings),
-          );
-          appSettingsRef.current = savedSettings;
-          setAppSettings(savedSettings);
+          await padStream(nextSettings);
           if (keyChanged) recordProductEvent("feature_ambient_pads");
         } catch (error) {
           setStatus(formatErrorStatus(error));
         }
+      });
+    },
+
+    handlePadVolumeDraftChange(nextValue: number) {
+      const volume = clampVolume(nextValue);
+      padVolumeRequestId += 1;
+      applyLocal({ padVolume: volume });
+      void padVolumeStream({ volume, requestId: padVolumeRequestId });
+    },
+
+    commitPadVolumeDraft(nextValue: number) {
+      const volume = clampVolume(nextValue);
+      const commitSettings = applyLocal({ padVolume: volume });
+      padVolumeRequestId += 1;
+      void padVolumeStream({
+        volume,
+        commitSettings,
+        requestId: padVolumeRequestId,
       });
     },
 
@@ -285,15 +403,10 @@ export function createMetronomeDeviceHandlers(
       // the clip in) whenever a pad is selected; disabling stays on the cheap
       // path so it silences immediately.
       const needsClip = nextValue && nextSettings.padId !== "";
+      if (needsClip) padNeedsKeyLoad = true;
       void runAction(async () => {
         try {
-          const savedSettings = normalizeAppSettings(
-            needsClip
-              ? await loadPadKey(nextSettings)
-              : await setPadConfigRealtime(nextSettings),
-          );
-          appSettingsRef.current = savedSettings;
-          setAppSettings(savedSettings);
+          await padStream(nextSettings);
           if (nextValue) recordProductEvent("feature_ambient_pads");
           setStatus(
             nextValue
@@ -314,7 +427,7 @@ export function createMetronomeDeviceHandlers(
       applyLocal({ metronomeVolume: normalizedValue });
       setMetronomeVolumeDraft(normalizedValue);
 
-      void setMetronomeVolumeRealtime(normalizedValue)
+      void metronomeVolumeStream(normalizedValue)
         .then(() => {
           if (metronomeLiveRequestIdRef.current !== requestId) {
             return;

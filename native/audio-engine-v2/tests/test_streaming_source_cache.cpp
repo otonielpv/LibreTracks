@@ -1628,3 +1628,82 @@ TEST_CASE("analyze_file_peaks without a callback behaves exactly as before") {
         CHECK(plain.max_peaks[index] == doctest::Approx(with_null.max_peaks[index]));
 }
 #endif
+
+// ── Fill-queue lanes ────────────────────────────────────────────────────────
+//
+// Both cases below run with LIBRETRACKS_FILL_THREADS=0 on purpose: with no
+// worker draining the queue, which lane a request landed on is a fact about the
+// call, not a race against a thread. Timing-based variants of these tests would
+// be measuring the scheduler instead of the policy.
+
+TEST_CASE("read-ahead blocks stay promotable to the urgent lane") {
+    ScopedCacheDir scope("fill_lane_promotion");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+    ScopedEnv no_fill("LIBRETRACKS_FILL_THREADS", "0");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 8;
+
+    SourceManager manager;
+    const Id source_id = "fill-lane-promotion-source";
+    manager.register_source(source_id, "fill-lane-promotion-source.wav");
+    REQUIRE(manager.store_decoded_source(
+        source_id, make_reference_audio(kFrames, kChannels),
+        kChannels, kSampleRate, kFrames).is_ok());
+
+    manager.request_range(source_id, 0, kDefaultBlockFrames * 4);
+    const auto queued = manager.take_fill_io_stats();
+    REQUIRE(queued.queue_normal >= 4);
+    REQUIRE(queued.queue_urgent == 0);
+
+    // The audio thread starves for a block that read-ahead already queued.
+    // request_range used to record every block it queued as "already on the
+    // urgent lane" while pushing it onto the read-ahead one, so this promotion
+    // was skipped and the starving block stayed at the back of the FIFO — for
+    // every prefetched block in the session, which is nearly all of them.
+    manager.request_block(source_id, 2, /*urgent=*/true);
+    const auto promoted = manager.take_fill_io_stats();
+    CHECK(promoted.queue_urgent == 1);
+}
+
+TEST_CASE("dropping read-ahead spares the lane a jump is blocking on") {
+    ScopedCacheDir scope("fill_lane_drop_readahead");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+    ScopedEnv no_fill("LIBRETRACKS_FILL_THREADS", "0");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 16;
+
+    SourceManager manager;
+    const Id source_id = "fill-lane-drop-source";
+    manager.register_source(source_id, "fill-lane-drop-source.wav");
+    REQUIRE(manager.store_decoded_source(
+        source_id, make_reference_audio(kFrames, kChannels),
+        kChannels, kSampleRate, kFrames).is_ok());
+
+    // Read-ahead for where playback currently is, then the window a jump is
+    // about to block on.
+    manager.request_range(source_id, 0, kDefaultBlockFrames * 8);
+    manager.request_range(source_id,
+                          kDefaultBlockFrames * 8,
+                          kDefaultBlockFrames * 2,
+                          /*urgent=*/true);
+    const auto before = manager.take_fill_io_stats();
+    REQUIRE(before.queue_normal >= 8);
+    REQUIRE(before.queue_urgent == 2);
+
+    const size_t dropped = manager.drop_pending_readahead();
+    CHECK(dropped == before.queue_normal);
+
+    const auto after = manager.take_fill_io_stats();
+    CHECK(after.queue_normal == 0);
+    CHECK(after.queue_urgent == 2);
+
+    // The dedup map must have been cleaned too, or the dropped blocks could
+    // never be asked for again.
+    manager.request_range(source_id, 0, kDefaultBlockFrames * 2);
+    const auto requeued = manager.take_fill_io_stats();
+    CHECK(requeued.queue_normal == 2);
+}

@@ -1,3 +1,18 @@
+//! Commands in this file are `(async)` unless the note below names them as
+//! an exception. Turning one back into a plain `#[tauri::command]` is a
+//! regression, not a style choice.
+//!
+//! Tauri runs a plain command inline in the IPC handler, i.e. on the main
+//! thread: the GTK main loop that also drives WebKitGTK's rendering on Linux,
+//! and the loop that owns the WebView2 host window on Windows. `(async)` only
+//! picks the threadpool; the bodies stay synchronous.
+//!
+//! Why it matters here: these read and write log files, hit the network for
+//! the update check, and talk to MIDI devices.
+//!
+//! `reveal_error_log` is the one exception: it drives the OS file manager,
+//! which is a main-thread API on macOS.
+
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -18,13 +33,12 @@ use crate::remote;
 use crate::state::DesktopState;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use libretracks_remote::RemoteServerInfo;
-
-#[tauri::command]
+#[tauri::command(async)]
 pub fn healthcheck() -> &'static str {
     "libretracks-ready"
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn is_debug_build() -> bool {
     cfg!(debug_assertions)
 }
@@ -40,7 +54,7 @@ pub struct TelemetryPlatform {
     pub device_class: &'static str,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_telemetry_platform() -> TelemetryPlatform {
     let os = if cfg!(target_os = "windows") {
         "windows"
@@ -154,7 +168,7 @@ pub struct OwnershipDiagnostics {
     pub prearm_worker_busy: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_ownership_diagnostics(
     state: State<'_, DesktopState>,
 ) -> Result<OwnershipDiagnostics, String> {
@@ -238,7 +252,7 @@ pub fn get_ownership_diagnostics(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_audio_debug_snapshot(
     state: State<'_, DesktopState>,
 ) -> Result<AudioDebugSnapshot, String> {
@@ -248,7 +262,7 @@ pub fn get_audio_debug_snapshot(
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_audio_output_meter(
     state: State<'_, DesktopState>,
 ) -> Result<AudioOutputMeterLevel, String> {
@@ -259,7 +273,7 @@ pub fn get_audio_output_meter(
 }
 
 /// E2E-only: available only when the native engine was built with capture.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_audio_output_capture(
     state: State<'_, DesktopState>,
 ) -> Result<crate::audio::engine::AudioOutputCapture, String> {
@@ -309,7 +323,7 @@ pub fn get_system_resource_snapshot(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn report_ui_render_metric(
     render_millis: f64,
     state: State<'_, DesktopState>,
@@ -323,7 +337,7 @@ pub fn report_ui_render_metric(
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String> {
     Ok(remote::remote_server_info(&app))
 }
@@ -332,17 +346,17 @@ pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String
 /// is the handheld device), so the command exists for API parity but always
 /// errors. The frontend hides the remote UI on mobile and never calls this.
 #[cfg(any(target_os = "android", target_os = "ios"))]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_remote_server_info() -> Result<serde_json::Value, String> {
     Err("remote control server is not available on mobile".to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_midi_inputs() -> Result<Vec<String>, String> {
     get_midi_input_names()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_midi_outputs() -> Result<Vec<String>, String> {
     get_midi_output_names()
 }
@@ -351,7 +365,7 @@ pub fn get_midi_outputs() -> Result<Vec<String>, String> {
 /// cabling reaches the target software without having to build a timeline
 /// first. Note-on and note-off are queued back to back; the receiving device
 /// sees a blip, which is enough for a MIDI monitor or a "learn" dialog.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn send_midi_test_note(
     state: State<'_, DesktopState>,
     channel: u8,
@@ -455,7 +469,7 @@ fn append_update_log(app: &AppHandle, line: &str) {
     let _ = writeln!(file, "[{timestamp_ms}] {line}");
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
     let log_dir = {
         #[cfg(target_os = "windows")]
@@ -526,7 +540,7 @@ pub(crate) fn write_picker_diagnostic(app: &AppHandle, layer: &str, message: &st
     let _ = writeln!(file, "[{timestamp_ms}] [{layer}] {message}");
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn append_picker_diagnostic(app: AppHandle, message: String) -> Result<(), String> {
     write_picker_diagnostic(&app, "frontend", &message);
     Ok(())
@@ -535,7 +549,7 @@ pub fn append_picker_diagnostic(app: AppHandle, message: String) -> Result<(), S
 /// Read the dedicated error log (`logs/errors.log`) so the Diagnostics panel
 /// can show / let the user copy it. Returns an empty string if it doesn't
 /// exist yet (no errors have been recorded).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_error_log() -> Result<String, String> {
     let Some(path) = crate::infra::error_log::errors_path() else {
         return Err("error logger not initialized".into());
@@ -549,7 +563,7 @@ pub fn read_error_log() -> Result<String, String> {
 
 /// Append a frontend-originated error (uncaught exception, rejected promise,
 /// failed invoke) to the same error log as backend panics/command failures.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn append_frontend_error(message: String) -> Result<(), String> {
     crate::infra::error_log::write_error(&format!("frontend: {message}"));
     Ok(())
@@ -612,7 +626,7 @@ fn diagnostics_log_path(kind: &str) -> Result<PathBuf, String> {
 /// survive a big log (and on Android there is no file manager to fall back
 /// to). Reading the tail — not the whole file — keeps this usable no matter
 /// how long the engine log has grown.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_diagnostics_log(
     kind: String,
     max_bytes: Option<u64>,
@@ -669,7 +683,7 @@ pub fn read_diagnostics_log(
 /// Remove the accumulated contents of a diagnostics log. The audio engine
 /// opens its file in append mode for each individual entry, so deleting it is
 /// safe while the engine is running; the next entry simply creates a new file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_diagnostics_log(kind: String) -> Result<(), String> {
     let path = diagnostics_log_path(&kind)?;
     match fs::remove_file(&path) {

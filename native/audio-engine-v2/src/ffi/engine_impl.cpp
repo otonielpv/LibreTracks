@@ -243,7 +243,13 @@ void request_jump_target_audio(SourceManager& sources,
                     clip.source_id,
                     source_frame,
                     clip_source_frames_for_timeline_span(
-                        track, clip, song, target_frame, window_frames));
+                        track, clip, song, target_frame, window_frames),
+                    // Urgent: this is the window wait_jump_target_audio_ready
+                    // BLOCKS on, and the caller is the Tauri command thread —
+                    // every millisecond it spends here is a millisecond of
+                    // frozen UI. On the read-ahead lane it queues behind the
+                    // 20s prefetch of every previous jump.
+                    /*urgent=*/true);
             }
         }
         return;
@@ -1803,6 +1809,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 : std::max(
                     4096,
                     (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
+            // The read-ahead queued for where we WERE is dead the moment we
+            // leave. Dropping it before queueing the new window is what keeps a
+            // burst of clicks from stacking one 20s-per-track prefetch per
+            // click on the fill pool — the state the user sees as the disk
+            // pegged and the transport hanging for a second.
+            if (source_manager_)
+                (void)source_manager_->drop_pending_readahead();
             if (source_manager_ && session_)
                 request_jump_target_audio(*source_manager_, *session_, c.frame, seek_window);
             // Build BOTH voice maps (pitch + warp) before the clock seek so
@@ -1882,6 +1895,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             const int seek_window = std::max(
                 4096,
                 (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
+            // Same reason as CmdSeekAbsolute: the previous position's
+            // read-ahead is now dead weight in front of the window this
+            // command is about to block on.
+            if (source_manager_)
+                (void)source_manager_->drop_pending_readahead();
             if (source_manager_ && session_)
                 request_jump_target_audio(*source_manager_, *session_, to, seek_window);
             // Build pitch + warp maps before the clock seek so they publish
