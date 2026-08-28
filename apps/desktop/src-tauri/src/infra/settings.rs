@@ -466,6 +466,14 @@ pub fn load_app_settings(app: &AppHandle) -> Result<AppSettings, io::Error> {
     Ok(settings)
 }
 
+/// Build the settings used by a fresh process. The PAD's on/off switch is a
+/// live-performance latch, not a durable preference: always start silent while
+/// retaining the selected pad, key, routing, gain and fade configuration.
+pub fn runtime_settings_for_startup(mut settings: AppSettings) -> AppSettings {
+    settings.pad_enabled = false;
+    settings
+}
+
 pub fn save_app_settings(app: &AppHandle, settings: &AppSettings) -> Result<PathBuf, io::Error> {
     let settings_path = settings_file_path(app)?;
     if let Some(parent_dir) = settings_path.parent() {
@@ -489,6 +497,26 @@ fn settings_file_path(app: &AppHandle) -> Result<PathBuf, io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_turns_the_pad_off_without_losing_its_configuration() {
+        let saved = AppSettings {
+            pad_enabled: true,
+            pad_id: "warm".into(),
+            pad_key: 7,
+            pad_volume: 1.8,
+            pad_output: "out:3-4".into(),
+            pad_fade_in_seconds: 2.5,
+            pad_fade_out_seconds: 4.0,
+            pad_follow_song_key: true,
+            pad_stop_with_transport: true,
+            ..AppSettings::default()
+        };
+        let mut expected = saved.clone();
+        expected.pad_enabled = false;
+
+        assert_eq!(runtime_settings_for_startup(saved), expected);
+    }
 
     /// Upgrading must not change how loud the click actually is: a legacy `0.8`
     /// played at `0.8 * 2.5 = 2.0`, so it has to land on exactly `2.0` now.

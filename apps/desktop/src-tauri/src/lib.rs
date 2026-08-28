@@ -122,20 +122,22 @@ pub fn run() {
                 eprintln!("[libretracks-settings] failed to load settings: {error}");
                 infra::settings::AppSettings::default()
             });
+            let runtime_settings =
+                infra::settings::runtime_settings_for_startup(initial_settings);
 
-            app.manage(AppSettingsStore::new(initial_settings.clone()));
+            app.manage(AppSettingsStore::new(runtime_settings.clone()));
 
             // Apply the decoding-cache preferences to the process env BEFORE the
             // audio engine is first used, so the configured folder / size cap
             // take effect for the very first decode.
-            infra::settings::apply_decoding_cache_env(&app.handle(), &initial_settings);
+            infra::settings::apply_decoding_cache_env(&app.handle(), &runtime_settings);
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             state.start_midi_runtime();
-            let initial_device = initial_settings.selected_output_device_id.clone();
-            let apply_result = state.audio.apply_settings(initial_settings);
+            let initial_device = runtime_settings.selected_output_device_id.clone();
+            let apply_result = state.audio.apply_settings(runtime_settings);
             // Desktop: a failure to apply the initial audio settings is fatal.
             // Mobile: tolerate an unavailable output so Android can recover its
             // route and the first iOS smoke build can boot with the no-link engine.
