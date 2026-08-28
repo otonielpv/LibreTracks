@@ -1,4 +1,4 @@
-import { useEffect, type MutableRefObject } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import type { SongView, TransportSnapshot } from "@libretracks/shared/models";
 import {
   cancelMarkerJump,
@@ -32,6 +32,11 @@ type TimelineKeyboardShortcutsProps = {
     options?: { busy?: boolean },
   ) => Promise<void>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
+  /** Re-anchors the visual playhead to a snapshot the transport store may have
+   * dropped as a duplicate. Needed because lastSeekPositionSeconds is a
+   * position, not a counter: seeking twice to the same spot publishes nothing,
+   * so the visual clock would keep extrapolating from the old anchor. */
+  forcePlaybackVisualAnchor?: (snapshot: TransportSnapshot) => void;
   snapshotRef: MutableRefObject<TransportSnapshot | null>;
   song: SongView | null;
   selectedClipId: string | null;
@@ -86,6 +91,7 @@ type TimelineKeyboardShortcutsProps = {
 export function useTimelineKeyboardShortcuts({
   runAction,
   applyPlaybackSnapshot,
+  forcePlaybackVisualAnchor,
   snapshotRef,
   song,
   selectedClipId,
@@ -115,6 +121,14 @@ export function useTimelineKeyboardShortcuts({
   toggleViewMode,
   toggleViewModeBackward,
 }: TimelineKeyboardShortcutsProps) {
+  // Kept in a ref, not the effect's dep array: it closes over per-render
+  // values in the panel, so listing it would re-register the key listener on
+  // every render.
+  const forceVisualAnchorRef = useRef(forcePlaybackVisualAnchor);
+  useEffect(() => {
+    forceVisualAnchorRef.current = forcePlaybackVisualAnchor;
+  });
+
   // Subscribe to the user's binding overrides so a remap in the shortcuts
   // panel takes effect immediately (the effect re-runs when this changes).
   const overrides = useKeybindingStore((state) => state.overrides);
@@ -161,6 +175,10 @@ export function useTimelineKeyboardShortcuts({
         void runAction(async () => {
           const nextSnapshot = await seekTransport(0);
           applyPlaybackSnapshot(nextSnapshot);
+          // Pressing Home twice seeks to a position the backend already
+          // reports as its last seek, so the store drops the snapshot as a
+          // duplicate and the subscriber that re-anchors never runs.
+          forceVisualAnchorRef.current?.(nextSnapshot);
           setStatus(t("transport.status.movedToStart"));
         });
       },

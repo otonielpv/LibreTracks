@@ -4821,6 +4821,7 @@ export function TransportPanelContent() {
   useTimelineKeyboardShortcuts({
     runAction,
     applyPlaybackSnapshot,
+    forcePlaybackVisualAnchor: applyTransportVisualAnchor,
     snapshotRef,
     song,
     selectedClipId,
@@ -5119,12 +5120,25 @@ export function TransportPanelContent() {
     try {
       const nextSnapshot = await seekTransport(positionSeconds);
       applyPlaybackSnapshot(nextSnapshot);
+      // The store only publishes a snapshot whose signature actually changed,
+      // and lastSeekPositionSeconds is a POSITION, not a counter: seeking twice
+      // to the same spot (two clicks on the same pixel, snapped to the same
+      // grid line) produces an identical snapshot that never reaches the
+      // subscriber. The flag still being set proves no subscriber ran, so the
+      // running=false anchor previewSeek installed for the round trip would
+      // stay — playhead frozen until some later snapshot happened to publish.
+      // Re-anchor here instead.
+      if (forceReanchorOnNextSnapshotRef.current) {
+        forceReanchorOnNextSnapshotRef.current = false;
+        applyTransportVisualAnchor(nextSnapshot);
+      }
       setStatus(
         t("transport.status.cursorMoved", {
           time: formatClock(nextSnapshot.positionSeconds),
         }),
       );
     } catch (error) {
+      forceReanchorOnNextSnapshotRef.current = false;
       restoreConfirmedTransportVisual();
       throw error;
     }
