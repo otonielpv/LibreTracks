@@ -4650,21 +4650,6 @@ html.lt-ios body {
               0 0 0 1px rgb(255 226 171 / 0.45);
 }
 
-.lt-region-warp-indicator {
-  position: absolute;
-  top: 50%;
-  right: 4px;
-  height: 0.9rem;
-  background: transparent;
-  color: rgb(255 226 171 / 0.9);
-  font-size: 0.625rem;
-  font-weight: 700;
-  line-height: 0.9rem;
-  pointer-events: none;
-  text-align: center;
-  transform: translateY(-50%);
-}
-
 /* Resize handles overlaid on each end of a region hotspot. Wide enough to
    grab comfortably (6px) but only visible on hover/selection so the
    region UI stays clean at rest. Sit above the button background so the

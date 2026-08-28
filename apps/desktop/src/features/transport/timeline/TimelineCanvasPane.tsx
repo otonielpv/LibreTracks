@@ -831,7 +831,7 @@ export function TimelineCanvasPane({
                 region.endSeconds,
                 pixelsPerSecond,
               );
-              const regionDescription = `Carril superior: región ${region.name}${region.warpEnabled && region.warpSourceBpm ? `, BPM original ${formatBpm(region.warpSourceBpm)}` : ""}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`;
+              const regionDescription = `Carril superior: región ${region.name}${region.warpEnabled ? ", warped" : ""}${region.warpEnabled && region.warpSourceBpm ? `, BPM original ${formatBpm(region.warpSourceBpm)}` : ""}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`;
               return (
                 <button
                   key={region.id}
@@ -963,11 +963,6 @@ export function TimelineCanvasPane({
                   }}
                 >
                   <span className="lt-sr-only">{region.name}</span>
-                  {region.warpEnabled ? (
-                    <span className="lt-region-warp-indicator" aria-hidden="true">
-                      warped
-                    </span>
-                  ) : null}
                   <div
                     className="lt-region-resize-handle is-start"
                     role="presentation"

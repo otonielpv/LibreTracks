@@ -108,3 +108,38 @@ describe("drawRulerRegion key badge", () => {
     expect(texts).toEqual(["Coro", "+2 st"]);
   });
 });
+
+describe("drawRulerRegion warp badge", () => {
+  it("paints the warp badge next to the key and the source BPM", () => {
+    const { ctx, texts } = createContextSpy();
+    drawRulerRegion(
+      ctx,
+      region({ key: "Dm", warpEnabled: true, warpSourceBpm: 100 }),
+      WIDTH,
+      CAMERA_X,
+      PPS,
+      false,
+    );
+    // All three ride together on the left, right after the region name.
+    expect(texts).toEqual(["Coro", "Dm", "warped", "100 BPM"]);
+  });
+
+  it("paints the warp badge even without a source BPM to show", () => {
+    const { ctx, texts } = createContextSpy();
+    drawRulerRegion(
+      ctx,
+      region({ warpEnabled: true, warpSourceBpm: null }),
+      WIDTH,
+      CAMERA_X,
+      PPS,
+      false,
+    );
+    expect(texts).toEqual(["Coro", "warped"]);
+  });
+
+  it("paints no warp badge when the region is not warped", () => {
+    const { ctx, texts } = createContextSpy();
+    drawRulerRegion(ctx, region({ key: "Dm" }), WIDTH, CAMERA_X, PPS, false);
+    expect(texts).not.toContain("warped");
+  });
+});

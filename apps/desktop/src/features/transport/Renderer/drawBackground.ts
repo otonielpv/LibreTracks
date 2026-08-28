@@ -480,6 +480,12 @@ export function drawRulerRegion(
   if (effectiveKey) {
     badges.push(effectiveKey);
   }
+  // Warp used to be announced by an HTML label pinned to the region strip's
+  // right edge, which a short region pushed out of sight. It rides along with
+  // the other badges now, left-aligned next to the name.
+  if (region.warpEnabled) {
+    badges.push("warped");
+  }
   if (region.warpEnabled && region.warpSourceBpm && region.warpSourceBpm > 0) {
     badges.push(`${formatBpm(region.warpSourceBpm)} BPM`);
   }
