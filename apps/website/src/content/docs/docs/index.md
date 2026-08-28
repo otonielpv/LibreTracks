@@ -5,7 +5,7 @@ description: User and technical documentation for LibreTracks.
 
 LibreTracks is a multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving or templating the session, and performing with predictable audio routing, markers, jumps, transposition controls, color-coded timelines, MIDI, customizable shortcuts, and a mobile remote.
 
-LibreTracks runs on desktop (Windows, macOS, Linux) and is now available on Android as an early beta — you can install it on a phone or tablet, open recent sessions, create new sessions from reusable templates, and work with real playback, audio import, and touch control of the timeline. The Android build is still in testing, so use it with care and don't rely on it for an important show yet.
+LibreTracks runs on desktop (Windows, macOS, Linux) and is now available on Android as an early beta — you can install it on a phone or tablet, open recent sessions, create new sessions from reusable templates, and work with real playback, audio import, and touch control of the timeline. On a phone the interface adapts to the screen in portrait, tracks get their own touch controls, and USB audio interfaces are recognised as soon as you plug them in. The Android build is still in testing, so use it with care and don't rely on it for an important show yet.
 
 ![LibreTracks project timeline](/screenshots/Proyecto.png)
 
@@ -52,6 +52,8 @@ Folder tracks can act as grouped route owners: child tracks may leave their outp
 Mixing also supports Ableton-style multi-selection: with several tracks selected, acting on any one of them applies the change to all. Mute, solo, transpose and routing match the state of the track you clicked, while volume and pan move relatively (the volume delta in dB), preserving the mix balance. Acting on a track outside the selection is still a single-track edit.
 
 The top bar shows a live resource meter with current CPU and memory usage, so you can tell at a glance when a large session starts to push your machine.
+
+The app also explains itself: the `Tutorial` button in the side rail opens four guided walkthroughs that spotlight the real controls of the interface — getting started, building a song, preparing for the show, and the three views — and some steps ask you to open the panel they are describing and carry on by themselves once you do. The walkthroughs account for the differences between mouse and touch screen, are offered when you open a session, and any of them can be replayed whenever you want.
 
 LibreTracks also notifies you in-app when a new version is published, with the changelog in the active app language and a shortcut to the downloads page. The check can be triggered manually from `Settings → General`.
 

@@ -5,7 +5,7 @@ description: "Manual de LibreTracks, el reproductor multitrack gratuito para dir
 
 LibreTracks es una workstation de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta pensada para preparar el show con antelacion, guardar o convertir la sesion en plantilla, y tocar con routing, marcas, saltos, controles de transposicion, timeline con colores, MIDI, atajos personalizables y remote movil de forma predecible.
 
-LibreTracks funciona en escritorio (Windows, macOS, Linux) y ahora esta disponible en Android como una beta inicial: puedes instalarlo en un movil o tablet, abrir sesiones recientes, crear sesiones nuevas desde plantillas reutilizables y trabajar con reproduccion real, importacion de audio y control tactil del timeline. La version de Android todavia esta en pruebas, asi que usala con cautela y no dependas de ella para un directo importante todavia.
+LibreTracks funciona en escritorio (Windows, macOS, Linux) y ahora esta disponible en Android como una beta inicial: puedes instalarlo en un movil o tablet, abrir sesiones recientes, crear sesiones nuevas desde plantillas reutilizables y trabajar con reproduccion real, importacion de audio y control tactil del timeline. En el movil la interfaz se adapta a la pantalla en vertical y las pistas se manejan con controles tactiles propios, y las interfaces de audio USB se reconocen al enchufarlas. La version de Android todavia esta en pruebas, asi que usala con cautela y no dependas de ella para un directo importante todavia.
 
 ![Timeline de proyecto en LibreTracks](/screenshots/Proyecto.png)
 
@@ -52,6 +52,8 @@ Las folder tracks tambien pueden actuar como dueñas del routing: las pistas hij
 La mezcla tambien admite multi-seleccion al estilo Ableton: con varias pistas seleccionadas, actuar sobre cualquiera de ellas aplica el cambio a todas. Silencio, solo, transpose y ruteo se igualan al estado de la pista pulsada, mientras que volumen y panorama se mueven de forma relativa (el delta de volumen en dB), conservando el balance de la mezcla. Actuar sobre una pista fuera de la seleccion sigue siendo una edicion individual.
 
 La barra superior muestra un medidor de recursos en vivo con el uso actual de CPU y memoria, asi puedes ver de un vistazo cuando una sesion grande empieza a exigir mas al equipo.
+
+La propia aplicacion se explica sola: el boton `Tutorial` de la barra lateral abre cuatro recorridos guiados que van senalando los controles reales de la interfaz — los primeros pasos, montar una cancion, preparar el directo y las tres vistas — y algunos pasos te piden abrir el panel del que hablan y continuan solos cuando lo haces. Los recorridos tienen en cuenta las diferencias entre raton y pantalla tactil, se ofrecen al abrir una sesion y puedes repetir cualquiera de ellos cuando quieras.
 
 LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, mostrando las novedades en el idioma de la app y un acceso directo a la pagina de descargas. La comprobacion tambien se puede lanzar manualmente desde `Configuracion - General`.
 
