@@ -7,9 +7,11 @@ import {
   resolveFollowCameraEaseFactor,
   resolveFollowCameraX,
   resolveVisualCorrectionSeconds,
+  resolveVisualClockResync,
   resolveVisualPlaybackPosition,
   resolveVisualPositionAcrossVamp,
 } from "./playbackClock";
+import type { TransportSnapshot } from "@libretracks/shared/models";
 
 function anchor(overrides: Partial<PlaybackVisualAnchor>): PlaybackVisualAnchor {
   return {
@@ -173,5 +175,123 @@ describe("resolveFollowCameraX", () => {
       if (next !== null) camera = next;
     }
     expect(camera).toBeCloseTo(1000, 6);
+  });
+});
+
+describe("resolveVisualClockResync", () => {
+  function snapshot(
+    overrides: Partial<TransportSnapshot> = {},
+  ): TransportSnapshot {
+    return {
+      playbackState: "playing",
+      positionSeconds: 10,
+      projectRevision: 1,
+      isNativeRuntime: true,
+      transportClock: {
+        anchorPositionSeconds: 10,
+        running: true,
+        lastSeekPositionSeconds: 0,
+        lastJumpPositionSeconds: null,
+      },
+      ...overrides,
+    } as TransportSnapshot;
+  }
+
+  function resync(params: {
+    anchor?: Partial<PlaybackVisualAnchor>;
+    previousSnapshot?: TransportSnapshot | null;
+    nextSnapshot?: TransportSnapshot;
+    visualNowSeconds?: number;
+  }) {
+    return resolveVisualClockResync({
+      anchor: anchor(params.anchor ?? {}),
+      previousSnapshot:
+        params.previousSnapshot === undefined
+          ? snapshot()
+          : params.previousSnapshot,
+      nextSnapshot: params.nextSnapshot ?? snapshot(),
+      visualNowSeconds: params.visualNowSeconds ?? 10,
+      nowMs: 5000,
+      maxDurationSeconds: 600,
+      anchorDurationSeconds: 600,
+    });
+  }
+
+  it("keeps the extrapolation while it tracks the engine within tolerance", () => {
+    expect(resync({ visualNowSeconds: 10.05 })).toEqual({ kind: "keep" });
+  });
+
+  it("eases the anchor back when the drift is small enough to hide", () => {
+    const decision = resync({ visualNowSeconds: 10.2 });
+    expect(decision.kind).toBe("correct");
+    if (decision.kind !== "correct") return;
+    // Lands on the engine, but displays the current visual position at t0 so
+    // the correction is invisible: 10.2 = 10 + 0.2.
+    expect(decision.anchor.anchorPositionSeconds).toBeCloseTo(10, 6);
+    expect(decision.anchor.correctionSeconds).toBeCloseTo(0.2, 6);
+    expect(decision.anchor.running).toBe(true);
+  });
+
+  it("snaps when the clocks are too far apart to ease together", () => {
+    expect(resync({ visualNowSeconds: 12 })).toEqual({ kind: "snap" });
+  });
+
+  it("defers to a full re-anchor when the transport actually moved", () => {
+    const seeked = snapshot({
+      transportClock: {
+        anchorPositionSeconds: 30,
+        running: true,
+        lastSeekPositionSeconds: 30,
+        lastJumpPositionSeconds: null,
+      },
+      positionSeconds: 30,
+    });
+    expect(resync({ nextSnapshot: seeked }).kind).toBe("reanchor");
+  });
+
+  it("never touches a parked anchor - that is a seek preview holding the cursor", () => {
+    // previewSeek parks the anchor with running=false while the round trip to
+    // the backend resolves. A poll landing mid-preview must not drag the
+    // cursor off the pointer.
+    expect(resync({ anchor: { running: false }, visualNowSeconds: 55 }).kind).toBe(
+      "reanchor",
+    );
+  });
+
+  it("defers to a full re-anchor when playback stopped", () => {
+    expect(
+      resync({ nextSnapshot: snapshot({ playbackState: "paused" }) }).kind,
+    ).toBe("reanchor");
+  });
+
+  it("defers to a full re-anchor when the playback rate changed", () => {
+    const warped = snapshot({
+      transportClock: {
+        anchorPositionSeconds: 10,
+        running: true,
+        playbackRate: 1.25,
+        lastSeekPositionSeconds: 0,
+        lastJumpPositionSeconds: null,
+      },
+    });
+    expect(resync({ nextSnapshot: warped }).kind).toBe("reanchor");
+  });
+
+  it("compares against the live position, not the possibly stale anchor", () => {
+    // Fallback snapshot flavour: the backend only refreshes the clock anchor at
+    // its 250ms sync cadence while positionSeconds stays live. Trusting the
+    // anchor here would report drift that isn't there.
+    const stale = snapshot({
+      positionSeconds: 10.02,
+      transportClock: {
+        anchorPositionSeconds: 9.8,
+        running: true,
+        lastSeekPositionSeconds: 0,
+        lastJumpPositionSeconds: null,
+      },
+    });
+    expect(resync({ nextSnapshot: stale, visualNowSeconds: 10 })).toEqual({
+      kind: "keep",
+    });
   });
 });

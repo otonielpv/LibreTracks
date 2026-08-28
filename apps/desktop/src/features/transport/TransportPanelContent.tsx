@@ -341,7 +341,6 @@ import {
   LIVE_ZOOM_COMMIT_DEBOUNCE_MS,
   MIDI_LEARN_COMMANDS,
   NATIVE_DND_DEBUG_ENABLED,
-  PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS,
   SCROLL_COMMIT_DEBOUNCE_MS,
   TIMELINE_FIT_RIGHT_GUTTER_PX,
   TRACK_HEIGHT_MAX,
@@ -351,9 +350,9 @@ import {
   ZOOM_MIN,
 } from "./constants";
 import {
-  CLOCK_RESYNC_MAX_SMOOTH_SECONDS,
   resolveFollowCameraX,
   resolveVisualPlaybackPosition,
+  resolveVisualClockResync,
   resolveVisualPositionAcrossVamp,
 } from "./playbackClock";
 import {
@@ -1543,6 +1542,15 @@ export function TransportPanelContent() {
   // backend resolves, and if the returned snapshot's lastSeekPositionSeconds
   // matches the previous one the anchor never re-runs → playhead frozen.
   const forceReanchorOnNextSnapshotRef = useRef(false);
+  // Points at resyncVisualClockToSnapshot so applyPlaybackSnapshot (declared
+  // above it, and a useCallback whose identity must stay stable) can reach it.
+  const resyncVisualClockRef = useRef<
+    | ((
+        previousSnapshot: TransportSnapshot | null,
+        nextSnapshot: TransportSnapshot,
+      ) => boolean)
+    | null
+  >(null);
   const displayPositionSecondsRef = useRef(0);
   // Latest timeline grid snap interval, kept in a ref so the Arrow-key nudge
   // callback (declared before the grid is computed) can read it. Populated by
@@ -2227,7 +2235,23 @@ export function TransportPanelContent() {
   const applyPlaybackSnapshot = useCallback(
     (nextSnapshot: TransportSnapshot | null) => {
       recordPlaybackTransition(snapshotRef.current?.playbackState, nextSnapshot?.playbackState);
+      const previousSnapshot = snapshotRef.current;
       useTransportStore.getState().setPlaybackState(nextSnapshot);
+      // The store publishes only when the snapshot's signature CHANGED, and
+      // during steady playback nothing in it does: same state, same revision,
+      // same last seek/jump. So the anchor logic hanging off its subscription
+      // never sees a polled snapshot, and the visual clock free-runs off
+      // performance.now() with no way back to the engine — it drifts, and it
+      // doesn't notice a stalled transport at all. When the store drops a
+      // snapshot, run the drift correction here instead; it only ever touches
+      // an anchor that is already running and unchanged, so it cannot fight a
+      // seek preview or a drag.
+      if (
+        nextSnapshot &&
+        useTransportStore.getState().playback !== nextSnapshot
+      ) {
+        resyncVisualClockRef.current?.(previousSnapshot, nextSnapshot);
+      }
       snapshotRef.current = nextSnapshot;
       applyPitchPrepareSnapshot(nextSnapshot?.pitch);
       applySourcesSnapshot(nextSnapshot?.sources);
@@ -3199,6 +3223,51 @@ export function TransportPanelContent() {
     );
   }
 
+  /**
+   * Applies resolveVisualClockResync's decision to the live anchor. Returns
+   * true when the resync owns the frame, false when the caller must run its
+   * own full re-anchor instead.
+   */
+  function resyncVisualClockToSnapshot(
+    previousSnapshot: TransportSnapshot | null,
+    nextSnapshot: TransportSnapshot,
+  ) {
+    const durationSeconds = songDurationSecondsRef.current;
+    const decision = resolveVisualClockResync({
+      anchor: playbackVisualAnchorRef.current,
+      previousSnapshot,
+      nextSnapshot,
+      visualNowSeconds: resolveCurrentVisualPosition(),
+      nowMs: performance.now(),
+      maxDurationSeconds:
+        timelineDurationSecondsRef.current > 0
+          ? timelineDurationSecondsRef.current
+          : durationSeconds > 0
+            ? durationSeconds
+            : Number.MAX_SAFE_INTEGER,
+      anchorDurationSeconds: timelineDurationSecondsRef.current || durationSeconds,
+    });
+
+    if (decision.kind === "reanchor") {
+      return false;
+    }
+
+    if (decision.kind === "correct") {
+      playbackVisualAnchorRef.current = decision.anchor;
+    } else if (decision.kind === "snap") {
+      applyTransportVisualAnchor(nextSnapshot);
+    }
+
+    return true;
+  }
+
+  // Point applyPlaybackSnapshot's ref at the declaration above. No dep array:
+  // it closes over per-render values, so the ref must track the latest version
+  // on every render (same pattern as performSeekRef below).
+  useEffect(() => {
+    resyncVisualClockRef.current = resyncVisualClockToSnapshot;
+  });
+
   // Publishes every transport snapshot: updates snapshotRef, re-anchors the
   // visual playhead and drives syncLivePosition. Hot path - see the 60fps
   // note on displayPositionSecondsRef.
@@ -3235,66 +3304,17 @@ export function TransportPanelContent() {
       const forceReanchor = forceReanchorOnNextSnapshotRef.current;
       forceReanchorOnNextSnapshotRef.current = false;
 
-      const shouldPreserveVisualAnchor =
+      // A published snapshot whose position bookkeeping is unchanged (some
+      // unrelated field of the signature moved: pitch progress, vamp, sources)
+      // must not jerk the playhead — keep extrapolating, correcting only the
+      // drift. An explicit re-anchor or a lifecycle anchor carries new
+      // transport state and always wins over that.
+      if (
         !forceReanchor &&
         !anchorMeta &&
-        previousSnapshot?.playbackState === "playing" &&
-        nextSnapshot.playbackState === "playing" &&
-        previousSnapshot.projectRevision === nextSnapshot.projectRevision &&
-        previousSnapshot.transportClock?.lastJumpPositionSeconds ===
-          nextSnapshot.transportClock?.lastJumpPositionSeconds &&
-        previousSnapshot.transportClock?.lastSeekPositionSeconds ===
-          nextSnapshot.transportClock?.lastSeekPositionSeconds &&
-        Math.abs(
-          playbackVisualAnchorRef.current.playbackRate -
-            (nextSnapshot.transportClock?.playbackRate ?? 1),
-        ) < 0.000001 &&
-        playbackVisualAnchorRef.current.running &&
-        Boolean(nextSnapshot.transportClock?.running);
-
-      if (shouldPreserveVisualAnchor) {
-        const polledAnchorPosition =
-          nextSnapshot.transportClock?.anchorPositionSeconds ??
-          nextSnapshot.positionSeconds;
-        const visualNowSeconds = resolveCurrentVisualPosition();
-        const visualDriftSeconds = Math.abs(
-          visualNowSeconds - polledAnchorPosition,
-        );
-
-        if (
-          visualDriftSeconds <= PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS
-        ) {
-          return;
-        }
-
-        // Drift beyond tolerance but still small enough to be clock skew, not a
-        // seek/jump (those change lastSeek/lastJump and never reach here). Re-
-        // anchor to the true position but carry the current visual offset as a
-        // correction that decays to zero, so the playhead keeps advancing
-        // smoothly and converges instead of snapping. This is the periodic
-        // micro-jump that made playback feel non-fluid.
-        if (visualDriftSeconds <= CLOCK_RESYNC_MAX_SMOOTH_SECONDS) {
-          const durationSeconds = songDurationSecondsRef.current;
-          const maxDuration =
-            timelineDurationSecondsRef.current > 0
-              ? timelineDurationSecondsRef.current
-              : durationSeconds > 0
-                ? durationSeconds
-                : Number.MAX_SAFE_INTEGER;
-          const clampedTarget = clamp(polledAnchorPosition, 0, maxDuration);
-          playbackVisualAnchorRef.current = {
-            anchorPositionSeconds: clampedTarget,
-            anchorReceivedAtMs: performance.now(),
-            durationSeconds:
-              timelineDurationSecondsRef.current || durationSeconds,
-            running: true,
-            playbackRate: nextSnapshot.transportClock?.playbackRate ?? 1,
-            // Displayed = clampedTarget + correction = visualNow at t0, then the
-            // correction eases out → converges to the true clock with no jump.
-            correctionSeconds: visualNowSeconds - clampedTarget,
-          };
-          return;
-        }
+        resyncVisualClockToSnapshot(previousSnapshot, nextSnapshot)
+      ) {
+        return;
       }
 
       applyTransportVisualAnchor(nextSnapshot, anchorMeta);

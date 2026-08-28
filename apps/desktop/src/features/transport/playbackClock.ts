@@ -19,6 +19,10 @@
  * carry correctionSeconds = 0 and so land instantly.
  */
 
+import type { TransportSnapshot } from "@libretracks/shared/models";
+
+import { PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS } from "./constants";
+
 export type PlaybackVisualAnchor = {
   anchorPositionSeconds: number;
   anchorReceivedAtMs: number;
@@ -172,4 +176,118 @@ export function resolveFollowCameraX(params: {
       : currentCameraX + distance * resolveFollowCameraEaseFactor(frameDtSeconds);
 
   return Math.abs(nextCameraX - currentCameraX) < 0.01 ? null : nextCameraX;
+}
+
+/**
+ * What a transport snapshot should do to the free-running visual clock.
+ *
+ * - `reanchor`: the snapshot carries new transport state (a different song
+ *   revision, a seek, a jump, a stopped transport). The caller must run its
+ *   full re-anchor, which is the only path allowed to change what the playhead
+ *   is doing — not just where it is.
+ * - `keep`: the extrapolation is still true within tolerance. Do nothing; this
+ *   is the common case and the reason the playhead glides.
+ * - `correct`: drift worth fixing, small enough to hide. Adopt the returned
+ *   anchor, which lands on the engine's position while carrying the current
+ *   visual offset as a correction that decays to zero.
+ * - `snap`: too far apart to ease away (a stalled engine, a visual clock that
+ *   ran off). Land on the truth now.
+ */
+export type VisualClockResyncDecision =
+  | { kind: "reanchor" }
+  | { kind: "keep" }
+  | { kind: "correct"; anchor: PlaybackVisualAnchor }
+  | { kind: "snap" };
+
+/**
+ * Decides how a polled snapshot should treat the visual clock.
+ *
+ * The visual playhead extrapolates from performance.now() while the engine runs
+ * on the audio clock: the two drift, and a stalled engine doesn't drift — it
+ * stops. Every snapshot carries the truth, so this is what keeps the
+ * extrapolation honest between the transport events that re-anchor it outright.
+ *
+ * Anything other than `reanchor` requires an anchor that is ALREADY RUNNING and
+ * a transport whose position bookkeeping is unchanged. That is what makes it
+ * safe to run on snapshots nobody published: a parked anchor (a seek preview
+ * holding the cursor under the pointer) reports `reanchor` and is left alone by
+ * a caller that has no new transport state to apply.
+ */
+export function resolveVisualClockResync(params: {
+  anchor: PlaybackVisualAnchor;
+  previousSnapshot: TransportSnapshot | null;
+  nextSnapshot: TransportSnapshot;
+  /** The visual position right now, vamp wrap already applied. */
+  visualNowSeconds: number;
+  nowMs: number;
+  /** Upper clamp for a corrected anchor (timeline workspace, then song). */
+  maxDurationSeconds: number;
+  /** Value to store as the anchor's own durationSeconds. */
+  anchorDurationSeconds: number;
+}): VisualClockResyncDecision {
+  const {
+    anchor,
+    previousSnapshot,
+    nextSnapshot,
+    visualNowSeconds,
+    nowMs,
+    maxDurationSeconds,
+    anchorDurationSeconds,
+  } = params;
+
+  const canPreserveAnchor =
+    previousSnapshot?.playbackState === "playing" &&
+    nextSnapshot.playbackState === "playing" &&
+    previousSnapshot.projectRevision === nextSnapshot.projectRevision &&
+    previousSnapshot.transportClock?.lastJumpPositionSeconds ===
+      nextSnapshot.transportClock?.lastJumpPositionSeconds &&
+    previousSnapshot.transportClock?.lastSeekPositionSeconds ===
+      nextSnapshot.transportClock?.lastSeekPositionSeconds &&
+    Math.abs(
+      anchor.playbackRate - (nextSnapshot.transportClock?.playbackRate ?? 1),
+    ) < 0.000001 &&
+    anchor.running &&
+    Boolean(nextSnapshot.transportClock?.running);
+
+  if (!canPreserveAnchor) {
+    return { kind: "reanchor" };
+  }
+
+  // Where the engine says the playhead is. In the normal snapshot flavour this
+  // is the very same number as transportClock.anchorPositionSeconds — the
+  // backend overwrites the anchor with the audio engine's live position
+  // (snapshot_with_transport_override). In the fallback flavour, with the
+  // native engine not reporting Playing (pending start, or a dead device on the
+  // null pump), the anchor is only refreshed at the backend's 250ms sync
+  // cadence while positionSeconds stays live; comparing against the anchor
+  // there would tug the playhead backwards on every poll that skipped a sync.
+  const enginePositionSeconds = nextSnapshot.positionSeconds;
+  const driftSeconds = Math.abs(visualNowSeconds - enginePositionSeconds);
+
+  if (driftSeconds <= PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS) {
+    return { kind: "keep" };
+  }
+
+  if (driftSeconds > CLOCK_RESYNC_MAX_SMOOTH_SECONDS) {
+    return { kind: "snap" };
+  }
+
+  const clampedTarget = Math.min(
+    Math.max(enginePositionSeconds, 0),
+    maxDurationSeconds,
+  );
+
+  return {
+    kind: "correct",
+    anchor: {
+      anchorPositionSeconds: clampedTarget,
+      anchorReceivedAtMs: nowMs,
+      durationSeconds: anchorDurationSeconds,
+      running: true,
+      playbackRate: nextSnapshot.transportClock?.playbackRate ?? 1,
+      // Displayed = clampedTarget + correction = visualNow at t0, then the
+      // correction eases out -> converges to the true clock with no jump.
+      correctionSeconds: visualNowSeconds - clampedTarget,
+    },
+  };
 }
