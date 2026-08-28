@@ -376,8 +376,10 @@ const copy = es
     const map = document.createElement("div");
     map.className = "analytics-echart analytics-map-visual";
     map.dataset.chart = "countries";
+    const rankingScroller = document.createElement("div");
+    rankingScroller.className = "analytics-map-ranking";
     const ranking = document.createElement("ol");
-    rows.filter((row) => row.label !== "XX").slice(0, 8).forEach((row) => {
+    rows.filter((row) => row.label !== "XX").forEach((row) => {
       const item = document.createElement("li");
       const name = document.createElement("span");
       name.textContent = regionNames.of(row.label) ?? row.label;
@@ -386,7 +388,8 @@ const copy = es
       item.append(name, value);
       ranking.append(item);
     });
-    layout.append(map, ranking);
+    rankingScroller.append(ranking);
+    layout.append(map, rankingScroller);
     card.append(layout);
     return card;
   }

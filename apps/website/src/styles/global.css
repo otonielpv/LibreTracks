@@ -648,6 +648,28 @@ h1 {
     #111;
 }
 
+/* The ranking lists every country the period saw, so it scrolls on its own
+   instead of stretching the card past the map beside it. */
+.analytics-map-ranking {
+  align-self: stretch;
+  max-height: 25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Keep the rows from sitting flush against the scrollbar. */
+  padding-right: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--lt-muted) 40%, transparent) transparent;
+}
+
+.analytics-map-ranking::-webkit-scrollbar {
+  width: 8px;
+}
+
+.analytics-map-ranking::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--lt-muted) 40%, transparent);
+  border-radius: 4px;
+}
+
 .analytics-map-layout ol {
   display: grid;
   gap: 0;
@@ -767,6 +789,10 @@ h1 {
 
   .analytics-map-visual {
     height: 18rem;
+  }
+
+  .analytics-map-ranking {
+    max-height: 18rem;
   }
 
   .analytics-echart,

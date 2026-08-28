@@ -37,6 +37,9 @@ async function breakdown(
   db: D1Database,
   column: "app_version" | "os" | "device_class" | "country_code",
   since: number,
+  // Countries are shown as a scrollable ranking next to the map, so the whole
+  // ISO 3166-1 range has to fit; the other dimensions stay capped at a top 20.
+  limit = 20,
 ): Promise<BreakdownRow[]> {
   const result = await db
     .prepare(
@@ -46,9 +49,9 @@ async function breakdown(
         WHERE received_at >= ?1
         GROUP BY ${column}
         ORDER BY devices DESC, sessions DESC
-        LIMIT 20`,
+        LIMIT ?2`,
     )
-    .bind(since)
+    .bind(since, limit)
     .all<BreakdownRow>();
   return result.results;
 }
@@ -215,7 +218,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       )
         .bind(since)
         .all<WeekdayRow>(),
-      breakdown(env.TELEMETRY_DB, "country_code", since),
+      breakdown(env.TELEMETRY_DB, "country_code", since, 300),
       breakdown(env.TELEMETRY_DB, "app_version", since),
       breakdown(env.TELEMETRY_DB, "os", since),
       breakdown(env.TELEMETRY_DB, "device_class", since),
