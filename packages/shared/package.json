@@ -9,7 +9,8 @@
     "./desktopApi": "./src/desktopApi.ts",
     "./timelineMath": "./src/timelineMath.ts",
     "./meterBallistics": "./src/meterBallistics.ts",
-    "./faderScale": "./src/faderScale.ts"
+    "./faderScale": "./src/faderScale.ts",
+    "./playbackClock": "./src/playbackClock.ts"
   },
   "scripts": {
     "lint": "tsc -p tsconfig.json --noEmit",

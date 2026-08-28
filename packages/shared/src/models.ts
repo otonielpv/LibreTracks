@@ -716,6 +716,37 @@ export function buildWaveformLodsFromPeaks(
   return lods;
 }
 
+/**
+ * A point-in-time comparison of the three positions the backend tracks, taken
+ * on each play / seek / jump.
+ *
+ * There is only one real clock — `lt::TransportClock`, counting frames on the
+ * audio thread. Everything above it either mirrors that clock or extrapolates
+ * from it on a wall clock, so this sample is how you tell a healthy mirror from
+ * one that has drifted:
+ *
+ * - `transportPositionSeconds`: the Rust wall-clock transport clock.
+ * - `enginePositionSeconds`: the Rust model's own position.
+ * - `runtimeEstimatedPositionSeconds`: what the native engine reports (or, if
+ *   it reports nothing, the audio controller's wall-clock estimate).
+ *
+ * The backend has computed this for a long time and shipped it in every
+ * snapshot; nothing consumed it. The PerfHud does now — see PerfHud.tsx.
+ */
+export type TransportDriftSample = {
+  /** What produced the sample: "play", "seek" or "jump". */
+  event: string;
+  transportPositionSeconds: number;
+  enginePositionSeconds: number;
+  runtimeEstimatedPositionSeconds?: number | null;
+  runtimeRunning: boolean;
+  transportMinusEngineSeconds: number;
+  runtimeMinusTransportSeconds?: number | null;
+  runtimeMinusEngineSeconds?: number | null;
+  /** Largest absolute gap among the three pairs. The number to watch. */
+  maxObservedDeltaSeconds: number;
+};
+
 export type TransportSnapshot = {
   playbackState: PlaybackState;
   positionSeconds: number;
@@ -742,6 +773,7 @@ export type TransportSnapshot = {
   };
   pitch?: PitchPrepareSummary;
   sources?: SourceReadinessSummary;
+  lastDriftSample?: TransportDriftSample | null;
   projectRevision: number;
   songDir?: string | null;
   songFilePath?: string | null;

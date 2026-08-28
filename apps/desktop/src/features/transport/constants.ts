@@ -43,7 +43,9 @@ export const NATIVE_DND_DEBUG_ENABLED =
 export const HARDWARE_OUTPUT_CHANNEL_COUNT = 8;
 export const LIBRARY_DRAG_EDGE_BUFFER_PX = 50;
 export const LIBRARY_DRAG_MAX_SCROLL_SPEED_PX = 22;
-export const PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS = 0.08;
+// PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS moved to
+// @libretracks/shared/playbackClock: the remote extrapolates the playhead from
+// the same snapshots and must use the same tolerance.
 
 export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
   {

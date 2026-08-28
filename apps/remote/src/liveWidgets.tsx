@@ -8,13 +8,16 @@ import {
   regionEffectiveKey,
   type SongRegionSummary,
   type SongView,
-  type TransportSnapshot,
 } from "@libretracks/shared/models";
 import { getCumulativeMusicalPosition } from "@libretracks/shared/timelineMath";
 import type { CSSProperties } from "react";
 
 import { getRemoteStrings } from "./i18n";
 import { buildMarkerCards } from "./markerCards";
+import {
+  type PlaybackVisualAnchor,
+  resolveLivePosition,
+} from "./remoteClock";
 
 const STRINGS = getRemoteStrings();
 
@@ -43,28 +46,6 @@ function nextMarkerCandidates(songView: SongView | null) {
   return buildMarkerCards(songView?.sectionMarkers ?? []).map(
     (entry) => entry.marker,
   );
-}
-
-function resolveLivePosition(snapshot: TransportSnapshot | null, receivedAtMs: number) {
-  if (!snapshot) {
-    return 0;
-  }
-  const transportClock = snapshot.transportClock;
-  if (snapshot.playbackState === "playing") {
-    const playbackRate =
-      Number.isFinite(transportClock?.playbackRate) && transportClock?.playbackRate !== undefined
-        ? Math.max(0, transportClock.playbackRate)
-        : 1;
-    const anchorPositionSeconds = transportClock?.running
-      ? transportClock.anchorPositionSeconds
-      : snapshot.positionSeconds;
-    return Math.max(
-      0,
-      anchorPositionSeconds +
-        ((performance.now() - receivedAtMs) / 1000) * playbackRate,
-    );
-  }
-  return Math.max(0, snapshot.positionSeconds);
 }
 
 function formatClock(totalSeconds: number) {
@@ -113,9 +94,10 @@ const EMPTY_CONTEXT: LiveMusicalContext = {
 };
 
 type ContextSources = {
-  snapshot: TransportSnapshot | null;
   songView: SongView | null;
-  snapshotReceivedAtMs: number;
+  /** The one visual clock, owned by the sync store. This module used to keep
+   * its own byte-identical copy of the extrapolation; see `remoteClock.ts`. */
+  visualAnchor: PlaybackVisualAnchor;
 };
 
 /**
@@ -218,8 +200,8 @@ export function useLiveMusicalContext(
     let frameId = 0;
 
     const render = () => {
-      const { snapshot, songView, snapshotReceivedAtMs } = getSourcesRef.current();
-      const position = resolveLivePosition(snapshot, snapshotReceivedAtMs);
+      const { songView, visualAnchor } = getSourcesRef.current();
+      const position = resolveLivePosition(visualAnchor);
       const next = deriveLiveMusicalContext(songView, position);
 
       const now = performance.now();

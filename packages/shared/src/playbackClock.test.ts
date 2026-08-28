@@ -1,17 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import type { TransportSnapshot } from "./models";
 import {
   CLOCK_RESYNC_EASE_MS,
-  FOLLOW_CAMERA_LOCK_PX,
   type PlaybackVisualAnchor,
-  resolveFollowCameraEaseFactor,
-  resolveFollowCameraX,
-  resolveVisualCorrectionSeconds,
   resolveVisualClockResync,
+  resolveVisualCorrectionSeconds,
   resolveVisualPlaybackPosition,
   resolveVisualPositionAcrossVamp,
 } from "./playbackClock";
-import type { TransportSnapshot } from "@libretracks/shared/models";
 
 function anchor(overrides: Partial<PlaybackVisualAnchor>): PlaybackVisualAnchor {
   return {
@@ -46,9 +43,9 @@ describe("resolveVisualCorrectionSeconds", () => {
 
   it("is fully resolved once the ease window elapses", () => {
     const a = anchor({ correctionSeconds: 0.04, anchorReceivedAtMs: 1000 });
-    expect(
-      resolveVisualCorrectionSeconds(a, 1000 + CLOCK_RESYNC_EASE_MS),
-    ).toBe(0);
+    expect(resolveVisualCorrectionSeconds(a, 1000 + CLOCK_RESYNC_EASE_MS)).toBe(
+      0,
+    );
     expect(
       resolveVisualCorrectionSeconds(a, 1000 + CLOCK_RESYNC_EASE_MS + 500),
     ).toBe(0);
@@ -64,6 +61,25 @@ describe("resolveVisualPlaybackPosition", () => {
     });
 
     expect(resolveVisualPlaybackPosition(a, 3_500)).toBeCloseTo(12, 6);
+  });
+
+  // The bug the four duplicated extrapolators had: two of them dropped
+  // playbackRate entirely, so under warp the playhead ran at wall-clock speed
+  // while the audio ran at the warped rate. Guard it here, once, for everyone.
+  it("does not fall back to realtime when a rate is present", () => {
+    const slow = anchor({ anchorReceivedAtMs: 0, playbackRate: 0.5 });
+    const fast = anchor({ anchorReceivedAtMs: 0, playbackRate: 2 });
+
+    expect(resolveVisualPlaybackPosition(slow, 1_000)).toBeCloseTo(0.5, 6);
+    expect(resolveVisualPlaybackPosition(fast, 1_000)).toBeCloseTo(2, 6);
+  });
+
+  it("treats a missing or nonsensical rate as realtime", () => {
+    const zero = anchor({ anchorReceivedAtMs: 0, playbackRate: 0 });
+    const nan = anchor({ anchorReceivedAtMs: 0, playbackRate: Number.NaN });
+
+    expect(resolveVisualPlaybackPosition(zero, 1_000)).toBeCloseTo(1, 6);
+    expect(resolveVisualPlaybackPosition(nan, 1_000)).toBeCloseTo(1, 6);
   });
 
   it("does not advance a stopped anchor", () => {
@@ -99,82 +115,6 @@ describe("resolveVisualPositionAcrossVamp", () => {
     expect(
       resolveVisualPositionAcrossVamp(20, { startSeconds: 20, endSeconds: 20 }),
     ).toBe(20);
-  });
-});
-
-describe("resolveFollowCameraEaseFactor", () => {
-  it("uses the base smoothing at a 60fps frame delta", () => {
-    expect(resolveFollowCameraEaseFactor(1 / 60)).toBeCloseTo(0.22, 6);
-  });
-
-  it("scales up for a longer (slower fps) frame so the feel is fps-independent", () => {
-    // Twice the frame time ⇒ roughly twice the closure per frame.
-    expect(resolveFollowCameraEaseFactor(2 / 60)).toBeCloseTo(0.44, 6);
-  });
-
-  it("clamps to 1 for a very long stall so it can't overshoot", () => {
-    expect(resolveFollowCameraEaseFactor(1)).toBe(1);
-  });
-});
-
-describe("resolveFollowCameraX", () => {
-  it("locks rigidly to the goal during steady tracking (small gap)", () => {
-    // A within-lock gap is steady tracking: go straight to the goal so the
-    // camera advances at exactly the playhead's velocity. This is what keeps
-    // low-zoom follow smooth — no exponential chase, no rAF-jitter ripple.
-    const goal = 100 + FOLLOW_CAMERA_LOCK_PX / 2;
-    expect(
-      resolveFollowCameraX({
-        currentCameraX: 100,
-        goalCameraX: goal,
-        frameDtSeconds: 1 / 60,
-      }),
-    ).toBe(goal);
-  });
-
-  it("locks straight to a sub-pixel-per-frame advance (no stutter)", () => {
-    // The low-zoom case: the goal is a fraction of a pixel ahead. It must move,
-    // not get suppressed, or the camera stalls every other frame.
-    expect(
-      resolveFollowCameraX({
-        currentCameraX: 0,
-        goalCameraX: 0.4,
-        frameDtSeconds: 1 / 60,
-      }),
-    ).toBeCloseTo(0.4, 6);
-  });
-
-  it("eases toward a far goal (a discontinuity) instead of jumping", () => {
-    const next = resolveFollowCameraX({
-      currentCameraX: 0,
-      goalCameraX: 1000, // well beyond the lock radius
-      frameDtSeconds: 1 / 60,
-    });
-    // 22% of 1000 = 220, fractional (never rounded).
-    expect(next).toBeCloseTo(220, 6);
-  });
-
-  it("returns null when already at the goal (no write needed)", () => {
-    expect(
-      resolveFollowCameraX({
-        currentCameraX: 50,
-        goalCameraX: 50,
-        frameDtSeconds: 1 / 60,
-      }),
-    ).toBeNull();
-  });
-
-  it("eases a large jump then locks, converging exactly to the goal", () => {
-    let camera = 0;
-    for (let i = 0; i < 120; i += 1) {
-      const next = resolveFollowCameraX({
-        currentCameraX: camera,
-        goalCameraX: 1000,
-        frameDtSeconds: 1 / 60,
-      });
-      if (next !== null) camera = next;
-    }
-    expect(camera).toBeCloseTo(1000, 6);
   });
 });
 
@@ -253,9 +193,9 @@ describe("resolveVisualClockResync", () => {
     // previewSeek parks the anchor with running=false while the round trip to
     // the backend resolves. A poll landing mid-preview must not drag the
     // cursor off the pointer.
-    expect(resync({ anchor: { running: false }, visualNowSeconds: 55 }).kind).toBe(
-      "reanchor",
-    );
+    expect(
+      resync({ anchor: { running: false }, visualNowSeconds: 55 }).kind,
+    ).toBe("reanchor");
   });
 
   it("defers to a full re-anchor when playback stopped", () => {

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import type { TransportDriftSample } from "@libretracks/shared/models";
+import { useTransportStore } from "../store";
 import {
   clearRecording,
   downloadRecording,
@@ -11,6 +13,12 @@ import {
   stopPerfMetrics,
   type PerfSnapshot,
 } from "./perfMetrics";
+
+/** Signed milliseconds, so the sign tells you which clock is ahead. */
+function formatDriftMs(seconds: number) {
+  const ms = seconds * 1000;
+  return `${ms >= 0 ? "+" : ""}${ms.toFixed(1)} ms`;
+}
 
 /**
  * Floating top-left HUD that surfaces the metrics in `perfMetrics`. Toggled
@@ -25,6 +33,7 @@ import {
 export function PerfHud() {
   const [enabled, setEnabled] = useState<boolean>(() => isPerfHudEnabled());
   const [snapshot, setSnapshot] = useState<PerfSnapshot | null>(null);
+  const [drift, setDrift] = useState<TransportDriftSample | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
 
   // Keybinding toggle. Lives at the window level so it works regardless of
@@ -53,6 +62,7 @@ export function PerfHud() {
     if (!enabled) {
       stopPerfMetrics();
       setSnapshot(null);
+      setDrift(null);
       return;
     }
     startPerfMetrics();
@@ -62,6 +72,11 @@ export function PerfHud() {
       // session afterwards (see Download button below).
       recordingTick();
       setSnapshot(readPerfSnapshot());
+      // Read, don't subscribe: the backend refreshes this only on play/seek/
+      // jump, and the HUD is already on a 250ms tick. A store subscription
+      // would re-render the HUD on every transport poll for a value that
+      // rarely changes.
+      setDrift(useTransportStore.getState().playback?.lastDriftSample ?? null);
     }, 250);
     return () => {
       window.clearInterval(id);
@@ -93,6 +108,12 @@ export function PerfHud() {
       : snapshot.waveformTileMsLastSecond <= 33
         ? "#e0c97e"
         : "#e07e7e";
+  // El desvío entre relojes es de unos pocos ms en condiciones normales; 50ms
+  // ya es un salto visible en el playhead y 250ms es el periodo del sondeo,
+  // o sea que un reloj se quedó sin re-anclar durante un ciclo entero.
+  const driftMs = (drift?.maxObservedDeltaSeconds ?? 0) * 1000;
+  const driftColor =
+    driftMs <= 50 ? "#7ee07e" : driftMs <= 250 ? "#e0c97e" : "#e07e7e";
   const lastGesture = snapshot.gestures[0] ?? null;
   const lastCommit = snapshot.commits[0] ?? null;
   // Verde = el arrastre no pasó por React, que es el objetivo del paso 02.
@@ -199,6 +220,33 @@ export function PerfHud() {
           </div>
         ) : null}
       </div>
+
+      {drift ? (
+        <div
+          style={{
+            marginTop: 6,
+            paddingTop: 6,
+            borderTop: "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          <div style={{ opacity: 0.6, marginBottom: 2 }}>
+            reloj · último {drift.event}
+          </div>
+          <div style={{ color: driftColor }}>
+            peor desvío: {formatDriftMs(drift.maxObservedDeltaSeconds)}
+          </div>
+          <div style={{ opacity: 0.82 }}>
+            transporte−modelo: {formatDriftMs(drift.transportMinusEngineSeconds)}
+          </div>
+          <div style={{ opacity: 0.82 }}>
+            motor−transporte:{" "}
+            {drift.runtimeMinusTransportSeconds == null
+              ? "n/d"
+              : formatDriftMs(drift.runtimeMinusTransportSeconds)}
+            {drift.runtimeRunning ? "" : " (motor parado)"}
+          </div>
+        </div>
+      ) : null}
 
       {snapshot.renderCounts.length > 0 ? (
         <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.12)" }}>

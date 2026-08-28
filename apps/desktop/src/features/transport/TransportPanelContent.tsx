@@ -350,11 +350,11 @@ import {
   ZOOM_MIN,
 } from "./constants";
 import {
-  resolveFollowCameraX,
   resolveVisualPlaybackPosition,
   resolveVisualClockResync,
   resolveVisualPositionAcrossVamp,
-} from "./playbackClock";
+} from "@libretracks/shared/playbackClock";
+import { resolveFollowCameraX } from "./followCamera";
 import {
   buildAudioRoutingOptions,
   buildMemoizedClipsByTrack,

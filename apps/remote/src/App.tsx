@@ -61,6 +61,12 @@ import {
 } from "@libretracks/shared/faderScale";
 import { getRemoteStrings } from "./i18n";
 import { buildMarkerCards, buildTimelineMarkerChips } from "./markerCards";
+import {
+  advanceRemoteClock,
+  idleRemoteAnchor,
+  type PlaybackVisualAnchor,
+  resolveLivePosition,
+} from "./remoteClock";
 import { resolveMarkerAutoScrollTop } from "./markerAutoScroll";
 import {
   CountdownWidget,
@@ -137,7 +143,10 @@ type RemoteSyncState = {
   settings: AppSettings | null;
   padsCatalog: PadsCatalog | null;
   meters: Record<string, AudioMeterLevel>;
-  snapshotReceivedAtMs: number;
+  /** The visual clock, and the ONLY record of when a snapshot landed: the
+   * arrival time lives inside the anchor. Folded forward on every snapshot so a
+   * poll that merely confirms the extrapolation leaves the playhead gliding. */
+  visualAnchor: PlaybackVisualAnchor;
   setSnapshot: (snapshot: TransportSnapshot) => void;
   setSongView: (songView: SongView | null) => void;
   setSettings: (settings: AppSettings) => void;
@@ -359,9 +368,20 @@ const useRemoteSyncStore = create<RemoteSyncState>()(
     settings: null,
     padsCatalog: null,
     meters: {},
-    snapshotReceivedAtMs: performance.now(),
+    visualAnchor: idleRemoteAnchor(performance.now()),
     setSnapshot: (snapshot) => {
-      set({ snapshot, snapshotReceivedAtMs: performance.now() });
+      set((state) => {
+        const nowMs = performance.now();
+        return {
+          snapshot,
+          visualAnchor: advanceRemoteClock({
+            anchor: state.visualAnchor,
+            previousSnapshot: state.snapshot,
+            nextSnapshot: snapshot,
+            nowMs,
+          }),
+        };
+      });
     },
     setSongView: (songView) => {
       set({ songView });
@@ -933,36 +953,10 @@ function formatTimelineSecondLabel(totalSeconds: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function resolveLivePosition(snapshot: TransportSnapshot | null, receivedAtMs: number) {
-  if (!snapshot) {
-    return 0;
-  }
-
-  const transportClock = snapshot.transportClock;
-  if (snapshot.playbackState === "playing") {
-    const playbackRate =
-      Number.isFinite(transportClock?.playbackRate) && transportClock?.playbackRate !== undefined
-        ? Math.max(0, transportClock.playbackRate)
-        : 1;
-    // `playbackState` and the native clock can arrive in different snapshots
-    // on a remote connection. Keep advancing from the snapshot position while
-    // the clock is missing/stale instead of freezing the timeline on phones.
-    const anchorPositionSeconds = transportClock?.running
-      ? transportClock.anchorPositionSeconds
-      : snapshot.positionSeconds;
-    return Math.max(
-      0,
-      anchorPositionSeconds + ((performance.now() - receivedAtMs) / 1000) * playbackRate,
-    );
-  }
-
-  return Math.max(0, snapshot.positionSeconds);
-}
-
 function useTransportReadout(): TransportReadout {
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
   const songView = useRemoteSyncStore((state) => state.songView);
-  const snapshotReceivedAtMs = useRemoteSyncStore((state) => state.snapshotReceivedAtMs);
+  const visualAnchor = useRemoteSyncStore((state) => state.visualAnchor);
   const [readout, setReadout] = useState<TransportReadout>({
     positionSeconds: 0,
     timecode: "00:00.00",
@@ -976,15 +970,15 @@ function useTransportReadout(): TransportReadout {
   const snapshotRef = useRef(snapshot);
   const songViewRef = useRef(songView);
   const timelineRegionsRef = useRef(timelineRegions);
-  const snapshotReceivedAtMsRef = useRef(snapshotReceivedAtMs);
+  const visualAnchorRef = useRef(visualAnchor);
   const lastReadoutCommitAtRef = useRef(0);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
     songViewRef.current = songView;
     timelineRegionsRef.current = timelineRegions;
-    snapshotReceivedAtMsRef.current = snapshotReceivedAtMs;
-  }, [snapshot, songView, snapshotReceivedAtMs, timelineRegions]);
+    visualAnchorRef.current = visualAnchor;
+  }, [snapshot, songView, visualAnchor, timelineRegions]);
 
   useEffect(() => {
     let frameId = 0;
@@ -993,8 +987,7 @@ function useTransportReadout(): TransportReadout {
       const currentSnapshot = snapshotRef.current;
       const currentSongView = songViewRef.current;
       const currentTimelineRegions = timelineRegionsRef.current;
-      const currentSnapshotReceivedAtMs = snapshotReceivedAtMsRef.current;
-      const positionSeconds = resolveLivePosition(currentSnapshot, currentSnapshotReceivedAtMs);
+      const positionSeconds = resolveLivePosition(visualAnchorRef.current);
       const currentRegion = getSongRegionAtPosition(currentSongView, positionSeconds);
       const tempoRegion =
         getSongTempoRegionAtPosition(currentSongView, positionSeconds) ??
@@ -1059,19 +1052,19 @@ function useTransportReadout(): TransportReadout {
 const SharedTimeline = memo(function SharedTimeline({
   songView,
   snapshot,
-  snapshotReceivedAtMs,
+  visualAnchor,
   pendingJumpTargetId,
 }: {
   songView: SongView | null;
   snapshot: TransportSnapshot | null;
-  snapshotReceivedAtMs: number;
+  visualAnchor: PlaybackVisualAnchor;
   pendingJumpTargetId: string | null;
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
   const snapshotRef = useRef(snapshot);
-  const snapshotReceivedAtMsRef = useRef(snapshotReceivedAtMs);
+  const visualAnchorRef = useRef(visualAnchor);
   const visibleGridMarkerCountRef = useRef(0);
   const visibleSectionMarkerCountRef = useRef(0);
   const visualPositionRef = useRef(0);
@@ -1148,7 +1141,7 @@ const SharedTimeline = memo(function SharedTimeline({
   // Centre the render window on the dragged view when the user is scrubbing,
   // else on the live playhead, so distant scroll positions render their grid.
   const renderCenterSeconds =
-    manualCenterSeconds ?? resolveLivePosition(snapshot, snapshotReceivedAtMs);
+    manualCenterSeconds ?? resolveLivePosition(visualAnchor);
   const renderWindowStartSeconds = Math.max(0, renderCenterSeconds - viewportDurationSeconds * 1.5);
   const renderWindowEndSeconds = Math.max(
     renderWindowStartSeconds + viewportDurationSeconds * 3,
@@ -1216,12 +1209,12 @@ const SharedTimeline = memo(function SharedTimeline({
 
   useEffect(() => {
     snapshotRef.current = snapshot;
-    snapshotReceivedAtMsRef.current = snapshotReceivedAtMs;
+    visualAnchorRef.current = visualAnchor;
 
     if (timelineDebugEnabled && snapshot) {
       debugStatsRef.current.snapshotCount += 1;
     }
-  }, [snapshot, snapshotReceivedAtMs]);
+  }, [snapshot, visualAnchor]);
 
   useEffect(() => {
     visibleGridMarkerCountRef.current = visibleGridMarkers.length;
@@ -1258,8 +1251,8 @@ const SharedTimeline = memo(function SharedTimeline({
       const repositionToken = getTransportRepositionToken(currentSnapshot);
       const explicitTransportReposition = repositionToken !== lastTransportRepositionTokenRef.current;
       const rawPositionSeconds = resolveLivePosition(
-        currentSnapshot,
-        syncState.snapshot ? syncState.snapshotReceivedAtMs : snapshotReceivedAtMsRef.current,
+        syncState.snapshot ? syncState.visualAnchor : visualAnchorRef.current,
+        frameAtMs,
       );
       const isPlaying = currentSnapshot?.playbackState === "playing";
       const lastFrameAtMs = lastFrameAtMsRef.current;
@@ -2958,8 +2951,9 @@ function useActiveRegionId(): string | null {
     let frameId = 0;
     const tick = () => {
       const currentSongView = songViewRef.current;
-      const { snapshot, snapshotReceivedAtMs } = useRemoteSyncStore.getState();
-      const positionSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
+      const positionSeconds = resolveLivePosition(
+        useRemoteSyncStore.getState().visualAnchor,
+      );
       const region = currentSongView?.regions.find(
         (candidate) =>
           positionSeconds >= candidate.startSeconds &&
@@ -3805,14 +3799,14 @@ function JumpToSongButtonWidget() {
 function TimelineWidget() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
-  const snapshotReceivedAtMs = useRemoteSyncStore((state) => state.snapshotReceivedAtMs);
+  const visualAnchor = useRemoteSyncStore((state) => state.visualAnchor);
   const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
   return (
     <div className="timeline-widget-host">
       <SharedTimeline
         songView={songView}
         snapshot={snapshot}
-        snapshotReceivedAtMs={snapshotReceivedAtMs}
+        visualAnchor={visualAnchor}
         pendingJumpTargetId={pendingJumpTargetId}
       />
     </div>
@@ -3824,8 +3818,8 @@ function TimelineWidget() {
 // re-renders when a displayed value changes.
 function useSharedLiveContext() {
   return useLiveMusicalContext(() => {
-    const { snapshot, songView, snapshotReceivedAtMs } = useRemoteSyncStore.getState();
-    return { snapshot, songView, snapshotReceivedAtMs };
+    const { songView, visualAnchor } = useRemoteSyncStore.getState();
+    return { songView, visualAnchor };
   });
 }
 

@@ -5,7 +5,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import type { TransportClock, TransportSnapshot } from "../desktopApi";
+import type { TransportSnapshot } from "../desktopApi";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { useTransportStore } from "../store";
 import {
@@ -34,7 +34,15 @@ type PlayheadOverlayProps = {
   livePixelsPerSecondRef?: MutableRefObject<number>;
   cameraXRef?: MutableRefObject<number>;
   dragStateRef: MutableRefObject<PlayheadDragState>;
-  positionSecondsRef?: MutableRefObject<number>;
+  /**
+   * The panel's visual clock, written every frame by the 60fps playhead loop
+   * (see `syncLivePosition`). REQUIRED: this overlay must never extrapolate a
+   * position of its own. It used to carry a private fallback extrapolator that
+   * ignored `playbackRate`, so a mount without this ref would have run the
+   * playhead at wall-clock speed through warped regions — a bug that only
+   * appears with warp enabled. Taking the shared clock is the only mode.
+   */
+  positionSecondsRef: MutableRefObject<number>;
   normalizePositionSeconds?: (
     positionSeconds: number,
     options?: { allowSnap?: boolean },
@@ -74,11 +82,13 @@ function resolvePlayheadAutoScrollSpeed(distancePx: number) {
   return Math.max(1, intensity * intensity * PLAYHEAD_MAX_SCROLL_SPEED_PX);
 }
 
+/**
+ * The slice of the transport this overlay tracks. Deliberately carries NO clock
+ * anchor: the position comes from `positionSecondsRef`, and holding an anchor
+ * here is what let a second, subtly different extrapolator grow in this file.
+ */
 type PlaybackSnapshotState = {
   playbackState: TransportSnapshot["playbackState"] | "empty";
-  positionSeconds: number;
-  transportClock: TransportClock | null;
-  anchorReceivedAtMs: number;
   /** While an automation jump is armed, the timeline second it fires at. The
    * visual clock must not extrapolate past this, else the playhead overshoots
    * the cue before the jump's reanchor arrives. */
@@ -105,28 +115,6 @@ function clientXToTimelineSecondsFromCamera(
   return screenXToSeconds(viewportX, cameraX, pixelsPerSecond);
 }
 
-function resolveClockPositionSeconds(
-  playback: PlaybackSnapshotState,
-  durationSeconds: number,
-) {
-  const safeDuration = Math.max(0, durationSeconds);
-  const isRunning =
-    playback.playbackState === "playing" &&
-    Boolean(playback.transportClock?.running);
-
-  if (!isRunning || !playback.transportClock) {
-    return clamp(playback.positionSeconds, 0, safeDuration);
-  }
-
-  const elapsedSeconds =
-    (performance.now() - playback.anchorReceivedAtMs) / 1000;
-  return clamp(
-    playback.transportClock.anchorPositionSeconds + elapsedSeconds,
-    0,
-    safeDuration,
-  );
-}
-
 export function PlayheadOverlay({
   className,
   durationSeconds,
@@ -147,9 +135,6 @@ export function PlayheadOverlay({
   const playheadRef = useRef<HTMLDivElement | null>(null);
   const playbackRef = useRef<PlaybackSnapshotState>({
     playbackState: "empty",
-    positionSeconds: 0,
-    transportClock: null,
-    anchorReceivedAtMs: performance.now(),
     pendingJumpExecuteSeconds: null,
     pendingJumpTargetSeconds: null,
   });
@@ -188,9 +173,6 @@ export function PlayheadOverlay({
     const syncPlayback = (playback: TransportSnapshot | null) => {
       playbackRef.current = {
         playbackState: playback?.playbackState ?? "empty",
-        positionSeconds: playback?.positionSeconds ?? 0,
-        transportClock: playback?.transportClock ?? null,
-        anchorReceivedAtMs: performance.now(),
         pendingJumpExecuteSeconds:
           playback?.pendingAutomationCue?.executeAtSeconds ??
           playback?.pendingMarkerJump?.executeAtSeconds ??
@@ -217,28 +199,15 @@ export function PlayheadOverlay({
       const effectivePixelsPerSecond =
         latestPropsRef.current.livePixelsPerSecondRef?.current ??
         latestPropsRef.current.pixelsPerSecond;
-      const sharedPositionSeconds =
-        latestPropsRef.current.positionSecondsRef?.current;
+      // One clock only: the panel's shared visual position, already carrying
+      // playbackRate, the vamp wrap and the eased drift correction.
       let nextSeconds = activeDrag
         ? activeDrag.currentSeconds
-        : typeof sharedPositionSeconds === "number"
-          ? clamp(
-              sharedPositionSeconds,
-              0,
-              Math.max(0, latestPropsRef.current.durationSeconds),
-            )
-          : playbackRef.current.playbackState === "playing" &&
-              playbackRef.current.transportClock?.running
-            ? resolveClockPositionSeconds(
-                playbackRef.current,
-                latestPropsRef.current.durationSeconds,
-              )
-            : clamp(
-                latestPropsRef.current.positionSecondsRef?.current ??
-                  playbackRef.current.positionSeconds,
-                0,
-                Math.max(0, latestPropsRef.current.durationSeconds),
-              );
+        : clamp(
+            latestPropsRef.current.positionSecondsRef.current,
+            0,
+            Math.max(0, latestPropsRef.current.durationSeconds),
+          );
 
       // When the playhead reaches an armed jump, move it to the destination
       // immediately rather than waiting for the backend reanchor (which can lag
