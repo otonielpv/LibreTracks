@@ -32,6 +32,7 @@ const FEATURE_EVENTS = [
 ] as const;
 
 const MIN_ADMIN_TOKEN_LENGTH = 15;
+const WINDOW_DAYS = new Set([1, 7, 30, 90]);
 
 async function breakdown(
   db: D1Database,
@@ -86,10 +87,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   }
 
   const requestedDays = Number(new URL(request.url).searchParams.get("days") ?? "30");
-  const windowDays = requestedDays === 7 || requestedDays === 90 ? requestedDays : 30;
+  const windowDays = WINDOW_DAYS.has(requestedDays) ? requestedDays : 30;
   const generatedAt = Date.now();
-  const since = generatedAt - windowDays * 86_400_000;
+  // The one-day window means the running UTC day rather than the last 24 hours:
+  // devices are counted per utc_day, so a rolling window straddling midnight
+  // would count the same device twice. The wider windows stay rolling.
+  const since =
+    windowDays === 1
+      ? Math.floor(generatedAt / 86_400_000) * 86_400_000
+      : generatedAt - windowDays * 86_400_000;
   const previousSince = since - windowDays * 86_400_000;
+  // Yesterday is compared up to the same time of day, so a morning check is not
+  // measured against a full day.
+  const previousUntil = windowDays === 1 ? generatedAt - 86_400_000 : since;
 
   const [
     totals,
@@ -123,7 +133,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
                FROM telemetry_events
               WHERE received_at >= ?1 AND received_at < ?2`,
           )
-            .bind(previousSince, since)
+            .bind(previousSince, previousUntil)
             .first<{ appStarts: number; devices: number }>(),
       env.TELEMETRY_DB.prepare(
         `SELECT event_name AS event, COUNT(*) AS events,

@@ -29,12 +29,15 @@ const copy = es
       successes: "exitos",
       failures: "fallos",
       updated: "Actualizado",
+      today: "Hoy",
       overview: "Resumen ejecutivo",
       activationRate: "Tasa de activacion",
       deepSessions: "Sesiones de 30+ min",
       previousPeriod: "frente al periodo anterior",
+      previousDay: "frente a ayer a esta hora",
       dailyTrend: "Evolucion diaria",
       utcActivity: "Actividad por hora UTC",
+      todayNote: "Dia UTC en curso; las horas que faltan aun no han ocurrido.",
       weekly: "Uso por dia de la semana",
       weeklyNote: "Dia local del dispositivo. Un pico en domingo indica uso en directo; una semana plana indica ensayos.",
       sundayShare: "Uso en domingo",
@@ -70,12 +73,15 @@ const copy = es
       successes: "successes",
       failures: "failures",
       updated: "Updated",
+      today: "Today",
       overview: "Executive overview",
       activationRate: "Activation rate",
       deepSessions: "30+ min sessions",
       previousPeriod: "versus previous period",
+      previousDay: "versus yesterday at this time",
       dailyTrend: "Daily trend",
       utcActivity: "Activity by UTC hour",
+      todayNote: "Running UTC day; the remaining hours have not happened yet.",
       weekly: "Usage by weekday",
       weeklyNote: "Device-local weekday. A Sunday spike means live use; a flat week means rehearsals.",
       sundayShare: "Sunday usage",
@@ -110,6 +116,7 @@ const copy = es
   </div>
   <div class="analytics-toolbar" data-analytics-toolbar hidden>
     <div class="analytics-window" role="group" aria-label="Time window">
+      <button type="button" data-days="1">{copy.today}</button>
       <button type="button" data-days="7">7d</button>
       <button type="button" data-days="30" class="is-active">30d</button>
       <button type="button" data-days="90">90d</button>
@@ -321,10 +328,16 @@ const copy = es
     return card;
   }
 
-  function chartCard(title: string, chart: string, wide = false): HTMLElement {
+  function chartCard(title: string, chart: string, wide = false, note?: string): HTMLElement {
     const card = document.createElement("article");
     card.className = `analytics-card analytics-chart-card${wide ? " analytics-wide" : ""}`;
     card.append(heading(title));
+    if (note) {
+      const hint = document.createElement("p");
+      hint.className = "stats-muted";
+      hint.textContent = note;
+      card.append(hint);
+    }
     const plot = document.createElement("div");
     plot.className = "analytics-echart";
     plot.dataset.chart = chart;
@@ -338,7 +351,12 @@ const copy = es
     return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
   }
 
-  function metric(value: string, title: string, change?: string): HTMLElement {
+  function metric(
+    value: string,
+    title: string,
+    change?: string,
+    changeNote: string = copy.previousPeriod,
+  ): HTMLElement {
     const card = document.createElement("article");
     const number = document.createElement("strong");
     number.textContent = value;
@@ -348,7 +366,7 @@ const copy = es
     if (change) {
       const detail = document.createElement("small");
       detail.className = change.startsWith("-") ? "is-negative" : "is-positive";
-      detail.textContent = `${change} ${copy.previousPeriod}`;
+      detail.textContent = `${change} ${changeNote}`;
       card.append(detail);
     }
     return card;
@@ -535,20 +553,28 @@ const copy = es
     summary.className = "analytics-summary";
     const activationRate = data.activation.find((item) => item.key === "project_ready")?.rate ?? 0;
     const deepSessionRate = data.engagement.find((item) => item.minutes === 30)?.rate ?? 0;
+    // A single day is one weekday and one point on the daily line, so the cards
+    // that only say something across days are left out of that window.
+    const singleDay = data.windowDays === 1;
+    const changeNote = singleDay ? copy.previousDay : copy.previousPeriod;
     summary.append(
-      metric(numbers.format(data.appStarts), copy.starts, data.comparison ? comparison(data.appStarts, data.comparison.appStarts) : undefined),
-      metric(numbers.format(data.activeDeviceDays), copy.devices, data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined),
+      metric(numbers.format(data.appStarts), copy.starts, data.comparison ? comparison(data.appStarts, data.comparison.appStarts) : undefined, changeNote),
+      metric(numbers.format(data.activeDeviceDays), copy.devices, data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined, changeNote),
       metric(`${activationRate.toFixed(1)}%`, copy.activationRate),
       metric(`${deepSessionRate.toFixed(1)}%`, copy.deepSessions),
-      metric(`${data.weekly.sundayShare.toFixed(1)}%`, copy.sundayShare),
     );
+    if (!singleDay) {
+      summary.append(metric(`${data.weekly.sundayShare.toFixed(1)}%`, copy.sundayShare));
+    }
 
     const grid = document.createElement("div");
     grid.className = "analytics-grid";
+    if (!singleDay) grid.append(trend(data.daily));
     grid.append(
-      trend(data.daily),
-      chartCard(copy.utcActivity, "hourly"),
-      weeklyCard(),
+      chartCard(copy.utcActivity, "hourly", singleDay, singleDay ? copy.todayNote : undefined),
+    );
+    if (!singleDay) grid.append(weeklyCard());
+    grid.append(
       chartCard(copy.activation, "funnel"),
       countryMap(data.breakdown.countries),
       dimension(copy.versions, data.breakdown.versions),
