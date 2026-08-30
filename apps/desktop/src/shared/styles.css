@@ -9723,8 +9723,8 @@ html.lt-ios body {
 }
 
 .lt-mobile .lt-settings-modal--fixed .lt-settings-modal-header p {
-  font-size: 0.68rem;
-  line-height: 1.25;
+  font-size: 0.62rem;
+  line-height: 1.22;
 }
 
 .lt-mobile .lt-settings-modal--fixed .lt-settings-modal-eyebrow {
@@ -9791,8 +9791,8 @@ html.lt-ios body {
 
 .lt-mobile .lt-settings-modal--fixed .lt-settings-field small,
 .lt-mobile .lt-settings-modal--fixed .lt-settings-toggle-copy small {
-  font-size: 0.64rem;
-  line-height: 1.28;
+  font-size: 0.58rem;
+  line-height: 1.22;
 }
 
 .lt-mobile .lt-settings-modal--fixed .lt-inline-actions {

@@ -147,12 +147,16 @@ describe("contrato responsive móvil", () => {
     const select = declarationsFor(
       ".lt-mobile .lt-settings-modal--fixed .lt-settings-field select",
     );
+    const description = declarationsFor(
+      ".lt-mobile .lt-settings-modal--fixed .lt-settings-toggle-copy small",
+    );
 
     expect(modal).toContain("100dvh");
     expect(modal).toContain("padding: 0.7rem");
     expect(title).toContain("font-size: 1.1rem");
     expect(field).toContain("padding: 0.58rem");
     expect(select).toContain("font-size: 0.74rem");
+    expect(description).toContain("font-size: 0.58rem");
     expect(styles).not.toContain(".lt-mobile .lt-settings-modal {");
   });
 

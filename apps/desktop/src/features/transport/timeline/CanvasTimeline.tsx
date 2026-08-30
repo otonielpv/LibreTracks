@@ -882,6 +882,10 @@ export function TimelineTrackCanvas({
       foregroundCanvas,
       foregroundContext,
       {
+        getCameraState: () => ({
+          cameraX: cameraXRef.current,
+          zoomLevel: livePixelsPerSecondRef.current,
+        }),
         getViewportMetrics: (): TimelineViewportMetrics => {
           const scrollViewport = scrollViewportRef.current;
           if (!scrollViewport) {
@@ -966,35 +970,6 @@ export function TimelineTrackCanvas({
     width,
     clipsByTrack,
   ]);
-
-  useEffect(() => {
-    let animationFrameId = 0;
-    let lastCameraX = Number.NaN;
-    let lastZoomLevel = Number.NaN;
-
-    const syncRendererState = () => {
-      const cameraX = cameraXRef.current;
-      const zoomLevel = livePixelsPerSecondRef.current;
-      if (cameraX !== lastCameraX || zoomLevel !== lastZoomLevel) {
-        snapshotRef.current = {
-          ...snapshotRef.current,
-          cameraX,
-          zoomLevel,
-        };
-        rendererRef.current?.updateState(snapshotRef.current);
-        lastCameraX = cameraX;
-        lastZoomLevel = zoomLevel;
-      }
-
-      animationFrameId = window.requestAnimationFrame(syncRendererState);
-    };
-
-    animationFrameId = window.requestAnimationFrame(syncRendererState);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrameId);
-    };
-  }, [cameraXRef, livePixelsPerSecondRef]);
 
   return (
     <div className="lt-track-canvas-layer" style={{ width, height }}>

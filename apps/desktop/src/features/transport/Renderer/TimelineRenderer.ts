@@ -44,6 +44,9 @@ export type TimelineViewportMetrics = {
 };
 
 type TimelineRendererOptions = {
+  /** Read both values in the paint frame so tracks cannot lag the ruler by
+   * one requestAnimationFrame during fast pan/zoom. */
+  getCameraState?: () => Pick<TrackSceneSnapshot, "cameraX" | "zoomLevel">;
   getViewportMetrics?: () => TimelineViewportMetrics;
   renderBackground?: (
     context: CanvasRenderingContext2D,
@@ -262,7 +265,17 @@ export class TimelineRenderer {
       return;
     }
 
-    const snapshot = this.snapshot;
+    let snapshot = this.snapshot;
+    const liveCamera = this.options.getCameraState?.();
+    if (
+      snapshot &&
+      liveCamera &&
+      (snapshot.cameraX !== liveCamera.cameraX ||
+        snapshot.zoomLevel !== liveCamera.zoomLevel)
+    ) {
+      this.updateState({ ...snapshot, ...liveCamera });
+      snapshot = this.snapshot;
+    }
     if (snapshot) {
       const viewport = this.getViewportMetrics(snapshot);
       const previewClipState = snapshot.clipPreviewSecondsRef.current;
