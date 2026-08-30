@@ -55,6 +55,7 @@ import {
   timelineCanvasPixelRatio,
   timelineVisibleTrackHeight,
 } from "../Renderer/canvasPixelRatio";
+import { intersectVisibleBounds } from "../Renderer/gestureBounds";
 
 type RulerCanvasProps = {
   width: number;
@@ -807,6 +808,8 @@ export function TimelineTrackCanvas({
         if (!viewport) return;
         viewport.scrollTop += deltaY;
       },
+      getGestureBounds: () =>
+        intersectVisibleBounds(container, scrollViewportRef.current),
     });
 
     return () => {

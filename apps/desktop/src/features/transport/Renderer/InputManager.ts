@@ -36,6 +36,16 @@ type InputManagerOptions = {
   onCommitZoom: (view: NativeZoomView) => void;
   onTrackHeightChange: (trackHeight: number) => void;
   onScrollVertical?: (deltaY: number) => void;
+  /**
+   * Dónde tiene que estar un dedo para contar como parte del gesto de dos
+   * dedos. Por omisión, el rectángulo del contenedor.
+   *
+   * El área de pistas necesita la suya: su elemento crece con el número de
+   * pistas (quien desplaza en vertical es un ancestro), así que su rectángulo
+   * se sale de la pantalla y un dedo apoyado en la barra de transporte caería
+   * dentro. Ver Renderer/gestureBounds.
+   */
+  getGestureBounds?: () => DOMRect | null;
 };
 
 type DragPanState = {
@@ -120,13 +130,17 @@ export class InputManager {
     this.container = options.container;
     this.container.addEventListener("wheel", this.handleWheel, { passive: false });
     this.container.addEventListener("mousedown", this.handleMouseDown, { passive: false });
-    // Touch (Android): two-finger pan + pinch zoom, DAW-tablet convention.
-    // One finger stays with the existing pointer interactions (select, drag
-    // clips, seek), so the gestures only engage at two touches.
+    // Táctil: dos dedos desplazan y hacen zoom, como en una tableta de DAW. Un
+    // dedo se queda con las interacciones de puntero de siempre (seleccionar,
+    // arrastrar clips, saltar), así que el gesto sólo entra a los dos dedos.
+    //
+    // Del contenedor cuelga SÓLO el arranque. El resto del gesto se sigue desde
+    // `window` (ver bindGestureListeners): el navegador entrega cada
+    // `touchmove` al elemento donde EMPEZÓ ese dedo, no al que hay debajo, así
+    // que en cuanto React repinta y ese elemento sale del documento el evento
+    // deja de burbujear hasta aquí — el gesto se moría a media pinza con los
+    // dedos todavía en la pantalla.
     this.container.addEventListener("touchstart", this.handleTouchStart, { passive: false });
-    this.container.addEventListener("touchmove", this.handleTouchMove, { passive: false });
-    this.container.addEventListener("touchend", this.handleTouchEnd, { passive: false });
-    this.container.addEventListener("touchcancel", this.handleTouchEnd, { passive: false });
     // En captura: hay que ver el pointerdown aunque el destino detenga la
     // propagacion (los hotspots del ruler lo hacen).
     this.container.addEventListener("pointerdown", this.handlePointerDown, true);
@@ -138,9 +152,7 @@ export class InputManager {
     this.container.removeEventListener("wheel", this.handleWheel);
     this.container.removeEventListener("mousedown", this.handleMouseDown);
     this.container.removeEventListener("touchstart", this.handleTouchStart);
-    this.container.removeEventListener("touchmove", this.handleTouchMove);
-    this.container.removeEventListener("touchend", this.handleTouchEnd);
-    this.container.removeEventListener("touchcancel", this.handleTouchEnd);
+    this.unbindGestureListeners();
     this.container.removeEventListener("pointerdown", this.handlePointerDown, true);
     this.container.removeEventListener("pointerup", this.handlePointerRelease, true);
     this.container.removeEventListener("pointercancel", this.handlePointerRelease, true);
@@ -148,6 +160,7 @@ export class InputManager {
     window.removeEventListener("mouseup", this.handleMouseUp);
 
     this.activePointers.clear();
+    this.container.style.touchAction = "";
 
     if (this.panCommitTimer !== null) {
       window.clearTimeout(this.panCommitTimer);
@@ -386,13 +399,59 @@ export class InputManager {
     return Math.max(0.01, currentZoomLevel * factor);
   }
 
-  /** Los dos dedos que ARRANCAN el gesto: sólo cuentan los apoyados en este
-   * contenedor. `event.touches` son todos los de la pantalla, así que con un
-   * dedo descansando sobre una cabecera de pista cualquier toque suelto en el
-   * timeline contaba como gesto de dos dedos y la cámara pegaba un salto. */
-  private seedingTouches(event: TouchEvent): [Touch, Touch] | null {
-    const touches = event.targetTouches;
-    return touches.length < 2 ? null : [touches[0], touches[1]];
+  /**
+   * Los dos dedos que ARRANCAN el gesto: los apoyados DENTRO de este
+   * contenedor. Hace falta filtrarlos porque `event.touches` son todos los de
+   * la pantalla, y con un dedo descansando sobre una cabecera de pista
+   * cualquier toque suelto en el timeline contaba como gesto de dos dedos y la
+   * cámara pegaba un salto.
+   *
+   * Se resuelve por GEOMETRÍA, contra el rectángulo del contenedor, y ahí
+   * estaba el fallo: `event.targetTouches` parece decir esto y dice otra cosa
+   * —son los dedos que empezaron sobre el MISMO elemento que este evento, no
+   * sobre este contenedor—. El área de pistas es un `div` por carril y la
+   * regla lleva banderas y asas encima, así que dos dedos aterrizan casi
+   * siempre en elementos distintos: el par no se completaba nunca y el gesto no
+   * llegaba a nacer. Por `touch.target` tampoco vale, que es justo lo que
+   * React desmonta a media pinza. Un rectángulo no depende de ninguna de las
+   * dos cosas.
+   */
+  private touchesInside(event: TouchEvent): [Touch, Touch] | null {
+    const bounds =
+      this.options.getGestureBounds?.() ??
+      this.container.getBoundingClientRect();
+    if (!bounds) {
+      return null;
+    }
+    const inside: Touch[] = [];
+    for (let index = 0; index < event.touches.length; index += 1) {
+      const touch = event.touches[index];
+      if (
+        touch.clientX >= bounds.left &&
+        touch.clientX <= bounds.right &&
+        touch.clientY >= bounds.top &&
+        touch.clientY <= bounds.bottom
+      ) {
+        inside.push(touch);
+      }
+    }
+    return inside.length < 2 ? null : [inside[0], inside[1]];
+  }
+
+  /** Mientras el gesto vive, sus muestras se leen de `window`: así sobreviven
+   * a que React se lleve el elemento donde nació el dedo. Se registran al
+   * sembrar y se sueltan al terminar, de modo que fuera del gesto no queda
+   * ningún escucha táctil global. */
+  private bindGestureListeners() {
+    window.addEventListener("touchmove", this.handleTouchMove, { passive: false });
+    window.addEventListener("touchend", this.handleTouchEnd, { passive: false });
+    window.addEventListener("touchcancel", this.handleTouchEnd, { passive: false });
+  }
+
+  private unbindGestureListeners() {
+    window.removeEventListener("touchmove", this.handleTouchMove);
+    window.removeEventListener("touchend", this.handleTouchEnd);
+    window.removeEventListener("touchcancel", this.handleTouchEnd);
   }
 
   /**
@@ -431,16 +490,25 @@ export class InputManager {
     };
   }
 
-  private localXFromClientX(clientX: number, bounds: DOMRect) {
-    return clamp(
-      clientXToLocalX(clientX, bounds, this.container.offsetWidth),
-      0,
-      this.container.offsetWidth || bounds.width,
-    );
+  /** Un punto de pantalla en coordenadas del contenedor. Se recorta al
+   * viewport para ANCLAR (un ancla de zoom fuera de la vista no significa
+   * nada), pero no para seguir un desplazamiento: recortarlo ahí congelaba la
+   * cámara en cuanto el punto medio de los dedos llegaba al borde, con el gesto
+   * todavía en marcha. */
+  private localXFromClientX(
+    clientX: number,
+    bounds: DOMRect,
+    clampToViewport = true,
+  ) {
+    const localX = clientXToLocalX(clientX, bounds, this.container.offsetWidth);
+    return clampToViewport
+      ? clamp(localX, 0, this.container.offsetWidth || bounds.width)
+      : localX;
   }
 
   /** Siembra (o re-siembra) el ancla del gesto con los dos dedos dados. */
   private seedTouchGesture(a: Touch, b: Touch) {
+    this.bindGestureListeners();
     const sample = this.sampleTouches(a, b);
     this.touchGesture = {
       idA: a.identifier,
@@ -470,16 +538,30 @@ export class InputManager {
   }
 
   private handleTouchStart = (event: TouchEvent) => {
-    const pair = this.seedingTouches(event);
+    const pair = this.touchesInside(event);
     if (!pair) {
       return;
     }
 
     // Dos dedos se quedan con el gesto: ni el navegador desplaza ni sigue vivo
     // el arrastre de un dedo que hubiera empezado antes.
-    if (event.cancelable) {
-      event.preventDefault();
+    //
+    // Si no se puede prevenir, el navegador YA se lo ha quedado: el primer dedo
+    // arrancó el desplazamiento vertical del carril antes de que llegara el
+    // segundo, y de ahí no se vuelve. Mover además la cámara es exactamente el
+    // "se pisan", así que el gesto ni nace: se levanta y se vuelve a apoyar.
+    if (!event.cancelable) {
+      return;
     }
+    event.preventDefault();
+
+    // Un tercer dedo NO reinicia un gesto en marcha. Sembrar de nuevo devuelve
+    // el modo a "sin decidir" y vuelve a pedir los 14 px de arranque: apoyar el
+    // pulgar sin querer —en un teléfono, sujetándolo— cortaba el gesto en seco.
+    if (this.touchGesture && this.gestureTouches(event)) {
+      return;
+    }
+
     this.cancelPendingPointerInteractions();
     this.seedTouchGesture(pair[0], pair[1]);
     // Mientras haya dos dedos el navegador no desplaza nada por su cuenta: el
@@ -498,7 +580,7 @@ export class InputManager {
       // Uno de los dos dedos del gesto ya no está. Si quedan otros dos sobre el
       // contenedor se re-siembra en su posición actual (así levantar un dedo de
       // tres no corta el gesto ni pega un salto); si no, se acaba.
-      const reseed = this.seedingTouches(event);
+      const reseed = this.touchesInside(event);
       if (reseed) {
         this.seedTouchGesture(reseed[0], reseed[1]);
       } else {
@@ -557,7 +639,7 @@ export class InputManager {
     }
 
     const bounds = this.container.getBoundingClientRect();
-    const midLocalX = this.localXFromClientX(sample.midClientX, bounds);
+    const midLocalX = this.localXFromClientX(sample.midClientX, bounds, false);
 
     let zoomNow = state.zoomLevel;
     if (gesture.mode === "zoom") {
@@ -599,7 +681,7 @@ export class InputManager {
       return;
     }
 
-    const reseed = this.seedingTouches(event);
+    const reseed = this.touchesInside(event);
     if (reseed) {
       // Se levantó uno de tres: seguir con los que quedan, re-anclados.
       this.seedTouchGesture(reseed[0], reseed[1]);
@@ -611,6 +693,7 @@ export class InputManager {
 
   private endTouchGesture() {
     this.touchGesture = null;
+    this.unbindGestureListeners();
     this.container.style.touchAction = "";
     // Confirmar YA, sin esperar al antirrebote: hasta que el zoom se confirma,
     // el envoltorio del ruler sigue con su `scaleX` de previsualizacion y las

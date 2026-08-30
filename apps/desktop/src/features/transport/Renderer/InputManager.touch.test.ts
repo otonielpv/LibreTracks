@@ -33,7 +33,7 @@ function touchEvent(type: string, touches: Touch[]) {
   return event;
 }
 
-function setup(options?: { canZoom?: boolean }) {
+function setup(options?: { canZoom?: boolean; getGestureBounds?: () => DOMRect | null }) {
   const container = document.createElement("div");
   Object.defineProperty(container, "offsetWidth", { value: 800 });
   container.getBoundingClientRect = () =>
@@ -72,6 +72,7 @@ function setup(options?: { canZoom?: boolean }) {
     onCommitZoom: (view) => commits.zoom.push(view.zoomLevel),
     onTrackHeightChange: () => {},
     onScrollVertical: (deltaY) => verticalScroll.push(deltaY),
+    getGestureBounds: options?.getGestureBounds,
   });
 
   return { container, manager, state, commits, verticalScroll };
@@ -302,5 +303,196 @@ describe("InputManager: gesto de dos dedos", () => {
 
     expect(state.zoomLevel).toBe(zoomBefore);
     expect(state.cameraX).toBe(cameraBefore);
+  });
+});
+
+/**
+ * El mismo gesto, contra el DOM que hay de verdad debajo del dedo.
+ *
+ * El bloque de arriba despacha todo sobre el contenedor y con `targetTouches`
+ * igual a `touches`. En el timeline real eso no pasa nunca: el área de pistas
+ * es un `div` por carril y la regla lleva encima banderas y asas, así que dos
+ * dedos aterrizan casi siempre en elementos DISTINTOS, y el navegador entrega
+ * cada `touchmove` al elemento donde EMPEZÓ ese dedo, no al contenedor.
+ */
+describe("InputManager: gesto de dos dedos sobre el DOM real", () => {
+  /** Un toque con destino propio, como el que fabrica el navegador. */
+  function targetedTouch(identifier: number, x: number, target: EventTarget) {
+    return { identifier, clientX: x, clientY: 200, target } as unknown as Touch;
+  }
+
+  /** Despacha como el navegador: sobre el elemento del toque que cambia, con
+   * `targetTouches` filtrado a los que comparten ESE destino. */
+  function dispatchAt(type: string, on: EventTarget, all: Touch[]) {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "touches", { value: all });
+    Object.defineProperty(event, "targetTouches", {
+      value: all.filter((each) => (each as Touch & { target: EventTarget }).target === on),
+    });
+    (on as HTMLElement).dispatchEvent(event);
+    return event;
+  }
+
+  function lanes(container: HTMLElement, count = 3) {
+    return Array.from({ length: count }, () => {
+      const lane = document.createElement("div");
+      container.append(lane);
+      return lane;
+    });
+  }
+
+  it("arranca con los dedos en carriles distintos", () => {
+    const { container, state } = setup();
+    const [laneA, laneB] = lanes(container);
+
+    const a = targetedTouch(1, 300, laneA);
+    const b = targetedTouch(2, 500, laneB);
+    dispatchAt("touchstart", laneA, [a]);
+    dispatchAt("touchstart", laneB, [a, b]);
+
+    dispatchAt("touchmove", laneA, [
+      targetedTouch(1, 250, laneA),
+      targetedTouch(2, 450, laneB),
+    ]);
+    dispatchAt("touchmove", laneA, [
+      targetedTouch(1, 150, laneA),
+      targetedTouch(2, 350, laneB),
+    ]);
+
+    expect(state.cameraX).toBeCloseTo(100, 6);
+  });
+
+  // Lo que se vio en un iPhone 13: a media pinza React rehace la regla, el
+  // elemento bajo el dedo deja de estar en el documento y el WebView reapunta
+  // el evento hacia arriba. Si el gesto sólo escucha en su contenedor, ese
+  // evento le pasa por encima y el gesto se muere con los dedos aún puestos.
+  it("sigue vivo cuando React se lleva el elemento bajo el dedo", () => {
+    const { container, state } = setup();
+    const [laneA] = lanes(container);
+
+    const a = targetedTouch(1, 300, laneA);
+    const b = targetedTouch(2, 500, laneA);
+    dispatchAt("touchstart", laneA, [a, b]);
+
+    // El repintado se lleva el carril. Los toques conservan su destino muerto
+    // (no se actualiza nunca) y el evento sube por encima del contenedor.
+    laneA.remove();
+    for (const [x1, x2] of [
+      [250, 550],
+      [100, 700],
+    ]) {
+      dispatchAt("touchmove", document.body, [
+        targetedTouch(1, x1, laneA),
+        targetedTouch(2, x2, laneA),
+      ]);
+    }
+
+    expect(state.zoomLevel).toBeGreaterThan(1.9);
+  });
+
+  it("un tercer dedo no reinicia el gesto en marcha", () => {
+    const { container, state } = setup();
+    const [laneA, laneB] = lanes(container);
+
+    dispatchAt("touchstart", laneA, [targetedTouch(1, 300, laneA)]);
+    dispatchAt("touchstart", laneB, [
+      targetedTouch(1, 300, laneA),
+      targetedTouch(2, 500, laneB),
+    ]);
+    dispatchAt("touchmove", laneA, [
+      targetedTouch(1, 250, laneA),
+      targetedTouch(2, 450, laneB),
+    ]);
+
+    // Se apoya el pulgar sujetando el teléfono. El gesto ya está decidido y
+    // anclado: tiene que seguir donde estaba, no volver a empezar.
+    dispatchAt("touchstart", laneB, [
+      targetedTouch(1, 250, laneA),
+      targetedTouch(2, 450, laneB),
+      targetedTouch(3, 700, laneB),
+    ]);
+    dispatchAt("touchmove", laneA, [
+      targetedTouch(1, 150, laneA),
+      targetedTouch(2, 350, laneB),
+      targetedTouch(3, 700, laneB),
+    ]);
+
+    expect(state.cameraX).toBeCloseTo(100, 6);
+  });
+
+  // Si el primer dedo llegó a arrancar el desplazamiento nativo del carril, el
+  // WebView ya no lo suelta: el touchstart del segundo llega sin poder
+  // prevenirse. Mover además la cámara es el "se pisan", así que el gesto ni
+  // nace: hay que levantar y volver a apoyar.
+  it("no nace si el navegador ya se ha quedado el gesto", () => {
+    const { container, state } = setup();
+    const [laneA] = lanes(container);
+
+    const stolen = new Event("touchstart", { bubbles: true, cancelable: false });
+    const fingers = [targetedTouch(1, 300, laneA), targetedTouch(2, 500, laneA)];
+    Object.defineProperty(stolen, "touches", { value: fingers });
+    Object.defineProperty(stolen, "targetTouches", { value: fingers });
+    laneA.dispatchEvent(stolen);
+
+    dispatchAt("touchmove", laneA, [
+      targetedTouch(1, 250, laneA),
+      targetedTouch(2, 450, laneA),
+    ]);
+    dispatchAt("touchmove", laneA, [
+      targetedTouch(1, 150, laneA),
+      targetedTouch(2, 350, laneA),
+    ]);
+
+    expect(state.cameraX).toBe(0);
+    expect(state.zoomLevel).toBe(1);
+  });
+
+  it("no cuenta un dedo fuera de la parte VISIBLE del área de pistas", () => {
+    const visible = {
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 300,
+      width: 800,
+      height: 300,
+    } as DOMRect;
+    const { container, state } = setup({ getGestureBounds: () => visible });
+    const [laneA] = lanes(container);
+
+    // El contenedor llega a 400; el visor se corta en 300.
+    const resting = {
+      identifier: 1,
+      clientX: 500,
+      clientY: 360,
+      target: laneA,
+    } as unknown as Touch;
+    dispatchAt("touchstart", laneA, [resting, targetedTouch(2, 500, laneA)]);
+    // Dos muestras: la primera sólo decidiría el modo, así que con una sola
+    // este test no sabría distinguir el filtro de la fase de decisión.
+    dispatchAt("touchmove", laneA, [resting, targetedTouch(2, 300, laneA)]);
+    dispatchAt("touchmove", laneA, [resting, targetedTouch(2, 100, laneA)]);
+
+    expect(state.cameraX).toBe(0);
+    expect(state.zoomLevel).toBe(1);
+  });
+
+  it("no cuenta un dedo apoyado FUERA del contenedor", () => {
+    const { container, state } = setup();
+    const [laneA] = lanes(container);
+    const outside = document.createElement("div");
+    document.body.append(outside);
+
+    // Un dedo descansando por debajo del contenedor (la barra de transporte,
+    // una cabecera de pista): no es la mitad de un gesto de cámara.
+    const resting = { identifier: 1, clientX: 500, clientY: 520, target: outside } as unknown as Touch;
+    const inside = targetedTouch(2, 500, laneA);
+    dispatchAt("touchstart", laneA, [resting, inside]);
+    // Dos muestras: con una sola, el gesto ni siquiera habría salido de la fase
+    // de decisión y el test pasaría aunque el filtro no hiciera nada.
+    dispatchAt("touchmove", laneA, [resting, targetedTouch(2, 300, laneA)]);
+    dispatchAt("touchmove", laneA, [resting, targetedTouch(2, 100, laneA)]);
+
+    expect(state.cameraX).toBe(0);
+    expect(state.zoomLevel).toBe(1);
   });
 });
