@@ -41,6 +41,11 @@ import {
 import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
+import {
+  MARKER_FLAG_GAP_PX,
+  markerFlagLabel,
+  measureMarkerFlagWidth,
+} from "../Renderer/markerFlagMetrics";
 import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
 import { useFollowerX } from "./useFollowerX";
 import { regionHotspotBounds } from "./regionHotspotBounds";
@@ -86,6 +91,13 @@ import {
 // their band. Changing it here alone misaligns the ruler with the track
 // headers — the CSS row heights below must move with it.
 const RULER_HEIGHT = isMobileApp ? 94 : 134;
+
+/** Margen de agarre a la IZQUIERDA del mastil de una marca. La bandera se
+ * dibuja a la derecha, asi que sin este margen el mastil en si mismo -que es lo
+ * que el usuario apunta cuando quiere mover la marca- quedaria fuera de la zona
+ * tactil. Un dedo no necesita mas: lo ancho del boton lo da la bandera. */
+const MARKER_HOTSPOT_PAD_LEFT_PX = 6;
+
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 /** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
@@ -1003,16 +1015,16 @@ export function TimelineCanvasPane({
             ) : null}
 
             {song?.sectionMarkers.map((section) => {
-              // Android: the fixed 68px desktop hotspot swallows neighbouring
-              // taps (tapping the next bar still selected this marker). Size
-              // the touch zone to the drawn flag instead: digit prefix + name
-              // at the canvas' ~7px/char, clamped to a finger-sized minimum.
-              const flagLabelLength =
-                section.name.length + (section.digit != null ? 3 : 0);
-              const androidHotspotWidth = Math.max(
-                30,
-                Math.min(96, 14 + flagLabelLength * 7),
+              // La zona tactil se mide contra la bandera QUE SE DIBUJA, con las
+              // mismas funciones que usa el canvas (ver Renderer/
+              // markerFlagMetrics). El ancho fijo anterior -68px en escritorio,
+              // una estimacion por caracteres en movil- sobraba por la derecha
+              // y se tragaba los toques dirigidos a la marca siguiente.
+              const flagWidth = measureMarkerFlagWidth(
+                markerFlagLabel(section),
               );
+              const hotspotWidth =
+                MARKER_HOTSPOT_PAD_LEFT_PX + MARKER_FLAG_GAP_PX + flagWidth;
               // El carril previsualizado SÍ pasa por React: cambia una o dos
               // veces por gesto, no por píxel. La posición no: la escribe el
               // bucle de hotspots leyendo el ref.
@@ -1038,9 +1050,12 @@ export function TimelineCanvasPane({
                   left: renderStartSeconds * pixelsPerSecond,
                   top: lane.top,
                   height: lane.height,
-                  ...(isMobileApp
-                    ? { width: androidHotspotWidth, marginLeft: -4 }
-                    : {}),
+                  width: hotspotWidth,
+                  // El desplazamiento va por variable, no por `margin-left`: el
+                  // envoltorio del ruler escala en X durante el zoom y la regla
+                  // de .lt-marker-hotspot lo contra-escala junto con el ancho.
+                  ["--lt-hotspot-offset-x" as string]:
+                    `${-MARKER_HOTSPOT_PAD_LEFT_PX}px`,
                 }}
                 onMouseDown={(event) => {
                   event.preventDefault();

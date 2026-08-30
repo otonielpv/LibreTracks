@@ -181,6 +181,10 @@ import {
 } from "./markerKinds";
 import { TimelineCanvasPane } from "./timeline/TimelineCanvasPane";
 import { HorizontalScrollbar } from "./timeline/HorizontalScrollbar";
+import {
+  createLibraryPlacementHandlers,
+  type LibraryPlacementDeps,
+} from "./library/libraryPlacement";
 import { settlePerfCommits } from "./perf/perfMetrics";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./compact/CompactView";
@@ -3923,49 +3927,25 @@ export function TransportPanelContent() {
   // (and the post-import prompt) call this instead: every asset lands on
   // its own auto-created track at the current playhead — the same pipeline
   // as dropping N files onto the timeline on desktop.
-  const handleAddLibraryAssetsAtPlayhead = useCallback(
-    (payload: Array<{ filePath: string }>) => {
-      if (payload.length === 0) return;
-      const startSeconds = displayPositionSecondsRef.current;
-      void runAction(async () => {
-        const snapshot = await createClipsWithAutoTracks(
-          payload.map((item) => ({
-            filePath: item.filePath,
-            timelineStartSeconds: startSeconds,
-          })),
-        );
-        applyPlaybackSnapshot(snapshot);
-        setStatus(
-          t("library.addedToTimeline", {
-            count: payload.length,
-            defaultValue: "{{count}} audios añadidos al timeline",
-          }),
-        );
-      });
-    },
-    [applyPlaybackSnapshot, runAction, setStatus, t],
+  // Colocacion sin puntero (biblioteca movil + vista compacta). Las reglas de
+  // DONDE cae cada cosa viven en ./library/libraryPlacement; aqui solo se le
+  // pasan las dependencias vivas por getter, para que la factoria se cree una
+  // sola vez y no se recree en cada render.
+  const libraryPlacementDepsRef = useRef<LibraryPlacementDeps | null>(null);
+  const libraryPlacement = useMemo(
+    () =>
+      createLibraryPlacementHandlers(() => {
+        const value = libraryPlacementDepsRef.current;
+        if (!value) {
+          throw new Error("library placement invoked before first render commit");
+        }
+        return value;
+      }),
+    [],
   );
-
-  const handleCompactDropLibraryAssetsIntoSong = useCallback(
-    (
-      regionId: string,
-      payload: Array<{ filePath: string; durationSeconds?: number }>,
-    ) => {
-      const region = song?.regions.find((r) => r.id === regionId);
-      if (!region || payload.length === 0) return;
-      const dropSeconds = region.startSeconds;
-      void runAction(async () => {
-        const snapshot = await createClipsWithAutoTracks(
-          payload.map((item) => ({
-            filePath: item.filePath,
-            timelineStartSeconds: dropSeconds,
-          })),
-        );
-        applyPlaybackSnapshot(snapshot);
-      });
-    },
-    [applyPlaybackSnapshot, runAction, song],
-  );
+  const handleAddLibraryAssetsAtPlayhead = libraryPlacement.addAssetsAtPlayhead;
+  const handleCompactDropLibraryAssetsIntoSong = libraryPlacement.addAssetsToSong;
+  const handleAddLibraryFolderToTimeline = libraryPlacement.addFolderToTimeline;
 
   // Imports a .ltpkg as a new song appended at the end of the project.
   // The previous logic was "lastEnd + one bar at the project's global
@@ -6717,6 +6697,7 @@ export function TransportPanelContent() {
     clearActiveLibraryDragPayload,
     stopInternalLibraryPointerDragListeners,
     startInternalLibraryPointerDrag,
+    dropLibraryFolder,
     handleDroppedSongPackagePath,
     handleImportLibraryFromPaths,
     handleImportLibraryFromDialog,
@@ -6725,6 +6706,19 @@ export function TransportPanelContent() {
     handleNativeFileDrop,
     handleDomExternalDropPreviewChange,
   } = libraryDragDrop;
+
+  // `dropLibraryFolder` nace de la factoria de arrastre, que se construye justo
+  // arriba, asi que las dependencias de colocacion se rellenan aqui y no junto
+  // al `useMemo` que las consume.
+  libraryPlacementDepsRef.current = {
+    t,
+    getSong: () => songRef.current,
+    getPlayheadSeconds: () => displayPositionSecondsRef.current,
+    runAction,
+    applyPlaybackSnapshot,
+    setStatus,
+    dropFolder: dropLibraryFolder,
+  };
 
   const handleRulerPointerDown = useTimelineRangeSelection({
     enabled: Boolean(song),
@@ -7262,6 +7256,7 @@ export function TransportPanelContent() {
                     assets.map((asset) => ({ filePath: asset.filePath })),
                   );
                 }}
+                onAddFolderToTimeline={handleAddLibraryFolderToTimeline}
               />
               {shouldShowEmptyState ? (
                 isMobileApp ? (

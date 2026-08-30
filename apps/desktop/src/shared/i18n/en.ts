@@ -1117,6 +1117,10 @@ const en = {
     deleteAsset: "Delete {{name}}",
     moveToRoot: "Move to root",
     moveToRootDisabled: "Move to root (already here)",
+    moveToFolder: "Move to folder...",
+    moveToFolderShort: "Move to...",
+    moveToFolderTitle: "Move {{count}} to...",
+    addFolderToTimeline: "Add to timeline as a song ({{count}})",
     pendingStatus: {
       queued: "Queued...",
       reading: "Reading file...",

@@ -1148,6 +1148,10 @@ const es = {
     deleteAsset: "Borrar {{name}}",
     moveToRoot: "Mover a la raiz",
     moveToRootDisabled: "Mover a la raiz (ya esta aqui)",
+    moveToFolder: "Mover a carpeta...",
+    moveToFolderShort: "Mover a...",
+    moveToFolderTitle: "Mover {{count}} a...",
+    addFolderToTimeline: "Añadir al timeline como cancion ({{count}})",
     pendingStatus: {
       queued: "En cola...",
       reading: "Leyendo archivo...",

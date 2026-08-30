@@ -15,6 +15,7 @@ import { isMobileApp, type LibraryImportProgressEvent } from "../desktopApi";
 import { DRAG_THRESHOLD_PX } from "../constants";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
+import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 import { formatUserFacingError } from "../errors/formatTransportError";
 
 type ContextMenuAction = {
@@ -57,6 +58,16 @@ type LibrarySidebarPanelProps = {
   /** Android: the selection action bar's "Add to timeline" — pointer-drag to
    * the timeline isn't viable on touch, so multi-select + one tap replaces it. */
   onAddSelectionToTimeline?: (assets: PendingLibraryAssetSummary[]) => void;
+  /** "Una carpeta, una canción": deja los audios de la carpeta en pistas nuevas
+   * y los envuelve en una región con su nombre. En escritorio esto se hace
+   * arrastrando la cabecera de la carpeta al timeline; en móvil no hay arrastre
+   * viable (pelea con el desplazamiento táctil), así que el mismo trabajo entra
+   * por el menú. Se ofrece en ambas plataformas: en escritorio también es útil
+   * cuando el timeline no está a la vista. */
+  onAddFolderToTimeline?: (
+    folderPath: string | null,
+    assets: PendingLibraryAssetSummary[],
+  ) => void;
 };
 
 function formatAssetDuration(durationSeconds: number) {
@@ -84,6 +95,7 @@ export function LibrarySidebarPanel({
   onDeleteFolder,
   onDeleteRequested,
   onAddSelectionToTimeline,
+  onAddFolderToTimeline,
 }: LibrarySidebarPanelProps) {
   const { t } = useTranslation();
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
@@ -273,6 +285,12 @@ export function LibrarySidebarPanel({
     updateAssetSelection(asset, event.ctrlKey || event.metaKey);
   };
 
+  // El WebView móvil no emite `contextmenu` al mantener el dedo, así que sin
+  // esto la biblioteca no tenía menú en el teléfono: ni borrar, ni renombrar
+  // carpetas, ni mover audios. Ver ../timeline/useTouchContextMenu.
+  const assetTouchMenu = useTouchContextMenu();
+  const folderTouchMenu = useTouchContextMenu();
+
   const openContextMenu = (
     event: MouseEvent<HTMLElement>,
     title: string,
@@ -289,7 +307,50 @@ export function LibrarySidebarPanel({
     });
   };
 
-  const assetContextMenu = (asset: PendingLibraryAssetSummary) => {
+  /** Segundo nivel del menú: elegir la carpeta destino.
+   *
+   * En escritorio mover un audio a una carpeta es arrastrarlo a su cabecera. En
+   * un móvil ese arrastre no existe (compite con el desplazamiento del panel),
+   * así que la biblioteca no tenía NINGUNA forma de meter un audio en una
+   * carpeta. En vez de inventar una pantalla nueva, el mismo menú se reescribe
+   * con la lista de carpetas: es el patrón "mover a…" de cualquier gestor de
+   * archivos y funciona igual con ratón. */
+  const openMoveToFolderMenu = (
+    anchor: { x: number; y: number },
+    contextAssets: PendingLibraryAssetSummary[],
+  ) => {
+    const filePaths = contextAssets.map((candidate) => candidate.filePath);
+    // Una sola carpeta de origen ⇒ se puede deshabilitar el destino en el que
+    // ya están. Con una selección repartida no hay tal cosa, y deshabilitar por
+    // "alguna está aquí" escondería un movimiento legítimo del resto.
+    const originFolders = new Set(
+      contextAssets.map((candidate) => candidate.folderPath ?? null),
+    );
+    const currentFolder =
+      originFolders.size === 1 ? [...originFolders][0] : undefined;
+
+    setContextMenu({
+      ...anchor,
+      title: t("library.moveToFolderTitle", { count: contextAssets.length }),
+      actions: [
+        {
+          label: t("library.rootFolder"),
+          disabled: currentFolder === null,
+          onSelect: () => onMoveAssetsToFolder(filePaths, null),
+        },
+        ...folders.map((folderPath) => ({
+          label: folderPath,
+          disabled: currentFolder === folderPath,
+          onSelect: () => onMoveAssetsToFolder(filePaths, folderPath),
+        })),
+      ],
+    });
+  };
+
+  const assetContextMenu = (
+    asset: PendingLibraryAssetSummary,
+    anchor: { x: number; y: number },
+  ) => {
     if (asset.isPending) {
       return [];
     }
@@ -297,6 +358,12 @@ export function LibrarySidebarPanel({
     const contextAssets = selectedAssetPathSet.has(asset.filePath) ? selectedAssets : [asset];
 
     const actions: ContextMenuAction[] = [
+      {
+        label: t("library.moveToFolder"),
+        // Sin carpetas no hay a dónde mover; "a la raíz" ya está debajo.
+        disabled: folders.length === 0,
+        onSelect: () => openMoveToFolderMenu(anchor, contextAssets),
+      },
       {
         label: contextAssets.length > 1
           ? t("library.deleteAssets", { count: contextAssets.length })
@@ -321,17 +388,34 @@ export function LibrarySidebarPanel({
     return actions;
   };
 
-  const folderContextMenu = (folderPath: string | null) => {
-    if (!folderPath) {
-      return [
-        {
-          label: t("library.createFolder"),
-          onSelect: onCreateFolder,
-        },
-      ];
+  const folderContextMenu = (
+    folderPath: string | null,
+    groupAssets: PendingLibraryAssetSummary[],
+  ) => {
+    const actions: ContextMenuAction[] = [];
+
+    if (onAddFolderToTimeline) {
+      const placeableAssets = groupAssets.filter(
+        (candidate) => !candidate.isPending,
+      );
+      actions.push({
+        label: t("library.addFolderToTimeline", {
+          count: placeableAssets.length,
+        }),
+        disabled: placeableAssets.length === 0,
+        onSelect: () => onAddFolderToTimeline(folderPath, placeableAssets),
+      });
     }
 
-    return [
+    if (!folderPath) {
+      actions.push({
+        label: t("library.createFolder"),
+        onSelect: onCreateFolder,
+      });
+      return actions;
+    }
+
+    actions.push(
       {
         label: t("library.renameFolder"),
         onSelect: () => onRenameFolder(folderPath),
@@ -340,7 +424,8 @@ export function LibrarySidebarPanel({
         label: t("library.deleteFolder"),
         onSelect: () => onDeleteFolder(folderPath),
       },
-    ];
+    );
+    return actions;
   };
 
   const handleAssetKeyDown = (event: KeyboardEvent<HTMLDivElement>, asset: PendingLibraryAssetSummary) => {
@@ -436,6 +521,13 @@ export function LibrarySidebarPanel({
     if (event.button !== 0) {
       return;
     }
+    // Igual que con los audios sueltos: en móvil el arrastre al timeline pelea
+    // con el desplazamiento del panel, y en vertical la biblioteca tapa el
+    // timeline entero, asi que no hay dónde soltar. Ahí el trabajo lo hace
+    // "Añadir al timeline" del menú (ver folderContextMenu).
+    if (isMobileApp) {
+      return;
+    }
 
     const folderName = folderPath ?? t("library.rootFolder");
     const payload = groupAssets
@@ -495,9 +587,24 @@ export function LibrarySidebarPanel({
                 aria-label={asset.fileName}
                 aria-pressed={isSelected}
                 title={asset.fileName}
-                onClick={(event) => handleAssetSelect(event, asset, groupAssets)}
+                onClick={(event) => {
+                  // Tras una pulsación larga el WebView emite además un click:
+                  // sin tragárselo, abrir el menú también cambiaba la selección.
+                  if (assetTouchMenu.consumeTriggered()) {
+                    return;
+                  }
+                  handleAssetSelect(event, asset, groupAssets);
+                }}
                 onMouseDown={(event) => handleAssetMouseDown(event, asset)}
-                onPointerDown={(event) => handleAssetPointerDown(event, asset)}
+                onPointerDown={(event) => {
+                  if (!isPending) {
+                    assetTouchMenu.begin(event);
+                  }
+                  handleAssetPointerDown(event, asset);
+                }}
+                onPointerMove={assetTouchMenu.move}
+                onPointerUp={assetTouchMenu.cancel}
+                onPointerCancel={assetTouchMenu.cancel}
                 onContextMenu={(event) => {
                   if (isPending) {
                     event.preventDefault();
@@ -507,7 +614,15 @@ export function LibrarySidebarPanel({
                   if (!selectedAssetPathSet.has(asset.filePath)) {
                     updateAssetSelection(asset, event.ctrlKey || event.metaKey);
                   }
-                  openContextMenu(event, asset.fileName, assetContextMenu(asset));
+                  const anchor = clientToZoomedCoords(
+                    event.clientX,
+                    event.clientY,
+                  );
+                  openContextMenu(
+                    event,
+                    asset.fileName,
+                    assetContextMenu(asset, anchor),
+                  );
                 }}
                 onKeyDown={(event) => handleAssetKeyDown(event, asset)}
               >
@@ -617,8 +732,27 @@ export function LibrarySidebarPanel({
                 className={`lt-library-folder-summary ${dragTargetFolderPath === null ? "is-drag-target" : ""}`}
                 data-library-folder-drop-target="true"
                 data-library-folder-path=""
-                onPointerDown={(event) => startFolderDrag(event, null, rootAssets)}
-                onContextMenu={(event) => openContextMenu(event, t("library.rootFolder"), folderContextMenu(null))}
+                onPointerDown={(event) => {
+                  folderTouchMenu.begin(event);
+                  startFolderDrag(event, null, rootAssets);
+                }}
+                onPointerMove={folderTouchMenu.move}
+                onPointerUp={folderTouchMenu.cancel}
+                onPointerCancel={folderTouchMenu.cancel}
+                onClick={(event) => {
+                  // El <summary> pliega el grupo al hacer click; tras abrir el
+                  // menú con el dedo eso plegaría la carpeta a la vez.
+                  if (folderTouchMenu.consumeTriggered()) {
+                    event.preventDefault();
+                  }
+                }}
+                onContextMenu={(event) =>
+                  openContextMenu(
+                    event,
+                    t("library.rootFolder"),
+                    folderContextMenu(null, rootAssets),
+                  )
+                }
               >
                 <span className="material-symbols-outlined">home_storage</span>
                 <span className="lt-library-folder-copy">
@@ -645,10 +779,25 @@ export function LibrarySidebarPanel({
                   className={`lt-library-folder-summary ${dragTargetFolderPath === group.folderPath ? "is-drag-target" : ""}`}
                   data-library-folder-drop-target="true"
                   data-library-folder-path={group.folderPath}
-                  onPointerDown={(event) =>
-                    startFolderDrag(event, group.folderPath, group.assets)
+                  onPointerDown={(event) => {
+                    folderTouchMenu.begin(event);
+                    startFolderDrag(event, group.folderPath, group.assets);
+                  }}
+                  onPointerMove={folderTouchMenu.move}
+                  onPointerUp={folderTouchMenu.cancel}
+                  onPointerCancel={folderTouchMenu.cancel}
+                  onClick={(event) => {
+                    if (folderTouchMenu.consumeTriggered()) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onContextMenu={(event) =>
+                    openContextMenu(
+                      event,
+                      group.folderPath,
+                      folderContextMenu(group.folderPath, group.assets),
+                    )
                   }
-                  onContextMenu={(event) => openContextMenu(event, group.folderPath, folderContextMenu(group.folderPath))}
                 >
                   <span className="material-symbols-outlined">folder</span>
                   <span className="lt-library-folder-copy">
@@ -707,6 +856,25 @@ export function LibrarySidebarPanel({
           >
             <span className="material-symbols-outlined">playlist_add</span>
             {t("library.addToTimeline", { count: selectedAssets.length })}
+          </button>
+          {/* Organizar la selección: el equivalente táctil de arrastrar los
+              audios a la cabecera de una carpeta. La barra ya es el sitio de
+              las acciones en lote, así que no hace falta buscar el menú de
+              ninguna fila en concreto. */}
+          <button
+            type="button"
+            className="lt-library-mobile-actionbar-move"
+            disabled={folders.length === 0}
+            onClick={(event) => {
+              const bounds = event.currentTarget.getBoundingClientRect();
+              openMoveToFolderMenu(
+                clientToZoomedCoords(bounds.left, bounds.top),
+                selectedAssets,
+              );
+            }}
+          >
+            <span className="material-symbols-outlined">drive_file_move</span>
+            {t("library.moveToFolderShort")}
           </button>
           <button
             type="button"

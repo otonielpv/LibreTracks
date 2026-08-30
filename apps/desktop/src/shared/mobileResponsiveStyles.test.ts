@@ -49,6 +49,16 @@ describe("contrato responsive móvil", () => {
     expect(sideNav).toContain("env(safe-area-inset-left");
   });
 
+  // En apaisado la barra de desplazamiento del timeline es lo ultimo antes del
+  // borde inferior. En iOS ese borde es del sistema (indicador de inicio), asi
+  // que sin apartarla el arrastre saca el gesto de salir de la app.
+  it("aparta la barra de desplazamiento de la zona de gestos inferior", () => {
+    const scrollbar = declarationsFor(".lt-mobile .lt-horizontal-scrollbar");
+
+    expect(scrollbar).toContain("env(safe-area-inset-bottom");
+    expect(scrollbar).toContain("box-sizing: border-box");
+  });
+
   it("fija el documento iOS para que WKWebView no cree scroll exterior", () => {
     expect(styles).toMatch(
       /html\.lt-ios,[^{]*html\.lt-ios body\s*\{[^}]*position:\s*fixed[^}]*overflow:\s*hidden/s,

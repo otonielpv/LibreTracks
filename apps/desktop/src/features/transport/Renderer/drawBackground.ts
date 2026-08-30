@@ -10,6 +10,12 @@ import {
 import type { TimelineGrid } from "../timeline/timelineMath";
 import { markerCategory, markerColor } from "../markerKinds";
 import {
+  MARKER_FLAG_FONT,
+  MARKER_FLAG_HEIGHT,
+  markerFlagLabel,
+  markerFlagWidth,
+} from "./markerFlagMetrics";
+import {
   firstIndexAtOrAfter,
   screenXToSeconds,
   secondsToScreenX,
@@ -528,15 +534,14 @@ export function drawRulerMarker(
   options: RulerMarkerDrawOptions,
 ) {
   const x = secondsToScreenX(marker.startSeconds, cameraX, pixelsPerSecond);
-  const label =
-    marker.digit == null ? marker.name : `${marker.digit}. ${marker.name}`;
+  const label = markerFlagLabel(marker);
 
-  context.font = '600 10px "Space Grotesk", sans-serif';
-  const labelWidth = Math.max(
-    30,
-    Math.ceil(context.measureText(label).width) + 12,
-  );
-  const labelHeight = 16;
+  // Ancho y alto vienen de ./markerFlagMetrics: el hotspot invisible que hace
+  // tocable esta bandera se dimensiona con las MISMAS funciones, para que la
+  // zona de toque no acabe siendo mas ancha que lo que se ve.
+  context.font = MARKER_FLAG_FONT;
+  const labelWidth = markerFlagWidth(context, label);
+  const labelHeight = MARKER_FLAG_HEIGHT;
   const snappedX = Math.round(x) + 0.5;
   // Cues draw in their own lane above the section lane; sections keep theirs.
   // Both sit flush with the top of their lane — the cue lane itself now starts

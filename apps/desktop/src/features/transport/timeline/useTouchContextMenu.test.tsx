@@ -43,6 +43,21 @@ function Harness({
   );
 }
 
+function CoordsHarness({ onCoords }: { onCoords: (x: number, y: number) => void }) {
+  const gesture = useTouchContextMenu({ delayMs: 500 });
+  return (
+    <div
+      data-testid="ruler"
+      onPointerDown={gesture.begin}
+      onPointerMove={gesture.move}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onCoords(event.clientX, event.clientY);
+      }}
+    />
+  );
+}
+
 function DelegatedHarness({ onTarget }: { onTarget: (target: EventTarget | null) => void }) {
   const gesture = useTouchContextMenu({ delayMs: 500 });
   return (
@@ -105,6 +120,24 @@ describe("useTouchContextMenu", () => {
 
     expect(onContextMenu).toHaveBeenCalledTimes(1);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  // Quien mantiene pulsado para crear una marca la quiere DONDE APUNTO. El menu
+  // se abria en la ultima posicion leida del dedo, asi que la deriva tolerada
+  // durante los 550 ms se convertia en una marca desplazada que habia que
+  // recolocar a mano.
+  it("abre el menu en el punto en que el dedo toco, no donde derivo", () => {
+    vi.useFakeTimers();
+    const onCoords = vi.fn();
+    const { getByTestId } = render(<CoordsHarness onCoords={onCoords} />);
+    const ruler = getByTestId("ruler");
+
+    fireEvent(ruler, touchPointer("pointerdown", 9, 400, 40));
+    // Deriva dentro de la tolerancia: la pulsacion larga sobrevive.
+    fireEvent(ruler, touchPointer("pointermove", 9, 411, 44));
+    act(() => vi.advanceTimersByTime(500));
+
+    expect(onCoords).toHaveBeenCalledWith(400, 40);
   });
 
   it("preserves the element under the finger for delegated pane menus", () => {

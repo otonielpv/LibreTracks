@@ -5,8 +5,6 @@ type ActiveTouch = {
   pointerId: number;
   startX: number;
   startY: number;
-  clientX: number;
-  clientY: number;
   target: HTMLElement;
   timerId: number;
 };
@@ -21,7 +19,12 @@ type TouchContextMenuOptions = {
  * Mobile WebViews do not do this consistently for a finger long-press. */
 export function useTouchContextMenu({
   delayMs = 550,
-  movementTolerancePx = 10,
+  // Un dedo apoyado sobre un movil no se esta quieto: sostener 550 ms sin
+  // desviarse 10 px es dificil, y cada desvio cancelaba la pulsacion larga en
+  // silencio (la marca "no se creaba"). 16 px es el umbral tipico de una
+  // pulsacion larga tactil, y no cuesta precision porque el menu se ancla donde
+  // el dedo TOCO, no donde acabo.
+  movementTolerancePx = 16,
   ignoreTarget,
 }: TouchContextMenuOptions = {}) {
   const activeRef = useRef<ActiveTouch | null>(null);
@@ -48,8 +51,6 @@ export function useTouchContextMenu({
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      clientX: event.clientX,
-      clientY: event.clientY,
       // Keep the element under the finger as the synthetic event target. This
       // lets a single capture listener cover a whole pane while normal
       // contextmenu bubbling still selects the specific track/empty area.
@@ -63,12 +64,16 @@ export function useTouchContextMenu({
       }
       activeRef.current = null;
       triggeredRef.current = true;
+      // Se dispara en el punto en que el dedo TOCO, no en el ultimo leido. Quien
+      // abre el menu para crear una marca la pone donde apunto, no donde le
+      // haya llevado la deriva del dedo durante la espera: sin esto la marca
+      // nacia hasta 10 px desplazada y habia que recolocarla a mano.
       active.target.dispatchEvent(
         new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
-          clientX: active.clientX,
-          clientY: active.clientY,
+          clientX: active.startX,
+          clientY: active.startY,
           button: 2,
           buttons: 0,
         }),
@@ -82,8 +87,6 @@ export function useTouchContextMenu({
     if (!active || active.pointerId !== event.pointerId) {
       return;
     }
-    active.clientX = event.clientX;
-    active.clientY = event.clientY;
     if (
       Math.hypot(event.clientX - active.startX, event.clientY - active.startY) >
       movementTolerancePx

@@ -4495,11 +4495,25 @@ html.lt-ios body {
   z-index: 6;
 }
 
+/* Los hijos del overlay de la regla heredan el `scaleX` que CanvasTimeline
+   aplica mientras dura la previsualizacion del zoom. Lo que mide en SEGUNDOS
+   (la banda de una region) DEBE estirarse con el; lo que mide en PIXELES -la
+   zona tactil de una marca- no: a 2x, una zona de 68px se vuelve un hueco
+   invisible de 136px que se traga los toques de la marca vecina. Estas se
+   contra-escalan con 1/scaleX, y su desplazamiento a la izquierda viaja
+   multiplicado por la misma variable para que siga valiendo los mismos pixeles
+   de pantalla (el padre escala tambien las traslaciones de sus hijos).
+   `--lt-hotspot-offset-x` se puede pisar en linea (movil usa un margen menor).
+   Ver --lt-ruler-mark-scale-x en Renderer/CanvasTimeline.tsx. */
 .lt-marker-hotspot {
   position: absolute;
   width: 4.25rem;
   height: 2.25rem;
-  margin-left: -0.5rem;
+  --lt-hotspot-offset-x: -0.5rem;
+  transform-origin: 0 0;
+  transform:
+    translateX(calc(var(--lt-hotspot-offset-x) * var(--lt-ruler-mark-scale-x, 1)))
+    scaleX(var(--lt-ruler-mark-scale-x, 1));
   border: 0;
   background: transparent;
   color: transparent;
@@ -4579,7 +4593,13 @@ html.lt-ios body {
   position: absolute;
   width: 3.25rem;
   height: 1.9rem;
-  margin-left: -0.35rem;
+  /* Misma contra-escala que .lt-marker-hotspot: ancho en pixeles dentro de un
+     envoltorio que se escala con el zoom. */
+  --lt-hotspot-offset-x: -0.35rem;
+  transform-origin: 0 0;
+  transform:
+    translateX(calc(var(--lt-hotspot-offset-x) * var(--lt-ruler-mark-scale-x, 1)))
+    scaleX(var(--lt-ruler-mark-scale-x, 1));
   border: 0;
   background: transparent;
   color: transparent;
@@ -8082,6 +8102,36 @@ html.lt-ios body {
   touch-action: pan-y;
 }
 
+/* ── Barra de desplazamiento horizontal: fuera de la zona de gestos ──── */
+/* En apaisado -la orientacion normal del DAW en un telefono- esta barra es lo
+   ultimo que hay antes del borde inferior de la pantalla, y en iOS ese borde no
+   es de la app: los ~20 px del indicador de inicio pertenecen al sistema, asi
+   que arrastrar el pulgar por la barra sacaba el gesto de salir de la app en
+   vez de mover la vista. El carril se aparta del borde por el inset seguro (y
+   crece un poco, porque un pulgar no acierta en 22 px) de modo que TODO su
+   recorrido cae dentro de la app. */
+.lt-mobile .lt-horizontal-scrollbar {
+  box-sizing: border-box;
+  height: calc(30px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* La celda izquierda de la misma fila de la rejilla: sin esto el fondo del
+   carril de cabeceras se queda corto y aparece una banda a distinto color. */
+.lt-mobile .lt-horizontal-scrollbar-spacer {
+  box-sizing: border-box;
+  height: calc(30px + env(safe-area-inset-bottom, 0px));
+}
+
+.lt-mobile .lt-horizontal-scrollbar-thumb {
+  top: 5px;
+  bottom: 5px;
+  border-radius: 5px;
+  /* Mas contraste: a este tamano el pulgar tapa el carril y hay que ver donde
+     esta antes de tocarlo. */
+  background: rgb(87 241 219 / 0.5);
+}
+
 /* ── Library panel: narrower on a phone ──────────────────────────────── */
 /* Desktop's 20rem leaves the timeline ~40% of a landscape phone; 15.5rem
    still fits asset names + durations comfortably. Header buttons compact
@@ -8249,6 +8299,31 @@ html.lt-ios body {
   font: 700 11px/1 "Space Grotesk", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+/* Secundario junto al primario: mismo alto tactil, peso visual menor porque
+   "anadir al timeline" es lo que se pulsa cada dia y "mover a..." se usa al
+   ordenar la biblioteca. */
+.lt-android .lt-library-mobile-actionbar-move {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0 0.6rem;
+  border: 1px solid rgb(87 241 219 / 0.35);
+  border-radius: 3px;
+  background: transparent;
+  color: #57f1db;
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.lt-android .lt-library-mobile-actionbar-move:disabled {
+  opacity: 0.4;
 }
 
 .lt-android .lt-library-mobile-actionbar-clear {

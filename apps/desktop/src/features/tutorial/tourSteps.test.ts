@@ -251,6 +251,17 @@ describe("recorridos", () => {
     }
   });
 
+  // La guía no puede enseñar lo que la plataforma no tiene: `midir` no tiene
+  // backend móvil, así que en el teléfono no hay pestañas MIDI en ajustes y el
+  // paso hablaba de un puerto y un canal que el usuario no podía configurar.
+  it("no enseña MIDI en móvil, donde no hay a dónde enviarlo", () => {
+    const mobileIds = visibleSteps(TOURS.daw, "mobile").map((step) => step.id);
+    const desktopIds = visibleSteps(TOURS.daw, "desktop").map((step) => step.id);
+
+    expect(mobileIds).not.toContain("midiTracks");
+    expect(desktopIds).toContain("midiTracks");
+  });
+
   it("los ids de paso no se repiten dentro de un recorrido", () => {
     for (const tour of allTours) {
       const ids = tour.steps.map((step) => step.id);

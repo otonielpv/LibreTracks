@@ -99,8 +99,13 @@ export const dawTour: TourDefinition = {
       i18nKey: "tutorial.daw.steps.folders",
     },
     {
+      // Sólo escritorio: en móvil no hay a dónde enviar las notas. `midir` no
+      // tiene backend Android/iOS, así que las pestañas MIDI de ajustes están
+      // ocultas ahí (ver androidHiddenSettingsTabs) y este paso prometía una
+      // configuración de puerto y canal que el usuario no puede encontrar.
       id: "midiTracks",
       target: TOUR_TARGETS.trackHeaders,
+      platforms: ["desktop"],
       viewMode: "daw",
       i18nKey: "tutorial.daw.steps.midiTracks",
     },

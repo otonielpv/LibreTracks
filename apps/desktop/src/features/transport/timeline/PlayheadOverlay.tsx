@@ -68,6 +68,11 @@ const PLAYHEAD_EDGE_BUFFER_PX = 48;
 /** Peak auto-scroll speed (px per frame) at the very edge of the viewport. */
 const PLAYHEAD_MAX_SCROLL_SPEED_PX = 24;
 
+/** Desplazamiento que convierte un toque sobre el asa en un arrastre. Por
+ * debajo de esto la pulsacion es de la regla (menu contextual), no del cabezal.
+ * Ver el comentario en handlePointerDown. */
+const TOUCH_DRAG_THRESHOLD_PX = 6;
+
 /**
  * Eased scroll speed for a pointer `distancePx` from the edge: zero outside the
  * buffer, ramping up quadratically as the pointer nears the border.
@@ -377,14 +382,46 @@ export function PlayheadOverlay({
       }
     };
 
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      currentSeconds: 0,
+    // Con un dedo el arrastre no empieza al tocar, sino al MOVER.
+    //
+    // El asa del cabezal ocupa 16px de ancho por todo el alto de la regla. Al
+    // mantener pulsado ahi para crear una marca pasaba una de dos: o el dedo se
+    // movia un pelo y la pulsacion larga se cancelaba (el menu no salia), o el
+    // menu salia y al levantar el dedo este arrastre confirmaba su salto, que
+    // cierra el menu — el "se abre y se cierra al instante". Armandolo, una
+    // pulsacion sin desplazamiento no es un arrastre y la regla se queda con
+    // ella. El raton conserva el arranque inmediato: ahi no hay pulsacion larga
+    // que estorbe y el salto al pulsar es el gesto esperado.
+    const isTouch = event.pointerType === "touch";
+    const armOriginX = event.clientX;
+    let armed = isTouch;
+
+    const startDrag = () => {
+      armed = false;
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        currentSeconds: 0,
+      };
+      playheadRef.current?.classList.add("is-dragging");
+      applySeekAtClientX();
     };
-    playheadRef.current?.classList.add("is-dragging");
-    applySeekAtClientX();
 
     const onPointerMove = (pointerEvent: PointerEvent) => {
+      if (armed) {
+        if (pointerEvent.pointerId !== event.pointerId) {
+          return;
+        }
+        if (
+          Math.abs(pointerEvent.clientX - armOriginX) <
+          TOUCH_DRAG_THRESHOLD_PX
+        ) {
+          return;
+        }
+        latestClientX = pointerEvent.clientX;
+        startDrag();
+        return;
+      }
+
       const activeDrag = dragStateRef.current;
       if (!activeDrag || pointerEvent.pointerId !== activeDrag.pointerId) {
         return;
@@ -397,25 +434,54 @@ export function PlayheadOverlay({
       maybeStartAutoScroll();
     };
 
+    /** Suelta el gesto SIN confirmar. Es lo que corresponde a un
+     * `pointercancel` (el gesto de dos dedos del timeline sintetiza uno para
+     * apartar los arrastres de un dedo) y a la pulsacion larga que abre el menu
+     * de la regla: ninguno de los dos debe mover el cabezal. */
+    const abandonDrag = () => {
+      armed = false;
+      dragStateRef.current = null;
+      playheadRef.current?.classList.remove("is-dragging");
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
+    };
+
     const finishDrag = (pointerEvent: PointerEvent) => {
+      if (armed) {
+        if (pointerEvent.pointerId === event.pointerId) {
+          abandonDrag();
+        }
+        return;
+      }
+
       const activeDrag = dragStateRef.current;
       if (!activeDrag || pointerEvent.pointerId !== activeDrag.pointerId) {
         return;
       }
 
       const commitSeconds = activeDrag.currentSeconds;
-      dragStateRef.current = null;
-      playheadRef.current?.classList.remove("is-dragging");
-      dragCleanupRef.current?.();
-      dragCleanupRef.current = null;
+      abandonDrag();
       void onSeekCommit(commitSeconds);
     };
+
+    const cancelDrag = (pointerEvent: PointerEvent) => {
+      const pointerId = armed ? event.pointerId : dragStateRef.current?.pointerId;
+      if (pointerId === undefined || pointerEvent.pointerId !== pointerId) {
+        return;
+      }
+      abandonDrag();
+    };
+
+    /** La pulsacion larga sobre la regla sintetiza un `contextmenu`; si ocurre
+     * encima del asa, este arrastre debe apartarse del camino. */
+    const onContextMenu = () => abandonDrag();
 
     const cleanup = () => {
       stopAutoScroll();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", finishDrag);
-      window.removeEventListener("pointercancel", finishDrag);
+      window.removeEventListener("pointercancel", cancelDrag);
+      window.removeEventListener("contextmenu", onContextMenu);
     };
 
     dragCleanupRef.current?.();
@@ -423,7 +489,12 @@ export function PlayheadOverlay({
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", finishDrag);
-    window.addEventListener("pointercancel", finishDrag);
+    window.addEventListener("pointercancel", cancelDrag);
+    window.addEventListener("contextmenu", onContextMenu);
+
+    if (!armed) {
+      startDrag();
+    }
   };
 
   return (
