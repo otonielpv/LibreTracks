@@ -3,6 +3,7 @@
 
 #import <AVFoundation/AVFoundation.h>
 
+#include <atomic>
 #include <cstdio>
 
 namespace lt {
@@ -16,10 +17,68 @@ std::string describe_error(NSError* error) {
                               : "AVAudioSession returned an error";
 }
 
+std::atomic<unsigned> g_route_generation{0};
+
+/// Subscribe to the two things iOS can do behind the app's back. Idempotent:
+/// configure_ios_playback_session runs on every device open.
+///
+/// The blocks touch nothing but an atomic and the log — no session calls, no
+/// device work — so they are safe on whatever thread the notification arrives
+/// on. What acts on them is the device manager's stall monitor, which already
+/// owns the tear-down/reopen path (see ios_audio_route_generation).
+void install_ios_session_observers() {
+    static dispatch_once_t once_token;
+    dispatch_once(&once_token, ^{
+        NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
+
+        [center addObserverForName:AVAudioSessionRouteChangeNotification
+                            object:nil
+                             queue:nil
+                        usingBlock:^(NSNotification* note) {
+            const NSInteger reason =
+                [note.userInfo[AVAudioSessionRouteChangeReasonKey] integerValue];
+            // ONLY real hardware coming and going. In particular NOT
+            // CategoryChange: this app's own setCategory during open posts one,
+            // so reacting to it would make every open trigger another open.
+            const bool hardware_changed =
+                reason == AVAudioSessionRouteChangeReasonNewDeviceAvailable ||
+                reason == AVAudioSessionRouteChangeReasonOldDeviceUnavailable;
+            lt_debug_log("[LT_IOS_AUDIO] route change reason=%ld acted=%d\n",
+                         static_cast<long>(reason), hardware_changed ? 1 : 0);
+            if (hardware_changed) {
+                g_route_generation.fetch_add(1, std::memory_order_relaxed);
+            }
+        }];
+
+        [center addObserverForName:AVAudioSessionInterruptionNotification
+                            object:nil
+                             queue:nil
+                        usingBlock:^(NSNotification* note) {
+            const NSInteger type =
+                [note.userInfo[AVAudioSessionInterruptionTypeKey] integerValue];
+            // Only the END is actionable. The BEGIN needs nothing from us: iOS
+            // has already stopped the callbacks and the stall monitor puts the
+            // engine on its fallback clock within ~1.5 s, which is what keeps
+            // the transport moving through the call.
+            const bool ended = type == AVAudioSessionInterruptionTypeEnded;
+            lt_debug_log("[LT_IOS_AUDIO] interruption type=%ld acted=%d\n",
+                         static_cast<long>(type), ended ? 1 : 0);
+            if (ended) {
+                g_route_generation.fetch_add(1, std::memory_order_relaxed);
+            }
+        }];
+    });
+}
+
 } // namespace
+
+unsigned ios_audio_route_generation() {
+    return g_route_generation.load(std::memory_order_relaxed);
+}
 
 bool configure_ios_playback_session(std::string* error_message) {
     @autoreleasepool {
+        install_ios_session_observers();
         AVAudioSession* session = AVAudioSession.sharedInstance;
         NSError* error = nil;
 

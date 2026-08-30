@@ -342,6 +342,11 @@ void AudioDeviceManager::Impl::monitor_main() {
     const auto ms_between = [](auto a, auto b) {
         return std::chrono::duration<double, std::milli>(b - a).count();
     };
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+    // Seeded from the current value, not from zero: whatever happened before
+    // the monitor started is already reflected in the device that is open.
+    unsigned last_route_generation = ios_audio_route_generation();
+#endif
     while (!monitor_stop.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(kMonitorPeriodMs));
         if (monitor_stop.load(std::memory_order_relaxed))
@@ -354,9 +359,37 @@ void AudioDeviceManager::Impl::monitor_main() {
         }
         if (pump_run.load(std::memory_order_relaxed) || !adaptor) {
             last_count = -1;
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+            // Already on the fallback clock: the control layer is reopening
+            // anyway, and it will pick up whatever route is current. Absorbing
+            // the event here keeps that recovery from being followed by a
+            // second, pointless tear-down.
+            last_route_generation = ios_audio_route_generation();
+#endif
             continue;
         }
         const auto now = std::chrono::steady_clock::now();
+#if defined(LT_ENGINE_IOS_AUDIO_SESSION)
+        // iOS moved the hardware under us, or a call just ended. Neither shows
+        // up as a stall — on a plug-in the callbacks never even pause — but the
+        // open device no longer describes the route, most visibly in its
+        // channel count. Hand it to the same path a dead device takes: tear the
+        // stream down, let the pump carry the engine clock, and the control
+        // layer reopens within its retry tick against the route that is
+        // actually there now.
+        const unsigned route_generation = ios_audio_route_generation();
+        if (route_generation != last_route_generation) {
+            last_route_generation = route_generation;
+            lt_debug_log(
+                "[LT_IOS_AUDIO] route/interruption event — reopening \"%s\"\n",
+                device_name.c_str());
+            last_error = "iOS audio route changed";
+            close_stream_locked();
+            start_pump_locked();
+            last_count = -1;
+            continue;
+        }
+#endif
         const std::uint64_t gen = open_generation.load(std::memory_order_relaxed);
         const int  count     = adaptor->callback_count();
         const bool dev_error = adaptor->has_error();

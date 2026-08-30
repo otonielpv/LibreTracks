@@ -23,6 +23,24 @@ bool configure_ios_playback_session(std::string* error_message);
 // Falls back to 2 when the session is not active yet or reports nothing usable.
 int current_ios_output_channel_count();
 
+// Counter bumped whenever iOS reports something that makes the OPEN device stop
+// describing reality: an interface plugged or unplugged, or an interruption
+// (a phone call) that has just ended.
+//
+// Deliberately a counter and not a callback. The device manager already has a
+// proven recovery path — the stall monitor tears the stream down, the fallback
+// pump keeps the engine clock running, and the control layer reopens — and
+// calling into it from a notification thread would mean taking the stream mutex
+// from a fourth thread. The monitor polls this instead, so a route change joins
+// the same path a dead device already takes, with no new locking.
+//
+// Why it is needed at all, given the stall monitor: PLUGGING IN is invisible to
+// it. iOS moves the route across seamlessly, the callbacks never stop, and the
+// device stays open at the channel count it negotiated before the interface
+// existed — so a four- or eight-output interface would keep behaving as stereo
+// until the app was restarted.
+unsigned ios_audio_route_generation();
+
 // Human-readable runtime state for field diagnostics (route, volume, sample
 // rate and buffer). Never called from the realtime callback.
 std::string describe_ios_playback_session();
