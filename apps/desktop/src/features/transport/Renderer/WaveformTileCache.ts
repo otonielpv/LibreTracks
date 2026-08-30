@@ -4,7 +4,7 @@ import type {
   WaveformSummaryDto,
   WaveformWindowDto,
 } from "../desktopApi";
-import { getWaveformWindow } from "../desktopApi";
+import { getWaveformWindow, isIOSApp } from "../desktopApi";
 import { recordWaveformTileRender } from "../perf/perfMetrics";
 import { clamp } from "../timeline/timelineMath";
 
@@ -33,10 +33,11 @@ const TILE_HEIGHT_STEPS = [32, 64, 128, 256] as const;
  *
  * Antes el tope eran 320 tiles, que con 1024x256 RGBA son 320 MiB en el caso
  * peor — y medido en el build de medición se llegó a un pico de 146 MB. Un
- * tope en bytes es el único que da una garantía; el de conteo depende de un
- * tamaño de tile que ahora es variable.
+ * Un tope en bytes permite controlar el coste aunque el tamaño de tile sea
+ * variable. En iOS es un objetivo blando: nunca se expulsa una onda que siga
+ * visible, aunque el viewport necesite superar temporalmente esos 24 MiB.
  */
-const MAX_CACHE_BYTES = 48 * 1024 * 1024;
+const MAX_CACHE_BYTES = (isIOSApp ? 24 : 48) * 1024 * 1024;
 
 /**
  * Milisegundos que un frame puede gastar rasterizando tiles.
@@ -735,16 +736,22 @@ export class WaveformTileCache {
    * resultado sí, que es lo importante durante rueda/pinza continua. */
   private visibleDetailKeys = new Set<string>();
 
+  /** Tiles used by the current paint. The iOS limit is deliberately soft:
+   * memory pressure may evict history, never a waveform still on screen. */
+  private readonly visibleTileKeys = new Set<string>();
+
   private detailReadySinceLastDrain = false;
 
   constructor(
     private readonly loadWindow: WaveformWindowLoader = getWaveformWindow,
+    private readonly maxCacheBytes = MAX_CACHE_BYTES,
   ) {}
 
   /** Vacía la cola de pendientes. Se llama una vez por pintado. */
   beginPaint() {
     this.pending.clear();
     this.visibleDetailKeys = new Set<string>();
+    this.visibleTileKeys.clear();
   }
 
   /**
@@ -773,6 +780,7 @@ export class WaveformTileCache {
     }
 
     const key = tileKey(namespace, request.tileIndex);
+    this.visibleTileKeys.add(key);
     const detailState = this.requestDetailWindowIfUseful(
       key,
       request,
@@ -918,6 +926,7 @@ export class WaveformTileCache {
             complete = false;
             break;
           }
+          this.visibleTileKeys.add(tileKey(namespace, tileIndex));
           const tileStart = tileIndex * WAVEFORM_TILE_WIDTH_PX;
           const overlapStart = Math.max(fallbackStartPixel, tileStart);
           const overlapEnd = Math.min(
@@ -1064,7 +1073,32 @@ export class WaveformTileCache {
     return {
       entries: this.tiles.size + this.detailWindows.size,
       bytes: this.byteEstimate,
+      visibleEntries:
+        [...this.tiles.keys()].filter((key) => this.visibleTileKeys.has(key))
+          .length +
+        [...this.detailWindows.keys()].filter((key) =>
+          this.visibleTileKeys.has(key),
+        ).length,
     };
+  }
+
+  /** Release cached history while preserving every tile used by the latest
+   * paint. Zeroing canvas dimensions asks WebKit to free GPU backing stores
+   * immediately instead of waiting for JavaScript garbage collection. */
+  releaseNonVisible() {
+    for (const [key, entry] of this.tiles) {
+      if (this.visibleTileKeys.has(key)) continue;
+      entry.canvas.width = 0;
+      entry.canvas.height = 0;
+      this.byteEstimate -= tileByteSize(entry);
+      this.tiles.delete(key);
+    }
+    for (const [key, entry] of this.detailWindows) {
+      if (this.visibleTileKeys.has(key)) continue;
+      this.byteEstimate -= entry.bytes;
+      this.detailWindows.delete(key);
+    }
+    this.byteEstimate = Math.max(0, this.byteEstimate);
   }
 
   private requestDetailWindowIfUseful(
@@ -1164,7 +1198,7 @@ export class WaveformTileCache {
   }
 
   private pruneLeastRecentlyUsedTiles() {
-    if (this.byteEstimate <= MAX_CACHE_BYTES) {
+    if (this.byteEstimate <= this.maxCacheBytes) {
       return;
     }
 
@@ -1183,12 +1217,23 @@ export class WaveformTileCache {
       })),
     ].sort((left, right) => left.lastUsedAt - right.lastUsedAt);
     for (const entry of entriesByAge) {
-      if (this.byteEstimate <= MAX_CACHE_BYTES) {
+      if (this.byteEstimate <= this.maxCacheBytes) {
         break;
       }
+      if (this.visibleTileKeys.has(entry.key)) {
+        continue;
+      }
       this.byteEstimate -= entry.bytes;
-      if (entry.kind === "tile") this.tiles.delete(entry.key);
-      else this.detailWindows.delete(entry.key);
+      if (entry.kind === "tile") {
+        const tile = this.tiles.get(entry.key);
+        if (tile) {
+          tile.canvas.width = 0;
+          tile.canvas.height = 0;
+        }
+        this.tiles.delete(entry.key);
+      } else {
+        this.detailWindows.delete(entry.key);
+      }
     }
   }
 }

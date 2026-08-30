@@ -5,9 +5,13 @@ import {
   reportUiDiagnosticState,
 } from "@libretracks/shared/desktopApi";
 
-import { getWaveformTileCacheDiagnostics } from "../Renderer/drawTracks";
+import {
+  getWaveformTileCacheDiagnostics,
+  releaseNonVisibleWaveformTiles,
+} from "../Renderer/drawTracks";
 
 const HEARTBEAT_INTERVAL_MS = 5_000;
+const IOS_MEMORY_WARNING_EVENT = "libretracks:ios-memory-warning";
 
 type NumberRef = { current: number };
 
@@ -63,6 +67,19 @@ export function usePlaybackUiDiagnostics({
   visibleTrackCount,
   trackSceneHeight,
 }: PlaybackUiDiagnosticsOptions) {
+  useEffect(() => {
+    if (!isIOSApp) return;
+    const releaseCachedHistory = () => {
+      releaseNonVisibleWaveformTiles();
+    };
+    window.addEventListener(IOS_MEMORY_WARNING_EVENT, releaseCachedHistory);
+    return () =>
+      window.removeEventListener(
+        IOS_MEMORY_WARNING_EVENT,
+        releaseCachedHistory,
+      );
+  }, []);
+
   useEffect(() => {
     if (!isIOSApp) {
       return;

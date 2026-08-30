@@ -25,6 +25,14 @@ export function getWaveformTileCacheDiagnostics() {
   return waveformTileCache.stats();
 }
 
+/** iOS memory warnings evict scroll history, but never tiles that belong to
+ * the currently painted viewport. */
+export function releaseNonVisibleWaveformTiles() {
+  const before = waveformTileCache.stats();
+  waveformTileCache.releaseNonVisible();
+  return { before, after: waveformTileCache.stats() };
+}
+
 /**
  * Índices derivados del `song`, calculados una vez por identidad de canción en
  * vez de una vez por carril y por frame.

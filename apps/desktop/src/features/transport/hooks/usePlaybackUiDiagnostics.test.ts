@@ -9,7 +9,9 @@ const reportUiDiagnosticState = vi.fn(
 const getWaveformTileCacheDiagnostics = vi.fn(() => ({
   entries: 12,
   bytes: 3_145_728,
+  visibleEntries: 8,
 }));
+const releaseNonVisibleWaveformTiles = vi.fn();
 
 vi.mock("@libretracks/shared/desktopApi", () => ({
   isIOSApp: true,
@@ -20,6 +22,7 @@ vi.mock("@libretracks/shared/desktopApi", () => ({
 vi.mock("../Renderer/drawTracks", () => ({
   getWaveformTileCacheDiagnostics: () =>
     getWaveformTileCacheDiagnostics(),
+  releaseNonVisibleWaveformTiles: () => releaseNonVisibleWaveformTiles(),
 }));
 
 describe("usePlaybackUiDiagnostics", () => {
@@ -59,7 +62,11 @@ describe("usePlaybackUiDiagnostics", () => {
       playbackState: "playing",
       followActive: true,
       cameraX: 120,
-      waveformTileCache: { entries: 12, bytes: 3_145_728 },
+      waveformTileCache: {
+        entries: 12,
+        bytes: 3_145_728,
+        visibleEntries: 8,
+      },
       canvasBackingStores: { count: 1, estimatedBytes: 80_000 },
     });
 
@@ -70,5 +77,25 @@ describe("usePlaybackUiDiagnostics", () => {
       cameraX: 180,
       cameraDeltaSinceLastHeartbeat: 60,
     });
+  });
+
+  it("releases only cached waveform history after an iOS memory warning", () => {
+    renderHook(() =>
+      usePlaybackUiDiagnostics({
+        playbackState: "playing",
+        followPlayheadEnabled: true,
+        viewMode: "daw",
+        cameraXRef: { current: 0 },
+        positionSecondsRef: { current: 0 },
+        pixelsPerSecondRef: { current: 80 },
+        viewportWidthRef: { current: 700 },
+        visibleTrackCount: 24,
+        trackSceneHeight: 1440,
+      }),
+    );
+
+    window.dispatchEvent(new Event("libretracks:ios-memory-warning"));
+
+    expect(releaseNonVisibleWaveformTiles).toHaveBeenCalledOnce();
   });
 });

@@ -68,8 +68,12 @@ final class IosFolderPickerPlugin: Plugin {
         forName: UIApplication.didReceiveMemoryWarningNotification,
         object: nil,
         queue: .main
-      ) { _ in
+      ) { [weak webview] _ in
         logIosMemoryWarning()
+        webview?.evaluateJavaScript(
+          "window.dispatchEvent(new Event('libretracks:ios-memory-warning'))",
+          completionHandler: nil
+        )
       }
     }
   }

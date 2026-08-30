@@ -400,6 +400,31 @@ describe("cola de rasterización con presupuesto", () => {
     expect(cache.drainPendingTiles(1000)).toBe(0);
   });
 
+  it("libera el historial sin expulsar los tiles del viewport actual", () => {
+    const cache = new WaveformTileCache();
+    cache.getTile(request({ tileIndex: 0 }));
+    cache.getTile(request({ tileIndex: 1 }));
+    cache.drainPendingTiles(1000);
+    expect(cache.stats().entries).toBe(2);
+
+    cache.beginPaint();
+    expect(cache.getTile(request({ tileIndex: 1 }))).not.toBeNull();
+    cache.releaseNonVisible();
+
+    expect(cache.stats()).toMatchObject({ entries: 1, visibleEntries: 1 });
+    expect(cache.getTile(request({ tileIndex: 1 }))).not.toBeNull();
+    expect(cache.getTile(request({ tileIndex: 0 }))).toBeNull();
+  });
+
+  it("trata el límite como blando si el viewport necesita más memoria", () => {
+    const cache = new WaveformTileCache(undefined, 1);
+    cache.getTile(request({ tileIndex: 0 }));
+    cache.drainPendingTiles(1000);
+
+    expect(cache.stats().entries).toBe(1);
+    expect(cache.getTile(request({ tileIndex: 0 }))).not.toBeNull();
+  });
+
   it("respeta el presupuesto en vez de vaciar la cola de golpe", () => {
     const cache = new WaveformTileCache();
     for (let index = 0; index < 40; index += 1) {
@@ -567,7 +592,7 @@ describe("cola de rasterización con presupuesto", () => {
     await Promise.resolve();
 
     expect(cache.hasPendingTiles()).toBe(false);
-    expect(cache.stats()).toEqual({ entries: 0, bytes: 0 });
+    expect(cache.stats()).toEqual({ entries: 0, bytes: 0, visibleEntries: 0 });
   });
 
   it("vuelve al LOD persistido si el detalle nativo no está disponible", async () => {
