@@ -45,14 +45,36 @@ type DragPanState = {
   latestCameraX: number;
 };
 
+/** Qué está haciendo el gesto de dos dedos. Ver TouchGestureState.mode. */
+type TouchGestureMode = "undecided" | "pan" | "zoom";
+
 type TouchGestureState = {
   /** Los DOS dedos que gobiernan el gesto, por identificador. Si el conjunto
    * cambia (se levanta uno, aterriza un tercero) el gesto se re-siembra en vez
    * de abortarse: de otro modo un apoyo accidental cancela el zoom a medias. */
   idA: number;
   idB: number;
+  /**
+   * Un gesto es desplazamiento O zoom, nunca los dos.
+   *
+   * Aplicar ambos a la vez —aunque el zoom lleve zona muerta— es lo que hacía
+   * que mover en horizontal hiciera zoom por el camino: dos dedos que recorren
+   * la pantalla nunca mantienen su separación, y sobre un desplazamiento largo
+   * esa deriva es de mucho más del 3% que la zona muerta descontaba. Se decide
+   * UNA vez, en cuanto uno de los dos ejes se despega, y se mantiene hasta que
+   * los dedos se levantan: para cambiar de modo, se levanta y se vuelve a
+   * apoyar. Es lo que hace que el gesto se sienta deliberado en vez de
+   * resbaladizo.
+   */
+  mode: TouchGestureMode;
   originZoom: number;
   startDistance: number;
+  /** Punto medio en el momento de anclar, para medir cuánto se ha recorrido. */
+  startMidClientX: number;
+  /** El mismo punto medio en coordenadas locales del contenedor. En modo zoom
+   * la cámara se resuelve contra ESTE punto y no contra el actual, así que la
+   * deriva lateral de los dedos no arrastra el material mientras se hace zoom. */
+  originMidLocalX: number;
   /** Punto de CONTENIDO bajo el punto medio inicial de los dedos, en unidades
    * de zoom 1 (es decir, px / zoomLevel). Es el ancla del lazo cerrado: en cada
    * movimiento la camara se resuelve para volver a poner ESTE punto bajo el
@@ -65,23 +87,13 @@ type TouchSample = {
   midClientX: number;
 };
 
-/** Zona muerta del pinza→zoom, en escala logaritmica.
+/**
+ * Cuánto tiene que despegarse un eje para que el gesto se decida.
  *
- * Se RESTA en vez de usarse como puerta. Con una puerta (`if (|scale-1| > 0.02)`)
- * el zoom no se aplica hasta cruzar el umbral y entonces entra de golpe con todo
- * lo acumulado: un desplazamiento a dos dedos, cuyos dedos siempre se separan un
- * poco, alterna dentro y fuera de la zona y el timeline da tirones. Restandola,
- * la funcion es continua en el umbral: justo al cruzarlo el factor sigue siendo
- * 1 y crece desde ahi. */
-const ZOOM_DEAD_ZONE_LOG = Math.log(1.03);
-
-function zoomFactorFromScale(scale: number) {
-  const logScale = Math.log(scale);
-  if (Math.abs(logScale) <= ZOOM_DEAD_ZONE_LOG) {
-    return 1;
-  }
-  return Math.exp(logScale - Math.sign(logScale) * ZOOM_DEAD_ZONE_LOG);
-}
+ * Es el único momento en que el gesto no hace nada. Con menos, un apoyo torcido
+ * decide por el usuario; con mucho más, el gesto se siente pegajoso al arrancar.
+ */
+const GESTURE_DECISION_PX = 14;
 
 export class InputManager {
   private readonly container: HTMLElement;
@@ -429,17 +441,30 @@ export class InputManager {
 
   /** Siembra (o re-siembra) el ancla del gesto con los dos dedos dados. */
   private seedTouchGesture(a: Touch, b: Touch) {
-    const state = this.options.getState();
     const sample = this.sampleTouches(a, b);
+    this.touchGesture = {
+      idA: a.identifier,
+      idB: b.identifier,
+      mode: "undecided",
+      ...this.anchorFrom(sample),
+    };
+  }
+
+  /** Estado de anclaje para una muestra: dónde están los dedos AHORA y qué hay
+   * bajo ellos. Se recalcula al decidir el modo, de modo que el modo elegido
+   * arranque desde cero y no herede el recorrido de la fase de decisión — que
+   * es lo que haría saltar la cámara justo al arrancar el gesto. */
+  private anchorFrom(sample: TouchSample) {
+    const state = this.options.getState();
     const bounds = this.container.getBoundingClientRect();
     const midLocalX = this.localXFromClientX(sample.midClientX, bounds);
     const zoom = state.zoomLevel > 0 ? state.zoomLevel : 1;
 
-    this.touchGesture = {
-      idA: a.identifier,
-      idB: b.identifier,
+    return {
       originZoom: zoom,
       startDistance: sample.distance,
+      startMidClientX: sample.midClientX,
+      originMidLocalX: midLocalX,
       originContentUnits: (state.cameraX + midLocalX) / zoom,
     };
   }
@@ -494,13 +519,19 @@ export class InputManager {
   };
 
   /**
-   * Zoom y desplazamiento salen de un único LAZO CERRADO contra el origen del
-   * gesto, no de deltas acumulados: el zoom es la razón de distancias respecto a
-   * la separación inicial, y la cámara se despeja para que el punto de contenido
-   * que había bajo el punto medio inicial quede bajo el punto medio actual. Así
-   * los dedos se quedan pegados al material — separarlos y moverlos a la vez
-   * hace lo que se espera, en vez de sumar dos correcciones que se estorban — y
-   * unos dedos temblorosos no acumulan deriva.
+   * Un gesto, un trabajo: o desplaza o hace zoom.
+   *
+   * El modo se decide una sola vez, en cuanto uno de los dos ejes se despega
+   * (ver GESTURE_DECISION_PX), comparando cuánto se han SEPARADO los dedos con
+   * cuánto se ha DESPLAZADO su punto medio. Gana el que vaya por delante. Al
+   * decidir se vuelve a anclar, así que el modo elegido arranca desde cero y la
+   * cámara no pega un salto con el recorrido de la fase de decisión.
+   *
+   * Dentro de cada modo se trabaja en LAZO CERRADO contra ese ancla, no con
+   * deltas acumulados: el zoom es la razón de distancias respecto a la
+   * separación anclada, y la cámara se despeja para volver a poner el punto de
+   * contenido anclado bajo el punto de pantalla que le toca. Unos dedos
+   * temblorosos no acumulan deriva.
    *
    * Sólo horizontal: el desplazamiento vertical del carril de pistas es del
    * gesto de un dedo. Moverlo también aquí duplicaba el recorrido cuando el
@@ -513,21 +544,34 @@ export class InputManager {
     }
 
     const state = this.options.getState();
+
+    if (gesture.mode === "undecided") {
+      const spread = Math.abs(sample.distance - gesture.startDistance);
+      const travel = Math.abs(sample.midClientX - gesture.startMidClientX);
+      if (Math.max(spread, travel) < GESTURE_DECISION_PX) {
+        return;
+      }
+      gesture.mode = state.canZoom && spread > travel ? "zoom" : "pan";
+      Object.assign(gesture, this.anchorFrom(sample));
+      return;
+    }
+
     const bounds = this.container.getBoundingClientRect();
     const midLocalX = this.localXFromClientX(sample.midClientX, bounds);
 
     let zoomNow = state.zoomLevel;
-    if (state.canZoom) {
+    if (gesture.mode === "zoom") {
       const targetZoom = Math.max(
         0.01,
-        gesture.originZoom *
-          zoomFactorFromScale(sample.distance / gesture.startDistance),
+        (gesture.originZoom * sample.distance) / gesture.startDistance,
       );
-      // Dentro de la zona muerta el zoom no cambia: previsualizarlo igualmente
-      // repetiría por cuadro todo el recálculo de cámara y reloj para dejar el
-      // mismo número.
+      // Sin cambio real de zoom no se previsualiza: repetiría por cuadro todo
+      // el recálculo de cámara y reloj para dejar el mismo número.
       if (Math.abs(targetZoom - zoomNow) > 1e-4) {
-        const view = this.options.onPreviewZoom(targetZoom, midLocalX);
+        const view = this.options.onPreviewZoom(
+          targetZoom,
+          gesture.originMidLocalX,
+        );
         if (view) {
           zoomNow = view.zoomLevel;
           this.scheduleZoomCommit(view);
@@ -535,8 +579,13 @@ export class InputManager {
       }
     }
 
+    // En zoom la cámara se resuelve contra el punto medio ANCLADO, así que la
+    // deriva lateral de los dedos no arrastra el material de paso; al desplazar
+    // se resuelve contra el punto medio actual, que es justo lo contrario.
+    const anchorLocalX =
+      gesture.mode === "zoom" ? gesture.originMidLocalX : midLocalX;
     const nextCameraX = this.options.onPreviewCameraX(
-      gesture.originContentUnits * zoomNow - midLocalX,
+      gesture.originContentUnits * zoomNow - anchorLocalX,
     );
     this.schedulePanCommit(nextCameraX);
   }

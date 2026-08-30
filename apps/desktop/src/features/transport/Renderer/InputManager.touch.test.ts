@@ -5,11 +5,13 @@ import { InputManager } from "./InputManager";
 /**
  * Gesto de dos dedos del timeline (móvil).
  *
- * Lo que se comprueba aquí no es "el zoom cambia", sino las tres propiedades por
- * las que el gesto se sentía tosco en el teléfono:
+ * Lo que se comprueba aquí no es "el zoom cambia", sino las propiedades por las
+ * que el gesto se sentía tosco en el teléfono:
  *
- *  1. el material se queda pegado a los dedos (lazo cerrado contra el origen),
- *  2. un desplazamiento a dos dedos no hace micro-zoom (zona muerta continua),
+ *  1. un gesto o desplaza o hace zoom, nunca los dos — mezclarlos hacía que
+ *     mover en horizontal hiciera zoom por el camino;
+ *  2. el material se queda pegado a los dedos (lazo cerrado contra el ancla), y
+ *     unos dedos temblorosos no acumulan deriva;
  *  3. el arrastre de un dedo que ya estaba en vuelo se CANCELA en vez de seguir
  *     peleando con la cámara.
  */
@@ -26,15 +28,6 @@ function touch(identifier: number, { x, y }: Vec) {
  * `preventDefault`, así que un Event normal con esa propiedad basta. */
 function touchEvent(type: string, touches: Touch[]) {
   const event = new Event(type, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "targetTouches", { value: touches });
-  Object.defineProperty(event, "touches", { value: touches });
-  return event;
-}
-
-/** Un `touchmove` que el navegador ya no deja cancelar: ha decidido desplazar
- * el carril de pistas él mismo (`touch-action: pan-y`). */
-function uncancelableTouchMove(touches: Touch[]) {
-  const event = new Event("touchmove", { bubbles: true, cancelable: false });
   Object.defineProperty(event, "targetTouches", { value: touches });
   Object.defineProperty(event, "touches", { value: touches });
   return event;
@@ -114,73 +107,88 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+
+/** touchstart con los dos dedos donde se indique. */
+function start(container: HTMLElement, x1: number, x2: number, y = 200) {
+  container.dispatchEvent(
+    touchEvent("touchstart", [touch(1, { x: x1, y }), touch(2, { x: x2, y })]),
+  );
+}
+
+function move(container: HTMLElement, x1: number, x2: number, y = 200) {
+  container.dispatchEvent(
+    touchEvent("touchmove", [touch(1, { x: x1, y }), touch(2, { x: x2, y })]),
+  );
+}
+
 describe("InputManager: gesto de dos dedos", () => {
-  it("mantiene el contenido pegado al punto medio al hacer pinza", () => {
+  // El gesto decide UNA vez qué está haciendo y se queda con ello. Mezclar los
+  // dos —aunque el zoom llevara zona muerta— era lo que hacía que mover en
+  // horizontal hiciera zoom por el camino: dos dedos que recorren la pantalla
+  // nunca mantienen su separación.
+  it("no hace nada hasta que el gesto se decide", () => {
     const { container, state } = setup();
 
-    // Dedos a 300 y 500: punto medio en 400.
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
+    start(container, 300, 500);
+    // 6 px de recorrido: por debajo del umbral de decisión.
+    move(container, 306, 506);
+
+    expect(state.cameraX).toBe(0);
+    expect(state.zoomLevel).toBe(1);
+  });
+
+  it("un desplazamiento largo no hace zoom aunque los dedos deriven", () => {
+    const { container, state } = setup();
+
+    start(container, 300, 500);
+    // Decide: el punto medio recorre 100 px y la separación no cambia.
+    move(container, 200, 400);
+    // Y ahora los dedos derivan un 25% mientras se sigue desplazando. Antes
+    // esto era zoom: la zona muerta sólo descontaba un 3%.
+    move(container, 50, 300);
+
+    expect(state.zoomLevel).toBe(1);
+    expect(state.cameraX).toBeGreaterThan(0);
+  });
+
+  it("una pinza no arrastra el material aunque los dedos deriven", () => {
+    const { container, state } = setup();
+
+    start(container, 300, 500);
+    // Decide zoom: la separación crece 100 px y el punto medio no se mueve.
+    move(container, 250, 550);
     const anchored = contentUnitsAt(state, 400);
 
-    // Se separan a 200 y 600 (x2) sin mover el punto medio.
-    container.dispatchEvent(
-      touchEvent("touchmove", [touch(1, { x: 200, y: 200 }), touch(2, { x: 600, y: 200 })]),
-    );
+    // Se sigue separando Y el punto medio deriva 60 px a la izquierda.
+    move(container, 130, 550);
 
-    expect(state.zoomLevel).toBeGreaterThan(1.8);
+    expect(state.zoomLevel).toBeGreaterThan(1.1);
+    // El material bajo el punto medio ANCLADO sigue donde estaba: la deriva no
+    // se convirtió en desplazamiento.
     expect(contentUnitsAt(state, 400)).toBeCloseTo(anchored, 6);
   });
 
-  it("sigue anclado cuando la pinza se mueve a la vez", () => {
+  it("mantiene el contenido pegado al punto medio al hacer pinza", () => {
     const { container, state } = setup();
 
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
+    start(container, 300, 500);
     const anchored = contentUnitsAt(state, 400);
+    move(container, 250, 550); // decide zoom y re-ancla
+    move(container, 100, 700); // separación x2 respecto al ancla
 
-    // Se separan a x2 Y el punto medio se desplaza de 400 a 250.
-    container.dispatchEvent(
-      touchEvent("touchmove", [touch(1, { x: 50, y: 200 }), touch(2, { x: 450, y: 200 })]),
-    );
-
-    // El material que estaba bajo 400 tiene que estar ahora bajo 250: es lo que
-    // la suma de deltas incrementales no conseguía (se estorbaban).
-    expect(contentUnitsAt(state, 250)).toBeCloseTo(anchored, 6);
+    expect(state.zoomLevel).toBeGreaterThan(1.9);
+    expect(contentUnitsAt(state, 400)).toBeCloseTo(anchored, 6);
   });
 
-  it("no hace micro-zoom durante un desplazamiento a dos dedos", () => {
+  it("desplaza siguiendo el punto medio de los dedos", () => {
     const { container, state } = setup();
 
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
-
-    // Desplazamiento de 100px con los dedos temblando un 1% (198 -> 202px).
-    container.dispatchEvent(
-      touchEvent("touchmove", [touch(1, { x: 201, y: 200 }), touch(2, { x: 399, y: 200 })]),
-    );
+    start(container, 300, 500);
+    move(container, 250, 450); // decide pan (50 px de recorrido)
+    move(container, 150, 350); // 100 px mas
 
     expect(state.zoomLevel).toBe(1);
     expect(state.cameraX).toBeCloseTo(100, 6);
-  });
-
-  it("aplica el zoom de forma continua al salir de la zona muerta", () => {
-    const { container, state } = setup();
-
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
-    // Justo por encima del 3% de zona muerta: el zoom debe arrancar desde ~1,
-    // no saltar de golpe al 3% acumulado.
-    container.dispatchEvent(
-      touchEvent("touchmove", [touch(1, { x: 296.9, y: 200 }), touch(2, { x: 503.1, y: 200 })]),
-    );
-
-    expect(state.zoomLevel).toBeGreaterThan(1);
-    expect(state.zoomLevel).toBeLessThan(1.005);
   });
 
   it("cancela el arrastre de un dedo que estaba en vuelo", () => {
@@ -196,9 +204,7 @@ describe("InputManager: gesto de dos dedos", () => {
     child.dispatchEvent(
       new PointerEvent("pointerdown", { pointerId: 7, pointerType: "touch", bubbles: true }),
     );
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
+    start(container, 300, 500);
 
     expect(cancelled).toContain(7);
   });
@@ -216,9 +222,7 @@ describe("InputManager: gesto de dos dedos", () => {
     });
     container.dispatchEvent(event);
 
-    container.dispatchEvent(
-      touchEvent("touchmove", [touch(1, { x: 100, y: 200 }), touch(2, { x: 300, y: 200 })]),
-    );
+    move(container, 100, 300);
 
     expect(state.cameraX).toBe(0);
     expect(state.zoomLevel).toBe(1);
@@ -227,12 +231,9 @@ describe("InputManager: gesto de dos dedos", () => {
   it("confirma cámara y zoom al levantar los dedos, sin esperar al antirrebote", () => {
     const { container, commits } = setup();
 
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
-    container.dispatchEvent(
-      touchEvent("touchmove", [touch(1, { x: 200, y: 200 }), touch(2, { x: 600, y: 200 })]),
-    );
+    start(container, 300, 500);
+    move(container, 250, 550); // decide zoom
+    move(container, 100, 700);
     container.dispatchEvent(touchEvent("touchend", []));
 
     expect(commits.zoom).toHaveLength(1);
@@ -245,15 +246,9 @@ describe("InputManager: gesto de dos dedos", () => {
   it("no desplaza en vertical: eso es del gesto de un dedo", () => {
     const { container, verticalScroll } = setup();
 
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
-    container.dispatchEvent(
-      touchEvent("touchmove", [
-        touch(1, { x: 300, y: 120 }),
-        touch(2, { x: 500, y: 120 }),
-      ]),
-    );
+    start(container, 300, 500);
+    move(container, 250, 450, 200); // decide pan
+    move(container, 150, 350, 80); // y ahora tambien sube 120 px
 
     expect(verticalScroll).toEqual([]);
   });
@@ -269,38 +264,40 @@ describe("InputManager: gesto de dos dedos", () => {
 
     const a = touch(1, { x: 300, y: 200 });
     const b = touch(2, { x: 500, y: 200 });
-    const start = new Event("touchstart", { bubbles: true, cancelable: true });
-    Object.defineProperty(start, "targetTouches", { value: [a, b] });
-    Object.defineProperty(start, "touches", { value: [a, b] });
-    container.dispatchEvent(start);
+    const begin = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(begin, "targetTouches", { value: [a, b] });
+    Object.defineProperty(begin, "touches", { value: [a, b] });
+    container.dispatchEvent(begin);
 
     // El repintado se lleva el elemento: `targetTouches` se queda vacío.
     child.remove();
-    const move = new Event("touchmove", { bubbles: true, cancelable: true });
-    const movedA = touch(1, { x: 200, y: 200 });
-    const movedB = touch(2, { x: 600, y: 200 });
-    Object.defineProperty(move, "targetTouches", { value: [] });
-    Object.defineProperty(move, "touches", { value: [movedA, movedB] });
-    container.dispatchEvent(move);
+    for (const [x1, x2] of [
+      [250, 550],
+      [100, 700],
+    ]) {
+      const event = new Event("touchmove", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "targetTouches", { value: [] });
+      Object.defineProperty(event, "touches", {
+        value: [touch(1, { x: x1, y: 200 }), touch(2, { x: x2, y: 200 })],
+      });
+      container.dispatchEvent(event);
+    }
 
-    expect(state.zoomLevel).toBeGreaterThan(1.8);
+    expect(state.zoomLevel).toBeGreaterThan(1.9);
   });
 
   it("re-siembra el ancla si cambia el par de dedos, sin saltar", () => {
     const { container, state } = setup();
 
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
-    container.dispatchEvent(
-      touchEvent("touchmove", [touch(1, { x: 200, y: 200 }), touch(2, { x: 600, y: 200 })]),
-    );
+    start(container, 300, 500);
+    move(container, 250, 550);
+    move(container, 100, 700);
     const zoomBefore = state.zoomLevel;
     const cameraBefore = state.cameraX;
 
     // Entra un tercer dedo y sale el primero: el par pasa a ser (2, 3).
     container.dispatchEvent(
-      touchEvent("touchmove", [touch(2, { x: 600, y: 200 }), touch(3, { x: 700, y: 200 })]),
+      touchEvent("touchmove", [touch(2, { x: 700, y: 200 }), touch(3, { x: 750, y: 200 })]),
     );
 
     expect(state.zoomLevel).toBe(zoomBefore);

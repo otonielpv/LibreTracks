@@ -4,6 +4,23 @@
 <dict>
   <key>ITSAppUsesNonExemptEncryption</key>
   <false/>
+  <!-- Sin esto iOS suspende la app en cuanto se bloquea la pantalla o el
+       usuario cambia de app, y la reproduccion se corta a mitad de canto. Es el
+       equivalente al servicio en primer plano que Android ya declara
+       (AudioPlaybackService + FOREGROUND_SERVICE_MEDIA_PLAYBACK): una app de
+       playback en directo tiene que seguir sonando con el movil en el bolsillo.
+       La categoria de sesion Playback, que ya se activa en
+       native/.../ios_audio_session.mm, es la otra mitad del requisito: iOS
+       exige AMBAS para conceder audio en segundo plano.
+
+       OJO: esto no cubre las INTERRUPCIONES (una llamada entrante). Ahi iOS
+       desactiva la sesion y hace falta observar
+       AVAudioSessionInterruptionNotification para volver a activarla al colgar;
+       eso sigue pendiente. -->
+  <key>UIBackgroundModes</key>
+  <array>
+    <string>audio</string>
+  </array>
   <key>UISupportedInterfaceOrientations</key>
   <array>
     <string>UIInterfaceOrientationLandscapeLeft</string>
