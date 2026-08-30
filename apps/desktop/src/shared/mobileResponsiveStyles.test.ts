@@ -136,6 +136,26 @@ describe("contrato responsive móvil", () => {
     );
   });
 
+  it("compacta la configuracion en iOS y Android sin afectar los otros modales", () => {
+    const modal = declarationsFor(".lt-mobile .lt-settings-modal--fixed");
+    const title = declarationsFor(
+      ".lt-mobile .lt-settings-modal--fixed .lt-settings-modal-header h2",
+    );
+    const field = declarationsFor(
+      ".lt-mobile .lt-settings-modal--fixed .lt-settings-field",
+    );
+    const select = declarationsFor(
+      ".lt-mobile .lt-settings-modal--fixed .lt-settings-field select",
+    );
+
+    expect(modal).toContain("100dvh");
+    expect(modal).toContain("padding: 0.7rem");
+    expect(title).toContain("font-size: 1.1rem");
+    expect(field).toContain("padding: 0.58rem");
+    expect(select).toContain("font-size: 0.8rem");
+    expect(styles).not.toContain(".lt-mobile .lt-settings-modal {");
+  });
+
   it("adapta el tutorial a teléfonos, apaisado y tablets", () => {
     const mobileCard = declarationsFor(".lt-mobile .lt-tour-card");
     expect(mobileCard).toContain("clamp(18rem, 37.5vw, 18.75rem)");

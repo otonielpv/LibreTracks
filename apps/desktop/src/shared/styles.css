@@ -9690,6 +9690,145 @@ html.lt-ios body {
   padding-left: max(1rem, env(safe-area-inset-left, 0px));
 }
 
+/* Settings is a dense desktop surface. On both mobile targets keep the same
+   information hierarchy, but spend fewer pixels on headings, cards and gaps.
+   The --fixed modifier belongs only to the main Settings panel, so the export,
+   automation and other task-focused dialogs retain their touch sizing. */
+.lt-mobile .lt-modal-backdrop {
+  padding-top: max(0.5rem, var(--lt-safe-area-top));
+  padding-right: max(0.5rem, var(--lt-safe-area-right));
+  padding-bottom: max(0.5rem, var(--lt-safe-area-bottom));
+  padding-left: max(0.5rem, var(--lt-safe-area-left));
+}
+
+.lt-mobile .lt-settings-modal--fixed {
+  width: min(44rem, 100%);
+  height: calc(100vh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem);
+  height: min(34rem, calc(100dvh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem));
+  max-height: calc(100dvh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem);
+  gap: 0.55rem;
+  padding: 0.7rem;
+  overflow: hidden;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-modal-header {
+  flex-direction: row;
+  gap: 0.6rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-modal-header h2 {
+  margin: 0.12rem 0 0.18rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-modal-header p {
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-modal-eyebrow {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-modal-close {
+  flex: 0 0 auto;
+  width: auto;
+  gap: 0.25rem;
+  padding: 0.42rem 0.58rem;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-modal-close .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-modal-body,
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tabs,
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tab-panels,
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tab-panel,
+.lt-mobile .lt-settings-modal--fixed .lt-settings-section,
+.lt-mobile .lt-settings-modal--fixed .lt-settings-section-grid {
+  gap: 0.55rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tablist {
+  flex-basis: 7.5rem;
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tab-button {
+  min-height: 2.1rem;
+  padding: 0.48rem 0.55rem;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-field {
+  gap: 0.38rem;
+  padding: 0.58rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-toggle {
+  gap: 0.38rem;
+  padding: 0.58rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-field-label,
+.lt-mobile .lt-settings-modal--fixed .lt-settings-toggle-copy strong {
+  font-size: 0.78rem;
+  line-height: 1.15;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-field select {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  line-height: 1.15;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-field small,
+.lt-mobile .lt-settings-modal--fixed .lt-settings-toggle-copy small {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-inline-actions {
+  gap: 0.4rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-inline-actions button {
+  padding: 0.48rem 0.68rem;
+  font-size: 0.72rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-icon-button {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-field-control-row {
+  grid-template-columns: minmax(0, 1fr) 2.25rem;
+  gap: 0.4rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-midi-learn-panel {
+  gap: 0.55rem;
+  padding: 0.6rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-midi-learn-feedback,
+.lt-mobile .lt-settings-modal--fixed .lt-midi-learn-live {
+  padding: 0.55rem 0.6rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-midi-learn-table th,
+.lt-mobile .lt-settings-modal--fixed .lt-midi-learn-table td {
+  padding: 0.48rem 0.58rem;
+}
+
 /* Portrait and tall split-screen windows have more vertical than horizontal
    room: navigation becomes a bottom bar and side panels become overlays. */
 @media (orientation: portrait) {
