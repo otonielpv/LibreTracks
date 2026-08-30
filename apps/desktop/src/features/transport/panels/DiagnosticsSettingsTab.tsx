@@ -83,27 +83,36 @@ export function DiagnosticsSettingsTab() {
     })();
   };
 
-  const handleClearEngineLog = () => {
+  const handleClearLog = (kind: DiagnosticsLogKind) => {
     void (async () => {
       const confirmed = await confirmDialog(
-        t("transport.settingsModal.diagnosticsClearConfirm", {
-          defaultValue:
-            "Delete the entire audio engine log? A new file will start with the next diagnostics.",
-        }),
+        kind === "engine"
+          ? t("transport.settingsModal.diagnosticsClearConfirm", {
+              defaultValue:
+                "Delete the entire audio engine log? A new file will start with the next diagnostics.",
+            })
+          : t("transport.settingsModal.diagnosticsErrorClearConfirm", {
+              defaultValue:
+                "Delete the entire error log? New errors will be recorded normally.",
+            }),
       );
       if (!confirmed) return;
 
       setIsLoadingLog(true);
       try {
-        await clearDiagnosticsLog("engine");
-        if (openLog === "engine") {
-          setLogView(await readDiagnosticsLog("engine"));
+        await clearDiagnosticsLog(kind);
+        if (openLog === kind) {
+          setLogView(await readDiagnosticsLog(kind));
         }
         setStatus(
           <small className="lt-update-check-status lt-update-check-status--new">
-            {t("transport.settingsModal.diagnosticsCleared", {
-              defaultValue: "Audio engine log deleted.",
-            })}
+            {kind === "engine"
+              ? t("transport.settingsModal.diagnosticsCleared", {
+                  defaultValue: "Audio engine log deleted.",
+                })
+              : t("transport.settingsModal.diagnosticsErrorCleared", {
+                  defaultValue: "Error log deleted.",
+                })}
           </small>,
         );
       } catch (error) {
@@ -214,6 +223,16 @@ export function DiagnosticsSettingsTab() {
               defaultValue: "Copy error log",
             })}
           </button>
+          <button
+            type="button"
+            className="lt-secondary-button"
+            disabled={isLoadingLog}
+            onClick={() => handleClearLog("errors")}
+          >
+            {t("transport.settingsModal.diagnosticsClear", {
+              defaultValue: "Delete log",
+            })}
+          </button>
         </div>
       </div>
 
@@ -257,7 +276,7 @@ export function DiagnosticsSettingsTab() {
             type="button"
             className="lt-secondary-button"
             disabled={isLoadingLog}
-            onClick={handleClearEngineLog}
+            onClick={() => handleClearLog("engine")}
           >
             {t("transport.settingsModal.diagnosticsClear", {
               defaultValue: "Delete log",

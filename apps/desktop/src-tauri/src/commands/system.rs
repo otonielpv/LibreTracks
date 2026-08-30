@@ -569,6 +569,14 @@ pub fn append_frontend_error(message: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Refresh the last-known UI breadcrumb in native memory. Heartbeats do not
+/// write to disk; a native failure signal promotes the latest one to errors.log.
+#[tauri::command(async)]
+pub fn report_ui_diagnostic_state(state: String) -> Result<(), String> {
+    crate::infra::ui_diagnostics::update_latest(state);
+    Ok(())
+}
+
 /// Reveal the error log in the OS file manager so the user can attach it to a
 /// bug report.
 #[tauri::command]
@@ -680,11 +688,14 @@ pub fn read_diagnostics_log(
     })
 }
 
-/// Remove the accumulated contents of a diagnostics log. The audio engine
-/// opens its file in append mode for each individual entry, so deleting it is
-/// safe while the engine is running; the next entry simply creates a new file.
+/// Remove the accumulated contents of a diagnostics log. The engine log opens
+/// on every entry and can be deleted. The normal logger keeps a descriptor open
+/// and therefore truncates under its own lock.
 #[tauri::command(async)]
 pub fn clear_diagnostics_log(kind: String) -> Result<(), String> {
+    if kind == "errors" {
+        return crate::infra::error_log::clear();
+    }
     let path = diagnostics_log_path(&kind)?;
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),

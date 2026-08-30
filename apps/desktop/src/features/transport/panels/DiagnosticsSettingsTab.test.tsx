@@ -87,7 +87,7 @@ describe("DiagnosticsSettingsTab", () => {
     clearDiagnosticsLog.mockResolvedValue(undefined);
 
     render(<DiagnosticsSettingsTab />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete log" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete log" })[1]);
 
     await waitFor(() => {
       expect(screen.getByText("Audio engine log deleted.")).toBeTruthy();
@@ -96,11 +96,25 @@ describe("DiagnosticsSettingsTab", () => {
     expect(clearDiagnosticsLog).toHaveBeenCalledWith("engine");
   });
 
+  it("deletes the normal error log independently from the engine log", async () => {
+    confirmDialog.mockResolvedValue(true);
+    clearDiagnosticsLog.mockResolvedValue(undefined);
+
+    render(<DiagnosticsSettingsTab />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete log" })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Error log deleted.")).toBeTruthy();
+    });
+    expect(clearDiagnosticsLog).toHaveBeenCalledWith("errors");
+    expect(clearDiagnosticsLog).not.toHaveBeenCalledWith("engine");
+  });
+
   it("keeps the engine log when deletion is cancelled", async () => {
     confirmDialog.mockResolvedValue(false);
 
     render(<DiagnosticsSettingsTab />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete log" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete log" })[1]);
 
     await waitFor(() => expect(confirmDialog).toHaveBeenCalledOnce());
     expect(clearDiagnosticsLog).not.toHaveBeenCalled();

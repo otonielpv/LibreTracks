@@ -180,6 +180,9 @@ const es = {
       diagnosticsClearConfirm:
         "¿Eliminar todo el registro del motor de audio? Se empezará un archivo nuevo con los próximos diagnósticos.",
       diagnosticsCleared: "Registro del motor de audio eliminado.",
+      diagnosticsErrorClearConfirm:
+        "¿Eliminar todo el registro de errores? Los errores nuevos se seguirán registrando normalmente.",
+      diagnosticsErrorCleared: "Registro de errores eliminado.",
       diagnosticsRefresh: "Actualizar",
       diagnosticsLogSize: "{{size}} en disco",
       diagnosticsTailOnly: "se muestra el final del archivo",

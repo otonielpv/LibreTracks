@@ -442,6 +442,7 @@ import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useDragListeners } from "./hooks/useDragListeners";
+import { usePlaybackUiDiagnostics } from "./hooks/usePlaybackUiDiagnostics";
 import { useSongViewLoader } from "./hooks/useSongViewLoader";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useSongStore } from "./songStore";
@@ -5655,6 +5656,20 @@ export function TransportPanelContent() {
     runAction,
     applyPlaybackSnapshot,
     optimisticallyAppliedRevisionsRef,
+  });
+
+  // Native iOS keeps this last-known state after WebContent dies, so a black
+  // UI can leave evidence in errors.log even though JavaScript is already gone.
+  usePlaybackUiDiagnostics({
+    playbackState,
+    followPlayheadEnabled,
+    viewMode,
+    cameraXRef,
+    positionSecondsRef: displayPositionSecondsRef,
+    pixelsPerSecondRef: livePixelsPerSecondRef,
+    viewportWidthRef: laneViewportWidthRef,
+    visibleTrackCount: visibleTracks.length,
+    trackSceneHeight: trackRowLayout.totalHeight,
   });
 
   // Global mousemove/mouseup listeners for clip + track drag. HOT PATH.

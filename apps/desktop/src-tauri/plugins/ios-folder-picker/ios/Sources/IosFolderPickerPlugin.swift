@@ -1,7 +1,17 @@
 import Foundation
+import ObjectiveC.runtime
 import Tauri
 import UIKit
 import UniformTypeIdentifiers
+import WebKit
+
+// Rust owns the normal application error log. Calling through these tiny C
+// hooks avoids a second Swift writer racing its rotation/file lock.
+@_silgen_name("libretracks_log_ios_webcontent_terminated")
+private func logWebContentTermination()
+
+@_silgen_name("libretracks_log_ios_memory_warning")
+private func logIosMemoryWarning()
 
 fileprivate enum FolderPickerEvent {
   case selected(URL)
@@ -41,11 +51,60 @@ final class IosFolderPickerPlugin: Plugin {
   private var pickerDelegate: FolderPickerDelegate?
   private var onResult: ((FolderPickerEvent) -> Void)?
   private var retainSelectedURL = true
+  private var memoryWarningObserver: NSObjectProtocol?
+  private var instrumentedNavigationDelegateClasses = Set<ObjectIdentifier>()
 
   override init() {
     super.init()
     diagnostic("plugin initialized")
     restoreBookmarks()
+  }
+
+  override func load(webview: WKWebView) {
+    super.load(webview: webview)
+    installWebContentTerminationLog(on: webview)
+    if memoryWarningObserver == nil {
+      memoryWarningObserver = NotificationCenter.default.addObserver(
+        forName: UIApplication.didReceiveMemoryWarningNotification,
+        object: nil,
+        queue: .main
+      ) { _ in
+        logIosMemoryWarning()
+      }
+    }
+  }
+
+  /// Wry already implements WKNavigationDelegate and receives
+  /// webViewWebContentProcessDidTerminate, but Tauri does not expose that hook
+  /// to an app. Wrap Wry's implementation in place: log first, then call the
+  /// original IMP so framework behaviour remains byte-for-byte intact.
+  private func installWebContentTerminationLog(on webview: WKWebView) {
+    guard let delegate = webview.navigationDelegate else {
+      diagnostic("cannot instrument WebContent termination: no navigation delegate")
+      return
+    }
+    let delegateClass: AnyClass = type(of: delegate)
+    let classId = ObjectIdentifier(delegateClass)
+    if instrumentedNavigationDelegateClasses.contains(classId) {
+      return
+    }
+    let selector = NSSelectorFromString("webViewWebContentProcessDidTerminate:")
+    guard let method = class_getInstanceMethod(delegateClass, selector) else {
+      diagnostic("cannot instrument WebContent termination: delegate has no callback")
+      return
+    }
+
+    let originalImplementation = method_getImplementation(method)
+    typealias OriginalCallback = @convention(c) (AnyObject, Selector, WKWebView) -> Void
+    let original = unsafeBitCast(originalImplementation, to: OriginalCallback.self)
+    let replacement: @convention(block) (AnyObject, WKWebView) -> Void = {
+      receiver, terminatedWebview in
+      logWebContentTermination()
+      original(receiver, selector, terminatedWebview)
+    }
+    method_setImplementation(method, imp_implementationWithBlock(replacement))
+    instrumentedNavigationDelegateClasses.insert(classId)
+    diagnostic("installed native WebContent termination logger")
   }
 
   @objc public func pickFolder(_ invoke: Invoke) throws {

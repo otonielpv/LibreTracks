@@ -6,4 +6,5 @@
 pub mod error;
 pub mod error_log;
 pub mod settings;
+pub mod ui_diagnostics;
 pub mod waveform_diag;

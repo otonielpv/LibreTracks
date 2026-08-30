@@ -56,6 +56,41 @@ pub fn errors_path() -> Option<PathBuf> {
     LOGGER.get().map(|logger| logger.path.clone())
 }
 
+/// Clear the active log without unlinking the file behind the logger's open
+/// descriptor. Deleting it directly is incorrect on Unix/iOS: later writes
+/// keep going to the unlinked inode until the app restarts.
+pub fn clear() -> Result<(), String> {
+    let logger = LOGGER
+        .get()
+        .ok_or_else(|| "error logger not initialized".to_string())?;
+    let mut guard = match logger.file.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    if guard.is_none() {
+        fs::create_dir_all(&logger.dir).map_err(|error| error.to_string())?;
+        *guard = Some(
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&logger.path)
+                .map_err(|error| error.to_string())?,
+        );
+    }
+    let file = guard
+        .as_mut()
+        .ok_or_else(|| "error log is unavailable".to_string())?;
+    file.set_len(0).map_err(|error| error.to_string())?;
+    file.flush().map_err(|error| error.to_string())?;
+
+    match fs::remove_file(logger.dir.join("errors.log.1")) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// Append one error line. Thread-safe and panic-free — callable from any
 /// thread, including the panic hook. A no-op until `init` runs or if the log
 /// dir is not writable.

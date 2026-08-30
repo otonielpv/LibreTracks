@@ -255,6 +255,7 @@ pub fn run() {
             commands::system::append_picker_diagnostic,
             commands::system::read_error_log,
             commands::system::append_frontend_error,
+            commands::system::report_ui_diagnostic_state,
             commands::system::reveal_error_log,
             commands::system::read_diagnostics_log,
             commands::system::clear_diagnostics_log,

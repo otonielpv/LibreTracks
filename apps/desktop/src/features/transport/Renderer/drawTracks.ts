@@ -19,6 +19,12 @@ import {
 
 const waveformTileCache = new WaveformTileCache();
 
+/** Read-only cache gauge for native crash breadcrumbs. Unlike the PerfHud
+ * metric, this remains available when performance recording is switched off. */
+export function getWaveformTileCacheDiagnostics() {
+  return waveformTileCache.stats();
+}
+
 /**
  * Índices derivados del `song`, calculados una vez por identidad de canción en
  * vez de una vez por carril y por frame.

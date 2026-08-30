@@ -1675,6 +1675,24 @@ export async function setMetronomeVolumeRealtime(volume: number): Promise<void> 
   await invokeCommand("set_metronome_volume_realtime", { volume });
 }
 
+/**
+ * Refresh native memory with a compact UI breadcrumb. This bypasses the normal
+ * invoke wrapper so a failed diagnostic heartbeat cannot recursively create an
+ * error or interfere with playback.
+ */
+export async function reportUiDiagnosticState(
+  state: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("report_ui_diagnostic_state", {
+      state: JSON.stringify(state),
+    });
+  } catch {
+    // Diagnostics must never affect the timeline.
+  }
+}
+
 export async function setVoiceGuideVolumeRealtime(volume: number): Promise<void> {
   await invokeCommand("set_voice_guide_volume_realtime", { volume });
 }
