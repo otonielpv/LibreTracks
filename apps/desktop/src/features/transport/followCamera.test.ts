@@ -2,60 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   FOLLOW_CAMERA_LOCK_PX,
-  IOS_FOLLOW_CAMERA_FRAME_INTERVAL_MS,
-  createFollowCameraFrameGate,
   resolveFollowCameraEaseFactor,
-  resolveFollowFrameDeltaSeconds,
   resolveFollowCameraX,
+  syncTimelineScrollElement,
 } from "./followCamera";
-
-describe("resolveFollowFrameDeltaSeconds", () => {
-  it("lets the first follow frame through immediately", () => {
-    expect(
-      resolveFollowFrameDeltaSeconds({
-        nowMs: 100,
-        lastFollowFrameMs: null,
-        minimumIntervalMs: IOS_FOLLOW_CAMERA_FRAME_INTERVAL_MS,
-      }),
-    ).toBeCloseTo(1 / 60, 6);
-  });
-
-  it("caps iOS camera writes at roughly 30fps", () => {
-    expect(
-      resolveFollowFrameDeltaSeconds({
-        nowMs: 116.7,
-        lastFollowFrameMs: 100,
-        minimumIntervalMs: IOS_FOLLOW_CAMERA_FRAME_INTERVAL_MS,
-      }),
-    ).toBeNull();
-    expect(
-      resolveFollowFrameDeltaSeconds({
-        nowMs: 133.2,
-        lastFollowFrameMs: 100,
-        minimumIntervalMs: IOS_FOLLOW_CAMERA_FRAME_INTERVAL_MS,
-      }),
-    ).toBeCloseTo(0.0332, 6);
-  });
-
-  it("does not throttle platforms with a zero interval", () => {
-    expect(
-      resolveFollowFrameDeltaSeconds({
-        nowMs: 116,
-        lastFollowFrameMs: 100,
-        minimumIntervalMs: 0,
-      }),
-    ).toBeCloseTo(0.016, 6);
-  });
-});
-
-describe("createFollowCameraFrameGate", () => {
-  it("retains the last accepted iOS frame timestamp", () => {
-    const nextFrame = createFollowCameraFrameGate(true);
-    expect(nextFrame(100)).not.toBeNull();
-    expect(nextFrame(116.7)).toBeNull();
-    expect(nextFrame(133.2)).toBeCloseTo(0.0332, 6);
-  });
-});
 
 describe("resolveFollowCameraEaseFactor", () => {
   it("uses the base smoothing at a 60fps frame delta", () => {
@@ -130,5 +80,19 @@ describe("resolveFollowCameraX", () => {
       if (next !== null) camera = next;
     }
     expect(camera).toBeCloseTo(1000, 6);
+  });
+});
+
+describe("syncTimelineScrollElement", () => {
+  it("updates scrollLeft when the camera moved materially", () => {
+    const element = { scrollLeft: 10 };
+    syncTimelineScrollElement(element, 25);
+    expect(element.scrollLeft).toBe(25);
+  });
+
+  it("avoids a redundant sub-pixel scroll write", () => {
+    const element = { scrollLeft: 10 };
+    syncTimelineScrollElement(element, 10.4);
+    expect(element.scrollLeft).toBe(10);
   });
 });

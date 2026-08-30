@@ -9,7 +9,6 @@ import {
   getWaveformTileCacheDiagnostics,
   releaseNonVisibleWaveformTiles,
 } from "../Renderer/drawTracks";
-import { IOS_FOLLOW_CAMERA_FPS } from "../followCamera";
 
 const HEARTBEAT_INTERVAL_MS = 5_000;
 const IOS_MEMORY_WARNING_EVENT = "libretracks:ios-memory-warning";
@@ -100,7 +99,7 @@ export function usePlaybackUiDiagnostics({
           playbackState === "playing" &&
           followPlayheadEnabled &&
           viewMode === "daw",
-        followCameraFpsCap: IOS_FOLLOW_CAMERA_FPS,
+        followCameraMode: "raf-no-store-debounce",
         playingForMs:
           playbackState === "playing" ? Date.now() - startedAt : 0,
         positionSeconds: positionSecondsRef.current,

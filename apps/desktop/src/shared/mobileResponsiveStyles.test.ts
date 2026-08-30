@@ -152,7 +152,7 @@ describe("contrato responsive móvil", () => {
     expect(modal).toContain("padding: 0.7rem");
     expect(title).toContain("font-size: 1.1rem");
     expect(field).toContain("padding: 0.58rem");
-    expect(select).toContain("font-size: 0.8rem");
+    expect(select).toContain("font-size: 0.74rem");
     expect(styles).not.toContain(".lt-mobile .lt-settings-modal {");
   });
 

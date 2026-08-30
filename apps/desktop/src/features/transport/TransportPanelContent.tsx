@@ -96,7 +96,6 @@ import {
   importStagedAudioFiles,
   importSongPackageFromPathWithProgress,
   importExternalProjectFromPathWithProgress,
-  isIOSApp,
   isMobileApp,
   isTauriApp,
   listenToMidiRawMessage,
@@ -370,7 +369,7 @@ import {
   resolveVisualClockResync,
   resolveVisualPositionAcrossVamp,
 } from "@libretracks/shared/playbackClock";
-import { createFollowCameraFrameGate, resolveFollowCameraX } from "./followCamera";
+import { resolveFollowCameraX, syncTimelineScrollElement } from "./followCamera";
 import {
   buildAudioRoutingOptions,
   buildMemoizedClipsByTrack,
@@ -4529,10 +4528,15 @@ export function TransportPanelContent() {
     }
 
     let animationFrameId = 0;
-    const nextFollowCameraFrame = createFollowCameraFrameGate(isIOSApp);
+    let lastFrameMs = performance.now();
 
     const tick = () => {
       const nowMs = performance.now();
+      // Real time since the previous frame, used to keep the follow-camera
+      // glide frame-rate independent. Clamp so a tab-switch stall or GC pause
+      // can't make the camera lurch on the next frame.
+      const frameDtSeconds = Math.min(0.1, (nowMs - lastFrameMs) / 1000);
+      lastFrameMs = nowMs;
 
       if (playheadDragRef.current) {
         animationFrameId = window.requestAnimationFrame(tick);
@@ -4548,10 +4552,7 @@ export function TransportPanelContent() {
       );
 
       syncLivePosition(nextPositionSeconds);
-      const followFrameDtSeconds = nextFollowCameraFrame(nowMs);
-      if (followFrameDtSeconds !== null) {
-        maybeFollowPlayhead(nextPositionSeconds, followFrameDtSeconds);
-      }
+      maybeFollowPlayhead(nextPositionSeconds, frameDtSeconds);
       animationFrameId = window.requestAnimationFrame(tick);
     };
 
@@ -4559,6 +4560,9 @@ export function TransportPanelContent() {
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
+      if (followPlayheadEnabledRef.current) {
+        setCameraX(cameraXRef.current);
+      }
     };
   }, [applyPlaybackSnapshot, playbackState]);
 
@@ -5019,6 +5023,8 @@ export function TransportPanelContent() {
       viewportWidth,
       syncPlayhead: false,
       commitToStore: false,
+      debounceStoreCommit: false,
+      syncScrollElement: false,
     });
   }
 
@@ -5032,6 +5038,7 @@ export function TransportPanelContent() {
       syncPlayhead?: boolean;
       commitToStore?: boolean;
       debounceStoreCommit?: boolean;
+      syncScrollElement?: boolean;
     },
   ) {
     const durationSeconds =
@@ -5074,15 +5081,9 @@ export function TransportPanelContent() {
 
       setCameraX(clampedCameraX);
     }
-    panelRef.current?.style.setProperty("--lt-camera-x", `${clampedCameraX}px`);
-
-    const shell = timelineShellRef.current;
-    if (shell && Math.abs(shell.scrollLeft - clampedCameraX) > 0.5) {
-      shell.scrollLeft = clampedCameraX;
+    if (options?.syncScrollElement !== false) {
+      syncTimelineScrollElement(timelineShellRef.current, clampedCameraX);
     }
-    // The custom horizontal scrollbar reads cameraXRef directly each frame, so
-    // it needs no imperative scrollLeft sync here.
-
     if (options?.syncPlayhead !== false) {
       syncLivePosition(
         playheadDragRef.current?.currentSeconds ??

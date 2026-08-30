@@ -30,49 +30,6 @@ export const FOLLOW_CAMERA_SMOOTHING = 0.22;
  */
 export const FOLLOW_CAMERA_LOCK_PX = 24;
 
-/** WKWebView repaints every visible timeline canvas whenever follow changes
- * cameraX. Capping only that camera write on iOS halves sustained GPU work;
- * the playhead clock and native audio continue at their normal cadence. */
-export const IOS_FOLLOW_CAMERA_FPS = 30;
-export const IOS_FOLLOW_CAMERA_FRAME_INTERVAL_MS =
-  1000 / IOS_FOLLOW_CAMERA_FPS;
-
-/** Return the elapsed time for the next follow-camera update, or null while a
- * platform-specific frame interval has not elapsed. */
-export function resolveFollowFrameDeltaSeconds(params: {
-  nowMs: number;
-  lastFollowFrameMs: number | null;
-  minimumIntervalMs: number;
-}): number | null {
-  const { nowMs, lastFollowFrameMs, minimumIntervalMs } = params;
-  if (lastFollowFrameMs === null) {
-    return 1 / 60;
-  }
-  const elapsedMs = Math.max(0, nowMs - lastFollowFrameMs);
-  // rAF timestamps commonly land a fraction below the nominal interval.
-  // Half a millisecond of tolerance prevents a 30fps gate becoming 20fps.
-  if (minimumIntervalMs > 0 && elapsedMs + 0.5 < minimumIntervalMs) {
-    return null;
-  }
-  return Math.min(0.1, elapsedMs / 1000);
-}
-
-/** Stateful frame gate kept outside TransportPanelContent's hot-path
- * monolith. The returned closure owns only its previous accepted timestamp. */
-export function createFollowCameraFrameGate(ios: boolean) {
-  let lastFollowFrameMs: number | null = null;
-  const minimumIntervalMs = ios ? IOS_FOLLOW_CAMERA_FRAME_INTERVAL_MS : 0;
-  return (nowMs: number) => {
-    const delta = resolveFollowFrameDeltaSeconds({
-      nowMs,
-      lastFollowFrameMs,
-      minimumIntervalMs,
-    });
-    if (delta !== null) lastFollowFrameMs = nowMs;
-    return delta;
-  };
-}
-
 /**
  * Frame-rate-compensated ease factor for the follow camera. The smoothing
  * constant is tuned for 60fps; scaling by the real frame delta keeps the same
@@ -118,4 +75,14 @@ export function resolveFollowCameraX(params: {
         distance * resolveFollowCameraEaseFactor(frameDtSeconds);
 
   return Math.abs(nextCameraX - currentCameraX) < 0.01 ? null : nextCameraX;
+}
+
+/** Keep manual pan/zoom's legacy scrollLeft contract without touching it at 60fps follow. */
+export function syncTimelineScrollElement(
+  element: { scrollLeft: number } | null,
+  cameraX: number,
+): void {
+  if (element && Math.abs(element.scrollLeft - cameraX) > 0.5) {
+    element.scrollLeft = cameraX;
+  }
 }
