@@ -792,13 +792,23 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     // name/channel mask makes JUCE reject perfectly valid route changes (built-
     // in speaker <-> headphones/USB). AVAudioSession above owns the policy;
     // let JUCE open the current system route with its native channel layout.
+    //
+    // The width is whatever the session just negotiated, NOT a hard-coded 2: a
+    // USB interface with four or eight outputs used to come up stereo, so its
+    // remaining outputs could not be reached at all — no separate click send,
+    // which is the point of a playback rig. `audioDeviceAboutToStart` reads the
+    // active channels back from the device and hands them to the render
+    // callback, so the routing follows on its own.
+    const int ios_output_channels = current_ios_output_channel_count();
     const auto t_setup = clk::now();
-    juce::String err = impl_->juce_manager.initialiseWithDefaultDevices(0, 2);
+    juce::String err =
+        impl_->juce_manager.initialiseWithDefaultDevices(0, ios_output_channels);
     const double setup_ms =
         std::chrono::duration<double, std::milli>(clk::now() - t_setup).count();
     device_debug_log(
-        "[LT_AUDIO_DEBUG] open_device iOS default route initialise_ms=%.1f err=\"%s\"\n",
-        setup_ms, err.isEmpty() ? "" : err.toRawUTF8());
+        "[LT_AUDIO_DEBUG] open_device iOS default route channels=%d "
+        "initialise_ms=%.1f err=\"%s\"\n",
+        ios_output_channels, setup_ms, err.isEmpty() ? "" : err.toRawUTF8());
     if (err.isNotEmpty()) {
         impl_->last_error = err.toStdString();
         return fail(Result<void>::err(impl_->last_error));

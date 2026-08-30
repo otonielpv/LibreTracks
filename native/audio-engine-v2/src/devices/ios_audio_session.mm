@@ -61,7 +61,45 @@ bool configure_ios_playback_session(std::string* error_message) {
             if (error_message != nullptr) *error_message = message;
             return false;
         }
+
+        // Ask for the route's full output width. iOS grants two channels unless
+        // an app asks for more, so a class-compliant USB interface with four or
+        // eight outputs came up stereo and the rest of it was unreachable — no
+        // separate click output, which is the point of a playback rig. Only
+        // meaningful once the session is ACTIVE: before that,
+        // maximumOutputNumberOfChannels describes nothing.
+        //
+        // A preference, like the sample rate above: if the route refuses, the
+        // session stays where it was and playback still works in stereo. Re-run
+        // on every open — which is also every route change — because unplugging
+        // the interface drops the count back to the built-in output.
+        const NSInteger max_channels = session.maximumOutputNumberOfChannels;
+        if (max_channels > session.outputNumberOfChannels) {
+            error = nil;
+            if (![session setPreferredOutputNumberOfChannels:max_channels
+                                                      error:&error]) {
+                lt_debug_log(
+                    "[LT_IOS_AUDIO] setPreferredOutputNumberOfChannels(%ld) "
+                    "refused: \"%s\" (staying at %ld)\n",
+                    static_cast<long>(max_channels),
+                    describe_error(error).c_str(),
+                    static_cast<long>(session.outputNumberOfChannels));
+            }
+        }
+        lt_debug_log("[LT_IOS_AUDIO] output channels granted=%ld max=%ld\n",
+                     static_cast<long>(session.outputNumberOfChannels),
+                     static_cast<long>(max_channels));
         return true;
+    }
+}
+
+int current_ios_output_channel_count() {
+    @autoreleasepool {
+        const NSInteger channels =
+            AVAudioSession.sharedInstance.outputNumberOfChannels;
+        // An inactive session (or a route reporting nothing) reads 0. Two is the
+        // floor every iOS output honours, and what the app opened before this.
+        return channels > 0 ? static_cast<int>(channels) : 2;
     }
 }
 
