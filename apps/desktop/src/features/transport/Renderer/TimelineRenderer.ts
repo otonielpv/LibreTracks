@@ -4,6 +4,7 @@ import type { SongView, WaveformSummaryDto } from "../desktopApi";
 import type { TimelineClipSummary, TimelineTrackSummary } from "../library/pendingAudioImports";
 import { recordCanvasRender } from "../perf/perfMetrics";
 import type { TimelineGrid } from "../timeline/timelineMath";
+import type { TrackRowLayout } from "../tracks/trackLayout";
 import {
   timelineCanvasPixelRatio,
   timelineCanvasViewport,
@@ -12,7 +13,11 @@ import {
 export type TrackSceneSnapshot = {
   width: number;
   height: number;
+  /** Global row height: what a track without its own offset is drawn at. */
   trackHeight: number;
+  /** Where each row starts and how tall it is, once per-track height offsets
+   * are folded in. See tracks/trackLayout.ts. */
+  trackLayout: TrackRowLayout;
   song: SongView;
   visibleTracks: TimelineTrackSummary[];
   clipsByTrack: Record<string, TimelineClipSummary[]>;
@@ -152,6 +157,7 @@ export class TimelineRenderer {
       previousSnapshot.clipsByTrack !== nextSnapshot.clipsByTrack ||
       previousSnapshot.waveformCache !== nextSnapshot.waveformCache ||
       previousSnapshot.trackHeight !== nextSnapshot.trackHeight ||
+      previousSnapshot.trackLayout !== nextSnapshot.trackLayout ||
       previousSnapshot.timelineGrid !== nextSnapshot.timelineGrid ||
       previousSnapshot.selectedClipId !== nextSnapshot.selectedClipId ||
       previousSnapshot.selectedClipIds.join("|") !== nextSnapshot.selectedClipIds.join("|") ||

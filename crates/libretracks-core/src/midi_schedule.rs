@@ -310,6 +310,7 @@ mod tests {
             midi_channel: channel,
             midi_enabled: true,
             collapsed: false,
+            height_offset: None,
         }
     }
 

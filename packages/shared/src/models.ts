@@ -420,6 +420,12 @@ export type TrackSummary = {
    * open the session. Optional + defaults to false for back-compat with
    * snapshots written before the field existed. */
   collapsed?: boolean;
+  /** Extra pixels this track's arrangement row gets on top of the global track
+   * height, so one track can stay tall while the rest are collapsed. Stored as
+   * an offset (not an absolute height) so the global height control still
+   * shifts every row by the same amount and keeps the differences the user
+   * set. Absent/null = the track just follows the global height. */
+  heightOffset?: number | null;
 };
 
 export function formatTransposeSemitones(value: number): string {

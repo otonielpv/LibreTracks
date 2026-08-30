@@ -21,6 +21,11 @@ use super::{
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession,
 };
 
+/// Widest deviation from the global track height a single row may carry, in
+/// pixels. Only a sanity bound on what the frontend sends: the real clamp is
+/// the effective row height, which only the view knows.
+const TRACK_HEIGHT_OFFSET_LIMIT: i32 = 400;
+
 impl DesktopSession {
     pub fn move_clip(
         &mut self,
@@ -416,6 +421,7 @@ impl DesktopSession {
             // A folder the user just made starts open — they need to see what
             // they are about to drag into it.
             collapsed: false,
+            height_offset: None,
         };
 
         insert_track(
@@ -533,6 +539,7 @@ impl DesktopSession {
                 midi_channel: 1,
                 midi_enabled: true,
                 collapsed: false,
+                height_offset: None,
             });
             append_clip_to_song(
                 &mut song,
@@ -606,6 +613,7 @@ impl DesktopSession {
                 midi_channel: 1,
                 midi_enabled: true,
                 collapsed: false,
+                height_offset: None,
             });
             append_clip_to_song(
                 &mut song,
@@ -724,6 +732,41 @@ impl DesktopSession {
             return Ok(self.snapshot());
         }
         track.collapsed = collapsed;
+
+        self.perf_metrics.song_save_millis = 0;
+        self.project_revision = self.project_revision.saturating_add(1);
+        audio.record_commit_model_only();
+        Ok(self.snapshot())
+    }
+
+    /// Persist how much taller (or shorter) one track's arrangement row is than
+    /// the global track height.
+    ///
+    /// `height_offset` of `None` puts the track back on the global height. Like
+    /// [`update_track_collapsed`](Self::update_track_collapsed) this is a view
+    /// gesture: no history entry, and nothing reaches the engine.
+    pub fn update_track_height_offset(
+        &mut self,
+        track_id: &str,
+        height_offset: Option<i32>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let height_offset = height_offset
+            .map(|offset| offset.clamp(-TRACK_HEIGHT_OFFSET_LIMIT, TRACK_HEIGHT_OFFSET_LIMIT))
+            .filter(|offset| *offset != 0);
+
+        let track = self
+            .engine
+            .song_mut()?
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        if track.height_offset == height_offset {
+            return Ok(self.snapshot());
+        }
+        track.height_offset = height_offset;
 
         self.perf_metrics.song_save_millis = 0;
         self.project_revision = self.project_revision.saturating_add(1);

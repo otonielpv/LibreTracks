@@ -6,6 +6,11 @@ export const TIMELINE_FIT_RIGHT_GUTTER_PX = 140;
 export const TRACK_HEIGHT_MIN = 18;
 export const TRACK_HEIGHT_MAX = 148;
 export const TRACK_HEIGHT_STEP = 8;
+/** Ceiling for ONE row once its own height offset is applied. Higher than
+ * TRACK_HEIGHT_MAX on purpose: the point of a per-track height is being able to
+ * open a single track up while the others stay collapsed, and the global
+ * maximum is sized for "all rows at once", which is a different budget. */
+export const TRACK_HEIGHT_ROW_MAX = 400;
 
 export type TrackHeaderDensity =
   | "is-lane"

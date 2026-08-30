@@ -1629,6 +1629,16 @@ export async function updateTrackCollapsed(args: {
   return invokeCommand<TransportSnapshot>("update_track_collapsed", args);
 }
 
+/** Persist how much taller than the global track height one track's row is.
+ * `heightOffset: null` puts it back on the global height. View-only, like
+ * updateTrackCollapsed: never reaches the engine, never undoable. */
+export async function updateTrackHeightOffset(args: {
+  trackId: string;
+  heightOffset: number | null;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_track_height_offset", args);
+}
+
 export async function commitTrackMixChange(args: {
   trackId: string;
   volume?: number;

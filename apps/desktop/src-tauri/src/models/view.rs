@@ -356,6 +356,10 @@ pub struct TrackSummary {
     /// frontend restores on load so a collapsed folder stays collapsed across
     /// sessions; always false on non-folder tracks.
     pub collapsed: bool,
+    /// Extra pixels this track's row gets over the global track height, so
+    /// the arrangement can keep one track tall among collapsed ones. `None`
+    /// = the track just follows the global height.
+    pub height_offset: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -658,6 +662,7 @@ pub(crate) fn song_to_view(
                 midi_channel: track.midi_channel,
                 midi_enabled: track.midi_enabled,
                 collapsed: track.collapsed,
+                height_offset: track.height_offset,
             })
             .collect(),
         automation_cues: automation_cues_to_summary(song, &automation.cues, automation_run_counts),
@@ -1303,6 +1308,7 @@ mod tests {
             midi_channel: 1,
             midi_enabled: true,
             collapsed: false,
+            height_offset: None,
         }
     }
 

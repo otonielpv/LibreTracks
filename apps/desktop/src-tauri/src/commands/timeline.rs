@@ -1004,6 +1004,22 @@ pub fn update_track_collapsed(
 }
 
 #[tauri::command(async)]
+pub fn update_track_height_offset(
+    track_id: String,
+    height_offset: Option<i32>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_track_height_offset(&track_id, height_offset, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command(async)]
 pub fn update_track_transpose_enabled(
     track_id: String,
     transpose_enabled: bool,

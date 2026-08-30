@@ -203,7 +203,7 @@ const en = {
       timelineNavigationSchemeLibreTracks:
         "LibreTracks classic (scroll wheel zooms)",
       timelineNavigationSchemeHelp:
-        "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor and Alt + scroll resizes track height.",
+        "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor. Alt + scroll resizes the track under the pointer, and Alt + Shift + scroll resizes every track.",
       timelinePlayheadFollowMode: "Playhead follow",
       timelinePlayheadFollowModeAhead: "Keep ahead (75% of the view)",
       timelinePlayheadFollowModeCenter: "Centered",
@@ -1157,6 +1157,9 @@ const en = {
     laneFolderEmpty: "Empty folder",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    resizeRow: "Resize track height",
+    resizeRowHint:
+      "Drag to resize this track (Alt: every track). Double-click to reset.",
   },
   importAudio: {
     title: "Import Audio",

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { drawAutomationLane } from "./drawTracks";
 import type { TrackSceneSnapshot } from "./TimelineRenderer";
+import { buildTrackRowLayout } from "../tracks/trackLayout";
 
 // Minimal recording fake for the 2D context: counts the calls that actually
 // put pixels on screen, so we can assert the lane drew a cue.
@@ -44,6 +45,7 @@ function buildSnapshot(
     width: 1000,
     height: 400,
     trackHeight: 96,
+    trackLayout: buildTrackRowLayout([], 96),
     song: {
       // `tracks` y `midiClips` no los usa el carril de automatización, pero el
       // índice por canción de drawTracks sí los recorre. El fixture dice ser un

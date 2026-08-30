@@ -57,6 +57,11 @@ import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useTouchContextMenu } from "./useTouchContextMenu";
 import { useBoundedTimelineScroll } from "./useBoundedTimelineScroll";
 import {
+  LibraryPreviewLanes,
+  type LibraryPreviewRow,
+} from "./LibraryPreviewLanes";
+import type { TrackRowLayout } from "../tracks/trackLayout";
+import {
   LANE_CUES,
   LANE_REGIONS,
   LANE_SECTIONS,
@@ -200,11 +205,7 @@ type LibraryClipPreviewState = {
   rowOffset: number;
 };
 
-type LibraryPreviewRow = {
-  rowOffset: number;
-  title: string;
-  previews: LibraryClipPreviewState[];
-};
+
 
 type TimelineCanvasPaneProps = {
   laneViewportWidth: number;
@@ -216,6 +217,8 @@ type TimelineCanvasPaneProps = {
    */
   viewportHeight: number;
   trackHeight: number;
+  /** Row tops/heights once per-track height offsets are folded in. */
+  trackLayout: TrackRowLayout;
   playheadDurationSeconds: number;
   song: SongView | null;
   visibleTracks: TimelineTrackSummary[];
@@ -356,6 +359,8 @@ type TimelineCanvasPaneProps = {
   } | null;
   onNativeZoomCommit: (view: { cameraX: number; zoomLevel: number }) => void;
   onNativeTrackHeightChange: (trackHeight: number) => void;
+  /** Alt + wheel over a lane: resize the row at `localY` by `deltaPx`. */
+  onNativeTrackRowHeightStep: (localY: number, deltaPx: number) => void;
   onPreviewPositionChange: (positionSeconds: number) => void;
   onSeekIntent: (positionSeconds: number) => void;
   onPlayheadSeekCommit: (positionSeconds: number) => void;
@@ -408,6 +413,7 @@ export function TimelineCanvasPane({
   laneViewportWidth,
   viewportHeight,
   trackHeight,
+  trackLayout,
   playheadDurationSeconds,
   song,
   visibleTracks,
@@ -466,6 +472,7 @@ export function TimelineCanvasPane({
   onNativeZoomPreview,
   onNativeZoomCommit,
   onNativeTrackHeightChange,
+  onNativeTrackRowHeightStep,
   onPreviewPositionChange,
   onSeekIntent,
   onPlayheadSeekCommit,
@@ -737,7 +744,7 @@ export function TimelineCanvasPane({
       : derivedTrackAreaHeight;
   const trackCanvasHeight = Math.max(
     visibleTrackAreaHeight,
-    visibleTracks.length * trackHeight,
+    trackLayout.totalHeight,
   );
   useBoundedTimelineScroll(
     scrollViewportRef,
@@ -1295,6 +1302,7 @@ export function TimelineCanvasPane({
               width={laneViewportWidth}
               height={trackCanvasHeight}
               trackHeight={trackHeight}
+              trackLayout={trackLayout}
               song={songForCanvas ?? song}
               visibleTracks={visibleTracks}
               clipsByTrack={renderedClipsByTrack}
@@ -1318,6 +1326,7 @@ export function TimelineCanvasPane({
               onNativeZoomPreview={onNativeZoomPreview}
               onNativeZoomCommit={onNativeZoomCommit}
               onNativeTrackHeightChange={onNativeTrackHeightChange}
+              onNativeTrackRowHeightStep={onNativeTrackRowHeightStep}
             />
           ) : null}
 
@@ -1462,6 +1471,9 @@ export function TimelineCanvasPane({
               const trackClips = clipsByTrack[track.id] ?? [];
               const isPendingTrack = Boolean(track.isPending);
               const isAutomationTrack = Boolean(track.isAutomation);
+              // The lane has to match the row the canvas painted underneath it,
+              // which is the track's own height when it carries an offset.
+              const rowHeight = trackLayout.heightOf(track.id);
 
               if (isAutomationTrack) {
                 return (
@@ -1469,11 +1481,11 @@ export function TimelineCanvasPane({
                     key={track.id}
                     className="lt-track-lane-row"
                     data-track-id={track.id}
-                    style={{ height: trackHeight }}
+                    style={{ height: rowHeight }}
                   >
                     <div
                       className="lt-track-lane is-automation"
-                      style={{ height: trackHeight }}
+                      style={{ height: rowHeight }}
                       aria-label={t("transport.automation.laneAria")}
                       onMouseDown={(event) => {
                         // Same seek-on-click as a normal lane: the synthetic
@@ -1603,11 +1615,11 @@ export function TimelineCanvasPane({
                   key={track.id}
                   className="lt-track-lane-row"
                   data-track-id={track.id}
-                  style={{ height: trackHeight }}
+                  style={{ height: rowHeight }}
                 >
                   <div
                     className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""} ${track.kind === "midi" ? "is-midi" : ""} ${isPendingTrack ? "is-pending" : ""}`}
-                    style={{ height: trackHeight }}
+                    style={{ height: rowHeight }}
                     aria-label={`Lane ${track.name}`}
                     onDragEnter={handleTimelineDragEnter}
                     onMouseDown={(event) => {
@@ -1622,7 +1634,7 @@ export function TimelineCanvasPane({
                     }}
                   >
                     {track.kind === "midi" ? (
-                      <MidiClipHotspots {...midiLane.lane(track.id, trackHeight)} />
+                      <MidiClipHotspots {...midiLane.lane(track.id, rowHeight)} />
                     ) : null}
                     {libraryClipPreview
                       .filter((preview) => preview.trackId === track.id)
@@ -1648,38 +1660,13 @@ export function TimelineCanvasPane({
               );
             })}
 
-          {libraryPreviewRows.map((previewRow) => (
-            <div
-              key={`library-preview-lane-${previewRow.rowOffset}`}
-              className="lt-track-lane-row is-library-preview"
-              style={{ height: trackHeight }}
-            >
-              <div
-                className="lt-track-lane is-library-preview"
-                style={{ height: trackHeight }}
-                aria-label={`Preview lane ${previewRow.title}`}
-                onDragEnter={handleTimelineDragEnter}
-              >
-                {previewRow.previews.map((preview) => (
-                  <div
-                    key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
-                    className="lt-library-clip-ghost"
-                    style={{
-                      left: resolveLibraryGhostLeft(
-                        preview.timelineStartSeconds,
-                      ),
-                      width: Math.max(
-                        preview.durationSeconds * pixelsPerSecond,
-                        36,
-                      ),
-                    }}
-                  >
-                    <span>{preview.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+          <LibraryPreviewLanes
+            rows={libraryPreviewRows}
+            trackHeight={trackHeight}
+            pixelsPerSecond={pixelsPerSecond}
+            resolveLibraryGhostLeft={resolveLibraryGhostLeft}
+            onDragEnter={handleTimelineDragEnter}
+          />
 
           <div
             className="lt-track-list-dropzone"

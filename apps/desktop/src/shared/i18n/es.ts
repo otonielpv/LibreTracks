@@ -205,7 +205,7 @@ const es = {
       timelineNavigationSchemeLibreTracks:
         "LibreTracks clásico (la rueda hace zoom)",
       timelineNavigationSchemeHelp:
-        "Elige cómo el trackpad o la rueda del ratón se mueven por la línea de tiempo. En modo Ableton, pellizcar (o Ctrl + scroll) hace zoom hacia el cursor y Alt + scroll cambia la altura de las pistas.",
+        "Elige cómo el trackpad o la rueda del ratón se mueven por la línea de tiempo. En modo Ableton, pellizcar (o Ctrl + scroll) hace zoom hacia el cursor. Alt + scroll cambia la altura de la pista que está bajo el ratón, y Alt + Mayús + scroll la de todas.",
       timelinePlayheadFollowMode: "Seguimiento del cursor",
       timelinePlayheadFollowModeAhead: "Adelantado (75% de la vista)",
       timelinePlayheadFollowModeCenter: "Centrado",
@@ -1188,6 +1188,9 @@ const es = {
     laneFolderEmpty: "Carpeta vacia",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    resizeRow: "Ajustar alto de la pista",
+    resizeRowHint:
+      "Arrastra para ajustar el alto de esta pista (Alt: todas). Doble clic para restablecer.",
   },
   importAudio: {
     title: "Importar Audio",

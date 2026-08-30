@@ -1110,6 +1110,7 @@ mod tests {
                     midi_channel: 1,
                     midi_enabled: true,
                     collapsed: false,
+                    height_offset: None,
                 },
                 Track {
                     id: "track_click".into(),
@@ -1128,6 +1129,7 @@ mod tests {
                     midi_channel: 1,
                     midi_enabled: true,
                     collapsed: false,
+                    height_offset: None,
                 },
                 Track {
                     id: "folder_main".into(),
@@ -1146,6 +1148,7 @@ mod tests {
                     midi_channel: 1,
                     midi_enabled: true,
                     collapsed: false,
+                    height_offset: None,
                 },
                 Track {
                     id: "track_drums".into(),
@@ -1164,6 +1167,7 @@ mod tests {
                     midi_channel: 1,
                     midi_enabled: true,
                     collapsed: false,
+                    height_offset: None,
                 },
             ],
             clips: vec![
@@ -1305,6 +1309,7 @@ mod tests {
                 midi_channel: 1,
                 midi_enabled: true,
                 collapsed: false,
+                height_offset: None,
             }],
             // One clip per region so each respects the "clip inside one
             // region" invariant. Together they cover the full timeline

@@ -660,6 +660,7 @@ pub fn merge_extracted_song_package(
             midi_channel: track.midi_channel,
             midi_enabled: track.midi_enabled,
             collapsed: track.collapsed,
+            height_offset: track.height_offset,
         });
         target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
@@ -850,6 +851,7 @@ mod tests {
             midi_channel: 1,
             midi_enabled: true,
             collapsed: false,
+            height_offset: None,
         }
     }
 
@@ -886,6 +888,7 @@ mod tests {
             midi_channel: channel,
             midi_enabled: true,
             collapsed: false,
+            height_offset: None,
         }
     }
 

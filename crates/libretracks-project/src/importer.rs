@@ -261,6 +261,7 @@ pub fn import_wav_song(
                 midi_channel: 1,
                 midi_enabled: true,
                 collapsed: false,
+                height_offset: None,
             })
             .collect(),
         clips: imported_files
@@ -346,6 +347,7 @@ pub fn append_wav_files_to_song(
             midi_channel: 1,
             midi_enabled: true,
             collapsed: false,
+            height_offset: None,
         });
 
         next_song.clips.push(Clip {

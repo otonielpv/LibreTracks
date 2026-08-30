@@ -3176,6 +3176,39 @@ html.lt-ios body {
   min-width: 0;
   flex: 0 0 auto;
   box-sizing: border-box;
+  position: relative;
+}
+
+/* Grab strip on the row's bottom edge: drag it to resize that one track.
+   Invisible until hovered — the arrangement is dense enough without a line on
+   every row — and it sits above the header so the drag wins over the header's
+   own pointerdown (which starts a track reorder). */
+.lt-track-header-resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  z-index: 3;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.lt-track-header-resize::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 1px;
+  height: 2px;
+  border-radius: 1px;
+  background: #57f1db;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.lt-track-header-resize:hover::after {
+  opacity: 0.75;
 }
 
 .lt-timeline-canvas-pane {

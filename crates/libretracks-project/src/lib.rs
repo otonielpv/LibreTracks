@@ -99,6 +99,7 @@ mod tests {
                 midi_channel: 1,
                 midi_enabled: true,
                 collapsed: false,
+                height_offset: None,
             }],
             clips: vec![Clip {
                 id: "clip_click".into(),

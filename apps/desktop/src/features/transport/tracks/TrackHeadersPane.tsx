@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 import { densityFromHeight } from "../constants";
+import type { TrackRowLayout } from "./trackLayout";
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import { useSongStore } from "../songStore";
 import { TrackHeaderItem } from "./TrackHeaderItem";
@@ -37,6 +38,9 @@ type TrackHeadersPaneProps = {
   visibleTracks: TimelineTrackSummary[];
   selectedTrackIds: string[];
   trackHeight: number;
+  /** Per-row heights, so a track with its own height offset lines up with the
+   * lane the canvas painted for it. */
+  trackLayout: TrackRowLayout;
   collapsedFolders: Set<string>;
   previewTrackDensityClass: string;
   libraryPreviewRows: LibraryPreviewRow[];
@@ -50,6 +54,10 @@ type TrackHeadersPaneProps = {
     trackId: string,
   ) => void;
   onToggleFolder: (trackId: string) => void;
+  /** Drag on the row's bottom edge: resizes this track (Alt = every track). */
+  onStartRowResize: (trackId: string, event: ReactPointerEvent<HTMLElement>) => void;
+  /** Double-click on that edge: back to the global height. */
+  onResetRowHeight: (trackId: string) => void;
   onToggleMute: (trackId: string) => void;
   onToggleSolo: (trackId: string) => void;
   onToggleTranspose: (trackId: string) => void;
@@ -70,6 +78,7 @@ export function TrackHeadersPane({
   visibleTracks,
   selectedTrackIds,
   trackHeight,
+  trackLayout,
   collapsedFolders,
   previewTrackDensityClass,
   libraryPreviewRows,
@@ -80,6 +89,8 @@ export function TrackHeadersPane({
   onEmptyAreaContextMenu,
   onStartTrackDrag,
   onToggleFolder,
+  onStartRowResize,
+  onResetRowHeight,
   onToggleMute,
   onToggleSolo,
   onToggleTranspose,
@@ -161,7 +172,11 @@ export function TrackHeadersPane({
           const automationEnabled = midiLanes?.automationEnabled !== false;
           const isTrackSelected = selectedTrackIds.includes(track.id);
           const childCount = getTrackChildCount(track.id);
-          const trackDensityClass = densityFromHeight(trackHeight);
+          // A track with its own height offset gets its own row height — and
+          // its own density, so a single tall track shows the full controls
+          // while the collapsed ones around it stay in lane mode.
+          const rowHeight = trackLayout.heightOf(track.id);
+          const trackDensityClass = densityFromHeight(rowHeight);
 
           if (track.isAutomation) {
             return (
@@ -169,13 +184,13 @@ export function TrackHeadersPane({
                 key={track.id}
                 className="lt-track-header-row"
                 data-track-id={track.id}
-                style={{ height: trackHeight }}
+                style={{ height: rowHeight }}
               >
                 <div
                   className={`lt-track-header lt-midi-track-header ${trackDensityClass} is-automation ${
                     isTrackSelected ? "is-selected" : ""
                   } ${automationEnabled ? "" : "is-midi-off"}`}
-                  style={{ height: trackHeight, paddingLeft: 8 }}
+                  style={{ height: rowHeight, paddingLeft: 8 }}
                   role="button"
                   tabIndex={0}
                   aria-label={t("transport.automation.trackHeaderAria")}
@@ -236,11 +251,11 @@ export function TrackHeadersPane({
                 key={track.id}
                 className="lt-track-header-row"
                 data-track-id={track.id}
-                style={{ height: trackHeight }}
+                style={{ height: rowHeight }}
               >
                 <div
                   className={`lt-track-header ${trackDensityClass} is-library-preview`}
-                  style={{ height: trackHeight, paddingLeft: 8 + track.depth * 12 }}
+                  style={{ height: rowHeight, paddingLeft: 8 + track.depth * 12 }}
                   aria-hidden="true"
                 >
                   <div className="lt-track-header-body">
@@ -265,14 +280,14 @@ export function TrackHeadersPane({
               key={track.id}
               className="lt-track-header-row"
               data-track-id={track.id}
-              style={{ height: trackHeight }}
+              style={{ height: rowHeight }}
             >
               {track.kind === "midi" ? (
                 <MidiTrackHeader
                   trackId={track.id}
                   trackName={track.name}
                   trackColor={track.color}
-                  trackHeight={trackHeight}
+                  trackHeight={rowHeight}
                   trackDepth={track.depth}
                   midiPort={track.midiPort}
                   midiChannel={track.midiChannel}
@@ -295,7 +310,7 @@ export function TrackHeadersPane({
                 trackDepth={track.depth}
                 trackColor={track.color}
                 childCount={childCount}
-                trackHeight={trackHeight}
+                trackHeight={rowHeight}
                 panValue={track.pan}
                 trackMuted={track.muted}
                 trackSolo={track.solo}
@@ -323,6 +338,27 @@ export function TrackHeadersPane({
                 onAudioToChange={onAudioToChange}
               />
               )}
+              {/* Ableton's gesture: drag the row's bottom edge to resize this
+                  track (Alt for every track), double-click to go back to the
+                  global height. Only real tracks have somewhere to store it. */}
+              <div
+                className="lt-track-header-resize"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label={t("trackHeader.resizeRow", {
+                  defaultValue: "Ajustar alto de la pista",
+                })}
+                title={t("trackHeader.resizeRowHint", {
+                  defaultValue:
+                    "Arrastra para ajustar el alto de la pista (Alt: todas). Doble clic para restablecer.",
+                })}
+                onPointerDown={(event) => onStartRowResize(track.id, event)}
+                onDoubleClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onResetRowHeight(track.id);
+                }}
+              />
             </div>
           );
         })}

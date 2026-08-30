@@ -3,6 +3,7 @@ import {
   clientDeltaXToLocalDelta,
   clientXToLocalX,
   getElementScaleX,
+  getElementScaleY,
 } from "../timeline/timelineMath";
 
 type NativeZoomView = {
@@ -35,6 +36,15 @@ type InputManagerOptions = {
   onPreviewZoom: (nextZoomLevel: number, anchorViewportX: number) => NativeZoomView | null;
   onCommitZoom: (view: NativeZoomView) => void;
   onTrackHeightChange: (trackHeight: number) => void;
+  /**
+   * Alt + wheel over a lane: resize THAT row instead of every row.
+   *
+   * The manager deliberately knows nothing about which track sits where — it
+   * reports the pointer's Y inside the track area and how many pixels the row
+   * should grow (negative to shrink), and the caller resolves the row. Leave it
+   * out and Alt keeps its old meaning (the global height) wherever it had one.
+   */
+  onTrackRowHeightStep?: (localY: number, deltaPx: number) => void;
   onScrollVertical?: (deltaY: number) => void;
   /**
    * Dónde tiene que estar un dedo para contar como parte del gesto de dos
@@ -273,14 +283,13 @@ export class InputManager {
   private handleWheelLibreTracks(event: WheelEvent, state: InputManagerState) {
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
-      const nextTrackHeight = clamp(
-        Math.round(
-          state.trackHeight + (event.deltaY < 0 ? this.options.trackHeightStep : -this.options.trackHeightStep),
-        ),
-        this.options.trackHeightMin,
-        this.options.trackHeightMax,
-      );
-      this.options.onTrackHeightChange(nextTrackHeight);
+      this.applyGlobalTrackHeightStep(event, state);
+      return;
+    }
+
+    if (event.altKey && this.options.onTrackRowHeightStep) {
+      event.preventDefault();
+      this.applyRowHeightStep(event);
       return;
     }
 
@@ -315,17 +324,17 @@ export class InputManager {
       return;
     }
 
-    // Alt + wheel = track height (replaces Ctrl + wheel from the legacy scheme).
+    // Alt + wheel = the height of the row under the pointer; add Shift for
+    // every row at once. Alt used to be the global height here (Ctrl + wheel
+    // is horizontal zoom in this scheme, so it could not carry it), and it
+    // still is when no per-row handler is wired.
     if (event.altKey) {
       event.preventDefault();
-      const nextTrackHeight = clamp(
-        Math.round(
-          state.trackHeight + (event.deltaY < 0 ? this.options.trackHeightStep : -this.options.trackHeightStep),
-        ),
-        this.options.trackHeightMin,
-        this.options.trackHeightMax,
-      );
-      this.options.onTrackHeightChange(nextTrackHeight);
+      if (event.shiftKey || !this.options.onTrackRowHeightStep) {
+        this.applyGlobalTrackHeightStep(event, state);
+        return;
+      }
+      this.applyRowHeightStep(event);
       return;
     }
 
@@ -372,6 +381,30 @@ export class InputManager {
   private wheelDeltaXToLocalDelta(deltaX: number) {
     const bounds = this.container.getBoundingClientRect();
     return deltaX / getElementScaleX(bounds, this.container.offsetWidth);
+  }
+
+  /** One wheel notch of the shared row height, clamped to the global range. */
+  private applyGlobalTrackHeightStep(event: WheelEvent, state: InputManagerState) {
+    const step =
+      event.deltaY < 0 ? this.options.trackHeightStep : -this.options.trackHeightStep;
+    const nextTrackHeight = clamp(
+      Math.round(state.trackHeight + step),
+      this.options.trackHeightMin,
+      this.options.trackHeightMax,
+    );
+    this.options.onTrackHeightChange(nextTrackHeight);
+  }
+
+  /** One wheel notch of the row under the pointer. The caller owns the clamp:
+   * a single row is allowed past the global maximum. */
+  private applyRowHeightStep(event: WheelEvent) {
+    const bounds = this.container.getBoundingClientRect();
+    const localY =
+      (event.clientY - bounds.top) /
+      getElementScaleY(bounds, this.container.offsetHeight);
+    const step =
+      event.deltaY < 0 ? this.options.trackHeightStep : -this.options.trackHeightStep;
+    this.options.onTrackRowHeightStep?.(localY, step);
   }
 
   private computeNextZoomLevel(event: WheelEvent, currentZoomLevel: number) {

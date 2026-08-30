@@ -564,6 +564,7 @@ mod tests {
                 midi_channel: 1,
                 midi_enabled: true,
                 collapsed: false,
+                height_offset: None,
             }],
             clips: vec![],
             midi_clips: vec![],
@@ -865,6 +866,7 @@ mod tests {
             midi_channel: 1,
             midi_enabled: true,
             collapsed: true,
+            height_offset: None,
         });
 
         let dir = tempfile::tempdir().expect("temp dir");
@@ -884,6 +886,41 @@ mod tests {
             .find(|track| track.id == "t1")
             .expect("audio track");
         assert!(!audio.collapsed);
+    }
+
+    /// A track the user made taller than the rest must come back that tall.
+    /// Same reasoning as the collapsed flag above: it is view state, but view
+    /// state the user set deliberately and expects to find again.
+    #[test]
+    fn track_height_offset_round_trips_through_save_and_load() {
+        let mut song = base_song();
+        song.tracks[0].height_offset = Some(140);
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        save_song(dir.path(), &song).expect("save song with a resized track");
+        let loaded = load_song(dir.path()).expect("reload song");
+
+        assert_eq!(loaded.tracks[0].height_offset, Some(140));
+    }
+
+    /// Sessions written before the field existed must still load, with every
+    /// track on the global height rather than failing to parse.
+    #[test]
+    fn songs_without_the_height_offset_field_follow_the_global_height() {
+        let song = base_song();
+        assert_eq!(song.tracks[0].height_offset, None);
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        save_song(dir.path(), &song).expect("save song");
+        let raw = std::fs::read_to_string(dir.path().join("song.ltsession"))
+            .expect("read back the saved session");
+        assert!(
+            !raw.contains("heightOffset"),
+            "a track on the global height must not write the field at all",
+        );
+
+        let loaded = load_song(dir.path()).expect("reload song");
+        assert_eq!(loaded.tracks[0].height_offset, None);
     }
 
     /// Sessions written before the field existed must still load, with every
@@ -936,6 +973,7 @@ mod tests {
             midi_channel: 3,
             midi_enabled: true,
             collapsed: false,
+            height_offset: None,
         });
         song.midi_clips.push(libretracks_core::MidiClip {
             id: "mc1".into(),

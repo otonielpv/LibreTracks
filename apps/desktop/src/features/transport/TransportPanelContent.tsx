@@ -432,6 +432,7 @@ import {
 } from "./menus/timelineMenus";
 import { createTrackHandlers } from "./tracks/trackHandlers";
 import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
+import { useTrackHeights } from "./tracks/useTrackHeights";
 import { createCompactSongHandlers } from "./compact/compactSongHandlers";
 import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { useLibraryState } from "./hooks/useLibraryState";
@@ -5635,6 +5636,27 @@ export function TransportPanelContent() {
   const visibleTracksRef = useRef<TimelineTrackSummary[]>(visibleTracks);
   visibleTracksRef.current = visibleTracks;
 
+  // Row heights: the shared layout plus the per-track resize gestures. The
+  // whole feature lives in ./tracks/useTrackHeights.
+  const {
+    trackRowLayout,
+    trackRowLayoutRef,
+    handleRowResizeStart,
+    handleHeaderAltWheel,
+    resetRowHeight,
+    stepRowHeightAtY,
+  } = useTrackHeights({
+    visibleTracks,
+    visibleTracksRef,
+    trackHeight,
+    songRef,
+    setSong,
+    setTrackHeight,
+    runAction,
+    applyPlaybackSnapshot,
+    optimisticallyAppliedRevisionsRef,
+  });
+
   // Global mousemove/mouseup listeners for clip + track drag. HOT PATH.
   // See ./hooks/useDragListeners for the two invariants (canvas-painted
   // preview via refs, and a minimal stable dep list).
@@ -5660,6 +5682,7 @@ export function TransportPanelContent() {
     trackDragRef,
     timelinePanRef,
     visibleTracksRef,
+    trackRowLayoutRef,
     livePixelsPerSecondRef,
     liveZoomLevelRef,
     clipPreviewSecondsRef,
@@ -6167,6 +6190,12 @@ export function TransportPanelContent() {
         trackHeight +
           (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP),
       );
+      return;
+    }
+
+    // Alt + wheel over a header resizes just that track; Ctrl above keeps its
+    // meaning (every track), which is the control the user reaches for most.
+    if (handleHeaderAltWheel(event)) {
       return;
     }
 
@@ -7631,6 +7660,7 @@ export function TransportPanelContent() {
                           visibleTracks={visibleTracks}
                           selectedTrackIds={selectedTrackIds}
                           trackHeight={trackHeight}
+                          trackLayout={trackRowLayout}
                           collapsedFolders={collapsedFolders}
                           previewTrackDensityClass={previewTrackDensityClass}
                           libraryPreviewRows={libraryPreviewRows}
@@ -7645,6 +7675,8 @@ export function TransportPanelContent() {
                           }
                           onStartTrackDrag={handleTrackHeaderDragStart}
                           onToggleFolder={handleTrackHeaderFolderToggle}
+                          onStartRowResize={handleRowResizeStart}
+                          onResetRowHeight={resetRowHeight}
                           onToggleMute={handleTrackHeaderMuteToggle}
                           onToggleSolo={handleTrackHeaderSoloToggle}
                           onToggleTranspose={handleTrackHeaderTransposeToggle}
@@ -7661,6 +7693,7 @@ export function TransportPanelContent() {
                           laneViewportWidth={laneViewportWidth}
                           viewportHeight={timelineViewportHeight}
                           trackHeight={trackHeight}
+                          trackLayout={trackRowLayout}
                           song={song}
                           visibleTracks={visibleTracks}
                           renderedClipsByTrack={renderedClipsByTrack}
@@ -7961,6 +7994,7 @@ export function TransportPanelContent() {
                           }
                           onNativeZoomCommit={commitZoomViewToStore}
                           onNativeTrackHeightChange={applyTrackHeight}
+                          onNativeTrackRowHeightStep={stepRowHeightAtY}
                           onPreviewPositionChange={syncLivePosition}
                           onPlayheadSeekCommit={(positionSeconds) => {
                             setContextMenu(null);

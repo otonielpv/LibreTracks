@@ -168,6 +168,15 @@ pub struct Track {
     /// on non-folder tracks, where it stays false.
     #[serde(default)]
     pub collapsed: bool,
+    /// Extra pixels this track's arrangement row gets on top of the global
+    /// track height, letting one track stay tall while the rest are collapsed.
+    /// Stored as an offset rather than an absolute height so the global height
+    /// control still shifts every row by the same amount and the differences
+    /// the user set survive it. Like [`Track::collapsed`] this is pure view
+    /// state the engine never reads, kept on the track so it survives closing
+    /// the session and travels with the .ltpkg/template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height_offset: Option<i32>,
 }
 
 pub fn default_audio_to() -> String {

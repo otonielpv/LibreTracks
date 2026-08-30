@@ -62,6 +62,7 @@ vi.mock("./WaveformTileCache", () => {
 import i18n from "../../../shared/i18n";
 import { drawTrackClipsLayer, folderCaptionFontSizes } from "./drawTracks";
 import { TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN } from "../constants";
+import { buildTrackRowLayout } from "../tracks/trackLayout";
 import type {
   TrackSceneSnapshot,
   TimelineViewportMetrics,
@@ -92,11 +93,20 @@ function createContextSpy() {
   } as unknown as CanvasRenderingContext2D;
 }
 
+/** Rebuild the row layout after a test changes the fixture's visible tracks. */
+function syncRowLayout(snapshot: TrackSceneSnapshot) {
+  snapshot.trackLayout = buildTrackRowLayout(
+    snapshot.visibleTracks,
+    snapshot.trackHeight,
+  );
+}
+
 function createSnapshot(withWaveform: boolean): TrackSceneSnapshot {
-  return {
+  const snapshot: TrackSceneSnapshot = {
     width: 1200,
     height: 200,
     trackHeight: 80,
+    trackLayout: buildTrackRowLayout([], 80),
     song: {
       id: "song-1",
       title: "Song",
@@ -201,6 +211,8 @@ function createSnapshot(withWaveform: boolean): TrackSceneSnapshot {
     clipPreviewTrackIdRef: { current: {} },
     cameraX: 0,
   };
+  syncRowLayout(snapshot);
+  return snapshot;
 }
 
 const viewport: TimelineViewportMetrics = {
@@ -506,6 +518,7 @@ describe("drawTrackClipsLayer", () => {
       { ...snapshot.song.tracks[0], parentTrackId: "folder-1" },
     ];
     snapshot.clipsByTrack = {};
+    syncRowLayout(snapshot);
     // Bars present so the faint grid hint drawn over the band is exercised.
     snapshot.timelineGrid.bars = [0, 2, 4];
 
@@ -641,6 +654,7 @@ describe("drawTrackClipsLayer", () => {
     snapshot.visibleTracks = [folder];
     snapshot.song.tracks = [folder];
     snapshot.clipsByTrack = {};
+    syncRowLayout(snapshot);
 
     drawTrackClipsLayer(context, snapshot, viewport);
 

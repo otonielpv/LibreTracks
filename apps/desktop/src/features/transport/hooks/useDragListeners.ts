@@ -25,7 +25,7 @@ import {
   resolveMemberTargetTrackId,
 } from "../timeline/clipVerticalDrag";
 import { snapToTimelineGrid } from "../timeline/useTimelineGrid";
-import { useTimelineUIStore } from "../uiStore";
+
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import type {
   ClipDragState,
@@ -35,6 +35,10 @@ import type {
   TrackDropState,
 } from "../types";
 import { trackDragAutoScrollVelocity } from "../tracks/trackDragAutoScroll";
+import {
+  trackRowDeltaForDrag,
+  type TrackRowLayout,
+} from "../tracks/trackLayout";
 
 export type UseDragListenersOptions = {
   // --- Live state, read through refs so the listeners never re-subscribe ---
@@ -43,6 +47,9 @@ export type UseDragListenersOptions = {
   trackDragRef: { current: TrackDragState };
   timelinePanRef: { current: TimelinePanState };
   visibleTracksRef: { current: TimelineTrackSummary[] };
+  /** Live row tops/heights, so a vertical clip drag lands on the row the
+   * pointer is actually over when rows differ in height. */
+  trackRowLayoutRef: { current: TrackRowLayout };
   livePixelsPerSecondRef: { current: number };
   liveZoomLevelRef: { current: number };
   /** Per-clip preview positions the canvas paints without a re-render. */
@@ -103,6 +110,7 @@ export function useDragListeners({
   trackDragRef,
   timelinePanRef,
   visibleTracksRef,
+  trackRowLayoutRef,
   livePixelsPerSecondRef,
   liveZoomLevelRef,
   clipPreviewSecondsRef,
@@ -232,15 +240,28 @@ export function useDragListeners({
         }
 
         // Vertical axis: convert the cursor's Y travel into a whole-row delta
-        // (tracks share a uniform height) and clamp it so every dragged member
-        // stays on a droppable lane. The resulting per-clip destination tracks
-        // are written to clipPreviewTrackIdRef, which the canvas reads to paint
-        // the ghost on the target lane without a React re-render.
-        const liveTrackHeight = Math.max(
-          1,
-          useTimelineUIStore.getState().trackHeight,
+        // and clamp it so every dragged member stays on a droppable lane. The
+        // resulting per-clip destination tracks are written to
+        // clipPreviewTrackIdRef, which the canvas reads to paint the ghost on
+        // the target lane without a React re-render.
+        //
+        // Rows no longer share one height (a track can carry its own offset),
+        // so the delta is resolved against the row layout: which row the
+        // primary clip's centre has travelled into. See tracks/trackLayout.
+        const primaryMember =
+          clipDrag.members.find(
+            (member) => member.clipId === clipDrag.clipId,
+          ) ?? clipDrag.members[0];
+        const primaryRowIndex = primaryMember
+          ? visibleTracksRef.current.findIndex(
+              (track) => track.id === primaryMember.originTrackId,
+            )
+          : -1;
+        const desiredRowDelta = trackRowDeltaForDrag(
+          trackRowLayoutRef.current,
+          primaryRowIndex,
+          deltaLocalY,
         );
-        const desiredRowDelta = Math.round(deltaLocalY / liveTrackHeight);
         const trackRowDelta = clampGroupRowDelta(
           clipDrag.members,
           desiredRowDelta,

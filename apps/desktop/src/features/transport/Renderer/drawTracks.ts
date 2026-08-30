@@ -8,6 +8,7 @@ import i18n from "../../../shared/i18n";
 import { recordTileDrain, reportWaveformTileCache } from "../perf/perfMetrics";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timeline/timelineMath";
+import type { TrackRowLayout } from "../tracks/trackLayout";
 import {
   drawWaveformSketch,
   getWaveformRenderPixelsPerSecond,
@@ -208,6 +209,7 @@ function drawFolderBandGridHint(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
   trackTop: number,
+  rowHeight: number,
 ) {
   const bars = snapshot.timelineGrid?.bars;
   if (!bars || bars.length === 0) {
@@ -226,7 +228,7 @@ function drawFolderBandGridHint(
       continue;
     }
     context.moveTo(x, trackTop);
-    context.lineTo(x, trackTop + snapshot.trackHeight);
+    context.lineTo(x, trackTop + rowHeight);
   }
   context.stroke();
   context.restore();
@@ -324,27 +326,27 @@ export function analyzedClipRatio(
 }
 
 function resolveVisibleTrackWindow(
-  trackCount: number,
-  trackHeight: number,
+  layout: TrackRowLayout,
   viewportScrollTop: number,
   viewportHeight: number,
 ) {
-  const safeTrackHeight = Math.max(1, trackHeight);
+  const trackCount = layout.heights.length;
   const safeScrollTop = Math.max(0, viewportScrollTop);
-  const safeViewportHeight = Math.max(safeTrackHeight, viewportHeight || safeTrackHeight);
-  const startIndex = clamp(Math.floor(safeScrollTop / safeTrackHeight) - 1, 0, trackCount);
+  const safeViewportHeight = Math.max(
+    layout.baseHeight,
+    viewportHeight || layout.baseHeight,
+  );
+  // One row of slack on each side, so a row scrolling into view is already
+  // painted. Rows have their own heights now, hence rowAt() rather than a
+  // division by a shared height.
+  const startIndex = clamp(layout.rowAt(safeScrollTop) - 1, 0, trackCount);
   const endIndex = clamp(
-    Math.ceil((safeScrollTop + safeViewportHeight) / safeTrackHeight) + 1,
+    layout.rowAt(safeScrollTop + safeViewportHeight) + 2,
     startIndex,
     trackCount,
   );
 
-  return {
-    startIndex,
-    endIndex,
-    startY: startIndex * safeTrackHeight,
-    endY: endIndex * safeTrackHeight,
-  };
+  return { startIndex, endIndex };
 }
 
 /**
@@ -384,8 +386,9 @@ export function drawAutomationLane(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
   trackTop: number,
+  rowHeight: number = snapshot.trackHeight,
 ) {
-  const laneHeight = snapshot.trackHeight;
+  const laneHeight = rowHeight;
   const centerY = trackTop + laneHeight / 2;
 
   // Ableton-style collision handling: a cue's label may only extend up to the
@@ -498,8 +501,9 @@ export function drawMidiLane(
   snapshot: TrackSceneSnapshot,
   trackTop: number,
   trackId: string,
+  rowHeight: number = snapshot.trackHeight,
 ) {
-  const laneHeight = snapshot.trackHeight;
+  const laneHeight = rowHeight;
   const centerY = trackTop + laneHeight / 2;
 
   const clips =
@@ -625,13 +629,9 @@ export function drawTrackClipsLayer(
   snapshot: TrackSceneSnapshot,
   viewport: TimelineViewportMetrics,
 ) {
-  const { startIndex: visibleTrackStart, endIndex: visibleTrackEnd, startY, endY } =
-    resolveVisibleTrackWindow(
-      snapshot.visibleTracks.length,
-      snapshot.trackHeight,
-      viewport.scrollTop,
-      viewport.height,
-    );
+  const layout = snapshot.trackLayout;
+  const { startIndex: visibleTrackStart, endIndex: visibleTrackEnd } =
+    resolveVisibleTrackWindow(layout, viewport.scrollTop, viewport.height);
 
   beginWaveformTilePaint();
   const songDrawIndex = getSongDrawIndex(snapshot.song);
@@ -653,16 +653,17 @@ export function drawTrackClipsLayer(
 
   for (let trackIndex = visibleTrackStart; trackIndex < visibleTrackEnd; trackIndex += 1) {
     const track = snapshot.visibleTracks[trackIndex];
-    const trackTop = trackIndex * snapshot.trackHeight;
+    const trackTop = layout.tops[trackIndex];
+    const rowHeight = layout.heights[trackIndex];
     const childCount = songDrawIndex.childCountByTrackId.get(track.id) ?? 0;
 
     if (track.isAutomation) {
-      drawAutomationLane(context, snapshot, trackTop);
+      drawAutomationLane(context, snapshot, trackTop, rowHeight);
       continue;
     }
 
     if (track.kind === "midi") {
-      drawMidiLane(context, snapshot, trackTop, track.id);
+      drawMidiLane(context, snapshot, trackTop, track.id, rowHeight);
       continue;
     }
 
@@ -682,13 +683,13 @@ export function drawTrackClipsLayer(
       context.fillStyle = track.color
         ? darken(track.color, FOLDER_BAND_DARKEN)
         : blendOnTrackBackdrop("#201f1f", 0.5);
-      context.fillRect(0, trackTop, snapshot.width, snapshot.trackHeight);
+      context.fillRect(0, trackTop, snapshot.width, rowHeight);
 
       // Faint bar lines back on top. The band masks the full-strength grid
       // underneath (that is what made the caption hard to read), then this
       // re-states it at a fraction of the strength: the row keeps a sense of
       // the timeline running through it instead of looking like a flat slab.
-      drawFolderBandGridHint(context, snapshot, trackTop);
+      drawFolderBandGridHint(context, snapshot, trackTop, rowHeight);
 
       // Solid accent ribbon on the left edge, mirroring the track header's
       // border/ribbon. A tint alone never reads as the picked colour — the
@@ -696,7 +697,7 @@ export function drawTrackClipsLayer(
       // undiluted somewhere, and the row needs the same anchor to match.
       if (track.color) {
         context.fillStyle = track.color;
-        context.fillRect(0, trackTop, 3, snapshot.trackHeight);
+        context.fillRect(0, trackTop, 3, rowHeight);
       }
 
       // The folder's own name leads the caption. The row has width to spare,
@@ -705,7 +706,7 @@ export function drawTrackClipsLayer(
       // folder identifiable without looking back at the header. The child count
       // follows as a quieter suffix so the old information is still there,
       // subordinate to the name rather than replacing it.
-      const labelCenterY = trackTop + snapshot.trackHeight / 2;
+      const labelCenterY = trackTop + rowHeight / 2;
       const countLabel = childCount
         ? i18n.t("trackHeader.laneFolderChildCount", { count: childCount })
         : i18n.t("trackHeader.laneFolderEmpty");
@@ -724,7 +725,7 @@ export function drawTrackClipsLayer(
       const captionMaxWidth = Math.max(0, snapshot.width - labelStartX - 12);
       // The gap tracks the type size so the two words keep their spacing
       // relationship instead of colliding as the caption grows.
-      const { namePx, countPx } = folderCaptionFontSizes(snapshot.trackHeight);
+      const { namePx, countPx } = folderCaptionFontSizes(rowHeight);
       const nameFont = `600 ${namePx}px "Space Grotesk", sans-serif`;
       const countFont = `500 ${countPx}px "Space Grotesk", sans-serif`;
       const countGap = Math.round(countPx * 0.8);
@@ -805,10 +806,11 @@ export function drawTrackClipsLayer(
       const previewTrackIndex =
         previewTrackId !== undefined ? trackIndexById.get(previewTrackId) : undefined;
       const clipTop =
-        previewTrackIndex !== undefined
-          ? previewTrackIndex * snapshot.trackHeight
-          : trackTop;
-      const clipHeight = snapshot.trackHeight;
+        previewTrackIndex !== undefined ? layout.tops[previewTrackIndex] : trackTop;
+      // A ghost on another lane takes THAT lane's height, so the preview shows
+      // the clip as it will land rather than as it currently sits.
+      const clipHeight =
+        previewTrackIndex !== undefined ? layout.heights[previewTrackIndex] : rowHeight;
       const isSelected =
         snapshot.selectedClipId === clip.id || selectedClipIdSet.has(clip.id);
 
@@ -1025,7 +1027,8 @@ export function drawTrackClipsLayer(
   context.strokeStyle = "rgba(229, 226, 225, 0.05)";
   context.lineWidth = 1;
   for (let index = visibleTrackStart + 1; index <= visibleTrackEnd; index += 1) {
-    const y = Math.round(index * snapshot.trackHeight) + 0.5;
+    const y =
+      Math.round(layout.tops[index] ?? layout.totalHeight) + 0.5;
     context.beginPath();
     context.moveTo(0, y);
     context.lineTo(snapshot.width, y);

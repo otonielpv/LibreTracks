@@ -51,6 +51,7 @@ import {
 } from "../constants";
 import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
+import type { TrackRowLayout } from "../tracks/trackLayout";
 import {
   timelineCanvasPixelRatio,
   timelineVisibleTrackHeight,
@@ -110,6 +111,7 @@ type TrackCanvasProps = {
   width: number;
   height: number;
   trackHeight: number;
+  trackLayout: TrackRowLayout;
   song: SongView;
   visibleTracks: TimelineTrackSummary[];
   clipsByTrack: Record<string, TimelineClipSummary[]>;
@@ -140,6 +142,9 @@ type TrackCanvasProps = {
   } | null;
   onNativeZoomCommit: (view: { cameraX: number; zoomLevel: number }) => void;
   onNativeTrackHeightChange: (trackHeight: number) => void;
+  /** Alt + wheel over a lane. `localY` is inside the track area; `deltaPx` is
+   * how much taller the row under it should get (negative to shrink). */
+  onNativeTrackRowHeightStep: (localY: number, deltaPx: number) => void;
 };
 
 function isRenderableCanvasSize(value: number) {
@@ -718,6 +723,7 @@ export function TimelineTrackCanvas({
   width,
   height,
   trackHeight,
+  trackLayout,
   song,
   visibleTracks,
   clipsByTrack,
@@ -741,6 +747,7 @@ export function TimelineTrackCanvas({
   onNativeZoomPreview,
   onNativeZoomCommit,
   onNativeTrackHeightChange,
+  onNativeTrackRowHeightStep,
 }: TrackCanvasProps) {
   const backgroundCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const tracksCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -750,6 +757,7 @@ export function TimelineTrackCanvas({
     width,
     height,
     trackHeight,
+    trackLayout,
     song,
     visibleTracks,
     clipsByTrack,
@@ -803,6 +811,7 @@ export function TimelineTrackCanvas({
       onPreviewZoom: onNativeZoomPreview,
       onCommitZoom: onNativeZoomCommit,
       onTrackHeightChange: onNativeTrackHeightChange,
+      onTrackRowHeightStep: onNativeTrackRowHeightStep,
       onScrollVertical: (deltaY) => {
         const viewport = scrollViewportRef.current;
         if (!viewport) return;
@@ -824,6 +833,7 @@ export function TimelineTrackCanvas({
     onNativeCameraXCommit,
     onNativeCameraXPreview,
     onNativeTrackHeightChange,
+    onNativeTrackRowHeightStep,
     onNativeZoomCommit,
     onNativeZoomPreview,
     scrollViewportRef,
@@ -834,6 +844,7 @@ export function TimelineTrackCanvas({
     width,
     height,
     trackHeight,
+    trackLayout,
     song,
     visibleTracks,
     clipsByTrack,
