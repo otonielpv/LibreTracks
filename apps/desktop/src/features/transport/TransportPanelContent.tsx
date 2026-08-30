@@ -182,6 +182,10 @@ import {
 import { TimelineCanvasPane } from "./timeline/TimelineCanvasPane";
 import { HorizontalScrollbar } from "./timeline/HorizontalScrollbar";
 import {
+  createTimelineBackgroundSeek,
+  type TimelineBackgroundSeekDeps,
+} from "./timeline/timelineBackgroundSeek";
+import {
   createLibraryPlacementHandlers,
   type LibraryPlacementDeps,
 } from "./library/libraryPlacement";
@@ -6244,79 +6248,41 @@ export function TransportPanelContent() {
     ],
   );
 
-  function beginTimelineSeekOrPan(event: ReactMouseEvent<HTMLElement>) {
-    event.preventDefault();
-    setContextMenu(null);
-    // Clamp the seek to the full timeline workspace (song + the empty
-    // 1-hour tail), not to the song's end. Clicking in the empty space
-    // past the last region should drop the playhead where the cursor is,
-    // not snap it back to the end of the song. timelineDurationSecondsRef
-    // mirrors workspaceDurationSeconds (= max(song, content) + tail).
-    const seekLimitSeconds =
-      timelineDurationSecondsRef.current || songRef.current?.durationSeconds || 0;
-    const previewSeconds = normalizeTimelineSeekSeconds(
-      rulerClientXToSeconds(
-        event.clientX,
-        event.currentTarget,
-        getCameraX(),
-        seekLimitSeconds,
-        livePixelsPerSecondRef.current,
-      ),
-      seekLimitSeconds,
-    );
-    previewSeek(previewSeconds);
-
-    const activePan: NonNullable<TimelinePanState> = {
-      pointerId: 1,
-      startClientX: event.clientX,
-      pointerScaleX: getElementScaleX(
-        event.currentTarget.getBoundingClientRect(),
-        event.currentTarget.offsetWidth,
-      ),
-      originCameraX: getCameraX(),
-      previewSeconds,
-      hasMoved: false,
-    };
-    timelinePanRef.current = activePan;
-
-    const onMouseMove = (windowEvent: MouseEvent) => {
-      const deltaX =
-        (activePan.startClientX - windowEvent.clientX) /
-        activePan.pointerScaleX;
-      const exceededThreshold = Math.abs(deltaX) > DRAG_THRESHOLD_PX;
-      if (!activePan.hasMoved && !exceededThreshold) {
-        return;
-      }
-
-      if (!activePan.hasMoved) {
-        activePan.hasMoved = true;
-        restoreConfirmedTransportVisual();
-      }
-
-      updateCameraX(activePan.originCameraX + deltaX, {
-        commitToStore: false,
+  // Pulsacion sobre el fondo del timeline. Las reglas -y el reparto distinto
+  // entre raton y dedo- viven en ./timeline/timelineBackgroundSeek.
+  const backgroundSeekDepsRef =
+    useRef<TimelineBackgroundSeekDeps | null>(null);
+  const beginTimelineSeekOrPan = useMemo(
+    () =>
+      createTimelineBackgroundSeek(() => {
+        const value = backgroundSeekDepsRef.current;
+        if (!value) {
+          throw new Error("timeline background seek before first render commit");
+        }
+        return value;
+      }),
+    [],
+  );
+  backgroundSeekDepsRef.current = {
+    getSeekLimitSeconds: () =>
+      timelineDurationSecondsRef.current ||
+      songRef.current?.durationSeconds ||
+      0,
+    getCameraX,
+    livePixelsPerSecondRef,
+    clientXToSeconds: rulerClientXToSeconds,
+    normalizeSeconds: normalizeTimelineSeekSeconds,
+    panRef: timelinePanRef,
+    closeContextMenu: () => setContextMenu(null),
+    previewSeek,
+    restoreConfirmedTransportVisual,
+    updateCameraX,
+    commitSeek: (seconds) => {
+      void runAction(async () => {
+        await performSeek(seconds);
       });
-    };
-
-    const onMouseUp = (windowEvent: MouseEvent) => {
-      if (windowEvent.button !== 0) {
-        return;
-      }
-
-      timelinePanRef.current = null;
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-
-      if (!activePan.hasMoved) {
-        void runAction(async () => {
-          await performSeek(activePan.previewSeconds);
-        });
-      }
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  }
+    },
+  };
 
   function handleTrackLaneMouseDown(
     event: ReactMouseEvent<HTMLDivElement>,

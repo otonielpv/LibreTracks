@@ -188,10 +188,15 @@ export class InputManager {
     }
 
     for (const [pointerId, target] of pointers) {
-      const node = target instanceof Element ? target : this.container;
-      if (!node.isConnected) {
-        continue;
-      }
+      // Si React ya se llevo el elemento sobre el que aterrizo el dedo (repinta
+      // constantemente durante un arrastre), el contenedor sirve igual: el
+      // evento sigue burbujeando hasta `window` y hasta la raiz de React, que
+      // es donde escuchan los arrastres. Saltarselo dejaba vivo justo el
+      // arrastre que hay que apartar.
+      const node =
+        target instanceof Element && target.isConnected
+          ? target
+          : this.container;
       node.dispatchEvent(
         new PointerEvent("pointercancel", {
           pointerId,
