@@ -59,6 +59,34 @@ describe("contrato responsive móvil", () => {
     expect(scrollbar).toContain("box-sizing: border-box");
   });
 
+  // En un teléfono apaisado el notch y las esquinas redondeadas comen por los
+  // LADOS. Las hojas iban a `left: 0; right: 0`, así que el texto se metía
+  // debajo del notch; y a lo ancho de un iPhone apaisado una hoja a pantalla
+  // completa con tres opciones se lee mal y roza los dos bordes.
+  it("aparta las hojas inferiores del notch y no las estira a pantalla completa", () => {
+    const sheet = styles.match(
+      /\.lt-mobile \.lt-control-popover-panel,\s*\.lt-mobile \.lt-context-menu\.is-mobile-sheet\s*\{([^}]+)\}/,
+    )?.[1];
+
+    expect(sheet, "falta la geometría compartida de las hojas").toBeTruthy();
+    expect(sheet).toContain("left: env(safe-area-inset-left");
+    expect(sheet).toContain("right: env(safe-area-inset-right");
+    expect(sheet).toContain("max-width:");
+    expect(sheet).toContain("margin-left: auto");
+  });
+
+  // La caja de la hoja YA se desplaza por `left`/`right`. Repetir el inset en el
+  // relleno lo sumaría dos veces y el contenido acabaría a ~120 px del borde.
+  it("no suma dos veces los insets laterales en las hojas", () => {
+    const padding = declarationsFor(".lt-mobile .lt-control-popover-panel");
+
+    expect(padding).not.toContain("safe-area-inset-left");
+    expect(padding).not.toContain("safe-area-inset-right");
+    // Abajo sí: la hoja se queda pegada al borde y su última línea no puede
+    // quedar bajo el indicador de inicio.
+    expect(padding).toContain("safe-area-inset-bottom");
+  });
+
   it("fija el documento iOS para que WKWebView no cree scroll exterior", () => {
     expect(styles).toMatch(
       /html\.lt-ios,[^{]*html\.lt-ios body\s*\{[^}]*position:\s*fixed[^}]*overflow:\s*hidden/s,
