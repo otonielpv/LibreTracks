@@ -58,17 +58,11 @@ type TouchGestureState = {
    * movimiento la camara se resuelve para volver a poner ESTE punto bajo el
    * punto medio actual, en vez de acumular deltas cuadro a cuadro. */
   originContentUnits: number;
-  lastMidClientY: number;
 };
 
 type TouchSample = {
   distance: number;
   midClientX: number;
-  midClientY: number;
-  /** El navegador ya se ha quedado con el gesto (desplazamiento nativo del
-   * carril de pistas). Se detecta por `event.cancelable === false`: a partir de
-   * ahi `preventDefault` no hace nada. */
-  browserOwned: boolean;
 };
 
 /** Zona muerta del pinza→zoom, en escala logaritmica.
@@ -110,13 +104,6 @@ export class InputManager {
    * gesto de dos dedos toma el mando. Ver cancelPendingPointerInteractions. */
   private readonly activePointers = new Map<number, EventTarget | null>();
 
-  /** Ultima muestra de los dos dedos, pendiente de procesar en el proximo
-   * cuadro. Un WebView entrega `touchmove` mas rapido de lo que pinta, y cada
-   * muestra dispara la previsualizacion completa de camara y zoom. */
-  private pendingTouchSample: TouchSample | null = null;
-
-  private touchFrameId: number | null = null;
-
   constructor(private readonly options: InputManagerOptions) {
     this.container = options.container;
     this.container.addEventListener("wheel", this.handleWheel, { passive: false });
@@ -149,11 +136,6 @@ export class InputManager {
     window.removeEventListener("mouseup", this.handleMouseUp);
 
     this.activePointers.clear();
-    if (this.touchFrameId !== null) {
-      window.cancelAnimationFrame(this.touchFrameId);
-      this.touchFrameId = null;
-    }
-    this.pendingTouchSample = null;
 
     if (this.panCommitTimer !== null) {
       window.clearTimeout(this.panCommitTimer);
@@ -387,27 +369,48 @@ export class InputManager {
     return Math.max(0.01, currentZoomLevel * factor);
   }
 
-  /** Los dos primeros dedos APOYADOS EN ESTE CONTENEDOR. `event.touches` son
-   * todos los de la pantalla: con un dedo descansando sobre una cabecera de
-   * pista, cualquier toque suelto en el timeline contaba como gesto de dos
-   * dedos y la camara pegaba un salto. */
-  private gestureTouches(event: TouchEvent): [Touch, Touch] | null {
+  /** Los dos dedos que ARRANCAN el gesto: sólo cuentan los apoyados en este
+   * contenedor. `event.touches` son todos los de la pantalla, así que con un
+   * dedo descansando sobre una cabecera de pista cualquier toque suelto en el
+   * timeline contaba como gesto de dos dedos y la cámara pegaba un salto. */
+  private seedingTouches(event: TouchEvent): [Touch, Touch] | null {
     const touches = event.targetTouches;
-    if (touches.length < 2) {
-      return null;
-    }
-    return [touches[0], touches[1]];
+    return touches.length < 2 ? null : [touches[0], touches[1]];
   }
 
-  private sampleTouches(a: Touch, b: Touch, browserOwned = false): TouchSample {
+  /**
+   * Los dos dedos del gesto EN CURSO, buscados por identificador entre todos
+   * los de la pantalla.
+   *
+   * Deliberadamente NO se usa `targetTouches` aquí. El destino de un toque se
+   * fija al tocar y no se actualiza: cuando React vuelve a pintar la regla a
+   * mitad de la pinza (cambia el nivel de zoom, se rehacen las banderas), el
+   * elemento sobre el que aterrizó el dedo deja de estar en el documento y sale
+   * de `targetTouches` — el gesto se moría solo a media pinza. Los
+   * identificadores sobreviven a ese repintado.
+   */
+  private gestureTouches(event: TouchEvent): [Touch, Touch] | null {
+    const gesture = this.touchGesture;
+    if (!gesture) {
+      return null;
+    }
+    let a: Touch | null = null;
+    let b: Touch | null = null;
+    for (let index = 0; index < event.touches.length; index += 1) {
+      const touch = event.touches[index];
+      if (touch.identifier === gesture.idA) a = touch;
+      else if (touch.identifier === gesture.idB) b = touch;
+    }
+    return a && b ? [a, b] : null;
+  }
+
+  private sampleTouches(a: Touch, b: Touch): TouchSample {
     return {
       distance: Math.max(
         1,
         Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
       ),
       midClientX: (a.clientX + b.clientX) / 2,
-      midClientY: (a.clientY + b.clientY) / 2,
-      browserOwned,
     };
   }
 
@@ -433,12 +436,11 @@ export class InputManager {
       originZoom: zoom,
       startDistance: sample.distance,
       originContentUnits: (state.cameraX + midLocalX) / zoom,
-      lastMidClientY: sample.midClientY,
     };
   }
 
   private handleTouchStart = (event: TouchEvent) => {
-    const pair = this.gestureTouches(event);
+    const pair = this.seedingTouches(event);
     if (!pair) {
       return;
     }
@@ -450,48 +452,58 @@ export class InputManager {
     }
     this.cancelPendingPointerInteractions();
     this.seedTouchGesture(pair[0], pair[1]);
+    // Mientras haya dos dedos el navegador no desplaza nada por su cuenta: el
+    // carril vertical es del gesto de UN dedo (`touch-action: pan-y`), y que las
+    // dos cosas convivieran es la mitad del "se pisan".
+    this.container.style.touchAction = "none";
   };
 
   private handleTouchMove = (event: TouchEvent) => {
+    if (!this.touchGesture) {
+      return;
+    }
+
     const pair = this.gestureTouches(event);
-    if (!this.touchGesture || !pair) {
+    if (!pair) {
+      // Uno de los dos dedos del gesto ya no está. Si quedan otros dos sobre el
+      // contenedor se re-siembra en su posición actual (así levantar un dedo de
+      // tres no corta el gesto ni pega un salto); si no, se acaba.
+      const reseed = this.seedingTouches(event);
+      if (reseed) {
+        this.seedTouchGesture(reseed[0], reseed[1]);
+      } else {
+        this.endTouchGesture();
+      }
       return;
     }
 
     if (event.cancelable) {
       event.preventDefault();
     }
-    const [a, b] = pair;
-    // Cambio el par de dedos (uno se levanto, entro un tercero): se re-siembra
-    // el ancla en su posicion actual para que la camara NO pegue un salto.
-    if (a.identifier !== this.touchGesture.idA || b.identifier !== this.touchGesture.idB) {
-      this.seedTouchGesture(a, b);
-      return;
-    }
 
-    this.pendingTouchSample = this.sampleTouches(a, b, !event.cancelable);
-    if (this.touchFrameId === null) {
-      this.touchFrameId = window.requestAnimationFrame(this.flushTouchSample);
-    }
+    // Se aplica AQUÍ, no en un `requestAnimationFrame`. En iOS, si el WebView
+    // llega a arrancar un desplazamiento propio, deja de entregar cuadros a las
+    // animaciones hasta que termina: la cámara se quedaba congelada a media
+    // pinza — el "se hace el gesto y para".
+    this.applyTouchSample(this.sampleTouches(pair[0], pair[1]));
   };
 
   /**
-   * Aplica la ultima muestra del gesto, una vez por cuadro.
-   *
-   * Zoom y desplazamiento salen de un unico LAZO CERRADO contra el origen del
-   * gesto, no de deltas acumulados: el zoom es la razon de distancias respecto a
-   * la separacion inicial, y la camara se despeja para que el punto de contenido
-   * que habia bajo el punto medio inicial quede bajo el punto medio actual. Asi
+   * Zoom y desplazamiento salen de un único LAZO CERRADO contra el origen del
+   * gesto, no de deltas acumulados: el zoom es la razón de distancias respecto a
+   * la separación inicial, y la cámara se despeja para que el punto de contenido
+   * que había bajo el punto medio inicial quede bajo el punto medio actual. Así
    * los dedos se quedan pegados al material — separarlos y moverlos a la vez
    * hace lo que se espera, en vez de sumar dos correcciones que se estorban — y
    * unos dedos temblorosos no acumulan deriva.
+   *
+   * Sólo horizontal: el desplazamiento vertical del carril de pistas es del
+   * gesto de un dedo. Moverlo también aquí duplicaba el recorrido cuando el
+   * navegador ya venía desplazando.
    */
-  private flushTouchSample = () => {
-    this.touchFrameId = null;
+  private applyTouchSample(sample: TouchSample) {
     const gesture = this.touchGesture;
-    const sample = this.pendingTouchSample;
-    this.pendingTouchSample = null;
-    if (!gesture || !sample) {
+    if (!gesture) {
       return;
     }
 
@@ -506,10 +518,15 @@ export class InputManager {
         gesture.originZoom *
           zoomFactorFromScale(sample.distance / gesture.startDistance),
       );
-      const view = this.options.onPreviewZoom(targetZoom, midLocalX);
-      if (view) {
-        zoomNow = view.zoomLevel;
-        this.scheduleZoomCommit(view);
+      // Dentro de la zona muerta el zoom no cambia: previsualizarlo igualmente
+      // repetiría por cuadro todo el recálculo de cámara y reloj para dejar el
+      // mismo número.
+      if (Math.abs(targetZoom - zoomNow) > 1e-4) {
+        const view = this.options.onPreviewZoom(targetZoom, midLocalX);
+        if (view) {
+          zoomNow = view.zoomLevel;
+          this.scheduleZoomCommit(view);
+        }
       }
     }
 
@@ -517,48 +534,36 @@ export class InputManager {
       gesture.originContentUnits * zoomNow - midLocalX,
     );
     this.schedulePanCommit(nextCameraX);
-
-    // Si el navegador ya venia desplazando el carril de pistas (un dedo bajando
-    // con `touch-action: pan-y`, y el segundo aterriza despues), ese scroll ya
-    // no se puede detener: sumarle el nuestro haria el doble de recorrido, que
-    // es parte del "se pisan". El zoom y el desplazamiento horizontal si siguen,
-    // porque no compiten con un desplazamiento vertical nativo.
-    const dragDeltaY = gesture.lastMidClientY - sample.midClientY;
-    if (
-      !sample.browserOwned &&
-      this.options.onScrollVertical &&
-      Math.abs(dragDeltaY) > 0.5
-    ) {
-      this.options.onScrollVertical(dragDeltaY);
-    }
-    gesture.lastMidClientY = sample.midClientY;
-  };
+  }
 
   private handleTouchEnd = (event: TouchEvent) => {
     if (!this.touchGesture) {
       return;
     }
 
-    const pair = this.gestureTouches(event);
-    if (pair) {
-      // Queda al menos otro par util (se levanto un tercer dedo): se re-siembra
-      // en vez de terminar, para no cortar el gesto a mitad.
-      this.seedTouchGesture(pair[0], pair[1]);
+    if (this.gestureTouches(event)) {
       return;
     }
 
-    this.touchGesture = null;
-    this.pendingTouchSample = null;
-    if (this.touchFrameId !== null) {
-      window.cancelAnimationFrame(this.touchFrameId);
-      this.touchFrameId = null;
+    const reseed = this.seedingTouches(event);
+    if (reseed) {
+      // Se levantó uno de tres: seguir con los que quedan, re-anclados.
+      this.seedTouchGesture(reseed[0], reseed[1]);
+      return;
     }
+
+    this.endTouchGesture();
+  };
+
+  private endTouchGesture() {
+    this.touchGesture = null;
+    this.container.style.touchAction = "";
     // Confirmar YA, sin esperar al antirrebote: hasta que el zoom se confirma,
     // el envoltorio del ruler sigue con su `scaleX` de previsualizacion y las
     // zonas tactiles siguen deformadas. Al soltar los dedos ya no llegan mas
     // muestras, asi que el antirrebote solo seria un retraso.
     this.flushCommits();
-  };
+  }
 
   private flushCommits() {
     if (this.zoomCommitTimer !== null) {

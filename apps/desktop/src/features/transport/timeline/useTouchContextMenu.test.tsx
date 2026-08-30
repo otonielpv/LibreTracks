@@ -58,6 +58,27 @@ function CoordsHarness({ onCoords }: { onCoords: (x: number, y: number) => void 
   );
 }
 
+/** Mismo cableado que la regla: el hook arma en CAPTURA y dentro hay un hijo
+ * que detiene la propagación (el asa del cabezal hace justo eso). */
+function StopsPropagationHarness({ onContextMenu }: { onContextMenu: () => void }) {
+  const gesture = useTouchContextMenu({ delayMs: 500 });
+  return (
+    <div
+      data-testid="ruler"
+      onPointerDownCapture={gesture.begin}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onContextMenu();
+      }}
+    >
+      <div
+        data-testid="playhead"
+        onPointerDown={(event) => event.stopPropagation()}
+      />
+    </div>
+  );
+}
+
 function DelegatedHarness({ onTarget }: { onTarget: (target: EventTarget | null) => void }) {
   const gesture = useTouchContextMenu({ delayMs: 500 });
   return (
@@ -138,6 +159,22 @@ describe("useTouchContextMenu", () => {
     act(() => vi.advanceTimersByTime(500));
 
     expect(onCoords).toHaveBeenCalledWith(400, 40);
+  });
+
+  // El asa del cabezal detiene la propagación en su `onPointerDown` para que un
+  // arrastre suyo no dispare además la selección de rango. Armando en burbuja,
+  // eso dejaba sin menú justo la franja donde está el cabezal.
+  it("un hijo que detiene la propagación no desarma la pulsación larga", () => {
+    vi.useFakeTimers();
+    const onContextMenu = vi.fn();
+    const { getByTestId } = render(
+      <StopsPropagationHarness onContextMenu={onContextMenu} />,
+    );
+
+    fireEvent(getByTestId("playhead"), touchPointer("pointerdown", 10, 400, 40));
+    act(() => vi.advanceTimersByTime(500));
+
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
   });
 
   it("preserves the element under the finger for delegated pane menus", () => {

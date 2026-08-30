@@ -792,13 +792,13 @@ export function TimelineCanvasPane({
         className="lt-ruler-track"
         data-lt-tour={TOUR_TARGETS.timelineRuler}
         ref={rulerTrackRef}
-        onPointerDown={(event) => {
-          rulerTouchContextMenu.begin(event);
-          onRulerPointerDown(event);
-        }}
-        onPointerMove={rulerTouchContextMenu.move}
-        onPointerUp={rulerTouchContextMenu.cancel}
-        onPointerCancel={rulerTouchContextMenu.cancel}
+        // En CAPTURA: el asa del cabezal detiene la propagación y con ello la
+        // pulsación larga nunca se armaba encima de ella. Ver useTouchContextMenu.
+        onPointerDownCapture={rulerTouchContextMenu.begin}
+        onPointerMoveCapture={rulerTouchContextMenu.move}
+        onPointerUpCapture={rulerTouchContextMenu.cancel}
+        onPointerCancelCapture={rulerTouchContextMenu.cancel}
+        onPointerDown={onRulerPointerDown}
         onMouseDown={(event) => onRulerPointerDown(event as unknown as ReactPointerEvent<HTMLDivElement>)}
         onContextMenu={onRulerContextMenu}
       >

@@ -813,9 +813,17 @@ export function LibrarySidebarPanel({
 
         {contextMenu ? (
           <div
-            className="lt-context-menu"
+            // En móvil el menú NO se ancla al dedo: anclado, cualquier pulsación
+            // en la mitad inferior del panel -y la barra de selección está
+            // justo ahí- lo abría fuera de la pantalla. Como hoja inferior
+            // siempre cae dentro, y los destinos crecen a tamaño de dedo.
+            className={`lt-context-menu${isMobileApp ? " is-mobile-sheet" : ""}`}
             ref={contextMenuRef}
-            style={{ left: contextMenu.x, top: contextMenu.y }}
+            style={
+              isMobileApp
+                ? undefined
+                : { left: contextMenu.x, top: contextMenu.y }
+            }
             onClick={(event) => event.stopPropagation()}
           >
             <strong>{contextMenu.title}</strong>
@@ -838,9 +846,23 @@ export function LibrarySidebarPanel({
 
       {isMobileApp && selectedAssets.length > 0 && onAddSelectionToTimeline ? (
         <div className="lt-library-mobile-actionbar">
-          <span className="lt-library-mobile-actionbar-count">
-            {t("library.selectedCount", { count: selectedAssets.length })}
-          </span>
+          {/* Dos filas: en apaisado el panel mide ~15rem y la cuenta, dos
+              botones con texto y la X no caben en una sola — el botón principal
+              se partía en tres líneas y la X se salía del panel. */}
+          <div className="lt-library-mobile-actionbar-head">
+            <span className="lt-library-mobile-actionbar-count">
+              {t("library.selectedCount", { count: selectedAssets.length })}
+            </span>
+            <button
+              type="button"
+              className="lt-library-mobile-actionbar-clear"
+              aria-label={t("library.clearSelection")}
+              onClick={() => setSelectedAssetPaths([])}
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div className="lt-library-mobile-actionbar-actions">
           <button
             type="button"
             className="lt-library-mobile-actionbar-add"
@@ -871,19 +893,13 @@ export function LibrarySidebarPanel({
                 clientToZoomedCoords(bounds.left, bounds.top),
                 selectedAssets,
               );
+              event.currentTarget.blur();
             }}
           >
             <span className="material-symbols-outlined">drive_file_move</span>
             {t("library.moveToFolderShort")}
           </button>
-          <button
-            type="button"
-            className="lt-library-mobile-actionbar-clear"
-            aria-label={t("library.clearSelection")}
-            onClick={() => setSelectedAssetPaths([])}
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
+          </div>
         </div>
       ) : null}
     </aside>

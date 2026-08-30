@@ -583,6 +583,16 @@ export function TimelineRulerCanvas({
               "--lt-ruler-mark-scale-x",
               `${overlayScaleX !== 0 ? 1 / overlayScaleX : 1}`,
             );
+            // La contra-escala de las zonas tactiles de ancho fijo (banderas,
+            // tempo) sólo se activa mientras el zoom está sin confirmar. Fuera
+            // de ese rato la escala es 1 y la regla no haría nada: dejar un
+            // `transform` puesto en cada hotspot obliga al WebView a tratarlos
+            // como capas propias en cada cuadro que la cámara se mueve, que con
+            // decenas de marcas se nota en un teléfono.
+            overlayContentRef.current.classList.toggle(
+              "is-zoom-preview",
+              overlayScaleX !== 1,
+            );
             lastOverlayTransformCameraX = cameraX;
             lastOverlayTransformScaleX = overlayScaleX;
           }
@@ -690,6 +700,7 @@ export function TimelineRulerCanvas({
       <div className="lt-ruler-overlay">
         <div
           ref={overlayContentRef}
+          className="lt-ruler-overlay-content"
           style={{
             position: "absolute",
             inset: 0,

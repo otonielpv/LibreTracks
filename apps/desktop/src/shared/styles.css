@@ -4495,25 +4495,12 @@ html.lt-ios body {
   z-index: 6;
 }
 
-/* Los hijos del overlay de la regla heredan el `scaleX` que CanvasTimeline
-   aplica mientras dura la previsualizacion del zoom. Lo que mide en SEGUNDOS
-   (la banda de una region) DEBE estirarse con el; lo que mide en PIXELES -la
-   zona tactil de una marca- no: a 2x, una zona de 68px se vuelve un hueco
-   invisible de 136px que se traga los toques de la marca vecina. Estas se
-   contra-escalan con 1/scaleX, y su desplazamiento a la izquierda viaja
-   multiplicado por la misma variable para que siga valiendo los mismos pixeles
-   de pantalla (el padre escala tambien las traslaciones de sus hijos).
-   `--lt-hotspot-offset-x` se puede pisar en linea (movil usa un margen menor).
-   Ver --lt-ruler-mark-scale-x en Renderer/CanvasTimeline.tsx. */
 .lt-marker-hotspot {
   position: absolute;
   width: 4.25rem;
   height: 2.25rem;
   --lt-hotspot-offset-x: -0.5rem;
-  transform-origin: 0 0;
-  transform:
-    translateX(calc(var(--lt-hotspot-offset-x) * var(--lt-ruler-mark-scale-x, 1)))
-    scaleX(var(--lt-ruler-mark-scale-x, 1));
+  margin-left: var(--lt-hotspot-offset-x);
   border: 0;
   background: transparent;
   color: transparent;
@@ -4593,18 +4580,37 @@ html.lt-ios body {
   position: absolute;
   width: 3.25rem;
   height: 1.9rem;
-  /* Misma contra-escala que .lt-marker-hotspot: ancho en pixeles dentro de un
-     envoltorio que se escala con el zoom. */
   --lt-hotspot-offset-x: -0.35rem;
-  transform-origin: 0 0;
-  transform:
-    translateX(calc(var(--lt-hotspot-offset-x) * var(--lt-ruler-mark-scale-x, 1)))
-    scaleX(var(--lt-ruler-mark-scale-x, 1));
+  margin-left: var(--lt-hotspot-offset-x);
   border: 0;
   background: transparent;
   color: transparent;
   cursor: pointer;
   z-index: 4;
+}
+
+/* Los hijos del overlay de la regla heredan el `scaleX` que CanvasTimeline
+   aplica MIENTRAS el zoom esta sin confirmar. Lo que mide en SEGUNDOS (la banda
+   de una region) DEBE estirarse con el; lo que mide en PIXELES -la zona tactil
+   de una marca- no: a 2x, una zona de 68px se vuelve un hueco invisible de
+   136px que se traga los toques de la marca vecina. Estas se contra-escalan con
+   1/scaleX, y su desplazamiento a la izquierda pasa de `margin-left` a una
+   traslacion multiplicada por la misma variable, para que siga valiendo los
+   mismos pixeles de pantalla (el padre escala tambien las traslaciones de sus
+   hijos).
+
+   Va bajo `.is-zoom-preview` a proposito: fuera del gesto la escala es 1 y esto
+   no haria nada, pero dejar un `transform` puesto en cada hotspot obliga al
+   WebView a tratarlos como capas propias en cada cuadro que la camara se mueve,
+   y con decenas de marcas se nota en un telefono. Ver
+   --lt-ruler-mark-scale-x en timeline/CanvasTimeline.tsx. */
+.lt-ruler-overlay-content.is-zoom-preview .lt-marker-hotspot,
+.lt-ruler-overlay-content.is-zoom-preview .lt-tempo-hotspot {
+  margin-left: 0;
+  transform-origin: 0 0;
+  transform:
+    translateX(calc(var(--lt-hotspot-offset-x) * var(--lt-ruler-mark-scale-x, 1)))
+    scaleX(var(--lt-ruler-mark-scale-x, 1));
 }
 
 .lt-automation-hotspot {
@@ -8301,6 +8307,28 @@ html.lt-ios body {
   letter-spacing: 0.08em;
 }
 
+/* Dos filas. En apaisado el panel de biblioteca mide ~15rem: la cuenta, dos
+   botones con texto y la X no caben en una sola, y el boton principal acababa
+   partido en tres lineas con la X fuera del panel. */
+.lt-android .lt-library-mobile-actionbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.lt-android .lt-library-mobile-actionbar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lt-android .lt-library-mobile-actionbar-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
 /* Secundario junto al primario: mismo alto tactil, peso visual menor porque
    "anadir al timeline" es lo que se pulsa cada dia y "mover a..." se usa al
    ordenar la biblioteca. */
@@ -8323,6 +8351,40 @@ html.lt-ios body {
 }
 
 .lt-android .lt-library-mobile-actionbar-move:disabled {
+  opacity: 0.4;
+}
+
+/* Hoja inferior. Anclado al dedo, este menu se abria fuera de la pantalla en
+   cuanto la pulsacion caia en la mitad baja del panel — y la barra de seleccion
+   esta justo ahi. Como hoja siempre entra, y los destinos crecen a tamano de
+   dedo. `left/right/bottom` en vez del `left/top` en linea, que en movil no se
+   escribe (ver LibrarySidebarPanel). */
+.lt-mobile .lt-context-menu.is-mobile-sheet {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  gap: 0;
+  max-height: 60vh;
+  padding: 0.6rem 0.5rem max(0.6rem, env(safe-area-inset-bottom, 0px));
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: #161616;
+}
+
+.lt-mobile .lt-context-menu.is-mobile-sheet strong {
+  padding-bottom: 0.5rem;
+}
+
+.lt-mobile .lt-context-menu.is-mobile-sheet button {
+  min-height: 2.75rem;
+  padding: 0 0.6rem;
+  font-size: 13px;
+  border-bottom: 1px solid rgb(186 202 197 / 0.1);
+}
+
+.lt-mobile .lt-context-menu.is-mobile-sheet button:disabled {
   opacity: 0.4;
 }
 

@@ -89,8 +89,6 @@ function contentUnitsAt(state: { cameraX: number; zoomLevel: number }, screenX: 
   return (state.cameraX + screenX) / (state.zoomLevel * BASE_PIXELS_PER_SECOND);
 }
 
-let frames: FrameRequestCallback[] = [];
-
 /** jsdom no trae PointerEvent; el gesto sintetiza `pointercancel` con el. */
 class TestPointerEvent extends MouseEvent {
   readonly pointerId: number;
@@ -109,26 +107,12 @@ beforeEach(() => {
     configurable: true,
     value: TestPointerEvent,
   });
-  frames = [];
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-    frames.push(callback);
-    return frames.length;
-  });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
-
-function flushFrames() {
-  const pending = frames;
-  frames = [];
-  for (const frame of pending) {
-    frame(0);
-  }
-}
 
 describe("InputManager: gesto de dos dedos", () => {
   it("mantiene el contenido pegado al punto medio al hacer pinza", () => {
@@ -144,7 +128,6 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(1, { x: 200, y: 200 }), touch(2, { x: 600, y: 200 })]),
     );
-    flushFrames();
 
     expect(state.zoomLevel).toBeGreaterThan(1.8);
     expect(contentUnitsAt(state, 400)).toBeCloseTo(anchored, 6);
@@ -162,7 +145,6 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(1, { x: 50, y: 200 }), touch(2, { x: 450, y: 200 })]),
     );
-    flushFrames();
 
     // El material que estaba bajo 400 tiene que estar ahora bajo 250: es lo que
     // la suma de deltas incrementales no conseguía (se estorbaban).
@@ -180,7 +162,6 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(1, { x: 201, y: 200 }), touch(2, { x: 399, y: 200 })]),
     );
-    flushFrames();
 
     expect(state.zoomLevel).toBe(1);
     expect(state.cameraX).toBeCloseTo(100, 6);
@@ -197,7 +178,6 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(1, { x: 296.9, y: 200 }), touch(2, { x: 503.1, y: 200 })]),
     );
-    flushFrames();
 
     expect(state.zoomLevel).toBeGreaterThan(1);
     expect(state.zoomLevel).toBeLessThan(1.005);
@@ -239,7 +219,6 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(1, { x: 100, y: 200 }), touch(2, { x: 300, y: 200 })]),
     );
-    flushFrames();
 
     expect(state.cameraX).toBe(0);
     expect(state.zoomLevel).toBe(1);
@@ -254,37 +233,16 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(1, { x: 200, y: 200 }), touch(2, { x: 600, y: 200 })]),
     );
-    flushFrames();
     container.dispatchEvent(touchEvent("touchend", []));
 
     expect(commits.zoom).toHaveLength(1);
     expect(commits.camera).toHaveLength(1);
   });
 
-  // El carril de pistas lleva `touch-action: pan-y`: un dedo bajando arranca el
-  // desplazamiento nativo, y cuando el segundo aterriza ese scroll ya no se
-  // puede detener. Sumarle el nuestro hacía el doble de recorrido.
-  it("no dobla el desplazamiento vertical que ya hace el navegador", () => {
-    const { container, verticalScroll, state } = setup();
-
-    container.dispatchEvent(
-      touchEvent("touchstart", [touch(1, { x: 300, y: 200 }), touch(2, { x: 500, y: 200 })]),
-    );
-    container.dispatchEvent(
-      uncancelableTouchMove([
-        touch(1, { x: 300, y: 120 }),
-        touch(2, { x: 500, y: 120 }),
-      ]),
-    );
-    flushFrames();
-
-    expect(verticalScroll).toEqual([]);
-    // El zoom y el desplazamiento horizontal siguen su curso: no compiten con
-    // un desplazamiento vertical nativo.
-    expect(state.zoomLevel).toBe(1);
-  });
-
-  it("desplaza en vertical cuando el gesto es nuestro", () => {
+  // Petición explícita tras probar en un iPhone 13: con dos dedos el
+  // desplazamiento vertical se pisaba con el nativo del carril de pistas. El
+  // vertical es del gesto de UN dedo; dos dedos son cámara y zoom, nada más.
+  it("no desplaza en vertical: eso es del gesto de un dedo", () => {
     const { container, verticalScroll } = setup();
 
     container.dispatchEvent(
@@ -296,9 +254,36 @@ describe("InputManager: gesto de dos dedos", () => {
         touch(2, { x: 500, y: 120 }),
       ]),
     );
-    flushFrames();
 
-    expect(verticalScroll).toEqual([80]);
+    expect(verticalScroll).toEqual([]);
+  });
+
+  // El destino de un toque se fija al tocar y no se actualiza. Cuando React
+  // repinta la regla a mitad de pinza (cambia el zoom, se rehacen las
+  // banderas), ese elemento sale del documento y con él el toque de
+  // `targetTouches`: el gesto se moría solo. Los identificadores no.
+  it("sobrevive a que React repinte el elemento bajo el dedo", () => {
+    const { container, state } = setup();
+    const child = document.createElement("div");
+    container.append(child);
+
+    const a = touch(1, { x: 300, y: 200 });
+    const b = touch(2, { x: 500, y: 200 });
+    const start = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(start, "targetTouches", { value: [a, b] });
+    Object.defineProperty(start, "touches", { value: [a, b] });
+    container.dispatchEvent(start);
+
+    // El repintado se lleva el elemento: `targetTouches` se queda vacío.
+    child.remove();
+    const move = new Event("touchmove", { bubbles: true, cancelable: true });
+    const movedA = touch(1, { x: 200, y: 200 });
+    const movedB = touch(2, { x: 600, y: 200 });
+    Object.defineProperty(move, "targetTouches", { value: [] });
+    Object.defineProperty(move, "touches", { value: [movedA, movedB] });
+    container.dispatchEvent(move);
+
+    expect(state.zoomLevel).toBeGreaterThan(1.8);
   });
 
   it("re-siembra el ancla si cambia el par de dedos, sin saltar", () => {
@@ -310,7 +295,6 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(1, { x: 200, y: 200 }), touch(2, { x: 600, y: 200 })]),
     );
-    flushFrames();
     const zoomBefore = state.zoomLevel;
     const cameraBefore = state.cameraX;
 
@@ -318,7 +302,6 @@ describe("InputManager: gesto de dos dedos", () => {
     container.dispatchEvent(
       touchEvent("touchmove", [touch(2, { x: 600, y: 200 }), touch(3, { x: 700, y: 200 })]),
     );
-    flushFrames();
 
     expect(state.zoomLevel).toBe(zoomBefore);
     expect(state.cameraX).toBe(cameraBefore);

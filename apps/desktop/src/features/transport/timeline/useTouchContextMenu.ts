@@ -15,8 +15,19 @@ type TouchContextMenuOptions = {
   ignoreTarget?: (target: EventTarget | null) => boolean;
 };
 
-/** Synthesizes the same bubbling `contextmenu` event as a desktop right-click.
- * Mobile WebViews do not do this consistently for a finger long-press. */
+/**
+ * Synthesizes the same bubbling `contextmenu` event as a desktop right-click.
+ * Mobile WebViews do not do this consistently for a finger long-press.
+ *
+ * ARMAR EN CAPTURA cuando el contenedor tenga hijos interactivos. Un hijo que
+ * llame a `stopPropagation()` en su `onPointerDown` — el asa del cabezal lo
+ * hace, para que arrastrarla no dispare además la selección de rango — deja sin
+ * armar una pulsación larga cableada en burbuja: sobre esa franja el menú
+ * simplemente no salía, y en la regla es justo donde más falta hace (crear una
+ * marca en la posición actual). La captura corre antes que el destino, así que
+ * ningún hijo puede quitársela. Usa `ignoreTarget` para las zonas que tengan su
+ * propio menú.
+ */
 export function useTouchContextMenu({
   delayMs = 550,
   // Un dedo apoyado sobre un movil no se esta quieto: sostener 550 ms sin

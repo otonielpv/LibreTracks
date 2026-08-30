@@ -24,9 +24,23 @@ const drawBackground = readFileSync(
   resolve(rendererDir, "drawBackground.ts"),
   "utf8",
 );
+const canvasTimeline = readFileSync(
+  resolve(rendererDir, "../timeline/CanvasTimeline.tsx"),
+  "utf8",
+);
 
 function marker(name: string, digit?: number): SectionMarkerSummary {
   return { id: "m", name, startSeconds: 0, digit } as SectionMarkerSummary;
+}
+
+/** Última regla cuyo selector sea EXACTAMENTE el dado (no una compuesta). */
+function baseRuleFor(selector: string): string {
+  const escaped = selector.replace(".", "\\.");
+  const matches = Array.from(
+    styles.matchAll(new RegExp(`(^|\\n)${escaped}\\s*\\{([^}]+)\\}`, "g")),
+  );
+  expect(matches.length, `falta la regla ${selector}`).toBeGreaterThan(0);
+  return matches.at(-1)?.[2] ?? "";
 }
 
 describe("geometría de la bandera de una marca", () => {
@@ -67,16 +81,34 @@ describe("geometría de la bandera de una marca", () => {
    * hueco invisible alrededor de la marca.
    */
   it("las zonas táctiles de ancho fijo se contra-escalan con el zoom", () => {
-    for (const selector of [".lt-marker-hotspot", ".lt-tempo-hotspot"]) {
-      const rule = styles.match(
-        new RegExp(`\\${selector}\\s*\\{([^}]+)\\}`),
-      )?.[1];
-      expect(rule, `falta la regla ${selector}`).toBeTruthy();
-      expect(rule).toContain("scaleX(var(--lt-ruler-mark-scale-x, 1))");
-      // El desplazamiento a la izquierda viaja por la misma variable: el padre
-      // escala también las traslaciones de sus hijos.
-      expect(rule).toContain("var(--lt-hotspot-offset-x)");
-      expect(rule).not.toContain("margin-left");
-    }
+    const match = styles.match(
+      /((?:\.lt-ruler-overlay-content\.is-zoom-preview[^,{]+,?\s*)+)\{([^}]+)\}/,
+    );
+    expect(match, "falta la regla de contra-escala").toBeTruthy();
+    const [, selectorList, rule] = match ?? [];
+
+    expect(rule).toContain("scaleX(var(--lt-ruler-mark-scale-x, 1))");
+    // El desplazamiento a la izquierda pasa de `margin-left` a una traslación
+    // por la misma variable: el padre escala también las traslaciones.
+    expect(rule).toContain("var(--lt-hotspot-offset-x)");
+    expect(rule).toContain("margin-left: 0");
+
+    // Cubre las dos zonas de ancho fijo, y sólo esas: la banda de una región
+    // mide en segundos y SÍ debe estirarse con el zoom.
+    expect(selectorList).toContain(".lt-marker-hotspot");
+    expect(selectorList).toContain(".lt-tempo-hotspot");
+    expect(selectorList).not.toContain(".lt-region-hotspot");
+  });
+
+  // Fuera del gesto la escala es 1 y la contra-escala no haría nada, pero un
+  // `transform` puesto en cada hotspot obliga al WebView a tratarlos como capas
+  // propias en cada cuadro que la cámara se mueve. Con decenas de marcas eso se
+  // nota en un teléfono, así que la regla vive bajo una clase que sólo existe
+  // mientras el zoom está sin confirmar.
+  it("no deja transform en los hotspots fuera del gesto de zoom", () => {
+    expect(baseRuleFor(".lt-marker-hotspot")).not.toContain("transform");
+    expect(baseRuleFor(".lt-tempo-hotspot")).not.toContain("transform");
+    expect(canvasTimeline).toContain('"is-zoom-preview"');
+    expect(canvasTimeline).toContain("overlayScaleX !== 1");
   });
 });

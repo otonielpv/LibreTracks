@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createRef } from "react";
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -14,6 +17,11 @@ import { PlayheadOverlay } from "./PlayheadOverlay";
  * el salto cierra el menú contextual: el menú "se abría y se cerraba al
  * instante". Con un dedo el arrastre ahora se ARMA y sólo empieza al moverse.
  */
+
+const pane = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), "TimelineCanvasPane.tsx"),
+  "utf8",
+);
 
 function boundsRef() {
   const element = document.createElement("div");
@@ -121,6 +129,17 @@ describe("PlayheadOverlay: asa con el dedo", () => {
     window.dispatchEvent(pointer("pointercancel", 480));
 
     expect(onSeekCommit).not.toHaveBeenCalled();
+  });
+
+  // La otra mitad del mismo problema: el asa detiene la propagación, así que si
+  // la regla arma la pulsación larga en burbuja no llega a armarse nunca encima
+  // del cabezal — y ahí es donde más falta hace (crear una marca en la posición
+  // actual). Se comprueba sobre la fuente porque el cableado vive en el panel.
+  it("la regla arma la pulsación larga en captura", () => {
+    expect(pane).toContain(
+      "onPointerDownCapture={rulerTouchContextMenu.begin}",
+    );
+    expect(pane).toContain("onPointerUpCapture={rulerTouchContextMenu.cancel}");
   });
 
   it("mantiene el arranque inmediato con el ratón", () => {
