@@ -96,6 +96,7 @@ import {
   importStagedAudioFiles,
   importSongPackageFromPathWithProgress,
   importExternalProjectFromPathWithProgress,
+  isIOSApp,
   isMobileApp,
   isTauriApp,
   listenToMidiRawMessage,
@@ -369,7 +370,7 @@ import {
   resolveVisualClockResync,
   resolveVisualPositionAcrossVamp,
 } from "@libretracks/shared/playbackClock";
-import { resolveFollowCameraX } from "./followCamera";
+import { createFollowCameraFrameGate, resolveFollowCameraX } from "./followCamera";
 import {
   buildAudioRoutingOptions,
   buildMemoizedClipsByTrack,
@@ -4528,15 +4529,10 @@ export function TransportPanelContent() {
     }
 
     let animationFrameId = 0;
-    let lastFrameMs = performance.now();
+    const nextFollowCameraFrame = createFollowCameraFrameGate(isIOSApp);
 
     const tick = () => {
       const nowMs = performance.now();
-      // Real time since the previous frame, used to keep the follow-camera
-      // glide frame-rate independent. Clamp so a tab-switch stall or GC pause
-      // can't make the camera lurch on the next frame.
-      const frameDtSeconds = Math.min(0.1, (nowMs - lastFrameMs) / 1000);
-      lastFrameMs = nowMs;
 
       if (playheadDragRef.current) {
         animationFrameId = window.requestAnimationFrame(tick);
@@ -4552,7 +4548,10 @@ export function TransportPanelContent() {
       );
 
       syncLivePosition(nextPositionSeconds);
-      maybeFollowPlayhead(nextPositionSeconds, frameDtSeconds);
+      const followFrameDtSeconds = nextFollowCameraFrame(nowMs);
+      if (followFrameDtSeconds !== null) {
+        maybeFollowPlayhead(nextPositionSeconds, followFrameDtSeconds);
+      }
       animationFrameId = window.requestAnimationFrame(tick);
     };
 
