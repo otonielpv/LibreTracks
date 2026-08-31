@@ -30,7 +30,13 @@ android {
     namespace = "com.libretracks.desktop"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.libretracks.desktop"
+        // The package name on Google Play. Deliberately NOT the same as
+        // `namespace` above: the Kotlin package, the Tauri/wry JNI bindings
+        // and the `Java_com_libretracks_desktop_*` symbols in Rust all derive
+        // from the namespace (and from tauri.conf.json's identifier) and must
+        // stay put, while this is the permanent, publicly visible id of the
+        // Play listing. It cannot be changed after the first upload.
+        applicationId = "com.libretracks.app"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

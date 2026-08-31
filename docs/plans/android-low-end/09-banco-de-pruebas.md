@@ -25,7 +25,7 @@ en el dispositivo**. Esto es la herramienta que las produce.
 2. Limpie el estado: `pm clear` opcional, purgue la caché de fuentes.
 3. Lance la app y ejecute un escenario.
 4. Muestree cada segundo, durante la operación:
-   - RSS del proceso (`dumpsys meminfo com.libretracks.desktop`)
+   - RSS del proceso (`dumpsys meminfo com.libretracks.app`)
    - `MemAvailable` del sistema
    - Bytes escritos por el proceso (`/proc/<pid>/io`, campo `write_bytes`)
    - Cualquier `am_kill` en logcat

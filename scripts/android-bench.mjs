@@ -19,7 +19,7 @@ import path from "node:path";
 import readline from "node:readline";
 import { spawnSync } from "node:child_process";
 
-const PACKAGE = "com.libretracks.desktop";
+const PACKAGE = "com.libretracks.app";
 
 // Etiquetas del motor que interesan durante una medicion. [LT_STARVATION] marca
 // hambruna del BlockCache (cortes de audio); las otras tres las anaden los pasos
