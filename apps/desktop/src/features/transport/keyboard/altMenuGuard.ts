@@ -10,13 +10,14 @@
  *
  * There is no way to tell the OS "that Alt was used", so the guard cancels the
  * Alt release itself: a cancelled key event is not forwarded to the window
- * procedure, so the menu never activates. It only arms after a wheel event that
- * actually carried Alt, so a plain Alt press anywhere else behaves normally.
+ * procedure, so the menu never activates. It only arms after a wheel or pointer
+ * gesture that actually carried Alt (Alt + wheel, Alt-dragging a track's bottom
+ * edge), so a plain Alt press anywhere else behaves normally.
  */
 export function installAltMenuGuard(): () => void {
   let armed = false;
 
-  const onWheel = (event: WheelEvent) => {
+  const onAltGesture = (event: WheelEvent | PointerEvent) => {
     if (event.altKey) {
       armed = true;
     }
@@ -49,13 +50,21 @@ export function installAltMenuGuard(): () => void {
     armed = false;
   };
 
-  window.addEventListener("wheel", onWheel, { capture: true, passive: true });
+  window.addEventListener("wheel", onAltGesture, {
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("pointerdown", onAltGesture, {
+    capture: true,
+    passive: true,
+  });
   window.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("keyup", onKeyUp, true);
   window.addEventListener("blur", onBlur);
 
   return () => {
-    window.removeEventListener("wheel", onWheel, { capture: true });
+    window.removeEventListener("wheel", onAltGesture, { capture: true });
+    window.removeEventListener("pointerdown", onAltGesture, { capture: true });
     window.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("keyup", onKeyUp, true);
     window.removeEventListener("blur", onBlur);

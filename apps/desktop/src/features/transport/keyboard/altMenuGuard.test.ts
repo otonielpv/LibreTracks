@@ -60,6 +60,20 @@ describe("installAltMenuGuard", () => {
     expect(key("keyup", { key: "Alt" })).toBe(false);
   });
 
+  it("cancels the Alt release after an Alt-drag too", () => {
+    // Alt-dragging a track's bottom edge (resize every row) is the same trap:
+    // Alt goes down and up with no key press in between.
+    install();
+
+    // jsdom has no PointerEvent; the guard only reads `altKey`, which a
+    // MouseEvent of the same type carries just as well.
+    window.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, altKey: true }),
+    );
+
+    expect(key("keyup", { key: "Alt" })).toBe(true);
+  });
+
   it("only swallows one release, not every later one", () => {
     install();
 
