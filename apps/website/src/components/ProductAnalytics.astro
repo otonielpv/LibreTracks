@@ -29,7 +29,6 @@ const copy = es
       successes: "exitos",
       failures: "fallos",
       updated: "Actualizado",
-      today: "Hoy",
       overview: "Resumen ejecutivo",
       activationRate: "Tasa de activacion",
       deepSessions: "Sesiones de 30+ min",
@@ -37,7 +36,7 @@ const copy = es
       previousDay: "frente a ayer a esta hora",
       dailyTrend: "Evolucion diaria",
       utcActivity: "Actividad por hora UTC",
-      todayNote: "Dia UTC en curso; las horas que faltan aun no han ocurrido.",
+      partialDayNote: "El rango dura menos de un dia: las horas que quedan fuera aparecen a cero.",
       weekly: "Uso por dia de la semana",
       weeklyNote: "Dia local del dispositivo. Un pico en domingo indica uso en directo; una semana plana indica ensayos.",
       sundayShare: "Uso en domingo",
@@ -49,6 +48,31 @@ const copy = es
       noData: "Todavia no hay datos para este periodo.",
       sessions: "inicios",
       active: "activos",
+      rangeTitle: "Rango de tiempo",
+      quickRanges: "Rangos rapidos",
+      absoluteRange: "Rango absoluto (UTC)",
+      rangeFrom: "Desde",
+      rangeTo: "Hasta",
+      rangeApply: "Aplicar rango",
+      rangeInvalid: "La fecha de inicio debe ser anterior a la de fin.",
+      rangeShown: "Rango",
+      retentionNote: "Solo se conservan los ultimos 90 dias de telemetria; lo anterior se borra automaticamente.",
+      clampedNote: "Rango recortado a los datos disponibles (90 dias de retencion).",
+      previousRange: "Desplazar al periodo anterior",
+      nextRange: "Desplazar al periodo siguiente",
+      refresh: "Recargar",
+      range_today: "Hoy",
+      range_yesterday: "Ayer",
+      range_last6h: "Ultimas 6 horas",
+      range_last24h: "Ultimas 24 horas",
+      range_last7d: "Ultimos 7 dias",
+      range_last14d: "Ultimos 14 dias",
+      range_last30d: "Ultimos 30 dias",
+      range_last90d: "Ultimos 90 dias",
+      range_thisWeek: "Esta semana",
+      range_lastWeek: "Semana pasada",
+      range_thisMonth: "Este mes",
+      range_lastMonth: "Mes pasado",
     }
   : {
       access: "Dashboard access",
@@ -73,7 +97,6 @@ const copy = es
       successes: "successes",
       failures: "failures",
       updated: "Updated",
-      today: "Today",
       overview: "Executive overview",
       activationRate: "Activation rate",
       deepSessions: "30+ min sessions",
@@ -81,7 +104,7 @@ const copy = es
       previousDay: "versus yesterday at this time",
       dailyTrend: "Daily trend",
       utcActivity: "Activity by UTC hour",
-      todayNote: "Running UTC day; the remaining hours have not happened yet.",
+      partialDayNote: "The range is shorter than a day: the hours outside it show as zero.",
       weekly: "Usage by weekday",
       weeklyNote: "Device-local weekday. A Sunday spike means live use; a flat week means rehearsals.",
       sundayShare: "Sunday usage",
@@ -93,6 +116,31 @@ const copy = es
       noData: "No data for this period yet.",
       sessions: "starts",
       active: "active",
+      rangeTitle: "Time range",
+      quickRanges: "Quick ranges",
+      absoluteRange: "Absolute range (UTC)",
+      rangeFrom: "From",
+      rangeTo: "To",
+      rangeApply: "Apply range",
+      rangeInvalid: "The start must come before the end.",
+      rangeShown: "Range",
+      retentionNote: "Only the last 90 days of telemetry are retained; anything older is deleted automatically.",
+      clampedNote: "Range trimmed to the available data (90-day retention).",
+      previousRange: "Shift to the previous period",
+      nextRange: "Shift to the next period",
+      refresh: "Reload",
+      range_today: "Today",
+      range_yesterday: "Yesterday",
+      range_last6h: "Last 6 hours",
+      range_last24h: "Last 24 hours",
+      range_last7d: "Last 7 days",
+      range_last14d: "Last 14 days",
+      range_last30d: "Last 30 days",
+      range_last90d: "Last 90 days",
+      range_thisWeek: "This week",
+      range_lastWeek: "Last week",
+      range_thisMonth: "This month",
+      range_lastMonth: "Last month",
     };
 ---
 
@@ -115,11 +163,35 @@ const copy = es
     <button class="button-link" type="button" data-analytics-submit>{copy.enter}</button>
   </div>
   <div class="analytics-toolbar" data-analytics-toolbar hidden>
-    <div class="analytics-window" role="group" aria-label="Time window">
-      <button type="button" data-days="1">{copy.today}</button>
-      <button type="button" data-days="7">7d</button>
-      <button type="button" data-days="30" class="is-active">30d</button>
-      <button type="button" data-days="90">90d</button>
+    <div class="analytics-range" role="group" aria-label={copy.rangeTitle}>
+      <button type="button" class="analytics-range-step" data-range-step="-1" title={copy.previousRange} aria-label={copy.previousRange}>&#8249;</button>
+      <button type="button" class="analytics-range-trigger" data-range-trigger aria-haspopup="dialog" aria-expanded="false">
+        <span aria-hidden="true">&#128337;</span>
+        <span data-range-label>{copy.range_last30d}</span>
+        <i aria-hidden="true">&#9662;</i>
+      </button>
+      <button type="button" class="analytics-range-step" data-range-step="1" title={copy.nextRange} aria-label={copy.nextRange}>&#8250;</button>
+      <button type="button" class="analytics-range-step" data-range-refresh title={copy.refresh} aria-label={copy.refresh}>&#10227;</button>
+      <div class="analytics-range-popover" data-range-popover role="dialog" aria-label={copy.rangeTitle} hidden>
+        <div class="analytics-range-quick">
+          <h4>{copy.quickRanges}</h4>
+          <ul data-range-presets></ul>
+        </div>
+        <div class="analytics-range-absolute">
+          <h4>{copy.absoluteRange}</h4>
+          <label>
+            <span>{copy.rangeFrom}</span>
+            <input type="datetime-local" data-range-from />
+          </label>
+          <label>
+            <span>{copy.rangeTo}</span>
+            <input type="datetime-local" data-range-to />
+          </label>
+          <p class="analytics-range-error" data-range-error hidden></p>
+          <button type="button" class="button-link" data-range-apply>{copy.rangeApply}</button>
+          <p class="stats-muted">{copy.retentionNote}</p>
+        </div>
+      </div>
     </div>
     <button type="button" class="analytics-lock" data-analytics-lock>{copy.exit}</button>
   </div>
@@ -166,10 +238,13 @@ const copy = es
   type Weekday = { weekday: number; sessions: number; devices: number };
   type ProductStats = {
     generatedAt: string;
-    windowDays: number;
+    from: string;
+    to: string;
+    retentionDays: number;
+    clamped: boolean;
     appStarts: number;
     activeDeviceDays: number;
-    comparison: { appStarts: number; activeDeviceDays: number } | null;
+    comparison: { appStarts: number; activeDeviceDays: number; from: string; to: string } | null;
     activation: Metric[];
     features: Feature[];
     quality: Quality[];
@@ -198,7 +273,119 @@ const copy = es
   const locale = root?.dataset.lang ?? "es";
   const numbers = new Intl.NumberFormat(locale);
   const TOKEN_KEY = "libretracks.analytics.admin-token";
-  let selectedDays = 30;
+  const RANGE_KEY = "libretracks.analytics.range";
+
+  const DAY_MS = 86_400_000;
+  const HOUR_MS = 3_600_000;
+  const DEFAULT_PRESET = "last30d";
+  // Mirrors the pruning window in functions/api/telemetry/events.ts. The server
+  // is the authority and overwrites this from every response; it only has to be
+  // right before the first one lands.
+  let retentionDays = 90;
+
+  // Every range is expressed in UTC. The tables bucket devices per utc_day and
+  // the hourly chart is labelled UTC, so anchoring the picker to the browser's
+  // timezone would make the selection and the axes disagree.
+  const startOfUtcDay = (ms: number) => Math.floor(ms / DAY_MS) * DAY_MS;
+  const startOfUtcWeek = (ms: number) => startOfUtcDay(ms) - new Date(ms).getUTCDay() * DAY_MS;
+  const startOfUtcMonth = (ms: number) => {
+    const date = new Date(ms);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+  };
+
+  type RangeValue = { from: number; to: number };
+  type RangeSelection = { preset: string | null; from: number; to: number };
+
+  const PRESETS: Array<{ key: string; resolve: (now: number) => RangeValue }> = [
+    // "Today" is the running UTC day rather than the last 24 hours, matching
+    // how the server counts a device once per utc_day.
+    { key: "today", resolve: (now) => ({ from: startOfUtcDay(now), to: now }) },
+    { key: "yesterday", resolve: (now) => ({ from: startOfUtcDay(now) - DAY_MS, to: startOfUtcDay(now) }) },
+    { key: "last6h", resolve: (now) => ({ from: now - 6 * HOUR_MS, to: now }) },
+    { key: "last24h", resolve: (now) => ({ from: now - DAY_MS, to: now }) },
+    { key: "last7d", resolve: (now) => ({ from: now - 7 * DAY_MS, to: now }) },
+    { key: "last14d", resolve: (now) => ({ from: now - 14 * DAY_MS, to: now }) },
+    { key: "last30d", resolve: (now) => ({ from: now - 30 * DAY_MS, to: now }) },
+    { key: "last90d", resolve: (now) => ({ from: now - 90 * DAY_MS, to: now }) },
+    // Weeks start on Sunday so "this week" lines up with the Sunday-first
+    // weekday chart and with the services the Sunday share is measuring.
+    { key: "thisWeek", resolve: (now) => ({ from: startOfUtcWeek(now), to: now }) },
+    { key: "lastWeek", resolve: (now) => ({ from: startOfUtcWeek(now) - 7 * DAY_MS, to: startOfUtcWeek(now) }) },
+    { key: "thisMonth", resolve: (now) => ({ from: startOfUtcMonth(now), to: now }) },
+    { key: "lastMonth", resolve: (now) => ({ from: startOfUtcMonth(startOfUtcMonth(now) - 1), to: startOfUtcMonth(now) }) },
+  ];
+
+  function presetRange(key: string): RangeValue | null {
+    const preset = PRESETS.find((item) => item.key === key);
+    return preset ? preset.resolve(Date.now()) : null;
+  }
+
+  function persistRange(value: RangeSelection): void {
+    try {
+      sessionStorage.setItem(RANGE_KEY, JSON.stringify(value));
+    } catch {
+      // Private browsing denies sessionStorage; the picker still works, it just
+      // forgets the range on reload.
+    }
+  }
+
+  function restoreRange(): RangeSelection {
+    try {
+      const stored = sessionStorage.getItem(RANGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Partial<RangeSelection>;
+        // A stored preset is resolved again rather than replayed, so "last 7
+        // days" still means the last seven days on a tab left open overnight.
+        if (typeof parsed.preset === "string") {
+          const value = presetRange(parsed.preset);
+          if (value) return { preset: parsed.preset, ...value };
+        }
+        if (
+          typeof parsed.from === "number" &&
+          typeof parsed.to === "number" &&
+          Number.isFinite(parsed.from) &&
+          Number.isFinite(parsed.to) &&
+          parsed.from < parsed.to
+        ) {
+          return { preset: null, from: parsed.from, to: parsed.to };
+        }
+      }
+    } catch {
+      // Unreadable or malformed state falls back to the default window.
+    }
+    return { preset: DEFAULT_PRESET, ...(presetRange(DEFAULT_PRESET) as RangeValue) };
+  }
+
+  let selection = restoreRange();
+
+  const rangeTrigger = root?.querySelector<HTMLButtonElement>("[data-range-trigger]");
+  const rangeLabelText = root?.querySelector<HTMLElement>("[data-range-label]");
+  const rangePopover = root?.querySelector<HTMLElement>("[data-range-popover]");
+  const rangePresets = root?.querySelector<HTMLElement>("[data-range-presets]");
+  const rangeFrom = root?.querySelector<HTMLInputElement>("[data-range-from]");
+  const rangeTo = root?.querySelector<HTMLInputElement>("[data-range-to]");
+  const rangeError = root?.querySelector<HTMLElement>("[data-range-error]");
+  const rangeApply = root?.querySelector<HTMLButtonElement>("[data-range-apply]");
+  const rangeRefresh = root?.querySelector<HTMLButtonElement>("[data-range-refresh]");
+
+  const instantFormat = new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  });
+  const rangeText = (value: RangeSelection) =>
+    `${instantFormat.format(value.from)} → ${instantFormat.format(value.to)} UTC`;
+  const rangeLabel = (value: RangeSelection) =>
+    value.preset ? copy[`range_${value.preset}`] ?? value.preset : rangeText(value);
+
+  // datetime-local speaks wall-clock time with no zone, so the conversion is
+  // done by hand against UTC instead of through the browser's local offset.
+  const toInputValue = (ms: number) => new Date(ms).toISOString().slice(0, 16);
+  const fromInputValue = (value: string): number => {
+    if (!value) return Number.NaN;
+    // Some browsers append seconds once the field has been stepped.
+    return Date.parse(value.length === 16 ? `${value}:00Z` : `${value}Z`);
+  };
 
   const names: Record<string, Record<string, string>> = {
     es: {
@@ -553,27 +740,30 @@ const copy = es
     summary.className = "analytics-summary";
     const activationRate = data.activation.find((item) => item.key === "project_ready")?.rate ?? 0;
     const deepSessionRate = data.engagement.find((item) => item.minutes === 30)?.rate ?? 0;
-    // A single day is one weekday and one point on the daily line, so the cards
-    // that only say something across days are left out of that window.
-    const singleDay = data.windowDays === 1;
-    const changeNote = singleDay ? copy.previousDay : copy.previousPeriod;
+    const from = Date.parse(data.from);
+    const to = Date.parse(data.to);
+    const span = to - from;
+    // A range confined to one UTC day is one weekday and one point on the daily
+    // line, so the cards that only say something across days are left out.
+    const multiDay = startOfUtcDay(to - 1) > startOfUtcDay(from);
+    const changeNote = span < DAY_MS ? copy.previousDay : copy.previousPeriod;
     summary.append(
       metric(numbers.format(data.appStarts), copy.starts, data.comparison ? comparison(data.appStarts, data.comparison.appStarts) : undefined, changeNote),
       metric(numbers.format(data.activeDeviceDays), copy.devices, data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined, changeNote),
       metric(`${activationRate.toFixed(1)}%`, copy.activationRate),
       metric(`${deepSessionRate.toFixed(1)}%`, copy.deepSessions),
     );
-    if (!singleDay) {
+    if (multiDay) {
       summary.append(metric(`${data.weekly.sundayShare.toFixed(1)}%`, copy.sundayShare));
     }
 
     const grid = document.createElement("div");
     grid.className = "analytics-grid";
-    if (!singleDay) grid.append(trend(data.daily));
+    if (multiDay) grid.append(trend(data.daily));
     grid.append(
-      chartCard(copy.utcActivity, "hourly", singleDay, singleDay ? copy.todayNote : undefined),
+      chartCard(copy.utcActivity, "hourly", !multiDay, span < DAY_MS ? copy.partialDayNote : undefined),
     );
-    if (!singleDay) grid.append(weeklyCard());
+    if (multiDay) grid.append(weeklyCard());
     grid.append(
       chartCard(copy.activation, "funnel"),
       countryMap(data.breakdown.countries),
@@ -603,10 +793,46 @@ const copy = es
     renderCharts(data);
   }
 
+  function syncRangeUi(): void {
+    if (rangeLabelText) rangeLabelText.textContent = rangeLabel(selection);
+    if (rangeTrigger) rangeTrigger.title = rangeText(selection);
+    rangePresets?.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.preset === selection.preset);
+    });
+    if (rangeFrom) rangeFrom.value = toInputValue(selection.from);
+    if (rangeTo) rangeTo.value = toInputValue(selection.to);
+    const now = Date.now();
+    const floor = now - retentionDays * DAY_MS;
+    // Stepping past either edge only returns the window it is already showing,
+    // so the arrow says so instead of pretending to move.
+    const back = root?.querySelector<HTMLButtonElement>('[data-range-step="-1"]');
+    const forward = root?.querySelector<HTMLButtonElement>('[data-range-step="1"]');
+    if (back) back.disabled = selection.from <= floor;
+    if (forward) forward.disabled = selection.to >= now - 5 * 60_000;
+  }
+
+  function closePopover(): void {
+    if (rangePopover) rangePopover.hidden = true;
+    rangeTrigger?.setAttribute("aria-expanded", "false");
+    if (rangeError) rangeError.hidden = true;
+  }
+
+  function applySelection(value: RangeSelection): void {
+    selection = value;
+    persistRange(selection);
+    syncRangeUi();
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    if (token) void load(token);
+  }
+
   async function load(token: string): Promise<void> {
     if (status) status.textContent = copy.loading;
     try {
-      const response = await fetch(`/api/telemetry/product-stats?days=${selectedDays}`, {
+      const query = new URLSearchParams({
+        from: String(selection.from),
+        to: String(selection.to),
+      });
+      const response = await fetch(`/api/telemetry/product-stats?${query}`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
@@ -617,10 +843,23 @@ const copy = es
       sessionStorage.setItem(TOKEN_KEY, token);
       if (form) form.hidden = true;
       if (toolbar) toolbar.hidden = false;
+      retentionDays = data.retentionDays ?? retentionDays;
+      // The server trims the request to what retention actually holds; adopting
+      // its answer keeps the arrows and the inputs stepping over real data.
+      selection = { preset: selection.preset, from: Date.parse(data.from), to: Date.parse(data.to) };
+      persistRange(selection);
+      syncRangeUi();
       render(data);
       if (status) {
-        const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt));
-        status.textContent = `${copy.updated}: ${date}`;
+        status.replaceChildren();
+        const generated = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt));
+        status.append(`${copy.updated}: ${generated} · ${copy.rangeShown}: ${rangeText(selection)}`);
+        if (data.clamped) {
+          const warning = document.createElement("em");
+          warning.className = "analytics-range-clamped";
+          warning.textContent = ` · ${copy.clampedNote}`;
+          status.append(warning);
+        }
       }
     } catch (error) {
       const key = error instanceof Error ? error.message : "unavailable";
@@ -628,6 +867,82 @@ const copy = es
       if (key === "unauthorized") sessionStorage.removeItem(TOKEN_KEY);
     }
   }
+
+  PRESETS.forEach((preset) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.preset = preset.key;
+    button.textContent = copy[`range_${preset.key}`] ?? preset.key;
+    button.addEventListener("click", () => {
+      const value = preset.resolve(Date.now());
+      closePopover();
+      applySelection({ preset: preset.key, ...value });
+    });
+    item.append(button);
+    rangePresets?.append(item);
+  });
+
+  rangeTrigger?.addEventListener("click", () => {
+    if (!rangePopover) return;
+    const open = rangePopover.hidden;
+    rangePopover.hidden = !open;
+    rangeTrigger.setAttribute("aria-expanded", String(open));
+    if (open) syncRangeUi();
+  });
+
+  rangeApply?.addEventListener("click", () => {
+    const from = fromInputValue(rangeFrom?.value ?? "");
+    const to = fromInputValue(rangeTo?.value ?? "");
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
+      if (rangeError) {
+        rangeError.textContent = copy.rangeInvalid;
+        rangeError.hidden = false;
+      }
+      return;
+    }
+    closePopover();
+    applySelection({ preset: null, from, to });
+  });
+
+  root?.querySelectorAll<HTMLButtonElement>("[data-range-step]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const direction = Number(button.dataset.rangeStep);
+      const span = selection.to - selection.from;
+      const now = Date.now();
+      const floor = now - retentionDays * DAY_MS;
+      let from = selection.from + direction * span;
+      let to = selection.to + direction * span;
+      // The window keeps its width when it hits an edge; sliding it back inside
+      // beats silently shrinking the period being compared.
+      if (to > now) {
+        to = now;
+        from = now - span;
+      }
+      if (from < floor) {
+        from = floor;
+        to = Math.min(now, floor + span);
+      }
+      applySelection({ preset: null, from, to });
+    });
+  });
+
+  rangeRefresh?.addEventListener("click", () => {
+    // A preset is re-resolved so "last 7 days" moves with the clock; an
+    // absolute range just re-queries the same window.
+    const value = selection.preset ? presetRange(selection.preset) : null;
+    applySelection(value ? { preset: selection.preset, ...value } : { ...selection });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!rangePopover || rangePopover.hidden) return;
+    const target = event.target as Node;
+    if (rangePopover.contains(target) || rangeTrigger?.contains(target)) return;
+    closePopover();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closePopover();
+  });
 
   const submitToken = () => {
     if (!tokenInput?.reportValidity()) return;
@@ -637,22 +952,16 @@ const copy = es
   tokenInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") submitToken();
   });
-  root?.querySelectorAll<HTMLButtonElement>("[data-days]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectedDays = Number(button.dataset.days);
-      root.querySelectorAll("[data-days]").forEach((item) => item.classList.toggle("is-active", item === button));
-      const token = sessionStorage.getItem(TOKEN_KEY);
-      if (token) void load(token);
-    });
-  });
   lock?.addEventListener("click", () => {
     sessionStorage.removeItem(TOKEN_KEY);
     content?.replaceChildren();
+    closePopover();
     if (form) form.hidden = false;
     if (toolbar) toolbar.hidden = true;
     if (status) status.textContent = "";
   });
   window.addEventListener("resize", () => chartInstances.forEach((chart) => chart.resize()));
+  syncRangeUi();
   const savedToken = sessionStorage.getItem(TOKEN_KEY);
   if (savedToken) void load(savedToken);
 </script>

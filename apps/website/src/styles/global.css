@@ -546,12 +546,14 @@ h1 {
   display: none;
 }
 
-.analytics-window {
+.analytics-range {
+  position: relative;
   display: flex;
   gap: 0.3rem;
 }
 
-.analytics-window button,
+.analytics-range-trigger,
+.analytics-range-step,
 .analytics-lock {
   min-height: 2.25rem;
   border: 1px solid color-mix(in srgb, var(--lt-muted) 22%, transparent);
@@ -562,9 +564,142 @@ h1 {
   cursor: pointer;
 }
 
-.analytics-window button.is-active {
+.analytics-range-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 14rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-range-trigger[aria-expanded="true"] {
   border-color: var(--lt-primary);
   color: var(--lt-primary);
+}
+
+.analytics-range-trigger i {
+  margin-left: auto;
+  font-style: normal;
+  opacity: 0.65;
+}
+
+/* The clock is an emoji for want of an icon set; dimming it keeps a full-colour
+   glyph from shouting next to the flat monochrome panel. */
+.analytics-range-trigger span[aria-hidden] {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.analytics-range-step {
+  min-width: 2.25rem;
+  padding: 0.4rem 0.5rem;
+  line-height: 1;
+}
+
+.analytics-range-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.analytics-range-popover {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(11rem, auto) minmax(15rem, 1fr);
+  gap: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 22%, transparent);
+  border-radius: 4px;
+  background: #171616;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 55%);
+  padding: 1rem;
+  width: max-content;
+  max-width: min(38rem, calc(100vw - 2rem));
+}
+
+.analytics-range-popover[hidden] {
+  display: none;
+}
+
+.analytics-range-popover h4 {
+  margin: 0 0 0.6rem;
+  color: color-mix(in srgb, var(--lt-text) 70%, transparent);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.analytics-range-quick ul {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analytics-range-quick button {
+  width: 100%;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--lt-text);
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.analytics-range-quick button:hover {
+  background: color-mix(in srgb, var(--lt-muted) 16%, transparent);
+}
+
+.analytics-range-quick button.is-active {
+  background: color-mix(in srgb, var(--lt-primary) 16%, transparent);
+  color: var(--lt-primary);
+}
+
+.analytics-range-absolute {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+}
+
+.analytics-range-absolute label,
+.analytics-range-absolute label span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.analytics-range-absolute label span {
+  color: color-mix(in srgb, var(--lt-text) 70%, transparent);
+  font-size: 0.75rem;
+}
+
+.analytics-range-absolute input {
+  min-height: 2.3rem;
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 25%, transparent);
+  border-radius: 3px;
+  background: #111;
+  color: var(--lt-text);
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  color-scheme: dark;
+}
+
+.analytics-range-error {
+  margin: 0;
+  color: #ff8f8f;
+  font-size: 0.78rem;
+}
+
+.analytics-range-error[hidden] {
+  display: none;
+}
+
+.analytics-range-clamped {
+  color: #ffe2ab;
+  font-style: normal;
 }
 
 .analytics-summary {
@@ -781,6 +916,20 @@ h1 {
 
   .analytics-login h3 {
     grid-column: auto;
+  }
+
+  .analytics-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .analytics-range-trigger {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .analytics-range-popover {
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
   }
 
   .analytics-map-layout {

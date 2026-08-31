@@ -32,12 +32,22 @@ const FEATURE_EVENTS = [
 ] as const;
 
 const MIN_ADMIN_TOKEN_LENGTH = 15;
-const WINDOW_DAYS = new Set([1, 7, 30, 90]);
+const DAY_MS = 86_400_000;
+// Every telemetry insert prunes both tables past this age (see events.ts), so
+// no query can reach further back however wide a range the dashboard asks for.
+const RETENTION_DAYS = 90;
+const PRESET_DAYS = new Set([1, 7, 30, 90]);
+// The dashboard builds "last 90 days" against its own clock, so by the time the
+// request lands the retention floor has already moved past it by the round trip.
+// Only a trim wider than that counts as the range having been cut short.
+const CLAMP_TOLERANCE_MS = 60_000;
+
+type Range = { from: number; to: number; clamped: boolean };
 
 async function breakdown(
   db: D1Database,
   column: "app_version" | "os" | "device_class" | "country_code",
-  since: number,
+  range: Range,
   // Countries are shown as a scrollable ranking next to the map, so the whole
   // ISO 3166-1 range has to fit; the other dimensions stay capped at a top 20.
   limit = 20,
@@ -47,12 +57,12 @@ async function breakdown(
       `SELECT ${column} AS label, COUNT(*) AS sessions,
               COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
          FROM telemetry_events
-        WHERE received_at >= ?1
+        WHERE received_at >= ?1 AND received_at < ?2
         GROUP BY ${column}
         ORDER BY devices DESC, sessions DESC
-        LIMIT ?2`,
+        LIMIT ?3`,
     )
-    .bind(since, limit)
+    .bind(range.from, range.to, limit)
     .all<BreakdownRow>();
   return result.results;
 }
@@ -72,6 +82,39 @@ function rate(value: number, total: number): number {
   return total > 0 ? Math.round((value / total) * 10_000) / 100 : 0;
 }
 
+// Accepts both epoch milliseconds (what the dashboard sends) and anything
+// Date.parse understands, so a range stays typeable by hand in the URL.
+function parseInstant(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = /^\d+$/.test(value) ? Number(value) : Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveRange(params: URLSearchParams, now: number): Range {
+  const floor = now - RETENTION_DAYS * DAY_MS;
+  const requestedFrom = parseInstant(params.get("from"));
+  const requestedTo = parseInstant(params.get("to"));
+  if (requestedFrom !== null && requestedTo !== null && requestedFrom < requestedTo) {
+    const from = Math.max(requestedFrom, floor);
+    const to = Math.min(requestedTo, now);
+    // A range entirely outside retention collapses; falling through to the
+    // default window beats answering with an empty dashboard and no reason.
+    if (from < to) {
+      const trimmed =
+        from - requestedFrom > CLAMP_TOLERANCE_MS ||
+        requestedTo - to > CLAMP_TOLERANCE_MS;
+      return { from, to, clamped: trimmed };
+    }
+  }
+  const requestedDays = Number(params.get("days") ?? "30");
+  const days = PRESET_DAYS.has(requestedDays) ? requestedDays : 30;
+  // The one-day preset means the running UTC day rather than the last 24
+  // hours: devices are counted per utc_day, so a rolling window straddling
+  // midnight would count the same device twice. The wider presets stay rolling.
+  const from = days === 1 ? Math.floor(now / DAY_MS) * DAY_MS : now - days * DAY_MS;
+  return { from, to: now, clamped: false };
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   if (
     !env.ANALYTICS_ADMIN_TOKEN ||
@@ -86,20 +129,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     );
   }
 
-  const requestedDays = Number(new URL(request.url).searchParams.get("days") ?? "30");
-  const windowDays = WINDOW_DAYS.has(requestedDays) ? requestedDays : 30;
   const generatedAt = Date.now();
-  // The one-day window means the running UTC day rather than the last 24 hours:
-  // devices are counted per utc_day, so a rolling window straddling midnight
-  // would count the same device twice. The wider windows stay rolling.
-  const since =
-    windowDays === 1
-      ? Math.floor(generatedAt / 86_400_000) * 86_400_000
-      : generatedAt - windowDays * 86_400_000;
-  const previousSince = since - windowDays * 86_400_000;
-  // Yesterday is compared up to the same time of day, so a morning check is not
-  // measured against a full day.
-  const previousUntil = windowDays === 1 ? generatedAt - 86_400_000 : since;
+  const range = resolveRange(new URL(request.url).searchParams, generatedAt);
+  const { from, to } = range;
+  const span = to - from;
+  // The comparison window is the same span immediately before, snapped up to
+  // whole days: a partial day (Today, Last 6 hours) then lands on the same
+  // clock hours yesterday instead of on the hours right before it.
+  const shift = Math.ceil(span / DAY_MS) * DAY_MS;
+  const previousFrom = from - shift;
+  const previousTo = to - shift;
+  // Retention would only feed a truncated previous window, and an invented
+  // drop is worse than no comparison at all.
+  const comparable = previousFrom >= generatedAt - RETENTION_DAYS * DAY_MS;
 
   const [
     totals,
@@ -121,33 +163,34 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
         `SELECT COUNT(*) AS appStarts,
                 COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
            FROM telemetry_events
-          WHERE received_at >= ?1`,
+          WHERE received_at >= ?1 AND received_at < ?2`,
       )
-        .bind(since)
+        .bind(from, to)
         .first<{ appStarts: number; devices: number }>(),
-      windowDays === 90
-        ? Promise.resolve(null)
-        : env.TELEMETRY_DB.prepare(
+      comparable
+        ? env.TELEMETRY_DB.prepare(
             `SELECT COUNT(*) AS appStarts,
                     COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
                FROM telemetry_events
               WHERE received_at >= ?1 AND received_at < ?2`,
           )
-            .bind(previousSince, previousUntil)
-            .first<{ appStarts: number; devices: number }>(),
+            .bind(previousFrom, previousTo)
+            .first<{ appStarts: number; devices: number }>()
+        : Promise.resolve(null),
       env.TELEMETRY_DB.prepare(
         `SELECT event_name AS event, COUNT(*) AS events,
                 COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
            FROM telemetry_product_events
-          WHERE received_at >= ?1
+          WHERE received_at >= ?1 AND received_at < ?2
           GROUP BY event_name`,
       )
-        .bind(since)
+        .bind(from, to)
         .all<EventRow>(),
       env.TELEMETRY_DB.prepare(
         `WITH signals AS (
            SELECT utc_day, daily_device_token, 'app_started' AS signal
-             FROM telemetry_events WHERE received_at >= ?1
+             FROM telemetry_events
+            WHERE received_at >= ?1 AND received_at < ?2
            UNION ALL
            SELECT utc_day, daily_device_token,
              CASE
@@ -157,7 +200,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
                WHEN event_name IN ('project_saved', 'session_exported') THEN 'work_completed'
              END AS signal
              FROM telemetry_product_events
-            WHERE received_at >= ?1 AND event_name IN (
+            WHERE received_at >= ?1 AND received_at < ?2 AND event_name IN (
               'project_created', 'project_opened', 'audio_imported',
               'playback_started', 'project_saved', 'session_exported'
             )
@@ -165,30 +208,33 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
          SELECT signal, COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
            FROM signals WHERE signal IS NOT NULL GROUP BY signal`,
       )
-        .bind(since)
+        .bind(from, to)
         .all<SignalRow>(),
       env.TELEMETRY_DB.prepare(
         `SELECT installation_age_bucket AS label,
                 COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
            FROM telemetry_events
-          WHERE received_at >= ?1 AND installation_age_bucket != 'unknown'
+          WHERE received_at >= ?1 AND received_at < ?2
+            AND installation_age_bucket != 'unknown'
           GROUP BY installation_age_bucket`,
       )
-        .bind(since)
+        .bind(from, to)
         .all<BucketRow>(),
       env.TELEMETRY_DB.prepare(
         `SELECT active_days_bucket AS label,
                 COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
            FROM telemetry_events
-          WHERE received_at >= ?1 AND active_days_bucket != 'unknown'
+          WHERE received_at >= ?1 AND received_at < ?2
+            AND active_days_bucket != 'unknown'
           GROUP BY active_days_bucket`,
       )
-        .bind(since)
+        .bind(from, to)
         .all<BucketRow>(),
       env.TELEMETRY_DB.prepare(
         `WITH starts AS (
            SELECT utc_day AS day, COUNT(DISTINCT daily_device_token) AS activeDevices
-             FROM telemetry_events WHERE received_at >= ?1 GROUP BY utc_day
+             FROM telemetry_events
+            WHERE received_at >= ?1 AND received_at < ?2 GROUP BY utc_day
          ), product AS (
            SELECT utc_day AS day,
              COUNT(DISTINCT CASE WHEN event_name IN (
@@ -197,7 +243,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
              ) THEN daily_device_token END) AS activatedDevices,
              COUNT(DISTINCT CASE WHEN event_name LIKE 'feature_%'
                THEN daily_device_token END) AS featureDevices
-             FROM telemetry_product_events WHERE received_at >= ?1 GROUP BY utc_day
+             FROM telemetry_product_events
+            WHERE received_at >= ?1 AND received_at < ?2 GROUP BY utc_day
          )
          SELECT starts.day, starts.activeDevices,
                 COALESCE(product.activatedDevices, 0) AS activatedDevices,
@@ -205,17 +252,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
            FROM starts LEFT JOIN product ON product.day = starts.day
           ORDER BY starts.day`,
       )
-        .bind(since)
+        .bind(from, to)
         .all<DailyRow>(),
       env.TELEMETRY_DB.prepare(
         `SELECT strftime('%H', received_at / 1000, 'unixepoch') AS hour,
                 COUNT(*) AS sessions,
                 COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
            FROM telemetry_events
-          WHERE received_at >= ?1
+          WHERE received_at >= ?1 AND received_at < ?2
           GROUP BY hour ORDER BY hour`,
       )
-        .bind(since)
+        .bind(from, to)
         .all<HourlyRow>(),
       // Grouped on the device-reported local weekday, never on utc_day: a
       // Sunday evening service in the Americas is already Monday in UTC.
@@ -223,15 +270,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
         `SELECT local_weekday AS weekday, COUNT(*) AS sessions,
                 COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
            FROM telemetry_events
-          WHERE received_at >= ?1 AND local_weekday != 'unknown'
+          WHERE received_at >= ?1 AND received_at < ?2 AND local_weekday != 'unknown'
           GROUP BY local_weekday ORDER BY weekday`,
       )
-        .bind(since)
+        .bind(from, to)
         .all<WeekdayRow>(),
-      breakdown(env.TELEMETRY_DB, "country_code", since, 300),
-      breakdown(env.TELEMETRY_DB, "app_version", since),
-      breakdown(env.TELEMETRY_DB, "os", since),
-      breakdown(env.TELEMETRY_DB, "device_class", since),
+      breakdown(env.TELEMETRY_DB, "country_code", range, 300),
+      breakdown(env.TELEMETRY_DB, "app_version", range),
+      breakdown(env.TELEMETRY_DB, "os", range),
+      breakdown(env.TELEMETRY_DB, "device_class", range),
     ]);
 
   const activeDeviceDays = totals?.devices ?? 0;
@@ -264,13 +311,20 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   return Response.json(
     {
       generatedAt: new Date(generatedAt).toISOString(),
-      windowDays,
+      from: new Date(from).toISOString(),
+      to: new Date(to).toISOString(),
+      retentionDays: RETENTION_DAYS,
+      // True when the request reached outside the retained data, so the
+      // dashboard can say the answer covers less than what was asked for.
+      clamped: range.clamped,
       appStarts: totals?.appStarts ?? 0,
       activeDeviceDays,
       comparison: previousTotals
         ? {
             appStarts: previousTotals.appStarts,
             activeDeviceDays: previousTotals.devices,
+            from: new Date(previousFrom).toISOString(),
+            to: new Date(previousTo).toISOString(),
           }
         : null,
       activation: signalKeys.map((key) => {
