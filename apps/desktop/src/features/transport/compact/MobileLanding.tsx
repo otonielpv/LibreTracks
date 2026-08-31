@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  isAndroidApp,
+  listDefaultSessions,
   listSessionTemplates,
   pickSessionFolder,
+  type DefaultSessionSummary,
   type SessionTemplateSummary,
 } from "../desktopApi";
 import {
@@ -66,6 +69,36 @@ export function MobileLanding({
   const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
     () => loadRecentSessions(),
   );
+  // Android only: the sessions actually on disk in the app's songs folder.
+  // The MRU cannot be the index there: localStorage can be lost or reset
+  // independently during WebView upgrades and recovery, and a session the
+  // list forgets would otherwise be unreachable (there is no "open from
+  // device" on Android any more). Everywhere else the MRU is the right answer:
+  // sessions are scattered across the device and only it knows where.
+  const [deviceSessions, setDeviceSessions] = useState<DefaultSessionSummary[]>(
+    [],
+  );
+
+  useEffect(() => {
+    if (!isAndroidApp) {
+      return;
+    }
+    let cancelled = false;
+    void listDefaultSessions()
+      .then((sessions) => {
+        if (!cancelled) {
+          setDeviceSessions(sessions);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDeviceSessions([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +130,22 @@ export function MobileLanding({
       return;
     }
     const name = trimmedName;
+    // Android has no "where to save" step: Google Play only grants the
+    // all-files permission to file managers and the like, so sessions always
+    // live in the app's own folder (see AndroidManifest.xml). iOS keeps the
+    // picker — its security-scoped bookmarks hand back a real path the engine
+    // can stream from, so a session there can live wherever the user wants.
+    if (isAndroidApp) {
+      setFolderError(null);
+      setCreationTemplate(undefined);
+      setSessionName("");
+      if (creationTemplate) {
+        onCreateSessionFromTemplate(creationTemplate.path, name);
+      } else {
+        onCreateSession(name);
+      }
+      return;
+    }
     // Ask where to save first; cancelling the folder cancels the whole create
     // (no silent fallback to the app's private folder). Only after we have a
     // destination do we close the form and hand off to the backend.
@@ -189,7 +238,7 @@ export function MobileLanding({
             >
               {t("common.create")}
             </button>
-            {onOpenSessionFromPicker ? (
+            {onOpenSessionFromPicker && !isAndroidApp ? (
               <button type="button" data-lt-tour={TOUR_TARGETS.landingOpen} onClick={onOpenSessionFromPicker}>
                 {t("common.open")}
               </button>
@@ -240,9 +289,33 @@ export function MobileLanding({
 
           <div className="lt-empty-state-templates lt-empty-state-recents">
             <div className="lt-empty-state-templates-header">
-              <span>{t("transport.shell.recentsHeading")}</span>
+              <span>
+                {isAndroidApp
+                  ? t("transport.shell.mobileSessionsHeading")
+                  : t("transport.shell.recentsHeading")}
+              </span>
             </div>
-            {recentSessions.length > 0 ? (
+            {isAndroidApp ? (
+              deviceSessions.length > 0 ? (
+                <ul className="lt-empty-state-template-list">
+                  {deviceSessions.map((entry) => (
+                    <li key={entry.songFile}>
+                      <button
+                        type="button"
+                        title={entry.songFile}
+                        onClick={() => onOpenSessionFromPath?.(entry.songFile)}
+                      >
+                        {entry.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="lt-empty-state-templates-empty">
+                  {t("transport.shell.mobileNoSessions")}
+                </p>
+              )
+            ) : recentSessions.length > 0 ? (
               <ul className="lt-empty-state-template-list">
                 {recentSessions
                   .slice(0, LANDING_RECENT_SESSIONS_LIMIT)

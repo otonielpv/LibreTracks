@@ -4,8 +4,9 @@
 //! security-scoped bookmarks that keep session-folder access across reopens and
 //! updates (`macos_bookmarks`), and the Android-only Storage Access Framework
 //! file flows (`mobile_files`), JNI output-device enumeration
-//! (`android_audio_devices`) and the JNI memory-pressure handler
-//! (`android_memory`).
+//! (`android_audio_devices`), the JNI memory-pressure handler
+//! (`android_memory`) and the external-storage lookup that decides where
+//! sessions live (`android_storage`).
 //!
 //! [`append_platform_output_devices`] is the one seam the audio layer uses to
 //! fold the Android-only endpoint enumeration into an engine device list.
@@ -19,6 +20,8 @@ pub mod resource_monitor;
 pub mod android_audio_devices;
 #[cfg(target_os = "android")]
 pub mod android_memory;
+#[cfg(target_os = "android")]
+pub mod android_storage;
 #[cfg(target_os = "android")]
 pub mod mobile_files;
 

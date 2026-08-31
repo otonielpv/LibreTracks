@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Foreground media service: keeps the AAudio stream alive with the
          screen off / app backgrounded. MEDIA_PLAYBACK type is mandatory on
@@ -8,25 +7,21 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Open-session-in-place: sessions are FOLDERS the engine streams by
-         real path, so browsing to one outside the app dir needs storage
-         access — legacy external storage on Android 10, "all files" on 11+.
-         The SAF picker alone can't cover this (single-file content URIs). -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-
-    <!-- AndroidTV support -->
-    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <!-- No storage permissions, deliberately. Google Play only grants
+         MANAGE_EXTERNAL_STORAGE to file managers, backup and anti-virus apps,
+         so a DAW cannot ship with it. Sessions therefore live in the app's own
+         external dir (see project_root), which needs no permission, and audio,
+         .ltset and .ltpkg still come in and out through the system picker —
+         that has never needed a permission either. What this costs is
+         open-session-in-place on an arbitrary folder: the engine streams audio
+         by real path and Android's folder grants hand back content:// URIs.
+         FL Studio Mobile and Audio Evolution both made the same trade.
+         Do NOT "fix" this by re-adding the permission. -->
 
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.libretracks_desktop"
-        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <!-- sensorLandscape: the DAW surface (timeline + mixer) is unusable in
              portrait on a phone; lock to landscape but allow both rotations. -->
@@ -40,8 +35,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <!-- AndroidTV support -->
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
 

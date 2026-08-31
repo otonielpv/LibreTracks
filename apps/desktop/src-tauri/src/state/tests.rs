@@ -4928,3 +4928,57 @@ fn progress_summary_is_skipped_without_a_known_duration() {
         super::progress_summary_from_peaks(&progress, Path::new("nonexistent.wav")).is_none()
     );
 }
+
+/// A folder only counts as a session when it actually holds a `.ltsession`;
+/// a stray folder of loose audio is not one.
+#[test]
+fn scan_sessions_in_lists_only_folders_holding_a_session_file() {
+    let root = tempdir().unwrap();
+    let songs = root.path().join("songs");
+    fs::create_dir_all(songs.join("Concierto")).unwrap();
+    fs::write(songs.join("Concierto").join("Concierto.ltsession"), "{}").unwrap();
+    fs::create_dir_all(songs.join("SoloAudio")).unwrap();
+    fs::write(songs.join("SoloAudio").join("pista.wav"), b"").unwrap();
+
+    let names: Vec<String> = super::scan_sessions_in(&songs)
+        .into_iter()
+        .map(|session| session.name)
+        .collect();
+    assert_eq!(names, ["Concierto"]);
+}
+
+/// A legacy root the device never used is the normal case, not an error.
+#[test]
+fn scan_sessions_in_tolerates_a_missing_folder() {
+    let root = tempdir().unwrap();
+    assert!(super::scan_sessions_in(&root.path().join("nunca-existio")).is_empty());
+}
+
+/// Android lists the current songs folder plus the legacy internal one. A
+/// session present in both — the user copied it across — must appear once, and
+/// as the copy in the current root, which is the one that gets written to.
+/// Names fold case because Android's storage is case-insensitive.
+#[test]
+fn dedupe_sessions_keeps_the_first_entry_for_a_repeated_name() {
+    let summary = |name: &str, path: &str, modified: u64| super::SessionSummary {
+        name: name.to_string(),
+        song_file: path.to_string(),
+        modified_ms: Some(modified),
+    };
+    let mut sessions = vec![
+        summary("Concierto", "/actual/Concierto.ltsession", 1),
+        summary("concierto", "/antiguo/concierto.ltsession", 2),
+        summary("Ensayo", "/antiguo/Ensayo.ltsession", 3),
+    ];
+
+    super::dedupe_sessions_by_name(&mut sessions);
+
+    let files: Vec<String> = sessions
+        .into_iter()
+        .map(|session| session.song_file)
+        .collect();
+    assert_eq!(
+        files,
+        ["/actual/Concierto.ltsession", "/antiguo/Ensayo.ltsession"]
+    );
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { TransportPanel } from "../features/transport/TransportPanel";
-import { isTauriApp } from "../features/transport/desktopApi";
+import { isMobileApp, isTauriApp } from "../features/transport/desktopApi";
 import { installAltMenuGuard } from "../features/transport/keyboard/altMenuGuard";
 import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
@@ -129,9 +129,13 @@ export function App() {
   // real user session is unaffected.
   const isWebDriver =
     typeof navigator !== "undefined" && navigator.webdriver === true;
+  // Never on mobile: the stores own updating there, so the popup would send
+  // people to a GitHub release they cannot install over a store build. The
+  // manual check in Settings is hidden for the same reason (UpdateCheckField).
   const { release, isModalOpen, dismiss } = useUpdateCheck({
     currentVersion,
-    enabled: isTauriApp && !import.meta.env.DEV && !isWebDriver,
+    enabled:
+      isTauriApp && !isMobileApp && !import.meta.env.DEV && !isWebDriver,
   });
 
   return (

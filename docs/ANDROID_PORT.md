@@ -29,7 +29,8 @@ detección por user-agent) en frontend y por comandos nuevos sin diálogo en
 Rust:
 
 - **Sesiones sin diálogos nativos**: comandos `start_create_song_named`
-  (crea por nombre en `<app_data>/songs`, con saneado de nombre),
+  (crea por nombre en el `getExternalFilesDir()/songs` privado de la app, sin
+  permisos de almacenamiento y con saneado de nombre),
   `start_open_project_from_path` y `list_default_sessions` (ordenadas por
   mtime). El flujo con diálogos de desktop queda intacto.
 - **`MobileLanding`**: en Android la landing muestra "Crear" (formulario de
@@ -94,8 +95,8 @@ cambios.
 
 ```powershell
 # Requisitos ya presentes en esta máquina: Android SDK (ANDROID_HOME),
-# NDK 27.1, JDK 21, targets rust android (rustup target add ...-linux-android)
-$env:NDK_HOME = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.1.12297006"
+# NDK 28.2, JDK 21, targets rust android (rustup target add ...-linux-android)
+$env:NDK_HOME = "$env:LOCALAPPDATA\Android\Sdk\ndk\28.2.13676358"
 cd apps/desktop
 npx tauri android build --apk --debug --target aarch64   # dispositivo real
 npx tauri android build --apk --debug --target x86_64    # emulador
@@ -112,7 +113,7 @@ El engine C++ **compila y corre en Android** sin cambios de código fuente:
 ```powershell
 # Por ABI (x86_64 emulador / arm64-v8a dispositivo). CMake >=3.25 del
 # sistema + ninja del SDK. FetchContent descarga libsndfile/r8brain/nlohmann.
-$ndk = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.1.12297006"
+$ndk = "$env:LOCALAPPDATA\Android\Sdk\ndk\28.2.13676358"
 $ninja = "$env:LOCALAPPDATA\Android\Sdk\cmake\3.22.1\bin\ninja.exe"
 cd native/audio-engine-v2
 cmake -S . -B build-android-x86_64 -G Ninja "-DCMAKE_MAKE_PROGRAM=$ninja" `
@@ -293,9 +294,9 @@ dispositivo).
    - **Bench de Bungee en ARM**: el presupuesto de 9+ voces está validado en
      x86; hay que medir en un móvil real (NEON en ARM suele rendir bien,
      pero el techo térmico es real).
-2. **Ficheros**: sustituir los picks cancelados del shim por
-   `tauri-plugin-dialog` (soporta móvil) + Storage Access Framework, y decidir
-   dónde viven las sesiones (`app_data_dir`).
+2. **Ficheros**: los picks de archivos usan Storage Access Framework; las
+   sesiones viven en `getExternalFilesDir()/songs`. El siguiente paso es un
+   portal persistente de import/export basado en `ACTION_OPEN_DOCUMENT_TREE`.
 3. **UI táctil**: la UI de escritorio carga pero no está pensada para táctil ni
    pantallas pequeñas; probablemente convenga una vista tipo "performance"
    (transporte + secciones + mezcla) antes que el timeline completo.
@@ -315,7 +316,6 @@ dispositivo).
 | `hideSystemBars()` + `onWindowFocusChanged` | ColorOS pierde el modo inmersivo al recuperar el foco y la barra de estado se come los taps de la barra superior |
 | `FLAG_KEEP_SCREEN_ON` | No dormir a mitad de una actuación |
 | `startForegroundService(AudioPlaybackService)` | Que la reproducción sobreviva a la pantalla apagada |
-| `requestStorageAccessOnce()` | Abrir sesiones in situ necesita leer carpetas, no URIs sueltas |
 | `installVoiceGuideAssets()` | El decoder nativo necesita rutas `fopen`-ables |
 | **`onTrimMemory` / `onLowMemory` → `nativeOnTrimMemory`** | Android avisa antes de matar; ignorarlo reinició el sistema del Oppo al importar 2 GB. Ver `docs/plans/android-low-end/03-presion-de-memoria.md` |
 

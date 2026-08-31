@@ -44,6 +44,16 @@ set_target_properties(lt_audio_engine_v2 PROPERTIES
   CXX_EXTENSIONS OFF
 )
 
+# Android 15+ devices may use 16 KiB memory pages, and Google Play rejects
+# new releases whose native ELF segments are only aligned to 4 KiB. NDK r28
+# does this by default; the explicit options also protect local NDK r27 builds.
+if(ANDROID)
+    target_link_options(lt_audio_engine_v2 PRIVATE
+        "LINKER:-z,max-page-size=16384"
+        "LINKER:-z,common-page-size=16384"
+    )
+endif()
+
 # On macOS, the consuming binary references the engine via
 # `@rpath/liblt_audio_engine_v2.dylib`. The dylib itself must record that as
 # its install_name so the linker stamps the @rpath form into the executable;

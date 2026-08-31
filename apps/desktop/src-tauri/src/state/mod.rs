@@ -3434,6 +3434,15 @@ pub(super) fn emit_project_load_progress(
 }
 
 pub(super) fn project_root(app: &AppHandle) -> PathBuf {
+    // Android keeps session data in the app-specific EXTERNAL files dir. It is
+    // still the app's own sandbox, so it costs no permission — which matters,
+    // because Play will not grant a DAW all-files access. Falls through to the
+    // internal dir when the external location is unavailable, and sessions
+    // already written there stay reachable via [`legacy_project_roots`].
+    #[cfg(target_os = "android")]
+    if let Some(external) = crate::platform::android_storage::external_files_dir() {
+        return external;
+    }
     app.path()
         .app_data_dir()
         .unwrap_or_else(|_| std::env::temp_dir().join("LibreTracks"))
@@ -3806,6 +3815,32 @@ pub(crate) fn create_song_default_directory(app: &AppHandle) -> PathBuf {
     project_root(app).join("songs")
 }
 
+/// Directories that held sessions before the current [`project_root`] did.
+///
+/// Only Android has any: it used to keep them under the internal
+/// `app_data_dir()`, and moving the root would otherwise make a tester's
+/// existing sessions vanish from the landing screen while the files sat
+/// untouched on disk. Listing both is free; copying gigabytes between volumes
+/// on the very phones this change is meant to help is not.
+fn legacy_project_roots(app: &AppHandle) -> Vec<PathBuf> {
+    #[cfg(target_os = "android")]
+    {
+        let internal = app
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| std::env::temp_dir().join("LibreTracks"));
+        if internal != project_root(app) {
+            return vec![internal];
+        }
+        Vec::new()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Vec::new()
+    }
+}
+
 /// Summary of a session folder inside the default songs directory, surfaced
 /// to the landing screen on platforms without native file dialogs (Android):
 /// the user picks from this list instead of an "open file" dialog.
@@ -3820,8 +3855,26 @@ pub struct SessionSummary {
 /// List the sessions living in the default songs folder, most recently
 /// modified first. Missing folder → empty list (fresh install).
 pub(crate) fn list_default_sessions(app: &AppHandle) -> Vec<SessionSummary> {
-    let dir = create_song_default_directory(app);
-    let mut sessions: Vec<SessionSummary> = match fs::read_dir(&dir) {
+    let mut dirs = vec![create_song_default_directory(app)];
+    dirs.extend(
+        legacy_project_roots(app)
+            .into_iter()
+            .map(|root| root.join("songs")),
+    );
+
+    let mut sessions: Vec<SessionSummary> = Vec::new();
+    for dir in &dirs {
+        sessions.extend(scan_sessions_in(dir));
+    }
+    dedupe_sessions_by_name(&mut sessions);
+    sessions.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms));
+    sessions
+}
+
+/// Every session folder directly inside `dir`, unsorted. Missing folder →
+/// empty list (a fresh install, or a legacy root this device never used).
+fn scan_sessions_in(dir: &Path) -> Vec<SessionSummary> {
+    match fs::read_dir(dir) {
         Ok(entries) => entries
             .flatten()
             .filter_map(|entry| {
@@ -3853,9 +3906,15 @@ pub(crate) fn list_default_sessions(app: &AppHandle) -> Vec<SessionSummary> {
             })
             .collect(),
         Err(_) => Vec::new(),
-    };
-    sessions.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms));
-    sessions
+    }
+}
+
+/// Drop later entries repeating an earlier name, so a session that exists in
+/// both the current and a legacy root is listed once. Earlier wins, and the
+/// caller passes the current root first.
+fn dedupe_sessions_by_name(sessions: &mut Vec<SessionSummary>) {
+    let mut seen: HashSet<String> = HashSet::new();
+    sessions.retain(|session| seen.insert(session.name.to_lowercase()));
 }
 
 /// Default folder where "Save as template" suggests writing `.lttemplate`

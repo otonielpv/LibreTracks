@@ -847,14 +847,15 @@ jobs:
           if-no-files-found: error
 
   build-android:
-    name: Build Android APK
+    name: Build Android Play bundle + APK
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
     runs-on: ubuntu-22.04
     env:
       ANDROID_ABI: arm64-v8a
       ANDROID_TARGET: aarch64
-      NDK_VERSION: 27.1.12297006
+      # r28+ emits 16 KiB-aligned ELF segments by default (required by Play).
+      NDK_VERSION: 28.2.13676358
       # This job never installs sccache (unlike `test` / `build-release-assets`),
       # but the workflow-level env sets RUSTC_WRAPPER=sccache. When
       # `tauri android build` shells out to `cargo build` for the aarch64 target,
@@ -888,7 +889,7 @@ jobs:
 
       - name: Install NDK + build tools
         run: |
-          sdkmanager --install "ndk;${NDK_VERSION}" "cmake;3.22.1" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager --install "ndk;${NDK_VERSION}" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
@@ -956,7 +957,7 @@ jobs:
           mkdir -p "$JNI_DIR"
           cp "$ENGINE_BUILD_DIR/liblt_audio_engine_v2.so" "$JNI_DIR/"
 
-      # Materialize the release keystore from secrets so the APK is signed with
+      # Materialize the release keystore from secrets so the APK and AAB are signed with
       # the real key (build.gradle reads keystore.properties → falls back to
       # debug signing when absent).
       - name: Prepare release keystore
@@ -980,34 +981,72 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
-      - name: Build signed release APK
+      - name: Build signed Play bundle and release APK
         # Fail loudly if the NDK engine .so isn't where build.rs links it from
         # (see crates/lt-audio-engine-v2/build.rs) instead of silently shipping
         # the no-op stub engine — an APK with no audio, waveforms, or devices.
         env:
           LT_ENGINE_ANDROID_REQUIRE_LINK: "1"
-        run: npx tauri android build --apk --target "$ANDROID_TARGET"
+        run: npx tauri android build --aab --apk --target "$ANDROID_TARGET" --ci
         working-directory: apps/desktop
 
-      - name: Verify APK is signed and not debuggable
+      - name: Verify Android artifacts
         run: |
           set -euo pipefail
-          APK=$(find apps/desktop/src-tauri/gen/android -path '*release*' -name '*.apk' | head -n1)
+          APK=$(find apps/desktop/src-tauri/gen/android -path '*release*' -name '*.apk' -print -quit)
+          AAB=$(find apps/desktop/src-tauri/gen/android -path '*release*' -name '*.aab' -print -quit)
+          test -n "$APK" || { echo "::error::Release APK was not produced"; exit 1; }
+          test -n "$AAB" || { echo "::error::Play Store AAB was not produced"; exit 1; }
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" verify --print-certs "$APK" | grep -q "CN=LibreTracks" \
             || { echo "::error::APK not signed with the LibreTracks key"; exit 1; }
+          keytool '-J-Duser.language=en' -printcert -jarfile "$AAB" | grep -q "Owner: CN=LibreTracks" \
+            || { echo "::error::AAB not signed with the LibreTracks upload key"; exit 1; }
           if "$BT/aapt" dump badging "$APK" | grep -q "application-debuggable"; then
             echo "::error::release APK is debuggable"; exit 1
           fi
-          # Rename to a clear, versioned asset name for the download page.
+          "$BT/zipalign" -c -P 16 -v 4 "$APK" >/dev/null \
+            || { echo "::error::APK is not 16 KiB ZIP-aligned"; exit 1; }
+
+          # Check every packaged native library, including the Rust/Tauri core
+          # and the separately built C++ audio engine, not just the ZIP layout.
+          AAB_DIR=$(mktemp -d)
+          unzip -q "$AAB" 'base/lib/*/*.so' -d "$AAB_DIR"
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          SO_COUNT=0
+          while IFS= read -r -d '' SO; do
+            ((SO_COUNT += 1))
+            LOAD_COUNT=0
+            while read -r ALIGNMENT; do
+              ((LOAD_COUNT += 1))
+              if (( ALIGNMENT < 0x4000 )); then
+                echo "::error file=$SO::ELF LOAD alignment is $ALIGNMENT; expected at least 0x4000"
+                exit 1
+              fi
+            done < <("$READELF" -lW "$SO" | awk '$1 == "LOAD" { print $NF }')
+            if (( LOAD_COUNT == 0 )); then
+              echo "::error file=$SO::Could not inspect ELF LOAD segments"
+              exit 1
+            fi
+          done < <(find "$AAB_DIR" -name '*.so' -print0)
+          if (( SO_COUNT == 0 )); then
+            echo "::error::AAB contains no native libraries"
+            exit 1
+          fi
+
+          # Rename to clear, versioned assets. The AAB is the file uploaded to
+          # Play Console; the APK remains useful for direct device testing.
           VER=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
           cp "$APK" "LibreTracks-${VER}-android-arm64.apk"
+          cp "$AAB" "LibreTracks-${VER}-play-store.aab"
 
       - name: Upload release assets
         uses: actions/upload-artifact@v4
         with:
           name: libretracks-android-assets
-          path: LibreTracks-*-android-arm64.apk
+          path: |
+            LibreTracks-*-android-arm64.apk
+            LibreTracks-*-play-store.aab
           if-no-files-found: error
 
       - name: Scrub keystore
@@ -1064,6 +1103,7 @@ jobs:
               -name '*.tar.gz' -o \
               -name '*.zip' -o \
               -name '*.apk' -o \
+              -name '*.aab' -o \
               -name '*.sig' \
             \) -print0
           )

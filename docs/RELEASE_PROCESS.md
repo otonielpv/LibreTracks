@@ -598,18 +598,18 @@ assets, so distributing Android is: **attach the signed `.apk` to the
 release** and the page shows it automatically (🤖 icon). No Google Play,
 no store fee.
 
-### Signing — the keystore is irreplaceable
+### Signing — back up the upload keystore
 
-A distributable APK must be signed with a stable key you own and must NOT
-be debuggable. Signing config lives in
+The Play Store AAB and distributable APK must be signed with a stable upload
+key you own and must NOT be debuggable. Signing config lives in
 `apps/desktop/src-tauri/gen/android/keystore.properties` (gitignored),
 which points at a `.jks` kept OUTSIDE the repo
 (`~/.libretracks/libretracks-release.jks`).
 
-**Back up that .jks somewhere safe (not just this machine).** If you lose
-it you can never ship an update to an already-installed app — users would
-have to uninstall + reinstall. All future versions must be signed with the
-same key.
+**Back up that .jks somewhere safe (not just this machine).** Enrol in Google
+Play App Signing: Google then protects the app-signing key and this `.jks` is
+the upload key. Play can reset a lost upload key, but APKs distributed directly
+still need the same signing key for in-place updates.
 
 `keystore.properties` format:
 ```
@@ -627,17 +627,20 @@ testing only, never for distribution.
 
 ```bash
 # arm64 covers all modern phones/tablets. Add --target x86_64 only for the
-# emulator; don't ship x86_64.
-cd apps/desktop && npx tauri android build --apk --target aarch64
+# emulator; don't ship x86_64. The AAB goes to Play Console; the APK is for
+# direct device testing/downloads.
+cd apps/desktop && npx tauri android build --aab --apk --target aarch64 --ci
 
 # Verify BEFORE attaching:
 apksigner verify --print-certs <apk>   # Signer #1 DN must be CN=LibreTracks
 aapt dump badging <apk> | grep debuggable   # must print nothing
+keytool -printcert -jarfile <aab>      # Owner must be CN=LibreTracks
+zipalign -c -P 16 -v 4 <apk>          # required for Android 15+ / Play
 
-# Attach app-universal-release.apk to the GitHub Release (rename to include
-# the version, e.g. LibreTracks-1.5.0-android.apk, so the download card reads
-# clearly). versionCode must increase every release or devices refuse the
-# update — it derives from tauri.android.versionCode.
+# Upload the .aab to Play Console. Attach the APK to the GitHub Release
+# (renamed with the version so the download card reads clearly). versionCode
+# must increase every release or devices refuse the update; it derives from
+# tauri.android.versionCode.
 ```
 
 Changing from a debug-signed test build to the release-signed APK requires

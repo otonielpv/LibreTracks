@@ -14,7 +14,7 @@ val tauriProperties = Properties().apply {
 }
 
 // Release signing: credentials live in gen/android/keystore.properties (NOT
-// versioned). When present, release builds are signed with the real upload
+// versioned). When present, release APKs/AABs are signed with the real upload
 // keystore; when absent (a fresh clone with no keystore), the release block
 // falls back to debug signing so a dev build still works.
 val keystorePropsFile = rootProject.file("keystore.properties")
@@ -72,8 +72,8 @@ android {
                     .toList().toTypedArray()
             )
             // Sign with the real upload keystore when its credentials are
-            // present (keystore.properties). A distributable APK must be
-            // signed with a stable key you own and NOT be debuggable. Without
+            // present (keystore.properties). Play bundles and distributable
+            // APKs must be signed with a stable key and NOT be debuggable. Without
             // the keystore (a fresh clone) fall back to debug signing +
             // debuggable so a dev build still installs on test devices — those
             // builds are for local testing only, never for distribution.

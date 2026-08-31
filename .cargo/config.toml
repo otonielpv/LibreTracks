@@ -6,3 +6,12 @@ LT_ENGINE_V2_LIB_DIR = { value = "native/audio-engine-v2/build-rb-on/Release", r
 
 [target.'cfg(all(target_os = "windows", target_env = "msvc"))']
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# Google Play requires every native library in apps targeting Android 15+
+# to support 16 KiB memory pages. NDK r28 uses this alignment by default;
+# keeping the linker flags explicit also makes local builds with NDK r27 safe.
+[target.'cfg(target_os = "android")']
+rustflags = [
+  "-C", "link-arg=-Wl,-z,max-page-size=16384",
+  "-C", "link-arg=-Wl,-z,common-page-size=16384",
+]
