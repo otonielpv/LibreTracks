@@ -504,7 +504,8 @@ pistas a la vez",
   the thing that changed; those have no such thing, and bolting a session
   screenshot onto them says nothing. An `art` spec omits `shot` and names
   `art` instead (a piece in `scripts/poster/art.mjs`), plus the optional
-  `artWidth`, `artCaption`, `artLabel`, `headlineSize`, and `badges`.
+  `artWidth`, `artCaption`, `artLabel`, `artStamp`, `headlineSize`, and
+  `badges`.
 - `badges`: optional, only read by the art pieces. Third-party logos
   (Ko-fi, Google Play, App Store) sitting next to the spec, embedded exactly
   as downloaded from each brand's own page — never redrawn, recoloured or
@@ -516,9 +517,16 @@ pistas a la vez",
   the others looks broken.
 - Spanish, same voice as the Facebook post. Check the accents.
 
-Working examples of all of the above: `marketing/post-donaciones` and
-`marketing/post-tiendas-moviles`. Both also set `theme` and `out` by hand,
-since with no version there is nothing to derive them from.
+Working examples of all of the above: `marketing/post-donaciones`,
+`marketing/post-tiendas-moviles` and `marketing/post-testers-android`. All
+three also set `theme` and `out` by hand, since with no version there is
+nothing to derive them from.
+
+An `art` poster is sized by the copy AND by the art: a piece drawn from its
+own width can overflow the art box onto the feature strip below it. The
+`testers` piece takes its height from the box for exactly that reason. If a new
+piece is taller than it is wide, size it the same way rather than tuning
+`artWidth` until it happens to fit.
 
 ### Look at the PNG before shipping it
 
