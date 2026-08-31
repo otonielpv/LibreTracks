@@ -14,6 +14,7 @@ export type RulerForegroundLayerArgs = {
   height: number;
   cameraX: number;
   pixelsPerSecond: number;
+  playheadSeconds: number;
   markers: SectionMarkerSummary[];
   tempoMarkers: TempoMarkerSummary[];
   timeSignatureMarkers: TimeSignatureMarkerSummary[];
@@ -23,6 +24,27 @@ export type RulerForegroundLayerArgs = {
   currentMarkerId: string | null;
   pulseAlpha: number;
 };
+
+/**
+ * Automation jumps are armed in the native engine as soon as playback starts
+ * so they remain sample-exact. That internal armed state can live for several
+ * minutes, though, and must not make the ruler look as if a jump is imminent
+ * for all of that time (especially on a phone, where the whole song often fits
+ * on screen). Keep the visual warning local to the final approach.
+ */
+export const AUTOMATION_JUMP_FEEDBACK_LEAD_SECONDS = 10;
+
+export function shouldShowAutomationJumpFeedback(
+  playheadSeconds: number,
+  executeAtSeconds: number,
+) {
+  return (
+    Number.isFinite(playheadSeconds) &&
+    Number.isFinite(executeAtSeconds) &&
+    executeAtSeconds <=
+      playheadSeconds + AUTOMATION_JUMP_FEEDBACK_LEAD_SECONDS
+  );
+}
 
 function drawPendingDashedLine(
   context: CanvasRenderingContext2D,
@@ -124,7 +146,13 @@ export function drawRulerForegroundLayer(
     );
   }
 
-  if (args.pendingAutomationCue) {
+  if (
+    args.pendingAutomationCue &&
+    shouldShowAutomationJumpFeedback(
+      args.playheadSeconds,
+      args.pendingAutomationCue.executeAtSeconds,
+    )
+  ) {
     drawPendingTargetLine(
       context,
       args.width,

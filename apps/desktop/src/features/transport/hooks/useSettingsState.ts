@@ -71,23 +71,37 @@ export function useSettingsState({
     appSettingsRef.current = appSettings;
   }, [appSettings]);
 
-  /** Load settings + audio devices + MIDI inputs in one pass and apply them. */
+  /**
+   * Load persisted settings first, independently from hardware discovery.
+   *
+   * The native audio engine already starts from those persisted settings. If
+   * device/MIDI enumeration is slow or unavailable (notably in a mobile
+   * WebView), holding the React state behind the same Promise.all leaves the
+   * toolbar on DEFAULT_APP_SETTINGS while the engine is already playing with
+   * the real configuration — e.g. an audible click whose button looks off.
+   */
   const refreshAudioSettings = useCallback(async () => {
-    const [nextSettings, nextAudioDevices, nextMidiInputs, nextMidiOutputs] =
-      await Promise.all([
-      getSettings(),
-      getAudioOutputDevices(),
-      getMidiInputs(),
-      getMidiOutputs(),
-    ]);
+    const nextSettings = await getSettings();
     const normalizedSettings = normalizeAppSettings(nextSettings);
     setAppSettings(normalizedSettings);
     await syncSettingsLanguage(normalizedSettings);
-    setAudioDeviceDescriptors(nextAudioDevices.deviceDescriptors ?? []);
-    setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
-    setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
-    setMidiInputDevices(nextMidiInputs);
-    setMidiOutputDevices(nextMidiOutputs);
+
+    const [audioDevices, midiInputs, midiOutputs] = await Promise.allSettled([
+      getAudioOutputDevices(),
+      getMidiInputs(),
+      getMidiOutputs(),
+    ] as const);
+    if (audioDevices.status === "fulfilled") {
+      setAudioDeviceDescriptors(audioDevices.value.deviceDescriptors ?? []);
+      setAudioOutputChannelCounts(audioDevices.value.channelCounts ?? {});
+      setDefaultAudioOutputDevice(audioDevices.value.defaultDevice ?? null);
+    }
+    if (midiInputs.status === "fulfilled") {
+      setMidiInputDevices(midiInputs.value);
+    }
+    if (midiOutputs.status === "fulfilled") {
+      setMidiOutputDevices(midiOutputs.value);
+    }
     return normalizedSettings;
   }, [syncSettingsLanguage]);
 

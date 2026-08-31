@@ -31,7 +31,10 @@ import {
   drawGridLines,
   drawRulerBackgroundLayer,
 } from "../Renderer/drawBackground";
-import { drawRulerForegroundLayer } from "../Renderer/drawForeground";
+import {
+  drawRulerForegroundLayer,
+  shouldShowAutomationJumpFeedback,
+} from "../Renderer/drawForeground";
 import { markerCategory } from "../markerKinds";
 import {
   buildTrackStructureSignature,
@@ -493,6 +496,7 @@ export function TimelineRulerCanvas({
     let lastOverlayCurrentMarkerId: string | null = null;
     let lastOverlayMarkerPreviewKey = "";
     let lastOverlayPulseFrame = -1;
+    let lastOverlayAutomationFeedbackVisible = false;
 
     const render = () => {
       const snapshot = snapshotRef.current;
@@ -613,8 +617,15 @@ export function TimelineRulerCanvas({
           const playheadSeconds =
             snapshot.playheadDragRef.current?.currentSeconds ??
             playheadSecondsRef.current;
+          const automationFeedbackVisible = Boolean(
+            snapshot.pendingAutomationCue &&
+              shouldShowAutomationJumpFeedback(
+                playheadSeconds,
+                snapshot.pendingAutomationCue.executeAtSeconds,
+              ),
+          );
           const pulseFrame =
-            snapshot.pendingMarkerJump || snapshot.pendingAutomationCue
+            snapshot.pendingMarkerJump || automationFeedbackVisible
               ? Math.floor(performance.now() / 32)
               : 0;
           const currentMarkerId =
@@ -634,6 +645,8 @@ export function TimelineRulerCanvas({
             lastOverlayPixelsPerSecond !== livePixelsPerSecond ||
             lastOverlayCurrentMarkerId !== currentMarkerId ||
             lastOverlayMarkerPreviewKey !== markerPreviewKey ||
+            lastOverlayAutomationFeedbackVisible !==
+              automationFeedbackVisible ||
             lastOverlayPulseFrame !== pulseFrame;
 
           if (shouldRedrawOverlay) {
@@ -648,6 +661,7 @@ export function TimelineRulerCanvas({
               height: snapshot.height,
               cameraX: roundedCameraX,
               pixelsPerSecond: livePixelsPerSecond,
+              playheadSeconds,
               markers: applyMarkerMovePreview(snapshot.markers, markerPreview),
               tempoMarkers: snapshot.tempoMarkers,
               timeSignatureMarkers: snapshot.timeSignatureMarkers,
@@ -663,6 +677,7 @@ export function TimelineRulerCanvas({
             lastOverlayPixelsPerSecond = livePixelsPerSecond;
             lastOverlayCurrentMarkerId = currentMarkerId;
             lastOverlayMarkerPreviewKey = markerPreviewKey;
+            lastOverlayAutomationFeedbackVisible = automationFeedbackVisible;
             lastOverlayPulseFrame = pulseFrame;
           }
 
