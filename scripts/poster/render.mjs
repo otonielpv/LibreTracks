@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { renderArt } from './art.mjs';
+
 const esc = (s) =>
   String(s)
     .replace(/&/g, '&amp;')
@@ -70,7 +72,15 @@ function numberedFeatures(features) {
  * pile of conditionals inside one.
  */
 export function renderPoster(spec, theme, assets) {
-  const { version, headline, headlineAccent, sub, badge, features, shot, shots = [] } = spec;
+  const { version, chip, headline, headlineAccent, sub, badge, features, shot, shots = [] } =
+    spec;
+
+  // A poster that draws its subject instead of screenshotting it picks its
+  // layout from the spec, not from the theme: the theme still owns the palette
+  // and the motif, but `art` has no screenshot to place.
+  const layout = spec.layout ?? theme.layout;
+  const art = layout === 'art' ? renderArt(spec.art, theme, assets, spec) : null;
+  const artCss = art ? art.css : '';
 
   const fonts = [
     fontFace('Space Grotesk', 700, assets.grotesk700),
@@ -82,7 +92,7 @@ export function renderPoster(spec, theme, assets) {
 
   const toShotUri = (file) =>
     dataUri(file, path.extname(file).toLowerCase() === '.jpg' ? 'image/jpeg' : 'image/png');
-  const shotUri = toShotUri(shot);
+  const shotUri = shot ? toShotUri(shot) : null;
   // Layouts that show a device family read the extra screenshots in order:
   // the first is the mid-size device, the second the phone.
   const extraUris = shots.map(toShotUri);
@@ -92,14 +102,31 @@ export function renderPoster(spec, theme, assets) {
       <div class="brand-tag">MULTITRACK PARA DIRECTO</div>
     </div>`;
   const badgeHtml = badge ? `<div class="badge">${esc(badge)}</div>` : '';
-  const versionChip = `<span class="vchip">v${esc(version)}</span>`;
+  // The pill above the headline is the version for a release announcement.
+  // Posters that are not a release — a donation drive, a store launch — pass
+  // `chip` instead: there the version number says nothing and the slot is
+  // better spent on the message.
+  const chipText = chip ? esc(chip) : `v${esc(version)}`;
+  const versionChip = `<span class="vchip">${chipText}</span>`;
 
   // Newlines in the headline are deliberate line breaks: a poster headline is
   // typeset by hand, not left to wrap wherever the box happens to end.
   const headlineHtml = `<h1>${esc(headline).replace(/\n/g, '<br>')}<span class="dot">${esc(headlineAccent ?? '.')}</span></h1>`;
 
   let body;
-  if (theme.layout === 'split') {
+  if (layout === 'art') {
+    body = `<div class="l-art">
+      <div class="art-main">
+        <div class="art-copy">
+          ${versionChip}
+          ${headlineHtml}
+          <p class="sub">${esc(sub)}</p>
+        </div>
+        <div class="art-figure">${art.html}</div>
+      </div>
+      <div class="feats-row">${featureBlocks(features)}</div>
+    </div>`;
+  } else if (layout === 'split') {
     body = `<div class="l-split">
       <div class="col-left">
         ${versionChip}
@@ -109,7 +136,7 @@ export function renderPoster(spec, theme, assets) {
       </div>
       <div class="col-right"><img class="shot shot-tall" src="${shotUri}" alt=""></div>
     </div>`;
-  } else if (theme.layout === 'bleed-right') {
+  } else if (layout === 'bleed-right') {
     body = `<div class="l-bleed">
       <div class="bleed-copy">
         ${versionChip}
@@ -119,7 +146,7 @@ export function renderPoster(spec, theme, assets) {
       <div class="bleed-shot"><img class="shot" src="${shotUri}" alt=""></div>
       <div class="feats-row">${featureBlocks(features)}</div>
     </div>`;
-  } else if (theme.layout === 'tilt') {
+  } else if (layout === 'tilt') {
     body = `<div class="l-tilt">
       <div class="tilt-shot"><img class="shot" src="${shotUri}" alt=""></div>
       <div class="tilt-copy">
@@ -129,7 +156,7 @@ export function renderPoster(spec, theme, assets) {
       </div>
       <div class="feats-row">${featureBlocks(features)}</div>
     </div>`;
-  } else if (theme.layout === 'devices') {
+  } else if (layout === 'devices') {
     const tablet = extraUris[0]
       ? `<img class="shot dev-tablet" src="${extraUris[0]}" alt="">`
       : '';
@@ -149,7 +176,7 @@ export function renderPoster(spec, theme, assets) {
       </div>
       <div class="feats-row">${featureBlocks(features)}</div>
     </div>`;
-  } else if (theme.layout === 'list') {
+  } else if (layout === 'list') {
     body = `<div class="l-list">
       <div class="list-head">
         ${versionChip}
@@ -293,6 +320,20 @@ h1{font-size:96px;font-weight:${theme.headlineWeight};line-height:.96;letter-spa
    rather than sizing to a fixed width and leaving the row half empty. */
 .list-shot{display:flex;min-height:0;margin-right:-84px;}
 .list-shot .shot{width:100%;height:100%;object-fit:cover;object-position:top left;}
+
+/* art — no screenshot at all: copy on the left, drawn subject on the right.
+   The figure column is fixed-width so the headline keeps a stable measure,
+   and the spec artWidth widens it for pieces that need the room. */
+.l-art{flex:1;display:flex;flex-direction:column;padding-top:50px;overflow:hidden;}
+.art-main{flex:1 1 auto;display:grid;
+  grid-template-columns:minmax(0,1fr) ${spec.artWidth ?? 400}px;
+  gap:48px;align-items:center;min-height:0;padding-bottom:62px;}
+.art-copy h1{font-size:${spec.headlineSize ?? 96}px;}
+.art-copy .sub{font-size:25px;max-width:24ch;}
+.art-figure{display:flex;align-items:center;justify-content:center;
+  height:100%;max-height:100%;}
+.l-art .feats-row{flex:0 0 auto;margin-top:auto;}
+${artCss}
 </style></head>
 <body>
 <div class="bgglow"></div><div class="motif"></div>

@@ -93,8 +93,10 @@ function main() {
 
   // The screenshot path is relative to the spec file, so a poster folder can be
   // moved without editing the JSON.
-  const shot = path.resolve(specDir, spec.shot);
-  if (!existsSync(shot)) {
+  // Optional: a poster on the "art" layout draws its subject and carries no
+  // screenshot at all (see art.mjs).
+  const shot = spec.shot ? path.resolve(specDir, spec.shot) : null;
+  if (shot && !existsSync(shot)) {
     throw new Error(`Screenshot not found: ${shot}`);
   }
 
@@ -109,6 +111,11 @@ function main() {
     return file;
   });
 
+  // Release posters derive their look from the version. A poster with no
+  // version (a donation drive, a store launch) has to name its theme.
+  if (!spec.version && !spec.theme && !args.theme) {
+    throw new Error('A spec without "version" must set "theme": there is nothing to derive it from.');
+  }
   const theme = pickTheme(spec.version, args.theme ? String(args.theme) : spec.theme);
 
   // Density of the capture, not of the layout: the page is always 1080 CSS px.
@@ -128,6 +135,26 @@ function main() {
   for (const [name, file] of Object.entries(assets)) {
     if (!existsSync(file)) throw new Error(`Missing font ${name}: ${file}`);
   }
+
+  // The brand icon reaches the art layouts as a data URI — the poster HTML has
+  // to stay self-contained — so it is added after the font check above, which
+  // walks `assets` expecting every value to be a path.
+  const iconFile = path.join(REPO, 'apps', 'website', 'public', 'icon.svg');
+  if (!existsSync(iconFile)) throw new Error(`Missing brand icon: ${iconFile}`);
+  assets.iconUri = `data:image/svg+xml;base64,${readFileSync(iconFile).toString('base64')}`;
+
+  // Official store/brand badges (Google Play, App Store, Ko-fi). They are
+  // trademarked artwork with their own usage rules, so they are DOWNLOADED
+  // from each brand page into the poster folder and embedded exactly as they
+  // came — never redrawn, recoloured or retyped. Order matters: the art
+  // pieces read them positionally.
+  assets.badgeUris = (spec.badges ?? []).map((rel) => {
+    const file = path.resolve(specDir, rel);
+    if (!existsSync(file)) throw new Error(`Badge not found: ${file}`);
+    const svg = path.extname(file).toLowerCase() === '.svg';
+    const mime = svg ? 'image/svg+xml' : 'image/png';
+    return `data:${mime};base64,${readFileSync(file).toString('base64')}`;
+  });
 
   const html = renderPoster({ ...spec, shot, shots }, theme, assets);
 

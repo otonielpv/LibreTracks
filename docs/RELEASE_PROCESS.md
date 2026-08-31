@@ -497,11 +497,28 @@ pistas a la vez",
 ` is a
   deliberate break — poster headlines are typeset by hand, not left to wrap.
 - `shots`: optional, only read by the `devices` layout. Ignored elsewhere.
+- `chip`: optional. Replaces the version pill with free text.
+- `layout`: optional, overrides the theme's layout. The one layout that is
+  NOT built around a screenshot is `art`, for posters that announce no
+  feature at all — a donation drive, a store launch. A release poster shows
+  the thing that changed; those have no such thing, and bolting a session
+  screenshot onto them says nothing. An `art` spec omits `shot` and names
+  `art` instead (a piece in `scripts/poster/art.mjs`), plus the optional
+  `artWidth`, `artCaption`, `artLabel`, `headlineSize`, and `badges`.
+- `badges`: optional, only read by the art pieces. Third-party logos
+  (Ko-fi, Google Play, App Store) sitting next to the spec, embedded exactly
+  as downloaded from each brand's own page — never redrawn, recoloured or
+  retyped, which is what their usage rules require. Each poster folder's
+  README records where its badges came from.
 - `features`: exactly 4, drawn from the Spanish bullets of
   `docs/releases/v<NEW>.md`. Keep each `body` to ~4 words AND each `title` to
   ~2 so the four columns stay on one line; a 2-line wrap in one column and not
   the others looks broken.
 - Spanish, same voice as the Facebook post. Check the accents.
+
+Working examples of all of the above: `marketing/post-donaciones` and
+`marketing/post-tiendas-moviles`. Both also set `theme` and `out` by hand,
+since with no version there is nothing to derive them from.
 
 ### Look at the PNG before shipping it
 
