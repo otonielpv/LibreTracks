@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { TransportPanel } from "../features/transport/TransportPanel";
 import { isTauriApp } from "../features/transport/desktopApi";
+import { installAltMenuGuard } from "../features/transport/keyboard/altMenuGuard";
 import { PerfHud } from "../features/transport/perf/PerfHud";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { useUpdateCheck } from "../features/updates/useUpdateCheck";
@@ -69,6 +70,11 @@ export function App() {
       active = false;
     };
   }, []);
+
+  // Windows opens the window's system menu when Alt is released unused, and
+  // then swallows the next input — right after every Alt + wheel track resize.
+  // See ../features/transport/keyboard/altMenuGuard.
+  useEffect(() => installAltMenuGuard(), []);
 
   // Interface zoom: apply the persisted scale on start, and wire the standard
   // Cmd/Ctrl +/-/0 shortcuts so small screens (e.g. a 13" MacBook) can shrink
