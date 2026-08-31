@@ -16,7 +16,8 @@ import {
   type PadCatalogEntry,
   type SongView,
 } from "../desktopApi";
-import { formatClock } from "../helpers";
+import { formatClock, formatCompactTime } from "../helpers";
+import { duplicateMarkerNames, groupMarkersBySong } from "./jumpTargetGroups";
 
 /**
  * What the modal is operating on. `cueId`/`name` are present when editing an
@@ -480,15 +481,29 @@ function ActionEditor({
                 ))}
               </optgroup>
             ) : null}
-            {markers.length > 0 ? (
-              <optgroup label={t("transport.automation.destinationMarkers")}>
-                {markers.map((m) => (
-                  <option key={m.id} value={`marker:${m.id}`}>
-                    {m.name}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
+            {groupMarkersBySong(regions, markers).map((group) => {
+              const duplicated = duplicateMarkerNames(group.markers);
+              return (
+                <optgroup
+                  key={group.region?.id ?? "__no_song__"}
+                  label={
+                    group.region
+                      ? t("transport.automation.destinationMarkersOf", {
+                          song: group.region.name,
+                        })
+                      : t("transport.automation.destinationMarkersNoSong")
+                  }
+                >
+                  {group.markers.map((m) => (
+                    <option key={m.id} value={`marker:${m.id}`}>
+                      {duplicated.has(m.name)
+                        ? `${m.name} (${formatCompactTime(m.startSeconds)})`
+                        : m.name}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
             <optgroup label={t("transport.automation.destinationOther")}>
               <option value={FRAME_OPTION}>
                 {t("transport.automation.exactPosition")}
