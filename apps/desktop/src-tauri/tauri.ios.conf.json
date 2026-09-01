@@ -7,7 +7,6 @@
   },
   "bundle": {
     "resources": {
-      "PrivacyInfo.xcprivacy": "PrivacyInfo.xcprivacy",
       "resources/voices": "voices",
       "../../../LICENSE": "licenses/LICENSE",
       "../../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",

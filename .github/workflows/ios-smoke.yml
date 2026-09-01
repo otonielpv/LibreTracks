@@ -173,6 +173,28 @@ jobs:
         working-directory: apps/desktop
         run: npm run tauri -- ios init --ci
 
+      # Apple reads the privacy manifest from the ROOT of the app bundle, and
+      # bundle.resources cannot put it there: project.yml declares `assets` as
+      # a folder reference, so everything Tauri copies ends up under
+      # .app/assets/ (which is where run 33496079188 found it). Copying it into
+      # the .app after the build would fix the smoke IPA and quietly break the
+      # signed one — a file added after codesign invalidates the signature — so
+      # it goes in as a real target resource, before the build.
+      - name: Add privacy manifest to the iOS app target
+        shell: bash
+        run: |
+          set -euo pipefail
+          apple_dir="apps/desktop/src-tauri/gen/apple"
+          cp apps/desktop/src-tauri/PrivacyInfo.xcprivacy \
+             "$apple_dir/PrivacyInfo.xcprivacy"
+          # The runner ships CocoaPods, which depends on this gem; install it
+          # only if that ever stops being true.
+          if ! ruby -e "require 'xcodeproj'" 2>/dev/null; then
+            gem install xcodeproj --no-document
+          fi
+          ruby scripts/ios-add-privacy-manifest.rb \
+            "$apple_dir/libretracks-desktop.xcodeproj" PrivacyInfo.xcprivacy
+
       # Tauri 2.10 does not expose a --no-sign flag. Keep `tauri ios build` as
       # the wrapper because its Xcode script needs Tauri's temporary options
       # server, but disable signing in the generated project. Exporting may
