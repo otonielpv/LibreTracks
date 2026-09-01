@@ -1125,6 +1125,10 @@ jobs:
             -DLT_ENGINE_USE_FFMPEG=OFF -DLT_ENGINE_USE_LIBSNDFILE=ON \
             -DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR="$BUNGEE_DIR"
           cmake --build "$ENGINE_BUILD_DIR" --target lt_audio_engine_v2
+          # JUCE must stay out of a Play Store binary: its AGPLv3 licensing
+          # option is incompatible with store distribution terms, and Android
+          # gets its audio from Oboe anyway. Same guard as the iOS smoke build.
+          grep -q 'LT_ENGINE_USE_JUCE:BOOL=OFF' "$ENGINE_BUILD_DIR/CMakeCache.txt"
           JNI_DIR="apps/desktop/src-tauri/gen/android/app/src/main/jniLibs/${ANDROID_ABI}"
           mkdir -p "$JNI_DIR"
           cp "$ENGINE_BUILD_DIR/liblt_audio_engine_v2.so" "$JNI_DIR/"

@@ -146,15 +146,15 @@ public:
     double take_gap_max_ms()  { return gap_max_ms_.exchange(0.0, std::memory_order_relaxed); }
     double take_work_max_ms() { return work_max_ms_.exchange(0.0, std::memory_order_relaxed); }
 
-    int         callback_count() const { return callback_count_.load(std::memory_order_relaxed); }
-    float       output_peak()    const { return output_peak_.load(std::memory_order_relaxed); }
-    bool        has_error()      const { return error_flag_.load(std::memory_order_relaxed); }
-    std::string last_error()     const { return last_error_; }
+    int   callback_count() const { return callback_count_.load(std::memory_order_relaxed); }
+    float output_peak()    const { return output_peak_.load(std::memory_order_relaxed); }
 
-    void set_error(std::string message) {
-        last_error_ = std::move(message);
-        error_flag_.store(true, std::memory_order_relaxed);
-    }
+    // NOTE: no error channel here, unlike the Oboe adaptor. RemoteIO has no
+    // "the stream died" callback to hook: when iOS stops the unit (an
+    // interruption, a route that went away) the callbacks simply cease, which
+    // the stall monitor already reads as death — and route changes arrive
+    // through AVAudioSession notifications instead. A flag nothing could ever
+    // raise would just be a branch that is always false.
 
 private:
     AudioRenderCallback* render_cb_;
@@ -163,8 +163,6 @@ private:
     std::atomic<double>  callback_duration_ms_{0.0};
     std::atomic<int>     callback_count_{0};
     std::atomic<float>   output_peak_{0.0f};
-    std::atomic<bool>    error_flag_{false};
-    std::string          last_error_;
     std::chrono::steady_clock::time_point last_callback_end_{};
     std::atomic<double>  gap_max_ms_{0.0};
     std::atomic<double>  work_max_ms_{0.0};
@@ -363,8 +361,7 @@ void AudioDeviceManager::Impl::monitor_main() {
         }
 
         const std::uint64_t gen = open_generation.load(std::memory_order_relaxed);
-        const int  count     = adaptor->callback_count();
-        const bool dev_error = adaptor->has_error();
+        const int count = adaptor->callback_count();
         if (++diagnostic_ticks >= 4) {
             diagnostic_ticks = 0;
             if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
@@ -380,21 +377,19 @@ void AudioDeviceManager::Impl::monitor_main() {
             last_gen = gen;
             last_count = count;
             last_change = now;
-            if (!dev_error) continue;
-        } else if (count != last_count) {
+            continue;
+        }
+        if (count != last_count) {
             last_count = count;
             last_change = now;
-            if (!dev_error) continue;
+            continue;
         }
         const double stalled_ms    = ms_between(last_change, now);
         const double since_open_ms = ms_between(last_open_time, now);
-        if (!dev_error
-            && (stalled_ms < kStallThresholdMs || since_open_ms < kFreshOpenGraceMs))
+        if (stalled_ms < kStallThresholdMs || since_open_ms < kFreshOpenGraceMs)
             continue;
-        const std::string reason = dev_error
-            ? adaptor->last_error()
-            : std::string("output device stopped delivering audio callbacks "
-                          "(interruption or route loss?)");
+        const std::string reason("output device stopped delivering audio "
+                                 "callbacks (interruption or route loss?)");
         fprintf(stderr,
                 "[LT_AUDIO] output device \"%s\" declared dead (%s; callbacks "
                 "frozen %.0f ms) — switching to the internal fallback clock\n",
@@ -672,9 +667,9 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.output_channel_count = impl_->output_channel_count;
     info.output_channel_names = impl_->output_channel_names;
     info.supported_sample_rates = impl_->supported_sample_rates;
+    // Written by open_device (a failed open) and by the monitor (a stall or a
+    // route change); the adaptor has no error channel of its own.
     info.last_error  = impl_->last_error;
-    if (impl_->adaptor && impl_->adaptor->has_error())
-        info.last_error = impl_->adaptor->last_error();
     info.fallback_active = impl_->fallback_active.load(std::memory_order_relaxed);
     return info;
 }

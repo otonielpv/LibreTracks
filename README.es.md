@@ -251,8 +251,13 @@ v3.0 o posterior (AGPL-3.0-or-later)**. Consulta [LICENSE](./LICENSE) para el
 texto completo. Es gratis y seguirá siéndolo — no hay versión de pago.
 
 El proyecto incluye componentes de terceros bajo sus propias licencias (JUCE bajo
-AGPLv3; FFmpeg y libsndfile bajo LGPL-2.1; Bungee bajo MPL-2.0; las fuentes bajo
-OFL-1.1; y numerosos componentes MIT/Apache). Consulta
+AGPLv3 —solo en las builds de escritorio—; FFmpeg y libsndfile bajo LGPL-2.1;
+Bungee bajo MPL-2.0; las fuentes bajo OFL-1.1; y numerosos componentes
+MIT/Apache). Consulta
 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) para la lista completa,
 atribuciones y ofertas de fuente; los textos completos están en
 [`licenses/`](./licenses/).
+
+Sobre la AGPL se aplica un permiso adicional para la distribución en tiendas de
+aplicaciones — ver [LICENSE-EXCEPTIONS.md](./LICENSE-EXCEPTIONS.md). Concede
+derechos y no quita ninguno: el código sigue siendo AGPL y público.

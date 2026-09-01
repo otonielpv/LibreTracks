@@ -23,6 +23,10 @@ These ship inside the desktop application (`.app` / `.exe` / `.deb` / `.rpm` /
 - **Notes:** LibreTracks uses JUCE under the AGPLv3 grant, which is why the
   combined work is distributed under AGPL-3.0-or-later. The JUCE splash screen
   and usage reporting are disabled, as permitted under the AGPLv3 option.
+- **Desktop builds only.** The mobile builds do not contain JUCE: iOS uses its
+  own CoreAudio/RemoteIO device backend and Android uses Oboe, both built with
+  `LT_ENGINE_USE_JUCE=OFF` (verified in CI). JUCE contributed only the audio
+  device layer, so nothing else in the engine depends on it.
 
 ### Bungee 2.4.24
 - **License:** Mozilla Public License 2.0 (MPL-2.0) — see
@@ -124,5 +128,24 @@ and the engine's CMake configuration). Because the FFmpeg libraries are linked
 dynamically, an end user may rebuild them from that source and substitute their
 own copy.
 
+On **mobile** these libraries are linked statically, because those builds ship a
+single binary rather than loadable libraries. iOS links both FFmpeg and
+libsndfile; Android links libsndfile only and is built without FFmpeg
+(`LT_ENGINE_USE_FFMPEG=OFF`), decoding through libsndfile and the bundled
+`dr_libs`. The relinking right in LGPL section 6 is satisfied by the same
+publication: the complete corresponding source of LibreTracks is public, so
+anyone can rebuild the application against their own copy of either library. The
+build script for the iOS FFmpeg is in this repository
+([`scripts/build-ffmpeg-ios.sh`](./scripts/build-ffmpeg-ios.sh)), alongside the
+engine's CMake configuration.
+
 The complete corresponding source for LibreTracks itself (an AGPL-3.0 work) is
 published at the project's public repository.
+
+## Distribution through application stores
+
+An application store's terms impose restrictions on downloaders that the AGPL
+would otherwise forbid downstream. The copyright holder grants an additional
+permission under AGPL section 7 to cover exactly that case; the text and its
+scope are in [LICENSE-EXCEPTIONS.md](./LICENSE-EXCEPTIONS.md). It applies to the
+binary distributed through the store and changes nothing about the source.
