@@ -114,7 +114,91 @@ function stores(theme, assets, spec) {
   return { css, html };
 }
 
-export const ART = { kofi, stores };
+
+/**
+ * A phone mid-beta: the app's Play listing with the tester button on it, a
+ * stamp across the corner, and the Google Play badge underneath.
+ *
+ * It is deliberately NOT the `stores` piece with one badge removed. That one
+ * says "here is where you get it, it is done"; this poster says the opposite —
+ * the listing is not public yet and the reader has to be let in first. The
+ * dashed chassis and the stamp are what carry that, and the button repeats the
+ * exact words Google Play shows ("Convertirme en tester"), so the poster and
+ * the screen the reader lands on say the same thing.
+ *
+ * `badges[0]` is the official Google Play badge, embedded as downloaded.
+ */
+function testers(theme, assets, spec) {
+  const label = spec.artLabel ?? 'Convertirme en tester';
+  const stamp = spec.artStamp ?? 'BETA';
+  const [gplay] = assets.badgeUris ?? [];
+  const badge = gplay
+    ? `<img class="store-badge store-badge-gplay" src="${gplay}" alt="Disponible en Google Play">`
+    : `<div class="plate">Google Play</div>`;
+  const caption = spec.artCaption;
+  const css = `
+/* Sized by HEIGHT, unlike the other pieces. A phone drawn from its width
+   (9/18.5 of a 430px column is ~670px tall) plus a badge under it overflows
+   the art box and lands on top of the feature strip — which is exactly what
+   the first render of this poster did. Here the column owns the height and
+   the phone shrinks into whatever is left. */
+.art-testers{width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:26px;}
+/* aspect-ratio, not a content-driven height: a phone as wide as it is tall
+   reads as a tablet. Dashed, unlike the shipped-app piece: this build is not
+   in the store yet and the frame should not look finished. The stamp hangs off
+   the corner, so the chassis is also the positioning context for it. */
+.test-phone{position:relative;flex:0 1 auto;height:100%;min-height:0;
+  width:auto;max-width:100%;aspect-ratio:9/18.5;border-radius:46px;padding:15px;
+  background:#ffffff0f;border:2px dashed ${theme.accent}88;
+  box-shadow:0 30px 80px #000000cc;}
+.test-screen{height:100%;min-height:0;border-radius:33px;background:${theme.bg};padding:20px 22px 30px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;}
+/* the earpiece bar is what makes a rounded rectangle read as a phone */
+.test-notch{width:112px;height:9px;border-radius:99px;background:#ffffff2e;
+  margin-bottom:auto;flex:0 0 auto;}
+.test-icon{width:132px;height:132px;border-radius:30px;display:block;
+  box-shadow:0 10px 30px #00000099;}
+.test-name{margin-top:20px;font-size:30px;font-weight:800;letter-spacing:-.01em;}
+.test-meta{margin-top:6px;font-size:16px;color:#ffffff8c;letter-spacing:.02em;}
+/* the real button wording, not a paraphrase: the reader has to recognise it */
+.test-cta{margin-top:24px;align-self:stretch;border-radius:999px;padding:14px 0;
+  background:${theme.accent};color:${theme.bg};font-size:17px;font-weight:900;
+  letter-spacing:.04em;text-transform:uppercase;}
+.test-free{margin-top:12px;margin-bottom:auto;font-size:15px;font-weight:600;
+  color:${theme.accentSoft};letter-spacing:.14em;}
+.test-stamp{position:absolute;top:22px;right:-30px;transform:rotate(9deg);
+  background:${theme.accent};color:${theme.bg};border-radius:12px;
+  padding:10px 20px;font-size:26px;font-weight:900;letter-spacing:.12em;
+  box-shadow:0 12px 30px #000000a6;}
+.store-badge{height:56px;width:auto;display:block;}
+/* Google's PNG carries its own clear-space margin inside the file, so it needs
+   a taller box than a badge without one to read at the same size. */
+.store-badge-gplay{height:66px;}
+.plate{border:2px solid ${theme.accent}88;border-radius:14px;padding:14px 22px;
+  font-size:19px;font-weight:800;letter-spacing:.08em;color:#fff;white-space:nowrap;}
+.test-url{font-size:20px;font-weight:800;letter-spacing:-.01em;color:${theme.accent};
+  text-align:center;}
+`;
+  const html = `<div class="art-testers">
+  <div class="test-phone">
+    <div class="test-screen">
+      <div class="test-notch"></div>
+      <img class="test-icon" src="${assets.iconUri}" alt="">
+      <div class="test-name">LibreTracks</div>
+      <div class="test-meta">Música · Directo</div>
+      <div class="test-cta">${esc(label)}</div>
+      <div class="test-free">GRATIS</div>
+    </div>
+    <div class="test-stamp">${esc(stamp)}</div>
+  </div>
+  ${badge}
+  ${caption ? `<div class="test-url">${esc(caption)}</div>` : ''}
+</div>`;
+  return { css, html };
+}
+export const ART = { kofi, stores, testers };
 
 export function renderArt(name, theme, assets, spec) {
   const piece = ART[name];

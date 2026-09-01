@@ -2156,30 +2156,18 @@ pub async fn start_import_session_package_from_dialog(app: AppHandle) -> Result<
             .filter(|name| !name.is_empty())
             .unwrap_or("sesion-importada")
             .to_string();
-        // Let the user choose where the new session folder lands (mirroring the
-        // desktop "save as" step). The dialog plugin has no folder chooser on
-        // Android, so we reuse the SAF create-document dialog and derive the
-        // parent folder from the placement. Cancelling cancels the import — no
-        // silent fallback to the private songs dir.
-        let suggested = crate::state::default_project_file_name(&default_name);
-        let Some(folder_pick) = crate::platform::mobile_files::save_file(
-            &app,
-            "Elige donde guardar la sesion importada",
-            &suggested,
-        ) else {
-            return Ok(false);
-        };
-        let Some(parent_dir) =
-            crate::platform::mobile_files::resolve_picked_document_parent(&folder_pick)
-        else {
-            return Err(
-                "Esa ubicacion no se puede usar como carpeta de sesion. Elige una carpeta \
-                 del almacenamiento del dispositivo (no un acceso directo como Descargas o \
-                 una nube)."
-                    .to_string(),
-            );
-        };
-        let target_song_dir = unique_session_dir(&parent_dir, &default_name);
+        // Android's Storage Access Framework returns a content:// document URI,
+        // not a writable filesystem directory. Trying to repurpose its
+        // create-document dialog as a folder picker fails under scoped storage:
+        // Downloads/Documents may return provider URIs and arbitrary public
+        // folders are not directly writable. Sessions need real paths because
+        // the audio engine streams their files, so import them into the same
+        // app-owned songs directory used by the Android landing screen.
+        let songs_dir = crate::state::create_song_default_directory(&app);
+        std::fs::create_dir_all(&songs_dir).map_err(|error| {
+            format!("No se pudo preparar la carpeta de sesiones: {error}")
+        })?;
+        let target_song_dir = unique_session_dir(&songs_dir, &default_name);
         ((picked, picked_name), target_song_dir)
     };
 
@@ -2443,7 +2431,7 @@ pub fn import_external_project(
 
 #[cfg(test)]
 mod export_naming_tests {
-    use super::{default_session_package_name, session_file_in_dir};
+    use super::{default_session_package_name, session_file_in_dir, unique_session_dir};
     use std::path::Path;
 
     #[test]
@@ -2487,6 +2475,20 @@ mod export_naming_tests {
         assert_eq!(
             session_file_in_dir(folder.path()),
             Some(folder.path().join("Directo.ltsession"))
+        );
+    }
+
+    #[test]
+    fn automatic_import_destination_never_overwrites_an_existing_session() {
+        let songs = tempfile::tempdir().expect("temporary songs directory");
+        std::fs::create_dir(songs.path().join("sesion-importada"))
+            .expect("existing session directory");
+        std::fs::create_dir(songs.path().join("sesion-importada-2"))
+            .expect("second existing session directory");
+
+        assert_eq!(
+            unique_session_dir(songs.path(), "sesion-importada"),
+            songs.path().join("sesion-importada-3")
         );
     }
 }
