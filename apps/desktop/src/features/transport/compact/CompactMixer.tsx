@@ -205,7 +205,6 @@ function CompactMixerComponent({
   onTrackContextMenu,
   selectedTrackIds,
   onTrackSelect,
-  onEmptyAreaClick,
   onTrackDragStart,
   activeSongTrackIds,
   filterActiveSong,
@@ -253,13 +252,6 @@ function CompactMixerComponent({
   return (
     <div
       className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""}`}
-      onClick={(event) => {
-        const target = event.target as HTMLElement | null;
-        if (target?.closest(".lt-compact-mixer-strip")) {
-          return;
-        }
-        onEmptyAreaClick();
-      }}
     >
       <div className="lt-compact-mixer-strips">
         {visibleTracks.map((track) => (
@@ -297,10 +289,6 @@ type CompactMixerProps_DragSelection = {
     trackName: string,
     event: ReactMouseEvent<HTMLDivElement>,
   ) => void;
-  /** Clic fuera de toda tira: deselecciona. En el DAW ese papel lo hace el
-   * fondo del timeline; aquí es el hueco que queda a los lados del mixer, y en
-   * móvil la única salida — no hay Escape. */
-  onEmptyAreaClick: () => void;
   /** Pointer-down on a strip handle starts the reorder drag. */
   onTrackDragStart: (
     event:

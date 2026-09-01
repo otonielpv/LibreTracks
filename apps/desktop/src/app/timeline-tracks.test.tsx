@@ -374,7 +374,9 @@ describe("App / timeline-tracks", () => {
     expect(rhythmHeader.className).toContain("is-selected");
   });
 
-  it("deselecciona al hacer clic en el hueco bajo las cabeceras", async () => {
+  // El hueco bajo las cabeceras servía, pero con muchas pistas hay que bajar
+  // hasta el final para encontrarlo: vale cualquier sitio.
+  it("deselecciona al hacer clic fuera del timeline", async () => {
     const { container } = await renderApp();
     const rhythmHeader = getTrackHeader(container, "Rhythm");
 
@@ -383,11 +385,10 @@ describe("App / timeline-tracks", () => {
     });
     expect(rhythmHeader.className).toContain("is-selected");
 
-    const headersList = container.querySelector(
-      ".lt-track-headers-list",
-    ) as HTMLElement;
+    const stage = container.querySelector(".lt-main-stage") as HTMLElement;
     await act(async () => {
-      fireEvent.click(headersList);
+      fireEvent.mouseDown(stage, { button: 0, clientX: 40, clientY: 40 });
+      fireEvent.click(stage, { button: 0, clientX: 40, clientY: 40 });
     });
 
     expect(rhythmHeader.className).not.toContain("is-selected");

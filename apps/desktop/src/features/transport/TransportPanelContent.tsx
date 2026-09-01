@@ -296,6 +296,7 @@ import {
 import { useProjectActions } from "./hooks/useProjectActions";
 import { useProjectAudioPreparation } from "./hooks/useProjectAudioPreparation";
 import { useE2ETestHooks } from "./hooks/useE2ETestHooks";
+import { useClearSelectionOnOutsideClick } from "./hooks/useClearSelectionOnOutsideClick";
 import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
 import { useTimelineActions } from "./timeline/useTimelineActions";
 import { useTimelineRangeSelection } from "./timeline/useTimelineRangeSelection";
@@ -3431,6 +3432,7 @@ export function TransportPanelContent() {
   });
 
   useAudioMeters();
+  useClearSelectionOnOutsideClick();
   useRegionMeters();
 
   // Backend waveform-ready events -> merge peaks into the waveform cache.
@@ -7677,7 +7679,6 @@ export function TransportPanelContent() {
                           onSelectTrack={handleTrackHeaderSelect}
                           onOpenContextMenu={handleTrackHeaderContextMenu}
                           onEmptyAreaContextMenu={handleEmptyAreaContextMenu}
-                          onEmptyAreaClick={clearSelectionIfAny}
                           onStartTrackDrag={handleTrackHeaderDragStart}
                           onToggleFolder={handleTrackHeaderFolderToggle}
                           onStartRowResize={handleRowResizeStart}
@@ -8108,7 +8109,6 @@ export function TransportPanelContent() {
                       dragPreview={compactDragPreview}
                       selectedTrackIds={selectedTrackIds}
                       onTrackSelect={handleTrackHeaderSelect}
-                      onClearSelection={clearSelectionIfAny}
                       onTrackDragStart={handleTrackHeaderDragStart}
                       selectedRegionId={selectedRegionId}
                       onSelectRegion={setSelectedRegionId}

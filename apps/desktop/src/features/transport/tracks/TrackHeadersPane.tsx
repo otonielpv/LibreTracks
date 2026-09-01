@@ -49,10 +49,6 @@ type TrackHeadersPaneProps = {
   onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onEmptyAreaContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  /** Clic con el botón izquierdo en el hueco bajo la última cabecera:
-   * deselecciona. Es el equivalente del fondo del timeline en esta columna,
-   * y en móvil la única salida — allí no hay Escape. */
-  onEmptyAreaClick: () => void;
   onStartTrackDrag: (
     event: ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>,
     trackId: string,
@@ -91,7 +87,6 @@ export function TrackHeadersPane({
   onSelectTrack,
   onOpenContextMenu,
   onEmptyAreaContextMenu,
-  onEmptyAreaClick,
   onStartTrackDrag,
   onToggleFolder,
   onStartRowResize,
@@ -147,18 +142,6 @@ export function TrackHeadersPane({
           event.preventDefault();
           event.stopPropagation();
         }
-      }}
-      onClick={(event) => {
-        // Sólo el hueco vacío: las filas y la celda del ruler (que lleva
-        // botones) se quedan con su propio manejo.
-        const target = event.target as HTMLElement | null;
-        if (
-          target?.closest(".lt-track-header-row") ||
-          target?.closest(".lt-ruler-header")
-        ) {
-          return;
-        }
-        onEmptyAreaClick();
       }}
       onContextMenu={(event) => {
         // Show the global track-list menu when the right-click hits empty
