@@ -1,5 +1,7 @@
 # Additional permissions
 
+Copyright © 2026 Otoniel Pérez Velarde.
+
 LibreTracks is licensed under the GNU Affero General Public License v3.0 or
 later; see [LICENSE](./LICENSE) for the full text. The permission below is an
 **additional permission** in the sense of section 7 of that license: it grants
@@ -15,12 +17,12 @@ downstream. That is why GPL-licensed software has historically been pulled from
 Apple's App Store rather than accepted.
 
 As an additional permission under section 7 of the GNU Affero General Public
-License version 3, the copyright holder of LibreTracks grants permission to
-distribute — and to have distributed on the copyright holder's behalf — binary
-copies of LibreTracks through Apple's App Store, Google Play, or a comparable
-application distribution platform, notwithstanding the additional restrictions
-that such a platform's terms of service impose on the recipients of those
-copies.
+License version 3, **Otoniel Pérez Velarde**, the copyright holder of
+LibreTracks, grants permission to distribute — and to have distributed on the
+copyright holder's behalf — binary copies of LibreTracks through Apple's App
+Store, Google Play, or a comparable application distribution platform,
+notwithstanding the additional restrictions that such a platform's terms of
+service impose on the recipients of those copies.
 
 Scope of this permission:
 
