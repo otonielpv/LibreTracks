@@ -8248,7 +8248,7 @@ export function TransportPanelContent() {
                 onClick={() => setIsMobileSessionsModalOpen(false)}
               >
                 <section
-                  className="lt-settings-modal"
+                  className="lt-settings-modal lt-sessions-modal"
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="lt-mobile-sessions-title"

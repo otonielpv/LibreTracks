@@ -37,6 +37,22 @@ Rust:
   nombre inline, valida duplicados) + lista "Tus sesiones". El mismo
   componente se reutiliza `embedded` en un modal "Sesiones…" accesible desde
   el menú Archivo cuando ya hay una sesión abierta.
+  - **Borrar sesión** (papelera de cada fila → confirmación →
+    `delete_session_at`): en el teléfono no hay gestor de archivos, así que
+    una sesión importada por error se quedaba ocupando el almacenamiento para
+    siempre. El comando borra la CARPETA, valida que sea una sesión, que esté
+    dentro de `getExternalFilesDir()/songs` (o del root heredado) y que no sea
+    la que está abierta.
+  - **Nombre de una sesión importada**: sale del último componente del
+    *document id* SAF, no del id entero
+    (`platform/document_name.rs`). Un `.ltset` cogido de Descargas llega como
+    `raw:/storage/emulated/0/Download/x.ltset`, y usarlo tal cual creaba
+    carpetas llamadas `raw--storage-emulated-0-Download-x`.
+  - **Scroll del modal**: el cuerpo del modal es el ÚNICO scroller
+    (`.lt-mobile .lt-sessions-modal` en `styles.css`). La tarjeta de la
+    landing trae el suyo con `overscroll-behavior: contain` y ahí dentro nunca
+    desborda, así que se tragaba el gesto sin poder moverse: sólo respondía la
+    barra de desplazamiento.
 - **Menú Archivo en Android**: solo "Sesiones…" y "Guardar" (el resto de
   entradas dependen de diálogos rfd). Guardar no usa diálogo y funciona.
 - **Import de audio**: el botón Importar de la Librería usa el file chooser

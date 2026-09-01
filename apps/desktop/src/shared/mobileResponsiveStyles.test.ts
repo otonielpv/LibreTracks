@@ -111,6 +111,33 @@ describe("contrato responsive móvil", () => {
     expect(card).toContain("overflow-y: auto");
   });
 
+  // Con una sesión abierta, "Sesiones…" mete la tarjeta de la landing en un
+  // modal. La tarjeta trae el scroller de la landing a pantalla completa
+  // (`overflow-y: auto` + `overscroll-behavior: contain`), pero ahí dentro su
+  // `max-height: 100%` no resuelve: nunca desborda, y `contain` impide que el
+  // gesto suba al marco, que es quien sí tiene el desbordamiento. El dedo
+  // empuja una caja que no se mueve y sólo funciona la barra.
+  it("deja un único scroller en el modal de sesiones", () => {
+    const modal = declarationsFor(".lt-mobile .lt-sessions-modal");
+    const body = declarationsFor(
+      ".lt-mobile .lt-sessions-modal .lt-settings-modal-body",
+    );
+    const card = declarationsFor(
+      ".lt-mobile .lt-sessions-modal .lt-empty-state-card",
+    );
+    const lists = declarationsFor(".lt-mobile .lt-empty-state-template-list");
+
+    expect(modal).toContain("overflow: hidden");
+    expect(body).toContain("overflow-y: auto");
+    expect(body).toContain("touch-action: pan-y");
+    expect(body).toContain("overscroll-behavior: contain");
+    // Nada dentro del cuerpo puede ser otro scrollport.
+    expect(card).toContain("overflow: visible");
+    expect(card).toContain("overscroll-behavior: auto");
+    expect(lists).toContain("max-height: none");
+    expect(lists).toContain("overflow: visible");
+  });
+
   it("convierte la navegación lateral en barra inferior en vertical", () => {
     expect(styles).toMatch(/@media\s*\(orientation:\s*portrait\)/);
     expect(styles).toMatch(

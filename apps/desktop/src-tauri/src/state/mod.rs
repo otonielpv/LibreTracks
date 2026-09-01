@@ -3852,15 +3852,24 @@ pub struct SessionSummary {
     pub modified_ms: Option<u64>,
 }
 
-/// List the sessions living in the default songs folder, most recently
-/// modified first. Missing folder → empty list (fresh install).
-pub(crate) fn list_default_sessions(app: &AppHandle) -> Vec<SessionSummary> {
+/// Folders the landing screen lists sessions from: the current songs directory
+/// first, then any legacy root this device used before (Android moved its data
+/// once). Also the allow-list for deleting a session: a delete request may only
+/// name a folder sitting directly inside one of these.
+pub(crate) fn default_session_dirs(app: &AppHandle) -> Vec<PathBuf> {
     let mut dirs = vec![create_song_default_directory(app)];
     dirs.extend(
         legacy_project_roots(app)
             .into_iter()
             .map(|root| root.join("songs")),
     );
+    dirs
+}
+
+/// List the sessions living in the default songs folder, most recently
+/// modified first. Missing folder → empty list (fresh install).
+pub(crate) fn list_default_sessions(app: &AppHandle) -> Vec<SessionSummary> {
+    let dirs = default_session_dirs(app);
 
     let mut sessions: Vec<SessionSummary> = Vec::new();
     for dir in &dirs {
@@ -3915,6 +3924,74 @@ fn scan_sessions_in(dir: &Path) -> Vec<SessionSummary> {
 fn dedupe_sessions_by_name(sessions: &mut Vec<SessionSummary>) {
     let mut seen: HashSet<String> = HashSet::new();
     sessions.retain(|session| seen.insert(session.name.to_lowercase()));
+}
+
+/// Which folder a "delete this session" request actually refers to.
+///
+/// The webview hands us the `.ltsession` path it was listing; a session is the
+/// FOLDER around it (project file, `audio/`, `cache/`), so that folder is what
+/// gets removed. This resolves it and refuses everything that is not one — the
+/// command deletes recursively, so every assumption is checked here rather
+/// than at the call site:
+///
+/// - the path must be an existing `.ltsession` file,
+/// - `allowed_roots`, when non-empty, is where the folder MUST live (directly
+///   inside one of them). Android passes its songs directories: sessions there
+///   are app-owned, and a stale or hand-edited path should never be able to
+///   point the recursive delete somewhere else. iOS and desktop pass none —
+///   sessions live wherever the user put them — and rely on the checks above
+///   plus the confirmation dialog,
+/// - and the folder may never BE one of those roots (a stray `.ltsession`
+///   sitting loose in the songs directory would otherwise take every session
+///   on the device with it).
+pub(crate) fn resolve_session_dir_to_delete(
+    song_file: &Path,
+    allowed_roots: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let is_session_file = song_file
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("ltsession"));
+    if !is_session_file {
+        return Err("Eso no es un archivo de sesion .ltsession.".to_string());
+    }
+    if !song_file.is_file() {
+        return Err("Esa sesion ya no esta en el dispositivo.".to_string());
+    }
+
+    let song_dir = song_file
+        .parent()
+        .ok_or_else(|| "No se pudo determinar la carpeta de la sesion.".to_string())?
+        .to_path_buf();
+
+    if allowed_roots.iter().any(|root| same_dir(root, &song_dir)) {
+        return Err("Esa sesion no esta en su propia carpeta; no se puede borrar.".to_string());
+    }
+
+    if !allowed_roots.is_empty() {
+        let parent = song_dir.parent().map(Path::to_path_buf);
+        let inside_a_root = parent
+            .as_deref()
+            .is_some_and(|parent| allowed_roots.iter().any(|root| same_dir(root, parent)));
+        if !inside_a_root {
+            return Err(
+                "Solo se pueden borrar las sesiones guardadas en LibreTracks.".to_string(),
+            );
+        }
+    }
+
+    Ok(song_dir)
+}
+
+/// Path equality that survives `.`/`..`, trailing separators and (on Windows)
+/// case and verbatim prefixes. Falls back to a literal comparison when either
+/// side cannot be canonicalized — a root that does not exist yet cannot match
+/// an existing folder anyway.
+pub(crate) fn same_dir(left: &Path, right: &Path) -> bool {
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
 }
 
 /// Default folder where "Save as template" suggests writing `.lttemplate`

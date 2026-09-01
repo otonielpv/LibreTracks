@@ -4947,6 +4947,77 @@ fn scan_sessions_in_lists_only_folders_holding_a_session_file() {
     assert_eq!(names, ["Concierto"]);
 }
 
+/// The landing screen's delete button hands back the `.ltsession` path it was
+/// listing; what gets removed is the folder around it.
+#[test]
+fn a_session_delete_resolves_to_the_folder_holding_the_project_file() {
+    let root = tempdir().unwrap();
+    let songs = root.path().join("songs");
+    let session_dir = songs.join("Concierto");
+    fs::create_dir_all(&session_dir).unwrap();
+    let song_file = session_dir.join("Concierto.ltsession");
+    fs::write(&song_file, "{}").unwrap();
+
+    assert_eq!(
+        super::resolve_session_dir_to_delete(&song_file, &[songs]).unwrap(),
+        session_dir
+    );
+}
+
+/// The recursive delete must never be steerable outside the app's own songs
+/// folders on Android, whatever path the webview sends.
+#[test]
+fn a_session_outside_the_allowed_roots_is_refused() {
+    let root = tempdir().unwrap();
+    let songs = root.path().join("songs");
+    fs::create_dir_all(&songs).unwrap();
+    let elsewhere = root.path().join("Documentos").join("Concierto");
+    fs::create_dir_all(&elsewhere).unwrap();
+    let song_file = elsewhere.join("Concierto.ltsession");
+    fs::write(&song_file, "{}").unwrap();
+
+    assert!(super::resolve_session_dir_to_delete(&song_file, &[songs]).is_err());
+    // With no allow-list (iOS/desktop, where sessions live wherever the user
+    // put them) the same path is accepted.
+    assert_eq!(
+        super::resolve_session_dir_to_delete(&song_file, &[]).unwrap(),
+        elsewhere
+    );
+}
+
+/// A `.ltsession` sitting loose in the songs directory would make the folder to
+/// delete the songs directory ITSELF — every session on the device.
+#[test]
+fn a_loose_session_file_never_deletes_the_songs_root() {
+    let root = tempdir().unwrap();
+    let songs = root.path().join("songs");
+    fs::create_dir_all(&songs).unwrap();
+    let song_file = songs.join("suelta.ltsession");
+    fs::write(&song_file, "{}").unwrap();
+
+    assert!(super::resolve_session_dir_to_delete(&song_file, &[songs.clone()]).is_err());
+    assert!(songs.is_dir());
+}
+
+/// Anything that is not an existing session file is refused before we touch
+/// the filesystem: a stale entry, or a path pointing at something else.
+#[test]
+fn only_an_existing_session_file_can_be_deleted() {
+    let root = tempdir().unwrap();
+    let songs = root.path().join("songs");
+    let session_dir = songs.join("Concierto");
+    fs::create_dir_all(&session_dir).unwrap();
+    let audio = session_dir.join("pista.wav");
+    fs::write(&audio, b"").unwrap();
+
+    assert!(super::resolve_session_dir_to_delete(&audio, &[songs.clone()]).is_err());
+    assert!(super::resolve_session_dir_to_delete(
+        &session_dir.join("Fantasma.ltsession"),
+        &[songs]
+    )
+    .is_err());
+}
+
 /// A legacy root the device never used is the normal case, not an error.
 #[test]
 fn scan_sessions_in_tolerates_a_missing_folder() {

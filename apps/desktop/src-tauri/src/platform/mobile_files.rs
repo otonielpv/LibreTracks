@@ -20,6 +20,8 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 
+use super::document_name::{self, percent_decode};
+
 /// SAF "open document" picker. Blocks until the user picks or cancels.
 /// Extensions are advisory only — SAF filters by MIME, and custom extensions
 /// like .ltpkg have none, so we accept everything and validate after.
@@ -207,7 +209,14 @@ fn unique_stamp() -> u128 {
         .unwrap_or(0)
 }
 
-/// Display name of a picked file, for validation/messages ("song.ltpkg").
+/// Display name of a picked file, for validation/messages ("song.ltpkg") and —
+/// via the import flows — for the name of the session folder we create.
+///
+/// The document id is NOT a name: depending on the provider it is
+/// `primary:Download/x.ltset` or `raw:/storage/emulated/0/Download/x.ltset`.
+/// [`document_name::document_display_name`] keeps only its last path
+/// component; handing the whole id downstream is what named imported sessions
+/// `raw--storage-emulated-0-Download-x`.
 pub fn picked_file_name(picked: &FilePath) -> String {
     match picked {
         FilePath::Path(path) => path
@@ -217,31 +226,7 @@ pub fn picked_file_name(picked: &FilePath) -> String {
         FilePath::Url(url) => url
             .path_segments()
             .and_then(|mut segments| segments.next_back())
-            .map(|segment| {
-                // SAF document ids come URL-encoded ("primary%3ADownload%2Fx.ltpkg").
-                percent_decode(segment)
-            })
+            .map(document_name::document_display_name)
             .unwrap_or_default(),
     }
-}
-
-fn percent_decode(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(
-                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""),
-                16,
-            ) {
-                out.push(byte);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }

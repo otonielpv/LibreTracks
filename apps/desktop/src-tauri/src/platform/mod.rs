@@ -2,7 +2,9 @@
 //! (`file_dialog`), on-demand OS resource sampling (`resource_monitor`), the
 //! Linux WebKitGTK white-screen mitigation (`linux_webkit`), the macOS
 //! security-scoped bookmarks that keep session-folder access across reopens and
-//! updates (`macos_bookmarks`), and the Android-only Storage Access Framework
+//! updates (`macos_bookmarks`), the SAF document-id parsing that turns a picked
+//! `content://` URI into a name a person recognises (`document_name`), and the
+//! Android-only Storage Access Framework
 //! file flows (`mobile_files`), JNI output-device enumeration
 //! (`android_audio_devices`), the JNI memory-pressure handler
 //! (`android_memory`) and the external-storage lookup that decides where
@@ -11,6 +13,7 @@
 //! [`append_platform_output_devices`] is the one seam the audio layer uses to
 //! fold the Android-only endpoint enumeration into an engine device list.
 
+pub mod document_name;
 pub mod file_dialog;
 pub mod linux_webkit;
 pub mod macos_bookmarks;

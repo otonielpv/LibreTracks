@@ -786,6 +786,18 @@ export async function listDefaultSessions(): Promise<DefaultSessionSummary[]> {
   return invokeCommand<DefaultSessionSummary[]>("list_default_sessions");
 }
 
+/**
+ * Delete a session — project file, audio and caches — from the device.
+ *
+ * Only the mobile landing offers this: a phone has no usable file manager, so
+ * a session imported by mistake was otherwise impossible to remove. The
+ * backend refuses the session that is currently open, and on Android refuses
+ * anything outside the app's own songs folders.
+ */
+export async function deleteSessionAt(songFile: string): Promise<void> {
+  await invokeCommand<null>("delete_session_at", { songFile });
+}
+
 /** Open a session whose `.ltsession` path is already known (Android landing). */
 export async function openProjectFromPath(
   songFile: string,

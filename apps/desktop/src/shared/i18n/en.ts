@@ -120,6 +120,10 @@ const en = {
       noRecents:
         "No recent sessions yet. Sessions you open or create will show up here.",
       removeRecent: "Remove from recents",
+      deleteSession: "Delete session from device",
+      confirmDeleteSession:
+        "Delete the session “{{name}}” from this device? Its project, audio and cache will be removed. This cannot be undone.",
+      deleteSessionFailed: "The session could not be deleted.",
       choosingProjectLocation: "Choose where to save the imported project...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",

@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  deleteSessionAt,
   isAndroidApp,
+  isMobileApp,
   listDefaultSessions,
   listSessionTemplates,
   pickSessionFolder,
@@ -15,6 +17,7 @@ import {
   removeRecentSession,
   type RecentSessionEntry,
 } from "../recentSessions";
+import { confirmDialog } from "../../../shared/dialog/dialogService";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 type MobileLandingProps = {
@@ -78,6 +81,9 @@ export function MobileLanding({
   const [deviceSessions, setDeviceSessions] = useState<DefaultSessionSummary[]>(
     [],
   );
+  // Failure of a delete (the session is open, the folder is gone). Kept apart
+  // from `folderError`, which belongs to the create form.
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAndroidApp) {
@@ -99,6 +105,39 @@ export function MobileLanding({
       cancelled = true;
     };
   }, []);
+
+  /**
+   * Delete a session from the device, after confirming. Mobile only: on
+   * desktop the trash icon in the recents list means "forget this entry", and
+   * the user has a real file manager for the rest.
+   *
+   * The MRU entry goes too, but only once the folder is actually gone —
+   * dropping it on a failed delete would hide a session that still exists.
+   */
+  const deleteSession = async (path: string, name: string) => {
+    setSessionError(null);
+    const confirmed = await confirmDialog(
+      t("transport.shell.confirmDeleteSession", { name }),
+    );
+    if (!confirmed) {
+      return;
+    }
+    try {
+      await deleteSessionAt(path);
+    } catch (error: unknown) {
+      setSessionError(
+        typeof error === "string"
+          ? error
+          : ((error as Error)?.message ??
+              t("transport.shell.deleteSessionFailed")),
+      );
+      return;
+    }
+    setRecentSessions(removeRecentSession(path));
+    if (isAndroidApp) {
+      setDeviceSessions(await listDefaultSessions().catch(() => []));
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -299,13 +338,30 @@ export function MobileLanding({
               deviceSessions.length > 0 ? (
                 <ul className="lt-empty-state-template-list">
                   {deviceSessions.map((entry) => (
-                    <li key={entry.songFile}>
+                    <li
+                      key={entry.songFile}
+                      className="lt-empty-state-recent-row"
+                    >
                       <button
                         type="button"
+                        className="lt-empty-state-recent-open"
                         title={entry.songFile}
                         onClick={() => onOpenSessionFromPath?.(entry.songFile)}
                       >
                         {entry.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="lt-empty-state-recent-remove"
+                        title={t("transport.shell.deleteSession")}
+                        aria-label={t("transport.shell.deleteSession")}
+                        onClick={() => {
+                          void deleteSession(entry.songFile, entry.name);
+                        }}
+                      >
+                        <span className="material-symbols-outlined">
+                          delete
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -329,14 +385,30 @@ export function MobileLanding({
                       >
                         {entry.name}
                       </button>
+                      {/* On a phone the trash DELETES the session: there is no
+                          file manager to do it with, and a list that only
+                          forgets entries leaves the storage full. On desktop it
+                          keeps its original, non-destructive meaning. */}
                       <button
                         type="button"
                         className="lt-empty-state-recent-remove"
-                        title={t("transport.shell.removeRecent")}
-                        aria-label={t("transport.shell.removeRecent")}
-                        onClick={() =>
-                          setRecentSessions(removeRecentSession(entry.path))
+                        title={
+                          isMobileApp
+                            ? t("transport.shell.deleteSession")
+                            : t("transport.shell.removeRecent")
                         }
+                        aria-label={
+                          isMobileApp
+                            ? t("transport.shell.deleteSession")
+                            : t("transport.shell.removeRecent")
+                        }
+                        onClick={() => {
+                          if (isMobileApp) {
+                            void deleteSession(entry.path, entry.name);
+                            return;
+                          }
+                          setRecentSessions(removeRecentSession(entry.path));
+                        }}
                       >
                         <span className="material-symbols-outlined">
                           delete
@@ -350,6 +422,11 @@ export function MobileLanding({
                 {t("transport.shell.noRecents")}
               </p>
             )}
+            {sessionError ? (
+              <p className="lt-mobile-landing-error" role="alert">
+                {sessionError}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

@@ -120,6 +120,10 @@ const es = {
       noRecents:
         "Aún no hay sesiones recientes. Las sesiones que abras o crees aparecerán aquí.",
       removeRecent: "Quitar de recientes",
+      deleteSession: "Borrar sesion del dispositivo",
+      confirmDeleteSession:
+        "¿Borrar la sesión «{{name}}» del dispositivo? Se eliminarán su proyecto, su audio y su caché. Esta acción no se puede deshacer.",
+      deleteSessionFailed: "No se pudo borrar la sesión.",
       choosingProjectLocation:
         "Elige donde guardar el proyecto importado...",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",

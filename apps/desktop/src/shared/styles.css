@@ -3039,7 +3039,10 @@ html.lt-ios body {
   border-color: rgb(87 241 219 / 0.4);
 }
 
-.lt-mobile-landing-name-taken {
+/* Inline failures on the landing card: the name already taken when creating,
+   and a session that refused to be deleted. */
+.lt-mobile-landing-name-taken,
+.lt-mobile-landing-error {
   margin: 0;
   color: #f2b8b5;
   font: 400 12px/1.4 "Space Grotesk", sans-serif;
@@ -8461,6 +8464,70 @@ html.lt-ios body {
 
 .lt-android .lt-empty-state-card h1 {
   font-size: 1.7rem;
+}
+
+/* ── "Sesiones…" modal: one scroller, and it is the body ─────────────── */
+/* The landing card is taller than a phone screen, so this modal has to scroll,
+   and with a finger it did not — only its scrollbar did.
+   `.lt-mobile .lt-empty-state-card` (further down) makes the card itself the
+   scroller for the FULL-SCREEN landing, with `max-height: 100%` +
+   `overflow-y: auto` + `overscroll-behavior: contain`. Inside this modal that
+   recipe backfires: the card's `100%` resolves against the plain wrapper div
+   `MobileLanding` renders, which has no definite height, so the card never has
+   any overflow of its own — but it is STILL a scroll container, and `contain`
+   means a pan that lands on it is not passed up to the frame that does have
+   the overflow. The finger pushes a box with nowhere to go.
+
+   So here the body scrolls and nothing inside it is a scrollport. */
+.lt-mobile .lt-sessions-modal {
+  /* `dvh` second so a WebView without it keeps the `vh` value (same pattern as
+     the settings modal above). */
+  max-height: calc(
+    100vh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem
+  );
+  max-height: calc(
+    100dvh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem
+  );
+  /* The frame stays put; the body below is what moves. */
+  overflow: hidden;
+}
+
+.lt-mobile .lt-sessions-modal .lt-settings-modal-body {
+  overflow-y: auto;
+  /* The browser owns the vertical drag here — nothing in this modal claims
+     touch gestures of its own. */
+  touch-action: pan-y;
+  /* Don't hand the leftover scroll to whatever is behind the backdrop. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lt-mobile .lt-sessions-modal .lt-empty-state-card {
+  /* Not a scrollport in here (see above), and not centred either: `margin:
+     auto` on a card taller than its box puts the top out of reach. */
+  overflow: visible;
+  overscroll-behavior: auto;
+  max-height: none;
+  margin: 0;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+/* No inner scrollers on a phone, in either landing. The six-row cap exists so
+   a long list cannot push the DESKTOP card open without bound; on a phone the
+   card (or the modal body) already scrolls, and a six-row box under the finger
+   is one more scrollport competing for the same drag. */
+.lt-mobile .lt-empty-state-template-list {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Full-screen landing: the card IS the scroller, so the pan belongs to it.
+   (Declared before the block that sizes it, so the responsive-contract test
+   still reads that one as the last word on the selector.) */
+.lt-mobile .lt-empty-state-card {
+  touch-action: pan-y;
 }
 
 /* ── Sticky :hover on touch (M/S/T toggles) ──────────────────────────── */

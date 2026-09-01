@@ -754,6 +754,62 @@ pub fn list_default_sessions(app: AppHandle) -> Result<Vec<crate::state::Session
     Ok(crate::state::list_default_sessions(&app))
 }
 
+/// Delete a session — its project file, audio and caches — from the device.
+///
+/// The mobile landing screen is the only way in: a phone has no file manager
+/// worth the name, so a session imported by mistake (or one that filled the
+/// device) could not be got rid of at all. The UI confirms first; this is the
+/// destructive half and it validates everything itself
+/// ([`crate::state::resolve_session_dir_to_delete`]), because what it runs is
+/// a recursive remove.
+///
+/// Refuses the session that is currently open: unloading it mid-delete would
+/// leave the engine streaming files that no longer exist. The caller is told
+/// to open another session first.
+#[tauri::command(async)]
+pub fn delete_session_at(
+    app: AppHandle,
+    song_file: String,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let song_file = std::path::PathBuf::from(song_file);
+
+    // Android keeps every session inside its own songs folders, so the delete
+    // is fenced to those. Elsewhere sessions live wherever the user saved
+    // them and there is no such fence to apply.
+    #[cfg(target_os = "android")]
+    let allowed_roots = crate::state::default_session_dirs(&app);
+    #[cfg(not(target_os = "android"))]
+    let allowed_roots: Vec<std::path::PathBuf> = {
+        let _ = &app;
+        Vec::new()
+    };
+
+    let song_dir = crate::state::resolve_session_dir_to_delete(&song_file, &allowed_roots)?;
+
+    // Read the open session's folder under a brief lock and release it before
+    // the delete: removing gigabytes of audio under the session lock is what
+    // freezes the UI (see the .ltset import).
+    let open_song_dir = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session.song_dir.clone()
+    };
+    if open_song_dir
+        .as_deref()
+        .is_some_and(|open| crate::state::same_dir(open, &song_dir))
+    {
+        return Err(
+            "Esa sesion esta abierta. Abre o crea otra sesion antes de borrarla.".to_string(),
+        );
+    }
+
+    std::fs::remove_dir_all(&song_dir)
+        .map_err(|error| format!("No se pudo borrar la sesion: {error}"))
+}
+
 /// List the reusable `.lttemplate` files in the default templates folder so the
 /// landing screen can offer them when creating a new session.
 #[tauri::command(async)]
