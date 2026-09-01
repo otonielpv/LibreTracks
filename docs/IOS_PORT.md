@@ -88,6 +88,29 @@ comprobar, con build **Release** y la interfaz USB conectada:
 3. Desconectar y reconectar en caliente: la ruta se recupera sola.
 4. Una llamada entrante: el transporte sigue y el audio vuelve al colgar.
 
+## Manifiesto de privacidad (App Store)
+
+`apps/desktop/src-tauri/PrivacyInfo.xcprivacy` se empaqueta en la raíz del
+bundle vía `bundle.resources` de `tauri.ios.conf.json`, y la CI falla si no
+llega ahí. Sin él, App Store Connect rechaza la subida (**ITMS-91053**).
+
+Lo declarado, con el código que lo respalda:
+
+| Declaración | Por qué |
+| --- | --- |
+| `DiskSpace` (E174.1) | `statvfs` en `source_manager.cpp`: la caché de PCM se dimensiona como un porcentaje del espacio libre |
+| `FileTimestamp` (C617.1, 0A2A.1) | la caché de ondas se indexa por ruta + tamaño + mtime; los dos motivos porque hay ficheros del contenedor **y** ficheros que el usuario abre desde Archivos |
+| `SystemBootTime` (35F9.1) | `std::chrono::steady_clock` es `mach_absolute_time` en Apple: medidores de callback, monitor de stalls y reloj de fallback |
+| `ProductInteraction` | las estadísticas opt-in de `docs/TELEMETRY.md` |
+
+**Si Apple reclama alguna API más**, el correo de ITMS-91053 nombra la
+categoría exacta: se añade otro bloque a `NSPrivacyAccessedAPITypes` con el
+motivo que corresponda. El candidato más probable es `UserDefaults` (CA92.1),
+que usaría WKWebView por debajo; no está declarado porque no hay ninguna
+llamada nuestra, y declarar APIs que no se usan tampoco es correcto.
+
+El DMG de macOS no necesita este fichero: solo se exige en la App Store.
+
 ## Qué se excluye todavía
 
 - Servidor remote: en móvil la aplicación es el dispositivo de control.

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Privacy manifest (App Store requirement since May 2024).
+
+  Apple rejects an upload that uses a "required reason" API without declaring
+  it here (ITMS-91053). Every entry below is backed by real code in this repo;
+  see docs/IOS_PORT.md for how to extend it when Apple names an API we missed.
+
+  This file is for the App Store build. The macOS DMG is distributed outside
+  the store and does not need it.
+-->
+<plist version="1.0">
+<dict>
+	<!--
+	  LibreTracks does not track: nothing it sends is linked to a person, and
+	  no data ever leaves for another company's advertising or measurement.
+	-->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!--
+	  Usage statistics (docs/TELEMETRY.md). Nothing is sent until the user
+	  explicitly opts in. The installation secret stays on the device; the
+	  server only ever sees a SHA-256 derivative that rotates every UTC day,
+	  and the event payload carries no names, paths or free-form text.
+
+	  Declared even though it is optional and pseudonymous: Apple wants the
+	  data type that CAN be collected, not only what is collected by default.
+	-->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+	</array>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!--
+		  Disk space: SourceManager sizes its PCM cache as a share of the free
+		  space on the cache volume (statvfs in source_manager.cpp), the same
+		  policy Ableton uses. E174.1 is the "is there room to write this"
+		  reason.
+		-->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+
+		<!--
+		  File timestamps: the waveform cache is keyed by path + size + mtime,
+		  so a re-analysis only happens when the audio actually changed
+		  (state/library.rs, state/mod.rs). Two reasons because both cases are
+		  real: C617.1 for files inside the app container (sessions, caches)
+		  and 0A2A.1 for audio the user handed us through the document picker.
+		-->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+				<string>0A2A.1</string>
+			</array>
+		</dict>
+
+		<!--
+		  System boot time: every timing measurement in the audio engine uses
+		  std::chrono::steady_clock, which is mach_absolute_time on Apple
+		  platforms — the callback gap/work maxima, the stall monitor, the
+		  fallback clock. 35F9.1 is exactly that: measuring elapsed time
+		  between events inside the app.
+		-->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

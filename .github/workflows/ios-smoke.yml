@@ -278,12 +278,25 @@ jobs:
             exit 1
           fi
 
+          # Apple reads the privacy manifest from the BUNDLE ROOT and rejects
+          # the upload without it (ITMS-91053). Report where it actually landed
+          # when it is missing from the root: the fix is a different resource
+          # mapping, not a different manifest.
+          if [ ! -f "$app/PrivacyInfo.xcprivacy" ]; then
+            echo "IPA has no PrivacyInfo.xcprivacy at the bundle root" >&2
+            find "$app" -name 'PrivacyInfo.xcprivacy' -print >&2 || true
+            exit 1
+          fi
+          /usr/libexec/PlistBuddy -c 'Print :NSPrivacyTracking' \
+            "$app/PrivacyInfo.xcprivacy" > /dev/null
+
           echo "IPA: $ipa"
           echo "Bundle: $bundle_id"
           echo "Minimum iOS: $minimum_ios"
           echo "Architectures: $archs"
           echo "Audio engine: native static C++ engine linked (RemoteIO, no JUCE)"
           echo "Full pack: Bungee + FFmpeg + voice guide + pads enabled"
+          echo "Privacy manifest: present at the bundle root"
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
 
       - name: Upload unsigned IPA
