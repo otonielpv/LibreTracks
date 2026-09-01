@@ -19,8 +19,8 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::infra::error::DesktopError;
 use crate::infra::settings::{
-    apply_decoding_cache_env, effective_decoding_cache_dir, save_app_settings, AppSettings,
-    AppSettingsStore,
+    apply_decoding_cache_env, effective_decoding_cache_dir, legacy_decoding_cache_dirs,
+    save_app_settings, AppSettings, AppSettingsStore,
 };
 use crate::state::DesktopState;
 #[tauri::command(async)]
@@ -272,7 +272,11 @@ pub fn get_decoding_cache_info(
     let dir = effective_decoding_cache_dir(&app, &settings);
     Ok(DecodingCacheInfo {
         dir: dir.to_string_lossy().replace('\\', "/"),
-        size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes() + waveform_cache_size_bytes(),
+        // Cache sitting in a root we no longer write to counts too, or the
+        // user is shown "0 B" over gigabytes they have no way to reach.
+        size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes()
+            + waveform_cache_size_bytes()
+            + cache_roots_size_bytes(&legacy_decoding_cache_dirs(&app, &dir)),
         max_gb: settings.decoding_cache_max_gb,
     })
 }
@@ -332,7 +336,30 @@ fn waveform_cache_size_bytes() -> u64 {
     let Some(dir) = waveform_cache_dir() else {
         return 0;
     };
-    let Ok(entries) = std::fs::read_dir(&dir) else {
+    files_size_bytes(&dir)
+}
+
+/// Bytes held by whole cache ROOTS — used for the ones this build no longer
+/// writes to (Android's old internal-storage location). Both subfolders count:
+/// the engine's PCM cache and the waveform peaks sit side by side under a root.
+fn cache_roots_size_bytes(roots: &[std::path::PathBuf]) -> u64 {
+    roots
+        .iter()
+        .flat_map(cache_subdirs)
+        .map(|dir| files_size_bytes(&dir))
+        .sum()
+}
+
+/// The two folders a cache root holds. Named here rather than spelled out at
+/// each call site so the size readout and the purge can never disagree about
+/// what a root contains.
+fn cache_subdirs(root: &std::path::PathBuf) -> [std::path::PathBuf; 2] {
+    [root.join("source-cache"), root.join("waveform-cache")]
+}
+
+/// Bytes of the FILES directly inside `dir`. Missing folder → 0.
+fn files_size_bytes(dir: &std::path::Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;
     };
     entries
@@ -349,7 +376,25 @@ fn purge_waveform_cache() -> (u64, u32) {
     let Some(dir) = waveform_cache_dir() else {
         return (0, 0);
     };
-    let Ok(entries) = std::fs::read_dir(&dir) else {
+    purge_files_in(&dir)
+}
+
+/// Same for whole roots — see [`cache_roots_size_bytes`].
+fn purge_cache_roots(roots: &[std::path::PathBuf]) -> (u64, u32) {
+    let mut freed = 0u64;
+    let mut failed = 0u32;
+    for dir in roots.iter().flat_map(cache_subdirs) {
+        let (dir_freed, dir_failed) = purge_files_in(&dir);
+        freed += dir_freed;
+        failed += dir_failed;
+    }
+    (freed, failed)
+}
+
+/// Delete the files directly inside `dir`.
+/// Returns `(bytes_freed, files_that_could_not_be_deleted)`.
+fn purge_files_in(dir: &std::path::Path) -> (u64, u32) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return (0, 0);
     };
     let mut freed = 0u64;
@@ -389,11 +434,85 @@ pub struct PurgeCacheResult {
 /// clean" — the user clicks Clear cache, sees no change, and concludes the
 /// button is broken. It isn't; the files are in use.
 #[tauri::command(async)]
-pub fn purge_decoding_cache() -> Result<PurgeCacheResult, String> {
+pub fn purge_decoding_cache(
+    app: AppHandle,
+    settings_store: State<'_, AppSettingsStore>,
+) -> Result<PurgeCacheResult, String> {
+    let settings = settings_store.current().map_err(|e| e.to_string())?;
+    let effective = effective_decoding_cache_dir(&app, &settings);
+
     let (pcm_freed, pcm_failed) = lt_audio_engine_v2::purge_decoding_cache_detailed();
     let (wave_freed, wave_failed) = purge_waveform_cache();
+    // Nothing holds the legacy files open (we stopped writing there), so this
+    // is the one route by which they can ever be reclaimed.
+    let (legacy_freed, legacy_failed) =
+        purge_cache_roots(&legacy_decoding_cache_dirs(&app, &effective));
     Ok(PurgeCacheResult {
-        freed_bytes: pcm_freed + wave_freed,
-        files_in_use: pcm_failed + wave_failed,
+        freed_bytes: pcm_freed + wave_freed + legacy_freed,
+        files_in_use: pcm_failed + wave_failed + legacy_failed,
     })
+}
+
+#[cfg(test)]
+mod cache_root_tests {
+    use super::{cache_roots_size_bytes, purge_cache_roots};
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// A cache root as it looks on disk: the engine's PCM files and the
+    /// waveform peaks side by side.
+    fn populated_root(root: &PathBuf) {
+        fs::create_dir_all(root.join("source-cache")).unwrap();
+        fs::create_dir_all(root.join("waveform-cache")).unwrap();
+        fs::write(root.join("source-cache").join("a.rf64"), vec![0u8; 300]).unwrap();
+        fs::write(root.join("waveform-cache").join("a.ltpeaks"), vec![0u8; 200]).unwrap();
+        // Not ours to count or delete: only the two known subfolders are.
+        fs::write(root.join("unrelated.txt"), vec![0u8; 999]).unwrap();
+    }
+
+    /// Android moved the cache off internal storage. What the old builds left
+    /// there has to keep showing up in the size readout, or the user is told
+    /// "0 B" over gigabytes they cannot reach any other way.
+    #[test]
+    fn a_root_we_no_longer_write_to_still_counts_towards_the_size() {
+        let temp = tempfile::tempdir().unwrap();
+        let legacy = temp.path().join("legacy-cache");
+        populated_root(&legacy);
+
+        assert_eq!(cache_roots_size_bytes(&[legacy]), 500);
+    }
+
+    #[test]
+    fn clearing_the_cache_reclaims_those_roots_too() {
+        let temp = tempfile::tempdir().unwrap();
+        let legacy = temp.path().join("legacy-cache");
+        populated_root(&legacy);
+
+        let (freed, in_use) = purge_cache_roots(std::slice::from_ref(&legacy));
+
+        assert_eq!((freed, in_use), (500, 0));
+        assert_eq!(cache_roots_size_bytes(std::slice::from_ref(&legacy)), 0);
+        // The folders stay (the engine recreates files in them); anything that
+        // is not one of the two cache subfolders is left alone.
+        assert!(legacy.join("unrelated.txt").is_file());
+    }
+
+    /// No legacy root (every platform but a migrated Android) must cost
+    /// nothing and report nothing.
+    #[test]
+    fn no_legacy_roots_is_not_an_error() {
+        assert_eq!(cache_roots_size_bytes(&[]), 0);
+        assert_eq!(purge_cache_roots(&[]), (0, 0));
+    }
+
+    /// A root that was never created (fresh install, or the fallback path was
+    /// never used) must not look like a failure.
+    #[test]
+    fn a_missing_root_is_skipped() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("never-existed");
+
+        assert_eq!(cache_roots_size_bytes(std::slice::from_ref(&missing)), 0);
+        assert_eq!(purge_cache_roots(&[missing]), (0, 0));
+    }
 }

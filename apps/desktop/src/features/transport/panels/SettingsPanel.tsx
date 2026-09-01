@@ -1149,7 +1149,8 @@ function InterfaceZoomField() {
   );
 }
 
-function DecodingCacheField() {
+/** Exported for the mobile-contract test; rendered only from this panel. */
+export function DecodingCacheField() {
   const { t } = useTranslation();
   const [info, setInfo] = useState<DecodingCacheInfo | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1234,10 +1235,15 @@ function DecodingCacheField() {
         })}
       </span>
       <small>
-        {t("transport.settingsModal.decodingCacheDescription", {
-          defaultValue:
-            "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. Changing the folder leaves old files behind until you clear the cache.",
-        })}
+        {isMobileApp
+          ? t("transport.settingsModal.decodingCacheDescriptionMobile", {
+              defaultValue:
+                "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. The location is fixed to the app's own storage.",
+            })
+          : t("transport.settingsModal.decodingCacheDescription", {
+              defaultValue:
+                "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. Changing the folder leaves old files behind until you clear the cache.",
+            })}
       </small>
 
       <div className="lt-cache-control-row">
@@ -1250,29 +1256,40 @@ function DecodingCacheField() {
             defaultValue: "Cache location",
           })}
         />
-        <button
-          type="button"
-          className="lt-secondary-button"
-          disabled={busy}
-          onClick={handleChangeFolder}
-        >
-          {t("transport.settingsModal.decodingCacheChange", {
-            defaultValue: "Change…",
-          })}
-        </button>
-        <button
-          type="button"
-          className="lt-secondary-button lt-cache-reset-button"
-          disabled={busy}
-          title={t("transport.settingsModal.decodingCacheResetHint", {
-            defaultValue: "Use the default location",
-          })}
-          onClick={handleResetFolder}
-        >
-          {t("transport.settingsModal.decodingCacheReset", {
-            defaultValue: "Default",
-          })}
-        </button>
+        {/* No folder picking on a phone. Two reasons, either one enough:
+            `tauri-plugin-dialog` returns FolderPickerNotImplemented for
+            `directory: true` on mobile, so the button could only ever fail;
+            and writing outside the app's own storage would need
+            MANAGE_EXTERNAL_STORAGE, which Play grants to file managers and
+            backup tools, not to a DAW (see AndroidManifest.xml). The size cap
+            and Clear cache below are the parts that still mean something. */}
+        {!isMobileApp ? (
+          <>
+            <button
+              type="button"
+              className="lt-secondary-button"
+              disabled={busy}
+              onClick={handleChangeFolder}
+            >
+              {t("transport.settingsModal.decodingCacheChange", {
+                defaultValue: "Change…",
+              })}
+            </button>
+            <button
+              type="button"
+              className="lt-secondary-button lt-cache-reset-button"
+              disabled={busy}
+              title={t("transport.settingsModal.decodingCacheResetHint", {
+                defaultValue: "Use the default location",
+              })}
+              onClick={handleResetFolder}
+            >
+              {t("transport.settingsModal.decodingCacheReset", {
+                defaultValue: "Default",
+              })}
+            </button>
+          </>
+        ) : null}
       </div>
 
       <div className="lt-cache-max-row">

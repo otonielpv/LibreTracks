@@ -193,6 +193,8 @@ const es = {
       decodingCacheTitle: "Caché de audio",
       decodingCacheDescription:
         "El audio que no es WAV (MP3, FLAC…) se decodifica una vez y se guarda aquí para que cargue al instante la próxima vez. Al cambiar la carpeta, los archivos anteriores quedan en la antigua hasta que vacíes la caché.",
+      decodingCacheDescriptionMobile:
+        "El audio que no es WAV (MP3, FLAC…) se decodifica una vez y se guarda aquí para que cargue al instante la próxima vez. La ubicación es fija: el almacenamiento propio de la app.",
       decodingCacheLocation: "Ubicación de la caché",
       decodingCacheChange: "Cambiar…",
       decodingCacheReset: "Predeterminada",

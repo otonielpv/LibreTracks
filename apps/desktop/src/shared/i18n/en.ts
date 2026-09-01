@@ -191,6 +191,8 @@ const en = {
       decodingCacheTitle: "Audio cache",
       decodingCacheDescription:
         "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. Changing the folder leaves old files behind until you clear the cache.",
+      decodingCacheDescriptionMobile:
+        "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. The location is fixed to the app's own storage.",
       decodingCacheLocation: "Cache location",
       decodingCacheChange: "Change…",
       decodingCacheReset: "Default",

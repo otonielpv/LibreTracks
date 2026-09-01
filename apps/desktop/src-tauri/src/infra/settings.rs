@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, io, path::PathBuf, sync::Mutex};
+use std::{collections::HashMap, fs, io, path::{Path, PathBuf}, sync::Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -372,10 +372,52 @@ pub fn default_decoding_cache_dir(app: &AppHandle) -> PathBuf {
         }
     }
 
+    // Android: next to the sessions, in the app-specific EXTERNAL dir — the
+    // same place `state::project_root` picks, and for the same reason. The
+    // generic branch below lands on INTERNAL storage, which is the volume that
+    // fills up first on a modest phone, and the cache of a multi-GB session is
+    // the heaviest thing we write. Sessions on one volume and their decoded
+    // audio on another was never deliberate. Falls through when the external
+    // volume is unavailable, exactly like the session root does.
+    #[cfg(target_os = "android")]
+    if let Some(external) = crate::platform::android_storage::external_files_dir() {
+        return external.join("cache");
+    }
+
     app.path()
         .app_local_data_dir()
         .unwrap_or_else(|_| std::env::temp_dir().join("LibreTracks"))
         .join("cache")
+}
+
+/// Cache roots this build no longer writes to, but earlier ones did.
+///
+/// Android moved the cache from internal storage to the app's external dir
+/// (see above). Whatever the old builds left behind is then invisible to the
+/// app: the size readout ignores it and "Clear cache" cannot reach it, so it
+/// sits there forever on the volume that runs out of space first. Reporting
+/// and purging still cover these, so the move does not strand gigabytes.
+///
+/// Empty on every other platform, and empty on Android when the fallback means
+/// the legacy root IS the effective one.
+pub fn legacy_decoding_cache_dirs(app: &AppHandle, effective: &Path) -> Vec<PathBuf> {
+    #[cfg(target_os = "android")]
+    {
+        let internal = app
+            .path()
+            .app_local_data_dir()
+            .unwrap_or_else(|_| std::env::temp_dir().join("LibreTracks"))
+            .join("cache");
+        if crate::state::same_dir(&internal, effective) {
+            return Vec::new();
+        }
+        return vec![internal];
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, effective);
+        Vec::new()
+    }
 }
 
 pub fn effective_decoding_cache_dir(app: &AppHandle, settings: &AppSettings) -> PathBuf {

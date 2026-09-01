@@ -257,6 +257,21 @@ cmake --build build-android-x86_64
   —tonos con decay— pintan waveforms EN FORMA DE TRIÁNGULOS que se
   confunden con un placeholder; el placeholder real es un rect plano con
   texto "ANALYZING WAVEFORM…".)
+- **Dónde vive la caché**: en `getExternalFilesDir()/cache`, junto a las
+  sesiones. Antes caía en la rama genérica de `default_decoding_cache_dir`,
+  que en Android resuelve al almacenamiento INTERNO: la sesión en un volumen y
+  su audio decodificado en otro, y el interno es justo el que se llena en un
+  teléfono modesto. Lo que quedó escrito en el sitio viejo sigue contando en el
+  tamaño que muestra Ajustes y lo borra "Vaciar caché"
+  (`legacy_decoding_cache_dirs`), para que el cambio de ubicación no deje
+  gigabytes inalcanzables.
+- **La ruta de la caché no se puede elegir en móvil**, y el ajuste ya no lo
+  ofrece: `tauri-plugin-dialog` devuelve `FolderPickerNotImplemented` para
+  `directory: true` en móvil (el botón sólo sabía fallar), y escribir fuera del
+  almacenamiento propio de la app pediría `MANAGE_EXTERNAL_STORAGE`, que Play
+  no concede a un DAW. Quedan el límite de tamaño y el vaciado. Si algún día
+  hace falta "mover la caché a la tarjeta SD", la vía sin permisos es
+  `Context.getExternalFilesDirs(null)`, que devuelve rutas reales por volumen.
 
 ## Audio validado en hardware real (Oppo A5, gama baja 2020)
 
