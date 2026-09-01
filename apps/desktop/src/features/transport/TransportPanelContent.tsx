@@ -1518,6 +1518,9 @@ export function TransportPanelContent() {
     (state) => state.setSelectedSectionId,
   );
   const clearSelection = useTimelineUIStore((state) => state.clearSelection);
+  const clearSelectionIfAny = useTimelineUIStore(
+    (state) => state.clearSelectionIfAny,
+  );
   const selectTrack = useTimelineUIStore((state) => state.selectTrack);
   const selectClip = useTimelineUIStore((state) => state.selectClip);
   const selectSection = useTimelineUIStore((state) => state.selectSection);
@@ -6326,6 +6329,11 @@ export function TransportPanelContent() {
         await performSeek(seconds);
       });
     },
+    // Pulsar el hueco vacío deselecciona. No toca la región ni el rango: la
+    // región seleccionada es el objetivo de las acciones MIDI de transposición
+    // y perderla por un toque en directo sería peor que el problema que esto
+    // arregla. Escape sigue limpiándolo todo.
+    clearSelection: clearSelectionIfAny,
   };
 
   function handleTrackLaneMouseDown(
@@ -6530,29 +6538,12 @@ export function TransportPanelContent() {
     openMenu(event, track.name, trackContextMenu(track, laneSeconds));
   }
 
-  function handleTrackListContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!songRef.current) {
-      return;
-    }
-
+  // El hueco vacío bajo los carriles y el que queda bajo las cabeceras abren el
+  // mismo menú global de pistas. La guarda de `.lt-track-lane-row` es para el
+  // primero: el menú del carril burbujea hasta aquí.
+  function handleEmptyAreaContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement | null;
-    if (target?.closest(".lt-track-lane-row")) {
-      return;
-    }
-
-    clearSelection();
-    setSelectedRegionId(null);
-    openMenu(
-      event,
-      t("transport.menu.tracksMenuTitle", { defaultValue: "Tracks" }),
-      globalTrackListContextMenu(),
-    );
-  }
-
-  function handleTrackHeadersEmptyAreaContextMenu(
-    event: ReactMouseEvent<HTMLDivElement>,
-  ) {
-    if (!songRef.current) {
+    if (!songRef.current || target?.closest(".lt-track-lane-row")) {
       return;
     }
 
@@ -7685,9 +7676,8 @@ export function TransportPanelContent() {
                           }
                           onSelectTrack={handleTrackHeaderSelect}
                           onOpenContextMenu={handleTrackHeaderContextMenu}
-                          onEmptyAreaContextMenu={
-                            handleTrackHeadersEmptyAreaContextMenu
-                          }
+                          onEmptyAreaContextMenu={handleEmptyAreaContextMenu}
+                          onEmptyAreaClick={clearSelectionIfAny}
                           onStartTrackDrag={handleTrackHeaderDragStart}
                           onToggleFolder={handleTrackHeaderFolderToggle}
                           onStartRowResize={handleRowResizeStart}
@@ -8023,7 +8013,7 @@ export function TransportPanelContent() {
                             });
                             return cameraXRef.current;
                           }}
-                          onTrackListContextMenu={handleTrackListContextMenu}
+                          onTrackListContextMenu={handleEmptyAreaContextMenu}
                           midiClips={timelineMenus.midiClipCallbacks}
                           onTrackLaneMouseDown={handleTrackLaneMouseDown}
                           onTimelineBackgroundMouseDown={(event) => {
@@ -8118,6 +8108,7 @@ export function TransportPanelContent() {
                       dragPreview={compactDragPreview}
                       selectedTrackIds={selectedTrackIds}
                       onTrackSelect={handleTrackHeaderSelect}
+                      onClearSelection={clearSelectionIfAny}
                       onTrackDragStart={handleTrackHeaderDragStart}
                       selectedRegionId={selectedRegionId}
                       onSelectRegion={setSelectedRegionId}

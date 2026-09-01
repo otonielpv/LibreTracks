@@ -27,6 +27,7 @@ function setup() {
     previewSeek: [] as number[],
     commitSeek: [] as number[],
     updateCameraX: [] as number[],
+    clearSelection: 0,
   };
 
   const deps: TimelineBackgroundSeekDeps = {
@@ -45,6 +46,9 @@ function setup() {
       return cameraX;
     },
     commitSeek: (seconds) => calls.commitSeek.push(seconds),
+    clearSelection: () => {
+      calls.clearSelection += 1;
+    },
   };
 
   const surface = document.createElement("div");
@@ -126,6 +130,27 @@ describe("fondo del timeline en táctil", () => {
     window.dispatchEvent(mouse("mouseup", 400));
 
     expect(calls.commitSeek).toEqual([]);
+  });
+
+  // Con el dedo no hay Escape: si el toque en el fondo no deselecciona, la
+  // pista se queda marcada para siempre.
+  it("un toque limpio deselecciona", () => {
+    const { begin, calls, press } = setup();
+
+    begin(press(400));
+    window.dispatchEvent(mouse("mouseup", 400));
+
+    expect(calls.clearSelection).toBe(1);
+  });
+
+  it("arrastrar no deselecciona: eso es mover la vista, no un toque", () => {
+    const { begin, calls, press } = setup();
+
+    begin(press(400));
+    window.dispatchEvent(mouse("mousemove", 200));
+    window.dispatchEvent(mouse("mouseup", 200));
+
+    expect(calls.clearSelection).toBe(0);
   });
 
   it("un solo dedo no cancela el toque", () => {

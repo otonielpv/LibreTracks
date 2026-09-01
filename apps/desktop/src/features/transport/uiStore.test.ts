@@ -222,6 +222,25 @@ describe("useTimelineUIStore", () => {
     });
   });
 
+  describe("clearSelectionIfAny", () => {
+    it("wipes the selection when there is one", () => {
+      get().setSelectedTrackIds(["t1"]);
+      get().clearSelectionIfAny();
+      expect(get().selectedTrackIds).toEqual([]);
+    });
+
+    // El fondo del timeline llama a esto en CADA clic de salto: sin la guarda
+    // publicaría arrays nuevos y re-renderizaría a todo suscriptor de la
+    // selección aunque no hubiera nada seleccionado.
+    it("no publica estado nuevo si no había nada seleccionado", () => {
+      const before = useTimelineUIStore.getState();
+      get().clearSelectionIfAny();
+      const after = useTimelineUIStore.getState();
+      expect(after.selectedTrackIds).toBe(before.selectedTrackIds);
+      expect(after.selectedClipIds).toBe(before.selectedClipIds);
+    });
+  });
+
   describe("snap and midi learn", () => {
     it("sets snap with a literal or updater and toggles it", () => {
       get().setSnapEnabled(false);

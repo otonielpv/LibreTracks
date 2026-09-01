@@ -49,6 +49,7 @@ type TimelineUIState = {
   toggleClipSelection: (clipId: string) => void;
   setSelectedSectionId: (sectionId: string | null) => void;
   clearSelection: () => void;
+  clearSelectionIfAny: () => void;
   selectTrack: (trackIds: string[]) => void;
   selectClip: (clipId: string | null, trackId?: string | null) => void;
   selectSection: (sectionId: string | null) => void;
@@ -64,7 +65,7 @@ type TimelineUIState = {
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
-  subscribeWithSelector((set) => ({
+  subscribeWithSelector((set, get) => ({
     cameraX: 0,
     zoomLevel: TIMELINE_DEFAULT_ZOOM_LEVEL,
     trackHeight: TIMELINE_DEFAULT_TRACK_HEIGHT,
@@ -157,6 +158,22 @@ export const useTimelineUIStore = create<TimelineUIState>()(
         selectedClipIds: [],
         selectedSectionId: null,
       });
+    },
+    /** Como `clearSelection`, pero no toca el estado si no había nada
+     * seleccionado. El fondo del timeline llama a esto en CADA clic de salto y
+     * `clearSelection` publica arrays nuevos: sin la guarda, cada clic en el
+     * hueco vacío re-renderizaría a todos los suscriptores de la selección. */
+    clearSelectionIfAny: () => {
+      const state = get();
+      if (
+        state.selectedTrackIds.length === 0 &&
+        state.selectedClipIds.length === 0 &&
+        state.selectedClipId === null &&
+        state.selectedSectionId === null
+      ) {
+        return;
+      }
+      state.clearSelection();
     },
     selectTrack: (selectedTrackIds) => {
       set({

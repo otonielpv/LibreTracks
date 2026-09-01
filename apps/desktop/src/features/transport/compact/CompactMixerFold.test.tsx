@@ -46,6 +46,7 @@ function renderMixer(
     collapsedFolders?: Set<string>;
     onToggleFolder?: (trackId: string) => void;
     onTrackSelect?: () => void;
+    onEmptyAreaClick?: () => void;
     onTrackDragStart?: () => void;
   } = {},
 ) {
@@ -66,6 +67,7 @@ function renderMixer(
       onTrackContextMenu={vi.fn()}
       selectedTrackIds={[]}
       onTrackSelect={overrides.onTrackSelect ?? vi.fn()}
+      onEmptyAreaClick={overrides.onEmptyAreaClick ?? vi.fn()}
       onTrackDragStart={overrides.onTrackDragStart ?? vi.fn()}
       activeSongTrackIds={null}
       filterActiveSong={false}

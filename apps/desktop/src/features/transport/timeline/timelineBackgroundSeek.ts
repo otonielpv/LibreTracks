@@ -44,6 +44,12 @@ export type TimelineBackgroundSeekDeps = {
     options?: { commitToStore?: boolean },
   ) => unknown;
   commitSeek: (seconds: number) => void;
+  /** Un clic/toque LIMPIO en el fondo también deselecciona pistas y clips, como
+   * en Ableton. Va aquí y no en el `mousedown` a propósito: arrastrar el fondo
+   * desplaza la cámara, y perder la selección por mover la vista sería peor que
+   * el problema que esto arregla. Con el dedo es la única forma de
+   * deseleccionar — no hay Escape. */
+  clearSelection: () => void;
 };
 
 export function createTimelineBackgroundSeek(
@@ -71,7 +77,10 @@ export function createTimelineBackgroundSeek(
         startClientX: event.clientX,
         startClientY: event.clientY,
         thresholdPx: DRAG_THRESHOLD_PX,
-        onTap: () => deps.commitSeek(previewSeconds),
+        onTap: () => {
+          deps.clearSelection();
+          deps.commitSeek(previewSeconds);
+        },
       });
       return;
     }
@@ -119,6 +128,7 @@ export function createTimelineBackgroundSeek(
       window.removeEventListener("mouseup", onMouseUp);
 
       if (!activePan.hasMoved) {
+        deps.clearSelection();
         deps.commitSeek(activePan.previewSeconds);
       }
     };

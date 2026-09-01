@@ -118,6 +118,8 @@ type CompactViewProps = {
     trackName: string,
     event: ReactMouseEvent<HTMLDivElement>,
   ) => void;
+  /** Clic en el hueco del mixer, fuera de toda tira: deselecciona. */
+  onClearSelection: () => void;
   /** Pointer-down on a strip handle starts a track-reorder drag. The
    * parent owns the move / drop pipeline (shared with the DAW). */
   onTrackDragStart: (
@@ -274,6 +276,7 @@ function CompactViewComponent({
   dragPreview,
   selectedTrackIds,
   onTrackSelect,
+  onClearSelection,
   onTrackDragStart,
   selectedRegionId,
   onSelectRegion,
@@ -486,6 +489,7 @@ function CompactViewComponent({
           onTrackContextMenu={onTrackContextMenu}
           selectedTrackIds={selectedTrackIds}
           onTrackSelect={onTrackSelect}
+          onEmptyAreaClick={onClearSelection}
           onTrackDragStart={onTrackDragStart}
           activeSongTrackIds={activeSongTrackIds}
           filterActiveSong={compactMixerFilterActiveSong}

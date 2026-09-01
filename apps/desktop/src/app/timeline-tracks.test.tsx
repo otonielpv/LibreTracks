@@ -325,6 +325,74 @@ describe("App / timeline-tracks", () => {
     expect(buttons[0].textContent).toContain("Seleccionar color...");
   });
 
+  // Antes de esto sólo Escape quitaba la selección, así que en móvil -donde no
+  // hay teclado- la pista se quedaba marcada para siempre.
+  it("deselecciona al hacer clic en el fondo del timeline", async () => {
+    const { container } = await renderApp();
+    mockTimelineShellMetrics(container, 600);
+    mockLaneBounds(container, 600);
+    const rhythmHeader = getTrackHeader(container, "Rhythm");
+
+    await act(async () => {
+      fireEvent.click(rhythmHeader);
+    });
+    expect(rhythmHeader.className).toContain("is-selected");
+
+    // "Keys" no tiene clips: el clic cae en el fondo del carril.
+    const emptyLane = screen.getByLabelText("Lane Keys");
+    await act(async () => {
+      fireEvent.mouseDown(emptyLane, { button: 0, clientX: 300 });
+      window.dispatchEvent(
+        new MouseEvent("mouseup", { button: 0, clientX: 300, bubbles: true }),
+      );
+    });
+
+    expect(rhythmHeader.className).not.toContain("is-selected");
+  });
+
+  it("no deselecciona al arrastrar el fondo para mover la vista", async () => {
+    const { container } = await renderApp();
+    mockTimelineShellMetrics(container, 600);
+    mockLaneBounds(container, 600);
+    const rhythmHeader = getTrackHeader(container, "Rhythm");
+
+    await act(async () => {
+      fireEvent.click(rhythmHeader);
+    });
+
+    const emptyLane = screen.getByLabelText("Lane Keys");
+    await act(async () => {
+      fireEvent.mouseDown(emptyLane, { button: 0, clientX: 300 });
+      window.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 220, bubbles: true }),
+      );
+      window.dispatchEvent(
+        new MouseEvent("mouseup", { button: 0, clientX: 220, bubbles: true }),
+      );
+    });
+
+    expect(rhythmHeader.className).toContain("is-selected");
+  });
+
+  it("deselecciona al hacer clic en el hueco bajo las cabeceras", async () => {
+    const { container } = await renderApp();
+    const rhythmHeader = getTrackHeader(container, "Rhythm");
+
+    await act(async () => {
+      fireEvent.click(rhythmHeader);
+    });
+    expect(rhythmHeader.className).toContain("is-selected");
+
+    const headersList = container.querySelector(
+      ".lt-track-headers-list",
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.click(headersList);
+    });
+
+    expect(rhythmHeader.className).not.toContain("is-selected");
+  });
+
   it("keeps multi-track selection when a fader inside it is moved", async () => {
     const { container } = await renderApp();
     const rhythmHeader = getTrackHeader(container, "Rhythm");
