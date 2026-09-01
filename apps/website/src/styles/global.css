@@ -1327,6 +1327,37 @@ h1 {
   border-top: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
 }
 
+/* Platform caveat shown under the installer list (see GithubReleases.astro).
+   Temporary: goes away with the note it styles once the DMG is notarized. */
+.platform-note {
+  margin-top: 1.25rem;
+  padding: 0.9rem 1rem;
+  border-radius: 4px;
+  background: var(--lt-surface-low);
+  border: 1px solid color-mix(in srgb, var(--lt-primary) 28%, transparent);
+}
+
+.platform-note strong {
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.platform-note p {
+  margin: 0 0 0.5rem;
+  color: color-mix(in srgb, var(--lt-text) 76%, transparent);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.platform-note code {
+  display: block;
+  overflow-x: auto;
+  padding: 0.5rem 0.6rem;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--lt-muted) 12%, transparent);
+  font-size: 0.82rem;
+}
+
 .older-hint {
   color: var(--lt-muted);
   margin: 0 0 1rem;

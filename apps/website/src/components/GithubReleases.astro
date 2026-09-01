@@ -113,6 +113,17 @@ const labels = {
     : "Releases could not be loaded during the build. You can open GitHub Releases directly.",
   noAssets: isSpanish ? "Esta release no contiene instaladores publicados." : "This release has no published installers.",
   open: isSpanish ? "Abrir en GitHub" : "Open on GitHub",
+  // TEMPORARY — delete this note (and the block that renders it) once the
+  // release workflow signs and notarizes the DMG with a Developer ID. Until
+  // then macOS blocks the download on first open with no in-app way out, and
+  // a download page that says nothing about it just loses the user.
+  gatekeeperTitle: isSpanish ? "macOS: primera apertura" : "macOS: first launch",
+  gatekeeperBody: isSpanish
+    ? "El DMG todavía no está firmado con un certificado de Apple, así que macOS lo bloquea la primera vez. Arrastra LibreTracks a Aplicaciones, ábrelo una vez, y ve a Ajustes del Sistema → Privacidad y seguridad → Abrir de todos modos. En macOS 14 y anteriores basta con clic derecho sobre la app → Abrir. Solo hace falta la primera vez."
+    : "The DMG is not signed with an Apple certificate yet, so macOS blocks it on first launch. Drag LibreTracks to Applications, open it once, then go to System Settings → Privacy & Security → Open Anyway. On macOS 14 and earlier, right-click the app → Open is enough. Only needed the first time.",
+  gatekeeperDamaged: isSpanish
+    ? "Si macOS dice que la app «está dañada», quita la marca de cuarentena en la Terminal:"
+    : "If macOS says the app \u201cis damaged\u201d, clear the quarantine flag in Terminal:",
 };
 
 const releaseUrl = `https://github.com/${owner}/${repo}/releases`;
@@ -187,6 +198,14 @@ const panels = await Promise.all(
                   ))}
                 </div>
               ) : <p>{labels.noAssets}</p>}
+              {panel.release.assets.some((asset) => /\.dmg$/i.test(asset.name)) ? (
+                <aside class="platform-note">
+                  <strong>🍎 {labels.gatekeeperTitle}</strong>
+                  <p>{labels.gatekeeperBody}</p>
+                  <p>{labels.gatekeeperDamaged}</p>
+                  <code>xattr -dr com.apple.quarantine /Applications/LibreTracks.app</code>
+                </aside>
+              ) : null}
               <div class="hero-actions" style="margin-top: 1.25rem;">
                 <a class="button-link" href={panel.release.html_url}>{labels.open}</a>
               </div>

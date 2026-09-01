@@ -599,6 +599,22 @@ Notes:
 
 ---
 
+## macOS DMG (signing and notarization)
+
+Setup and troubleshooting live in [APPLE_SIGNING.md](./APPLE_SIGNING.md). What
+matters when cutting a release:
+
+- **With the Apple secrets configured**, the macOS job signs with the Developer
+  ID identity, notarizes, staples the DMG, and verifies Gatekeeper's own verdict
+  before uploading. Any of those failing fails the release — on purpose.
+- **Without them**, the DMG still builds but ships UNSIGNED and macOS blocks it
+  on download. The job prints a warning instead of failing, and the download
+  page shows a temporary first-launch note (`.platform-note`).
+- A signed release means the note on the download page can go. It is marked as
+  temporary in `GithubReleases.astro`.
+
+---
+
 ## Android APK (distribution)
 
 The download page (`GithubReleases.astro`) lists each GitHub Release's

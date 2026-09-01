@@ -516,7 +516,104 @@ jobs:
           }
           Write-Host "ASIO support confirmed present in release engine DLL."
 
+      # Distributing a Mac app outside the App Store needs BOTH a Developer ID
+      # signature and notarization. Without them macOS does not show a scary
+      # dialog the user can click through, it refuses the download outright
+      # ("LibreTracks is damaged and can't be opened").
+      #
+      # The secrets are optional on purpose: a fork, or this repository before
+      # the Apple Developer account exists, still produces an unsigned DMG via
+      # the unsigned branch below. When APPLE_CERTIFICATE is present, though,
+      # every other credential becomes mandatory — a signed-but-unnotarized
+      # build is blocked by Gatekeeper just the same, so a half-configured
+      # secret set must fail loudly instead of shipping a DMG nobody can open.
+      #
+      # Scoped to matrix.publish: the Intel runner is validation-only and its
+      # bundle is never uploaded, so notarizing it would just spend minutes and
+      # an Apple round trip on an artifact nobody downloads.
+      #
+      # Setup for all of this lives in docs/APPLE_SIGNING.md.
+      - name: Prepare macOS signing identity
+        id: macos-signing
+        if: matrix.platform == 'macos' && matrix.publish
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No Apple Developer ID secrets configured. This DMG will be UNSIGNED and macOS will block it on download. See docs/APPLE_SIGNING.md."
+            exit 0
+          fi
+
+          for required in APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                          APPLE_API_KEY_BASE64 APPLE_API_KEY APPLE_API_ISSUER; do
+            if [ -z "${!required:-}" ]; then
+              echo "::error::APPLE_CERTIFICATE is set but $required is missing. A signed build that is not notarized is still blocked by Gatekeeper, so this cannot be a warning."
+              exit 1
+            fi
+          done
+
+          # A throwaway keychain, deleted by the cleanup step. codesign has to
+          # read the private key with no interactive unlock, which is what
+          # set-key-partition-list grants it.
+          keychain="$RUNNER_TEMP/libretracks-signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+
+          certificate="$RUNNER_TEMP/developer-id.p12"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          rm -f "$certificate"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychain -d user -s "$keychain" login.keychain-db
+
+          # Fail here rather than 40 minutes later inside the bundler: a typo in
+          # APPLE_SIGNING_IDENTITY is the likeliest way this step goes wrong.
+          if ! security find-identity -v -p codesigning "$keychain" \
+            | grep -F "$APPLE_SIGNING_IDENTITY" > /dev/null; then
+            echo "::error::APPLE_SIGNING_IDENTITY does not match the imported certificate. It must be the full name, e.g. 'Developer ID Application: Name (TEAMID)'."
+            security find-identity -v -p codesigning "$keychain" || true
+            exit 1
+          fi
+
+          # notarytool only reads the App Store Connect key from a file.
+          api_key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+          echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$api_key_path"
+          chmod 600 "$api_key_path"
+
+          echo "APPLE_API_KEY_PATH=$api_key_path" >> "$GITHUB_ENV"
+          echo "LT_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "Developer ID identity imported; notarization credentials ready."
+
+      - name: Build Tauri bundles (signed + notarized macOS)
+        if: matrix.platform == 'macos' && matrix.publish && steps.macos-signing.outputs.enabled == 'true'
+        uses: tauri-apps/tauri-action@v0.5
+        env:
+          LD_LIBRARY_PATH: ${{ env.LT_ENGINE_V2_LIB_DIR }}
+          LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+        with:
+          projectPath: 'apps/desktop'
+          args: '--verbose --target universal-apple-darwin'
+
       - name: Build Tauri bundles
+        if: matrix.platform != 'macos' || steps.macos-signing.outputs.enabled != 'true'
         uses: tauri-apps/tauri-action@v0.5
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
@@ -837,6 +934,81 @@ jobs:
             echo "Binary exited non-zero but dyld did not report missing libraries — OK."
           fi
           echo "macOS bundle validation passed."
+
+      # Tauri notarizes and staples the .app, but the DMG users actually
+      # download is assembled afterwards and is NOT stapled by the bundler.
+      # Staple it here: an unstapled DMG needs a live round trip to Apple on
+      # first open, and a rehearsal room with no wifi is exactly where that
+      # fails. Runs after the dylib-wiring guard on purpose — a broken bundle
+      # should be caught before it costs a notarization round trip.
+      - name: Notarize and staple macOS DMG
+        if: matrix.platform == 'macos' && matrix.publish && steps.macos-signing.outputs.enabled == 'true'
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DMG="$(find target-desktop-native -type f -name '*.dmg' -print -quit)"
+          if [ -z "$DMG" ]; then
+            echo "::error::No DMG found under target-desktop-native"
+            exit 1
+          fi
+          echo "Notarizing $DMG"
+          xcrun notarytool submit "$DMG" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait --timeout 30m
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+
+      # The signature is what the user meets before any of our code runs, so it
+      # gets the same treatment as the dylib wiring above: verified in CI, not
+      # assumed. Each check maps to a way a Mac release can reach users broken.
+      - name: Verify macOS signature and notarization
+        if: matrix.platform == 'macos' && matrix.publish && steps.macos-signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find target-desktop-native -type d -name 'LibreTracks.app' -path '*/bundle/macos/*' | head -n1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No LibreTracks.app found under target-desktop-native"
+            exit 1
+          fi
+
+          # --deep because the engine, bungee.framework and the libav dylibs
+          # carry separate signatures; one unsigned nested binary is enough to
+          # fail notarization or trip library validation at launch.
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+          # Hardened runtime is required for notarization. Notarytool would
+          # have rejected the app already, but a bundler change that silently
+          # drops the flag is worth naming explicitly.
+          if ! codesign --display --verbose=2 "$APP_PATH" 2>&1 \
+            | grep -E 'flags=.*runtime' > /dev/null; then
+            echo "::error::App is signed without the hardened runtime."
+            exit 1
+          fi
+
+          # Gatekeeper's own verdict, which is what the user's Mac runs. The
+          # source line must say notarized, not merely signed.
+          spctl_output="$(spctl --assess --type exec --verbose=4 "$APP_PATH" 2>&1)"
+          echo "$spctl_output"
+          if ! echo "$spctl_output" | grep -F 'source=Notarized Developer ID' > /dev/null; then
+            echo "::error::Gatekeeper does not see a notarized Developer ID app."
+            exit 1
+          fi
+
+          xcrun stapler validate "$APP_PATH"
+          echo "macOS signature, hardened runtime and notarization verified."
+
+      - name: Remove temporary signing keychain
+        if: always() && matrix.platform == 'macos' && matrix.publish && steps.macos-signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          security delete-keychain "${LT_SIGNING_KEYCHAIN:-}" || true
+          rm -f "${APPLE_API_KEY_PATH:-}" || true
 
       - name: Upload release assets
         if: matrix.publish
