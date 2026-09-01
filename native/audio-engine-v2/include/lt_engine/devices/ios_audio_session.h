@@ -6,10 +6,16 @@
 namespace lt {
 
 // Configure and activate the process-wide AVAudioSession for output-only DAW
-// playback. The actual realtime callback remains owned by JUCE/CoreAudio.
+// playback. The realtime callback itself belongs to the device manager's
+// RemoteIO unit (audio_device_manager_ios.mm); this owns the policy.
 //
 // This also negotiates the output WIDTH: see current_ios_output_channel_count.
-bool configure_ios_playback_session(std::string* error_message);
+//
+// preferred_sample_rate is a request, not a guarantee — Bluetooth and AirPlay
+// routes routinely negotiate something else, and the caller must read back
+// AVAudioSession.sampleRate. Pass 0 for the default (48 kHz).
+bool configure_ios_playback_session(std::string* error_message,
+                                    double preferred_sample_rate = 0.0);
 
 // Output channels the active route actually granted.
 //

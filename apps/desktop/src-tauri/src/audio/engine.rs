@@ -3500,7 +3500,11 @@ fn backend_from_str(value: &str) -> AudioBackendKind {
         | "wasapi exclusive"
         | "windows audio (low latency mode)"
         | "windows audio (exclusive mode)" => AudioBackendKind::Wasapi,
-        "coreaudio" | "core_audio" | "core audio" => AudioBackendKind::CoreAudio,
+        // "coreaudio-ios" is our own RemoteIO backend (audio_device_manager_ios.mm),
+        // not a JUCE typename. Same backend from the user's point of view.
+        "coreaudio" | "core_audio" | "core audio" | "coreaudio-ios" => {
+            AudioBackendKind::CoreAudio
+        }
         "alsa" => AudioBackendKind::Alsa,
         "jack" => AudioBackendKind::Jack,
         "directsound" | "direct_sound" | "direct sound" => AudioBackendKind::DirectSound,

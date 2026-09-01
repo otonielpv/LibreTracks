@@ -76,7 +76,8 @@ unsigned ios_audio_route_generation() {
     return g_route_generation.load(std::memory_order_relaxed);
 }
 
-bool configure_ios_playback_session(std::string* error_message) {
+bool configure_ios_playback_session(std::string* error_message,
+                                    double preferred_sample_rate) {
     @autoreleasepool {
         install_ios_session_observers();
         AVAudioSession* session = AVAudioSession.sharedInstance;
@@ -102,11 +103,15 @@ bool configure_ios_playback_session(std::string* error_message) {
         }
 
         // These are preferences, not requirements: Bluetooth/AirPlay routes
-        // commonly negotiate a different rate or buffer duration.
+        // commonly negotiate a different rate or buffer duration. The caller
+        // reads AVAudioSession.sampleRate back afterwards and configures the
+        // engine with what it actually got.
+        const double requested_rate =
+            preferred_sample_rate > 0.0 ? preferred_sample_rate : 48000.0;
         error = nil;
-        [session setPreferredSampleRate:48000.0 error:&error];
+        [session setPreferredSampleRate:requested_rate error:&error];
         error = nil;
-        [session setPreferredIOBufferDuration:(256.0 / 48000.0) error:&error];
+        [session setPreferredIOBufferDuration:(256.0 / requested_rate) error:&error];
 
         error = nil;
         if (![session setActive:YES error:&error]) {

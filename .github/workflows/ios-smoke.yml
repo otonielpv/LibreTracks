@@ -125,7 +125,7 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
             -DLT_ENGINE_BUILD_TESTS=OFF \
             -DLT_ENGINE_BUILD_BENCHES=OFF \
-            -DLT_ENGINE_USE_JUCE=ON \
+            -DLT_ENGINE_USE_JUCE=OFF \
             -DLT_ENGINE_USE_OBOE=OFF \
             -DLT_ENGINE_USE_FFMPEG=ON \
             -DLT_ENGINE_USE_LIBSNDFILE=ON \
@@ -157,6 +157,12 @@ jobs:
 
           grep -q 'LT_ENGINE_USE_BUNGEE:BOOL=ON' "$build_dir/CMakeCache.txt"
           grep -q 'LT_ENGINE_USE_FFMPEG:BOOL=ON' "$build_dir/CMakeCache.txt"
+          # JUCE must stay out of the iOS build. Its AGPLv3 licensing option is
+          # incompatible with App Store distribution terms, and on iOS it only
+          # ever wrapped RemoteIO — which audio_device_manager_ios.mm now owns.
+          # A silent flip back to ON would build a shippable-looking IPA that
+          # cannot legally ship, so fail the job instead.
+          grep -q 'LT_ENGINE_USE_JUCE:BOOL=OFF' "$build_dir/CMakeCache.txt"
 
           echo "LT_ENGINE_IOS_LIB_DIR=$link_dir" >> "$GITHUB_ENV"
 
@@ -259,6 +265,13 @@ jobs:
             echo "IPA executable still contains the silent no-link engine" >&2
             exit 1
           fi
+          # Positive fingerprint for the RemoteIO device backend. Without JUCE,
+          # a device manager that failed to link would fall through to the
+          # silent stub, which reports a different backend name entirely.
+          if ! strings "$app/$executable" | grep 'coreaudio-ios' >/dev/null; then
+            echo "IPA executable does not contain the iOS RemoteIO audio backend" >&2
+            exit 1
+          fi
           if ! find "$app" -path '*/voices/es/counts/1.wav' -print -quit \
             | grep . >/dev/null; then
             echo "IPA does not contain the bundled voice-guide bank" >&2
@@ -269,7 +282,7 @@ jobs:
           echo "Bundle: $bundle_id"
           echo "Minimum iOS: $minimum_ios"
           echo "Architectures: $archs"
-          echo "Audio engine: native static C++ engine linked"
+          echo "Audio engine: native static C++ engine linked (RemoteIO, no JUCE)"
           echo "Full pack: Bungee + FFmpeg + voice guide + pads enabled"
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
 

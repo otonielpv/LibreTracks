@@ -1164,7 +1164,10 @@ double AudioDeviceManager::take_callback_work_max_ms() {
 
 } // namespace lt
 
-#elif !LT_ENGINE_USE_OBOE // no JUCE, no Oboe — stub implementation
+// No JUCE, no Oboe and no iOS RemoteIO backend (audio_device_manager_ios.mm) —
+// stub implementation. iOS must be excluded explicitly: without JUCE it would
+// otherwise match here and collide with the real backend at link time.
+#elif !LT_ENGINE_USE_OBOE && !defined(LT_ENGINE_IOS_AUDIO_SESSION)
 // (the Oboe backend lives in audio_device_manager_oboe.cpp)
 
 namespace lt {
@@ -1224,4 +1227,4 @@ bool   AudioDeviceManager::fallback_active()     const { return false; }
 
 } // namespace lt
 
-#endif // LT_ENGINE_USE_JUCE / !LT_ENGINE_USE_OBOE
+#endif // LT_ENGINE_USE_JUCE / !LT_ENGINE_USE_OBOE / !LT_ENGINE_IOS_AUDIO_SESSION
