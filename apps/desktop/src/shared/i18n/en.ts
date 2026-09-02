@@ -1272,6 +1272,7 @@ const en = {
   },
   tutorial: {
     launch: "Tutorial",
+    newBadge: "New",
     launchAria: "Open the tutorial: {{tour}}",
     progress: "{{tour}} · step {{current}} of {{total}}",
     next: "Next",
@@ -1514,6 +1515,46 @@ const en = {
         done: {
           title: "You can build now",
           body: "The live tour is still waiting in the same TUTORIAL button: jump modes, vamp, master, transpose and warp.",
+        },
+      },
+    },
+    cloud: {
+      name: "Your sessions in the cloud",
+      summary: "Moving songs and sessions from one device to another.",
+      steps: {
+        welcome: {
+          title: "From one device to another",
+          body: "You can now build the set on your computer and open it on your phone or tablet, with no cables and no copying files by hand. Songs and sessions travel through your own Google Drive account.",
+        },
+        yourAccount: {
+          title: "It is YOUR account, not ours",
+          body: "The files are stored in your Google Drive, not on any LibreTracks server: we host nothing. You connect your account once, and the permission is kept securely on this device.",
+        },
+        panel: {
+          title: "The cloud panel",
+          body: "This is where you connect the account and see what you have uploaded, how much room is left and what you can delete. You can also search by name, tempo, key or time signature. With a session open this same panel lives in the FILE menu, so you never have to come back to this screen for it.",
+          bodyMobile: "This is where you connect the account and see what you have uploaded, how much room is left and what you can delete. It is the first thing you will use on a phone: fetching what you prepared on the computer. With a session open you will find it on the side rail, under the ⇅ button with the up and down arrows, next to export and import.",
+        },
+        importLanding: {
+          title: "Import from wherever you like",
+          body: "When you import, LibreTracks asks where from: this computer or Drive. Choose Drive and you see what you have uploaded, pick one, and it downloads and imports in a single step. It works the same for whole sessions and for single songs.",
+          bodyMobile: "When you import, LibreTracks asks where from: this device or Drive. Choose Drive and you see what you have uploaded, pick one, and it downloads and imports in a single step. It works the same for whole sessions and for single songs.",
+        },
+        fileMenu: {
+          title: "Export and import, now to Drive as well",
+          body: "Export session, import session and import song all live here, and all three first ask where: the usual disk, or your Drive account. Exporting a single song is done from that song's own menu, and it asks too. Nothing changes if you choose the disk — the cloud is simply one more place.",
+        },
+        fileActions: {
+          title: "Export and import, now to Drive as well",
+          body: "The ⇅ button on the side rail, the one with the up and down arrows, opens this: the cloud panel, export session and import song, and everything that moves a file first asks where: this device, or your Drive account. Exporting a single song is done from that song's own menu. Nothing changes if you choose the device — the cloud is simply one more place.",
+        },
+        naming: {
+          title: "They name themselves",
+          body: "What you upload carries the tempo, key and time signature in its name, for example \"How Great Thou Art [72bpm Am 4-4]\". That is how you tell them apart, and how you can filter by them once a hundred songs are up there.",
+        },
+        privacy: {
+          title: "It only sees what it uploads itself",
+          body: "LibreTracks can only see the files the app itself creates: the rest of your Drive is invisible to it — not out of politeness, but because Google does not let it look. You can disconnect the account whenever you like from the cloud panel.",
         },
       },
     },

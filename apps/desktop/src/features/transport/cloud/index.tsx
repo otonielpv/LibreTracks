@@ -3,6 +3,7 @@ import { CloudPanel } from "./CloudPanel";
 import { CloudToast } from "./CloudToast";
 
 export { CloudLandingButton } from "./CloudLandingButton";
+export { CloudMenuItem } from "./CloudMenuItem";
 export {
   beginExportWithChoice,
   cancelExportChoice,

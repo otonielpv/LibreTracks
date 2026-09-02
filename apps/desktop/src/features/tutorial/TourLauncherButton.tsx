@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { useSongStore } from "../transport/songStore";
-import { toursForContext } from "./tourModel";
+import { nextUnseenTour, toursForContext } from "./tourModel";
 import { currentTourPlatform, useTourStore } from "./tourStore";
 import { TOURS } from "./tours";
 import { TOUR_TARGETS } from "./tourTargets";
@@ -47,7 +47,14 @@ export function TourLauncherButton() {
   } | null>(null);
 
   const available = toursForContext(hasOpenSession);
-  const onlyTour = available.length === 1 ? available[0] : null;
+  // En el inicio no hay menu aunque haya dos recorridos: se arranca el primero
+  // sin ver y al terminarlo la guia encadena el siguiente (ver `endTour`). Con
+  // la sesion abierta hay cuatro y elegir si es del usuario.
+  const onlyTour = hasOpenSession
+    ? available.length === 1
+      ? available[0]
+      : null
+    : (nextUnseenTour(false, progress) ?? available[0]);
   const someTourSeen = available.some(
     (tourId) => progress[tourId] !== undefined,
   );

@@ -255,7 +255,7 @@ import {
   type ExportSongTarget,
 } from "./panels/ExportSongModal";
 import { ExportSessionModal } from "./panels/ExportSessionModal";
-import { beginExportWithChoice, cancelExportChoice, CloudLandingButton, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
+import { beginExportWithChoice, cancelExportChoice, CloudLandingButton, CloudMenuItem, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
 import {
   AutomationCueModal,
   type AutomationCueDraft,
@@ -7194,6 +7194,7 @@ export function TransportPanelContent() {
                   <span className="material-symbols-outlined">library_add</span>
                   {t("timelineTopbar.importSong")}
                 </button>
+                <CloudMenuItem onSelected={() => setIsMobileFileActionsOpen(false)} />
                 <button
                   type="button"
                   role="menuitem"

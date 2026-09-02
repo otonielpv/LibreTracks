@@ -10865,3 +10865,17 @@ html.lt-ios body {
 .lt-export-modal > .lt-inline-actions {
   flex: none;
 }
+
+/* Etiqueta de NOVEDAD en la tarjeta de la guia. A quien ya se sabe la app hay
+   que decirle que esto es nuevo, no que le vamos a explicar el programa otra
+   vez. */
+.lt-tour-new-badge {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.18);
+  color: rgb(87 241 219);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}

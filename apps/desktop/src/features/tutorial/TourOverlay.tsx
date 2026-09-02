@@ -12,7 +12,12 @@ import { useTranslation } from "react-i18next";
 import { useShortcutHint } from "../transport/keyboard/shortcutHint";
 import { useTimelineUIStore, type ViewMode } from "../transport/uiStore";
 import { placeTourCard, type CardPosition } from "./tourCardPlacement";
-import { isWaitSatisfied, shouldAutoStartLandingTour, stepBodyKeys } from "./tourModel";
+import {
+  autoStartTourOnLanding,
+  isAnnouncementTour,
+  isWaitSatisfied,
+  stepBodyKeys,
+} from "./tourModel";
 import {
   currentTourPlatform,
   subscribeSessionTourOffer,
@@ -117,20 +122,23 @@ export function TourOverlay() {
   }));
   const restoreViewModeRef = useRef<ViewMode | null>(null);
 
-  // Arranque automático la primera vez que se abre la app. Siempre el
-  // recorrido de la pantalla de inicio: al arrancar nunca hay sesión abierta.
+  // Arranque automático al abrir la app: el primer recorrido que este usuario
+  // no ha visto. Al arrancar nunca hay sesión abierta, así que siempre es uno
+  // de los de la pantalla de inicio.
+  //
+  // No es siempre el de primeros pasos: quien lleva meses con la app y se
+  // encuentra una función nueva tiene un recorrido sin ver, y no va a abrir la
+  // guía por su cuenta a ver si hay novedades.
   useEffect(() => {
     const store = useTourStore.getState();
-    if (
-      !shouldAutoStartLandingTour({
-        progress: store.progress,
-        isWebDriver: isWebDriverSession(),
-        isTestRun: import.meta.env.MODE === "test",
-      })
-    ) {
-      return;
+    const tourId = autoStartTourOnLanding({
+      progress: store.progress,
+      isWebDriver: isWebDriverSession(),
+      isTestRun: import.meta.env.MODE === "test",
+    });
+    if (tourId) {
+      store.startTour(tourId);
     }
-    store.startTour("landing");
   }, []);
 
   // Al cargar una sesión se despliega el menú con los recorridos que quedan,
@@ -460,6 +468,11 @@ export function TourOverlay() {
       )}
       <div ref={cardRef} className={cardClassName} style={cardStyle}>
         <span className="lt-tour-eyebrow">
+          {isAnnouncementTour(activeTourId) ? (
+            <span className="lt-tour-new-badge">
+              {t("tutorial.newBadge", { defaultValue: "Novedad" })}
+            </span>
+          ) : null}
           {t("tutorial.progress", {
             tour: t(`${TOURS[activeTourId].i18nKey}.name`),
             current: stepIndex + 1,

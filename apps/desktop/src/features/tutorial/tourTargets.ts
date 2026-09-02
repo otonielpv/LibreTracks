@@ -27,6 +27,7 @@ export const TOUR_TARGETS = {
   landingImport: "landing-import",
   landingImportExternal: "landing-import-external",
   landingCatalog: "landing-catalog",
+  landingCloud: "landing-cloud",
   // Área de trabajo, con sesión abierta.
   libraryPanel: "library-panel",
   libraryNewFolder: "library-new-folder",
@@ -34,6 +35,8 @@ export const TOUR_TARGETS = {
   settingsModal: "settings-modal",
   settingsClose: "settings-close",
   topbarFileMenu: "topbar-file-menu",
+  // Movil: el menu ARCHIVO no se dibuja; sus entradas viven en el rail.
+  mobileFileActions: "mobile-file-actions",
   topbarTransport: "topbar-transport",
   topbarMetronome: "topbar-metronome",
   topbarVoiceGuide: "topbar-voice-guide",

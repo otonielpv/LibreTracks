@@ -75,6 +75,7 @@ export function SideNav({
             defaultValue: "Importar / Exportar",
           })}
           aria-expanded={isFileActionsOpen}
+          data-lt-tour={TOUR_TARGETS.mobileFileActions}
           onClick={onFileActionsClick}
         >
           <span className="material-symbols-outlined">import_export</span>

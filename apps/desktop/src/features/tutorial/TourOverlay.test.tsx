@@ -196,7 +196,7 @@ describe("TourOverlay", () => {
     });
   });
 
-  it("el último paso cierra el recorrido y lo marca como terminado", () => {
+  it("el último paso lo marca terminado y encadena el de la nube", () => {
     render(<TourOverlay />);
     startTour("landing");
 
@@ -215,8 +215,11 @@ describe("TourOverlay", () => {
       advance();
     }
 
-    expect(document.querySelector(".lt-tour-root")).toBeNull();
     expect(useTourStore.getState().progress.landing).toBe("completed");
+    // La guia NO se cierra: sin sesion abierta encadena lo que queda por ver,
+    // asi que el overlay sigue en pantalla mostrando ya el de la nube.
+    expect(document.querySelector(".lt-tour-root")).not.toBeNull();
+    expect(useTourStore.getState().activeTourId).toBe("cloud");
   });
 
   it("Escape sale de la guía y cuenta como descartada", () => {
@@ -338,7 +341,7 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
     expect(screen.getByText(landing.welcome.title)).toBeTruthy();
   });
 
-  it("con sesión abierta ofrece los tres recorridos en un menú", () => {
+  it("con sesión abierta ofrece los cuatro recorridos en un menú", () => {
     // Este es el reparto que justifica partirlos: hasta que no hay proyecto
     // cargado no existen ni la línea de tiempo ni las vistas, y una vez
     // cargado hay demasiado que contar para una sola tirada.
@@ -361,7 +364,7 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
       Array.from(menu?.querySelectorAll("[data-tour-choice]") ?? []).map(
         (item) => item.getAttribute("data-tour-choice"),
       ),
-    ).toEqual(["workspace", "daw", "live"]);
+    ).toEqual(["workspace", "daw", "live", "cloud"]);
   });
 
   it("elegir un recorrido en el menú lo lanza y cierra el menú", () => {
@@ -544,7 +547,7 @@ describe("oferta al abrir una sesión", () => {
     expect(menu).not.toBeNull();
     expect(
       Array.from(menu?.querySelectorAll("[data-tour-choice]") ?? []).length,
-    ).toBe(3);
+    ).toBe(4);
     // Ofrece, no impone: no arranca ningún recorrido por su cuenta.
     expect(document.querySelector(".lt-tour-root")).toBeNull();
     unsubscribe();
@@ -565,11 +568,12 @@ describe("oferta al abrir una sesión", () => {
     unsubscribe();
   });
 
-  it("calla cuando ya se han visto los tres", () => {
+  it("calla cuando ya se han visto los cuatro", () => {
     const unsubscribe = openSessionWith({
       workspace: "completed",
       daw: "completed",
       live: "completed",
+      cloud: "completed",
     });
 
     expect(document.querySelector(".lt-tour-menu")).toBeNull();

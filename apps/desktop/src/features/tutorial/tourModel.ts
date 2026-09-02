@@ -30,7 +30,18 @@ import type { TourTargetId } from "./tourTargets";
 
 export type TourPlatform = "desktop" | "mobile";
 
-export type TourId = "landing" | "workspace" | "daw" | "live";
+export type TourId = "landing" | "workspace" | "daw" | "live" | "cloud";
+
+/**
+ * En qué pantalla está el usuario. Lo mismo que decide `toursForContext`.
+ *
+ * Existe porque el recorrido de la nube es el único que se ofrece en LAS DOS
+ * pantallas: sus puntos de entrada viven en el inicio (el botón Nube) y dentro
+ * de la sesión (exportar e importar). Sus pasos se filtran por contexto igual
+ * que los demás se filtran por plataforma, en vez de partirlo en dos recorridos
+ * que contarían lo mismo.
+ */
+export type TourContext = "landing" | "session";
 
 /**
  * Cómo terminó un recorrido. La diferencia importa: quien LLEGÓ AL FINAL está
@@ -42,6 +53,27 @@ export type TourOutcome = "completed" | "dismissed";
 export type TourProgress = Partial<Record<TourId, TourOutcome>>;
 
 const ALL_PLATFORMS: readonly TourPlatform[] = ["desktop", "mobile"];
+const ALL_CONTEXTS: readonly TourContext[] = ["landing", "session"];
+
+/**
+ * Recorridos que anuncian una funcion NUEVA, no los primeros pasos.
+ *
+ * Cambian en dos cosas: la tarjeta los etiqueta como novedad, y se anuncian
+ * aunque el usuario haya saltado un recorrido alguna vez. Un "Saltar" significa
+ * "no me expliques la app", no "no me cuentes nunca lo que cambia" -- y a quien
+ * lleva meses usandola no se le puede pedir que abra la guia por su cuenta a
+ * ver si hay novedades.
+ *
+ * Vive aqui y no en la definicion del recorrido porque `tourModel` no puede
+ * importar el catalogo sin cerrar un ciclo, y tener la marca en dos sitios es
+ * peor que tenerla en el que ambos pueden leer.
+ */
+const ANNOUNCEMENT_TOURS: readonly TourId[] = ["cloud"];
+
+/** Si este recorrido se presenta como novedad. */
+export function isAnnouncementTour(tourId: TourId): boolean {
+  return ANNOUNCEMENT_TOURS.includes(tourId);
+}
 
 /**
  * Condición que completa un paso interactivo: la guía espera a que el usuario
@@ -75,6 +107,14 @@ export type TourStep = {
   waitFor?: TourWaitCondition;
   /** Plataformas donde aplica el paso. Omitido = las dos. */
   platforms?: readonly TourPlatform[];
+  /**
+   * Pantallas donde aplica el paso. Omitido = las dos.
+   *
+   * Solo lo usa el recorrido de la nube, que se ofrece con sesión y sin ella y
+   * tiene que iluminar cosas distintas en cada caso: el botón Nube del inicio
+   * no existe dentro de la sesión, y el menú de archivo no existe fuera.
+   */
+  contexts?: readonly TourContext[];
   /** Vista a la que la guía cambia antes de mostrar el paso. */
   viewMode?: ViewMode;
   /**
@@ -108,7 +148,39 @@ export type TourDefinition = {
  * Puras y aparte del store para poder probar la decisión sin montar la app.
  */
 export function toursForContext(hasOpenSession: boolean): TourId[] {
-  return hasOpenSession ? ["workspace", "daw", "live"] : ["landing"];
+  // `cloud` sale en las dos: es lo único que se usa igual con sesión abierta y
+  // sin ella, y para quien ya terminó el tutorial es además la novedad que hay
+  // que contarle.
+  return hasOpenSession
+    ? ["workspace", "daw", "live", "cloud"]
+    : ["landing", "cloud"];
+}
+
+/** El contexto que corresponde a lo que hay en pantalla. */
+export function contextFor(hasOpenSession: boolean): TourContext {
+  return hasOpenSession ? "session" : "landing";
+}
+
+/**
+ * El primer recorrido de esta pantalla que el usuario no ha visto todavia.
+ *
+ * Es lo que encadena la pantalla de inicio: quien empieza de cero hace
+ * "Primeros pasos" y sigue con el de la nube; quien ya termino el tutorial en su
+ * dia solo tiene pendiente el de la nube y va directo a el. Nadie elige de un
+ * menu antes de haber visto nada, y el orden es el natural — primero que es una
+ * sesion, luego como moverla.
+ *
+ * `null` cuando ya se han visto todos.
+ */
+export function nextUnseenTour(
+  hasOpenSession: boolean,
+  progress: TourProgress,
+): TourId | null {
+  return (
+    toursForContext(hasOpenSession).find(
+      (tourId) => progress[tourId] === undefined,
+    ) ?? null
+  );
 }
 
 /** El recorrido por defecto de la pantalla: el primero de su lista. */
@@ -116,13 +188,22 @@ export function tourIdForContext(hasOpenSession: boolean): TourId {
   return toursForContext(hasOpenSession)[0];
 }
 
-/** Los pasos que esta plataforma llega a ver, en orden. */
+/**
+ * Los pasos que esta plataforma y esta pantalla llegan a ver, en orden.
+ *
+ * `context` es opcional para no obligar a los recorridos de una sola pantalla
+ * —todos menos el de la nube— a decir dónde están.
+ */
 export function visibleSteps(
   tour: TourDefinition,
   platform: TourPlatform,
+  context?: TourContext,
 ): TourStep[] {
-  return tour.steps.filter((step) =>
-    (step.platforms ?? ALL_PLATFORMS).includes(platform),
+  return tour.steps.filter(
+    (step) =>
+      (step.platforms ?? ALL_PLATFORMS).includes(platform) &&
+      (context === undefined ||
+        (step.contexts ?? ALL_CONTEXTS).includes(context)),
   );
 }
 
@@ -161,8 +242,34 @@ export function shouldAutoStartLandingTour(options: {
   isWebDriver: boolean;
   isTestRun: boolean;
 }): boolean {
-  if (options.isWebDriver || options.isTestRun) return false;
-  return options.progress.landing === undefined;
+  return autoStartTourOnLanding(options) !== null;
+}
+
+/**
+ * Que recorrido arranca solo al abrir la app, o `null` si ninguno.
+ *
+ * Ya no es siempre el de primeros pasos. Cuando se anade una funcion con
+ * recorrido propio, quien lleva meses usando la app tiene un recorrido sin ver
+ * y merece enterarse sin tener que pulsar TUTORIAL: alguien que ya se sabe el
+ * programa no va a abrir la guia por su cuenta a ver si hay novedades.
+ *
+ * La condicion de siempre se mantiene y es la que protege de la insistencia: un
+ * "Saltar" en cualquier recorrido es un no explicito y vale para todos. Quien
+ * cerro el tutorial el primer dia no quiere que le salte otro seis meses
+ * despues.
+ */
+export function autoStartTourOnLanding(options: {
+  progress: TourProgress;
+  isWebDriver: boolean;
+  isTestRun: boolean;
+}): TourId | null {
+  if (options.isWebDriver || options.isTestRun) return null;
+  const next = nextUnseenTour(false, options.progress);
+  if (next === null) return null;
+  // Una novedad se anuncia aunque en su dia se saltara el tutorial; los
+  // primeros pasos no vuelven a insistir a quien ya dijo que no.
+  if (isAnnouncementTour(next)) return next;
+  return Object.values(options.progress).includes("dismissed") ? null : next;
 }
 
 /**

@@ -1303,6 +1303,7 @@ const es = {
   },
   tutorial: {
     launch: "Tutorial",
+    newBadge: "Novedad",
     launchAria: "Abrir el tutorial: {{tour}}",
     progress: "{{tour}} · paso {{current}} de {{total}}",
     next: "Siguiente",
@@ -1545,6 +1546,46 @@ const es = {
         done: {
           title: "Ya sabes montar",
           body: "Te queda el recorrido de directo, en el mismo botón TUTORIAL: los modos de salto, el vamp, el master, el cambio de tono y el warp.",
+        },
+      },
+    },
+    cloud: {
+      name: "Tus sesiones en la nube",
+      summary: "Llevar canciones y sesiones de un dispositivo a otro.",
+      steps: {
+        welcome: {
+          title: "De un dispositivo a otro",
+          body: "Ahora puedes montar el repertorio en el ordenador y abrirlo en el móvil o la tableta, sin cables ni pasar archivos a mano. Las canciones y las sesiones viajan por tu propia cuenta de Google Drive.",
+        },
+        yourAccount: {
+          title: "Es TU cuenta, no la nuestra",
+          body: "Los archivos se guardan en tu Google Drive, no en ningún servidor de LibreTracks: nosotros no alojamos nada. Conectas tu cuenta una vez y el permiso queda guardado de forma segura en este dispositivo.",
+        },
+        panel: {
+          title: "El panel de la nube",
+          body: "Desde aquí conectas la cuenta y ves lo que tienes subido, cuánto espacio te queda y qué puedes borrar. También puedes buscar por nombre, tempo, tonalidad o métrica. Con una sesión abierta este mismo panel está en el menú ARCHIVO, así que no hace falta volver a esta pantalla.",
+          bodyMobile: "Desde aquí conectas la cuenta y ves lo que tienes subido, cuánto espacio te queda y qué puedes borrar. Es lo primero que usarás en el móvil: bajarte lo que preparaste en el ordenador. Con una sesión abierta lo tienes en el lateral, en el botón ⇅ de las flechas arriba y abajo, junto a exportar e importar.",
+        },
+        importLanding: {
+          title: "Importar desde donde quieras",
+          body: "Al importar, LibreTracks te pregunta de dónde: de este equipo o de Drive. Si eliges Drive, ves lo que tienes subido y lo eliges; se descarga y se importa en un solo paso. Vale igual para sesiones enteras y para canciones sueltas.",
+          bodyMobile: "Al importar, LibreTracks te pregunta de dónde: de este dispositivo o de Drive. Si eliges Drive, ves lo que tienes subido y lo eliges; se descarga y se importa en un solo paso. Vale igual para sesiones enteras y para canciones sueltas.",
+        },
+        fileMenu: {
+          title: "Exportar e importar, ahora también a Drive",
+          body: "Aquí están exportar la sesión, importar una sesión e importar una canción, y las tres te preguntan primero dónde: el disco de siempre o tu cuenta de Drive. Exportar una canción suelta se hace desde el menú de la propia canción, y también pregunta. Nada cambia si eliges el disco: la nube es simplemente un sitio más.",
+        },
+        fileActions: {
+          title: "Exportar e importar, ahora también a Drive",
+          body: "En el lateral, el botón ⇅ de las flechas arriba y abajo abre esto: el panel de la nube, exportar la sesión e importar canciones, y todo lo que mueve archivos te pregunta primero dónde: este dispositivo o tu cuenta de Drive. Exportar una canción suelta se hace desde el menú de la propia canción. Nada cambia si eliges el dispositivo: la nube es simplemente un sitio más.",
+        },
+        naming: {
+          title: "Se nombran solas",
+          body: "Lo que subes lleva el tempo, la tonalidad y la métrica en el nombre, por ejemplo «Cuán grande es Él [72bpm Am 4-4]». Así reconoces cuál es cuál y puedes filtrar por ellos aunque tengas cien canciones arriba.",
+        },
+        privacy: {
+          title: "Solo ve lo que ella misma sube",
+          body: "LibreTracks solo puede ver los archivos que crea la propia aplicación: el resto de tu Drive le es invisible, no por educación sino porque Google no se lo deja ver. Puedes desconectar la cuenta cuando quieras desde el panel de la nube.",
         },
       },
     },

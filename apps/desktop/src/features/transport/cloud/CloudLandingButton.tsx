@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useCloudStore } from "./cloudStore";
 
 /**
@@ -21,7 +22,7 @@ export function CloudLandingButton() {
   const openPanel = useCloudStore((state) => state.openPanel);
 
   return (
-    <button type="button" onClick={openPanel}>
+    <button type="button" data-lt-tour={TOUR_TARGETS.landingCloud} onClick={openPanel}>
       {t("transport.cloud.landingAction", { defaultValue: "Nube" })}
     </button>
   );

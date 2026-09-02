@@ -12,7 +12,8 @@ import {
   type TourPlatform,
   type TourProgress,
   type TourStep,
-} from "./tourModel";
+  contextFor,
+  nextUnseenTour,} from "./tourModel";
 import { TOURS } from "./tours";
 
 // Estado de la guía interactiva.
@@ -142,7 +143,13 @@ export const useTourStore = create<TourState>()((set, get) => ({
   },
   startTour: (tourId, platform = currentTourPlatform()) => {
     const tour = TOURS[tourId];
-    const steps = visibleSteps(tour, platform);
+    // Con el contexto, no solo la plataforma: el recorrido de la nube se
+    // ofrece en las dos pantallas y sus pasos no son los mismos en cada una.
+    const steps = visibleSteps(
+      tour,
+      platform,
+      contextFor(useSongStore.getState().song !== null),
+    );
     if (steps.length === 0) return;
     // Arrancar un recorrido cierra el menú: no tiene sentido dejarlo abierto
     // debajo del escudo.
@@ -162,6 +169,19 @@ export const useTourStore = create<TourState>()((set, get) => ({
       steps: [],
       progress: nextProgress,
     });
+
+    // Encadenado en la pantalla de inicio: quien LLEGA AL FINAL sigue con lo
+    // siguiente que no ha visto. Solo al completar, nunca al saltar -- quien
+    // pulso "Saltar" ya dijo que no, y lanzarle otro recorrido encima es
+    // insistir. Y solo sin sesion abierta: con ella hay un menu y elegir es del
+    // usuario.
+    if (outcome !== "completed") return;
+    const hasOpenSession = useSongStore.getState().song !== null;
+    if (hasOpenSession) return;
+    const following = nextUnseenTour(hasOpenSession, nextProgress);
+    if (following) {
+      get().startTour(following);
+    }
   },
   nextStep: () => {
     const { stepIndex, steps } = get();

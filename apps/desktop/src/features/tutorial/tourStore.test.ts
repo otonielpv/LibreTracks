@@ -4,6 +4,7 @@ import { useSongStore } from "../transport/songStore";
 import {
   isWaitSatisfied,
   shouldOfferToursOnSessionOpen,
+  autoStartTourOnLanding,
   shouldAutoStartLandingTour,
   tourIdForContext,
 } from "./tourModel";
@@ -265,14 +266,26 @@ describe("navegación", () => {
     expect(useTourStore.getState().stepIndex).toBe(0);
   });
 
-  it("llegar al final cuenta como terminado", () => {
+  it("llegar al final cuenta como terminado y encadena el siguiente", () => {
     const total = useTourStore.getState().steps.length;
     for (let index = 0; index < total; index += 1) {
       useTourStore.getState().nextStep();
     }
 
-    expect(useTourStore.getState().activeTourId).toBeNull();
     expect(useTourStore.getState().progress.landing).toBe("completed");
+    // Sin sesión abierta la guía sigue sola con lo que queda por ver, en vez
+    // de dejar al usuario delante de un menú antes de haber visto nada.
+    expect(useTourStore.getState().activeTourId).toBe("cloud");
+  });
+
+  /// La otra mitad de la regla, y la que importa: quien pulsa "Saltar" ya ha
+  /// dicho que no, y lanzarle el siguiente recorrido encima es insistir.
+  it("saltar NO encadena el siguiente", () => {
+    useTourStore.getState().nextStep();
+    useTourStore.getState().endTour();
+
+    expect(useTourStore.getState().progress.landing).toBe("dismissed");
+    expect(useTourStore.getState().activeTourId).toBeNull();
   });
 
   it("salir a medias cuenta como descartado, no como terminado", () => {
@@ -331,16 +344,37 @@ describe("arranque automático", () => {
     ).toBe(true);
   });
 
-  it("no arranca si ya se vio, se terminara o no", () => {
-    for (const outcome of ["completed", "dismissed"] as const) {
-      expect(
-        shouldAutoStartLandingTour({
-          progress: { landing: outcome },
-          isWebDriver: false,
-          isTestRun: false,
-        }),
-      ).toBe(false);
-    }
+  /// Antes bastaba con haber visto el de inicio para que no arrancara nada.
+  /// Ya no: haberlo TERMINADO no puede tapar una funcion nueva, porque quien se
+  /// sabe la app no va a abrir la guia por su cuenta a ver si hay novedades.
+  /// Haberlo SALTADO si, y eso no cambia.
+  it("no arranca si se salto, pero si queda algo nuevo tras terminarlo", () => {
+    // Saltado el de inicio Y vista ya la novedad: no queda nada que anunciar.
+    expect(
+      shouldAutoStartLandingTour({
+        progress: { landing: "dismissed", cloud: "dismissed" },
+        isWebDriver: false,
+        isTestRun: false,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldAutoStartLandingTour({
+        progress: { landing: "completed" },
+        isWebDriver: false,
+        isTestRun: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("no arranca nada cuando no queda ninguno por ver", () => {
+    expect(
+      shouldAutoStartLandingTour({
+        progress: { landing: "completed", cloud: "completed" },
+        isWebDriver: false,
+        isTestRun: false,
+      }),
+    ).toBe(false);
   });
 
   it("no arranca bajo WebDriver", () => {
@@ -419,7 +453,7 @@ describe("oferta de recorridos al abrir una sesión", () => {
     ).toBe(true);
   });
 
-  it("calla cuando ya se han visto los tres", () => {
+  it("calla cuando ya se han visto los cuatro", () => {
     expect(
       shouldOfferToursOnSessionOpen({
         ...base,
@@ -427,9 +461,60 @@ describe("oferta de recorridos al abrir una sesión", () => {
           workspace: "completed",
           daw: "completed",
           live: "completed",
+          cloud: "completed",
         },
       }),
     ).toBe(false);
+  });
+
+
+  /// El caso que motivo el cambio: alguien que lleva meses con la app y ya
+  /// completo el tutorial. No va a abrir la guia por su cuenta a ver si hay
+  /// novedades, asi que la novedad tiene que salir sola.
+  it("arranca solo el recorrido nuevo para quien ya completo el tutorial", () => {
+    expect(
+      autoStartTourOnLanding({
+        progress: { landing: "completed", workspace: "completed" },
+        isWebDriver: false,
+        isTestRun: false,
+      }),
+    ).toBe("cloud");
+  });
+
+  /// Un "Saltar" significa "no me expliques la app", no "no me cuentes nunca lo
+  /// que cambia": una NOVEDAD se anuncia igual. Es la diferencia entre insistir
+  /// con el tutorial y avisar de algo que antes no existia.
+  it("anuncia una novedad aunque en su dia se saltara el tutorial", () => {
+    expect(
+      autoStartTourOnLanding({
+        progress: { landing: "dismissed" },
+        isWebDriver: false,
+        isTestRun: false,
+      }),
+    ).toBe("cloud");
+  });
+
+  /// Pero una vez vista, no vuelve. Ni terminada ni saltada.
+  it("una novedad ya vista no se repite", () => {
+    for (const outcome of ["completed", "dismissed"] as const) {
+      expect(
+        autoStartTourOnLanding({
+          progress: { landing: "dismissed", cloud: outcome },
+          isWebDriver: false,
+          isTestRun: false,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("no arranca nada cuando ya se han visto todos", () => {
+    expect(
+      autoStartTourOnLanding({
+        progress: { landing: "completed", cloud: "completed" },
+        isWebDriver: false,
+        isTestRun: false,
+      }),
+    ).toBeNull();
   });
 
   it("sólo una vez por arranque de la app", () => {

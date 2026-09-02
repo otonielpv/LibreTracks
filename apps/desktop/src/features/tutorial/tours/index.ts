@@ -1,4 +1,5 @@
 import type { TourDefinition, TourId } from "../tourModel";
+import { cloudTour } from "./cloud";
 import { dawTour } from "./daw";
 import { landingTour } from "./landing";
 import { liveTour } from "./live";
@@ -13,4 +14,5 @@ export const TOURS: Record<TourId, TourDefinition> = {
   workspace: workspaceTour,
   daw: dawTour,
   live: liveTour,
+  cloud: cloudTour,
 };
