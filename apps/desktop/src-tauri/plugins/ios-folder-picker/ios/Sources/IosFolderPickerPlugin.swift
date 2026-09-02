@@ -1,5 +1,6 @@
 import Foundation
 import ObjectiveC.runtime
+import Security
 import Tauri
 import UIKit
 import UniformTypeIdentifiers
@@ -20,6 +21,15 @@ fileprivate enum FolderPickerEvent {
 
 private struct ExportFileArgs: Decodable {
   let sourcePath: String
+}
+
+private struct SecureStoreSetArgs: Decodable {
+  let name: String
+  let value: String
+}
+
+private struct SecureStoreNameArgs: Decodable {
+  let name: String
 }
 
 private final class FolderPickerDelegate: NSObject, UIDocumentPickerDelegate {
@@ -198,6 +208,79 @@ final class IosFolderPickerPlugin: Plugin {
   /// Present iOS' native export document picker with an already-populated
   /// source file. Unlike a desktop save dialog, iOS chooses the destination
   /// while copying this source into Files/iCloud/another provider.
+  // MARK: - Keychain
+  //
+  // The Google refresh token, which is standing authorisation to reach part of
+  // the user's Drive until they revoke it. The desktop builds keep it in the OS
+  // credential store through the `keyring` crate, which has no iOS backend, so
+  // it goes into the iOS keychain here instead of anywhere in the sandbox.
+
+  private func keychainQuery(_ name: String) -> [String: Any] {
+    [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: "LibreTracks",
+      kSecAttrAccount as String: name,
+    ]
+  }
+
+  @objc public func secureStoreSet(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(SecureStoreSetArgs.self)
+
+    // Deleted first: SecItemAdd fails with errSecDuplicateItem rather than
+    // replacing, and an update path would be a second code path for no gain.
+    SecItemDelete(keychainQuery(args.name) as CFDictionary)
+
+    var query = keychainQuery(args.name)
+    query[kSecValueData as String] = Data(args.value.utf8)
+    // AfterFirstUnlock, not WhenUnlocked: a set can still be uploading with the
+    // screen locked, and the token has to be refreshable while that happens.
+    // It stays unreadable until the first unlock after a reboot.
+    query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+
+    let status = SecItemAdd(query as CFDictionary, nil)
+    guard status == errSecSuccess else {
+      invoke.reject("No se pudo guardar en el llavero (\(status))")
+      return
+    }
+    invoke.resolve()
+  }
+
+  @objc public func secureStoreGet(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(SecureStoreNameArgs.self)
+
+    var query = keychainQuery(args.name)
+    query[kSecReturnData as String] = true
+    query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+
+    // Anything other than a hit reads as "nothing stored", including a keychain
+    // entry that survived a restore onto a device that cannot decrypt it. The
+    // caller then asks the user to sign in again, which always works; surfacing
+    // an error would leave them stuck with no way out from inside the app.
+    guard status == errSecSuccess,
+          let data = item as? Data,
+          let text = String(data: data, encoding: .utf8)
+    else {
+      invoke.resolve(["value": nil as String?])
+      return
+    }
+    invoke.resolve(["value": text])
+  }
+
+  @objc public func secureStoreDelete(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(SecureStoreNameArgs.self)
+    let status = SecItemDelete(keychainQuery(args.name) as CFDictionary)
+    // Already gone is the desired end state, not a failure: disconnecting must
+    // succeed when called twice.
+    guard status == errSecSuccess || status == errSecItemNotFound else {
+      invoke.reject("No se pudo borrar del llavero (\(status))")
+      return
+    }
+    invoke.resolve()
+  }
+
   @objc public func exportFile(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(ExportFileArgs.self)
     let sourceURL = URL(fileURLWithPath: args.sourcePath)

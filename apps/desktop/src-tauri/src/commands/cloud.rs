@@ -22,8 +22,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use libretracks_cloud::google::client_config;
 use libretracks_cloud::google::drive::DriveClient;
-use libretracks_cloud::keychain::KeychainTokenStore;
-use libretracks_cloud::token::TokenManager;
+use libretracks_cloud::token::{TokenManager, TokenStore};
 use libretracks_cloud::{CloudError, CloudStorage, RemoteFolder};
 
 const TRANSFER_PROGRESS_EVENT: &str = "cloud:transfer-progress";
@@ -141,9 +140,41 @@ fn is_configured() -> bool {
     }
 }
 
-fn drive() -> Result<DriveClient, String> {
-    let store = KeychainTokenStore::google_drive().map_err(describe)?;
-    let manager = TokenManager::new(Box::new(store)).map_err(describe)?;
+/// The credential store for this platform.
+///
+/// Three different mechanisms behind one trait, because no single crate covers
+/// them: `keyring` reaches Credential Manager, Keychain and Secret Service on
+/// desktop but has no mobile backend at all, so Android goes through
+/// `AndroidKeyStore` over JNI and iOS through its own Keychain.
+///
+/// A refresh token is standing authorisation to reach part of a real person's
+/// Drive until they revoke it, which is why none of these is "a file in app
+/// storage".
+fn token_store(app: &AppHandle) -> Result<Box<dyn TokenStore>, String> {
+    // Only the iOS branch needs it; the others reach their store without one.
+    let _ = app;
+    #[cfg(target_os = "android")]
+    {
+        Ok(Box::new(
+            crate::platform::android_token_store::AndroidTokenStore::google_drive(),
+        ))
+    }
+    #[cfg(target_os = "ios")]
+    {
+        Ok(Box::new(
+            crate::platform::ios_token_store::IosTokenStore::google_drive(app.clone()),
+        ))
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        Ok(Box::new(
+            libretracks_cloud::keychain::KeychainTokenStore::google_drive().map_err(describe)?,
+        ))
+    }
+}
+
+fn drive(app: &AppHandle) -> Result<DriveClient, String> {
+    let manager = TokenManager::new(token_store(app)?).map_err(describe)?;
     DriveClient::new(Box::new(manager)).map_err(describe)
 }
 
@@ -199,9 +230,10 @@ pub async fn cloud_staging_dir(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn cloud_status() -> Result<CloudStatus, String> {
-    let connected = KeychainTokenStore::google_drive()
-        .and_then(|store| TokenManager::new(Box::new(store)))
+pub async fn cloud_status(app: AppHandle) -> Result<CloudStatus, String> {
+    let connected = token_store(&app)
+        .ok()
+        .and_then(|store| TokenManager::new(store).ok())
         .map(|manager| manager.is_connected())
         .unwrap_or(false);
 
@@ -252,8 +284,7 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
         .await
         .map_err(describe)?;
 
-    let store = KeychainTokenStore::google_drive().map_err(describe)?;
-    TokenManager::new(Box::new(store))
+    TokenManager::new(token_store(&app)?)
         .map_err(describe)?
         .adopt(&token)
         .map_err(describe)
@@ -269,21 +300,20 @@ pub async fn cloud_connect(_app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn cloud_disconnect() -> Result<(), String> {
+pub async fn cloud_disconnect(app: AppHandle) -> Result<(), String> {
     // Folder ids belong to the Drive they came from. Keeping them across a
     // sign-out would have the next account writing into ids that are not its
     // own.
     libretracks_cloud::google::drive::forget_cached_folders().await;
-    let store = KeychainTokenStore::google_drive().map_err(describe)?;
-    TokenManager::new(Box::new(store))
+    TokenManager::new(token_store(&app)?)
         .map_err(describe)?
         .disconnect()
         .map_err(describe)
 }
 
 #[tauri::command]
-pub async fn cloud_quota() -> Result<CloudQuota, String> {
-    let quota = drive()?.quota().await.map_err(describe)?;
+pub async fn cloud_quota(app: AppHandle) -> Result<CloudQuota, String> {
+    let quota = drive(&app)?.quota().await.map_err(describe)?;
     Ok(CloudQuota {
         used_bytes: quota.used_bytes,
         limit_bytes: quota.limit_bytes,
@@ -292,8 +322,8 @@ pub async fn cloud_quota() -> Result<CloudQuota, String> {
 }
 
 #[tauri::command]
-pub async fn cloud_list(folder: String) -> Result<Vec<CloudFile>, String> {
-    let files = drive()?
+pub async fn cloud_list(app: AppHandle, folder: String) -> Result<Vec<CloudFile>, String> {
+    let files = drive(&app)?
         .list(folder_from(&folder)?)
         .await
         .map_err(describe)?;
@@ -322,7 +352,7 @@ pub async fn cloud_upload(app: AppHandle, local_path: String) -> Result<CloudFil
 
     let transfer = TransferGuard::begin()?;
     let handle = app.clone();
-    let uploaded = drive()?
+    let uploaded = drive(&app)?
         .upload(folder, &path, &name, &move |done, total| {
             emit_progress(&handle, done, total)
         }, &move || transfer.is_cancelled())
@@ -348,7 +378,7 @@ pub async fn cloud_download(
     let dest = PathBuf::from(dest_dir).join(&file_name);
     let transfer = TransferGuard::begin()?;
     let handle = app.clone();
-    drive()?
+    drive(&app)?
         .download(&file_id, &dest, &move |done, total| {
             emit_progress(&handle, done, total)
         }, &move || transfer.is_cancelled())
@@ -373,8 +403,8 @@ pub fn cloud_cancel_transfer() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn cloud_delete(file_id: String) -> Result<(), String> {
-    drive()?.delete(&file_id).await.map_err(describe)
+pub async fn cloud_delete(app: AppHandle, file_id: String) -> Result<(), String> {
+    drive(&app)?.delete(&file_id).await.map_err(describe)
 }
 
 #[cfg(test)]

@@ -10,6 +10,10 @@
 //! (`android_memory`) and the external-storage lookup that decides where
 //! sessions live (`android_storage`).
 //!
+//! The two mobile credential stores (`android_token_store`, `ios_token_store`)
+//! sit here for the same reason: they hold the cloud refresh token, and the
+//! `keyring` crate that covers every desktop OS has no backend for either.
+//!
 //! [`append_platform_output_devices`] is the one seam the audio layer uses to
 //! fold the Android-only endpoint enumeration into an engine device list.
 
@@ -19,12 +23,17 @@ pub mod linux_webkit;
 pub mod macos_bookmarks;
 pub mod resource_monitor;
 
+#[cfg(target_os = "ios")]
+pub mod ios_token_store;
+
 #[cfg(target_os = "android")]
 pub mod android_audio_devices;
 #[cfg(target_os = "android")]
 pub mod android_memory;
 #[cfg(target_os = "android")]
 pub mod android_storage;
+#[cfg(target_os = "android")]
+pub mod android_token_store;
 #[cfg(target_os = "android")]
 pub mod mobile_files;
 
