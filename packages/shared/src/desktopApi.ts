@@ -1961,3 +1961,14 @@ export async function listenToCloudTransferProgress(
 export async function getCloudStagingDir(): Promise<string> {
   return invokeCommand<string>("cloud_staging_dir");
 }
+
+/**
+ * Delete a staged package once its transfer is finished.
+ *
+ * These are whole `.ltset` packages, so leaving them for whatever eventually
+ * clears the cache is not good enough on a phone. Refused for any path outside
+ * the staging directory.
+ */
+export async function discardStagedPackage(path: string): Promise<void> {
+  return invokeCommand<void>("cloud_discard_staged", { path });
+}

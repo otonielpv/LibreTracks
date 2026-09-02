@@ -277,7 +277,7 @@ export function CloudPanel() {
                       percent: transfer.percent,
                     })}
                   </span>
-                  {transfer.direction === "preparing" ? null : (
+                  {(
                     <button
                       type="button"
                       className="lt-link-button lt-cloud-cancel"

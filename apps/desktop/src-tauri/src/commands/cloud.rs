@@ -212,21 +212,57 @@ fn emit_progress(app: &AppHandle, done: u64, total: u64) {
 ///
 /// An upload has to be written somewhere before it can be sent, and a download
 /// has to land somewhere before it can be imported. Neither is a file the user
-/// ever sees or keeps, so both use the OS temp directory rather than asking for
-/// a location that would only be noise in a flow they think of as one step.
+/// ever sees or keeps, so neither is worth a location prompt in a flow they
+/// experience as one step.
 ///
-/// Stale files here are the price of a transfer that died mid-way; the OS
-/// reclaims them, and reusing the same directory keeps them from multiplying.
+/// # Why the app cache dir and not the OS temp dir
+///
+/// Because on Android there is no OS temp dir to speak of: `/tmp` does not
+/// exist and the root filesystem is read-only, so `temp_dir()` resolves to a
+/// path the app cannot create — which is exactly how this failed on a real
+/// device with `could not create the staging directory: Permission denied`.
+/// The per-app cache directory is writable on every platform, and on Android
+/// the system may reclaim it under pressure, which is the right behaviour for
+/// files nobody keeps.
 #[tauri::command]
 pub async fn cloud_staging_dir(app: AppHandle) -> Result<String, String> {
     let dir = app
         .path()
-        .temp_dir()
-        .map_err(|e| format!("no temp directory available: {e}"))?
-        .join("libretracks-cloud");
+        .app_cache_dir()
+        .map_err(|e| format!("no cache directory available: {e}"))?
+        .join("cloud-staging");
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("could not create the staging directory: {e}"))?;
     Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Delete a staged package once its transfer is done.
+///
+/// These are whole `.ltset` packages — gigabytes, on devices that have little
+/// room. Leaving them to whatever eventually clears the cache is not good
+/// enough, so each flow drops its own file as soon as it is finished with it.
+///
+/// Refuses anything outside the staging directory: the path comes back from the
+/// frontend, and a delete command that takes an arbitrary path is not something
+/// to leave lying around.
+#[tauri::command]
+pub async fn cloud_discard_staged(app: AppHandle, path: String) -> Result<(), String> {
+    let staging = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("no cache directory available: {e}"))?
+        .join("cloud-staging");
+    let target = PathBuf::from(&path);
+
+    if !target.starts_with(&staging) {
+        return Err("refusing to delete a file outside the staging directory".to_string());
+    }
+    match std::fs::remove_file(&target) {
+        Ok(()) => Ok(()),
+        // Already gone is the desired end state.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("could not delete the staged package: {e}")),
+    }
 }
 
 #[tauri::command]

@@ -59,13 +59,7 @@ export type CloudTransfer = {
   /** Previous sample, kept to derive the rate. Not for display. */
   sampledAtMs: number;
   sampledBytes: number;
-  /**
-   * `preparing` is the local half of an export: writing the .ltpkg/.ltset
-   * before a byte goes anywhere. Distinguished because zipping a gigabyte of
-   * audio and uploading it are very different waits, and reporting both as
-   * "uploading" makes a slow export look like a slow network.
-   */
-  direction: "upload" | "download" | "preparing";
+  direction: "upload" | "download";
   percent: number;
 };
 
@@ -257,7 +251,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
 
   cancelTransfer: async () => {
     const transfer = get().transfer;
-    if (!transfer || transfer.direction === "preparing" || get().cancelling) {
+    if (!transfer || get().cancelling) {
       return;
     }
     set({ cancelling: true });

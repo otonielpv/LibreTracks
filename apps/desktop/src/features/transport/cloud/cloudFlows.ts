@@ -1,4 +1,5 @@
 import {
+  discardStagedPackage,
   downloadFromCloud,
   getCloudStagingDir,
   type CloudFile,
@@ -103,8 +104,9 @@ export async function importFromCloud(
   if (!file) {
     return false;
   }
+  let localPath: string | null = null;
   try {
-    const localPath = await stageFromCloud(file);
+    localPath = await stageFromCloud(file);
     await runImport(localPath);
     return true;
   } catch (error) {
@@ -222,12 +224,20 @@ export async function finishExportWithChoice(
     // Separator by hand rather than a path library: this string only ever goes
     // straight back to Rust, which accepts either on Windows.
     const stagedPath = `${stagingDir}/${fileName}`;
-    // Flagged before the export starts so a long zip reads as "preparing" and
-    // not as a stalled upload.
-    useCloudStore.setState({ transfer: newTransfer(fileName, "preparing") });
-    await runExport(stagedPath);
-    useCloudStore.setState({ transfer: null });
-    await useCloudStore.getState().upload(stagedPath);
+    try {
+      // No indicator of our own for the export half: it already raises the
+      // app's own "Exportando sesion... %", and two overlays describing the
+      // same wait is worse than one -- especially when ours could offer
+      // neither a cancel button nor a rate. Ours takes over for the upload,
+      // which is the half nothing else reports.
+      await runExport(stagedPath);
+      await useCloudStore.getState().upload(stagedPath);
+    } finally {
+      // In a finally, not after the upload: a cancelled or failed transfer left
+      // its package behind, and these are hundreds of megabytes on a phone that
+      // has little room to spare.
+      void discardStagedPackage(stagedPath).catch(() => {});
+    }
   } catch (error) {
     if (!isCloudTransferCancellation(error)) {
       useCloudStore.setState({
@@ -256,4 +266,16 @@ export async function exportAskingWhere(
   }
   useCloudStore.getState().setExportTarget(choice);
   await finishExportWithChoice(fileName, runExport);
+}
+
+/**
+ * Forget where an export was headed, because it is not happening.
+ *
+ * `beginExportWithChoice` records the destination and `finishExportWithChoice`
+ * spends it, so cancelling the mode chooser in between used to leave it set:
+ * the NEXT export then read a stale "cloud" and uploaded without ever asking.
+ * Every path that closes a mode chooser without exporting must call this.
+ */
+export function cancelExportChoice(): void {
+  useCloudStore.getState().setExportTarget(null);
 }

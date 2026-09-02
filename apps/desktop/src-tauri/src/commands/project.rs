@@ -2072,6 +2072,7 @@ fn session_audio_mode(
 /// E2E automation seam, which cannot pilot the dialog. Not wired into any UI.
 #[tauri::command]
 pub async fn export_session_package_at(
+    app: AppHandle,
     write_path: String,
     include_audio: bool,
     prepared: Option<bool>,
@@ -2090,7 +2091,25 @@ pub async fn export_session_package_at(
     let cache_root = crate::state::decoding_cache_root();
     let path = std::path::PathBuf::from(write_path);
     let audio_mode = session_audio_mode(include_audio, prepared);
-    tauri::async_runtime::spawn_blocking(move || {
+
+    // Emits the SAME progress events as the dialog-driven export.
+    //
+    // It used to swallow them (`|_done, _total| {}`), which was harmless while
+    // only the E2E seam called it — and then the cloud export started using it
+    // and the UI hung: the shared frontend handler waits for the terminal
+    // `done` event before it uploads, so a command that never sends one leaves
+    // a finished 120 MB package on disk and two indicators frozen at 0%.
+    // Anything that exports must report the same way, whoever called it.
+    let worker_app = app.clone();
+    crate::state::emit_session_export_progress(
+        &app,
+        2,
+        "Preparando exportacion...".into(),
+        false,
+        None,
+    );
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
         libretracks_project::export_session_as_package_with_audio(
             &cache_root,
             &song_dir,
@@ -2098,14 +2117,52 @@ pub async fn export_session_package_at(
             &sidecars,
             &path,
             audio_mode,
-            |_done, _total| {},
+            |done, total| {
+                if total > 0 {
+                    let percent = 5 + ((done as f64 / total as f64) * 93.0) as u8;
+                    let message = if include_audio {
+                        format!("Empaquetando audio... {done}/{total}")
+                    } else {
+                        format!("Empaquetando sesion... {done}/{total}")
+                    };
+                    crate::state::emit_session_export_progress(
+                        &worker_app,
+                        percent.min(98),
+                        message,
+                        false,
+                        None,
+                    );
+                }
+            },
         )
         .map_err(|error| error.to_string())
     })
     .await
-    .map_err(|error| error.to_string())??;
+    .map_err(|error| error.to_string())?;
 
-    Ok(true)
+    match result {
+        Ok(_) => {
+            crate::state::emit_session_export_progress(
+                &app,
+                100,
+                "Sesion exportada.".into(),
+                true,
+                None,
+            );
+            Ok(true)
+        }
+        Err(message) => {
+            crate::infra::error_log::write_error(&format!("session export failed: {message}"));
+            crate::state::emit_session_export_progress(
+                &app,
+                100,
+                "La exportacion fallo.".into(),
+                true,
+                Some(message.clone()),
+            );
+            Err(message)
+        }
+    }
 }
 
 /// Import a `.ltset` as a new session under an explicit target folder,
@@ -2190,6 +2247,19 @@ pub fn import_session_package_at(
 /// and open it as a fresh session — no session needs to be open first, so this
 /// is wired to the empty-state landing screen as well as the menu. Replaces
 /// whatever is currently loaded (it does NOT merge).
+/// Where an Android session import reads its `.ltset` from.
+///
+/// Two shapes because the two sources are genuinely different: a package the
+/// user picked arrives as a `content://` document that can only be read through
+/// its descriptor, while one fetched from Drive is an ordinary file in the app
+/// cache. Collapsing them would mean copying the cloud one through the SAF
+/// machinery for no reason.
+#[cfg(target_os = "android")]
+enum AndroidPackageSource {
+    Saf(tauri_plugin_fs::FilePath, String),
+    Local(std::path::PathBuf),
+}
+
 /// `package_path` skips the FIRST dialog only.
 ///
 /// A set fetched from the cloud is already on disk, so asking the user to pick
@@ -2202,12 +2272,25 @@ pub async fn start_import_session_package_from_dialog(
 ) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     let (package_source, target_song_dir) = {
-        // Cloud import is not wired on mobile (no deep-link sign-in yet), so a
-        // path here would mean something went wrong upstream. Refuse loudly
-        // rather than silently opening the picker and importing the wrong set.
-        if package_path.is_some() {
-            return Err("La importacion desde la nube no esta disponible en movil".to_string());
-        }
+        // A package fetched from Drive is already a real file in the app cache,
+        // so it skips the picker AND the SAF read path: it can be extracted by
+        // path like any desktop import. Only the destination logic below is
+        // shared, because Android has nowhere else to put a session.
+        if let Some(path) = package_path.as_deref() {
+            let package_file = std::path::PathBuf::from(path);
+            let default_name = package_file
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .filter(|name| !name.is_empty())
+                .unwrap_or("sesion-importada")
+                .to_string();
+            let songs_dir = crate::state::create_song_default_directory(&app);
+            std::fs::create_dir_all(&songs_dir).map_err(|error| {
+                format!("No se pudo preparar la carpeta de sesiones: {error}")
+            })?;
+            let target_song_dir = unique_session_dir(&songs_dir, &default_name);
+            (AndroidPackageSource::Local(package_file), target_song_dir)
+        } else {
         // SAF picker for the .ltset.
         let Some(picked) = crate::platform::mobile_files::pick_file(&app, "Importar sesion (.ltset)")
         else {
@@ -2238,7 +2321,8 @@ pub async fn start_import_session_package_from_dialog(
             format!("No se pudo preparar la carpeta de sesiones: {error}")
         })?;
         let target_song_dir = unique_session_dir(&songs_dir, &default_name);
-        ((picked, picked_name), target_song_dir)
+        (AndroidPackageSource::Saf(picked, picked_name), target_song_dir)
+        }
     };
 
     #[cfg(target_os = "ios")]
@@ -2341,19 +2425,32 @@ pub async fn start_import_session_package_from_dialog(
             // alive for minutes, whose finalizer then timed out and took the
             // process down.
             #[cfg(target_os = "android")]
-            let extracted = {
-                let (picked, _) = &package_source;
-                let handle =
-                    crate::platform::mobile_files::open_picked_file_for_read(&worker_app, picked)?;
-                let result = DesktopSession::extract_session_package_from_reader_off_lock(
-                    &worker_app,
-                    handle,
-                    &target_song_dir,
-                )
-                .map_err(|error| error.to_string());
-                // Close the descriptor now rather than leaving it to the JVM's
-                // finalizer, which is what timed out in the crash we're fixing.
-                result?
+            let extracted = match &package_source {
+                AndroidPackageSource::Saf(picked, _) => {
+                    let handle = crate::platform::mobile_files::open_picked_file_for_read(
+                        &worker_app,
+                        picked,
+                    )?;
+                    let result = DesktopSession::extract_session_package_from_reader_off_lock(
+                        &worker_app,
+                        handle,
+                        &target_song_dir,
+                    )
+                    .map_err(|error| error.to_string());
+                    // Close the descriptor now rather than leaving it to the
+                    // JVM's finalizer, which is what timed out in the crash
+                    // we're fixing.
+                    result?
+                }
+                // Already a real file: extract by path, exactly as desktop does.
+                AndroidPackageSource::Local(package_file) => {
+                    DesktopSession::extract_session_package_off_lock(
+                        &worker_app,
+                        package_file,
+                        &target_song_dir,
+                    )
+                    .map_err(|error| error.to_string())?
+                }
             };
 
             #[cfg(not(target_os = "android"))]

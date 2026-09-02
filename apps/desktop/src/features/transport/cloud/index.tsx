@@ -5,6 +5,7 @@ import { CloudToast } from "./CloudToast";
 export { CloudLandingButton } from "./CloudLandingButton";
 export {
   beginExportWithChoice,
+  cancelExportChoice,
   exportAskingWhere,
   finishExportWithChoice,
   importSessionWithChoice,

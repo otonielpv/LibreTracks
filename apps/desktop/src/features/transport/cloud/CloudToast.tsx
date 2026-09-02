@@ -104,22 +104,17 @@ export function CloudToast() {
             progress_activity
           </span>
           <span className="lt-cloud-toast-text">
-            {transfer.direction === "preparing"
-              ? t("transport.cloud.preparing", {
-                  defaultValue: "Preparando {{name}}…",
+            {transfer.direction === "upload"
+              ? t("transport.cloud.uploading", {
+                  defaultValue: "Subiendo {{name}}…",
                   name: transfer.name,
                 })
-              : transfer.direction === "upload"
-                ? t("transport.cloud.uploading", {
-                    defaultValue: "Subiendo {{name}}…",
-                    name: transfer.name,
-                  })
-                : t("transport.cloud.downloading", {
-                    defaultValue: "Descargando {{name}}…",
-                    name: transfer.name,
-                  })}
+              : t("transport.cloud.downloading", {
+                  defaultValue: "Descargando {{name}}…",
+                  name: transfer.name,
+                })}
           </span>
-          {transfer.direction === "preparing" ? null : (
+          {(
             <>
               <span className="lt-cloud-toast-percent">
                 {transfer.percent}%

@@ -255,7 +255,7 @@ import {
   type ExportSongTarget,
 } from "./panels/ExportSongModal";
 import { ExportSessionModal } from "./panels/ExportSessionModal";
-import { beginExportWithChoice, CloudLandingButton, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
+import { beginExportWithChoice, cancelExportChoice, CloudLandingButton, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
 import {
   AutomationCueModal,
   type AutomationCueDraft,
@@ -7200,7 +7200,9 @@ export function TransportPanelContent() {
                   disabled={!song}
                   onClick={() => {
                     setIsMobileFileActionsOpen(false);
-                    setIsExportSessionModalOpen(true);
+                    void beginExportWithChoice("session", () =>
+                      setIsExportSessionModalOpen(true),
+                    );
                   }}
                 >
                   <span className="material-symbols-outlined">ios_share</span>
@@ -8306,14 +8308,14 @@ export function TransportPanelContent() {
 
             <ExportSongModal
               target={exportSongTarget}
-              onCancel={() => setExportSongTarget(null)}
+              onCancel={() => { setExportSongTarget(null); cancelExportChoice(); }}
               onConfirm={confirmSongExport(song, handleConfirmExportSong)}
             />
 
             <ExportSessionModal
               isOpen={isExportSessionModalOpen}
               sessionTitle={song?.title ?? ""}
-              onCancel={() => setIsExportSessionModalOpen(false)}
+              onCancel={() => { setIsExportSessionModalOpen(false); cancelExportChoice(); }}
               onConfirm={confirmSessionExport(song, handleExportSessionConfirm, () => setIsExportSessionModalOpen(false))}
             />
 

@@ -10827,3 +10827,41 @@ html.lt-ios body {
   color: rgb(214 226 224 / 0.5);
   font-variant-numeric: tabular-nums;
 }
+
+/* Modales altos en pantallas bajas (el movil en horizontal, sobre todo).
+   .lt-settings-modal no acota su altura, y su cuerpo tiene `flex: 1;
+   min-height: 0` -- listo para scrollear -- pero sin `overflow-y`. Al no caber,
+   el contenido desbordaba SIN recortarse y se pintaba encima de la fila de
+   botones: "Cancelar" y "Exportar" aparecian tachados por el texto de una
+   opcion.
+
+   Acotado a los modales que NO llevan un scroller propio dentro. Aplicarlo a
+   .lt-settings-modal en general dejaria scrollers anidados en los que si lo
+   tienen, que es como el modal de Sesiones dejo de responder al dedo. */
+.lt-export-modal,
+.lt-cloud-modal,
+.lt-storage-choice-modal,
+.lt-cloud-picker-modal {
+  max-height: 100%;
+  /* El marco no se mueve; lo que scrollea es el cuerpo. */
+  overflow: hidden;
+}
+
+.lt-export-modal > .lt-settings-modal-body,
+.lt-cloud-modal > .lt-settings-modal-body,
+.lt-storage-choice-modal > .lt-settings-modal-body,
+.lt-cloud-picker-modal > .lt-settings-modal-body {
+  overflow-y: auto;
+  /* Que el dedo no arrastre la pagina de detras al llegar al final. */
+  overscroll-behavior: contain;
+}
+
+/* Cabecera y botonera fuera del scroll y sin encogerse: son la referencia fija
+   del modal, y aplastarlas para ganar sitio es justo lo que no se quiere. */
+.lt-export-modal > .lt-settings-modal-header,
+.lt-cloud-modal > .lt-settings-modal-header,
+.lt-storage-choice-modal > .lt-settings-modal-header,
+.lt-cloud-picker-modal > .lt-settings-modal-header,
+.lt-export-modal > .lt-inline-actions {
+  flex: none;
+}

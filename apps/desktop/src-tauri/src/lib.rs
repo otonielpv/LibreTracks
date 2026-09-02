@@ -253,6 +253,7 @@ pub fn run() {
             commands::settings::set_metronome_sound_realtime,
             commands::settings::set_voice_guide_config_realtime,
             commands::cloud::cloud_staging_dir,
+            commands::cloud::cloud_discard_staged,
             commands::cloud::cloud_status,
             commands::cloud::cloud_connect,
             commands::cloud::cloud_disconnect,
