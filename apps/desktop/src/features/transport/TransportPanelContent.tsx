@@ -79,6 +79,7 @@ import {
   deleteTrack,
   duplicateClips,
   exportRegionAsPackage,
+  exportRegionAsPackageAt,
   getAudioOutputDevices,
   getLibraryAssets,
   getLibraryFolders,
@@ -254,6 +255,7 @@ import {
   type ExportSongTarget,
 } from "./panels/ExportSongModal";
 import { ExportSessionModal } from "./panels/ExportSessionModal";
+import { beginExportWithChoice, CloudLandingButton, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
 import {
   AutomationCueModal,
   type AutomationCueDraft,
@@ -3836,6 +3838,7 @@ export function TransportPanelContent() {
         upsertSongTempoMarker,
         deleteSongRegion,
         exportRegionAsPackage,
+        exportRegionAsPackageAt,
         renameLibraryFolder,
         moveLibraryAsset,
         deleteLibraryFolder,
@@ -6978,9 +6981,10 @@ export function TransportPanelContent() {
           onOpenProject={handleOpenProjectClick}
           onOpenRecentSession={handleOpenProjectFromPath}
           onOpenMobileSessions={() => setIsMobileSessionsModalOpen(true)}
-          onImportSong={handleImportSongClick}
-          onImportSession={handleImportSessionClick}
-          onExportSession={() => setIsExportSessionModalOpen(true)}
+          onImportSong={() => void importSongWithChoice(handleImportSongClick)}
+          onImportSession={() => void importSessionWithChoice(handleImportSessionClick)}
+          onExportSession={() => void beginExportWithChoice("session", () => setIsExportSessionModalOpen(true))}
+          onOpenCloud={() => useCloudStore.getState().openPanel()}
           onImportExternalProject={handleImportExternalProjectClick}
           onSaveProject={handleSaveProjectClick}
           onSaveProjectAs={handleSaveProjectAsClick}
@@ -7184,7 +7188,7 @@ export function TransportPanelContent() {
                   role="menuitem"
                   onClick={() => {
                     setIsMobileFileActionsOpen(false);
-                    handleImportSongClick();
+                    void importSongWithChoice(handleImportSongClick);
                   }}
                 >
                   <span className="material-symbols-outlined">library_add</span>
@@ -7270,7 +7274,7 @@ export function TransportPanelContent() {
                     }
                     onOpenSessionFromPicker={handleOpenProjectClick}
                     onOpenSessionFromPath={handleOpenProjectFromPath}
-                    onImportSession={handleImportSessionClick}
+                    onImportSession={() => handleImportSessionClick()}
                   />
                 ) : (
                 <div className="lt-empty-state">
@@ -7292,7 +7296,7 @@ export function TransportPanelContent() {
                       <button type="button" data-lt-tour={TOUR_TARGETS.landingOpen} onClick={handleOpenProjectClick}>
                         {t("common.open")}
                       </button>
-                      <button type="button" data-lt-tour={TOUR_TARGETS.landingImport} onClick={handleImportSessionClick}>
+                      <button type="button" data-lt-tour={TOUR_TARGETS.landingImport} onClick={() => void importSessionWithChoice(handleImportSessionClick)}>
                         {t("transport.shell.importSession", {
                           defaultValue: "Importar sesión",
                         })}
@@ -7304,6 +7308,7 @@ export function TransportPanelContent() {
                       >
                         {t("timelineTopbar.importExternalProject")}
                       </button>
+                      <CloudLandingButton />
                     </div>
                     <div className="lt-empty-state-columns" data-lt-tour={TOUR_TARGETS.landingCatalog}>
                     <div className="lt-empty-state-templates">
@@ -8291,7 +8296,7 @@ export function TransportPanelContent() {
                       }}
                       onImportSession={() => {
                         setIsMobileSessionsModalOpen(false);
-                        handleImportSessionClick();
+                        void importSessionWithChoice(handleImportSessionClick);
                       }}
                     />
                   </div>
@@ -8302,18 +8307,17 @@ export function TransportPanelContent() {
             <ExportSongModal
               target={exportSongTarget}
               onCancel={() => setExportSongTarget(null)}
-              onConfirm={handleConfirmExportSong}
+              onConfirm={confirmSongExport(song, handleConfirmExportSong)}
             />
 
             <ExportSessionModal
               isOpen={isExportSessionModalOpen}
               sessionTitle={song?.title ?? ""}
               onCancel={() => setIsExportSessionModalOpen(false)}
-              onConfirm={(includeAudio) => {
-                setIsExportSessionModalOpen(false);
-                handleExportSessionConfirm(includeAudio);
-              }}
+              onConfirm={confirmSessionExport(song, handleExportSessionConfirm, () => setIsExportSessionModalOpen(false))}
             />
+
+            <CloudSurfaces />
 
             {automationCueDraft ? (
               <AutomationCueModal

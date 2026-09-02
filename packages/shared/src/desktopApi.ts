@@ -973,17 +973,22 @@ export async function exportSessionPackage(
 
 /**
  * Export the whole session as a `.ltset` to an explicit path, bypassing the
- * native dialog and progress-event choreography. Used by the E2E automation
- * seam (which cannot pilot the dialog); not called from production UI.
+ * native save dialog.
+ *
+ * Two callers: the E2E seam, which cannot pilot a dialog, and the cloud export,
+ * which writes to a staging file before uploading. `prepared` is honoured
+ * rather than hardcoded so the mode the user picked survives — an Optimized set
+ * is several times larger, which matters a great deal over a network.
  */
 export async function exportSessionPackageAt(
   writePath: string,
   includeAudio: boolean,
+  prepared = false,
 ): Promise<boolean> {
   return invokeCommand<boolean>("export_session_package_at", {
     writePath,
     includeAudio,
-    prepared: false,
+    prepared,
   });
 }
 
@@ -1008,8 +1013,20 @@ export async function importSessionPackageAt(
 // and opens it — replacing whatever is loaded. Routes through the same
 // progress-emitting worker flow as openProject so a large set doesn't freeze the
 // UI. No session needs to be open first (wired to the empty-state landing too).
-export async function importSessionPackage(): Promise<TransportSnapshot | null> {
-  return runProjectLoadCommand("start_import_session_package_from_dialog");
+/**
+ * Import a `.ltset` as a brand-new session.
+ *
+ * `packagePath` skips only the "pick the file" dialog — for a set already
+ * fetched from the cloud, asking the user to locate a temp file would be
+ * nonsense. Where the new session folder lands is still their choice, so that
+ * dialog always runs.
+ */
+export async function importSessionPackage(
+  packagePath?: string,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_import_session_package_from_dialog", {
+    packagePath: packagePath ?? null,
+  });
 }
 
 export async function importSongPackage(
@@ -1811,4 +1828,131 @@ export async function deleteTracks(
   trackIds: string[],
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_tracks", { trackIds });
+}
+
+// ── Cloud (the user's own Google Drive) ──────────────────────────────────────
+//
+// LibreTracks hosts nothing: these move `.ltpkg` / `.ltset` packages in and out
+// of an account the USER owns, under a `LibreTracks/` folder with `Songs/` and
+// `Sessions/` inside. The token lives in the OS credential store on the device
+// and never reaches us.
+//
+// Explicit transfers, not sync: nothing runs in the background, so there is
+// never a conflict to resolve.
+
+/** Which of the two cloud folders a listing refers to. */
+export type CloudFolder = "songs" | "sessions";
+
+export type CloudStatus = {
+  /**
+   * Whether this build can reach Google at all. Distinct from `connected`: a
+   * build compiled without the OAuth client secret walks the user through the
+   * entire consent screen and only then fails, so the UI disables the entry
+   * point instead of letting that happen.
+   */
+  configured: boolean;
+  connected: boolean;
+  provider: string;
+};
+
+export type CloudQuota = {
+  usedBytes: number;
+  /** Null on an account with no ceiling. */
+  limitBytes: number | null;
+  freeBytes: number | null;
+};
+
+export type CloudFile = {
+  id: string;
+  name: string;
+  sizeBytes: number;
+  modified: string | null;
+};
+
+/** Progress of an upload or download, emitted as `cloud:transfer-progress`. */
+export type CloudTransferProgressEvent = {
+  doneBytes: number;
+  totalBytes: number;
+  percent: number;
+  emittedAtUnixMs: number;
+};
+
+export async function getCloudStatus(): Promise<CloudStatus> {
+  return invokeCommand<CloudStatus>("cloud_status");
+}
+
+/**
+ * Open the system browser and complete the OAuth sign-in.
+ *
+ * Resolves only once the user has granted access and the token is stored, so a
+ * caller can refresh its status straight after. Rejects if they cancel the
+ * consent screen or take longer than five minutes.
+ */
+export async function connectCloud(): Promise<void> {
+  return invokeCommand<void>("cloud_connect");
+}
+
+/** Forget the account and drop its credentials from the OS store. */
+export async function disconnectCloud(): Promise<void> {
+  return invokeCommand<void>("cloud_disconnect");
+}
+
+/**
+ * Quota of the whole Google account, not of LibreTracks.
+ *
+ * Drive counts Gmail and Photos against the same allowance, so showing only
+ * what LibreTracks occupies leaves the user unable to explain why a session
+ * does not fit.
+ */
+export async function getCloudQuota(): Promise<CloudQuota> {
+  return invokeCommand<CloudQuota>("cloud_quota");
+}
+
+export async function listCloudFiles(folder: CloudFolder): Promise<CloudFile[]> {
+  return invokeCommand<CloudFile[]>("cloud_list", { folder });
+}
+
+/** Upload a package, filed under Songs or Sessions by its extension. */
+export async function uploadToCloud(localPath: string): Promise<CloudFile> {
+  return invokeCommand<CloudFile>("cloud_upload", { localPath });
+}
+
+/** Download a package into `destDir`; resolves with the local path it landed on. */
+export async function downloadFromCloud(
+  fileId: string,
+  fileName: string,
+  destDir: string,
+): Promise<string> {
+  return invokeCommand<string>("cloud_download", { fileId, fileName, destDir });
+}
+
+export async function deleteCloudFile(fileId: string): Promise<void> {
+  return invokeCommand<void>("cloud_delete", { fileId });
+}
+
+/**
+ * Subscribe to upload/download progress.
+ *
+ * Fires per resumable chunk on upload and per network chunk on download, so it
+ * is frequent: keep the handler cheap and let the store hold the value rather
+ * than re-rendering a tree from it directly.
+ */
+export async function listenToCloudTransferProgress(
+  handler: (progress: CloudTransferProgressEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<CloudTransferProgressEvent>("cloud:transfer-progress", (event) => {
+    handler(event.payload);
+  });
+}
+
+/**
+ * Scratch directory for packages on their way to or from the cloud.
+ *
+ * A download has to land somewhere before it can be imported, and an upload has
+ * to be written before it can be sent. Neither is a file the user keeps, so
+ * neither is worth a location prompt in a flow they experience as one step.
+ */
+export async function getCloudStagingDir(): Promise<string> {
+  return invokeCommand<string>("cloud_staging_dir");
 }

@@ -25,6 +25,12 @@ env:
   # the engine build mid-libsndfile. Degrade to direct compilation on backend
   # I/O errors instead of failing the build.
   SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+  # Google OAuth client secret for the desktop client, read by option_env! in
+  # crates/libretracks-cloud. Deliberately not in the repository: the GOCSPX-
+  # prefix is a recognised scanning pattern and a push would risk automatic
+  # revocation. Empty on fork pull requests, where secrets are unavailable, and
+  # the build then reports cloud sign-in as not configured instead of failing.
+  LIBRETRACKS_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
 jobs:
   test:

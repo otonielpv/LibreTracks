@@ -71,6 +71,12 @@ export type CompactSongHandlerDeps = {
     regionId: string,
     includeAudio: boolean,
   ) => Promise<boolean>;
+  /** Same export, to an explicit path instead of a save dialog. */
+  exportRegionAsPackageAt: (
+    regionId: string,
+    writePath: string,
+    includeAudio: boolean,
+  ) => Promise<boolean>;
   renameLibraryFolder: (
     oldFolderPath: string,
     newFolderPath: string,
@@ -130,6 +136,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     upsertSongTempoMarker,
     deleteSongRegion,
     exportRegionAsPackage,
+    exportRegionAsPackageAt,
     renameLibraryFolder,
     moveLibraryAsset,
     deleteLibraryFolder,
@@ -358,13 +365,25 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     });
   };
 
-  // Runs the export once the user picked a mode in the ExportSongModal.
-  const handleConfirmExportSong = (regionId: string, includeAudio: boolean) => {
+  /**
+   * Runs the export once the user picked a mode in the ExportSongModal.
+   *
+   * `writePath` skips the save dialog and writes there, which is how the cloud
+   * export gets a file to upload. Returned rather than discarded so that caller
+   * knows when the package actually exists on disk.
+   */
+  const handleConfirmExportSong = (
+    regionId: string,
+    includeAudio: boolean,
+    writePath?: string,
+  ) => {
     const currentRegion = findRegion(regionId);
     setExportSongTarget(null);
-    void runAction(
+    return runAction(
       async () => {
-        const exported = await exportRegionAsPackage(regionId, includeAudio);
+        const exported = writePath
+          ? await exportRegionAsPackageAt(regionId, writePath, includeAudio)
+          : await exportRegionAsPackage(regionId, includeAudio);
         if (exported) {
           setStatus(
             `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,

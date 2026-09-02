@@ -46,6 +46,8 @@ type TimelineTopbarProps = {
   onImportSong: () => void;
   onImportSession: () => void;
   onExportSession: () => void;
+  /** Abre el panel de nube (conectar cuenta y gestionar lo subido). */
+  onOpenCloud: () => void;
   onImportExternalProject: () => void;
   onSaveProject: () => void;
   onSaveProjectAs: () => void;
@@ -105,6 +107,7 @@ export function TimelineTopbar({
   onImportSong,
   onImportSession,
   onExportSession,
+  onOpenCloud,
   onImportExternalProject,
   onSaveProject,
   onSaveProjectAs,
@@ -353,6 +356,19 @@ export function TimelineTopbar({
                   <span>
                     {t("timelineTopbar.exportSession", {
                       defaultValue: "Exportar sesión…",
+                    })}
+                  </span>
+                </button>
+                {/* Sin `disabled`: conectar la cuenta y revisar lo ya subido
+                    tiene sentido aunque no haya proyecto abierto. */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onTopMenuAction(onOpenCloud)}
+                >
+                  <span>
+                    {t("timelineTopbar.cloud", {
+                      defaultValue: "Nube…",
                     })}
                   </span>
                 </button>

@@ -10392,3 +10392,425 @@ html.lt-ios body {
 .lt-tour-menu .lt-tour-menu-reset .lt-tour-menu-name {
   font-weight: 600;
 }
+
+/* ── Panel de nube ────────────────────────────────────────────────────────── */
+/* Reutiliza el armazon de .lt-settings-modal; aqui solo lo propio del panel.
+   Sin color-mix() ni :has(): el Safari 13 de Catalina no los entiende y
+   Lightning CSS no los rescata. */
+
+.lt-cloud-modal {
+  width: min(40rem, 100%);
+}
+
+.lt-cloud-note {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: rgb(214 226 224 / 0.72);
+}
+
+.lt-cloud-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgb(255 138 128 / 0.35);
+  border-radius: 2px;
+  background: rgb(255 138 128 / 0.08);
+  font-size: 0.82rem;
+  color: rgb(255 190 184);
+}
+
+.lt-cloud-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgb(87 241 219 / 0.14);
+  font-size: 0.9rem;
+}
+
+.lt-cloud-quota-bar {
+  height: 6px;
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.12);
+  overflow: hidden;
+}
+
+.lt-cloud-quota-bar > span {
+  display: block;
+  height: 100%;
+  background: rgb(87 241 219 / 0.65);
+}
+
+.lt-cloud-quota p {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+}
+
+.lt-cloud-quota-hint {
+  color: rgb(214 226 224 / 0.55);
+  font-size: 0.78rem !important;
+}
+
+.lt-cloud-transfer {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgb(87 241 219 / 0.9);
+}
+
+.lt-cloud-folder h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgb(214 226 224 / 0.6);
+}
+
+.lt-cloud-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.lt-cloud-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  background: rgb(255 255 255 / 0.03);
+  font-size: 0.85rem;
+}
+
+/* El nombre absorbe el espacio y se recorta; el tamano y el boton no deben
+   moverse de sitio por un archivo con nombre largo. */
+.lt-cloud-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-cloud-file-size {
+  flex: none;
+  color: rgb(214 226 224 / 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Boton de texto plano, para acciones secundarias dentro de un panel. */
+.lt-link-button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgb(87 241 219 / 0.85);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.lt-link-button:hover {
+  color: rgb(87 241 219);
+}
+
+.lt-link-button.lt-danger {
+  color: rgb(255 138 128 / 0.85);
+}
+
+.lt-link-button.lt-danger:hover {
+  color: rgb(255 138 128);
+}
+
+/* Boton de Google segun su guia de marca: fondo claro, borde gris, texto
+   oscuro y la "G" a 18px con separacion de 12px. No recolorear ni cambiar las
+   proporciones del logo. Sobre el modal oscuro, la version clara es la que se
+   reconoce de un vistazo. */
+.lt-google-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  align-self: flex-start;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgb(116 119 117);
+  border-radius: 4px;
+  background: rgb(255 255 255);
+  color: rgb(31 31 31);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lt-google-button:hover:not(:disabled) {
+  background: rgb(243 243 243);
+}
+
+.lt-google-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Accion secundaria de contorno: no compite con la principal pero tampoco
+   parece un enlace suelto. */
+.lt-ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid rgb(87 241 219 / 0.28);
+  border-radius: 2px;
+  background: none;
+  color: rgb(214 226 224 / 0.85);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.lt-ghost-button:hover {
+  border-color: rgb(87 241 219 / 0.55);
+  color: rgb(230 240 238);
+}
+
+.lt-ghost-button .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.lt-cloud-account-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Eleccion local / Drive y selector de archivo de la nube. */
+.lt-storage-choice-modal,
+.lt-cloud-picker-modal {
+  width: min(34rem, 100%);
+}
+
+.lt-storage-choice-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+/* En pantallas estrechas las dos opciones se apilan: dos tarjetas de 17rem no
+   caben de lado en el movil. */
+@media (max-width: 30rem) {
+  .lt-storage-choice-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lt-storage-choice-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.03);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-storage-choice-option:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.07);
+}
+
+.lt-storage-choice-option:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-storage-choice-option .material-symbols-outlined {
+  font-size: 1.6rem;
+  color: rgb(87 241 219 / 0.8);
+}
+
+.lt-storage-choice-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.lt-storage-choice-hint {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgb(214 226 224 / 0.6);
+}
+
+/* Fila del selector: toda la fila es el boton, no solo el nombre. */
+.lt-cloud-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-cloud-picker-modal .lt-cloud-list li:hover {
+  background: rgb(87 241 219 / 0.08);
+}
+
+/* Aviso de nube con el panel cerrado. Las exportaciones se lanzan desde el
+   menu, asi que el panel esta cerrado durante toda la transferencia: sin esto
+   un fallo de subida no lo ve nadie. */
+.lt-cloud-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + var(--lt-safe-area-bottom));
+  /* Por debajo de .lt-modal-backdrop (60): un aviso no debe taparle un boton a
+     nadie, y los modales muestran su propio progreso. */
+  z-index: 55;
+  max-width: min(26rem, calc(100vw - 2rem));
+  pointer-events: auto;
+}
+
+.lt-cloud-toast-error,
+.lt-cloud-toast-transfer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.22);
+  background: rgb(13 15 16 / 0.97);
+  font-size: 0.82rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+}
+
+.lt-cloud-toast-error {
+  border-color: rgb(255 138 128 / 0.4);
+  color: rgb(255 190 184);
+}
+
+.lt-cloud-toast .material-symbols-outlined {
+  font-size: 1.1rem;
+  flex: none;
+}
+
+/* El texto se recorta antes que empujar el porcentaje fuera de la caja. */
+.lt-cloud-toast-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-cloud-toast-percent {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: rgb(87 241 219 / 0.9);
+}
+
+/* Velocidad y tiempo restante bajo el porcentaje. */
+.lt-cloud-toast-percent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+
+.lt-cloud-toast-rate {
+  font-size: 0.72rem;
+  color: rgb(214 226 224 / 0.55);
+}
+
+/* Busqueda y filtros de la nube. */
+.lt-cloud-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lt-cloud-filter-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.04);
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.lt-cloud-filter-search:focus {
+  outline: none;
+  border-color: rgb(87 241 219 / 0.5);
+}
+
+.lt-cloud-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-cloud-filter-row select {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: rgb(22 25 26);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.lt-cloud-filter-bpm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: rgb(214 226 224 / 0.55);
+}
+
+/* Anchura fija: los campos numericos no deben bailar al escribir. */
+.lt-cloud-filter-bpm input {
+  width: 5rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.04);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.lt-cloud-filter-count {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgb(214 226 224 / 0.5);
+}
+
+/* El nombre pasa a dos lineas: titulo arriba, tempo/tonalidad/metrica debajo. */
+.lt-cloud-file-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.lt-cloud-file-meta {
+  font-size: 0.72rem;
+  color: rgb(214 226 224 / 0.5);
+  font-variant-numeric: tabular-nums;
+}

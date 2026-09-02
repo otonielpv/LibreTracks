@@ -11,6 +11,7 @@ import {
   createSongFromTemplatePath,
   createSongNamed,
   exportSessionPackage,
+  exportSessionPackageAt,
   getProjectLoadProgressSnapshot,
   importSessionPackage,
   importSongPackageFromPathWithProgress,
@@ -272,9 +273,16 @@ export function useProjectActions({
   // current one — the "create at home, play live elsewhere" flow. Works from the
   // empty-state landing too (no session needs to be open first). The native
   // dialogs (pick .ltset, choose destination folder) run backend-side.
-  function handleImportSessionClick() {
+  /**
+   * Import a `.ltset` as a new session.
+   *
+   * `sourcePath` skips the file picker only; the destination folder is still
+   * chosen by the user. It is how a set fetched from the cloud reuses this exact
+   * flow instead of growing a parallel one.
+   */
+  function handleImportSessionClick(sourcePath?: string) {
     runProjectLoadFlow(
-      importSessionPackage,
+      () => importSessionPackage(sourcePath),
       t("transport.shell.importingSession", {
         defaultValue: "Importando sesión...",
       }),
@@ -288,10 +296,23 @@ export function useProjectActions({
   // via the session:export-progress event into a non-modal indicator, so a large
   // full export shows real percent (and the user keeps using the UI). We resolve
   // on the terminal `done` event.
-  function handleExportSessionConfirm(mode: SessionExportMode) {
+  /**
+   * Export the session as a `.ltset`.
+   *
+   * `writePath` skips the save dialog and writes there instead, which is how the
+   * cloud export produces a file to upload. The progress choreography is
+   * identical either way, so the user sees the same indicator regardless of
+   * where the set is going.
+   */
+  function handleExportSessionConfirm(
+    mode: SessionExportMode,
+    writePath?: string,
+  ) {
     const includeAudio = mode !== "light";
     const prepared = mode === "optimized";
-    void runAction(async () => {
+    // Returned rather than discarded: the cloud export has to know WHEN the
+    // .ltset exists on disk before it can upload it.
+    return runAction(async () => {
       // Register the progress listener BEFORE invoking the command so we don't
       // miss early events. `finished` resolves on the terminal `done` event.
       let resolveFinished: (() => void) | null = null;
@@ -323,7 +344,9 @@ export function useProjectActions({
             defaultValue: "Exportando sesión...",
           }),
         });
-        const started = await exportSessionPackage(includeAudio, prepared);
+        const started = writePath
+          ? await exportSessionPackageAt(writePath, includeAudio, prepared)
+          : await exportSessionPackage(includeAudio, prepared);
         if (!started) {
           // User cancelled the save dialog: no terminal event will arrive.
           setSessionExportUiState({ active: false, percent: 0, message: "" });
@@ -350,7 +373,15 @@ export function useProjectActions({
     });
   }
 
-  function handleImportSongClick() {
+  /**
+   * Import a `.ltpkg` into the current session.
+   *
+   * `sourcePath` skips the file picker and imports that package directly. It is
+   * how the cloud flow reuses this exact path instead of growing a second
+   * import that would drift from this one: a package fetched from Drive is
+   * staged locally and arrives here as an ordinary path.
+   */
+  function handleImportSongClick(sourcePath?: string) {
     // Non-blocking import: the backend returns as soon as the package is
     // unzipped + the song structure is persisted (it no longer waits for every
     // source to finish decoding). So we do NOT raise the blocking shell overlay
@@ -370,7 +401,12 @@ export function useProjectActions({
       setPackageUnpackUiState({ active: true, percent: 0 });
       try {
         let nextSnapshot: TransportSnapshot | null;
-        if (isMobileApp) {
+        if (sourcePath) {
+          nextSnapshot = await importSongPackageFromPathWithProgress(
+            sourcePath,
+            getImportPositionSeconds(),
+          );
+        } else if (isMobileApp) {
           // rfd has no file-dialog implementation on iOS. Use the WebView
           // document picker while the original tap gesture is still active,
           // stage its bytes, then feed the normal path-based package importer.

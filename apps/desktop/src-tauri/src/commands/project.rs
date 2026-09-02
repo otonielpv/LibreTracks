@@ -2190,10 +2190,24 @@ pub fn import_session_package_at(
 /// and open it as a fresh session — no session needs to be open first, so this
 /// is wired to the empty-state landing screen as well as the menu. Replaces
 /// whatever is currently loaded (it does NOT merge).
+/// `package_path` skips the FIRST dialog only.
+///
+/// A set fetched from the cloud is already on disk, so asking the user to pick
+/// it would be asking them to find a temp file they never chose. Where the new
+/// session folder goes is still theirs to decide, so the second dialog stays.
 #[tauri::command]
-pub async fn start_import_session_package_from_dialog(app: AppHandle) -> Result<bool, String> {
+pub async fn start_import_session_package_from_dialog(
+    app: AppHandle,
+    package_path: Option<String>,
+) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     let (package_source, target_song_dir) = {
+        // Cloud import is not wired on mobile (no deep-link sign-in yet), so a
+        // path here would mean something went wrong upstream. Refuse loudly
+        // rather than silently opening the picker and importing the wrong set.
+        if package_path.is_some() {
+            return Err("La importacion desde la nube no esta disponible en movil".to_string());
+        }
         // SAF picker for the .ltset.
         let Some(picked) = crate::platform::mobile_files::pick_file(&app, "Importar sesion (.ltset)")
         else {
@@ -2229,12 +2243,17 @@ pub async fn start_import_session_package_from_dialog(app: AppHandle) -> Result<
 
     #[cfg(target_os = "ios")]
     let (package_source, target_song_dir) = {
-        let Some(package_file) =
-            libretracks_ios_folder_picker::pick_file(app.clone()).await?
-        else {
-            return Ok(false);
+        let package_file = match package_path.as_deref() {
+            Some(path) => std::path::PathBuf::from(path),
+            None => {
+                let Some(picked) =
+                    libretracks_ios_folder_picker::pick_file(app.clone()).await?
+                else {
+                    return Ok(false);
+                };
+                std::path::PathBuf::from(picked)
+            }
         };
-        let package_file = std::path::PathBuf::from(package_file);
         if package_file
             .extension()
             .and_then(|extension| extension.to_str())
@@ -2261,13 +2280,18 @@ pub async fn start_import_session_package_from_dialog(app: AppHandle) -> Result<
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (package_source, target_song_dir) = {
-        let package_file = FileDialog::new()
-            .add_filter("LibreTracks Set", &["ltset"])
-            .set_title("Importar sesion (.ltset)")
-            .pick_file();
-
-        let Some(package_file) = package_file else {
-            return Ok(false);
+        let package_file = match package_path.as_deref() {
+            Some(path) => std::path::PathBuf::from(path),
+            None => {
+                let Some(picked) = FileDialog::new()
+                    .add_filter("LibreTracks Set", &["ltset"])
+                    .set_title("Importar sesion (.ltset)")
+                    .pick_file()
+                else {
+                    return Ok(false);
+                };
+                picked
+            }
         };
 
         // Default the new project folder to <app_data>/songs/<set-name>, but let the

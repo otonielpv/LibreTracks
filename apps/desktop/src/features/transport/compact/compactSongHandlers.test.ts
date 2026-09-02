@@ -70,6 +70,7 @@ function setup(overrides: Partial<CompactSongHandlerDeps> = {}) {
     upsertSongTempoMarker: vi.fn(async () => snapshot(5)),
     deleteSongRegion: vi.fn(async () => snapshot(6)),
     exportRegionAsPackage: vi.fn(async () => true),
+    exportRegionAsPackageAt: vi.fn(async () => true),
     renameLibraryFolder: vi.fn(async () => []),
     moveLibraryAsset: vi.fn(async () => []),
     deleteLibraryFolder: vi.fn(async () => []),

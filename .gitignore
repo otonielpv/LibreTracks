@@ -34,6 +34,11 @@ build*
 # ...but the FFmpeg build *scripts* are source, not build artifacts (the broad build* above would catch them).
 !scripts/build-ffmpeg-universal.sh
 !scripts/build-ffmpeg-linux.sh
+# ...and so is a Cargo build script. `build*` matches build.rs by name, which
+# would silently drop it from a fresh clone: the crate still compiles, but
+# without its `rerun-if-env-changed` the build-time client secret stops being
+# picked up when it changes. Same trap as the gradle files below.
+!crates/*/build.rs
 # ...and the Android gradle project files are source too. Without these
 # negations a fresh clone can't build the Android app at all (the gradle
 # build scripts were silently swallowed by `build*`). gen/android/.gitignore

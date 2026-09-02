@@ -23,6 +23,7 @@ import {
 } from "../features/transport/uiStore";
 import { App as AppComponent } from "../app/App";
 import { useTourStore } from "../features/tutorial/tourStore";
+import { useCloudStore } from "../features/transport/cloud/cloudStore";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
 export type MockWebviewDragDropEvent =
@@ -298,6 +299,10 @@ beforeEach(async () => {
     },
     isMenuOpen: false,
   });
+
+  // Un store sobrevive al desmontaje, asi que sin esto una prueba que conecte
+  // la nube dejaria a la siguiente creyendose ya conectada.
+  useCloudStore.getState().reset();
   vi.clearAllMocks();
   vi.restoreAllMocks();
   await i18n.changeLanguage("en");
