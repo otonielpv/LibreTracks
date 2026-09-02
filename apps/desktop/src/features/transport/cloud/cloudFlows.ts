@@ -4,7 +4,11 @@ import {
   type CloudFile,
   type CloudFolder,
 } from "../desktopApi";
-import { newTransfer, useCloudStore } from "./cloudStore";
+import {
+  isCloudTransferCancellation,
+  newTransfer,
+  useCloudStore,
+} from "./cloudStore";
 
 /**
  * The local-or-Drive flows behind the ordinary import and export actions.
@@ -68,11 +72,14 @@ export function pickCloudFile(folder: CloudFolder): Promise<CloudFile | null> {
 async function stageFromCloud(file: CloudFile): Promise<string> {
   const store = useCloudStore.getState();
   const stagingDir = await getCloudStagingDir();
-  useCloudStore.setState({ transfer: newTransfer(file.name, "download") });
+  useCloudStore.setState({
+    transfer: newTransfer(file.name, "download"),
+    cancelling: false,
+  });
   try {
     return await downloadFromCloud(file.id, file.name, stagingDir);
   } finally {
-    useCloudStore.setState({ transfer: null });
+    useCloudStore.setState({ transfer: null, cancelling: false });
     void store.refreshQuota();
   }
 }
@@ -101,9 +108,11 @@ export async function importFromCloud(
     await runImport(localPath);
     return true;
   } catch (error) {
-    useCloudStore.setState({
-      error: error instanceof Error ? error.message : String(error),
-    });
+    if (!isCloudTransferCancellation(error)) {
+      useCloudStore.setState({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return false;
   }
 }
@@ -220,9 +229,11 @@ export async function finishExportWithChoice(
     useCloudStore.setState({ transfer: null });
     await useCloudStore.getState().upload(stagedPath);
   } catch (error) {
-    useCloudStore.setState({
-      error: error instanceof Error ? error.message : String(error),
-    });
+    if (!isCloudTransferCancellation(error)) {
+      useCloudStore.setState({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 

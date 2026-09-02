@@ -79,6 +79,8 @@ export function CloudPanel() {
   const connecting = useCloudStore((state) => state.connecting);
   const loadingFolder = useCloudStore((state) => state.loadingFolder);
   const transfer = useCloudStore((state) => state.transfer);
+  const cancelling = useCloudStore((state) => state.cancelling);
+  const cancelTransfer = useCloudStore((state) => state.cancelTransfer);
   const error = useCloudStore((state) => state.error);
   const refreshStatus = useCloudStore((state) => state.refreshStatus);
   const connect = useCloudStore((state) => state.connect);
@@ -261,13 +263,35 @@ export function CloudPanel() {
               ) : null}
 
               {transfer ? (
-                <p className="lt-cloud-transfer">
-                  {t("transport.cloud.transferring", {
-                    defaultValue: "{{name}} — {{percent}}%",
-                    name: transfer.name,
-                    percent: transfer.percent,
-                  })}
-                </p>
+                <div className="lt-cloud-transfer">
+                  <span>
+                    <span
+                      className="material-symbols-outlined lt-spin"
+                      aria-hidden="true"
+                    >
+                      progress_activity
+                    </span>{" "}
+                    {t("transport.cloud.transferring", {
+                      defaultValue: "{{name}} — {{percent}}%",
+                      name: transfer.name,
+                      percent: transfer.percent,
+                    })}
+                  </span>
+                  {transfer.direction === "preparing" ? null : (
+                    <button
+                      type="button"
+                      className="lt-link-button lt-cloud-cancel"
+                      disabled={cancelling}
+                      onClick={() => void cancelTransfer()}
+                    >
+                      {cancelling
+                        ? t("transport.cloud.cancelling", {
+                            defaultValue: "Cancelando…",
+                          })
+                        : t("common.cancel", { defaultValue: "Cancelar" })}
+                    </button>
+                  )}
+                </div>
               ) : null}
 
               <CloudFileFilters

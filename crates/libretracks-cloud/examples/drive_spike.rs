@@ -181,7 +181,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     print!("\r  {}%   ", done * 100 / total);
                     let _ = std::io::stdout().flush();
                 }
-            })
+            }, &|| false)
             .await?;
         println!("\nSubido con id {}", uploaded.id);
     }

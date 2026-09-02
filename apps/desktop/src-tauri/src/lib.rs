@@ -231,6 +231,7 @@ pub fn run() {
             commands::cloud::cloud_list,
             commands::cloud::cloud_upload,
             commands::cloud::cloud_download,
+            commands::cloud::cloud_cancel_transfer,
             commands::cloud::cloud_delete,
             commands::pads::get_pads_catalog,
             commands::pads::download_pad,

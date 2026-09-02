@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import {
+  cancelCloudTransfer,
   connectCloud,
   deleteCloudFile,
   disconnectCloud,
@@ -97,6 +98,8 @@ type CloudState = {
   connecting: boolean;
   loadingFolder: CloudFolder | null;
   transfer: CloudTransfer | null;
+  /** True after cancel was pressed and before the backend transfer exits. */
+  cancelling: boolean;
   /** Last failure, already translated to a human sentence by the backend. */
   error: string | null;
 
@@ -113,6 +116,7 @@ type CloudState = {
   upload: (localPath: string) => Promise<CloudFile | null>;
   remove: (folder: CloudFolder, fileId: string) => Promise<void>;
   setTransferProgress: (doneBytes: number, totalBytes: number, atMs: number) => void;
+  cancelTransfer: () => Promise<void>;
   clearError: () => void;
   reset: () => void;
 };
@@ -144,6 +148,10 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function isCloudTransferCancellation(error: unknown): boolean {
+  return messageOf(error).toLowerCase().includes("transfer was cancelled");
+}
+
 export const useCloudStore = create<CloudState>((set, get) => ({
   isPanelOpen: false,
   pendingChoice: null,
@@ -155,6 +163,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   connecting: false,
   loadingFolder: null,
   transfer: null,
+  cancelling: false,
   error: null,
 
   openPanel: () => set({ isPanelOpen: true, error: null }),
@@ -223,6 +232,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     const name = localPath.split(/[\\/]/).pop() ?? localPath;
     set({
       transfer: newTransfer(name, "upload"),
+      cancelling: false,
       error: null,
     });
     try {
@@ -236,10 +246,25 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       await get().refreshQuota();
       return uploaded;
     } catch (error) {
-      set({ error: messageOf(error) });
+      if (!isCloudTransferCancellation(error)) {
+        set({ error: messageOf(error) });
+      }
       return null;
     } finally {
-      set({ transfer: null });
+      set({ transfer: null, cancelling: false });
+    }
+  },
+
+  cancelTransfer: async () => {
+    const transfer = get().transfer;
+    if (!transfer || transfer.direction === "preparing" || get().cancelling) {
+      return;
+    }
+    set({ cancelling: true });
+    try {
+      await cancelCloudTransfer();
+    } catch (error) {
+      set({ cancelling: false, error: messageOf(error) });
     }
   },
 
@@ -313,6 +338,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       connecting: false,
       loadingFolder: null,
       transfer: null,
+      cancelling: false,
       error: null,
     }),
 }));

@@ -10460,6 +10460,10 @@ html.lt-ios body {
   margin: 0;
   font-size: 0.85rem;
   color: rgb(87 241 219 / 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .lt-cloud-folder h3 {
@@ -10733,6 +10737,15 @@ html.lt-ios body {
 .lt-cloud-toast-rate {
   font-size: 0.72rem;
   color: rgb(214 226 224 / 0.55);
+}
+
+.lt-cloud-cancel {
+  flex: none;
+}
+
+.lt-cloud-cancel:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 /* Busqueda y filtros de la nube. */

@@ -34,9 +34,11 @@ import { useCloudStore } from "./cloudStore";
 export function CloudToast() {
   const { t } = useTranslation();
   const transfer = useCloudStore((state) => state.transfer);
+  const cancelling = useCloudStore((state) => state.cancelling);
   const error = useCloudStore((state) => state.error);
   const isPanelOpen = useCloudStore((state) => state.isPanelOpen);
   const clearError = useCloudStore((state) => state.clearError);
+  const cancelTransfer = useCloudStore((state) => state.cancelTransfer);
 
   // Probed once at start-up. Without it the first import shows its Drive option
   // greyed out while the very first status call is still in flight.
@@ -95,12 +97,11 @@ export function CloudToast() {
         </div>
       ) : transfer ? (
         <div className="lt-cloud-toast-transfer">
-          <span className="material-symbols-outlined" aria-hidden="true">
-            {transfer.direction === "upload"
-              ? "cloud_upload"
-              : transfer.direction === "download"
-                ? "cloud_download"
-                : "inventory_2"}
+          <span
+            className="material-symbols-outlined lt-spin"
+            aria-hidden="true"
+          >
+            progress_activity
           </span>
           <span className="lt-cloud-toast-text">
             {transfer.direction === "preparing"
@@ -119,17 +120,31 @@ export function CloudToast() {
                   })}
           </span>
           {transfer.direction === "preparing" ? null : (
-            <span className="lt-cloud-toast-percent">
-              {transfer.percent}%
-              {transfer.bytesPerSecond ? (
-                <span className="lt-cloud-toast-rate">
-                  {formatRate(transfer.bytesPerSecond)}
-                  {transfer.etaSeconds !== null
-                    ? ` · ${formatEta(transfer.etaSeconds)}`
-                    : ""}
-                </span>
-              ) : null}
-            </span>
+            <>
+              <span className="lt-cloud-toast-percent">
+                {transfer.percent}%
+                {transfer.bytesPerSecond ? (
+                  <span className="lt-cloud-toast-rate">
+                    {formatRate(transfer.bytesPerSecond)}
+                    {transfer.etaSeconds !== null
+                      ? ` · ${formatEta(transfer.etaSeconds)}`
+                      : ""}
+                  </span>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                className="lt-link-button lt-cloud-cancel"
+                disabled={cancelling}
+                onClick={() => void cancelTransfer()}
+              >
+                {cancelling
+                  ? t("transport.cloud.cancelling", {
+                      defaultValue: "Cancelando…",
+                    })
+                  : t("common.cancel", { defaultValue: "Cancelar" })}
+              </button>
+            </>
           )}
         </div>
       ) : null}

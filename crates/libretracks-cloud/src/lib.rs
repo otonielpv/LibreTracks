@@ -140,6 +140,8 @@ impl RemoteFolder {
 /// desktop app forwards these to a Tauri event, the same shape the ambient-pad
 /// downloader already uses.
 pub type ProgressFn = dyn Fn(u64, u64) + Send + Sync;
+/// Returns true once the caller has asked the active transfer to stop.
+pub type CancelFn = dyn Fn() -> bool + Send + Sync;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CloudError {
@@ -205,6 +207,7 @@ pub trait CloudStorage: Send + Sync {
         local_path: &Path,
         remote_name: &str,
         progress: &ProgressFn,
+        cancelled: &CancelFn,
     ) -> Result<RemoteFile, CloudError>;
 
     async fn download(
@@ -212,6 +215,7 @@ pub trait CloudStorage: Send + Sync {
         file_id: &str,
         dest_path: &Path,
         progress: &ProgressFn,
+        cancelled: &CancelFn,
     ) -> Result<(), CloudError>;
 
     async fn delete(&self, file_id: &str) -> Result<(), CloudError>;

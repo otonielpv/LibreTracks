@@ -1926,6 +1926,11 @@ export async function downloadFromCloud(
   return invokeCommand<string>("cloud_download", { fileId, fileName, destDir });
 }
 
+/** Abort the active upload/download. Safe when it has just completed. */
+export async function cancelCloudTransfer(): Promise<void> {
+  return invokeCommand<void>("cloud_cancel_transfer");
+}
+
 export async function deleteCloudFile(fileId: string): Promise<void> {
   return invokeCommand<void>("cloud_delete", { fileId });
 }

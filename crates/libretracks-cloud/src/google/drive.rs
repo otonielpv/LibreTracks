@@ -18,29 +18,89 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter};
+use tokio_util::io::ReaderStream;
 
-use crate::{CloudError, CloudStorage, ProgressFn, Quota, RemoteFile, RemoteFolder};
+use crate::{CancelFn, CloudError, CloudStorage, ProgressFn, Quota, RemoteFile, RemoteFolder};
 
 const FILES_ENDPOINT: &str = "https://www.googleapis.com/drive/v3/files";
 const UPLOAD_ENDPOINT: &str = "https://www.googleapis.com/upload/drive/v3/files";
 const ABOUT_ENDPOINT: &str = "https://www.googleapis.com/drive/v3/about";
 const FOLDER_MIME: &str = "application/vnd.google-apps.folder";
 
-/// Bytes per resumable chunk.
+/// Tuning for resumable upload chunks.
 ///
 /// Drive requires a multiple of 256 KiB for every chunk but the last, and every
 /// chunk costs a full round trip *plus* server-side commit work before the next
 /// may start — that cost is per chunk, not per byte, so small chunks make a
-/// large upload dramatically slower than the connection warrants. 16 MiB keeps
-/// a 115 MB package to 8 commits instead of 15, and a dropped connection still
-/// only redoes seconds of transfer.
-const CHUNK_SIZE: u64 = 16 * 1024 * 1024;
+/// large upload dramatically slower than the connection warrants.
+///
+/// A fixed size is wrong at both ends: wastefully chatty on fibre and expensive
+/// to retry on a weak mobile link. Start conservatively and tune each following
+/// request toward a target duration from the effective rate just observed. On
+/// desktop that target is deliberately long: Drive documents a single content
+/// request as its fastest resumable-upload path. The initial request remains
+/// small enough to calibrate progress before committing to a large retry unit.
+/// The body is streamed from disk, so a large chunk does not reserve that much
+/// RAM.
+const CHUNK_ALIGNMENT: u64 = 256 * 1024;
+const MIN_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
+const INITIAL_CHUNK_SIZE: u64 = 16 * 1024 * 1024;
+/// ReaderStream defaults to 4 KiB. For a multi-gigabyte file that means
+/// hundreds of thousands of async-file/pool round trips before the bytes even
+/// reach TLS. One MiB keeps memory bounded while making disk feeding negligible
+/// next to the network transfer.
+const UPLOAD_READ_BUFFER_SIZE: usize = 1024 * 1024;
+/// Avoid flooding the webview while still making the bar look continuous.
+const PROGRESS_INTERVAL_MS: u64 = 100;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const MAX_CHUNK_SIZE: u64 = 512 * 1024 * 1024;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+const MAX_CHUNK_SIZE: u64 = 32 * 1024 * 1024;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const TARGET_CHUNK_DURATION: Duration = Duration::from_secs(30);
+#[cfg(any(target_os = "android", target_os = "ios"))]
+const TARGET_CHUNK_DURATION: Duration = Duration::from_secs(4);
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const MAX_CHUNK_GROWTH: u64 = 32;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+const MAX_CHUNK_GROWTH: u64 = 4;
+
+/// Pick the next request size without abrupt swings from one noisy sample.
+///
+/// Elapsed time deliberately includes Drive's acknowledgement/commit latency:
+/// that overhead is precisely what larger chunks should amortise. Growth and
+/// shrinkage are bounded per observation, then averaged with the current size.
+fn next_chunk_size(current: u64, transferred: u64, elapsed: Duration) -> u64 {
+    if transferred == 0 || elapsed.is_zero() {
+        return current;
+    }
+    let bytes_per_second = transferred as f64 / elapsed.as_secs_f64();
+    let measured_target =
+        (bytes_per_second * TARGET_CHUNK_DURATION.as_secs_f64()).round() as u64;
+    let gradual_target =
+        measured_target.clamp(current / 2, current.saturating_mul(MAX_CHUNK_GROWTH));
+    let smoothed = current.saturating_add(gradual_target) / 2;
+    let aligned = (smoothed / CHUNK_ALIGNMENT) * CHUNK_ALIGNMENT;
+    aligned.clamp(MIN_CHUNK_SIZE, MAX_CHUNK_SIZE)
+}
+
+/// Bytes that may be shown inside an unacknowledged request.
+///
+/// Hyper can consume a large part of the file into its own buffers much faster
+/// than the socket sends it. Never let that buffered count outrun the effective
+/// rate Drive confirmed for the preceding request.
+fn visible_streamed_bytes(consumed: u64, bytes_per_second: f64, elapsed: Duration) -> u64 {
+    let rate_limited = (bytes_per_second * elapsed.as_secs_f64()) as u64;
+    consumed.min(rate_limited)
+}
 
 /// Folder ids resolved this run, so a folder is looked up at most once.
 ///
@@ -288,7 +348,11 @@ impl CloudStorage for DriveClient {
         local_path: &Path,
         remote_name: &str,
         progress: &ProgressFn,
+        cancelled: &CancelFn,
     ) -> Result<RemoteFile, CloudError> {
+        if cancelled() {
+            return Err(CloudError::Cancelled);
+        }
         let total = tokio::fs::metadata(local_path).await?.len();
 
         // Ask before spending an hour uploading. Drive counts Gmail and Photos
@@ -305,28 +369,76 @@ impl CloudStorage for DriveClient {
         let folder_id = self.folder_id(folder).await?;
         let session_uri = self.begin_upload(&folder_id, remote_name, total).await?;
 
-        let mut file = tokio::fs::File::open(local_path).await?;
         let mut offset: u64 = 0;
+        let mut chunk_size = INITIAL_CHUNK_SIZE;
+        let mut confirmed_bytes_per_second: Option<f64> = None;
         progress(0, total);
 
         loop {
-            let end = (offset + CHUNK_SIZE).min(total);
-            let len = (end - offset) as usize;
-            let mut buf = vec![0u8; len];
+            if cancelled() {
+                return Err(CloudError::Cancelled);
+            }
+            let end = (offset + chunk_size).min(total);
+            let len = end - offset;
+            // Reopen per request so the request body owns its reader and can be
+            // streamed by reqwest without first allocating the whole chunk.
+            // Reopening is negligible next to a network round trip and also
+            // makes a server-directed rewind after a 308 straightforward.
+            let mut file = tokio::fs::File::open(local_path).await?;
             file.seek(std::io::SeekFrom::Start(offset)).await?;
-            tokio::io::AsyncReadExt::read_exact(&mut file, &mut buf).await?;
 
-            let response = self
+            let request_started = Instant::now();
+            let streamed = Arc::new(AtomicU64::new(0));
+            let stream_count = Arc::clone(&streamed);
+            let body_stream = ReaderStream::with_capacity(file.take(len), UPLOAD_READ_BUFFER_SIZE)
+                .map(move |result| {
+                    if let Ok(bytes) = &result {
+                        stream_count.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+                    }
+                    result
+                });
+            let body = reqwest::Body::wrap_stream(body_stream);
+
+            let request = self
                 .http
                 .put(&session_uri)
+                // A streamed reqwest body has no intrinsic size hint. Drive's
+                // resumable protocol requires this header for every chunk.
+                .header(reqwest::header::CONTENT_LENGTH, len)
                 .header(
                     reqwest::header::CONTENT_RANGE,
                     content_range(offset, end, total),
                 )
-                .body(buf)
-                .send()
-                .await
-                .map_err(net)?;
+                .body(body)
+                .send();
+            tokio::pin!(request);
+            let mut progress_tick =
+                tokio::time::interval(Duration::from_millis(PROGRESS_INTERVAL_MS));
+            progress_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut last_visible = offset;
+            let response = loop {
+                tokio::select! {
+                    result = &mut request => break result.map_err(net)?,
+                    _ = progress_tick.tick() => {
+                        if cancelled() {
+                            return Err(CloudError::Cancelled);
+                        }
+                        let Some(confirmed_rate) = confirmed_bytes_per_second else {
+                            continue;
+                        };
+                        let consumed = streamed.load(Ordering::Relaxed).min(len);
+                        let visible = offset + visible_streamed_bytes(
+                            consumed,
+                            confirmed_rate,
+                            request_started.elapsed(),
+                        );
+                        if visible > last_visible {
+                            last_visible = visible;
+                            progress(visible.min(total), total);
+                        }
+                    }
+                }
+            };
 
             let status = response.status().as_u16();
             match status {
@@ -335,13 +447,29 @@ impl CloudStorage for DriveClient {
                 // our own counter here is how a resumed upload silently
                 // corrupts a file.
                 308 => {
-                    offset = resume_offset(
+                    let next_offset = resume_offset(
                         response
                             .headers()
                             .get(reqwest::header::RANGE)
                             .and_then(|v| v.to_str().ok()),
                     )
                     .unwrap_or(end);
+                    let transferred = next_offset.saturating_sub(offset);
+                    let request_elapsed = request_started.elapsed();
+                    if transferred > 0 && !request_elapsed.is_zero() {
+                        let observed = transferred as f64 / request_elapsed.as_secs_f64();
+                        confirmed_bytes_per_second = Some(
+                            confirmed_bytes_per_second
+                                .map(|previous| previous * 0.7 + observed * 0.3)
+                                .unwrap_or(observed),
+                        );
+                    }
+                    chunk_size = next_chunk_size(
+                        chunk_size,
+                        transferred,
+                        request_elapsed,
+                    );
+                    offset = next_offset;
                     progress(offset, total);
                 }
                 200 | 201 => {
@@ -372,15 +500,29 @@ impl CloudStorage for DriveClient {
         file_id: &str,
         dest_path: &Path,
         progress: &ProgressFn,
+        cancelled: &CancelFn,
     ) -> Result<(), CloudError> {
-        let response = self
+        if cancelled() {
+            return Err(CloudError::Cancelled);
+        }
+        let request = self
             .http
             .get(format!("{FILES_ENDPOINT}/{file_id}"))
             .header(reqwest::header::AUTHORIZATION, self.auth().await?)
             .query(&[("alt", "media")])
-            .send()
-            .await
-            .map_err(net)?;
+            .send();
+        tokio::pin!(request);
+        let mut cancel_tick = tokio::time::interval(Duration::from_millis(PROGRESS_INTERVAL_MS));
+        let response = loop {
+            tokio::select! {
+                result = &mut request => break result.map_err(net)?,
+                _ = cancel_tick.tick() => {
+                    if cancelled() {
+                        return Err(CloudError::Cancelled);
+                    }
+                }
+            }
+        };
 
         if !response.status().is_success() {
             return Err(provider_error(response).await);
@@ -404,7 +546,19 @@ impl CloudStorage for DriveClient {
         let mut last_reported_percent = u64::MAX;
         let mut stream = response.bytes_stream();
 
-        while let Some(chunk) = stream.next().await {
+        loop {
+            let chunk = tokio::select! {
+                next = stream.next() => next,
+                _ = tokio::time::sleep(Duration::from_millis(PROGRESS_INTERVAL_MS)) => {
+                    if cancelled() {
+                        drop(out);
+                        let _ = tokio::fs::remove_file(&staging).await;
+                        return Err(CloudError::Cancelled);
+                    }
+                    continue;
+                }
+            };
+            let Some(chunk) = chunk else { break };
             let chunk = chunk.map_err(net)?;
             out.write_all(&chunk).await?;
             done += chunk.len() as u64;
@@ -423,6 +577,11 @@ impl CloudStorage for DriveClient {
                 last_reported_percent = percent;
                 progress(done, denominator);
             }
+        }
+        if cancelled() {
+            drop(out);
+            let _ = tokio::fs::remove_file(&staging).await;
+            return Err(CloudError::Cancelled);
         }
         // shutdown() flushes the buffer AND the file underneath. A bare
         // flush() would leave the last partial buffer unwritten and rename a
@@ -571,10 +730,65 @@ mod tests {
     use super::*;
 
     #[test]
-    fn chunk_size_is_a_multiple_of_256_kib() {
+    fn chunk_sizes_are_multiples_of_256_kib() {
         // Drive rejects any non-final chunk that is not, and the rejection is a
         // generic 400 that says nothing about why.
-        assert_eq!(CHUNK_SIZE % (256 * 1024), 0);
+        assert_eq!(MIN_CHUNK_SIZE % CHUNK_ALIGNMENT, 0);
+        assert_eq!(INITIAL_CHUNK_SIZE % CHUNK_ALIGNMENT, 0);
+        assert_eq!(MAX_CHUNK_SIZE % CHUNK_ALIGNMENT, 0);
+    }
+
+    #[test]
+    fn chunk_tuning_grows_on_a_fast_link_and_shrinks_on_a_slow_one() {
+        let fast = next_chunk_size(
+            INITIAL_CHUNK_SIZE,
+            INITIAL_CHUNK_SIZE,
+            Duration::from_millis(500),
+        );
+        let slow = next_chunk_size(
+            INITIAL_CHUNK_SIZE,
+            INITIAL_CHUNK_SIZE,
+            Duration::from_secs(64),
+        );
+        assert!(fast > INITIAL_CHUNK_SIZE);
+        assert!(slow < INITIAL_CHUNK_SIZE);
+        assert_eq!(fast % CHUNK_ALIGNMENT, 0);
+        assert_eq!(slow % CHUNK_ALIGNMENT, 0);
+    }
+
+    #[test]
+    fn chunk_tuning_obeys_platform_bounds() {
+        assert_eq!(
+            next_chunk_size(
+                MAX_CHUNK_SIZE,
+                MAX_CHUNK_SIZE,
+                Duration::from_millis(1)
+            ),
+            MAX_CHUNK_SIZE
+        );
+        assert_eq!(
+            next_chunk_size(
+                MIN_CHUNK_SIZE,
+                MIN_CHUNK_SIZE,
+                Duration::from_secs(3_600)
+            ),
+            MIN_CHUNK_SIZE
+        );
+    }
+
+    #[test]
+    fn streamed_progress_cannot_run_ahead_of_confirmed_rate() {
+        let buffered = 70 * 1024 * 1024;
+        let visible = visible_streamed_bytes(
+            buffered,
+            10.0 * 1024.0 * 1024.0,
+            Duration::from_secs(2),
+        );
+        assert_eq!(visible, 20 * 1024 * 1024);
+        assert_eq!(
+            visible_streamed_bytes(5 * 1024 * 1024, 10.0 * 1024.0 * 1024.0, Duration::from_secs(2)),
+            5 * 1024 * 1024
+        );
     }
 
     #[test]

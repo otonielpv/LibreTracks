@@ -13,6 +13,8 @@
 //! no conflicts to resolve.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -25,6 +27,50 @@ use libretracks_cloud::token::TokenManager;
 use libretracks_cloud::{CloudError, CloudStorage, RemoteFolder};
 
 const TRANSFER_PROGRESS_EVENT: &str = "cloud:transfer-progress";
+
+/// Exactly one foreground cloud transfer is allowed. The command that owns the
+/// token drops it on every success/error path; the cancel command only flips
+/// the token and never has to own or abort another async task directly.
+static ACTIVE_TRANSFER: OnceLock<Mutex<Option<Arc<AtomicBool>>>> = OnceLock::new();
+
+fn active_transfer() -> &'static Mutex<Option<Arc<AtomicBool>>> {
+    ACTIVE_TRANSFER.get_or_init(|| Mutex::new(None))
+}
+
+struct TransferGuard {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl TransferGuard {
+    fn begin() -> Result<Self, String> {
+        let mut active = active_transfer()
+            .lock()
+            .map_err(|_| "cloud transfer state is unavailable".to_string())?;
+        if active.is_some() {
+            return Err("another cloud transfer is already running".to_string());
+        }
+        let cancelled = Arc::new(AtomicBool::new(false));
+        *active = Some(Arc::clone(&cancelled));
+        Ok(Self { cancelled })
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+}
+
+impl Drop for TransferGuard {
+    fn drop(&mut self) {
+        if let Ok(mut active) = active_transfer().lock() {
+            if active
+                .as_ref()
+                .is_some_and(|token| Arc::ptr_eq(token, &self.cancelled))
+            {
+                *active = None;
+            }
+        }
+    }
+}
 
 /// How long a sign-in may sit waiting for the browser.
 ///
@@ -274,11 +320,12 @@ pub async fn cloud_upload(app: AppHandle, local_path: String) -> Result<CloudFil
         .ok_or_else(|| "the file has no usable name".to_string())?
         .to_string();
 
+    let transfer = TransferGuard::begin()?;
     let handle = app.clone();
     let uploaded = drive()?
         .upload(folder, &path, &name, &move |done, total| {
             emit_progress(&handle, done, total)
-        })
+        }, &move || transfer.is_cancelled())
         .await
         .map_err(describe)?;
 
@@ -299,14 +346,30 @@ pub async fn cloud_download(
     dest_dir: String,
 ) -> Result<String, String> {
     let dest = PathBuf::from(dest_dir).join(&file_name);
+    let transfer = TransferGuard::begin()?;
     let handle = app.clone();
     drive()?
         .download(&file_id, &dest, &move |done, total| {
             emit_progress(&handle, done, total)
-        })
+        }, &move || transfer.is_cancelled())
         .await
         .map_err(describe)?;
     Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Ask the active upload/download to abort. It is intentionally idempotent so
+/// a double-click or a completion racing the click is harmless.
+/// `async` keeps even this tiny mutex acquisition off the webview/main thread,
+/// matching the invariant enforced for every non-dialog command in this app.
+#[tauri::command(async)]
+pub fn cloud_cancel_transfer() -> Result<(), String> {
+    let active = active_transfer()
+        .lock()
+        .map_err(|_| "cloud transfer state is unavailable".to_string())?;
+    if let Some(cancelled) = active.as_ref() {
+        cancelled.store(true, Ordering::Release);
+    }
+    Ok(())
 }
 
 #[tauri::command]
