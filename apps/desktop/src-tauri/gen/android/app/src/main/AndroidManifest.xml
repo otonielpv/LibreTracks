@@ -36,6 +36,24 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
+            <intent-filter >
+                <action android:name="android.intent.action.VIEW" />
+                <!-- ChromeOS ARC++ uses a different action for deep links -->
+                <action android:name="org.chromium.arc.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.googleusercontent.apps.809304051758-k6cr7mg3eqf1dentv3ggffuvcfadt9pf" />
+                <data android:scheme="com.googleusercontent.apps.809304051758-o6bh7njdsj1d0596u1n0skpqasn4pr8q" />
+                <data android:scheme="com.googleusercontent.apps.809304051758-ekp6mq7miacmd1qtjej20tqv2grhs68d" />
+                
+                
+                
+                
+                
+            </intent-filter>
+            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
         </activity>
 
         <service

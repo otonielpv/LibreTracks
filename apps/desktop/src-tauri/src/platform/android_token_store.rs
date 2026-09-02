@@ -12,19 +12,20 @@
 
 #![cfg(target_os = "android")]
 
-use jni::objects::{JObject, JString, JValue};
+use jni::objects::{JClass, JObject, JString, JValue};
 use jni::JavaVM;
 
 use libretracks_cloud::token::{StoredToken, TokenStore};
 use libretracks_cloud::CloudError;
 
-/// Fully-qualified name of the Kotlin helper, in JNI form.
+/// Fully-qualified name of the Kotlin helper, in the dotted form `loadClass`
+/// wants.
 ///
 /// This is the Kotlin *namespace* (`com.libretracks.desktop`), NOT the Play
 /// applicationId (`com.libretracks.app`). They differ on purpose, and using the
 /// wrong one here fails at run time with a class-not-found that says nothing
 /// about which of the two was meant.
-const CLASS: &str = "com/libretracks/desktop/SecureTokenStore";
+const CLASS: &str = "com.libretracks.desktop.SecureTokenStore";
 
 pub struct AndroidTokenStore {
     /// Entry name, so a second provider later does not collide with Google's.
@@ -43,12 +44,22 @@ impl AndroidTokenStore {
     }
 }
 
-/// Run `body` with an attached JNI environment and the application Context.
+/// Run `body` with an attached JNI environment, the application Context, and
+/// the Kotlin helper class.
 ///
 /// Every call re-attaches rather than caching an env: a `JNIEnv` is bound to the
 /// thread that made it, and these run from whichever async task needed a token.
+///
+/// # Why the class is looked up through the Context, not by name
+///
+/// A thread attached from native code does NOT inherit the application class
+/// loader — it gets the system one, whose `DexPathList` holds nothing of ours.
+/// `env.call_static_method("com/libretracks/desktop/SecureTokenStore", ...)`
+/// therefore failed at run time with `ClassNotFoundException` even though the
+/// class was compiled and dexed into the APK. Asking the Context for its own
+/// loader and calling `loadClass` finds it from any thread.
 fn with_env<T>(
-    body: impl FnOnce(&mut jni::JNIEnv, &JObject) -> Result<T, jni::errors::Error>,
+    body: impl FnOnce(&mut jni::JNIEnv, &JObject, &JClass) -> Result<T, jni::errors::Error>,
 ) -> Result<T, CloudError> {
     let ctx = ndk_context::android_context();
     let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }
@@ -58,7 +69,23 @@ fn with_env<T>(
         .map_err(|e| CloudError::Network(format!("attach_current_thread: {e}")))?;
 
     let context = unsafe { JObject::from_raw(ctx.context().cast()) };
-    let result = body(&mut env, &context);
+
+    let result = (|| {
+        let loader = env
+            .call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?
+            .l()?;
+        let class_name = env.new_string(CLASS)?;
+        let class = env
+            .call_method(
+                &loader,
+                "loadClass",
+                "(Ljava/lang/String;)Ljava/lang/Class;",
+                &[JValue::Object(&class_name)],
+            )?
+            .l()?;
+        let class = JClass::from(class);
+        body(&mut env, &context, &class)
+    })();
 
     // A pending Java exception poisons every later JNI call on this thread, so
     // it has to be cleared whatever happened — otherwise one failed read makes
@@ -73,11 +100,11 @@ fn with_env<T>(
 
 impl TokenStore for AndroidTokenStore {
     fn load(&self) -> Result<Option<StoredToken>, CloudError> {
-        let raw: Option<String> = with_env(|env, context| {
+        let raw: Option<String> = with_env(|env, context, class| {
             let name = env.new_string(&self.name)?;
             let value = env
                 .call_static_method(
-                    CLASS,
+                    class,
                     "load",
                     "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
                     &[JValue::Object(context), JValue::Object(&name)],
@@ -101,11 +128,11 @@ impl TokenStore for AndroidTokenStore {
         let payload =
             serde_json::to_string(token).map_err(|e| CloudError::Network(e.to_string()))?;
 
-        with_env(|env, context| {
+        with_env(|env, context, class| {
             let name = env.new_string(&self.name)?;
             let value = env.new_string(&payload)?;
             env.call_static_method(
-                CLASS,
+                class,
                 "save",
                 "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V",
                 &[
@@ -119,10 +146,10 @@ impl TokenStore for AndroidTokenStore {
     }
 
     fn clear(&self) -> Result<(), CloudError> {
-        with_env(|env, context| {
+        with_env(|env, context, class| {
             let name = env.new_string(&self.name)?;
             env.call_static_method(
-                CLASS,
+                class,
                 "clear",
                 "(Landroid/content/Context;Ljava/lang/String;)V",
                 &[JValue::Object(context), JValue::Object(&name)],

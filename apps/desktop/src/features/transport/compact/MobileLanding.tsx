@@ -17,6 +17,7 @@ import {
   removeRecentSession,
   type RecentSessionEntry,
 } from "../recentSessions";
+import { CloudLandingButton } from "../cloud";
 import { confirmDialog } from "../../../shared/dialog/dialogService";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
@@ -289,6 +290,10 @@ export function MobileLanding({
                 })}
               </button>
             ) : null}
+            {/* Antes quedaba fuera porque el login de nube no existia en movil.
+                Ya existe (deep link), y aqui es donde mas falta hace: bajarte
+                una sesion del escritorio es lo primero que haces en el telefono. */}
+            <CloudLandingButton />
           </div>
         )}
 

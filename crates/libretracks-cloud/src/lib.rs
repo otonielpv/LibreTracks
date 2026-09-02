@@ -28,6 +28,7 @@ pub mod google;
 pub mod keychain;
 pub mod loopback;
 pub mod pkce;
+pub mod redirect;
 pub mod token;
 
 use std::path::Path;

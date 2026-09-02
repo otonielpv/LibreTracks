@@ -290,13 +290,94 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
         .map_err(describe)
 }
 
+/// Where a sign-in in progress is waiting for its redirect.
+///
+/// The deep-link handler is registered ONCE at start-up rather than per
+/// attempt: `on_open_url` has no way to unregister, so installing one each time
+/// someone pressed Connect would pile up handlers for the life of the process.
+/// A sign-in drops its sender here, the single handler finds it, and anything
+/// arriving with no sign-in in flight is discarded.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+static PENDING_REDIRECT: std::sync::OnceLock<
+    std::sync::Mutex<Option<tokio::sync::oneshot::Sender<String>>>,
+> = std::sync::OnceLock::new();
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn pending_redirect() -> &'static std::sync::Mutex<Option<tokio::sync::oneshot::Sender<String>>> {
+    PENDING_REDIRECT.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// Route OAuth redirects to whichever sign-in is waiting. Call once, at setup.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn register_deep_link_handler(app: &AppHandle) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+
+    app.deep_link().on_open_url(|event| {
+        let Some(url) = event.urls().first().map(|url| url.to_string()) else {
+            return;
+        };
+        // Taken, not cloned: a redirect is consumed once. A second link arriving
+        // with nothing waiting is dropped, which is what should happen to a
+        // stale one the system replays after the app was killed.
+        if let Some(sender) = pending_redirect().lock().ok().and_then(|mut slot| slot.take()) {
+            let _ = sender.send(url);
+        }
+    });
+}
+
 /// Mobile signs in through a deep link rather than a loopback socket, which
-/// Google deprecated for the Android and iOS client types. Not wired yet, so it
-/// says so instead of failing in a way that looks like a bug.
+/// Google deprecated for the Android and iOS client types.
+///
+/// The browser is the SYSTEM browser, opened through the opener plugin. Google
+/// rejects an embedded WebView outright with `disallowed_useragent`, so this is
+/// not a stylistic choice.
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
-pub async fn cloud_connect(_app: AppHandle) -> Result<(), String> {
-    Err("cloud sign-in is not available on mobile yet".to_string())
+pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    use libretracks_cloud::google::oauth::AuthSession;
+    use libretracks_cloud::redirect::parse_redirect_str;
+    use libretracks_cloud::token::exchange_code;
+
+    // Port is ignored on mobile: the redirect is a private URI scheme, not a
+    // socket. Passing 0 keeps one signature for every platform.
+    let session = AuthSession::begin(0).map_err(|e| e.to_string())?;
+
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    {
+        let mut slot = pending_redirect()
+            .lock()
+            .map_err(|_| "the deep link slot is poisoned".to_string())?;
+        // Replaces any abandoned attempt: the old receiver is gone, so its
+        // sender would fail anyway, and leaving it would make THIS sign-in the
+        // one that never receives anything.
+        *slot = Some(sender);
+    }
+
+    app.opener()
+        .open_url(session.authorization_url(), None::<&str>)
+        .map_err(|e| format!("could not open the browser: {e}"))?;
+
+    let raw = tokio::time::timeout(SIGN_IN_TIMEOUT, receiver)
+        .await
+        .map_err(|_| "the sign-in timed out".to_string())?
+        .map_err(|_| "the sign-in was interrupted".to_string())?;
+
+    let params = parse_redirect_str(&raw).map_err(describe)?;
+    // Never skip. Only the flow that started this sign-in knows the state.
+    session
+        .verify_state(&params.state)
+        .map_err(|e| e.to_string())?;
+
+    let token = exchange_code(&session, &params.code)
+        .await
+        .map_err(describe)?;
+
+    TokenManager::new(token_store(&app)?)
+        .map_err(describe)?
+        .adopt(&token)
+        .map_err(describe)
 }
 
 #[tauri::command]

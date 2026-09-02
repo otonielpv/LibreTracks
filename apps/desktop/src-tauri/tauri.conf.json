@@ -24,7 +24,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "deb", "rpm", "appimage", "app", "dmg"],
+    "targets": [
+      "nsis",
+      "deb",
+      "rpm",
+      "appimage",
+      "app",
+      "dmg"
+    ],
     "resources": {
       "../../remote/dist": "remote-dist",
       "../../../vendor/bin/native/*": ".",
@@ -39,7 +46,9 @@
     },
     "fileAssociations": [
       {
-        "ext": ["ltsession"],
+        "ext": [
+          "ltsession"
+        ],
         "name": "LibreTracks.Session",
         "description": "Proyecto/sesión de LibreTracks",
         "mimeType": "application/x-libretracks-session",
@@ -47,11 +56,16 @@
         "rank": "Owner",
         "exportedType": {
           "identifier": "com.libretracks.session",
-          "conformsTo": ["public.data", "public.content"]
+          "conformsTo": [
+            "public.data",
+            "public.content"
+          ]
         }
       },
       {
-        "ext": ["ltpkg"],
+        "ext": [
+          "ltpkg"
+        ],
         "name": "LibreTracks.SongPackage",
         "description": "Paquete de canción de LibreTracks",
         "mimeType": "application/x-libretracks-package",
@@ -59,11 +73,16 @@
         "rank": "Owner",
         "exportedType": {
           "identifier": "com.libretracks.songpackage",
-          "conformsTo": ["public.data", "public.archive"]
+          "conformsTo": [
+            "public.data",
+            "public.archive"
+          ]
         }
       },
       {
-        "ext": ["ltset"],
+        "ext": [
+          "ltset"
+        ],
         "name": "LibreTracks.Set",
         "description": "Sesión completa de LibreTracks",
         "mimeType": "application/x-libretracks-set",
@@ -71,11 +90,16 @@
         "rank": "Owner",
         "exportedType": {
           "identifier": "com.libretracks.set",
-          "conformsTo": ["public.data", "public.archive"]
+          "conformsTo": [
+            "public.data",
+            "public.archive"
+          ]
         }
       },
       {
-        "ext": ["lttemplate"],
+        "ext": [
+          "lttemplate"
+        ],
         "name": "LibreTracks.Template",
         "description": "Plantilla de sesión de LibreTracks",
         "mimeType": "application/x-libretracks-template",
@@ -83,7 +107,10 @@
         "rank": "Owner",
         "exportedType": {
           "identifier": "com.libretracks.template",
-          "conformsTo": ["public.data", "public.content"]
+          "conformsTo": [
+            "public.data",
+            "public.content"
+          ]
         }
       }
     ],
@@ -141,5 +168,19 @@
       "icons/icon.ico",
       "icons/icon.png"
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "com.googleusercontent.apps.809304051758-k6cr7mg3eqf1dentv3ggffuvcfadt9pf",
+            "com.googleusercontent.apps.809304051758-o6bh7njdsj1d0596u1n0skpqasn4pr8q",
+            "com.googleusercontent.apps.809304051758-ekp6mq7miacmd1qtjej20tqv2grhs68d"
+          ],
+          "appLink": false
+        }
+      ]
+    }
   }
 }

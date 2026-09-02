@@ -50,6 +50,28 @@ fn resolve_engine_log_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> 
         .ok()
 }
 
+/// El plugin de deep link, o un marcador inerte fuera de movil.
+///
+/// En escritorio el redirect de OAuth vuelve por el socket de loopback y no hay
+/// esquema que registrar. Devolver aqui otro plugin ya registrado (opener, por
+/// ejemplo) haria que Tauri lo rechazara por nombre duplicado, asi que el
+/// sustituto lleva un nombre propio y no hace nada.
+///
+/// Devuelve `impl Plugin` y no el tipo concreto: el plugin de deep link lleva
+/// su propio tipo de configuracion, cuyo modulo es privado en el crate y no se
+/// puede nombrar desde aqui.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn deep_link_plugin<R: tauri::Runtime>() -> impl tauri::plugin::Plugin<R> {
+    tauri_plugin_deep_link::init()
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn deep_link_plugin<R: tauri::Runtime>() -> impl tauri::plugin::Plugin<R> {
+    // `()` explicito: sin plugin real que lo fije, el tipo de configuracion
+    // del Builder no se puede inferir.
+    tauri::plugin::Builder::<R, ()>::new("libretracks-deep-link-unused").build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Install the error-log panic hook before anything else so panics during
@@ -73,6 +95,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(deep_link_plugin())
         .manage(DesktopState::default());
 
     #[cfg(target_os = "ios")]
@@ -82,6 +105,12 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            // Una sola vez, no por intento de login: on_open_url no se puede
+            // desregistrar, asi que instalarlo en cada pulsacion de Conectar
+            // acumularia manejadores durante toda la vida del proceso.
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            commands::cloud::register_deep_link_handler(app.handle());
+
             // Resolve the error-log directory now that app_data_dir is
             // available; degrade gracefully (no logging) if it can't resolve
             // rather than aborting startup.

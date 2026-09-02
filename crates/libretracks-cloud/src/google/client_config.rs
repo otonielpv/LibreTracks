@@ -98,6 +98,26 @@ pub const CLIENT_SECRET: Option<&str> = {
     }
 };
 
+/// # Android necesita un interruptor en la consola de Google
+///
+/// Google desactiva por defecto los esquemas URI propios en los clientes de
+/// Android nuevos, por riesgo de suplantacion: cualquier app del dispositivo
+/// puede declarar el mismo esquema. Sin activarlo, el consentimiento devuelve
+/// `400 invalid_request` antes incluso de mostrarse.
+///
+/// Hay que activar **"Habilitar esquema URI personalizado"** en Configuracion
+/// avanzada de CADA cliente de Android — el de depuracion y el de Play. Si solo
+/// se hace en el de depuracion, funciona en la maquina del desarrollador y falla
+/// para todos los usuarios, y no se descubre hasta publicar.
+///
+/// La alternativa oficial es el SDK de Google Identity Services para Android
+/// (no los App Links, que no valen para esto). Se descarto a proposito el
+/// 2026-09-02: no cambia nada para el usuario, y partiria en dos el flujo de
+/// OAuth que hoy comparten escritorio, iOS y Android. Revisar si Google anuncia
+/// fecha de cierre del interruptor.
+///
+/// iOS no esta afectado: ahi el esquema propio sigue siendo lo correcto.
+
 /// How Google returns the authorization response to this build.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RedirectUri {

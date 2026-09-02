@@ -7274,7 +7274,7 @@ export function TransportPanelContent() {
                     }
                     onOpenSessionFromPicker={handleOpenProjectClick}
                     onOpenSessionFromPath={handleOpenProjectFromPath}
-                    onImportSession={() => handleImportSessionClick()}
+                    onImportSession={() => void importSessionWithChoice(handleImportSessionClick)}
                   />
                 ) : (
                 <div className="lt-empty-state">

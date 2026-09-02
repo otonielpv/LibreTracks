@@ -59,6 +59,12 @@ rfd = "0.15"
 # iOS uses the native C++ engine as a static arm64 library. The target-specific
 # plugin below supplies the document picker; the engine dependency itself is
 # declared once above so Cargo cannot accidentally unify in the silent stub.
+# Deep link: en movil el redirect de OAuth no puede ir por loopback (Google lo
+# retiro para los tipos de cliente Android e iOS), asi que vuelve por un esquema
+# propio derivado del ID de cliente.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-deep-link = "2"
+
 [target.'cfg(target_os = "ios")'.dependencies]
 libretracks-ios-folder-picker = { path = "plugins/ios-folder-picker" }
 

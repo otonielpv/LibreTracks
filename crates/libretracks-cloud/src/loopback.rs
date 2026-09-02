@@ -26,14 +26,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use url::Url;
 
+use crate::redirect::{parse_redirect_url, RedirectParams};
 use crate::CloudError;
-
-/// What Google sent back on the redirect.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RedirectParams {
-    pub code: String,
-    pub state: String,
-}
 
 /// A one-shot listener for a single OAuth redirect.
 pub struct LoopbackListener {
@@ -134,25 +128,7 @@ pub(crate) fn parse_redirect_request(request_line: &str) -> Result<RedirectParam
         .and_then(|base| base.join(target))
         .map_err(|e| CloudError::Network(e.to_string()))?;
 
-    let mut code = None;
-    let mut state = None;
-    for (key, value) in url.query_pairs() {
-        match key.as_ref() {
-            "code" => code = Some(value.into_owned()),
-            "state" => state = Some(value.into_owned()),
-            // Google sends `error=access_denied` when the user declines. That
-            // is a normal outcome, not a failure to report as broken.
-            "error" => return Err(CloudError::Cancelled),
-            _ => {}
-        }
-    }
-
-    match (code, state) {
-        (Some(code), Some(state)) => Ok(RedirectParams { code, state }),
-        _ => Err(CloudError::Network(
-            "the redirect carried no authorization code".into(),
-        )),
-    }
+    parse_redirect_url(&url)
 }
 
 #[cfg(test)]
