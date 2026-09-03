@@ -37,6 +37,7 @@ add_executable(lt_engine_tests
     prearmed_jump_tests.cpp
     test_rt_guard.cpp
     test_rt_no_allocations.cpp
+    test_mixer_routing_step03.cpp
 )
 
 target_link_libraries(lt_engine_tests
@@ -55,6 +56,7 @@ target_include_directories(lt_engine_tests PRIVATE
 # silent at runtime.
 target_compile_definitions(lt_engine_tests PRIVATE
     LT_ENGINE_RT_GUARD=1
+    LT_ENGINE_TEST_HOOKS=1
     LT_VOICES_DIR="${CMAKE_SOURCE_DIR}/../../apps/desktop/src-tauri/resources/voices"
 )
 

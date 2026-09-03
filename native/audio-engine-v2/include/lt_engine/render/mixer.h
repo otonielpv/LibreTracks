@@ -17,6 +17,8 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace lt {
@@ -128,6 +130,16 @@ public:
     // Sentinel returned by take_pending_scheduled_jump() when no jump is pending.
     static constexpr Frame kNoJumpPending = -1;
 
+#if defined(LT_ENGINE_TEST_HOOKS)
+    // Test-only latch: exercise the render fallback used while rebuilding the
+    // control table. Never enabled in shipped engine targets.
+    void force_control_count_zero_for_test() noexcept;
+    static std::pair<int, int> route_channels_for_test(std::string_view route,
+                                                       int available_channels,
+                                                       const int* active_channels,
+                                                       int active_count) noexcept;
+#endif
+
 private:
     // std::atomic<shared_ptr> (C++20) instead of the free atomic_load/store
     // helpers: on MSVC the free helpers share a GLOBAL spinlock pool that
@@ -181,6 +193,8 @@ private:
         Id track_id;
         Id parent_track_id;
         int parent_control_index = -1;     // index into controls_[], -1 = no parent
+        int route_left_channel = 0;
+        int route_right_channel = -1;
         bool is_folder = false;
         std::atomic<float> gain{1.0f};
         std::atomic<float> pan{0.0f};
@@ -361,6 +375,10 @@ private:
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;
     void rebuild_control_slots(std::shared_ptr<const Session> session, bool preserve_realtime_state);
+    void recalculate_control_routing(const std::shared_ptr<const Session>& session,
+                                     const int* active_output_channels,
+                                     int active_output_channel_count,
+                                     int control_count) noexcept;
     std::shared_ptr<const Session> load_session() const noexcept;
     void store_session(std::shared_ptr<const Session> session) noexcept;
 };

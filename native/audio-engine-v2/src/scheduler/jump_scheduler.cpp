@@ -179,6 +179,9 @@ struct JumpScheduler::Impl {
     // Command thread writes here; audio thread drains.
     std::mutex              pending_mutex;
     std::queue<PendingOp>   pending_ops;
+    // Audio-thread-owned scratch queue: constructing a local std::queue here
+    // allocates on every callback when the previous pending batch is moved.
+    std::queue<PendingOp>   audio_pending_ops;
 
     // Audio thread owns this vector.
     mutable std::mutex live_mutex;
@@ -252,7 +255,7 @@ Result<void> JumpScheduler::replace(const Id& jump_id,
 // ── Audio thread ────────────────────────────────────────────────────────────
 
 void JumpScheduler::drain_pending() {
-    std::queue<PendingOp> local;
+    auto& local = impl_->audio_pending_ops;
     {
         std::lock_guard lock(impl_->pending_mutex);
         std::swap(local, impl_->pending_ops);

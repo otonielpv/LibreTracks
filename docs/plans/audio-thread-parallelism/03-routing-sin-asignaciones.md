@@ -36,6 +36,16 @@ se arregló entonces. Este es el hermano que quedó vivo.
 
 ## Cambio pedido
 
+### Alcance aclarado: drenaje del scheduler dentro del callback
+
+El guard del paso 02 demuestra que `Mixer::render` también llama a
+`JumpScheduler::drain_pending()`. Esa función construía una cola temporal con
+asignación en cada callback, por lo que C1 no puede llegar a cero aunque el
+routing quede precalculado. El paso incluye por tanto la reutilización de esa
+cola en `src/scheduler/jump_scheduler.cpp`: sigue siendo una higiene del mismo
+callback, no un cambio del reloj ni de la semántica de saltos. El orden y los
+resultados de los saltos deben permanecer idénticos.
+
 ### 1. Precalcular el routing en el slot de control
 
 `TrackControlState` (`mixer.h`, ~línea 180) ya guarda estado derivado por pista

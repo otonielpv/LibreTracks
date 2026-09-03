@@ -17,8 +17,15 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 
 namespace lt {
+
+#if defined(LT_ENGINE_TEST_HOOKS)
+void Mixer::force_control_count_zero_for_test() noexcept {
+    control_count_.store(0, std::memory_order_release);
+}
+#endif
 
 namespace {
 
@@ -85,16 +92,23 @@ float soft_limit_output(float x) noexcept {
     return std::copysign(std::min(shaped, ceiling), x);
 }
 
-std::string normalize_audio_route(std::string route) {
-    std::transform(route.begin(), route.end(), route.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    route.erase(route.begin(), std::find_if(route.begin(), route.end(), [](unsigned char c) {
-        return std::isspace(c) == 0;
-    }));
-    route.erase(std::find_if(route.rbegin(), route.rend(), [](unsigned char c) {
-        return std::isspace(c) == 0;
-    }).base(), route.end());
+std::string_view normalize_audio_route(std::string_view route) noexcept {
+    while (!route.empty() && std::isspace(static_cast<unsigned char>(route.front())) != 0)
+        route.remove_prefix(1);
+    while (!route.empty() && std::isspace(static_cast<unsigned char>(route.back())) != 0)
+        route.remove_suffix(1);
     return route;
+}
+
+bool route_equals(std::string_view value, std::string_view expected) noexcept {
+    if (value.size() != expected.size()) return false;
+    for (std::size_t i = 0; i < value.size(); ++i)
+        if (static_cast<char>(std::tolower(static_cast<unsigned char>(value[i]))) != expected[i]) return false;
+    return true;
+}
+
+bool route_starts_with(std::string_view value, std::string_view prefix) noexcept {
+    return value.size() >= prefix.size() && route_equals(value.substr(0, prefix.size()), prefix);
 }
 
 const Track* find_track_in_song(const Song& song, const Id& track_id) {
@@ -104,13 +118,13 @@ const Track* find_track_in_song(const Song& song, const Id& track_id) {
     return it == song.tracks.end() ? nullptr : &(*it);
 }
 
-std::string resolve_effective_audio_route(const Track& track, const Song& song) {
+std::string_view resolve_effective_audio_route(const Track& track, const Song& song) noexcept {
     const Track* current = &track;
     int depth = 0;
 
     while (current && depth < 8) {
-        const std::string route = normalize_audio_route(current->audio_to);
-        if (!route.empty() && route != "inherit")
+        const std::string_view route = normalize_audio_route(current->audio_to);
+        if (!route.empty() && !route_equals(route, "inherit"))
             return route;
 
         if (current->parent_track_id.empty())
@@ -127,71 +141,76 @@ std::string resolve_effective_audio_route(const Track& track, const Song& song) 
     return "master";
 }
 
-std::vector<int> route_channels(const std::string& audio_to,
-                                int available_channels,
-                                const int* active_output_channels,
-                                int active_output_channel_count) {
+void route_channels(std::string_view audio_to, int available_channels,
+                    const int* active_output_channels, int active_output_channel_count,
+                    int& left_channel, int& right_channel) noexcept {
     const int channels = std::max(1, available_channels);
-    std::string normalized = normalize_audio_route(audio_to);
-
-    auto stereo_pair = [channels](int start) {
-        int first = std::max(0, std::min(start, channels - 1));
-        int second = std::max(0, std::min(first + 1, channels - 1));
-        return std::vector<int>{ first, second };
+    const std::string_view normalized = normalize_audio_route(audio_to);
+    auto stereo_pair = [channels, &left_channel, &right_channel](int start) {
+        left_channel = std::max(0, std::min(start, channels - 1));
+        right_channel = std::max(0, std::min(left_channel + 1, channels - 1));
     };
 
-    if (normalized.empty() || normalized == "master" || normalized == "main")
+    if (normalized.empty() || route_equals(normalized, "master") || route_equals(normalized, "main"))
         return stereo_pair(0);
-    if (normalized == "monitor")
-        return channels >= 4 ? stereo_pair(2) : stereo_pair(0);
+    if (route_equals(normalized, "monitor"))
+        return stereo_pair(channels >= 4 ? 2 : 0);
 
-    bool ext_zero_based = normalized.rfind("ext:", 0) == 0;
-    for (const auto& prefix : { std::string("ext:"), std::string("hardware:"), std::string("out_"), std::string("out ") }) {
-        if (normalized.rfind(prefix, 0) == 0) {
-            normalized = normalized.substr(prefix.size());
+    bool ext_zero_based = route_starts_with(normalized, "ext:");
+    std::string_view numeric = normalized;
+    for (const auto prefix : { std::string_view("ext:"), std::string_view("hardware:"), std::string_view("out_"), std::string_view("out ") }) {
+        if (route_starts_with(normalized, prefix)) {
+            numeric = normalized.substr(prefix.size());
             break;
         }
     }
-    if (normalized.rfind("out", 0) == 0)
-        normalized = normalized.substr(3);
-
-    normalized.erase(std::remove_if(normalized.begin(), normalized.end(), [](unsigned char c) {
-        return std::isspace(c) != 0;
-    }), normalized.end());
-    std::vector<int> result;
+    if (route_starts_with(numeric, "out"))
+        numeric = numeric.substr(3);
+    int found = 0;
     auto add_channel = [&](int parsed) {
         const int physical = ext_zero_based ? parsed : parsed - 1;
         const int callback_slot = device_layout::callback_channel_for_physical(
             physical, active_output_channels, active_output_channel_count, channels);
-        if (callback_slot >= 0)
-            result.push_back(callback_slot);
+        if (callback_slot >= 0 && found < 2) {
+            if (found++ == 0) left_channel = callback_slot;
+            else right_channel = callback_slot;
+        }
     };
-
-    auto dash = normalized.find('-');
-    if (dash != std::string::npos) {
-        try {
-            int start = std::stoi(normalized.substr(0, dash));
-            int end = std::stoi(normalized.substr(dash + 1));
-            if (end >= start) {
-                for (int ch = start; ch <= end; ++ch)
-                    add_channel(ch);
-            }
-        } catch (...) {
-            result.clear();
+    auto parse = [](std::string_view value, int& out) noexcept {
+        if (value.empty()) return false;
+        int n = 0;
+        for (char c : value) {
+            if (c < '0' || c > '9') return false;
+            n = n * 10 + (c - '0');
         }
-    } else {
-        try {
-            add_channel(std::stoi(normalized));
-        } catch (...) {
-        }
+        out = n;
+        return true;
+    };
+    const auto dash = numeric.find('-');
+    int start = 0, end = 0;
+    if (dash != std::string_view::npos && parse(numeric.substr(0, dash), start)
+        && parse(numeric.substr(dash + 1), end) && end >= start) {
+        for (int ch = start; ch <= end && found < 2; ++ch) add_channel(ch);
+    } else if (parse(numeric, start)) {
+        add_channel(start);
     }
-
-    if (result.empty())
-        return stereo_pair(0);
-    return result;
+    if (found == 0) stereo_pair(0);
+    else if (found == 1) right_channel = -1;
 }
 
 } // namespace
+
+#if defined(LT_ENGINE_TEST_HOOKS)
+std::pair<int, int> Mixer::route_channels_for_test(std::string_view route,
+                                                    int available_channels,
+                                                    const int* active_channels,
+                                                    int active_count) noexcept {
+    int left = 0;
+    int right = -1;
+    route_channels(route, available_channels, active_channels, active_count, left, right);
+    return {left, right};
+}
+#endif
 
 Mixer::Mixer(const Session*       session,
              const SourceManager* sources,
@@ -221,15 +240,47 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
 
 void Mixer::set_active_output_channels(const std::vector<int>& channels) noexcept {
     const int count = std::min(static_cast<int>(channels.size()), kMaxOutputChannels);
-    // Publish the count as zero while replacing the slots. A concurrent audio
-    // block then safely uses identity routing for that one block rather than a
-    // half-old map; the release store publishes the complete new map.
+    const int old_control_count = std::clamp(control_count_.load(std::memory_order_acquire), 0,
+                                             static_cast<int>(controls_.size()));
+    std::array<int, kMaxOutputChannels> active{};
+    for (int slot = 0; slot < count; ++slot)
+        active[static_cast<std::size_t>(slot)] = channels[static_cast<std::size_t>(slot)];
+    control_count_.store(0, std::memory_order_release);
     active_output_channel_count_.store(0, std::memory_order_release);
     for (int slot = 0; slot < count; ++slot) {
         active_output_channels_[static_cast<std::size_t>(slot)].store(
             channels[static_cast<std::size_t>(slot)], std::memory_order_relaxed);
     }
+    recalculate_control_routing(load_session(), active.data(), count, old_control_count);
     active_output_channel_count_.store(count, std::memory_order_release);
+    control_count_.store(old_control_count, std::memory_order_release);
+}
+
+void Mixer::recalculate_control_routing(const std::shared_ptr<const Session>& session,
+                                        const int* active_output_channels,
+                                        int active_output_channel_count,
+                                        int control_count) noexcept {
+    const int active_count = std::clamp(active_output_channel_count, 0, kMaxOutputChannels);
+    const int bounded_control_count = std::clamp(control_count, 0, static_cast<int>(controls_.size()));
+    const int available = std::max(1, active_count);
+    if (!session) return;
+    for (const auto& song : session->songs) {
+        for (const auto& track : song.tracks) {
+            int index = -1;
+            for (int i = 0; i < bounded_control_count; ++i) {
+                if (controls_[static_cast<std::size_t>(i)]->initialized
+                    && controls_[static_cast<std::size_t>(i)]->track_id == track.id) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index < 0) continue;
+            auto& slot = *controls_[static_cast<std::size_t>(index)];
+            route_channels(resolve_effective_audio_route(track, song), available,
+                           active_output_channels, active_count, slot.route_left_channel,
+                           slot.route_right_channel);
+        }
+    }
 }
 
 std::shared_ptr<const Session> Mixer::load_session() const noexcept {
@@ -391,6 +442,13 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
     }
     needed = std::max<std::size_t>(needed, kInitialControlSlots);
 
+    // Capture one coherent active-output snapshot for the whole table. The
+    // table remains unpublished until every route has been derived from it.
+    std::array<int, kMaxOutputChannels> active_channels{};
+    const int active_count = std::clamp(active_output_channel_count_.load(std::memory_order_acquire), 0, kMaxOutputChannels);
+    for (int i = 0; i < active_count; ++i)
+        active_channels[static_cast<std::size_t>(i)] = active_output_channels_[static_cast<std::size_t>(i)].load(std::memory_order_relaxed);
+
     std::vector<std::unique_ptr<TrackControlState>> next;
     try {
         next.reserve(needed);
@@ -449,6 +507,8 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
                 slot.is_folder      = (track.kind == TrackKind::Folder);
                 // parent_control_index resolved in second pass below.
                 slot.parent_control_index = -1;
+                route_channels(resolve_effective_audio_route(track, song), std::max(1, active_count),
+                               active_channels.data(), active_count, slot.route_left_channel, slot.route_right_channel);
                 slot.gain.store(previous ? previous->gain.load(std::memory_order_relaxed) : track.gain,
                                 std::memory_order_relaxed);
                 slot.pan.store(previous ? previous->pan.load(std::memory_order_relaxed)
@@ -489,6 +549,8 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
         dst.parent_track_id = std::move(src.parent_track_id);
         dst.is_folder      = src.is_folder;
         dst.parent_control_index = src.parent_control_index;
+        dst.route_left_channel = src.route_left_channel;
+        dst.route_right_channel = src.route_right_channel;
         dst.gain.store(src.gain.load(std::memory_order_relaxed), std::memory_order_relaxed);
         dst.pan.store(src.pan.load(std::memory_order_relaxed), std::memory_order_relaxed);
         dst.mute.store(src.mute.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -645,11 +707,16 @@ void Mixer::render_timeline_span(float** output_channels,
             update_ancestor_folder_meters(
                 song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
-            auto route = route_channels(resolve_effective_audio_route(track, song), num_channels,
-                                        render_output_channels_.data(),
-                                        render_output_channel_count_);
-            const int left_channel = route.empty() ? 0 : route[0];
-            const int right_channel = route.size() > 1 ? route[1] : -1;
+            int left_channel = 0;
+            int right_channel = -1;
+            if (slot_idx >= 0 && active_output_channel_count_.load(std::memory_order_acquire) > 0) {
+                left_channel = control->route_left_channel;
+                right_channel = control->route_right_channel;
+            } else {
+                route_channels(resolve_effective_audio_route(track, song), num_channels,
+                               render_output_channels_.data(), render_output_channel_count_,
+                               left_channel, right_channel);
+            }
             const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
             const bool right_only_source = track_peak_r > 1.0e-7f && track_peak_l <= 1.0e-7f;
 
@@ -978,11 +1045,16 @@ void Mixer::render(float** output_channels,
                 update_ancestor_folder_meters(
                     song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
 
-                auto route = route_channels(resolve_effective_audio_route(track, song), num_channels,
-                                            render_output_channels_.data(),
-                                            render_output_channel_count_);
-                const int left_channel = route.empty() ? 0 : route[0];
-                const int right_channel = route.size() > 1 ? route[1] : -1;
+                int left_channel = 0;
+                int right_channel = -1;
+                if (slot_idx >= 0 && active_output_channel_count_.load(std::memory_order_acquire) > 0) {
+                    left_channel = control->route_left_channel;
+                    right_channel = control->route_right_channel;
+                } else {
+                    route_channels(resolve_effective_audio_route(track, song), num_channels,
+                                   render_output_channels_.data(), render_output_channel_count_,
+                                   left_channel, right_channel);
+                }
                 const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
                 const bool right_only_source = track_peak_r > 1.0e-7f && track_peak_l <= 1.0e-7f;
 

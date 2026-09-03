@@ -16,7 +16,7 @@ using namespace lt;
 namespace {
 
 constexpr int kBlockFrames = 512;
-constexpr int kTrackCount = 4;
+constexpr int kTrackCount = 8;
 constexpr int kBlocks = 100;
 
 Session four_track_session() {
@@ -28,6 +28,18 @@ Session four_track_session() {
     song.id = "song";
     song.start_frame = 0;
     song.end_frame = kBlockFrames * kBlocks;
+    song.regions.push_back(Region{"warped", "Warped", 0, song.end_frame, 0, true, 100.0});
+    Track root;
+    root.id = "folder-root";
+    root.kind = TrackKind::Folder;
+    root.audio_to = "ext:2";
+    song.tracks.push_back(root);
+    Track nested;
+    nested.id = "folder-nested";
+    nested.kind = TrackKind::Folder;
+    nested.parent_track_id = root.id;
+    nested.audio_to = "inherit";
+    song.tracks.push_back(nested);
     for (int index = 0; index < kTrackCount; ++index) {
         const auto suffix = std::to_string(index);
         const Id source_id = "source-" + suffix;
@@ -35,6 +47,8 @@ Session four_track_session() {
 
         Track track;
         track.id = "track-" + suffix;
+        track.parent_track_id = (index % 2 == 0) ? nested.id : root.id;
+        track.audio_to = (index == 1) ? "ext:3" : "inherit";
         track.clips.push_back(Clip{
             "clip-" + suffix, source_id, 0, 0, song.end_frame
         });
@@ -49,7 +63,7 @@ Session four_track_session() {
 // Expected failure until step 03 removes per-track routing allocations from
 // Mixer::render. Run explicitly with --no-skip to inspect the current count;
 // step 03 must remove doctest::skip() when the count reaches zero.
-TEST_CASE("Mixer render performs no realtime allocations" * doctest::skip()) {
+TEST_CASE("Mixer render performs no realtime allocations") {
     SourceManager sources;
     for (int index = 0; index < kTrackCount; ++index) {
         const Id source_id = "source-" + std::to_string(index);
@@ -66,6 +80,7 @@ TEST_CASE("Mixer render performs no realtime allocations" * doctest::skip()) {
     TransportClock clock(test::kFixtureSampleRate);
     JumpScheduler scheduler;
     Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.set_active_output_channels({0, 1});
     clock.play();
     clock.clear_pending_start();
 

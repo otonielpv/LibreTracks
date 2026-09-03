@@ -108,6 +108,19 @@ TEST_CASE("sparse ASIO channel selection preserves physical external routes") {
     CHECK(peak(out_14) < 1.0e-7f);
     CHECK(peak(out_15) > 0.01f);
     CHECK(peak(out_16) > 0.01f);
+
+    // The active physical map is a live input to the precomputed routes. It
+    // must take effect without replacing the session/control table.
+    mixer.set_active_output_channels({14, 15, 12, 13});
+    std::fill(out_13.begin(), out_13.end(), 0.0f);
+    std::fill(out_14.begin(), out_14.end(), 0.0f);
+    std::fill(out_15.begin(), out_15.end(), 0.0f);
+    std::fill(out_16.begin(), out_16.end(), 0.0f);
+    mixer.render(out, 4, kBlock, clock.sample_rate());
+    CHECK(peak(out_13) > 0.01f);
+    CHECK(peak(out_14) > 0.01f);
+    CHECK(peak(out_15) < 1.0e-7f);
+    CHECK(peak(out_16) < 1.0e-7f);
 }
 
 #if LT_ENGINE_HAVE_BUNGEE
