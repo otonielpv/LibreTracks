@@ -251,9 +251,53 @@ private:
 
     // Stereo mix bus (reused each block, fixed size).
     static constexpr int kMaxBlockFrames = 4096;
-    float mix_l_[kMaxBlockFrames] = {};
-    float mix_r_[kMaxBlockFrames] = {};
-    float* mix_[2] = { mix_l_, mix_r_ };
+
+    // ── Buses de mezcla POR PISTA ───────────────────────────────────────────
+    //
+    // Antes había un único bus (`mix_l_`/`mix_r_`) que se reutilizaba pista a
+    // pista. Era *el* punto de serialización del render: dos pistas no pueden
+    // calcularse a la vez si escriben en el mismo sitio.
+    //
+    // Con un bus por ranura, el bucle se parte en dos fases:
+    //
+    //   FASE A  por pista: limpiar su bus, renderizar dentro, medir sus picos.
+    //           Independiente entre pistas. Es la que repartirá el paso 08.
+    //   FASE B  reducción: ganancia, pan, routing, medidores de carpeta y
+    //           acumulación en la salida. Se queda siempre en el director y
+    //           recorre las ranuras EN ORDEN ASCENDENTE.
+    //
+    // El orden de la fase B no es un detalle de implementación, es el contrato
+    // de bit-exactitud del plan (docs/plans/audio-thread-parallelism/
+    // 07-buses-de-mezcla-por-pista.md): la suma de flotantes no es asociativa,
+    // así que sumar en orden de ranura hace que la salida NO dependa de cuántos
+    // hilos la calculen. Sin eso, el test de equivalencia serie-vs-paralelo del
+    // paso 08 sería imposible de escribir y cada usuario oiría un audio
+    // ligeramente distinto según su CPU.
+    //
+    // Coste: 2 canales x max_block_frames x 4 B por ranura. Es el mismo orden
+    // que los scratch que TrackRenderer ya reserva por ranura (6x block), así
+    // que no cambia la clase de consumo del render.
+    struct TrackBusSlot {
+        std::vector<float> left;
+        std::vector<float> right;
+    };
+    std::vector<std::unique_ptr<TrackBusSlot>> track_buses_;
+
+    // Lo que la fase A calcula y la fase B consume. Un valor por ranura.
+    struct TrackBlockState {
+        bool  rendered = false;   // false ⇒ la fase B se salta esta ranura
+        float start_gain = 0.f, end_gain = 0.f;
+        float start_pan = 0.f, end_pan = 0.f;
+        float start_mute_gain = 0.f, end_mute_gain = 0.f;
+        float start_solo_gain = 0.f, end_solo_gain = 0.f;
+        float peak_l = 0.f, peak_r = 0.f;
+        float rms_l = 0.f, rms_r = 0.f;
+        int   left_channel = 0, right_channel = -1;
+        const Track* track = nullptr;
+        std::size_t  map_index = 0;
+        bool         has_ancestor_map = false;
+    };
+    std::vector<TrackBlockState> track_block_state_;
 
     // Meters (peak hold, updated each block).
     std::atomic<float> meter_l_{0.f};

@@ -675,6 +675,13 @@ void Mixer::render_timeline_span(float** output_channels,
 
         const bool solo_active = any_solo_active_in_slots();
 
+        // La fase B se salta las ranuras que la A no marco. Sin este reseteo
+        // arrastraria el estado del bloque anterior y una pista saltada seguiria
+        // sumando su bus viejo a la salida.
+        for (std::size_t ti = 0; ti < renderer_slots && ti < track_block_state_.size(); ++ti)
+            track_block_state_[ti].rendered = false;
+
+        // -- FASE A: por pista e independiente entre pistas ------------------
         for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
             const Track& track = song.tracks[ti];
 
@@ -744,15 +751,21 @@ void Mixer::render_timeline_span(float** output_channels,
                 continue;
             }
 
-            std::fill(mix_l_, mix_l_ + num_frames, 0.f);
-            std::fill(mix_r_, mix_r_ + num_frames, 0.f);
+            // Bus propio de esta ranura: es lo que permite que la fase A sea
+            // independiente entre pistas.
+            TrackBusSlot& bus = *track_buses_[ti];
+            float* mix_l = bus.left.data();
+            float* mix_r = bus.right.data();
+            float* bus_channels[2] = { mix_l, mix_r };
+            std::fill(mix_l, mix_l + num_frames, 0.f);
+            std::fill(mix_r, mix_r + num_frames, 0.f);
 
             // gain_override=1.0f: the mixer applies track gain/pan/mute itself
             // below, so we neutralize them here WITHOUT copying the Track (that
             // per-block heap allocation contended the global allocator lock with
             // import-time allocations and stalled the audio thread).
             renderers_[ti]->render(track, timeline_frame, num_frames,
-                                   mix_, 2, *sources_, bungee_voices_,
+                                   bus_channels, 2, *sources_, bungee_voices_,
                                    clock_->sample_rate(), 0, &song,
                                    /*track_is_silent=*/settled_silent,
                                    /*track_gain_override=*/1.0f);
@@ -761,10 +774,10 @@ void Mixer::render_timeline_span(float** output_channels,
             float track_peak_l = 0.f, track_peak_r = 0.f;
             double track_sum_l = 0.0, track_sum_r = 0.0;
             for (int f = 0; f < num_frames; ++f) {
-                track_peak_l = std::max(track_peak_l, std::abs(mix_l_[f]));
-                track_peak_r = std::max(track_peak_r, std::abs(mix_r_[f]));
-                track_sum_l += static_cast<double>(mix_l_[f]) * mix_l_[f];
-                track_sum_r += static_cast<double>(mix_r_[f]) * mix_r_[f];
+                track_peak_l = std::max(track_peak_l, std::abs(mix_l[f]));
+                track_peak_r = std::max(track_peak_r, std::abs(mix_r[f]));
+                track_sum_l += static_cast<double>(mix_l[f]) * mix_l[f];
+                track_sum_r += static_cast<double>(mix_r[f]) * mix_r[f];
             }
             track_meters_[ti]->left_peak.store(track_peak_l, std::memory_order_relaxed);
             track_meters_[ti]->right_peak.store(track_peak_r, std::memory_order_relaxed);
@@ -774,11 +787,11 @@ void Mixer::render_timeline_span(float** output_channels,
                 static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames)));
             track_meters_[ti]->left_rms.store(track_rms_l, std::memory_order_relaxed);
             track_meters_[ti]->right_rms.store(track_rms_r, std::memory_order_relaxed);
-            update_ancestor_folder_meters(
-                song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r,
-                (published_slots && map_index < ancestor_meter_indices_for_renderer_.size())
-                    ? &ancestor_meter_indices_for_renderer_[map_index] : nullptr);
 
+            // Los medidores de CARPETA acumulan entre pistas, asi que no pueden
+            // ir aqui: van en la fase B, en orden de ranura. El routing si se
+            // resuelve aqui y se guarda, porque depende de `control`, que es
+            // estado de esta pista.
             int left_channel = 0;
             int right_channel = -1;
             if (slot_idx >= 0 && active_output_channel_count_.load(std::memory_order_acquire) > 0) {
@@ -789,8 +802,48 @@ void Mixer::render_timeline_span(float** output_channels,
                                render_output_channels_.data(), render_output_channel_count_,
                                left_channel, right_channel);
             }
-            const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
-            const bool right_only_source = track_peak_r > 1.0e-7f && track_peak_l <= 1.0e-7f;
+
+            TrackBlockState& st = track_block_state_[ti];
+            st.rendered         = true;
+            st.start_gain       = start_gain;      st.end_gain       = end_gain;
+            st.start_pan        = start_pan;       st.end_pan        = end_pan;
+            st.start_mute_gain  = start_mute_gain; st.end_mute_gain  = end_mute_gain;
+            st.start_solo_gain  = start_solo_gain; st.end_solo_gain  = end_solo_gain;
+            st.peak_l           = track_peak_l;    st.peak_r         = track_peak_r;
+            st.rms_l            = track_rms_l;     st.rms_r          = track_rms_r;
+            st.left_channel     = left_channel;    st.right_channel  = right_channel;
+            st.track            = &track;
+            st.map_index        = map_index;
+            st.has_ancestor_map =
+                published_slots && map_index < ancestor_meter_indices_for_renderer_.size();
+        }
+
+        // -- FASE B: reduccion, siempre en el director y EN ORDEN ASCENDENTE --
+        //
+        // El orden es el contrato de bit-exactitud del plan: la suma de
+        // flotantes no es asociativa, asi que recorrer las ranuras de menor a
+        // mayor hace que la salida sea identica la calcule un hilo o los que
+        // sean. No lo cambies "para optimizar".
+        for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
+            TrackBlockState& st = track_block_state_[ti];
+            if (!st.rendered) continue;
+
+            const Track& track = *st.track;
+            const float* mix_l = track_buses_[ti]->left.data();
+            const float* mix_r = track_buses_[ti]->right.data();
+
+            update_ancestor_folder_meters(
+                song, track, st.peak_l, st.peak_r, st.rms_l, st.rms_r,
+                st.has_ancestor_map
+                    ? &ancestor_meter_indices_for_renderer_[st.map_index] : nullptr);
+
+            const float start_gain = st.start_gain, end_gain = st.end_gain;
+            const float start_pan = st.start_pan, end_pan = st.end_pan;
+            const float start_mute_gain = st.start_mute_gain, end_mute_gain = st.end_mute_gain;
+            const float start_solo_gain = st.start_solo_gain, end_solo_gain = st.end_solo_gain;
+            const int   left_channel = st.left_channel, right_channel = st.right_channel;
+            const bool left_only_source = st.peak_l > 1.0e-7f && st.peak_r <= 1.0e-7f;
+            const bool right_only_source = st.peak_r > 1.0e-7f && st.peak_l <= 1.0e-7f;
 
             for (int f = 0; f < num_frames; ++f) {
                 const float t = static_cast<float>(f + 1) / static_cast<float>(std::max(1, num_frames));
@@ -801,8 +854,8 @@ void Mixer::render_timeline_span(float** output_channels,
                 const float pan = clamp_pan(start_pan + (end_pan - start_pan) * t);
                 const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
                 const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
-                float source_l = mix_l_[f];
-                float source_r = mix_r_[f];
+                float source_l = mix_l[f];
+                float source_r = mix_r[f];
                 if (left_only_source)
                     source_r = source_l;
                 else if (right_only_source)
@@ -1013,7 +1066,11 @@ void Mixer::render(float** output_channels,
 
             const bool solo_active = any_solo_active_in_slots();
 
-            // Render each track.
+            for (std::size_t ti = 0; ti < renderer_slots && ti < track_block_state_.size(); ++ti)
+                track_block_state_[ti].rendered = false;
+
+            // -- FASE A: por pista e independiente entre pistas. Es la que
+            //    repartira el pool del paso 08. --
             for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
                 const Track& track = song.tracks[ti];
 
@@ -1084,9 +1141,20 @@ void Mixer::render(float** output_channels,
                     ++skipped_this_block;
                     continue;
                 }
-                // Render into mix bus.
-                std::fill(mix_l_, mix_l_ + num_frames, 0.f);
-                std::fill(mix_r_, mix_r_ + num_frames, 0.f);
+                // Render into this slot's own bus.
+                //
+                // Este camino (bloque partido por un salto) se queda de UNA
+                // sola fase: el paso 08 no lo paraleliza, porque un salto ya es
+                // un evento raro y partir tambien esta rama duplicaria la
+                // superficie de riesgo sin ganar nada medible. Usa el bus de la
+                // ranura igualmente para que no quede ningun bus compartido en
+                // el mixer.
+                TrackBusSlot& bus = *track_buses_[ti];
+                float* mix_l = bus.left.data();
+                float* mix_r = bus.right.data();
+                float* bus_channels[2] = { mix_l, mix_r };
+                std::fill(mix_l, mix_l + num_frames, 0.f);
+                std::fill(mix_r, mix_r + num_frames, 0.f);
 
                 // `track_is_silent`: when both endpoints of the mute/gain
                 // smoothing window are zero, the stretched Bungee path is
@@ -1100,7 +1168,7 @@ void Mixer::render(float** output_channels,
                 // contended the global heap lock with import allocations,
                 // stalling playback (LT_AUDIO_DIAG cbwork spikes).
                 renderers_[ti]->render(track, timeline_frame, num_frames,
-                                       mix_, 2, *sources_, bungee_voices_,
+                                       bus_channels, 2, *sources_, bungee_voices_,
                                        clock_->sample_rate(), 0, &song,
                                        /*track_is_silent=*/settled_silent,
                                        /*track_gain_override=*/1.0f);
@@ -1109,10 +1177,10 @@ void Mixer::render(float** output_channels,
                 float track_peak_l = 0.f, track_peak_r = 0.f;
                 double track_sum_l = 0.0, track_sum_r = 0.0;
                 for (int f = 0; f < num_frames; ++f) {
-                    track_peak_l = std::max(track_peak_l, std::abs(mix_l_[f]));
-                    track_peak_r = std::max(track_peak_r, std::abs(mix_r_[f]));
-                    track_sum_l += static_cast<double>(mix_l_[f]) * mix_l_[f];
-                    track_sum_r += static_cast<double>(mix_r_[f]) * mix_r_[f];
+                    track_peak_l = std::max(track_peak_l, std::abs(mix_l[f]));
+                    track_peak_r = std::max(track_peak_r, std::abs(mix_r[f]));
+                    track_sum_l += static_cast<double>(mix_l[f]) * mix_l[f];
+                    track_sum_r += static_cast<double>(mix_r[f]) * mix_r[f];
                 }
                 track_meters_[ti]->left_peak.store(track_peak_l, std::memory_order_relaxed);
                 track_meters_[ti]->right_peak.store(track_peak_r, std::memory_order_relaxed);
@@ -1122,11 +1190,10 @@ void Mixer::render(float** output_channels,
                     static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames)));
                 track_meters_[ti]->left_rms.store(track_rms_l, std::memory_order_relaxed);
                 track_meters_[ti]->right_rms.store(track_rms_r, std::memory_order_relaxed);
-                update_ancestor_folder_meters(
-                    song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r,
-                    (published_slots && map_index < ancestor_meter_indices_for_renderer_.size())
-                        ? &ancestor_meter_indices_for_renderer_[map_index] : nullptr);
 
+                // Los medidores de CARPETA acumulan entre pistas: van en la
+                // fase B. El routing se resuelve aqui porque depende de
+                // `control`, que es estado de esta pista.
                 int left_channel = 0;
                 int right_channel = -1;
                 if (slot_idx >= 0 && active_output_channel_count_.load(std::memory_order_acquire) > 0) {
@@ -1137,8 +1204,46 @@ void Mixer::render(float** output_channels,
                                    render_output_channels_.data(), render_output_channel_count_,
                                    left_channel, right_channel);
                 }
-                const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
-                const bool right_only_source = track_peak_r > 1.0e-7f && track_peak_l <= 1.0e-7f;
+
+                TrackBlockState& st = track_block_state_[ti];
+                st.rendered         = true;
+                st.start_gain       = start_gain;      st.end_gain       = end_gain;
+                st.start_pan        = start_pan;       st.end_pan        = end_pan;
+                st.start_mute_gain  = start_mute_gain; st.end_mute_gain  = end_mute_gain;
+                st.start_solo_gain  = start_solo_gain; st.end_solo_gain  = end_solo_gain;
+                st.peak_l           = track_peak_l;    st.peak_r         = track_peak_r;
+                st.rms_l            = track_rms_l;     st.rms_r          = track_rms_r;
+                st.left_channel     = left_channel;    st.right_channel  = right_channel;
+                st.track            = &track;
+                st.map_index        = map_index;
+                st.has_ancestor_map =
+                    published_slots && map_index < ancestor_meter_indices_for_renderer_.size();
+            }
+
+            // -- FASE B: reduccion, siempre en el director y EN ORDEN
+            //    ASCENDENTE. Es el contrato de bit-exactitud del plan: la suma
+            //    de flotantes no es asociativa, asi que este orden hace que la
+            //    salida no dependa de cuantos hilos la calculen. --
+            for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
+                TrackBlockState& st = track_block_state_[ti];
+                if (!st.rendered) continue;
+
+                const Track& track = *st.track;
+                const float* mix_l = track_buses_[ti]->left.data();
+                const float* mix_r = track_buses_[ti]->right.data();
+
+                update_ancestor_folder_meters(
+                    song, track, st.peak_l, st.peak_r, st.rms_l, st.rms_r,
+                    st.has_ancestor_map
+                        ? &ancestor_meter_indices_for_renderer_[st.map_index] : nullptr);
+
+                const float start_gain = st.start_gain, end_gain = st.end_gain;
+                const float start_pan = st.start_pan, end_pan = st.end_pan;
+                const float start_mute_gain = st.start_mute_gain, end_mute_gain = st.end_mute_gain;
+                const float start_solo_gain = st.start_solo_gain, end_solo_gain = st.end_solo_gain;
+                const int   left_channel = st.left_channel, right_channel = st.right_channel;
+                const bool left_only_source = st.peak_l > 1.0e-7f && st.peak_r <= 1.0e-7f;
+                const bool right_only_source = st.peak_r > 1.0e-7f && st.peak_l <= 1.0e-7f;
 
                 // Accumulate into selected output route.
                 for (int f = 0; f < num_frames; ++f) {
@@ -1150,8 +1255,8 @@ void Mixer::render(float** output_channels,
                     const float pan = clamp_pan(start_pan + (end_pan - start_pan) * t);
                     const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
                     const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
-                    float source_l = mix_l_[f];
-                    float source_r = mix_r_[f];
+                    float source_l = mix_l[f];
+                    float source_r = mix_r[f];
                     if (left_only_source)
                         source_r = source_l;
                     else if (right_only_source)
@@ -1370,7 +1475,8 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
     // Skip the whole dance when nothing has to grow, which is the common case
     // (same or smaller session) and must not drop audio.
     const bool needs_growth =
-        renderers_.size() < needed || track_meters_.size() < needed;
+        renderers_.size() < needed || track_meters_.size() < needed
+        || track_buses_.size() < needed || track_block_state_.size() < needed;
     if (needs_growth) {
         renderer_count_.store(0, std::memory_order_release);
     }
@@ -1379,15 +1485,45 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
             renderers_.push_back(std::make_unique<TrackRenderer>());
         while (track_meters_.size() < needed)
             track_meters_.push_back(std::make_unique<TrackMeterSlot>());
+        // Un bus por ranura. Boxeados igual que los medidores: crecer el vector
+        // exterior mueve punteros, nunca los buffers que el hilo de audio pueda
+        // estar escribiendo.
+        while (track_buses_.size() < needed)
+            track_buses_.push_back(std::make_unique<TrackBusSlot>());
+        if (track_block_state_.size() < needed)
+            track_block_state_.resize(needed);
     } catch (...) {
         // Out of memory: keep whatever we already had. The render loops clamp to
         // renderer_count_ below, so this degrades to "extra tracks stay silent"
         // rather than a crash or an out-of-bounds write.
     }
 
-    const std::size_t usable = std::min(renderers_.size(), track_meters_.size());
+    std::size_t usable = std::min(renderers_.size(), track_meters_.size());
+    usable = std::min(usable, track_buses_.size());
+    usable = std::min(usable, track_block_state_.size());
     for (auto& renderer : renderers_)
         renderer->prepare(frames);
+    // Los buses se dimensionan al mismo tamano de bloque que los scratch de
+    // TrackRenderer. Coste: 2 canales x frames x 4 B por ranura -- 512 frames y
+    // 64 ranuras son 256 KB, y con el maximo teorico de 4096 son 2 MB. Es el
+    // mismo orden que los 6x block que TrackRenderer ya reserva por ranura, asi
+    // que no cambia la clase de consumo del render.
+    try {
+        for (auto& bus : track_buses_) {
+            bus->left.assign(static_cast<std::size_t>(frames), 0.0f);
+            bus->right.assign(static_cast<std::size_t>(frames), 0.0f);
+        }
+    } catch (...) {
+        // Igual que arriba: si no hay memoria, lo que queda es lo que habia.
+        // El bucle se limita a renderer_count_, asi que degrada a silencio en
+        // las ranuras nuevas en vez de escribir fuera de rango.
+        usable = 0;
+        for (const auto& bus : track_buses_) {
+            if (bus->left.size() < static_cast<std::size_t>(frames)) break;
+            ++usable;
+        }
+        usable = std::min(usable, std::min(renderers_.size(), track_meters_.size()));
+    }
     renderer_count_.store(static_cast<int>(usable), std::memory_order_release);
 }
 
