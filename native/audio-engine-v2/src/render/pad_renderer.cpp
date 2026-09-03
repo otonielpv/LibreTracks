@@ -214,7 +214,11 @@ PadConfig PadRenderer::config() const {
 void PadRenderer::set_clip(std::shared_ptr<const PadClip> clip) noexcept {
     clip_present_.store(clip != nullptr && !clip->empty(), std::memory_order_release);
     clip_key_.store(clip ? clip->key : -1, std::memory_order_release);
+#if !defined(_MSC_VER)
+    std::atomic_store_explicit(&clip_, std::move(clip), std::memory_order_release);
+#else
     clip_.store(std::move(clip), std::memory_order_release);
+#endif
     // Signal the audio thread to reset its read cursor to the new clip's start.
     clip_seq_.fetch_add(1, std::memory_order_release);
 }
@@ -277,7 +281,12 @@ void PadRenderer::render(float** output_channels,
 
     // The newest decoded clip becomes the incoming voice while the previous
     // one remains audible for the brief overlap.
+#if !defined(_MSC_VER)
+    std::shared_ptr<const PadClip> pending =
+        std::atomic_load_explicit(&clip_, std::memory_order_acquire);
+#else
     std::shared_ptr<const PadClip> pending = clip_.load(std::memory_order_acquire);
+#endif
 
     // Detect a newly decoded key or pack.
     const std::uint64_t seq = clip_seq_.load(std::memory_order_acquire);

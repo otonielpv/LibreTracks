@@ -193,14 +193,20 @@ private:
     std::atomic<int> route_end_{3};
     std::array<char, 64> output_route_{};
 
-    // std::atomic<std::shared_ptr> y no las funciones libres std::atomic_load/
-    // store: en MSVC esas comparten un spinlock GLOBAL DEL PROCESO
+    // En MSVC usamos std::atomic<std::shared_ptr> porque las funciones libres
+    // std::atomic_load/store comparten un spinlock GLOBAL DEL PROCESO
     // (microsoft/STL#86) que el hilo de audio acaba disputando con cualquier
     // otro shared_ptr atómico del programa, incluidos los de hilos
     // BELOW_NORMAL. Se lee una vez por bloque dentro de render(), o sea en el
     // callback. Mismo arreglo que el puntero de sesión (mixer.h) y que el mapa
     // de voces del warp (paso 05).
+    // Apple libc++ y GCC 11 no ofrecen la especialización C++20, así que fuera
+    // de MSVC conservamos el shared_ptr normal y usamos las funciones libres.
+#if !defined(_MSC_VER)
+    std::shared_ptr<const VoiceGuideClipBank> bank_;
+#else
     std::atomic<std::shared_ptr<const VoiceGuideClipBank>> bank_;
+#endif
     std::atomic<bool> bank_present_{false};
 
     Frame last_render_end_ = -1;

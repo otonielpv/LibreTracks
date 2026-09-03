@@ -408,7 +408,11 @@ VoiceGuideConfig VoiceGuideRenderer::config() const {
 
 void VoiceGuideRenderer::set_clip_bank(std::shared_ptr<const VoiceGuideClipBank> bank) noexcept {
     bank_present_.store(bank != nullptr, std::memory_order_release);
+#if !defined(_MSC_VER)
+    std::atomic_store_explicit(&bank_, std::move(bank), std::memory_order_release);
+#else
     bank_.store(std::move(bank), std::memory_order_release);
+#endif
 }
 
 // ── Voice pool ───────────────────────────────────────────────────────────────
@@ -518,7 +522,12 @@ void VoiceGuideRenderer::render(float** output_channels,
         return;
     }
 
+#if !defined(_MSC_VER)
+    std::shared_ptr<const VoiceGuideClipBank> bank =
+        std::atomic_load_explicit(&bank_, std::memory_order_acquire);
+#else
     std::shared_ptr<const VoiceGuideClipBank> bank = bank_.load(std::memory_order_acquire);
+#endif
     if (!bank) {
         copy_text(muted_reason_, "no_bank");
         // Still ramp the gain down so a mid-clip disable fades cleanly.
