@@ -29,6 +29,40 @@ void Mixer::force_control_count_zero_for_test() noexcept {
 
 namespace {
 
+// Despertar varios hilos tiene un coste fijo. El banco de Release mide que una
+// voz Bungee cuesta aproximadamente un 1 % del presupuesto del buffer, así que
+// por debajo de ocho pistas caras el camino serie conserva margen de sobra y
+// gasta menos CPU total. Las rutas Direct no justifican despertar el pool ni
+// siquiera con muchas pistas: son copias y medidores de unas pocas decenas de
+// microsegundos.
+constexpr int kMinCostlyTracksForParallelRender = 8;
+
+bool block_has_enough_costly_tracks(const Song& song, Frame timeline_frame,
+                                    int block_frames) noexcept {
+    int costly_tracks = 0;
+    const Frame block_end = timeline_frame + static_cast<Frame>(block_frames);
+
+    for (const Track& track : song.tracks) {
+        if (track.kind == TrackKind::Folder) continue;
+
+        bool costly = false;
+        for (const Clip& clip : track.clips) {
+            const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+            if (timeline_frame >= clip_end || block_end <= clip.timeline_start_frame)
+                continue;
+            if (resolve_pitch_render_decision(track, clip, song, timeline_frame).path
+                != ClipPathKind::Direct) {
+                costly = true;
+                break;
+            }
+        }
+
+        if (costly && ++costly_tracks >= kMinCostlyTracksForParallelRender)
+            return true;
+    }
+    return false;
+}
+
 #if defined(LT_ENGINE_TEST_HOOKS)
 #endif
 
@@ -1230,7 +1264,9 @@ void Mixer::render(float** output_channels,
 
             {
                 RenderJobRef job(phase_a);
-                render_pool_.run_block(static_cast<int>(phase_a_count), job);
+                render_pool_.run_block(
+                    static_cast<int>(phase_a_count), job,
+                    block_has_enough_costly_tracks(song, timeline_frame, num_frames));
             }
             rendered_this_block += rendered_atomic.exchange(0, std::memory_order_relaxed);
             skipped_this_block  += skipped_atomic.exchange(0, std::memory_order_relaxed);

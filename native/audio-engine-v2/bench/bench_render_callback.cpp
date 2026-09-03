@@ -31,10 +31,12 @@
 //   bench_render_callback.exe [--tracks N] [--block F] [--sr R] [--warp 0|1]
 //                             [--ratio X] [--semitones S] [--threads T]
 //                             [--blocks B] [--warmup W] [--json <ruta>]
-//                             [--matrix] [--label <texto>]
+//                             [--paced] [--matrix] [--label <texto>]
 //
-//   --matrix  ejecuta la matriz de la línea base (ver kBaselineMatrix) y
-//             escribe todas las filas al JSON.
+//   --paced   respeta la cadencia real del dispositivo entre bloques y mide
+//             CPU total del proceso. Es el modo que detecta workers girando
+//             mientras la tarjeta reproduce el buffer anterior.
+//   --matrix  ejecuta la matriz de la línea base y escribe las filas al JSON.
 //
 // El desglose por fases sólo está disponible si LIBRETRACKS_AUDIO_DIAG está
 // puesto en el ENTORNO antes de arrancar el proceso. El banco lo intenta poner
@@ -59,7 +61,17 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
+
+#if defined(_WIN32)
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#else
+#  include <sys/resource.h>
+#endif
 
 using namespace lt;
 using Clock = std::chrono::steady_clock;
@@ -80,6 +92,7 @@ struct Config {
     int    threads    = 1;   // pool de render (paso 08)
     int    blocks     = 600;
     int    warmup     = 150;
+    bool   paced      = false;
     std::string label;
 
     double budget_us() const {
@@ -100,6 +113,8 @@ struct BenchResult {
 
     double avg_us = 0.0, p50_us = 0.0, p95_us = 0.0, p99_us = 0.0, max_us = 0.0;
     double measured_total_us = 0.0;   // suma de los bloques medidos
+    double process_cpu_seconds = 0.0;
+    double wall_seconds = 0.0;
     PhaseSums phases;
 
     // Contadores estructurales. Éstos NO pueden variar entre dos ejecuciones de
@@ -114,7 +129,35 @@ struct BenchResult {
     int           bungee_voices   = 0;
 
     double pct(double us) const { return 100.0 * us / cfg.budget_us(); }
+    double process_cpu_percent() const {
+        const unsigned int logical = std::max(1u, std::thread::hardware_concurrency());
+        return wall_seconds > 0.0
+            ? 100.0 * process_cpu_seconds / (wall_seconds * logical)
+            : 0.0;
+    }
 };
+
+double process_cpu_seconds() noexcept {
+#if defined(_WIN32)
+    FILETIME created{}, exited{}, kernel{}, user{};
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
+        return 0.0;
+    ULARGE_INTEGER k{}, u{};
+    k.LowPart = kernel.dwLowDateTime;
+    k.HighPart = kernel.dwHighDateTime;
+    u.LowPart = user.dwLowDateTime;
+    u.HighPart = user.dwHighDateTime;
+    return static_cast<double>(k.QuadPart + u.QuadPart) * 1.0e-7;
+#else
+    rusage usage{};
+    if (getrusage(RUSAGE_SELF, &usage) != 0) return 0.0;
+    const double user = static_cast<double>(usage.ru_utime.tv_sec)
+                      + static_cast<double>(usage.ru_utime.tv_usec) * 1.0e-6;
+    const double system = static_cast<double>(usage.ru_stime.tv_sec)
+                        + static_cast<double>(usage.ru_stime.tv_usec) * 1.0e-6;
+    return user + system;
+#endif
+}
 
 // ── Construcción de la sesión sintética ──────────────────────────────────────
 
@@ -240,6 +283,10 @@ BenchResult run(const Config& cfg) {
     samples.reserve(static_cast<std::size_t>(cfg.blocks));
     PhaseSums phases;
 
+    const auto measured_start = Clock::now();
+    auto next_deadline = measured_start;
+    const double cpu_start = process_cpu_seconds();
+
     for (int b = 0; b < cfg.blocks; ++b) {
         const auto t0 = Clock::now();
         mixer.render(out, kChannels, cfg.block, clock.sample_rate());
@@ -253,7 +300,15 @@ BenchResult run(const Config& cfg) {
         phases.sched  += static_cast<double>(ph.sched);
         phases.tracks += static_cast<double>(ph.tracks);
         phases.post   += static_cast<double>(ph.post);
+
+        if (cfg.paced) {
+            next_deadline += std::chrono::nanoseconds(
+                static_cast<long long>(cfg.budget_us() * 1000.0));
+            std::this_thread::sleep_until(next_deadline);
+        }
     }
+    const double cpu_end = process_cpu_seconds();
+    const auto measured_end = Clock::now();
     phases.available = phases.total() > 0.0;
 
     std::vector<double> sorted = samples;
@@ -273,6 +328,9 @@ BenchResult run(const Config& cfg) {
     r.p99_us = quantile(0.99);
     r.max_us = sorted.empty() ? 0.0 : sorted.back();
     r.measured_total_us = sum;
+    r.process_cpu_seconds = std::max(0.0, cpu_end - cpu_start);
+    r.wall_seconds = std::chrono::duration<double>(
+        measured_end - measured_start).count();
     r.phases = phases;
 
     r.rendered_tracks = mixer.rendered_track_count() - rendered0;
@@ -308,6 +366,7 @@ bool verify_determinism(const Config& cfg, std::string& detail) {
     Config probe = cfg;
     probe.blocks = 50;
     probe.warmup = 20;
+    probe.paced = false;
 
     const BenchResult a = run(probe);
     const BenchResult b = run(probe);
@@ -375,6 +434,10 @@ void print_detail(const BenchResult& r) {
                 static_cast<unsigned long long>(r.rendered_tracks),
                 static_cast<unsigned long long>(r.skipped_tracks),
                 static_cast<unsigned long long>(r.over_budget));
+    std::printf("  CPU proceso: %.1f%% (%s, %.3f s CPU / %.3f s reloj, %u hilos logicos)\n",
+                r.process_cpu_percent(), r.cfg.paced ? "cadencia real" : "sin pausa",
+                r.process_cpu_seconds, r.wall_seconds,
+                std::max(1u, std::thread::hardware_concurrency()));
 
     if (!r.phases.available) {
         std::printf("  fases: NO DISPONIBLES. Pon LIBRETRACKS_AUDIO_DIAG=1 en el\n"
@@ -423,6 +486,7 @@ void write_json(const std::vector<BenchResult>& results, const std::string& path
           << "\"ratio\": " << r.cfg.ratio << ", "
           << "\"semitones\": " << r.cfg.semitones << ", "
           << "\"threads\": " << r.cfg.threads << ", "
+          << "\"paced\": " << (r.cfg.paced ? "true" : "false") << ", "
           << "\"blocks\": " << r.cfg.blocks << ", "
           << "\"budget_us\": " << r.cfg.budget_us() << ", "
           << "\"avg_us\": " << r.avg_us << ", "
@@ -430,6 +494,9 @@ void write_json(const std::vector<BenchResult>& results, const std::string& path
           << "\"p95_us\": " << r.p95_us << ", "
           << "\"p99_us\": " << r.p99_us << ", "
           << "\"max_us\": " << r.max_us << ", "
+          << "\"process_cpu_seconds\": " << r.process_cpu_seconds << ", "
+          << "\"wall_seconds\": " << r.wall_seconds << ", "
+          << "\"process_cpu_percent\": " << r.process_cpu_percent() << ", "
           << "\"avg_pct_budget\": " << r.pct(r.avg_us) << ", "
           << "\"p95_pct_budget\": " << r.pct(r.p95_us) << ", "
           << "\"bungee_voices\": " << r.bungee_voices << ", "
@@ -517,6 +584,7 @@ int main(int argc, char** argv) {
         else if (a == "--threads")   cfg.threads     = std::atoi(next("--threads"));
         else if (a == "--blocks")    cfg.blocks      = std::atoi(next("--blocks"));
         else if (a == "--warmup")    cfg.warmup      = std::atoi(next("--warmup"));
+        else if (a == "--paced")     cfg.paced       = true;
         else if (a == "--label")     cfg.label       = next("--label");
         else if (a == "--json")      json_path       = next("--json");
         else if (a == "--matrix")    matrix          = true;

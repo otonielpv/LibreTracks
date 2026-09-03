@@ -164,11 +164,9 @@ const en = {
       languageSpanish: "Español",
       tabDiagnostics: "Diagnostics",
       tabShortcuts: "Shortcuts",
-      diagnosticsPerformanceTitle: "Audio performance",
-      diagnosticsSingleThread: "Use a single thread for audio",
-      diagnosticsSingleThreadHint:
-        "Turn this on only if the sound crackles or the app feels slow. Normally audio is spread across several cores so it has more headroom.",
-      diagnosticsActiveThreads: "Audio threads in use:",
+      audioMulticoreProcessing: "Multicore processing",
+      audioMulticoreProcessingHint:
+        "Distributes audio processing across multiple CPU cores to give demanding sessions more headroom. Recommended.",
       diagnosticsTitle: "Error log",
       diagnosticsDescription:
         "If the app freezes or misbehaves, send us this log so we can find the cause. It records errors only — no audio or personal data.",

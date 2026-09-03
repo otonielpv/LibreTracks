@@ -47,15 +47,15 @@ caliente**: asigna. Usa un puntero a función más un `void*`, una plantilla, o 
 
 ### 2. Reglas de tiempo real del pool
 
-- **Barrera de espera activa, no `condition_variable`.** El diagnóstico
-  (Hecho 3) muestra que esto es lo que hace que funcione a 128 frames.
-  Contador de generación por bloque; los trabajadores giran con `YieldProcessor`
-  / `__builtin_ia32_pause` / `std::this_thread::yield` según plataforma.
-- **Aparcado en reposo.** Girar sin parar quema una CPU con el transporte
-  detenido. Tras N bloques sin trabajo, los trabajadores pasan a esperar en un
-  `condition_variable`; el director los despierta al arrancar. **El umbral debe
-  ser lo bastante alto para que un transporte en marcha no aparque nunca**;
-  documenta el número y por qué.
+- **Espera activa sólo en la junta del director.** El callback gira mientras
+  queda trabajo real del bloque, porque no puede devolver audio incompleto. Los
+  trabajadores hacen un giro corto y luego duermen con `atomic::wait`;
+  `atomic::notify_all` los despierta sin tomar un mutex desde el callback.
+  Mantenerlos girando durante los 2,7-10,7 ms entre buffers provocó una
+  regresión medida de 20-25 % de CPU del proceso.
+- **Bypass de bloques baratos.** Una sola tarea, las rutas Direct y las sesiones
+  con menos de ocho pistas DSP caras se renderizan en serie. Despertar el pool
+  cuesta más que ese trabajo y no aporta margen audible.
 - **El director trabaja.** Toma tareas de la misma cola. Con `thread_count == 1`
   no hay barrera ni atómicos: el camino es literalmente el bucle de hoy.
 - **Prioridad de tiempo real en todos los trabajadores.** Extrae
@@ -129,10 +129,9 @@ criterio de aceptación puede afirmar sobre un tiempo.
       `PENDIENTE-HUMANO` y **dilo**; no lo des por bueno.
 - [ ] C6 — Arranque y parada limpios: `start()`/`stop()` repetidos 100 veces no
       filtran hilos ni cuelgan. Test.
-- [ ] C7 — Parar el transporte deja a los trabajadores aparcados: contador
-      `pool_spinning_threads` a 0 tras el umbral de reposo, y el uso de CPU del
-      proceso en reposo no sube respecto a antes del cambio. La parte del
-      contador es test; la del uso de CPU es `PENDIENTE-HUMANO`.
+- [ ] C7 — Los trabajadores duermen entre callbacks y con el transporte parado:
+      `pool_waiting_threads` refleja la espera atómica, y el uso de CPU se mide
+      con `bench_render_callback --paced` tanto en reposo como reproduciendo.
 - [ ] C8 — Cambiar el número de hilos en caliente (a través de `start`/`stop`
       desde la hebra de control, entre bloques) no produce ni un bloque de
       silencio. Test.

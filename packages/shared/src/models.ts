@@ -885,9 +885,9 @@ export type AppSettings = {
   /**
    * Reducir el trabajo de audio a un solo hilo.
    *
-   * Es el interruptor de «si cruje, prueba esto» de la pestaña Diagnóstico, no
-   * un mando de rendimiento. Apagado, el motor reparte el render entre varios
-   * hilos según la máquina; encendido, vuelve al camino de un solo hilo.
+     * La UI lo presenta en positivo como «Procesamiento multinúcleo» dentro de
+     * Audio. Se conserva este nombre negativo para migrar sin romper los ajustes
+     * existentes: false activa la política automática; true fuerza un solo hilo.
    */
   audioSingleThreadRender: boolean;
   selectedMidiDevice: string | null;

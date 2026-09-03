@@ -35,7 +35,8 @@ constexpr int kBlock  = 512;
 constexpr int kBlocks = 120;
 constexpr int kTracks = 24;
 
-Session build_session(SourceManager& sm, Frame length) {
+Session build_session(SourceManager& sm, Frame length, bool warp_enabled = true,
+                      int track_count = kTracks) {
     Session s;
     s.id = "s08";
     s.sample_rate = kSR;
@@ -50,7 +51,7 @@ Session build_session(SourceManager& sm, Frame length) {
     warp.id = "r-warp";
     warp.start_frame = 0;
     warp.end_frame = length;
-    warp.warp_enabled = true;
+    warp.warp_enabled = warp_enabled;
     warp.warp_source_bpm = 100.0;      // ratio 1.2 -> voces Bungee de verdad
     song.regions.push_back(warp);
 
@@ -61,7 +62,7 @@ Session build_session(SourceManager& sm, Frame length) {
     folder.gain = 0.9f;
     song.tracks.push_back(folder);
 
-    for (int i = 0; i < kTracks; ++i) {
+    for (int i = 0; i < track_count; ++i) {
         const std::string src = "src-" + std::to_string(i);
         sm.register_source(src, "");
         REQUIRE(sm.store_decoded_source(
@@ -175,6 +176,81 @@ TEST_CASE("step08 C3: con un hilo no se entra en la barrera") {
                   "con un hilo el camino serie no debe tocar la barrera");
     CHECK(d.blocks_serial > 0);
     CHECK(d.blocks_run == 0);
+}
+
+RenderThreadPoolDiagnostics render_pool_diagnostics_for(bool warp_enabled,
+                                                         int track_count) {
+    const Frame length = static_cast<Frame>(kBlock) * 64;
+    SourceManager sm;
+    auto session = std::make_shared<const Session>(
+        build_session(sm, length, warp_enabled, track_count));
+
+    TransportClock clock(kSR);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sm, &clock, &scheduler);
+    BungeeVoiceManager voices;
+    REQUIRE(voices.prepare(kSR, 2, kBlock * 4));
+    voices.rebuild_for_session(*session, sm, /*playhead=*/0);
+    mixer.set_bungee_voice_manager(&voices);
+    mixer.prepare_render_resources(kBlock);
+    mixer.set_render_thread_count(4);
+    clock.play();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* channels[2] = {left.data(), right.data()};
+    mixer.render(channels, 2, kBlock, kSR);
+    return mixer.render_pool_diagnostics();
+}
+
+TEST_CASE("el pool no despierta trabajadores para una sola tarea") {
+    RenderThreadPool pool;
+    pool.start(4);
+
+    std::atomic<int> calls{0};
+    auto job = [&](int) noexcept {
+        calls.fetch_add(1, std::memory_order_relaxed);
+    };
+    RenderJobRef ref(job);
+    for (int block = 0; block < 50; ++block)
+        pool.run_block(1, ref);
+
+    const auto d = pool.diagnostics();
+    CHECK(calls.load(std::memory_order_relaxed) == 50);
+    CHECK(d.blocks_serial == 50);
+    CHECK(d.blocks_run == 0);
+    CHECK(d.barrier_entries == 0);
+}
+
+TEST_CASE("el llamante puede mantener un bloque barato en serie") {
+    RenderThreadPool pool;
+    pool.start(4);
+
+    std::atomic<int> calls{0};
+    auto job = [&](int) noexcept {
+        calls.fetch_add(1, std::memory_order_relaxed);
+    };
+    RenderJobRef ref(job);
+    pool.run_block(24, ref, /*allow_parallel=*/false);
+
+    const auto d = pool.diagnostics();
+    CHECK(calls.load(std::memory_order_relaxed) == 24);
+    CHECK(d.blocks_serial == 1);
+    CHECK(d.blocks_run == 0);
+    CHECK(d.barrier_entries == 0);
+}
+
+TEST_CASE("el mixer solo paraleliza cuando hay suficientes pistas DSP caras") {
+    const auto direct = render_pool_diagnostics_for(false, 24);
+    CHECK(direct.blocks_serial == 1);
+    CHECK(direct.barrier_entries == 0);
+
+    const auto small_warp = render_pool_diagnostics_for(true, 7);
+    CHECK(small_warp.blocks_serial == 1);
+    CHECK(small_warp.barrier_entries == 0);
+
+    const auto large_warp = render_pool_diagnostics_for(true, 8);
+    CHECK(large_warp.blocks_run == 1);
+    CHECK(large_warp.barrier_entries == 1);
 }
 
 TEST_CASE("step08 C6: arrancar y parar el pool repetidamente no cuelga") {

@@ -13,13 +13,13 @@
 //
 // ── Las reglas que lo hacen viable ─────────────────────────────────────────
 //
-// 1. BARRERA DE ESPERA ACTIVA, no condition_variable. Despertar un hilo por el
-//    SO cuesta decenas de µs sobre un presupuesto de 2,67 ms. Es la diferencia
-//    entre escalar con buffers pequeños y no escalar.
-// 2. APARCADO EN REPOSO. Girar sin parar quemaría una CPU con el transporte
-//    parado, así que tras un número de bloques sin trabajo los trabajadores
-//    pasan a esperar de verdad. El umbral tiene que ser lo bastante alto para
-//    que un transporte en marcha no aparque nunca.
+// 1. ESPERA HIBRIDA. Tras acabar un bloque los trabajadores giran brevemente
+//    para absorber publicaciones contiguas (bancos/tests), y luego duermen
+//    sobre el contador atomico. Nunca queman el hueco completo entre callbacks.
+//    La junta del director si usa espera activa: ahi hay trabajo real pendiente
+//    y el callback no puede devolver hasta que termine.
+// 2. SIN MUTEX EN EL CALLBACK. atomic::notify_all despierta a los trabajadores
+//    sin que run_block tome el mutex de una condition_variable.
 // 3. EL DIRECTOR TRABAJA. Toma tareas de la misma cola, así que con un solo
 //    hilo el reparto no cuesta nada.
 // 4. thread_count == 1 NO PASA POR AQUÍ. El llamante ejecuta su bucle tal cual;
@@ -36,10 +36,8 @@
 // ---------------------------------------------------------------------------
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -66,8 +64,10 @@ struct RenderThreadPoolDiagnostics {
     std::uint64_t blocks_run = 0;        // bloques repartidos entre trabajadores
     std::uint64_t blocks_serial = 0;     // bloques hechos sólo por el director
     std::uint64_t barrier_entries = 0;   // veces que se armó la barrera
-    std::uint64_t parked_wakeups = 0;    // despertares desde el aparcado
-    int           spinning_threads = 0;  // trabajadores girando ahora mismo
+    std::uint64_t parked_wakeups = 0;    // despertares desde espera atomica
+    std::uint64_t wait_entries = 0;      // entradas en espera atomica
+    int           spinning_threads = 0;  // trabajadores en el giro corto
+    int           waiting_threads = 0;   // trabajadores dormidos
 };
 
 class RenderThreadPool {
@@ -86,7 +86,8 @@ public:
 
     // Desde el HILO DE AUDIO. Ejecuta job(i) para i en [0, count) y no vuelve
     // hasta que han terminado todos. El llamante participa.
-    void run_block(int count, const RenderJobRef& job) noexcept;
+    void run_block(int count, const RenderJobRef& job,
+                   bool allow_parallel = true) noexcept;
 
     int  thread_count() const noexcept;
     RenderThreadPoolDiagnostics diagnostics() const noexcept;

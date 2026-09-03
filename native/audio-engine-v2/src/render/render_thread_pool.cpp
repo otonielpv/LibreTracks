@@ -1,8 +1,6 @@
 #include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/core/realtime_thread.h>
 
-#include <algorithm>
-
 #if defined(_WIN32)
 #  ifndef NOMINMAX
 #    define NOMINMAX
@@ -25,18 +23,10 @@ namespace lt {
 
 namespace {
 
-// Cuántos bloques seguidos sin trabajo antes de aparcar a los trabajadores.
-//
-// Con el transporte en marcha llega un bloque cada 2,7-10,7 ms, así que un
-// trabajador nunca llega a este umbral mientras suena algo: aparcar a mitad de
-// reproducción costaría el despertar del SO que toda la barrera de espera
-// activa existe para evitar. Con el transporte parado se alcanza en menos de un
-// segundo y el pool deja de quemar CPU.
-constexpr int kIdleBlocksBeforeParking = 200;
-
-// Giros antes de ceder el resto del quantum. Suficiente para cubrir la latencia
-// de un bloque normal sin monopolizar el núcleo si el trabajo se retrasa.
-constexpr int kSpinsBeforeYield = 4000;
+// Ventana corta antes de dormir. Cubre publicaciones contiguas en bancos y
+// callbacks encadenados sin mantener N-1 nucleos ocupados durante los 2,7-10,7
+// ms que normalmente separan dos buffers de audio.
+constexpr int kSpinsBeforeWait = 256;
 
 } // namespace
 
@@ -55,17 +45,14 @@ struct RenderThreadPool::Impl {
     std::atomic<bool> quit{false};
     std::vector<std::thread> workers;
 
-    // Aparcado en reposo. Sólo se usa cuando el transporte lleva rato parado.
-    std::mutex              park_mutex;
-    std::condition_variable park_cv;
-    std::atomic<bool>       parked{false};
-
     // Diagnóstico.
     std::atomic<std::uint64_t> blocks_run{0};
     std::atomic<std::uint64_t> blocks_serial{0};
     std::atomic<std::uint64_t> barrier_entries{0};
     std::atomic<std::uint64_t> parked_wakeups{0};
+    std::atomic<std::uint64_t> wait_entries{0};
     std::atomic<int>           spinning{0};
+    std::atomic<int>           waiting{0};
 
     // Toma tareas hasta agotar la cola. Lo ejecutan por igual el director y los
     // trabajadores: es lo que hace que con un hilo no haya reparto que pagar.
@@ -85,44 +72,35 @@ struct RenderThreadPool::Impl {
         promote_render_worker_thread();
 
         std::uint64_t seen = generation.load(std::memory_order_acquire);
-        int idle_blocks = 0;
 
         for (;;) {
             spinning.fetch_add(1, std::memory_order_relaxed);
             int spins = 0;
-            while (generation.load(std::memory_order_acquire) == seen) {
+            while (generation.load(std::memory_order_acquire) == seen
+                   && spins++ < kSpinsBeforeWait) {
                 if (quit.load(std::memory_order_relaxed)) {
                     spinning.fetch_sub(1, std::memory_order_relaxed);
                     return;
                 }
-                if (++spins < kSpinsBeforeYield) {
-                    LT_CPU_RELAX();
-                    continue;
-                }
-                // Se acabó el giro barato. Si además llevamos muchos bloques
-                // sin trabajo, aparcar de verdad en vez de seguir quemando.
-                if (++idle_blocks >= kIdleBlocksBeforeParking) {
-                    spinning.fetch_sub(1, std::memory_order_relaxed);
-                    std::unique_lock lock(park_mutex);
-                    parked.store(true, std::memory_order_relaxed);
-                    park_cv.wait(lock, [&] {
-                        return quit.load(std::memory_order_relaxed)
-                            || generation.load(std::memory_order_acquire) != seen;
-                    });
-                    parked.store(false, std::memory_order_relaxed);
-                    lock.unlock();
-                    parked_wakeups.fetch_add(1, std::memory_order_relaxed);
-                    idle_blocks = 0;
-                    if (quit.load(std::memory_order_relaxed)) return;
-                    spinning.fetch_add(1, std::memory_order_relaxed);
-                }
-                spins = 0;
-                std::this_thread::yield();
+                LT_CPU_RELAX();
             }
             spinning.fetch_sub(1, std::memory_order_relaxed);
 
-            seen = generation.load(std::memory_order_acquire);
-            idle_blocks = 0;
+            if (quit.load(std::memory_order_relaxed)) return;
+
+            if (generation.load(std::memory_order_acquire) == seen) {
+                wait_entries.fetch_add(1, std::memory_order_relaxed);
+                waiting.fetch_add(1, std::memory_order_relaxed);
+                generation.wait(seen, std::memory_order_acquire);
+                waiting.fetch_sub(1, std::memory_order_relaxed);
+                parked_wakeups.fetch_add(1, std::memory_order_relaxed);
+                if (quit.load(std::memory_order_relaxed)) return;
+            }
+
+            const std::uint64_t published =
+                generation.load(std::memory_order_acquire);
+            if (published == seen) continue;
+            seen = published;
             drain();
         }
     }
@@ -154,11 +132,8 @@ void RenderThreadPool::stop() noexcept {
         return;
     }
     impl_->quit.store(true, std::memory_order_relaxed);
-    {
-        std::lock_guard lock(impl_->park_mutex);
-        impl_->generation.fetch_add(1, std::memory_order_release);
-    }
-    impl_->park_cv.notify_all();
+    impl_->generation.fetch_add(1, std::memory_order_release);
+    impl_->generation.notify_all();
     for (auto& w : impl_->workers) {
         if (w.joinable()) w.join();
     }
@@ -166,12 +141,14 @@ void RenderThreadPool::stop() noexcept {
     impl_->quit.store(false, std::memory_order_relaxed);
 }
 
-void RenderThreadPool::run_block(int count, const RenderJobRef& job) noexcept {
+void RenderThreadPool::run_block(int count, const RenderJobRef& job,
+                                 bool allow_parallel) noexcept {
     if (count <= 0) return;
 
     // Camino serie: sin trabajadores no hay barrera, ni atómicos, ni nada que
-    // pueda comportarse distinto. Es literalmente el bucle de antes del paso 08.
-    if (!impl_ || impl_->workers.empty()) {
+    // pueda comportarse distinto. Una sola tarea tambien se queda aqui: avisar
+    // a N-1 trabajadores para que compitan por un unico indice solo añade CPU.
+    if (!impl_ || impl_->workers.empty() || count == 1 || !allow_parallel) {
         for (int i = 0; i < count; ++i) job(i);
         impl_ ? (void)impl_->blocks_serial.fetch_add(1, std::memory_order_relaxed)
               : (void)0;
@@ -185,17 +162,10 @@ void RenderThreadPool::run_block(int count, const RenderJobRef& job) noexcept {
     I.done.store(0, std::memory_order_relaxed);
     I.barrier_entries.fetch_add(1, std::memory_order_relaxed);
 
-    // Publicar la generación suelta a los trabajadores. Si alguno está aparcado
-    // hay que despertarlo con el lock tomado, o se pierde el aviso.
-    if (I.parked.load(std::memory_order_relaxed)) {
-        {
-            std::lock_guard lock(I.park_mutex);
-            I.generation.fetch_add(1, std::memory_order_release);
-        }
-        I.park_cv.notify_all();
-    } else {
-        I.generation.fetch_add(1, std::memory_order_release);
-    }
+    // Publicar y despertar. atomic::wait comprueba el valor antes de dormir,
+    // así que una notificación que coincida con esa transición no se pierde.
+    I.generation.fetch_add(1, std::memory_order_release);
+    I.generation.notify_all();
 
     // El director también trabaja.
     I.drain();
@@ -222,7 +192,9 @@ RenderThreadPoolDiagnostics RenderThreadPool::diagnostics() const noexcept {
     d.blocks_serial    = impl_->blocks_serial.load(std::memory_order_relaxed);
     d.barrier_entries  = impl_->barrier_entries.load(std::memory_order_relaxed);
     d.parked_wakeups   = impl_->parked_wakeups.load(std::memory_order_relaxed);
+    d.wait_entries     = impl_->wait_entries.load(std::memory_order_relaxed);
     d.spinning_threads = impl_->spinning.load(std::memory_order_relaxed);
+    d.waiting_threads  = impl_->waiting.load(std::memory_order_relaxed);
     return d;
 }
 

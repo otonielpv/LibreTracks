@@ -24,6 +24,7 @@ import { formatUserFacingError } from "../errors/formatTransportError";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
 import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
+import { MulticoreAudioField } from "./MulticoreAudioField";
 import { UpdateCheckField } from "./UpdateCheckField";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import {
@@ -75,8 +76,6 @@ type SettingsPanelProps = {
   onAudioSafeModeChange: (checked: boolean) => void;
   onLowLatencyOutputChange: (checked: boolean) => void;
   onAudioSingleThreadRenderChange: (checked: boolean) => void;
-  /** Hilos de audio en uso, del snapshot del motor. Sólo informativo. */
-  activeRenderThreads?: number;
 
   midiInputDevices: string[];
   isMidiInputRefreshing: boolean;
@@ -150,7 +149,6 @@ export function SettingsPanel({
   onAudioSafeModeChange,
   onLowLatencyOutputChange,
   onAudioSingleThreadRenderChange,
-  activeRenderThreads,
   midiInputDevices,
   isMidiInputRefreshing,
   selectedMidiInputDevice,
@@ -589,6 +587,14 @@ export function SettingsPanel({
                         </span>
                       </label>
                     ) : null}
+
+                    <MulticoreAudioField
+                      singleThreadRender={appSettings.audioSingleThreadRender}
+                      disabled={isSaving}
+                      onSingleThreadRenderChange={
+                        onAudioSingleThreadRenderChange
+                      }
+                    />
                   </div>
                 </section>
               ) : null}
@@ -853,12 +859,7 @@ export function SettingsPanel({
                   id="lt-settings-panel-diagnostics"
                   aria-labelledby="lt-settings-tab-diagnostics"
                 >
-                  <DiagnosticsSettingsTab
-                    singleThreadRender={appSettings.audioSingleThreadRender}
-                    onSingleThreadRenderChange={onAudioSingleThreadRenderChange}
-                    activeRenderThreads={activeRenderThreads}
-                    disabled={isSaving}
-                  />
+                  <DiagnosticsSettingsTab />
                 </section>
               ) : null}
 
