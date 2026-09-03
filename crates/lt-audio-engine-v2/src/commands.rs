@@ -269,6 +269,15 @@ pub enum EngineCommand {
     SetLowLatency {
         enabled: bool,
     },
+    /// Hilos del pool de render de audio. `0` = automático (decide la política
+    /// del dispositivo). No es un mando de rendimiento para el músico: lo
+    /// expone la pestaña Diagnóstico como control de resolución de problemas,
+    /// para no obligar a nadie a lanzar la app desde una terminal con una
+    /// variable de entorno. Ver
+    /// docs/plans/audio-thread-parallelism/09-politica-de-hilos.md
+    SetRenderThreads {
+        threads: i32,
+    },
     /// Retry opening the last-requested output device after it died and the
     /// engine fell back to its internal silent clock (snapshot
     /// `device.fallback_active == true`). No-op while a hardware stream is

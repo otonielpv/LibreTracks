@@ -122,6 +122,8 @@ EngineCommand command_from_json(const std::string& raw) {
 
     if (type == "SetMetronomeVolume")
         return CmdSetMetronomeVolume{ j.at("volume").get<float>() };
+    if (type == "SetRenderThreads")
+        return CmdSetRenderThreads{ j.at("threads").get<int>() };
 
     if (type == "SetMetronomeOutputRoute")
         return CmdSetMetronomeOutputRoute{ j.at("route").get<std::string>() };
@@ -500,6 +502,9 @@ std::string command_to_json(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeVolume>) {
             j["type"] = "SetMetronomeVolume"; j["volume"] = c.volume;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetRenderThreads>) {
+            j["type"] = "SetRenderThreads"; j["threads"] = c.threads;
         }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeOutputRoute>) {
             j["type"] = "SetMetronomeOutputRoute"; j["route"] = c.route;

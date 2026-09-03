@@ -120,6 +120,12 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       persistAudioPatch({ lowLatencyOutput: enabled }, audioRoutingUpdated());
     },
 
+    handleAudioSingleThreadRenderChange(enabled: boolean) {
+      // No reabre el dispositivo: el motor cambia el pool entre bloques, así
+      // que tocar esto no corta el audio (ver la nota en state/mod.rs).
+      persistAudioPatch({ audioSingleThreadRender: enabled }, audioRoutingUpdated());
+    },
+
     handleEnabledOutputChannelChange(channelIndex: number, enabled: boolean) {
       setEnabledOutputChannelsDraft((previous) => {
         const next = new Set(

@@ -882,6 +882,14 @@ export type AppSettings = {
   audioSafeMode: boolean;
   /** Android only: open the output stream in AAudio low-latency mode. */
   lowLatencyOutput: boolean;
+  /**
+   * Reducir el trabajo de audio a un solo hilo.
+   *
+   * Es el interruptor de «si cruje, prueba esto» de la pestaña Diagnóstico, no
+   * un mando de rendimiento. Apagado, el motor reparte el render entre varios
+   * hilos según la máquina; encendido, vuelve al camino de un solo hilo.
+   */
+  audioSingleThreadRender: boolean;
   selectedMidiDevice: string | null;
   /** Port the timeline MIDI tracks send to. Separate from the input device. */
   selectedMidiOutputDevice: string | null;
@@ -986,6 +994,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   outputSampleFormat: null,
   audioSafeMode: false,
   lowLatencyOutput: false,
+  audioSingleThreadRender: false,
   selectedMidiDevice: null,
   selectedMidiOutputDevice: null,
   suppressMissingMidiDeviceWarning: false,
@@ -1193,6 +1202,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     outputSampleFormat,
     audioSafeMode: Boolean(settings.audioSafeMode),
     lowLatencyOutput: Boolean(settings.lowLatencyOutput),
+    audioSingleThreadRender: Boolean(settings.audioSingleThreadRender),
     selectedMidiDevice,
     selectedMidiOutputDevice,
     suppressMissingMidiDeviceWarning: Boolean(

@@ -2052,6 +2052,7 @@ export function TransportPanelContent() {
     handleOutputBufferSizeChange,
     handleAudioSafeModeChange,
     handleLowLatencyOutputChange,
+    handleAudioSingleThreadRenderChange,
     handleEnabledOutputChannelChange,
     handleDiscardEnabledOutputChannels,
     handleSelectAllOutputChannels,
@@ -8197,6 +8198,7 @@ export function TransportPanelContent() {
               onClearOutputChannels={handleClearOutputChannels}
               onAudioSafeModeChange={handleAudioSafeModeChange}
               onLowLatencyOutputChange={handleLowLatencyOutputChange}
+              onAudioSingleThreadRenderChange={handleAudioSingleThreadRenderChange}
               midiInputDevices={midiInputDevices}
               isMidiInputRefreshing={isMidiInputRefreshing}
               selectedMidiInputDevice={selectedMidiInputDevice}

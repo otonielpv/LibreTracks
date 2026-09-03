@@ -2061,6 +2061,24 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (mixer_) mixer_->set_metronome_volume(metronome_config_.volume);
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetRenderThreads>) {
+            // Hebra de control. `start()` para el pool anterior antes de crear
+            // el nuevo, así que cambiar esto mientras suena es seguro y no
+            // corta el audio: entre bloques, el mixer ejecuta el camino serie.
+            render_threads_user_choice_ = c.threads;
+            const unsigned hw = std::thread::hardware_concurrency();
+            const int recommended = lt_recommend_render_threads_for(
+                lt_device_profile().device_class, hw > 0 ? static_cast<int>(hw) : 0);
+            const int threads = lt_resolve_render_threads(
+                recommended, render_threads_user_choice_,
+                std::getenv("LIBRETRACKS_RENDER_THREADS"));
+            if (mixer_) mixer_->set_render_thread_count(threads);
+            render_threads_effective_ = threads;
+            debug_log("[LT_THREADS] render pool -> %d hilo(s) "
+                      "(peticion=%d recomendado=%d)\n",
+                      threads, c.threads, recommended);
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeOutputRoute>) {
             metronome_config_.output_route = c.route.empty() ? std::string("master") : c.route;
             if (mixer_) mixer_->set_metronome_config(metronome_config_);

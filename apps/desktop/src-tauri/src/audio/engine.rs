@@ -1905,6 +1905,19 @@ impl AudioController {
                 }
             }
             } // end if rebuild_stream
+
+            // Hilos del pool de render. Fuera del `if rebuild_stream`: cambiarlo
+            // no necesita reabrir el dispositivo, y el motor lo aplica entre
+            // bloques sin cortar el audio. 0 = automatico.
+            if let Err(error) = engine.send_command(&EngineCommand::SetRenderThreads {
+                threads: if settings.audio_single_thread_render { 1 } else { 0 },
+            }) {
+                if audio_debug_logging_enabled() {
+                    eprintln!(
+                        "[libretracks-audio] render thread count rejected ({error});                          keeping previous value."
+                    );
+                }
+            }
             // Metronome config is a pure state setter; if THIS fails it's a
             // genuine engine bug, so we DO propagate.
             engine.send_command(&EngineCommand::SetMetronomeConfig {

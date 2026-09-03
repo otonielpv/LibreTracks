@@ -166,6 +166,11 @@ const es = {
       languageSpanish: "Español",
       tabDiagnostics: "Diagnóstico",
       tabShortcuts: "Atajos",
+      diagnosticsPerformanceTitle: "Rendimiento del audio",
+      diagnosticsSingleThread: "Usar un solo hilo para el audio",
+      diagnosticsSingleThreadHint:
+        "Actívalo sólo si el sonido cruje o la aplicación va lenta. Normalmente el audio se reparte entre varios núcleos para ir más holgado.",
+      diagnosticsActiveThreads: "Hilos de audio en uso:",
       diagnosticsTitle: "Registro de errores",
       diagnosticsDescription:
         "Si la aplicación se congela o falla, envíanos este registro para encontrar la causa. Solo guarda errores — sin audio ni datos personales.",

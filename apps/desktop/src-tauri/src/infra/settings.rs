@@ -161,6 +161,17 @@ pub struct AppSettings {
     /// on desktop, which negotiates latency through buffer size.
     #[serde(default)]
     pub low_latency_output: bool,
+    /// Reducir el trabajo de audio a un solo hilo.
+    ///
+    /// Es el interruptor de "si cruje, prueba esto" de la pestaña Diagnóstico.
+    /// Apagado, el motor reparte el render entre varios hilos según la máquina
+    /// (~3,7x más margen con 4 hilos, medido). Encendido, vuelve al camino de un
+    /// solo hilo, que es el comportamiento de siempre.
+    ///
+    /// Existe porque el usuario que reportó el problema no tiene por qué saber
+    /// abrir una terminal: la alternativa era una variable de entorno.
+    #[serde(default)]
+    pub audio_single_thread_render: bool,
     #[serde(default)]
     pub selected_midi_device: Option<String>,
     /// Port the timeline's MIDI tracks send to. Separate from
@@ -303,6 +314,7 @@ impl Default for AppSettings {
             output_sample_format: None,
             audio_safe_mode: false,
             low_latency_output: false,
+            audio_single_thread_render: false,
             selected_midi_device: None,
             selected_midi_output_device: None,
             suppress_missing_midi_device_warning: false,

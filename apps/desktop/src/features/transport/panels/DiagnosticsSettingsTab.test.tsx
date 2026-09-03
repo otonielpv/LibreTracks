@@ -119,4 +119,44 @@ describe("DiagnosticsSettingsTab", () => {
     await waitFor(() => expect(confirmDialog).toHaveBeenCalledOnce());
     expect(clearDiagnosticsLog).not.toHaveBeenCalled();
   });
+
+  it("no muestra la seccion de rendimiento si no se cablea", () => {
+    // Es lo que permite que el resto de tests rendericen el componente a secas
+    // sin tener que conocer los ajustes de audio.
+    render(<DiagnosticsSettingsTab />);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("ofrece un interruptor, no un numero de hilos", () => {
+    // El control existe para que un usuario que no sabe abrir una terminal
+    // pueda salir del paso. Un selector de "cuantos hilos" seria justo lo que
+    // no puede evaluar, asi que aqui solo hay un si/no.
+    const onChange = vi.fn();
+    render(
+      <DiagnosticsSettingsTab
+        singleThreadRender={false}
+        onSingleThreadRenderChange={onChange}
+        activeRenderThreads={4}
+      />,
+    );
+
+    const toggle = screen.getByRole("checkbox");
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it("muestra los hilos en uso para que un reporte no tenga que adivinarlos", () => {
+    const { container } = render(
+      <DiagnosticsSettingsTab
+        singleThreadRender={false}
+        onSingleThreadRenderChange={vi.fn()}
+        activeRenderThreads={4}
+      />,
+    );
+    expect(container.textContent).toContain("uso: 4");
+  });
 });

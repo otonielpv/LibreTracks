@@ -74,6 +74,9 @@ type SettingsPanelProps = {
   onClearOutputChannels: () => void;
   onAudioSafeModeChange: (checked: boolean) => void;
   onLowLatencyOutputChange: (checked: boolean) => void;
+  onAudioSingleThreadRenderChange: (checked: boolean) => void;
+  /** Hilos de audio en uso, del snapshot del motor. Sólo informativo. */
+  activeRenderThreads?: number;
 
   midiInputDevices: string[];
   isMidiInputRefreshing: boolean;
@@ -146,6 +149,8 @@ export function SettingsPanel({
   onClearOutputChannels,
   onAudioSafeModeChange,
   onLowLatencyOutputChange,
+  onAudioSingleThreadRenderChange,
+  activeRenderThreads,
   midiInputDevices,
   isMidiInputRefreshing,
   selectedMidiInputDevice,
@@ -848,7 +853,12 @@ export function SettingsPanel({
                   id="lt-settings-panel-diagnostics"
                   aria-labelledby="lt-settings-tab-diagnostics"
                 >
-                  <DiagnosticsSettingsTab />
+                  <DiagnosticsSettingsTab
+                    singleThreadRender={appSettings.audioSingleThreadRender}
+                    onSingleThreadRenderChange={onAudioSingleThreadRenderChange}
+                    activeRenderThreads={activeRenderThreads}
+                    disabled={isSaving}
+                  />
                 </section>
               ) : null}
 

@@ -1719,6 +1719,9 @@ impl DesktopSession {
             || previous_settings.output_channel_mapping != next_settings.output_channel_mapping
             || previous_settings.audio_safe_mode != next_settings.audio_safe_mode
             || previous_settings.low_latency_output != next_settings.low_latency_output;
+        // Nota: audio_single_thread_render NO entra aqui. Cambiarlo no necesita
+        // reabrir el dispositivo -- el motor cambia el pool entre bloques -- y
+        // meterlo aqui haria que tocar el interruptor cortara el audio.
         let midi_changed =
             previous_settings.selected_midi_device != next_settings.selected_midi_device;
         let output_channels_changed =

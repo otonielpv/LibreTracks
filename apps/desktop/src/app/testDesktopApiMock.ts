@@ -405,6 +405,7 @@ function buildInitialState(): DesktopApiMockState {
       outputSampleFormat: null,
       audioSafeMode: false,
       lowLatencyOutput: false,
+      audioSingleThreadRender: false,
       selectedMidiDevice: null,
       selectedMidiOutputDevice: null,
       suppressMissingMidiDeviceWarning: false,

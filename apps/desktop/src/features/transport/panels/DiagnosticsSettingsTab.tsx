@@ -26,7 +26,25 @@ function formatLogBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function DiagnosticsSettingsTab() {
+/**
+ * Props opcionales. Cuando no se pasan, la sección de rendimiento no se
+ * muestra: así los tests que renderizan `<DiagnosticsSettingsTab />` a secas
+ * siguen valiendo y el componente no obliga a nadie a cablearlo.
+ */
+export interface DiagnosticsSettingsTabProps {
+  singleThreadRender?: boolean;
+  onSingleThreadRenderChange?: (enabled: boolean) => void;
+  /** Hilos que el motor está usando de verdad. Sólo informativo. */
+  activeRenderThreads?: number;
+  disabled?: boolean;
+}
+
+export function DiagnosticsSettingsTab({
+  singleThreadRender,
+  onSingleThreadRenderChange,
+  activeRenderThreads,
+  disabled = false,
+}: DiagnosticsSettingsTabProps = {}) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<ReactNode>(null);
   const [openLog, setOpenLog] = useState<DiagnosticsLogKind | null>(null);
@@ -167,6 +185,56 @@ export function DiagnosticsSettingsTab() {
 
   return (
     <div className="lt-settings-section-grid">
+      {/* Rendimiento del audio.
+          Va en Diagnóstico y no en Audio a propósito: no es un mando para
+          ajustar, es el "si cruje, prueba esto". Un músico no tiene forma de
+          evaluar cuántos hilos le convienen, así que aquí no hay un número que
+          elegir, sólo un interruptor. Los hilos activos se muestran al lado
+          para que un reporte de usuario diga a cuántos corría de verdad. */}
+      {onSingleThreadRenderChange ? (
+        <div className="lt-settings-field">
+          <span className="lt-settings-field-label">
+            {t("transport.settingsModal.diagnosticsPerformanceTitle", {
+              defaultValue: "Rendimiento del audio",
+            })}
+          </span>
+          <label className="lt-settings-toggle">
+            <input
+              type="checkbox"
+              checked={Boolean(singleThreadRender)}
+              disabled={disabled}
+              onChange={(event) =>
+                onSingleThreadRenderChange(event.target.checked)
+              }
+            />
+            <span className="lt-settings-toggle-copy">
+              <span>
+                {t("transport.settingsModal.diagnosticsSingleThread", {
+                  defaultValue: "Usar un solo hilo para el audio",
+                })}
+              </span>
+              <small>
+                {t("transport.settingsModal.diagnosticsSingleThreadHint", {
+                  defaultValue:
+                    "Actívalo sólo si el sonido cruje o la aplicación va lenta. Normalmente el audio se reparte entre varios núcleos para ir más holgado.",
+                })}
+              </small>
+            </span>
+          </label>
+          {typeof activeRenderThreads === "number" ? (
+            <small>
+              {/* El número va FUERA de la cadena traducida: así no depende de
+                  la interpolación, que el arnés de tests no aplica, y el test
+                  puede comprobar que el número sale de verdad. */}
+              {t("transport.settingsModal.diagnosticsActiveThreads", {
+                defaultValue: "Hilos de audio en uso:",
+              })}{" "}
+              {activeRenderThreads}
+            </small>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="lt-settings-field">
         <span className="lt-settings-field-label">
           {t("transport.settingsModal.diagnosticsTitle", {
