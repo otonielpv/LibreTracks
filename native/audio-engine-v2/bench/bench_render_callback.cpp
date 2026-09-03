@@ -18,6 +18,11 @@
 //   reinician en CADA bloque, de forma que el "máximo desde la última lectura"
 //   que devuelve take_phase_max_us() es exactamente el valor de ese bloque.
 //
+//   Esas marcas se truncan a µs enteros, así que el desglose tiene un suelo de
+//   resolución: por debajo de ~100 µs por bloque el redondeo pesa más que lo
+//   medido y el banco dice "n/a" en vez de publicar el error del reloj como si
+//   fuera un hallazgo. Ver kPhaseMeaningfulFloorUs.
+//
 // El audio de las fuentes va en RAM (store_decoded_source) a propósito: la
 // starvation de disco es otro problema, con otra firma, y contaminaría la
 // medida. Ver el Hecho 1 del diagnóstico del plan.
@@ -288,6 +293,14 @@ BenchResult run(const Config& cfg) {
 // pasadas de la misma configuración no renderizan las mismas pistas por los
 // mismos caminos, el banco no está midiendo lo mismo dos veces y ninguna
 // comparación contra la línea base significa nada.
+//
+// Se comprueba CADA configuración, no una representativa. La primera versión
+// sondeaba sólo `configs.front()`, y en `--matrix` esa primera fila es 1 pista,
+// buffer 128 y warp APAGADO: comparaba `path_stretched` y `bungee_voices` de 0
+// contra 0 y daba OK sin haber tocado nunca el camino del warp, que es el único
+// donde el determinismo podría romperse de verdad. La línea base se publicó así
+// una vez. El coste de sondear todas es ~18 % del tiempo de la matriz; la
+// alternativa es una comprobación que da verde sin mirar.
 
 bool verify_determinism(const Config& cfg, std::string& detail) {
     Config probe = cfg;
@@ -315,6 +328,25 @@ bool verify_determinism(const Config& cfg, std::string& detail) {
                     static_cast<std::uint64_t>(a.bungee_voices),
                     static_cast<std::uint64_t>(b.bungee_voices));
     return !bad;
+}
+
+// ── Suelo de resolución del desglose por fases ───────────────────────────────
+//
+// `Mixer::render` marca las fases con duration_cast<microseconds>, o sea trunca
+// a µs enteros, y hay cuatro marcas por bloque. Eso deja un déficit sistemático
+// de ~1-2 µs por bloque que NO es trabajo sin instrumentar: es redondeo.
+//
+// Da igual en un bloque de 3268 µs (0,04 %) y se lo come todo en uno de 1,8 µs
+// (66 %). Reportar «cobertura 44 %» para una fila de 1 pista sería inventarse
+// un hallazgo a partir de la resolución del reloj.
+//
+// Por encima de este suelo el déficit de truncamiento queda por debajo del ±5 %
+// que pide el criterio C4: 4 marcas x 1 µs de error máximo = 4 µs, y 4/100 = 4 %.
+constexpr double kPhaseMeaningfulFloorUs = 100.0;
+constexpr int    kPhaseMarksPerBlock     = 4;
+
+bool phase_coverage_is_meaningful(const BenchResult& r) {
+    return r.phases.available && r.avg_us >= kPhaseMeaningfulFloorUs;
 }
 
 // ── Salida ───────────────────────────────────────────────────────────────────
@@ -355,6 +387,15 @@ void print_detail(const BenchResult& r) {
                 r.phases.sched / static_cast<double>(r.blocks_rendered),
                 r.phases.tracks/ static_cast<double>(r.blocks_rendered),
                 r.phases.post  / static_cast<double>(r.blocks_rendered));
+
+    if (!phase_coverage_is_meaningful(r)) {
+        std::printf("  cobertura de fases: n/a — el bloque medio son %.1f us y las\n"
+                    "    fases se truncan a us enteros (%d marcas por bloque), asi\n"
+                    "    que el deficit de truncamiento pesa mas que lo que se mide.\n"
+                    "    El dato sale por debajo de %.0f us/bloque.\n",
+                    r.avg_us, kPhaseMarksPerBlock, kPhaseMeaningfulFloorUs);
+        return;
+    }
     std::printf("  cobertura de fases: %.1f%% del tiempo total del callback%s\n",
                 cov, (cov >= 95.0 && cov <= 105.0) ? " (dentro del +-5%)"
                                                     : "  <-- FUERA DEL +-5%");
@@ -401,9 +442,16 @@ void write_json(const std::vector<BenchResult>& results, const std::string& path
             f << ", \"phase_load_us\": "   << r.phases.load / n
               << ", \"phase_sched_us\": "  << r.phases.sched / n
               << ", \"phase_tracks_us\": " << r.phases.tracks / n
-              << ", \"phase_post_us\": "   << r.phases.post / n
-              << ", \"phase_coverage_pct\": "
-              << 100.0 * r.phases.total() / r.measured_total_us;
+              << ", \"phase_post_us\": "   << r.phases.post / n;
+            // La cobertura sólo se publica cuando significa algo. Por debajo del
+            // suelo de resolución el número sería el error de truncamiento del
+            // reloj disfrazado de hallazgo, y un JSON no lleva notas al pie.
+            if (phase_coverage_is_meaningful(r)) {
+                f << ", \"phase_coverage_pct\": "
+                  << 100.0 * r.phases.total() / r.measured_total_us;
+            } else {
+                f << ", \"phase_coverage_pct\": null";
+            }
         }
         f << "}" << (i + 1 < results.size() ? ",\n" : "\n");
     }
@@ -490,20 +538,24 @@ int main(int argc, char** argv) {
     const std::vector<Config> configs = matrix ? baseline_matrix(cfg)
                                                : std::vector<Config>{cfg};
 
-    // C6: se comprueba sobre la primera configuración, que es representativa —
-    // si el banco fuera no determinista, lo sería en cualquiera.
-    {
+    // C6: TODAS las configuraciones, no una representativa. Ver el comentario
+    // de verify_determinism.
+    for (std::size_t i = 0; i < configs.size(); ++i) {
         std::string detail;
-        if (!verify_determinism(configs.front(), detail)) {
+        if (!verify_determinism(configs[i], detail)) {
             std::fprintf(stderr,
-                "DETERMINISMO ROTO: dos pasadas de la misma configuración dan\n"
+                "DETERMINISMO ROTO en la configuración %zu de %zu\n"
+                "(%d pistas, bloque %d, warp %s, ratio %.3f): dos pasadas dan\n"
                 "contadores distintos (%s). El banco no está midiendo lo mismo\n"
                 "dos veces; cualquier comparación contra la línea base sería\n"
-                "ruido. Abortando.\n", detail.c_str());
+                "ruido. Abortando.\n",
+                i + 1, configs.size(), configs[i].tracks, configs[i].block,
+                configs[i].warp ? "on" : "off", configs[i].ratio, detail.c_str());
             return 3;
         }
-        std::printf("determinismo estructural: OK (dos pasadas, contadores idénticos)\n\n");
     }
+    std::printf("determinismo estructural: OK en %zu configuración(es), "
+                "dos pasadas cada una\n\n", configs.size());
 
     print_header();
     std::vector<BenchResult> results;
