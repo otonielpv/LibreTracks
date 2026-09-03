@@ -20,8 +20,11 @@ export default defineConfig({
   integrations: [
     // Starlight pulls in the sitemap integration itself, but without a filter it
     // publishes the private /admin/ dashboards. Declare it explicitly instead.
+    // /download/stats/ joins them: it renders its counters client-side, so it is
+    // marked noIndex and listing a page we ask Google not to index is a
+    // contradiction the coverage report would keep reminding us about.
     sitemap({
-      filter: (page) => !/\/(es\/)?admin\//.test(new URL(page).pathname),
+      filter: (page) => !/^\/(es\/)?(admin\/|download\/stats\/)/.test(new URL(page).pathname),
     }),
     tailwind({ applyBaseStyles: false }),
     starlight({

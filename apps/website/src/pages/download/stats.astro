@@ -2,7 +2,11 @@
 import SiteLayout from "../../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="LibreTracks Release Stats" description="Fresh GitHub release download counters for LibreTracks." lang="en">
+{/* The counters are fetched from the GitHub API in the browser, so what a
+    crawler sees is a heading and "Loading current counters...". There is
+    nothing here worth a search result, and leaving it indexable only means it
+    sits in Search Console for ever as a page Google declines to index. */}
+<SiteLayout title="LibreTracks Release Stats" description="Fresh GitHub release download counters for LibreTracks." lang="en" noIndex>
   <main class="site-shell band">
     <div class="section-heading">
       <p class="eyebrow">Release stats</p>
