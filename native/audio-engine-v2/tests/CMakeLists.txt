@@ -38,6 +38,7 @@ add_executable(lt_engine_tests
     test_rt_guard.cpp
     test_rt_no_allocations.cpp
     test_mixer_routing_step03.cpp
+    test_mixer_strings_step04.cpp
 )
 
 target_link_libraries(lt_engine_tests

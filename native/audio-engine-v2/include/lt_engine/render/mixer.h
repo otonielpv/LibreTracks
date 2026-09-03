@@ -134,6 +134,11 @@ public:
     // Test-only latch: exercise the render fallback used while rebuilding the
     // control table. Never enabled in shipped engine targets.
     void force_control_count_zero_for_test() noexcept;
+    std::uint64_t take_control_index_lookup_count_for_test() noexcept {
+        return control_index_lookup_count_.exchange(0, std::memory_order_relaxed);
+    }
+    void accumulate_folder_meter_for_test(int meter_index, float value) noexcept;
+    float folder_meter_peak_for_test(int meter_index) const noexcept;
     static std::pair<int, int> route_channels_for_test(std::string_view route,
                                                        int available_channels,
                                                        const int* active_channels,
@@ -216,6 +221,13 @@ private:
     std::vector<std::unique_ptr<TrackControlState>> controls_;
     std::atomic<int> control_count_{0};
     TrackControlState fallback_control_;
+
+    // Immutable lookup tables published with control_count_: flattened by
+    // song, then track.  The audio thread uses these in the normal path;
+    // string lookup remains only for the rebuild fallback window.
+    std::vector<int> control_slot_for_renderer_;
+    std::vector<std::array<int, kMaxFolderDepth>> ancestor_meter_indices_for_renderer_;
+    std::vector<int> renderer_song_offsets_;
 
     // Compute effective (folder-chained) controls for a track slot.
     // Must only be called from the audio thread.
@@ -342,7 +354,8 @@ private:
                                        float left_peak,
                                        float right_peak,
                                        float left_rms,
-                                       float right_rms) noexcept;
+                                       float right_rms,
+                                       const std::array<int, kMaxFolderDepth>* precomputed_ancestors = nullptr) noexcept;
     void render_timeline_span(float** output_channels,
                               int num_channels,
                               int num_frames,
@@ -374,6 +387,7 @@ private:
     TrackControlState* control_for_track(const Id& track_id) noexcept;
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;
+    mutable std::atomic<std::uint64_t> control_index_lookup_count_{0};
     void rebuild_control_slots(std::shared_ptr<const Session> session, bool preserve_realtime_state);
     void recalculate_control_routing(const std::shared_ptr<const Session>& session,
                                      const int* active_output_channels,

@@ -29,6 +29,12 @@ void Mixer::force_control_count_zero_for_test() noexcept {
 
 namespace {
 
+void atomic_max_relaxed(std::atomic<float>& target, float value) noexcept {
+    float current = target.load(std::memory_order_relaxed);
+    while (current < value && !target.compare_exchange_weak(
+               current, value, std::memory_order_relaxed, std::memory_order_relaxed)) {}
+}
+
 bool jump_debug_enabled() {
     static const bool on = [] {
         const char* raw = std::getenv("LIBRETRACKS_JUMP_DEBUG");
@@ -210,6 +216,16 @@ std::pair<int, int> Mixer::route_channels_for_test(std::string_view route,
     route_channels(route, available_channels, active_channels, active_count, left, right);
     return {left, right};
 }
+
+void Mixer::accumulate_folder_meter_for_test(int meter_index, float value) noexcept {
+    if (meter_index < 0 || static_cast<std::size_t>(meter_index) >= track_meters_.size()) return;
+    atomic_max_relaxed(track_meters_[static_cast<std::size_t>(meter_index)]->left_peak, value);
+}
+
+float Mixer::folder_meter_peak_for_test(int meter_index) const noexcept {
+    if (meter_index < 0 || static_cast<std::size_t>(meter_index) >= track_meters_.size()) return 0.0f;
+    return track_meters_[static_cast<std::size_t>(meter_index)]->left_peak.load(std::memory_order_relaxed);
+}
 #endif
 
 Mixer::Mixer(const Session*       session,
@@ -333,6 +349,7 @@ const Mixer::TrackControlState* Mixer::control_for_track(const Id& track_id) con
 }
 
 int Mixer::control_index_for_track(const Id& track_id) const noexcept {
+    control_index_lookup_count_.fetch_add(1, std::memory_order_relaxed);
     if (track_id.empty()) return -1;
     const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0,
                                  static_cast<int>(controls_.size()));
@@ -585,6 +602,47 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
     // acquire control_count_, so they see every slot's track_id and resolved
     // parent index consistently — or 0 (fallback) during the rebuild, never a
     // half-written state.
+    // Build renderer-local indices while publication is still blocked.  The
+    // renderer pool is reused per song, therefore the tables are flattened and
+    // carry one offset per song.
+    control_slot_for_renderer_.clear();
+    ancestor_meter_indices_for_renderer_.clear();
+    renderer_song_offsets_.clear();
+    if (session) {
+        std::size_t flat = 0;
+        for (const auto& song : session->songs) {
+            renderer_song_offsets_.push_back(static_cast<int>(flat));
+            for (std::size_t ti = 0; ti < song.tracks.size(); ++ti, ++flat) {
+                int slot_index = -1;
+                for (int j = 0; j < count; ++j) {
+                    if (controls_[static_cast<std::size_t>(j)]->initialized
+                        && controls_[static_cast<std::size_t>(j)]->track_id == song.tracks[ti].id) {
+                        slot_index = j;
+                        break;
+                    }
+                }
+                control_slot_for_renderer_.push_back(slot_index);
+                std::array<int, kMaxFolderDepth> ancestors{};
+                ancestors.fill(-1);
+                const Track* current = &song.tracks[ti];
+                int depth = 0;
+                while (current && !current->parent_track_id.empty() && depth < kMaxFolderDepth) {
+                    int parent_index = -1;
+                    for (std::size_t pi = 0; pi < song.tracks.size(); ++pi) {
+                        if (song.tracks[pi].id == current->parent_track_id) {
+                            if (song.tracks[pi].kind == TrackKind::Folder)
+                                parent_index = static_cast<int>(pi);
+                            current = parent_index >= 0 ? &song.tracks[pi] : nullptr;
+                            break;
+                        }
+                    }
+                    if (parent_index < 0) break;
+                    ancestors[static_cast<std::size_t>(depth++)] = parent_index;
+                }
+                ancestor_meter_indices_for_renderer_.push_back(ancestors);
+            }
+        }
+    }
     control_count_.store(count, std::memory_order_release);
 }
 
@@ -605,7 +663,9 @@ void Mixer::render_timeline_span(float** output_channels,
     const std::size_t renderer_slots =
         static_cast<std::size_t>(std::max(0, renderer_count_.load(std::memory_order_acquire)));
 
+    std::size_t song_index = 0;
     for (const auto& song : session->songs) {
+        const std::size_t this_song_index = song_index++;
         if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
             continue;
 
@@ -619,7 +679,13 @@ void Mixer::render_timeline_span(float** output_channels,
                 continue;
             }
 
-            int slot_idx = control_index_for_track(track.id);
+            const std::size_t map_index = (this_song_index < renderer_song_offsets_.size())
+                ? static_cast<std::size_t>(renderer_song_offsets_[this_song_index]) + ti
+                : control_slot_for_renderer_.size();
+            const bool published_slots = control_count_.load(std::memory_order_acquire) > 0;
+            int slot_idx = (published_slots && map_index < control_slot_for_renderer_.size())
+                ? control_slot_for_renderer_[map_index]
+                : control_index_for_track(track.id);
             TrackControlState* control = (slot_idx >= 0) ? controls_[static_cast<std::size_t>(slot_idx)].get() : nullptr;
 
             EffectiveControls fallback_eff{};
@@ -705,7 +771,9 @@ void Mixer::render_timeline_span(float** output_channels,
             track_meters_[ti]->left_rms.store(track_rms_l, std::memory_order_relaxed);
             track_meters_[ti]->right_rms.store(track_rms_r, std::memory_order_relaxed);
             update_ancestor_folder_meters(
-                song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
+                song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r,
+                (published_slots && map_index < ancestor_meter_indices_for_renderer_.size())
+                    ? &ancestor_meter_indices_for_renderer_[map_index] : nullptr);
 
             int left_channel = 0;
             int right_channel = -1;
@@ -1639,7 +1707,20 @@ void Mixer::update_ancestor_folder_meters(const Song& song,
                                           float left_peak,
                                           float right_peak,
                                           float left_rms,
-                                          float right_rms) noexcept {
+                                          float right_rms,
+                                          const std::array<int, kMaxFolderDepth>* precomputed_ancestors) noexcept {
+    if (precomputed_ancestors) {
+        for (int depth = 0; depth < kMaxFolderDepth; ++depth) {
+            const int parent_index = (*precomputed_ancestors)[static_cast<std::size_t>(depth)];
+            if (parent_index < 0 || static_cast<std::size_t>(parent_index) >= track_meters_.size()) break;
+            auto& meter = *track_meters_[static_cast<std::size_t>(parent_index)];
+            atomic_max_relaxed(meter.left_peak, left_peak);
+            atomic_max_relaxed(meter.right_peak, right_peak);
+            atomic_max_relaxed(meter.left_rms, left_rms);
+            atomic_max_relaxed(meter.right_rms, right_rms);
+        }
+        return;
+    }
     const Track* current = &track;
     int depth = 0;
     while (!current->parent_track_id.empty() && depth < kMaxFolderDepth) {
@@ -1657,18 +1738,10 @@ void Mixer::update_ancestor_folder_meters(const Song& song,
             break;
 
         auto& meter = *track_meters_[parent_index];
-        meter.left_peak.store(
-            std::max(meter.left_peak.load(std::memory_order_relaxed), left_peak),
-            std::memory_order_relaxed);
-        meter.right_peak.store(
-            std::max(meter.right_peak.load(std::memory_order_relaxed), right_peak),
-            std::memory_order_relaxed);
-        meter.left_rms.store(
-            std::max(meter.left_rms.load(std::memory_order_relaxed), left_rms),
-            std::memory_order_relaxed);
-        meter.right_rms.store(
-            std::max(meter.right_rms.load(std::memory_order_relaxed), right_rms),
-            std::memory_order_relaxed);
+        atomic_max_relaxed(meter.left_peak, left_peak);
+        atomic_max_relaxed(meter.right_peak, right_peak);
+        atomic_max_relaxed(meter.left_rms, left_rms);
+        atomic_max_relaxed(meter.right_rms, right_rms);
 
         current = &(*parent);
         ++depth;
