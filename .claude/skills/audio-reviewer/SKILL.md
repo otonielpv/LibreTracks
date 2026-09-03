@@ -30,6 +30,10 @@ Lee:
 
 **No te fías del informe del BUILDER.** Si dice que un test pasa, lo ejecutas tú.
 
+**No ejecutes Graphify** (`graphify update`, `query`, `path`, `explain` ni
+ninguna otra variante). La regla global de `CLAUDE.md` queda anulada para todas
+las sesiones REVIEWER de este plan: revisa con comandos concretos y el diff.
+
 Para **cada** criterio de aceptación, uno por uno:
 
 - `[x]` **CONFIRMADO** — lo has verificado tú mismo. Di cómo.

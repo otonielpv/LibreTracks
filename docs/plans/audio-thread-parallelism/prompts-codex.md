@@ -36,6 +36,8 @@ Si tu paso depende de otros, comprueba en sus bitacoras que estan aprobados
 antes de empezar. Si no lo estan, dilo y para.
 
 Reglas duras que te van a rechazar si las incumples:
+  - NO ejecutes Graphify en ninguna de sus variantes. Para este plan queda
+    anulada la regla global de CLAUDE.md de actualizar el grafo.
   - "Bit-exacto" significa bit-exacto: sin tolerancia, todas las muestras de
     todos los bloques. Nada de abs(a-b) < 1e-6.
   - Nada de tests que midan tiempos de hilos. El rendimiento va al banco.
@@ -83,6 +85,9 @@ Lee, en este orden:
   4. El diff real: git diff y git status
 
 NO TE FIAS DEL INFORME DEL BUILDER. Si dice que un test pasa, lo ejecutas tu.
+
+NO ejecutes Graphify en ninguna de sus variantes. Para este plan queda anulada
+la regla global de CLAUDE.md de actualizar el grafo.
 
 Para CADA criterio, uno por uno, marcas [x] CONFIRMADO (di como lo verificaste),
 [!] RECHAZADO (fichero:linea y que falla) o [ ] PENDIENTE-HUMANO (requiere

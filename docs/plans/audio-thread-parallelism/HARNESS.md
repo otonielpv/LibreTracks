@@ -103,6 +103,10 @@ Ninguno.
 
 ## Reglas del bucle
 
+0. **BUILDER y REVIEWER no ejecutan Graphify.** Para este plan queda anulada la
+   instrucción global de `CLAUDE.md` de actualizar el grafo tras tocar código.
+   Tampoco se usan `graphify query/path/explain`: cada vuelta se limita a los
+   ficheros, tests y bancos concretos del paso.
 1. **El REVIEWER no escribe código de producción.** Sólo juzga y, si acaso,
    arregla el propio test que está evaluando cuando el fallo sea del test.
 2. **El REVIEWER ejecuta los comandos él mismo.** No se fía del informe del

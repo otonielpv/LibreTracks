@@ -1,5 +1,10 @@
 ## graphify
 
+> **Excepción explícita:** los agentes BUILDER y REVIEWER del plan
+> `docs/plans/audio-thread-parallelism/` no deben ejecutar Graphify en ninguna
+> de sus variantes. Esta excepción prevalece sobre las reglas siguientes durante
+> todas las vueltas de ese harness.
+
 This project has a graphify knowledge graph at graphify-out/.
 
 Rules:

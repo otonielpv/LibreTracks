@@ -45,6 +45,9 @@ que están aprobados**. El paso 08 en particular no se empieza sin 03, 04, 05 y
 
 ## Restricciones duras de este plan
 
+- **No ejecutes Graphify** (`graphify update`, `query`, `path`, `explain` ni
+  ninguna otra variante). La regla global de `CLAUDE.md` queda anulada para
+  todas las sesiones BUILDER de este plan.
 - **«Bit-exacto» significa bit-exacto.** Sin tolerancia, sobre todas las
   muestras de todos los bloques comparados. Un test de equivalencia con
   `abs(a-b) < 1e-6` es rechazo automático en los pasos 03-08.

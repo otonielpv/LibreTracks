@@ -26,6 +26,9 @@ Lee:
 
 **No te fías del informe del BUILDER.** Si dice que un test pasa, lo ejecutas tú.
 
+**No ejecutes Graphify** en ninguna de sus variantes. Para este plan queda
+anulada la regla global de `CLAUDE.md` de actualizar el grafo.
+
 Para **cada** criterio: `[x]` CONFIRMADO (di cómo lo verificaste), `[!]`
 RECHAZADO (fichero:línea y qué falla), o `[ ]` PENDIENTE-HUMANO (requiere
 escucha real o hardware concreto — ni lo apruebes ni lo rechaces).

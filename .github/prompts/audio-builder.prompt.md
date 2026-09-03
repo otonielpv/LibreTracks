@@ -38,6 +38,8 @@ que están aprobados. El paso 08 no se empieza sin 03, 04, 05 y 07 aprobados.
 
 ## Restricciones duras de este plan
 
+- **No ejecutes Graphify** en ninguna de sus variantes. Para este plan queda
+  anulada la regla global de `CLAUDE.md` de actualizar el grafo.
 - **«Bit-exacto» significa bit-exacto**: sin tolerancia, todas las muestras de
   todos los bloques. `abs(a-b) < 1e-6` es rechazo automático en los pasos 03-08.
 - **Nada de tests que midan tiempos de hilos.** Dos releases tumbadas en este
