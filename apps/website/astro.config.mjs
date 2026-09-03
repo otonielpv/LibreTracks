@@ -5,6 +5,11 @@ import tailwind from "@astrojs/tailwind";
 
 export default defineConfig({
   site: "https://libretracks.com",
+  // Cloudflare Pages answers `/download` with a 308 to `/download/`, so any
+  // internal link written without the slash makes Google crawl a redirect
+  // instead of the page. `always` makes `astro dev` 404 on those links so they
+  // are caught here rather than in a Search Console coverage report.
+  trailingSlash: "always",
   i18n: {
     defaultLocale: "en",
     locales: ["en", "es"],
@@ -39,7 +44,14 @@ export default defineConfig({
         src: "./src/assets/icon.svg",
         alt: "LibreTracks",
       },
-      social: [{ icon: "github", label: "GitHub", href: "https://github.com/otonielpv/LibreTracks" }],
+      // Same set as the marketing header in SiteLayout, so the two headers do
+      // not offer a different idea of where the community lives.
+      social: [
+        { icon: "github", label: "GitHub", href: "https://github.com/otonielpv/LibreTracks" },
+        { icon: "facebook", label: "Facebook", href: "https://www.facebook.com/groups/1795788251804551" },
+        { icon: "reddit", label: "Reddit", href: "https://www.reddit.com/r/LibreTracks/" },
+        { icon: "youtube", label: "YouTube", href: "https://www.youtube.com/@LibreTracks" },
+      ],
       customCss: ["./src/styles/starlight.css"],
       sidebar: [
         {

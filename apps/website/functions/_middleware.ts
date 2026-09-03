@@ -20,7 +20,11 @@
  *
  * - Preview deployments (`<hash>.libretracks.pages.dev`) are left alone, hence
  *   the exact-match host list rather than a `.pages.dev` suffix test. Redirecting
- *   those would make it impossible to check a build before it goes live.
+ *   those would make it impossible to check a build before it goes live. They do
+ *   get `X-Robots-Tag: noindex` instead: a preview is a byte-identical copy of
+ *   the site on a crawlable hostname, and while its canonical points back here,
+ *   an indexable duplicate is one more reason for Google to pick the wrong URL
+ *   as canonical for the home page.
  */
 
 const CANONICAL_HOST = "libretracks.com";
@@ -39,5 +43,13 @@ export const onRequest: PagesFunction = async (context) => {
     return Response.redirect(url.toString(), 301);
   }
 
-  return context.next();
+  const response = await context.next();
+
+  if (url.hostname.endsWith(".pages.dev")) {
+    const tagged = new Response(response.body, response);
+    tagged.headers.set("X-Robots-Tag", "noindex");
+    return tagged;
+  }
+
+  return response;
 };
