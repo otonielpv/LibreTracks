@@ -35,6 +35,8 @@ add_executable(lt_engine_tests
     bungee_voice_manager_tests.cpp
     warp_timing_tests.cpp
     prearmed_jump_tests.cpp
+    test_rt_guard.cpp
+    test_rt_no_allocations.cpp
 )
 
 target_link_libraries(lt_engine_tests
@@ -52,8 +54,17 @@ target_include_directories(lt_engine_tests PRIVATE
 # bank, so a kind wired up without a recording fails the build rather than going
 # silent at runtime.
 target_compile_definitions(lt_engine_tests PRIVATE
+    LT_ENGINE_RT_GUARD=1
     LT_VOICES_DIR="${CMAKE_SOURCE_DIR}/../../apps/desktop/src-tauri/resources/voices"
 )
+
+# Compile the disabled form in isolation: linking it into the instrumented test
+# executable would give the inline header two different definitions.
+add_library(rt_guard_release_contract OBJECT test_rt_guard_disabled.cpp)
+target_include_directories(rt_guard_release_contract PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_compile_features(rt_guard_release_contract PRIVATE cxx_std_20)
 
 if(LT_ENGINE_ENABLE_ASAN)
     if(MSVC)

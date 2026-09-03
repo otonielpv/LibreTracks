@@ -1,6 +1,7 @@
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/devices/device_channel_layout.h>
 #include <lt_engine/debug/logging.h>
+#include <lt_engine/diagnostics/rt_guard.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
@@ -721,6 +722,7 @@ void Mixer::render(float** output_channels,
                    int     num_channels,
                    int     num_frames,
                    double  /*sample_rate*/) noexcept {
+    lt::rt::ScopedRealtimeSection rt_section;
     auto t0 = std::chrono::steady_clock::now();
     callback_count_.fetch_add(1, std::memory_order_relaxed);
 

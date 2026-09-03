@@ -96,6 +96,12 @@ target_compile_definitions(lt_audio_engine_v2 PUBLIC
     _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING
 )
 
+# The realtime allocation guard is test instrumentation. The test build uses a
+# separate static engine, so this define can never reach the shipped library.
+if(LT_ENGINE_BUILD_TESTS)
+    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_RT_GUARD=1)
+endif()
+
 if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HANDHELD=1)
 else()
