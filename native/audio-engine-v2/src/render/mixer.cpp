@@ -29,6 +29,9 @@ void Mixer::force_control_count_zero_for_test() noexcept {
 
 namespace {
 
+#if defined(LT_ENGINE_TEST_HOOKS)
+#endif
+
 void atomic_max_relaxed(std::atomic<float>& target, float value) noexcept {
     float current = target.load(std::memory_order_relaxed);
     while (current < value && !target.compare_exchange_weak(
@@ -221,6 +224,7 @@ void Mixer::accumulate_folder_meter_for_test(int meter_index, float value) noexc
     if (meter_index < 0 || static_cast<std::size_t>(meter_index) >= track_meters_.size()) return;
     atomic_max_relaxed(track_meters_[static_cast<std::size_t>(meter_index)]->left_peak, value);
 }
+
 
 float Mixer::folder_meter_peak_for_test(int meter_index) const noexcept {
     if (meter_index < 0 || static_cast<std::size_t>(meter_index) >= track_meters_.size()) return 0.0f;
@@ -1001,7 +1005,9 @@ void Mixer::render(float** output_channels,
         const std::size_t renderer_slots =
             static_cast<std::size_t>(std::max(0, renderer_count_.load(std::memory_order_acquire)));
         // Find the current song.
+        std::size_t song_index = 0;
         for (const auto& song : session->songs) {
+            const std::size_t this_song_index = song_index++;
             if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
                 continue;
 
@@ -1017,7 +1023,13 @@ void Mixer::render(float** output_channels,
                     continue;
                 }
 
-                int slot_idx = control_index_for_track(track.id);
+                const std::size_t map_index = (this_song_index < renderer_song_offsets_.size())
+                    ? static_cast<std::size_t>(renderer_song_offsets_[this_song_index]) + ti
+                    : control_slot_for_renderer_.size();
+                const bool published_slots = control_count_.load(std::memory_order_acquire) > 0;
+                int slot_idx = (published_slots && map_index < control_slot_for_renderer_.size())
+                    ? control_slot_for_renderer_[map_index]
+                    : control_index_for_track(track.id);
                 TrackControlState* control = (slot_idx >= 0) ? controls_[static_cast<std::size_t>(slot_idx)].get() : nullptr;
 
                 EffectiveControls fallback_eff{};
@@ -1111,7 +1123,9 @@ void Mixer::render(float** output_channels,
                 track_meters_[ti]->left_rms.store(track_rms_l, std::memory_order_relaxed);
                 track_meters_[ti]->right_rms.store(track_rms_r, std::memory_order_relaxed);
                 update_ancestor_folder_meters(
-                    song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r);
+                    song, track, track_peak_l, track_peak_r, track_rms_l, track_rms_r,
+                    (published_slots && map_index < ancestor_meter_indices_for_renderer_.size())
+                        ? &ancestor_meter_indices_for_renderer_[map_index] : nullptr);
 
                 int left_channel = 0;
                 int right_channel = -1;
