@@ -79,6 +79,23 @@ El medidor de recursos (`ResourceMeter.tsx`) ya enseña «Carga de audio». Aña
 en el detalle expandido, cuántos hilos hay activos. Es lo que va a permitir a un
 usuario decirnos «tengo 4 hilos y sigue al 90 %» en un reporte.
 
+### 5. Convivir con MMCSS ya configurado por JUCE en Windows
+
+El log del PC afectado contiene `err=1552`. Ese código es
+`ERROR_THREAD_ALREADY_IN_TASK`: el callback ya pertenece a una tarea MMCSS.
+Tratarlo como una promoción ausente y ejecutar el fallback
+`THREAD_PRIORITY_TIME_CRITICAL` produce un diagnóstico falso y puede alterar una
+política que el backend ya configuró.
+
+La promoción del director y de los workers debe ser idempotente y distinguir:
+
+- promoción propia correcta;
+- hilo ya administrado por MMCSS (informativo, sin fallback);
+- fallo real (fallback best-effort y código de error).
+
+No filtres simplemente el texto del log: prueba la decisión mediante una capa
+inyectable alrededor de las llamadas AVRT.
+
 ## Criterios de aceptación
 
 - [ ] C1 — `lt_recommend_worker_threads(WorkerRole::Render)` devuelve la tabla
@@ -110,6 +127,9 @@ usuario decirnos «tengo 4 hilos y sigue al 90 %» en un reporte.
       hilos lógicos, la UI **no** se vuelve pegajosa durante la reproducción de
       20 pistas con warp. Si lo hace, baja el valor por defecto de esa fila y
       actualiza este documento.
+- [ ] C12 — En Windows, `ERROR_THREAD_ALREADY_IN_TASK` se registra como
+      `already_mmcss` y no ejecuta el fallback; los fallos AVRT reales sí lo
+      hacen. Test con wrapper AVRT inyectado, incluida prueba de que sabe fallar.
 
 ## Notas para el implementador
 

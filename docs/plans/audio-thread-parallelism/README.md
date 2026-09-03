@@ -19,6 +19,7 @@ tocar nada.**
 | Que desaparezcan los picos esporádicos del callback | 03, 04, 05 |
 | Que activar warp sin cambiar el tempo salga gratis | 06 |
 | Poder demostrar cualquiera de las tres cosas | 01, 02 |
+| No confundir CPU saturada con bloques ausentes en el PC real | 10 |
 
 ## Pasos
 
@@ -33,6 +34,7 @@ tocar nada.**
 | [07](07-buses-de-mezcla-por-pista.md) | Buses de mezcla por pista (sin cambiar de hilo) | 01 | medio | base |
 | [08](08-pool-de-render.md) | Pool de trabajadores de tiempo real | 03, 04, 05, 07 | **alto** | **el más alto** |
 | [09](09-politica-de-hilos.md) | Política de hilos, perfil de dispositivo y ajuste | 08 | medio | alto (UX) |
+| [10](10-validacion-pc-afectado.md) | Validación Release en el PC afectado | 09 | bajo | cierre real |
 
 ## Orden recomendado
 
@@ -43,10 +45,16 @@ tocar nada.**
 02 (detector) ──┬─► 03 ─────┤
                 ├─► 04 ─────┼─► 08 ─► 09
                 └─► 05 ─────┘
+                                      │
+                                      └─► 10 (PC afectado)
 ```
 
 **Empieza por 01 y 02.** Sin línea base no se puede demostrar ninguna mejora, y
 sin detector no se puede demostrar que 03/04/05 arreglan algo.
+
+**No cierres el reporte del usuario al terminar 09.** El log real contiene
+starvation además de carga alta. El paso 10 compara ambas firmas en Release y
+decide con datos si hace falta un plan separado de streaming/caché.
 
 Los pasos 03, 04, 05 y 06 son independientes entre sí y pueden repartirse entre
 agentes distintos. **08 no se empieza hasta que 03, 04, 05 y 07 estén

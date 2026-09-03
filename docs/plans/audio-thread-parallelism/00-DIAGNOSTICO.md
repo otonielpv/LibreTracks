@@ -53,6 +53,42 @@ rellenan la caché. Consecuencia para el diagnóstico:
 
 Los dos pueden coexistir. Este plan ataca **solo el primero**.
 
+### Evidencia del PC afectado (log recibido el 2026-09-03)
+
+El usuario tiene un **Intel i5-11400H (6 núcleos / 12 hilos), 8 GB de RAM y
+una RTX 3050**. No es una máquina insuficiente para reproducción multitrack:
+la GPU no participa en Bungee y el CPU tiene paralelismo de sobra para el pool
+de 4 hilos propuesto. Los 8 GB sí sitúan al equipo en el perfil
+`ModestDesktop` y dejan menos margen para caché, WebView y paginación.
+
+El fichero real `libretracks-engine-1788425424.log` cambia el diagnóstico de
+"una causa probable" a **dos fallos observados**:
+
+- 172 líneas `[LT_STARVATION]` en el historial. En el tramo iniciado el
+  2026-08-30 hay 141 eventos y unos 660 423 frames silenciados acumulados
+  (~13,8 s a 48 kHz); una ventana individual llega a ~963 ms. En sesiones
+  anteriores hay ventanas de 2,8 s y 12,1 s.
+- El proceso elige 4 hilos de relleno y 3 de decode para 12 hilos lógicos y
+  7,6 GB detectados. Es decir, el log es posterior al pool de relleno: volver a
+  añadir ese pool no es una solución.
+- Reserva un working set mínimo de 1957 MB, con máximo de 2981 MB. En una
+  máquina de 8 GB puede ser correcto o contraproducente según la memoria
+  **disponible**; el log no contiene `pf+=`, `fill_q` ni tiempos de lectura con
+  los que decidirlo.
+- No hay ninguna línea `[LT_PITCH_DEBUG]`: faltan `active_voices`, ratio y
+  backend. Por eso este log **no demuestra** cuántas voces llevaron el callback
+  al 96 %, aunque sí demuestra starvation independiente.
+- Hay 61 mensajes `MMCSS promotion FAILED (err=1552)`. En Windows, 1552 es
+  `ERROR_THREAD_ALREADY_IN_TASK`: el hilo ya pertenecía a una tarea MMCSS. No
+  debe presentarse como ausencia de MMCSS ni activar un fallback como si la
+  promoción multimedia no existiera; hay que convivir con la promoción del
+  backend JUCE (paso 09).
+
+Consecuencia: completar 01-09 puede bajar mucho la carga de Bungee y aun así
+dejar cortes por bloques no residentes. El [paso 10](10-validacion-pc-afectado.md)
+es ahora la puerta de cierre del reporte real y obliga a medir ambas firmas por
+separado.
+
 ## Hecho 2 — el warp cuesta ~1 % del presupuesto por pista, y es plano
 
 Con warp activo, `render/pitch_resolution.cpp:104-111` manda **todos** los clips
@@ -82,9 +118,11 @@ Sólo escala con el **número de voces**, y el hilo de audio las recorre en seri
 > Consecuencia directa: **activar warp con ratio 1.0 y sin transposición se paga
 > entero a cambio de nada.** Es el paso [06](06-bypass-de-warp-neutro.md).
 
-Para llegar al 96 % en esta máquina harían falta ~90 voces. Con 20-25 pistas, la
-máquina del usuario es ~4x más lenta por hilo — plausible en un portátil con
-plan de ahorro de energía o throttling térmico.
+Para llegar al 96 % en esta máquina harían falta ~90 voces. El i5-11400H del
+usuario no explica por especificación, él solo, una diferencia de ~4x por hilo.
+Antes de atribuirla al hardware hay que conocer las voces activas, la frecuencia
+real bajo carga, el plan de energía y el resto del trabajo del callback. Esos
+datos faltan en el log recibido.
 
 ## Hecho 3 — el paralelismo sí escala, incluso con buffers pequeños
 
@@ -252,4 +290,6 @@ B1 es *el* punto de serialización y es lo que resuelve el paso 07.
   `native/audio-engine-v2/WARP_BACKEND_NOTES.md`.
 - La calidad del warp. Bungee sigue siendo el backend; el paso 06 sólo evita
   invocarlo cuando es la identidad.
-- El camino de starvation de disco. Es otro problema con otra firma.
+- El camino de starvation de disco. Es otro problema con otra firma; el paso 10
+  impide dar por resuelto el reporte del usuario si esa firma sigue presente,
+  pero su corrección puede requerir un plan específico.
