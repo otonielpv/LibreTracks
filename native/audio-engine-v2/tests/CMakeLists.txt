@@ -42,6 +42,7 @@ add_executable(lt_engine_tests
     test_voice_map_publish_step05.cpp
     test_neutral_warp_step06.cpp
     test_mixer_buses_step07.cpp
+    test_render_pool_step08.cpp
 )
 
 target_link_libraries(lt_engine_tests

@@ -1,4 +1,5 @@
 #include <lt_engine/devices/audio_device_manager.h>
+#include <lt_engine/core/realtime_thread.h>
 #include <lt_engine/devices/device_channel_layout.h>
 
 #if defined(LT_ENGINE_IOS_AUDIO_SESSION)
@@ -37,35 +38,12 @@
 
 namespace lt {
 
-#if defined(_WIN32)
-// Promote the calling thread (the audio device's callback thread) to the
-// Windows Multimedia Class Scheduler "Pro Audio" task. Without this the JUCE
-// DirectSound/MME callback runs at normal priority and gets preempted by the
-// decode workers + UI under load — measured as 100-400ms callback stalls that
-// underrun the buffer and drop out playing tracks (LT_AUDIO_DIAG cb_max_ms
-// spikes with zero render work). Every real DAW does this. Idempotent per
-// thread via thread_local; best-effort (older Windows without avrt just skips).
-void promote_audio_thread_to_pro_audio() {
-    static thread_local bool promoted = false;
-    if (promoted) return;
-    promoted = true;
-    DWORD task_index = 0;
-    HANDLE h = AvSetMmThreadCharacteristicsA("Pro Audio", &task_index);
-    if (h) {
-        const BOOL prio_ok = AvSetMmThreadPriority(h, AVRT_PRIORITY_CRITICAL);
-        // Intentionally leak the handle: it must stay valid for the lifetime of
-        // the audio thread, which lives until the device closes / process exit.
-        lt_debug_log("[LT_AUDIO_DIAG] audio thread promoted to MMCSS Pro Audio "
-                     "(tid=%lu prio_ok=%d)\n",
-                     GetCurrentThreadId(), prio_ok ? 1 : 0);
-    } else {
-        // Fallback: at least lift the thread above the BELOW_NORMAL decode pool.
-        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-        lt_debug_log("[LT_AUDIO_DIAG] MMCSS promotion FAILED (err=%lu); fell back "
-                     "to THREAD_PRIORITY_TIME_CRITICAL\n", GetLastError());
-    }
-}
-#endif
+// La promocion del hilo de audio vivia aqui, Windows-only y dentro del .cpp.
+// El pool de render del paso 08 necesita lo mismo para sus trabajadores, asi que
+// se movio a core/realtime_thread.{h,cpp} con implementaciones para las demas
+// plataformas y con la regla de "igualar, no superar" que explica el hecho 1.1
+// del diagnostico: en WASAPI JUCE ya mete este hilo en "Pro Audio" a prioridad
+// NORMAL, asi que los trabajadores no deben pedir CRITICAL.
 
 // ---------------------------------------------------------------------------
 // JUCE callback adaptor — bridges AudioRenderCallback to juce::AudioIODeviceCallback

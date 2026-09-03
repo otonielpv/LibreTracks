@@ -77,7 +77,7 @@ struct Config {
     bool   warp       = false;
     double ratio      = 1.0;
     int    semitones  = 0;
-    int    threads    = 1;   // reservado: lo cablea el paso 08
+    int    threads    = 1;   // pool de render (paso 08)
     int    blocks     = 600;
     int    warmup     = 150;
     std::string label;
@@ -215,6 +215,7 @@ BenchResult run(const Config& cfg) {
     }
 
     mixer.prepare_render_resources(cfg.block);
+    mixer.set_render_thread_count(cfg.threads);
     clock.play();
 
     std::vector<float> left(static_cast<std::size_t>(cfg.block), 0.0f);
@@ -284,6 +285,7 @@ BenchResult run(const Config& cfg) {
     r.path_varispeed = td.path_varispeed_count;
     r.path_stretched = td.path_stretched_count;
 
+    mixer.set_render_thread_count(1);   // para los trabajadores antes de salir
     return r;
 }
 
@@ -354,14 +356,14 @@ bool phase_coverage_is_meaningful(const BenchResult& r) {
 void print_header() {
     std::printf("%7s %6s %5s %7s %10s %10s %10s %10s %9s %7s\n",
                 "pistas", "bloque", "warp", "ratio",
-                "avg us", "p95 us", "p99 us", "max us", "%presup", "voces");
+                "avg us", "p95 us", "p99 us", "max us", "%presup", "hilos");
 }
 
 void print_row(const BenchResult& r) {
     std::printf("%7d %6d %5s %7.3f %10.1f %10.1f %10.1f %10.1f %8.1f%% %7d\n",
                 r.cfg.tracks, r.cfg.block, r.cfg.warp ? "on" : "off", r.cfg.ratio,
                 r.avg_us, r.p95_us, r.p99_us, r.max_us,
-                r.pct(r.avg_us), r.bungee_voices);
+                r.pct(r.avg_us), r.cfg.threads);
 }
 
 void print_detail(const BenchResult& r) {
@@ -524,12 +526,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (cfg.threads != 1) {
-        std::fprintf(stderr,
-            "--threads %d: el pool de render es del paso 08; hoy sólo vale 1.\n",
-            cfg.threads);
-        return 2;
-    }
     if (cfg.tracks <= 0 || cfg.block <= 0 || cfg.sample_rate <= 0 || cfg.blocks <= 0) {
         std::fprintf(stderr, "parámetros fuera de rango\n");
         return 2;

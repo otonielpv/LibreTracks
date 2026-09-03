@@ -6,4 +6,5 @@ target_sources(lt_audio_engine_v2 PRIVATE
     voice_guide_renderer.cpp
     pad_renderer.cpp
     mixer.cpp
+    render_thread_pool.cpp
 )

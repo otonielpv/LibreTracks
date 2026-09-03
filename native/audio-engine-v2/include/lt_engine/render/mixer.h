@@ -9,6 +9,7 @@
 #include <lt_engine/render/metronome_renderer.h>
 #include <lt_engine/render/voice_guide_renderer.h>
 #include <lt_engine/render/pad_renderer.h>
+#include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -69,6 +70,11 @@ public:
     void set_bungee_voice_manager(class BungeeVoiceManager* mgr) noexcept;
     void clear_session();
     void prepare_render_resources(int max_block_frames) noexcept;
+
+    // Pool de render (paso 08). Solo desde la HEBRA DE CONTROL, nunca durante
+    // un bloque. threads <= 1 deja el camino serie exacto de siempre.
+    void set_render_thread_count(int threads);
+    RenderThreadPoolDiagnostics render_pool_diagnostics() const noexcept;
     void trigger_crossfade() noexcept;
     void set_metronome_config(const MetronomeConfig& config);
     void set_metronome_enabled(bool enabled);
@@ -298,6 +304,11 @@ private:
         bool         has_ancestor_map = false;
     };
     std::vector<TrackBlockState> track_block_state_;
+
+    // Reparte la FASE A entre el director y sus trabajadores. La fase B no pasa
+    // por aqui nunca: es la reduccion, y su orden es el contrato de
+    // bit-exactitud del plan.
+    RenderThreadPool render_pool_;
 
     // Meters (peak hold, updated each block).
     std::atomic<float> meter_l_{0.f};

@@ -1069,15 +1069,23 @@ void Mixer::render(float** output_channels,
             for (std::size_t ti = 0; ti < renderer_slots && ti < track_block_state_.size(); ++ti)
                 track_block_state_[ti].rendered = false;
 
-            // -- FASE A: por pista e independiente entre pistas. Es la que
-            //    repartira el pool del paso 08. --
-            for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
+            // Los contadores de pistas los tocan varios hilos en la fase A, asi
+            // que no pueden ser las variables locales de antes.
+            std::atomic<std::uint64_t> rendered_atomic{0};
+            std::atomic<std::uint64_t> skipped_atomic{0};
+
+            // -- FASE A: por pista e independiente entre pistas. La reparte
+            //    el pool; con un hilo, run_block ejecuta el bucle tal cual. --
+            const std::size_t phase_a_count =
+                std::min(song.tracks.size(), renderer_slots);
+            auto phase_a = [&](int index) noexcept {
+                const std::size_t ti = static_cast<std::size_t>(index);
                 const Track& track = song.tracks[ti];
 
                 // Folder tracks are not audio sources — skip rendering them.
                 if (track.kind == TrackKind::Folder) {
-                    ++skipped_this_block;
-                    continue;
+                    skipped_atomic.fetch_add(1, std::memory_order_relaxed);
+                    return;
                 }
 
                 const std::size_t map_index = (this_song_index < renderer_song_offsets_.size())
@@ -1138,8 +1146,8 @@ void Mixer::render(float** output_channels,
                     && std::abs(start_gain * start_mute_gain * start_solo_gain) <= 1.0e-6f
                     && std::abs(gain * target_mute_gain * target_solo_gain) <= 1.0e-6f;
                 if (settled_silent && track.clips.empty()) {
-                    ++skipped_this_block;
-                    continue;
+                    skipped_atomic.fetch_add(1, std::memory_order_relaxed);
+                    return;
                 }
                 // Render into this slot's own bus.
                 //
@@ -1172,7 +1180,7 @@ void Mixer::render(float** output_channels,
                                        clock_->sample_rate(), 0, &song,
                                        /*track_is_silent=*/settled_silent,
                                        /*track_gain_override=*/1.0f);
-                ++rendered_this_block;
+                rendered_atomic.fetch_add(1, std::memory_order_relaxed);
 
                 float track_peak_l = 0.f, track_peak_r = 0.f;
                 double track_sum_l = 0.0, track_sum_r = 0.0;
@@ -1218,7 +1226,14 @@ void Mixer::render(float** output_channels,
                 st.map_index        = map_index;
                 st.has_ancestor_map =
                     published_slots && map_index < ancestor_meter_indices_for_renderer_.size();
+            };
+
+            {
+                RenderJobRef job(phase_a);
+                render_pool_.run_block(static_cast<int>(phase_a_count), job);
             }
+            rendered_this_block += rendered_atomic.exchange(0, std::memory_order_relaxed);
+            skipped_this_block  += skipped_atomic.exchange(0, std::memory_order_relaxed);
 
             // -- FASE B: reduccion, siempre en el director y EN ORDEN
             //    ASCENDENTE. Es el contrato de bit-exactitud del plan: la suma
@@ -1525,6 +1540,16 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
         usable = std::min(usable, std::min(renderers_.size(), track_meters_.size()));
     }
     renderer_count_.store(static_cast<int>(usable), std::memory_order_release);
+}
+
+void Mixer::set_render_thread_count(int threads) {
+    // Solo hebra de control. start() para el pool anterior antes de crear el
+    // nuevo, asi que cambiar en caliente entre bloques es seguro.
+    render_pool_.start(threads);
+}
+
+RenderThreadPoolDiagnostics Mixer::render_pool_diagnostics() const noexcept {
+    return render_pool_.diagnostics();
 }
 
 void Mixer::trigger_crossfade() noexcept {

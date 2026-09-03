@@ -3,4 +3,5 @@ target_sources(lt_audio_engine_v2 PRIVATE
     commands.cpp
     events.cpp
     snapshot.cpp
+    realtime_thread.cpp
 )
