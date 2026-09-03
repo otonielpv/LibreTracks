@@ -65,6 +65,22 @@ caliente**: asigna. Usa un puntero a función más un `void*`, una plantilla, o 
   `THREAD_TIME_CONSTRAINT_POLICY`, Linux/Android el mejor esfuerzo disponible.
   **Un trabajador a prioridad normal es peor que no tener pool**: el planificador
   lo desaloja y se convierte en el rezagado que revienta el bloque.
+
+  **Pero no promociones a ciegas a `AVRT_PRIORITY_CRITICAL`.** El hecho 1.1 del
+  diagnóstico lo midió en el log del usuario afectado: en WASAPI, JUCE ya mete
+  su hilo de callback en la tarea «Pro Audio» con `AVRT_PRIORITY_NORMAL`
+  (`juce_WASAPI_windows.cpp:1492-1505`), nuestra promoción posterior falla con
+  1552 y el director se queda en `NORMAL`. Si los trabajadores entran en
+  `CRITICAL`, quedan **por encima del director**, que es el único hilo con una
+  fecha límite dura: una inversión de prioridad fabricada por nosotros.
+
+  La regla es **igualar, no superar**: los trabajadores deben acabar en la misma
+  clase MMCSS que el director. Como no podemos leer la prioridad efectiva del
+  hilo de JUCE, lo honesto es promocionar los trabajadores a «Pro Audio» con
+  `AVRT_PRIORITY_NORMAL` y dejar `CRITICAL` sólo para el caso en que el director
+  sí lo haya conseguido (promoción propia, sin JUCE de por medio). Registra en un
+  contador de diagnóstico qué clase acabó teniendo cada uno; si no lo mides, no
+  lo sabes.
 - **Nada de asignaciones, locks ni excepciones** dentro de `run_block`. El
   detector del paso 02 lo verifica.
 

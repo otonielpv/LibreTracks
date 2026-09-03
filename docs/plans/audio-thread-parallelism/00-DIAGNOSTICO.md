@@ -84,6 +84,34 @@ El fichero real `libretracks-engine-1788425424.log` cambia el diagnóstico de
   promoción multimedia no existiera; hay que convivir con la promoción del
   backend JUCE (paso 09).
 
+### 1.1 — Qué prioridad tiene REALMENTE el hilo de audio en WASAPI
+
+Rastreando de dónde sale ese 1552 (61 fallos frente a 73 éxitos en el mismo log,
+o sea el 46 % de las promociones): lo hace JUCE.
+`juce_WASAPI_windows.cpp:1492-1505` registra su propio hilo de callback en la
+tarea **«Pro Audio»** nada más entrar en `run()`… y lo hace con
+
+```cpp
+avSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);   // JUCE
+```
+
+Nuestro `promote_audio_thread_to_pro_audio()` viene después, pide la misma
+tarea, recibe 1552 porque el hilo ya está dentro, y cae al respaldo de
+`THREAD_PRIORITY_TIME_CRITICAL`. El handle que haría falta para subir la
+prioridad MMCSS lo tiene JUCE y no lo publica.
+
+**Conclusión: en el backend WASAPI el hilo de audio corre a
+`AVRT_PRIORITY_NORMAL`, no a `AVRT_PRIORITY_CRITICAL`.** Está dentro de MMCSS
+—o sea protegido frente a hilos normales— pero un escalón por debajo de lo que
+el código cree que está pidiendo.
+
+Esto **no** es la causa del 96 %, y por sí solo probablemente no se oye. Importa
+por otra razón, y es un requisito duro del [paso 08](08-pool-de-render.md): si
+los trabajadores del pool se promocionan a `AVRT_PRIORITY_CRITICAL` mientras el
+director sigue en `NORMAL`, habremos creado una inversión de prioridad nosotros
+mismos, con los trabajadores por encima del único hilo que tiene una fecha
+límite dura. Ver la nota correspondiente en el paso 08.
+
 Consecuencia: completar 01-09 puede bajar mucho la carga de Bungee y aun así
 dejar cortes por bloques no residentes. El [paso 10](10-validacion-pc-afectado.md)
 es ahora la puerta de cierre del reporte real y obliga a medir ambas firmas por
