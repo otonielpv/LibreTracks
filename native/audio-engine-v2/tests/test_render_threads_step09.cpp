@@ -6,6 +6,7 @@
 // criterio C8 pide demostrar que no se ha cometido.
 
 #include <doctest/doctest.h>
+#include <lt_engine/core/device_profile.h>
 #include <lt_engine/core/thread_policy.h>
 
 using namespace lt;
@@ -16,30 +17,50 @@ constexpr std::uint64_t GB = 1024ull * 1024 * 1024;
 
 TEST_CASE("step09 C1: la tabla de hilos de render, fijada valor a valor") {
     // >= 8 nucleos logicos -> 4
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 8,  16 * GB) == 4);
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 12, 32 * GB) == 4);
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 20, 32 * GB) == 4);
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 64, 64 * GB) == 4);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 8) == 4);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 12) == 4);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 20) == 4);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 64) == 4);
 
     // 4-7 nucleos -> 2
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 4, 8 * GB) == 2);
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 6, 8 * GB) == 2);
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 7, 4 * GB) == 2);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 4) == 2);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 6) == 2);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 7) == 2);
 
     // <= 3 nucleos -> 1 (pool desactivado)
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 1, 4 * GB) == 1);
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 2, 4 * GB) == 1);
-    CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 3, 8 * GB) == 1);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 1) == 1);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 2) == 1);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Desktop, 3) == 1);
 }
 
-TEST_CASE("step09: los hilos de render NO dependen de la RAM") {
-    // A proposito, y distinto de Decode: el render no asigna nada por bloque
-    // (contrato del paso 02), asi que la RAM no es la restriccion. Si alguien
-    // le mete un tope por RAM copiando de Decode, esto lo para.
-    for (std::uint64_t ram : {2 * GB, 4 * GB, 8 * GB, 16 * GB, 64 * GB}) {
-        CAPTURE(ram);
-        CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 12, ram) == 4);
-        CHECK(lt_recommend_worker_threads_for(WorkerRole::Render, 4, ram) == 2);
+TEST_CASE("step09 C7: en movil manda el PERFIL, no el numero de nucleos") {
+    // El hueco que quedaba abierto. Un telefono de 8 nucleos es big.LITTLE y con
+    // presupuesto termico: decidir por el numero le daria 4 hilos de tiempo real
+    // igual que a un PC. Estos casos lo impiden.
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Constrained, 8)  == 1);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Constrained, 4)  == 1);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Handheld, 8)     == 1);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::Handheld, 12)    == 1);
+
+    // Solo un movil con memoria de sobra y muchos nucleos llega a 2, y nunca a 4.
+    CHECK(lt_recommend_render_threads_for(DeviceClass::RoomyHandheld, 8) == 2);
+    CHECK(lt_recommend_render_threads_for(DeviceClass::RoomyHandheld, 4) == 1);
+
+    // Ninguna clase de movil alcanza el tope de escritorio, ni con 64 nucleos.
+    for (auto dc : {DeviceClass::Constrained, DeviceClass::Handheld,
+                    DeviceClass::RoomyHandheld}) {
+        CAPTURE(static_cast<int>(dc));
+        CHECK(lt_recommend_render_threads_for(dc, 64) <= 2);
+    }
+}
+
+TEST_CASE("step09: escritorio y estacion de trabajo comparten tabla") {
+    for (auto dc : {DeviceClass::Workstation, DeviceClass::Desktop,
+                    DeviceClass::ModestDesktop}) {
+        CAPTURE(static_cast<int>(dc));
+        CHECK(lt_recommend_render_threads_for(dc, 12) == 4);
+        CHECK(lt_recommend_render_threads_for(dc, 4)  == 2);
+        CHECK(lt_recommend_render_threads_for(dc, 2)  == 1);
     }
 }
 

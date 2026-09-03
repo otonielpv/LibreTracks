@@ -61,40 +61,35 @@ Reutiliza `DeviceClass` de `core/device_profile.h`; ya distingue
 Ya lo usa el paso 08; aquí sólo hay que documentarlo en
 `docs/audio-runtime-debug.md`.
 
-### 3. Ajuste de usuario
+### 3. NO hay ajuste de usuario. Corregido tras revisarlo
 
-En Ajustes → Audio, junto al tamaño de buffer:
+**Este apartado pedía un selector «Hilos de procesado» en Ajustes → Audio.
+Estaba mal planteado y se retira.**
 
-- Un selector **«Hilos de procesado»** con `Automático (N)` / `1` / `2` / `4`,
-  donde N es lo que recomienda la política.
-- Texto de ayuda breve, localizado (es/en), explicando que más hilos reparten la
-  carga entre núcleos y que si la interfaz se vuelve lenta conviene bajarlo.
-- Persistido con el resto de ajustes de audio. Al cambiarlo, reiniciar el pool
-  desde la hebra de control (`stop()` + `start()`), **sin** reabrir el
-  dispositivo.
+Lo que hacen de verdad los DAW de referencia es más variado de lo que daba por
+supuesto:
 
-### 4. Mostrar el efecto
+| DAW | Qué expone |
+| --- | --- |
+| Reaper | Número de hilos explícito (auto / 1..N) |
+| Logic Pro | «Processing Threads»: Automatic / 1..N |
+| Ableton Live | Sólo un **interruptor** («Multicore Rendering»), no un número |
+| Cubase | Interruptor + nivel de ASIO-Guard, no un número |
 
-El medidor de recursos (`ResourceMeter.tsx`) ya enseña «Carga de audio». Añade,
-en el detalle expandido, cuántos hilos hay activos. Es lo que va a permitir a un
-usuario decirnos «tengo 4 hilos y sigue al 90 %» en un reporte.
+Ninguno le pide a un músico que elija una cifra como control principal, y los
+dos que exponen el número van en automático por defecto. «Hilos de procesado» es
+jerga de ingeniero: quien lo lea no tiene forma de evaluar si le conviene 2 o 4,
+y si se equivoca empeora justo en directo, que es cuando no hay arreglo.
 
-### 5. Convivir con MMCSS ya configurado por JUCE en Windows
+En su lugar:
 
-El log del PC afectado contiene `err=1552`. Ese código es
-`ERROR_THREAD_ALREADY_IN_TASK`: el callback ya pertenece a una tarea MMCSS.
-Tratarlo como una promoción ausente y ejecutar el fallback
-`THREAD_PRIORITY_TIME_CRITICAL` produce un diagnóstico falso y puede alterar una
-política que el backend ya configuró.
-
-La promoción del director y de los workers debe ser idempotente y distinguir:
-
-- promoción propia correcta;
-- hilo ya administrado por MMCSS (informativo, sin fallback);
-- fallo real (fallback best-effort y código de error).
-
-No filtres simplemente el texto del log: prueba la decisión mediante una capa
-inyectable alrededor de las llamadas AVRT.
+- **Automático y punto.** Decide `lt_recommend_render_threads_for()`.
+- **`LIBRETRACKS_RENDER_THREADS` como escotilla de soporte.** Si a un usuario le
+  va mal, se le dice que la ponga a 1 por teléfono. Resuelve el caso real sin
+  publicar un mando que el 99 % no debe tocar.
+- **Los hilos activos en el medidor, de SOLO LECTURA.** Eso sí aporta: un
+  reporte podrá decir «4 hilos y sigue al 90 %» en vez de dejarnos adivinando,
+  que es exactamente lo que pasó con el log del 96 %.
 
 ## Criterios de aceptación
 
@@ -109,19 +104,18 @@ inyectable alrededor de las llamadas AVRT.
       Test.
 - [ ] C4 — Un valor inválido (`0`, `-1`, `"abc"`, `999`) cae al recomendado sin
       romper ni crear 999 hilos. Test.
-- [ ] C5 — Cambiar el ajuste en la UI reinicia el pool **sin cortar el audio**:
-      reproduciendo, cambiar de 1 a 4 y de 4 a 1 no produce silencio ni un
-      cambio de muestra que no sea el propio reparto. Test de motor + `PENDIENTE-HUMANO`
-      para la comprobación auditiva.
-- [ ] C6 — El ajuste persiste entre reinicios y aparece en ambos idiomas. Test
-      de frontend + revisión de `es.ts` / `en.ts`.
+- [ ] C5 — **RETIRADO.** No hay ajuste de usuario que cambiar. La capacidad de
+      cambiar hilos en caliente sin cortar el audio ya la cubre el C8 del paso
+      08.
+- [ ] C6 — **RETIRADO.** Sin ajuste no hay nada que persistir ni que traducir.
 - [ ] C7 — En `Constrained`, el pool queda desactivado aunque el usuario tenga
       guardado un valor mayor de una sesión anterior en otro dispositivo. Test.
 - [ ] C8 — Prueba de que sabe fallar: cambia un valor de la tabla de C1 y
       comprueba que el test se pone rojo. Un test parametrizado que compara
       contra el propio cálculo en vez de contra constantes fijadas no vale.
-- [ ] C9 — `ResourceMeter` muestra los hilos activos y el número coincide con
-      `render_threads_active` del snapshot. Test de frontend.
+- [ ] C9 — El snapshot expone `render_threads_active` y el medidor puede
+      mostrarlo. **De solo lectura**: es información para un reporte, no un
+      mando.
 - [ ] C10 — `npm test` (las 4 suites) pasa. `cargo check --all-targets` pasa.
 - [ ] C11 — `PENDIENTE-HUMANO`: con el valor por defecto en un portátil de 4
       hilos lógicos, la UI **no** se vuelve pegajosa durante la reproducción de

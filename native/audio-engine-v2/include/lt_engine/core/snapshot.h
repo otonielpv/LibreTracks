@@ -47,6 +47,12 @@ struct CpuDiagnostics {
     double callback_duration_ms  = 0.0;
     double callback_duration_max_ms = 0.0;
     double callback_load_percent = 0.0;
+    // Hilos del pool de render que estan realmente activos (1 = sin pool).
+    // Es de SOLO LECTURA: no hay ajuste de usuario para esto a proposito -- ver
+    // docs/plans/audio-thread-parallelism/09-politica-de-hilos.md. Se expone
+    // para que un reporte de usuario diga a cuantos hilos corria de verdad en
+    // vez de dejarnos adivinando, que es justo lo que paso con el log del 96 %.
+    int render_threads_active = 1;
     int    underrun_count        = 0;
     int    callback_count        = 0;
     uint64_t callback_over_budget_count = 0;

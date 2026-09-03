@@ -45,7 +45,10 @@ enum class WorkerRole {
     Decode,    // MP3/etc → WAV cache: CPU + I/O + RAM bound.
     Fill,      // repopulate evicted WAV blocks for playing tracks: disk I/O bound.
     Waveform,  // peak analysis for the UI: disk I/O bound, negligible RAM.
-    Render,    // reparto de la fase A del callback: CPU pura, tiempo real duro.
+    // No hay Render aqui a proposito: los hilos del pool de render dependen de
+    // la CLASE DE DISPOSITIVO, no de nucleos y RAM, asi que su politica vive en
+    // device_profile.h (lt_recommend_render_threads_for). Tener la misma tabla
+    // en dos sitios es como se rompen estas cosas.
 };
 
 // Total physical RAM in bytes, 0 if it can't be determined.
@@ -104,35 +107,6 @@ inline int lt_recommend_worker_threads_for(WorkerRole role, int cores_in, std::u
     // background pools tiny so the audio callback + UI never get starved of a
     // core. `spare` is already cores-1, so a 2-core box yields spare=1.
     const bool low_core = cores <= 2;
-
-    if (role == WorkerRole::Render) {
-        // El pool de render NO es un pool de fondo: son hilos de tiempo real
-        // que compiten con el callback y con la UI. Eso cambia el criterio.
-        //
-        // Tope en 4, y no es timidez. El banco del plan
-        // (docs/plans/audio-thread-parallelism/) mide 3,67x con 4 hilos y sólo
-        // 5,46x con 8, en una máquina OCIOSA de 20 hilos. La ganancia marginal
-        // del quinto en adelante no compensa dos riesgos: robarle núcleos al
-        // WebView de la UI, y aumentar la probabilidad de que un trabajador
-        // caiga en un núcleo lento y se convierta en el rezagado que define la
-        // latencia del bloque (el bloque no acaba hasta que acaba la última
-        // pista).
-        //
-        //   >= 8 núcleos lógicos → 4
-        //   4-7                  → 2
-        //   <= 3                 → 1 (pool desactivado)
-        //
-        // Menos de 4 núcleos van a 1 a propósito: con 2-3 núcleos, dos hilos de
-        // tiempo real dejan a la UI sin sitio y el remedio se nota más que la
-        // enfermedad.
-        //
-        // Nota deliberada: esto NO mira la RAM. El render no asigna nada por
-        // bloque (es el contrato del paso 02), así que la RAM no es la
-        // restricción aquí — al contrario que en Decode.
-        if (cores >= 8) return 4;
-        if (cores >= 4) return 2;
-        return 1;
-    }
 
     if (role == WorkerRole::Decode) {
         // Decode is the RAM-heavy one (decode buffer + resample copy per job).

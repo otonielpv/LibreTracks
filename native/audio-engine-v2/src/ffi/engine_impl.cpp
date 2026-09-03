@@ -824,7 +824,12 @@ Result<void> EngineImpl::initialize() {
     // Pool de render (paso 08/09). El numero sale de la politica compartida,
     // con el ajuste del usuario y el override de entorno por encima.
     if (mixer_) {
-        const int recommended = lt_recommend_worker_threads(WorkerRole::Render);
+        // Por PERFIL, no sólo por núcleos: un móvil de 8 núcleos es big.LITTLE
+        // y con presupuesto térmico, así que decidir por el número le daría 4
+        // hilos de tiempo real. Ver lt_recommend_render_threads_for.
+        const unsigned hw = std::thread::hardware_concurrency();
+        const int recommended = lt_recommend_render_threads_for(
+            lt_device_profile().device_class, hw > 0 ? static_cast<int>(hw) : 0);
         const char* env = std::getenv("LIBRETRACKS_RENDER_THREADS");
         const int threads = lt_resolve_render_threads(recommended,
                                                       render_threads_user_choice_, env);
@@ -833,6 +838,43 @@ Result<void> EngineImpl::initialize() {
         debug_log("[LT_THREADS] render pool: %d hilo(s) "
                   "(recomendado=%d usuario=%d env=%s)\n",
                   threads, recommended, render_threads_user_choice_, env ? env : "-");
+    }
+
+    // ── Cabecera autosuficiente del log ─────────────────────────────────────
+    //
+    // El log que mandó el usuario con la carga al 96 % no permitía correlacionar
+    // nada: no decía versión, ni dispositivo, ni buffer, ni si Bungee estaba
+    // disponible, ni cuántas voces había. Se podía demostrar que hubo
+    // starvation, pero no qué llevó el callback al 96 %.
+    //
+    // Sin rutas de proyecto ni nombres de canciones: esto lo pega un usuario en
+    // un correo.
+    {
+        const auto& profile = lt_device_profile();
+        const std::string backend_name =
+            device_manager_ ? device_manager_->actual_backend() : std::string("-");
+        const unsigned hw = std::thread::hardware_concurrency();
+        lt_debug_log(
+            "[LT_ENGINE_INFO] libretracks engine build=%s %s | cpu_hilos=%u "
+            "ram_fisica_mb=%llu perfil=%d | sr=%d buffer=%d canales=%d "
+            "backend=%s | hilos_render=%d decode=%d fill=%d | bungee=%s\n",
+            __DATE__, __TIME__,
+            hw,
+            static_cast<unsigned long long>(lt_physical_ram_bytes() / (1024ull * 1024)),
+            static_cast<int>(profile.device_class),
+            clock_ ? clock_->sample_rate() : 0,
+            device_manager_ ? device_manager_->actual_buffer_size() : 0,
+            2,
+            backend_name.c_str(),
+            render_threads_effective_,
+            lt_recommend_worker_threads(WorkerRole::Decode),
+            lt_recommend_worker_threads(WorkerRole::Fill),
+#if LT_ENGINE_HAVE_BUNGEE
+            (bungee_voices_ && bungee_voices_->is_available()) ? "si" : "compilado-sin-usar"
+#else
+            "no-compilado"
+#endif
+        );
     }
 
     state_ = State::Initialized;
@@ -1053,6 +1095,7 @@ std::string EngineImpl::get_snapshot() const {
         // num_frames/sample_rate. Without this the meter was stuck at 0%: the
         // snapshot only carried the raw duration, never the ratio.
         snap.cpu.callback_load_percent = mixer_->callback_load_percent();
+        snap.cpu.render_threads_active = mixer_->render_pool_diagnostics().threads;
         snap.cpu.callback_count       = mixer_->callback_count();
         snap.cpu.callback_over_budget_count = mixer_->callback_over_budget_count();
         snap.cpu.mixer_rendered_track_count = mixer_->rendered_track_count();
@@ -1168,8 +1211,31 @@ std::string EngineImpl::get_snapshot() const {
     {
         static std::chrono::steady_clock::time_point s_last_starve_log;
         static uint64_t s_prev_miss_frames = 0;
+        static uint64_t s_starve_generation = 0;
         const uint64_t miss_now = snap.cpu.source_cache_miss_frames;
         const auto now = std::chrono::steady_clock::now();
+
+        // El contador vive en el SourceManager, y el SourceManager se sustituye
+        // (cargar otra sesión, reconfigurar el dispositivo). Esta línea base es
+        // `static`, así que sobrevive a esa sustitución: cuando el contador
+        // vuelve a cero, `miss_now > s_prev_miss_frames` es falso y no se
+        // registra nada hasta superar el total viejo — y el «N total» que sí se
+        // imprime parece acumulativo sin serlo.
+        //
+        // Eso es exactamente lo que enseña el log del usuario afectado: totales
+        // que bajan sin ninguna marca que lo explique. Un total que cambia de
+        // fuente tiene que decirlo.
+        if (miss_now < s_prev_miss_frames) {
+            ++s_starve_generation;
+            lt_debug_log("[LT_STARVATION] contador reiniciado (generacion %llu): "
+                         "el total anterior era %llu y la fuente ha cambiado "
+                         "(sesion nueva o dispositivo reconfigurado). Los totales "
+                         "de aqui en adelante NO continuan a los de arriba.\n",
+                         static_cast<unsigned long long>(s_starve_generation),
+                         static_cast<unsigned long long>(s_prev_miss_frames));
+            s_prev_miss_frames = 0;
+        }
+
         if (miss_now > s_prev_miss_frames &&
             now - s_last_starve_log >= std::chrono::milliseconds(500)) {
             // Delta accumulates across throttled windows: baseline only advances
@@ -1177,9 +1243,11 @@ std::string EngineImpl::get_snapshot() const {
             const uint64_t delta = miss_now - s_prev_miss_frames;
             const int sr = snap.device.sample_rate > 0 ? snap.device.sample_rate : 48000;
             lt_debug_log(
-                "[LT_STARVATION] streaming prebuffer behind: +%llu silenced frames "
-                "(~%.0f ms) since last log, %llu total. The audio thread played silence "
-                "because blocks weren't cached in time (slow disk/CPU can't keep up).\n",
+                "[LT_STARVATION] gen=%llu streaming prebuffer behind: +%llu silenced "
+                "frames (~%.0f ms) since last log, %llu total EN ESTA GENERACION. "
+                "The audio thread played silence because blocks weren't cached in "
+                "time (slow disk/CPU can't keep up).\n",
+                static_cast<unsigned long long>(s_starve_generation),
                 static_cast<unsigned long long>(delta),
                 (static_cast<double>(delta) / sr) * 1000.0,
                 static_cast<unsigned long long>(miss_now));

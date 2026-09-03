@@ -55,6 +55,7 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"callback_duration_ms",  snap.cpu.callback_duration_ms},
         {"callback_duration_max_ms", snap.cpu.callback_duration_max_ms},
         {"callback_load_percent", snap.cpu.callback_load_percent},
+        {"render_threads_active", snap.cpu.render_threads_active},
         {"underrun_count",        snap.cpu.underrun_count},
         {"callback_count",        snap.cpu.callback_count},
         {"callback_over_budget_count", snap.cpu.callback_over_budget_count},

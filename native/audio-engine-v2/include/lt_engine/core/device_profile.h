@@ -217,6 +217,37 @@ inline DeviceProfile lt_device_profile_for(const DeviceProbe& probe) {
 // then sounds briefly and falls into a deterministic silent gap. Reserve 40%
 // for Bungee, live read-ahead and other clips, and cap only handhelds; desktop
 // keeps the user-configured window unchanged.
+// Hilos de render segun la clase de dispositivo y los nucleos logicos.
+//
+// El tope de escritorio es 4, y no es timidez. El banco del plan mide 3,67x con
+// 4 hilos y solo 5,46x con 8, en una maquina OCIOSA de 20 hilos. La ganancia del
+// quinto en adelante no compensa robarle nucleos al WebView de la UI ni subir la
+// probabilidad de que un trabajador caiga en un nucleo lento y se convierta en
+// el rezagado que define la latencia del bloque.
+//
+// EN MOVIL MANDA EL PERFIL, NO LOS NUCLEOS, y por un motivo concreto: un
+// telefono de 8 nucleos es big.LITTLE, asi que "8 nucleos" no significa lo mismo
+// que en un PC. Decidir por el numero le daria 4 hilos de tiempo real a un movil
+// que ademas esta limitado por presupuesto termico. El plan android-low-end
+// documenta un Snapdragon 665 (4 A73 + 4 A53) donde mas hilos no dio throughput.
+//
+// NO mira la RAM, a diferencia de Decode: el render no asigna nada por bloque
+// (contrato del paso 02), asi que la RAM no es la restriccion aqui.
+inline int lt_recommend_render_threads_for(DeviceClass device_class, int cores_in) {
+    const int cores = cores_in > 0 ? cores_in : 4;
+
+    switch (device_class) {
+        case DeviceClass::Constrained:   return 1;   // pool desactivado
+        case DeviceClass::Handheld:      return 1;
+        case DeviceClass::RoomyHandheld: return cores >= 8 ? 2 : 1;
+        default: break;                              // escritorio
+    }
+
+    if (cores >= 8) return 4;
+    if (cores >= 4) return 2;
+    return 1;
+}
+
 inline int lt_playback_prefetch_window_frames(const DeviceProfile& profile,
                                               int sample_rate,
                                               std::size_t active_sources,
