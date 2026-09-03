@@ -40,6 +40,7 @@ add_executable(lt_engine_tests
     test_mixer_routing_step03.cpp
     test_mixer_strings_step04.cpp
     test_voice_map_publish_step05.cpp
+    test_neutral_warp_step06.cpp
 )
 
 target_link_libraries(lt_engine_tests

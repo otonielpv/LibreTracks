@@ -54,6 +54,40 @@ struct PitchRenderDecision {
 PitchRenderDecision resolve_pitch_render_decision(
     const Track& track, const Clip& clip, const Song& song, Frame timeline_frame) noexcept;
 
+// ── Warp neutro ─────────────────────────────────────────────────────────────
+//
+// Un warp con ratio 1.0 y sin transposición es la identidad: Bungee analiza y
+// resintetiza para devolver exactamente lo que entró, a ~1 % del presupuesto
+// del callback POR PISTA. Medido: a nivel de motor entero, 24 pistas pasan de
+// 0,9 % a 37,6 % con warp, y el ratio no cambia ese coste (ratio 1.0 y 1.2
+// miden igual). Ver el hecho 2 de
+// docs/plans/audio-thread-parallelism/00-DIAGNOSTICO.md.
+//
+// La decisión puede tomarse una vez, no por bloque: resolve_warp_time_ratio()
+// toma el BPM objetivo en el frame de INICIO de la región, así que el ratio de
+// una región es constante mientras dure.
+//
+// Tolerancia: comparación EXACTA con 1.0. Un ratio de 1,000001 no es neutro —
+// en una canción de cinco minutos son ~14 ms de deriva contra el clic, que sí
+// se oye. Cualquier tolerancia que se eligiera aquí habría que justificarla
+// contra esa deriva acumulada, y no hay ningún valor que lo consiga mejor que
+// la igualdad: los ratios los produce una división de dobles que da exactamente
+// 1.0 cuando los dos BPM coinciden.
+constexpr double kNeutralWarpRatio = 1.0;
+
+// True cuando el clip está en una región con warp cuya combinación de ratio y
+// transposición hace que Bungee no cambie nada.
+//
+// ESTA FUNCIÓN ES LA ÚNICA VERDAD. La consultan resolve_pitch_render_decision
+// (para elegir camino) y enumerate_voices (para decidir si enrola voz). Si las
+// dos no coinciden, la pista enmudece: render_path_stretched devuelve silencio
+// cuando no encuentra voz. Ver project_region_parsers_must_mirror — en este
+// repo ya hubo un bug por tener la misma regla escrita en dos sitios.
+bool is_neutral_warp(const Track& track,
+                     const Clip& clip,
+                     const Song& song,
+                     Frame timeline_frame) noexcept;
+
 // Compute the time_ratio Bungee should use for a clip at `timeline_frame`
 // based on the region's warp settings and the song's effective tempo at the
 // region start. Returns 1.0 (= no warp) when warp is disabled, when the

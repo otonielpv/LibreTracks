@@ -104,7 +104,14 @@ PitchRenderDecision resolve_pitch_render_decision(
     //   - warp on → Bungee (preserves duration, decouples pitch from speed)
     //   - warp off + pitch → Varispeed (pitch changes speed; no Bungee voice)
     //   - otherwise → Direct
-    if (d.warp_active) {
+    //
+    // Salvo cuando el warp es la identidad: ratio exactamente 1.0 y 0
+    // semitonos efectivos. Ahí Bungee analizaría y resintetizaría para
+    // devolver lo mismo que entró, a ~1 % del presupuesto por pista. Ver
+    // is_neutral_warp() en el cabecero.
+    if (d.warp_active && is_neutral_warp(track, clip, song, timeline_frame)) {
+        d.path = ClipPathKind::Direct;
+    } else if (d.warp_active) {
         d.path = ClipPathKind::Stretched;
     } else if (d.needs_pitch) {
         d.path = ClipPathKind::Varispeed;
@@ -112,6 +119,35 @@ PitchRenderDecision resolve_pitch_render_decision(
         d.path = ClipPathKind::Direct;
     }
     return d;
+}
+
+bool is_neutral_warp(const Track& track,
+                     const Clip& clip,
+                     const Song& song,
+                     Frame timeline_frame) noexcept {
+    const Region* region = region_at_frame(song, timeline_frame);
+    if (!region || !region->warp_enabled || !(region->warp_source_bpm > 0.0))
+        return false;   // sin warp no hay nada que evitar; ya va por Direct
+
+    const double ratio = resolve_warp_time_ratio(song, timeline_frame);
+    if (!std::isfinite(ratio) || ratio != kNeutralWarpRatio)
+        return false;
+
+    // La transposición efectiva se calcula igual que en
+    // resolve_pitch_render_decision, incluida la regla de NeverTranspose.
+    //
+    // Ese caso es fácil de pasar por alto y es justo donde más se gana: una
+    // pista marcada «no transponer» con warp activo ya ignora los semitonos, así
+    // que si además el ratio es 1.0 no le queda nada que hacer a Bungee. Antes
+    // pagaba la voz entera para copiar el audio tal cual.
+    const bool never_transpose =
+        track.transpose_behavior == TransposeBehavior::NeverTranspose;
+    if (never_transpose)
+        return true;
+
+    const Semitones effective = clamp_supported_semitones(
+        resolve_region_transpose(song, timeline_frame) + clip.semitones);
+    return effective == 0;
 }
 
 double resolve_warp_time_ratio(const Song& song, Frame timeline_frame) noexcept {

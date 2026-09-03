@@ -192,7 +192,18 @@ TEST_CASE("path decision: NeverTranspose + warp -> Stretched even though pitch i
     CHECK(d.warp_active == true);
 }
 
-TEST_CASE("path decision: NeverTranspose + unity-ratio warp suppresses pitch") {
+// CAMBIO DE COMPORTAMIENTO DELIBERADO (paso 06 del plan
+// audio-thread-parallelism). Este test afirmaba `Stretched`.
+//
+// Es el caso neutro exacto: warp_source_bpm == song.bpm da ratio 1.0, y
+// NeverTranspose deja los semitonos efectivos en 0. Bungee analizaba y
+// resintetizaba una pista entera para devolver byte a byte lo que entró, a
+// ~1 % del presupuesto del callback. Ahora va por Direct.
+//
+// Lo que NO cambia, y por eso siguen comprobándose: `warp_active` sigue siendo
+// true (la región está en modo warp; es el ratio lo que resulta neutro) y los
+// semitonos efectivos siguen siendo 0.
+TEST_CASE("path decision: NeverTranspose + unity-ratio warp -> Direct (warp neutro)") {
     auto song = make_song(7);
     song.bpm = 120.0;
     Region region;
@@ -205,11 +216,12 @@ TEST_CASE("path decision: NeverTranspose + unity-ratio warp suppresses pitch") {
     auto track = make_track(TransposeBehavior::NeverTranspose);
     auto clip = make_clip(0);
     const auto d = resolve_pitch_render_decision(track, clip, song, 0);
-    CHECK(d.path == ClipPathKind::Stretched);
+    CHECK(d.path == ClipPathKind::Direct);
     CHECK(d.effective_semitones == 0);
     CHECK(d.warp_active == true);
     CHECK(d.warp_time_ratio == doctest::Approx(1.0));
     CHECK(d.pitch_scale == doctest::Approx(1.0));
+    CHECK(is_neutral_warp(track, clip, song, 0));
 }
 
 TEST_CASE("path decision: NeverTranspose + no warp + region pitch -> Varispeed (track follows)") {

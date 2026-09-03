@@ -293,15 +293,29 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
                 // enroll those clips here — even on the same track as the
                 // playhead. Region edges don't need to align with clip edges,
                 // so any overlap with a warp region qualifies.
-                bool clip_in_warp_region = false;
+                const Region* clip_warp_region = nullptr;
                 for (const Region* wr : warp_regions) {
                     if (clip.timeline_start_frame < wr->end_frame
                         && clip_end > wr->start_frame) {
-                        clip_in_warp_region = true;
+                        clip_warp_region = wr;
                         break;
                     }
                 }
-                if (!clip_in_warp_region) continue;
+                if (!clip_warp_region) continue;
+
+                // Warp neutro: ratio exactamente 1.0 y 0 semitonos efectivos.
+                // Bungee sería la identidad, así que el clip va por Direct y no
+                // hace falta construir la voz ni calentarla.
+                //
+                // Se pregunta en el frame de inicio de la región, que es donde
+                // resolve_warp_time_ratio fija el ratio; ese ratio es constante
+                // mientras dure la región, así que el renderer obtendrá la misma
+                // respuesta en cualquier bloque de dentro. Es lo que mantiene de
+                // acuerdo a las dos mitades de la decisión: si discreparan, el
+                // renderer pediría una voz que nadie enroló y
+                // render_path_stretched devuelve SILENCIO.
+                if (is_neutral_warp(track, clip, song, clip_warp_region->start_frame))
+                    continue;
 
                 auto src = sources.get_shared(clip.source_id);
                 if (!src || !src->is_loaded()) continue;
