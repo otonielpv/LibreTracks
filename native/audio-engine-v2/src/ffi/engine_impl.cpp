@@ -1,6 +1,7 @@
 #include <lt_engine/engine_impl.h>
 #include <lt_engine/core/device_profile.h>
 #include <lt_engine/core/engine_core.h>
+#include <lt_engine/core/thread_policy.h>
 #include <lt_engine/core/events.h>
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/render/pitch_resolution.h>
@@ -818,6 +819,20 @@ Result<void> EngineImpl::initialize() {
         // feeds exactly `bs` input frames) while letting warp pass more.
         bungee_voices_->prepare(sr, /*channels=*/2, bs * 4);
         if (prearmed_jumps_) prearmed_jumps_->prepare(sr, /*channels=*/2, bs * 4);
+    }
+
+    // Pool de render (paso 08/09). El numero sale de la politica compartida,
+    // con el ajuste del usuario y el override de entorno por encima.
+    if (mixer_) {
+        const int recommended = lt_recommend_worker_threads(WorkerRole::Render);
+        const char* env = std::getenv("LIBRETRACKS_RENDER_THREADS");
+        const int threads = lt_resolve_render_threads(recommended,
+                                                      render_threads_user_choice_, env);
+        mixer_->set_render_thread_count(threads);
+        render_threads_effective_ = threads;
+        debug_log("[LT_THREADS] render pool: %d hilo(s) "
+                  "(recomendado=%d usuario=%d env=%s)\n",
+                  threads, recommended, render_threads_user_choice_, env ? env : "-");
     }
 
     state_ = State::Initialized;

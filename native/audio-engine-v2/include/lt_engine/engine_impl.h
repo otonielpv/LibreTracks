@@ -99,6 +99,16 @@ private:
     // re-population is cheap.
     std::atomic<std::uint64_t>          prearm_revision_{0};
     std::unique_ptr<Mixer>              mixer_;
+
+    // Hilos del pool de render (pasos 08/09).
+    //
+    // `user_choice` es lo que eligió la persona en Ajustes: 0 = «Automático».
+    // `effective` es lo que acabó usándose tras aplicar la política de la
+    // máquina y el override de entorno — se expone en el snapshot para que un
+    // reporte de usuario diga a cuántos hilos corría de verdad en vez de a
+    // cuántos creíamos que corría.
+    int render_threads_user_choice_ = 0;
+    int render_threads_effective_   = 1;
     std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;
     MetronomeConfig                     metronome_config_;
