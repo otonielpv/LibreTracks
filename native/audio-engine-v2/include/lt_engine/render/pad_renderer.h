@@ -136,7 +136,14 @@ private:
     // Active clip. Pinned by a shared_ptr so a swap can't free the buffer while
     // render() still reads it. bank_present_ mirrors clip != nullptr for a
     // lock-free diagnostics read.
-    std::shared_ptr<const PadClip> clip_;
+    // std::atomic<std::shared_ptr> y no las funciones libres std::atomic_load/
+    // store: en MSVC esas comparten un spinlock GLOBAL DEL PROCESO
+    // (microsoft/STL#86) que el hilo de audio acaba disputando con cualquier
+    // otro shared_ptr atómico del programa, incluidos los de hilos
+    // BELOW_NORMAL. Se lee una vez por bloque dentro de render(), o sea en el
+    // callback. Mismo arreglo que el puntero de sesión (mixer.h) y que el mapa
+    // de voces del warp (paso 05).
+    std::atomic<std::shared_ptr<const PadClip>> clip_;
     std::atomic<bool> clip_present_{false};
     // Read cursor into the active clip (in frames), advanced by render(). Only
     // touched from the audio thread.

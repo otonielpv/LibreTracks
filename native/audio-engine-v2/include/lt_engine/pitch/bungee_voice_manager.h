@@ -36,6 +36,19 @@ struct BungeeVoiceManagerDiagnostics {
     std::uint64_t rebuilds_for_seek    = 0;
     std::uint64_t voice_lookups_hit    = 0;   // voice_for() returned non-null
     std::uint64_t voice_lookups_miss   = 0;   // voice_for() returned nullptr
+
+    // Voces cuyo destructor corrió en el hilo de audio. Debe ser 0.
+    //
+    // Destruir una voz libera los buffers de Bungee, o sea toma el lock del
+    // allocator dentro del callback. Pasa cuando el hilo de audio suelta la
+    // última referencia a un mapa ya reemplazado. La hebra de control retira
+    // los mapas salientes justo para que no ocurra; este contador es lo que
+    // convierte «no debería pasar» en «no pasa», y lo que delataría una ruta
+    // de publicación nueva que se saltara el retiro.
+    //
+    // Sólo cuenta cuando el motor se compila con LT_ENGINE_RT_GUARD (tests):
+    // saber si estamos en el hilo de audio requiere la marca del paso 02.
+    std::uint64_t voices_destroyed_on_audio_thread = 0;
 };
 
 class BungeeVoiceManager {

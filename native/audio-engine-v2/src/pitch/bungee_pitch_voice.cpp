@@ -1,4 +1,7 @@
 #include <lt_engine/pitch/bungee_pitch_voice.h>
+#include <lt_engine/diagnostics/rt_guard.h>
+#include <atomic>
+#include <cstdint>
 
 #ifndef LT_ENGINE_HAVE_BUNGEE
 #  define LT_ENGINE_HAVE_BUNGEE 0
@@ -16,6 +19,32 @@
 #include <vector>
 
 namespace lt {
+
+// Voces destruidas dentro del callback. Ver la nota en el cabecero: destruir
+// una voz libera los buffers de Bungee, o sea toma el lock del allocator, y
+// hacerlo en el hilo de audio es un stall. En producción esto no se instrumenta
+// (identificar el hilo de audio requiere la marca del paso 02, que sólo existe
+// en el build de tests) y el destructor queda exactamente como estaba.
+namespace {
+std::atomic<std::uint64_t> g_destroyed_on_audio_thread{0};
+}
+
+std::uint64_t BungeePitchVoice::destroyed_on_audio_thread_count() noexcept {
+    return g_destroyed_on_audio_thread.load(std::memory_order_relaxed);
+}
+void BungeePitchVoice::reset_destroyed_on_audio_thread_count() noexcept {
+    g_destroyed_on_audio_thread.store(0, std::memory_order_relaxed);
+}
+
+namespace {
+// Se llama desde los dos destructores (el real y el stub).
+inline void note_voice_destruction() noexcept {
+#if LT_ENGINE_RT_GUARD
+    if (lt::rt::in_realtime_section())
+        g_destroyed_on_audio_thread.fetch_add(1, std::memory_order_relaxed);
+#endif
+}
+}
 
 #if LT_ENGINE_HAVE_BUNGEE
 
@@ -153,7 +182,7 @@ struct BungeePitchVoice::Impl {
 BungeePitchVoice::BungeePitchVoice()
     : impl_(std::make_unique<Impl>()) {}
 
-BungeePitchVoice::~BungeePitchVoice() = default;
+BungeePitchVoice::~BungeePitchVoice() { note_voice_destruction(); }
 BungeePitchVoice::BungeePitchVoice(BungeePitchVoice&&) noexcept = default;
 BungeePitchVoice& BungeePitchVoice::operator=(BungeePitchVoice&&) noexcept = default;
 
@@ -359,7 +388,7 @@ double BungeePitchVoice::mapped_time_ratio() const noexcept {
 struct BungeePitchVoice::Impl {};
 
 BungeePitchVoice::BungeePitchVoice() = default;
-BungeePitchVoice::~BungeePitchVoice() = default;
+BungeePitchVoice::~BungeePitchVoice() { note_voice_destruction(); }
 BungeePitchVoice::BungeePitchVoice(BungeePitchVoice&&) noexcept = default;
 BungeePitchVoice& BungeePitchVoice::operator=(BungeePitchVoice&&) noexcept = default;
 

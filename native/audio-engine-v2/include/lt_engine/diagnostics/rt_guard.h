@@ -37,6 +37,17 @@ public:
     ScopedRealtimeSection& operator=(const ScopedRealtimeSection&) = delete;
 };
 
+// True mientras el hilo actual esté dentro de una sección de tiempo real.
+//
+// Lo consume el contador de voces destruidas en el callback
+// (`BungeePitchVoice::destroyed_on_audio_thread_count`, paso 05): saber "estoy
+// en el hilo de audio" es la misma pregunta que ya responde esta marca, y
+// duplicarla con un thread_local propio habría dado dos verdades que se pueden
+// desincronizar.
+inline bool in_realtime_section() noexcept {
+    return detail::realtime_section_depth != 0;
+}
+
 inline Violations violations() noexcept { return detail::thread_violations; }
 
 inline void reset_violations() noexcept { detail::thread_violations = {}; }
@@ -49,6 +60,7 @@ public:
     ~ScopedRealtimeSection() noexcept = default;
 };
 
+constexpr bool in_realtime_section() noexcept { return false; }
 constexpr Violations violations() noexcept { return {}; }
 constexpr void reset_violations() noexcept {}
 

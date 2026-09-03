@@ -94,10 +94,71 @@ struct BungeeVoiceManager::Impl {
     int  channel_count = 0;
     int  max_in_frames = 0;
 
-    // Published voice map. Audio thread reads via std::atomic_load; control
-    // thread builds a new map and swaps via std::atomic_store.
-    std::shared_ptr<const VoiceMap> empty{std::make_shared<const VoiceMap>()};
-    std::shared_ptr<const VoiceMap> active{empty};
+    // Mapa de voces publicado. El hilo de audio lo lee una vez por clip
+    // warpeado y por bloque; la hebra de control construye uno nuevo y lo
+    // intercambia.
+    //
+    // std::atomic<std::shared_ptr> y NO las funciones libres
+    // std::atomic_load/store: en MSVC esas comparten un spinlock GLOBAL DEL
+    // PROCESO (microsoft/STL#86), y este es el camino caliente del warp — con
+    // 25 pistas warpeadas son 25 tomas de ese spinlock por bloque, que puede
+    // tener un hilo BELOW_NORMAL de los que construyen voces. Inversión de
+    // prioridad de manual. Ya estaba diagnosticado en
+    // docs/HANDOFF_import_while_playing_glitches.md y arreglado para el puntero
+    // de sesión (mixer.h:160); esta era la instancia que quedó viva.
+    //
+    // No es lock-free: la implementación usa un lock POR OBJETO. La mejora es
+    // dejar de competir con cualquier otro shared_ptr atómico del proceso.
+    std::shared_ptr<const VoiceMap>              empty{std::make_shared<const VoiceMap>()};
+    std::atomic<std::shared_ptr<const VoiceMap>> active{empty};
+
+    // Mapas retirados que todavía podría estar usando el hilo de audio.
+    //
+    // Sin esto, el hilo de audio destruye voces: suelta su copia del
+    // shared_ptr al acabar el bloque y, si el mapa ya fue reemplazado, ese
+    // decremento llega a cero ahí mismo — liberando los buffers de Bungee bajo
+    // el lock del allocator, en el callback. La hebra de control se queda una
+    // referencia de cada mapa saliente para que el contador no pueda llegar a
+    // cero en el hilo equivocado, y las suelta más tarde, cuando ya sólo las
+    // tiene ella.
+    //
+    // Sólo la toca la hebra de control, siempre bajo build_mutex.
+    std::vector<std::shared_ptr<const VoiceMap>> retired;
+
+    // Cuántas publicaciones se conserva un mapa retirado antes de soltarlo.
+    //
+    // El hilo de audio coge y suelta sus referencias dentro de UN bloque, así
+    // que con una sola publicación de gracia ya sobraría. Cuatro es margen
+    // barato: un mapa vacío pesa poco y las publicaciones son cosa de la hebra
+    // de control, no del callback.
+    static constexpr std::size_t kRetiredMapsKept = 4;
+
+    // Publicación desde la HEBRA DE CONTROL. Retira el mapa saliente antes de
+    // instalar el nuevo, y suelta los más viejos.
+    //
+    // El orden importa: primero quedarse la referencia, después intercambiar.
+    // Al revés habría una ventana en la que el hilo de audio es el único dueño.
+    //
+    // La primera versión podaba por `use_count()==1` sobre el MAPA, y estaba
+    // mal de una forma que el test destapó: el hilo de audio no se queda con el
+    // mapa, se queda con las VOCES (`voice_for_shared` devuelve la voz; el
+    // snapshot del mapa muere al salir de la función). Así que el mapa saliente
+    // llegaba con use_count()==1 y se podaba en la misma llamada, destruyendo
+    // sus voces salvo las que el audio sostenía — que morían después, dentro
+    // del callback. Contaba 4 destrucciones donde debía contar 0.
+    //
+    // Una cola de longitud fija no necesita razonar sobre quién referencia qué:
+    // el mapa se destruye cuando lo expulsa el cuarto siguiente, y eso ocurre
+    // AQUÍ, en una hebra de control. Correcto por construcción.
+    void publish_from_control(std::shared_ptr<const VoiceMap> next) {
+        auto outgoing = active.load(std::memory_order_acquire);
+        active.store(std::move(next), std::memory_order_release);
+        if (!outgoing) return;
+
+        retired.push_back(std::move(outgoing));
+        while (retired.size() > kRetiredMapsKept)
+            retired.erase(retired.begin());   // destruye aquí, no en el audio
+    }
 
     // Source-ready callbacks and explicit seeks can ask for rebuilds from
     // different control threads. Building/warming Bungee streams is expensive
@@ -165,7 +226,7 @@ bool BungeeVoiceManager::prepare(int sample_rate,
     impl_->max_in_frames = max_input_frames;
     impl_->prepared      = true;
     // Start with an empty map — voices are built on the first rebuild_*.
-    std::atomic_store(&impl_->active, impl_->empty);
+    impl_->publish_from_control(impl_->empty);
     return true;
 #endif
 }
@@ -371,7 +432,7 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
 
     const auto specs = enumerate_voices(session, sources, playhead);
 
-    auto current = std::atomic_load(&impl_->active);
+    auto current = impl_->active.load(std::memory_order_acquire);
     auto next    = std::make_shared<VoiceMap>();
     next->reserve(specs.size());
 
@@ -437,8 +498,7 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
     }
 
     const int active_count = static_cast<int>(next->size());
-    std::atomic_store(&impl_->active,
-                      std::shared_ptr<const VoiceMap>(std::move(next)));
+    impl_->publish_from_control(std::shared_ptr<const VoiceMap>(std::move(next)));
     if (bungee_debug_enabled()) {
         lt_debug_log(
             "[BUNGEE] rebuild_for_session playhead=%lld active=%d built=%d reused=%d\n",
@@ -453,7 +513,19 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                                            const Session& session,
                                            const SourceManager& sources) {
     auto next = build_seek_voice_map(target_frame, session, sources);
-    publish_prepared_voice_map_realtime(std::move(next));
+    if (!impl_ || !next) return;
+#if LT_ENGINE_HAVE_BUNGEE
+    if (!impl_->prepared) return;
+    // Publica por el camino de control, no por publish_prepared_voice_map_realtime:
+    // esto es una hebra de control, así que puede —y debe— retirar el mapa
+    // saliente en vez de dejar que muera en el hilo de audio.
+    std::lock_guard build_lock(impl_->build_mutex);
+    impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
+    impl_->publish_from_control(std::move(next));
+    impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
+#else
+    (void)next;
+#endif
 }
 
 void BungeeVoiceManager::retime_existing_for_session(
@@ -465,7 +537,7 @@ void BungeeVoiceManager::retime_existing_for_session(
 
 #if LT_ENGINE_HAVE_BUNGEE
     const auto specs = enumerate_voices(session, sources, playhead);
-    auto current = std::atomic_load(&impl_->active);
+    auto current = impl_->active.load(std::memory_order_acquire);
     // A clip/track edit during playback (move clip, cut, duplicate, reorder
     // tracks, tempo tweak) re-publishes the session, which calls us. We must
     // NOT touch voices whose clip is unchanged: their Bungee pipeline is warm
@@ -748,8 +820,7 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
         }
         return;
     }
-    std::atomic_store(&impl_->active,
-                      std::shared_ptr<const VoiceMap>(std::move(next)));
+    impl_->publish_from_control(std::shared_ptr<const VoiceMap>(std::move(next)));
     if (bungee_debug_enabled()) {
         lt_debug_log(
             "[BUNGEE] rebuild_for_seek target=%lld active=%d built=%d\n",
@@ -823,7 +894,7 @@ void BungeeVoiceManager::clear() {
     if (!impl_) return;
     impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
     std::lock_guard build_lock(impl_->build_mutex);
-    std::atomic_store(&impl_->active, impl_->empty);
+    impl_->publish_from_control(impl_->empty);
 }
 
 void BungeeVoiceManager::swap_in_prepared_voices(PreparedVoiceMap prepared_voices) {
@@ -839,7 +910,7 @@ void BungeeVoiceManager::swap_in_prepared_voices(PreparedVoiceMap prepared_voice
 
     const int active_count = static_cast<int>(next->size());
     impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
-    std::atomic_store(&impl_->active, std::move(next));
+    impl_->publish_from_control(std::move(next));
     impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
     if (bungee_debug_enabled()) {
         lt_debug_log(
@@ -875,7 +946,12 @@ void BungeeVoiceManager::publish_prepared_voice_map_realtime(
 #else
     if (!impl_->prepared) return;
     impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
-    std::atomic_store(&impl_->active, std::move(prepared_voices));
+    // Store desnudo, sin retirar el saliente: esto lo llama el HILO DE AUDIO
+    // (mixer.cpp, camino del salto prearmado) y publish_from_control hace
+    // push_back. Ver la nota de "lo que este paso NO cierra" en la bitácora:
+    // el mapa saliente puede morir aquí, y el contador
+    // voices_destroyed_on_audio_thread está para medirlo en vez de suponerlo.
+    impl_->active.store(std::move(prepared_voices), std::memory_order_release);
     impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
 #endif
 }
@@ -887,13 +963,13 @@ void BungeeVoiceManager::publish_empty_voice_map_realtime() noexcept {
 #if LT_ENGINE_HAVE_BUNGEE
     if (!impl_->prepared) return;
     impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
-    std::atomic_store(&impl_->active, impl_->empty);
+    impl_->active.store(impl_->empty, std::memory_order_release);   // ver arriba
 #endif
 }
 
 std::shared_ptr<BungeePitchVoice> BungeeVoiceManager::voice_for_shared(const Id& clip_id) noexcept {
     if (!impl_) return nullptr;
-    auto snapshot = std::atomic_load(&impl_->active);
+    auto snapshot = impl_->active.load(std::memory_order_acquire);
     if (!snapshot) {
         impl_->voice_lookups_miss.fetch_add(1, std::memory_order_relaxed);
         return {};
@@ -914,13 +990,15 @@ BungeePitchVoice* BungeeVoiceManager::voice_for(const Id& clip_id) noexcept {
 BungeeVoiceManagerDiagnostics BungeeVoiceManager::diagnostics() const noexcept {
     BungeeVoiceManagerDiagnostics d;
     if (!impl_) return d;
-    auto snapshot = std::atomic_load(&impl_->active);
+    auto snapshot = impl_->active.load(std::memory_order_acquire);
     d.active_voice_count   = snapshot ? static_cast<int>(snapshot->size()) : 0;
     d.voices_built_total   = impl_->voices_built_total.load(std::memory_order_relaxed);
     d.rebuilds_for_session = impl_->rebuilds_for_session.load(std::memory_order_relaxed);
     d.rebuilds_for_seek    = impl_->rebuilds_for_seek.load(std::memory_order_relaxed);
     d.voice_lookups_hit    = impl_->voice_lookups_hit.load(std::memory_order_relaxed);
     d.voice_lookups_miss   = impl_->voice_lookups_miss.load(std::memory_order_relaxed);
+    d.voices_destroyed_on_audio_thread =
+        BungeePitchVoice::destroyed_on_audio_thread_count();
     return d;
 }
 

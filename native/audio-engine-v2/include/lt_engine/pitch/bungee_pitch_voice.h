@@ -17,6 +17,7 @@
 
 #include <lt_engine/core/types.h>
 
+#include <cstdint>
 #include <memory>
 
 namespace lt {
@@ -25,6 +26,20 @@ class BungeePitchVoice {
 public:
     BungeePitchVoice();
     ~BungeePitchVoice();
+
+    // ── Diagnóstico de dónde muere una voz ───────────────────────────────
+    //
+    // Destruir una voz libera los buffers de Bungee: toma el lock del
+    // allocator. Si eso ocurre dentro del callback, es un stall del hilo de
+    // audio. La hebra de control retira los mapas salientes precisamente para
+    // que no pase (`BungeeVoiceManager::Impl::publish_from_control`), y este
+    // contador es lo que lo demuestra en vez de darlo por supuesto.
+    //
+    // Sólo cuenta con LT_ENGINE_RT_GUARD activo (tests): identificar el hilo
+    // de audio necesita la marca del paso 02. En producción el destructor no
+    // hace nada extra.
+    static std::uint64_t destroyed_on_audio_thread_count() noexcept;
+    static void reset_destroyed_on_audio_thread_count() noexcept;
 
     BungeePitchVoice(const BungeePitchVoice&) = delete;
     BungeePitchVoice& operator=(const BungeePitchVoice&) = delete;
