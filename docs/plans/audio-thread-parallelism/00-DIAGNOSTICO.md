@@ -60,7 +60,8 @@ de la región al camino `Stretched`, y `pitch/bungee_voice_manager.cpp:225-243`
 da una **voz Bungee propia a cada clip**. Sin warp esos clips van por `Direct`,
 que es una copia de memoria.
 
-Banco `bench-reference/bungee_voice_cost.cpp`, 48 kHz, hop=-1:
+Banco `native/audio-engine-v2/bench/bench_bungee_voice_cost.cpp`, 48 kHz,
+hop=-1:
 
 | voces | 512 fr (10,67 ms) | 256 fr (5,33 ms) | 128 fr (2,67 ms) |
 | ---: | ---: | ---: | ---: |
@@ -87,8 +88,8 @@ plan de ahorro de energía o throttling térmico.
 
 ## Hecho 3 — el paralelismo sí escala, incluso con buffers pequeños
 
-Banco `bench-reference/bungee_thread_scaling.cpp`: prioridad MMCSS Pro Audio en
-todos los hilos, barrera de espera activa (nada de `condition_variable`), el
+Banco `native/audio-engine-v2/bench/bench_bungee_thread_scaling.cpp`: prioridad
+MMCSS Pro Audio en todos los hilos, barrera de espera activa (nada de `condition_variable`), el
 director también trabaja. Mide el tiempo de pared que pagaría el callback.
 
 **24 voces:**

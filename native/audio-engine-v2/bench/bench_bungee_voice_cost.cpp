@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
     std::printf("sr=%d block=%d hop=%d ratio=%.4f pitch=%.4f  budget=%.3f ms\n",
                 sr, block, hop, ratio, pitch, block * 1000.0 / sr);
     std::printf("%6s %12s %12s %12s %10s\n",
-                "voces", "avg us/blk", "p95 us/blk", "max us/blk", "%% budget");
+                "voces", "avg us/blk", "p95 us/blk", "max us/blk", "% budget");
 
     const double budget_us = block * 1e6 / sr;
 

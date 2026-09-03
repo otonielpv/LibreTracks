@@ -12,20 +12,29 @@ than it sounded in real material. Re-running the comparison with
 `samples/ACUSTICA 1_01.wav` showed Bungee and RubberBand R2 were close enough
 to A/B directly, and Bungee was preferred by ear.
 
-The current bench target is:
+> **Histórico (2026, fecha exacta no registrada).** El target
+> `bench_bungee_warp_backends` que produjo la tabla de abajo **ya no existe en
+> el árbol**, así que estas cifras no son reproducibles tal cual. Se conservan
+> porque documentan la decisión de backend, no como línea base.
+>
+> Los bancos vivos son:
+>
+> ```powershell
+> cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build-bench `
+>       -DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR=<release> -DLT_ENGINE_BUILD_BENCHES=ON
+> cmake --build native/audio-engine-v2/build-bench --config Release
+> ```
+>
+> | Target | Qué mide |
+> | --- | --- |
+> | `bench_bungee_voice_cost` | coste de N voces Bungee por bloque |
+> | `bench_bungee_thread_scaling` | speedup al repartir esas voces entre hilos |
+> | `bench_render_callback` | `Mixer::render` entera, con desglose por fases |
+>
+> La línea base medida está en
+> `docs/plans/audio-thread-parallelism/baseline.md`.
 
-```powershell
-cmake --build native\audio-engine-v2\build-bungee-on-ffmpeg --config Release --target bench_bungee_warp_backends
-native\audio-engine-v2\build-bungee-on-ffmpeg\Release\bench_bungee_warp_backends.exe
-```
-
-It writes comparison WAVs under:
-
-```text
-bench-out/warp-bungee-samples/ACUSTICA_1_01
-```
-
-On the 44.1 kHz sample, ratio `1.213`, 3 voices:
+Cifras históricas: 44,1 kHz, ratio `1.213`, 3 voces:
 
 | Backend | CPU avg | CPU p95 | Latency |
 |---|---:|---:|---:|

@@ -88,9 +88,10 @@ Son los mismos roles y el mismo protocolo que el plan `android-low-end`, con
 otro directorio de plan y otro de bitácoras. Se separan para que ambos planes
 puedan avanzar sin pisarse las bitácoras.
 
-## Material de referencia
+## Línea base
 
-[`bench-reference/`](bench-reference/) contiene los dos bancos con los que se
-midió el diagnóstico, ya validados. El paso 01 los promociona a
-`native/audio-engine-v2/bench/` con su entrada de CMake; no son código de
-producción tal como están.
+[`baseline.md`](baseline.md) y [`baseline.json`](baseline.json) son las cifras
+contra las que se compara cada paso. Las produce `bench_render_callback`
+(`native/audio-engine-v2/bench/`), junto a los dos bancos de Bungee con los que
+se midió el diagnóstico. **Una cifra medida en otra máquina no dice nada sobre
+ésta**: el `baseline.md` lleva CPU, SO y commit por ese motivo.

@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     for (int n : {8, 16, 24, 32}) {
         std::printf("--- %d voces ---\n", n);
         std::printf("%8s %11s %11s %11s %10s %9s\n",
-                    "hilos", "avg us", "p95 us", "max us", "%% presup", "speedup");
+                    "hilos", "avg us", "p95 us", "max us", "% presup", "speedup");
         double base_avg = 0.0;
         for (int T : {1, 2, 4, 6, 8}) {
             std::vector<std::unique_ptr<Voice>> voices;

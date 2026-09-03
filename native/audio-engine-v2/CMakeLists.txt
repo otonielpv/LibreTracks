@@ -413,6 +413,56 @@ if(LT_ENGINE_BUILD_BENCHES)
         endif()
     endif()
 
+    # ── Bancos del plan audio-thread-parallelism ────────────────────────────
+    #
+    # bench_render_callback mide `Mixer::render` entera (enlaza el engine).
+    # Los dos bench_bungee_* enlazan DIRECTAMENTE contra bungee.lib y no contra
+    # lt_audio_engine_v2: es a propósito, aíslan el coste de la librería del de
+    # nuestro código. Por eso sólo se construyen si Bungee está disponible.
+    # Ver docs/plans/audio-thread-parallelism/01-banco-y-linea-base.md
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_render_callback.cpp")
+        add_executable(bench_render_callback bench/bench_render_callback.cpp)
+        target_compile_features(bench_render_callback PRIVATE cxx_std_20)
+        target_link_libraries(bench_render_callback PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_render_callback PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        if(LT_ENGINE_USE_BUNGEE AND WIN32 AND DEFINED LT_BUNGEE_DIR)
+            set(_lt_cb_bungee_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+            if(EXISTS "${_lt_cb_bungee_dll}")
+                add_custom_command(TARGET bench_render_callback POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_lt_cb_bungee_dll}"
+                        "$<TARGET_FILE_DIR:bench_render_callback>"
+                    COMMENT "Copying Bungee DLL for render-callback bench")
+            endif()
+        endif()
+    endif()
+
+    if(LT_ENGINE_USE_BUNGEE AND DEFINED LT_BUNGEE_DIR)
+        foreach(_lt_bungee_bench bench_bungee_voice_cost bench_bungee_thread_scaling)
+            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/${_lt_bungee_bench}.cpp")
+                add_executable(${_lt_bungee_bench} bench/${_lt_bungee_bench}.cpp)
+                target_compile_features(${_lt_bungee_bench} PRIVATE cxx_std_20)
+                target_include_directories(${_lt_bungee_bench} PRIVATE
+                    "${LT_BUNGEE_DIR}/include")
+                if(WIN32)
+                    target_link_libraries(${_lt_bungee_bench} PRIVATE
+                        "${LT_BUNGEE_DIR}/windows-x86_64/bungee.lib"
+                        avrt)   # MMCSS: los trabajadores del banco de escalado
+                                # necesitan prioridad Pro Audio o la medida es
+                                # la del planificador, no la del DSP.
+                    set(_lt_bb_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+                    if(EXISTS "${_lt_bb_dll}")
+                        add_custom_command(TARGET ${_lt_bungee_bench} POST_BUILD
+                            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                                "${_lt_bb_dll}" "$<TARGET_FILE_DIR:${_lt_bungee_bench}>"
+                            COMMENT "Copying Bungee DLL for ${_lt_bungee_bench}")
+                    endif()
+                endif()
+            endif()
+        endforeach()
+    endif()
+
 endif()
 
 # ---------------------------------------------------------------------------
