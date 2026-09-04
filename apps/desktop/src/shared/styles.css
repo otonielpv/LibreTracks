@@ -3544,12 +3544,12 @@ html.lt-ios body {
 .lt-track-header.is-selected {
   /* Per-track border/glow tints; opaque var() value, dimmed via low opacity is
      not possible on borders, so we approximate the old ~42% mix with the solid
-     colour. Default teal keeps the prior look for uncoloured tracks. */
+     colour. Default teal keeps the prior look for uncoloured tracks.
+     The selection rectangle itself is drawn by ::before, not by an inset
+     shadow: see the comment there. */
   border-right-color: var(--lt-track-color, #57f1db);
   border-bottom-color: var(--lt-track-color, #57f1db);
-  box-shadow:
-    inset 0 0 0 1px var(--lt-track-color, #57f1db),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Selected-track surface wash — overlay so the solid track colour reads at
@@ -3595,13 +3595,33 @@ html.lt-ios body {
   background: var(--lt-track-color, transparent);
 }
 
+/* Selection rectangle + the thicker accent bar, as one overlay painted ABOVE
+   the header content (z-index 3 beats .lt-track-header-body's 2).
+   It used to be an `inset 0 0 0 1px` box-shadow, which the browser paints under
+   the element's children: in the shortest lane heights the routing combobox
+   (16px tall in an 18px row) and the meter strip — which stretches edge to edge
+   because lane mode drops the body's vertical padding — sat on top of the top
+   line and broke the rectangle. pointer-events stays off so the overlay never
+   swallows a click on the header. */
 .lt-track-header.is-selected::before {
-  background: var(--lt-track-color, #57f1db);
-  width: 4px;
+  inset: 0;
+  width: auto;
+  z-index: 3;
+  pointer-events: none;
+  background: transparent;
+  border-left: 4px solid var(--lt-track-color, #57f1db);
+  box-shadow: inset 0 0 0 1px var(--lt-track-color, #57f1db);
 }
 
 .lt-track-header.is-solo::before {
   background: #ffe2ab;
+}
+
+/* Selected + solo: keep the amber accent, but on the overlay's border so the
+   bar doesn't flood the whole row with colour. */
+.lt-track-header.is-solo.is-selected::before {
+  background: transparent;
+  border-left-color: #ffe2ab;
 }
 
 .lt-track-header-main {
