@@ -450,6 +450,49 @@ bool ensure_seek_read_window_ready(const SourceManager& sources,
     return spec.source->is_range_ready(clamped_start, required_frames);
 }
 
+// Construye y ceba UNA voz para `spec`. Único sitio donde nace una voz de
+// sesión: lo comparten rebuild_for_session (mapa completo) y
+// retime_existing_for_session (sólo lo que falta), para que las dos den voces
+// idénticamente cebadas y ancladas.
+std::shared_ptr<BungeePitchVoice> build_voice_for_spec(
+        const VoiceSpec& spec,
+        const SourceManager& sources,
+        int sample_rate, int channel_count, int max_in_frames) {
+    auto voice = std::make_shared<BungeePitchVoice>();
+    if (!voice->configure(sample_rate, channel_count, max_in_frames))
+        return nullptr;
+
+    const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
+    voice_priming::warm(*voice, sample_rate, channel_count, max_in_frames,
+                        spec.time_ratio, pitch_scale);
+    // Prefeed the voice with real source audio so the audio thread's first
+    // render_block returns aligned output instead of the ~140ms of silence that
+    // voice_priming::warm (zero input) leaves in Bungee's output FIFO.
+    const int latency_frames = static_cast<int>(voice->latency_frames());
+    const bool window_ready = ensure_seek_read_window_ready(
+        sources, spec, max_in_frames, latency_frames);
+    voice_priming::Alignment aligned{spec.source_frame,
+                                     spec.source_frame + latency_frames};
+    if (window_ready && spec.source) {
+        aligned = voice_priming::align_on_source(
+            *voice, *spec.source, spec.source_frame,
+            channel_count, max_in_frames, pitch_scale, spec.time_ratio);
+    }
+    // Without a prefeed the fallback above skips `latency` into the source
+    // rather than letting the voice run permanently late: a brief head gap is
+    // masked by the fade-in armed below, whereas a constant lag never stops
+    // fighting the click.
+    voice->set_feed_anchor(static_cast<long long>(aligned.anchor),
+                           static_cast<long long>(aligned.fed_through));
+    voice->set_clip_mapping(spec.timeline_start_frame,
+                            spec.source_start_frame, spec.time_ratio);
+    // Voice is already primed with real audio above; ask for 0-frame fade-in.
+    // If the source window was not ready (very rare: source not yet decoded at
+    // session-build time), re-arm a short fade-in to mask the warm-only silence.
+    voice->arm_fade_in(window_ready ? 0 : 3);
+    return voice;
+}
+
 #endif // LT_ENGINE_HAVE_BUNGEE
 
 } // namespace
@@ -486,48 +529,13 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
             continue;
         }
 
-        auto voice = std::make_shared<BungeePitchVoice>();
-        if (!voice->configure(impl_->sample_rate,
-                              impl_->channel_count,
-                              impl_->max_in_frames)) {
-            continue;
-        }
-        voice_priming::warm(*voice,
-                            impl_->sample_rate, impl_->channel_count,
-                            impl_->max_in_frames, spec.time_ratio,
-                            semitones_to_pitch_scale(spec.effective_semitones));
-        // Prefeed the voice with real source audio so the audio thread's
-        // first render_block returns aligned output instead of the ~140ms of
-        // silence that voice_priming::warm (zero input) leaves in Bungee's output
-        // FIFO. Without this, the first Play after LoadSession suffers the
-        // same initial silence the seek path already avoids — they share the
-        // exact prefeed strategy below.
-        const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
-        const int latency_frames = static_cast<int>(voice->latency_frames());
-        const bool window_ready = ensure_seek_read_window_ready(
-            sources, spec, impl_->max_in_frames,
-            latency_frames);
-        voice_priming::Alignment aligned{spec.source_frame,
-                              spec.source_frame + latency_frames};
-        if (window_ready && spec.source) {
-            aligned = voice_priming::align_on_source(
-                *voice, *spec.source, spec.source_frame,
-                impl_->channel_count, impl_->max_in_frames,
-                pitch_scale, spec.time_ratio);
-        }
-        // Without a prefeed the fallback above skips `latency` into the source
-        // rather than letting the voice run permanently late: a brief head gap
-        // is masked by the fade-in armed below, whereas a constant lag never
-        // stops fighting the click.
-        voice->set_feed_anchor(static_cast<long long>(aligned.anchor),
-                               static_cast<long long>(aligned.fed_through));
-        voice->set_clip_mapping(spec.timeline_start_frame,
-                                spec.source_start_frame, spec.time_ratio);
-        // Voice is already primed with real audio above; ask for 0-frame
-        // fade-in. If the source window was not ready (very rare: source not
-        // yet decoded at session-build time), re-arm a short fade-in to mask
-        // the warm-only silence.
-        voice->arm_fade_in(window_ready ? 0 : 3);
+        // Prefeed included: the first Play after LoadSession must not suffer
+        // the initial silence the seek path already avoids.
+        auto voice = build_voice_for_spec(spec, sources,
+                                          impl_->sample_rate,
+                                          impl_->channel_count,
+                                          impl_->max_in_frames);
+        if (!voice) continue;
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
@@ -592,10 +600,26 @@ void BungeeVoiceManager::retime_existing_for_session(
     int retimed = 0;
     int retimed_soft = 0;
     int missing = 0;
+    // Clips que AHORA necesitan voz y no la tienen. Un retime que sólo mueve lo
+    // que ya existe los deja mudos para siempre: render_path_stretched devuelve
+    // silencio cuando no encuentra voz, y nada vuelve a pasar por aquí hasta
+    // que otro comando fuerza un build completo.
+    //
+    // El caso real es cambiar la nota de una región con warp a ratio 1.0: hasta
+    // ese momento todos los clips eran warp NEUTRO (sin voz, camino Direct) y
+    // el cambio de tono los saca a todos de la neutralidad a la vez. Se oye
+    // como que al transponer enmudecen todas las pistas menos las marcadas
+    // «no transponer» (esas siguen siendo neutras), hasta que se toca
+    // cualquier otro control.
+    std::vector<const VoiceSpec*> to_enroll;
     for (const auto& spec : specs) {
         auto it = current->find(spec.clip_id);
         if (it == current->end() || !it->second) {
             ++missing;
+            // En vivo no: un arrastre publica por tick y construir voces ahí
+            // puede esperar por bloques de disco. El commit del drop
+            // (live=false) las enrola.
+            if (!live) to_enroll.push_back(&spec);
             continue;
         }
         auto& voice = *it->second;
@@ -635,12 +659,40 @@ void BungeeVoiceManager::retime_existing_for_session(
                                spec.source_start_frame, spec.time_ratio);
         ++retimed;
     }
+    // Enrolar SIN tocar las voces calientes: el mapa nuevo reusa exactamente
+    // los mismos shared_ptr, así que las que ya sonaban conservan su pipeline y
+    // su fase. Reconstruirlas es lo que desincronizaba el clic al transponer
+    // (ver el contrato de esta clase en el cabecero).
+    int enrolled = 0;
+    if (!to_enroll.empty()) try {
+        std::lock_guard build_lock(impl_->build_mutex);
+        auto next = std::make_shared<VoiceMap>(*current);
+        for (const VoiceSpec* spec : to_enroll) {
+            auto voice = build_voice_for_spec(*spec, sources,
+                                              impl_->sample_rate,
+                                              impl_->channel_count,
+                                              impl_->max_in_frames);
+            if (!voice) continue;
+            (*next)[spec->clip_id] = std::move(voice);
+            ++enrolled;
+            impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (enrolled > 0) {
+            impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
+            impl_->publish_from_control(
+                std::shared_ptr<const VoiceMap>(std::move(next)));
+            current = impl_->load_active();
+        }
+    } catch (...) {
+        // Esta función es noexcept: si la reserva falla se queda el mapa
+        // anterior. Peor caso, el silencio que ya había; nunca un terminate.
+    }
     if (bungee_debug_enabled()) {
         lt_debug_log(
-            "[BUNGEE] retime_existing live=%d playhead=%lld specs=%zu retimed=%d soft=%d missing=%d active=%zu\n",
+            "[BUNGEE] retime_existing live=%d playhead=%lld specs=%zu retimed=%d soft=%d missing=%d enrolled=%d active=%zu\n",
             live ? 1 : 0,
             static_cast<long long>(playhead), specs.size(),
-            retimed, retimed_soft, missing,
+            retimed, retimed_soft, missing, enrolled,
             current ? current->size() : 0);
     }
 #else

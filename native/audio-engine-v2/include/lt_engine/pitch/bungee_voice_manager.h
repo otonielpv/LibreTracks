@@ -93,6 +93,14 @@ public:
     // clip mapping changed are NOT hard-retimed (cursor reset + FIFO clear +
     // fade-in) — doing that every tick of a big drag buzzes ("trrrr"). The drag
     // commit calls again with live=false so they retime cleanly once at the drop.
+    //
+    // Además ENROLA (sólo con live=false) los clips que ahora necesitan voz y no
+    // la tienen. Sin eso, cualquier edición que saque a un clip del warp neutro
+    // —cambiar la nota de una región a ratio 1.0 es la de todos los días— lo
+    // dejaba mudo hasta el siguiente build completo, porque
+    // render_path_stretched devuelve silencio si no encuentra voz. Las voces ya
+    // calientes se reusan tal cual (mismo shared_ptr): enrolar no debe costar
+    // la fase de las que ya sonaban.
     void retime_existing_for_session(const Session& session,
                                      const SourceManager& sources,
                                      Frame playhead,

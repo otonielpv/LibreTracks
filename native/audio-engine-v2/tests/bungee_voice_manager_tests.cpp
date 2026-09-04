@@ -396,3 +396,59 @@ TEST_CASE("rebuild_for_session voices ready clips while another source decodes")
     CHECK(mgr.voice_for("clip_pending") == nullptr);
 #endif
 }
+
+// Regression: cambiar el tono de la región enmudecía las pistas.
+//
+// Con warp activo y ratio 1.0, un clip sin transposición efectiva es warp
+// NEUTRO: is_neutral_warp() lo deja fuera de enumerate_voices y el renderer lo
+// manda por Direct. Ese equilibrio se rompe en cuanto el usuario cambia la
+// nota: el clip pasa a necesitar voz, pero CmdSetRegionTranspose sólo llamaba a
+// retime_existing_for_session, que RETIMA las voces que ya existen y no crea
+// ninguna. render_path_stretched devuelve silencio cuando no encuentra voz, así
+// que la pista quedaba muda hasta que otro comando (un salto, el interruptor de
+// «no transponer» de otra pista) forzaba un build completo.
+//
+// Las dos mitades importan: enrolar lo que falta SIN tocar las voces calientes
+// que ya sonaban — reconstruirlas es lo que desincronizaba el clic (ver el test
+// «region transpose retimes the warm voice in place»).
+TEST_CASE("region transpose enrolls voices for clips that had none") {
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+
+    auto session = make_one_transposed_clip_session(/*semitones=*/0);
+    // Ratio exactamente 1.0: warp encendido sin cambio de tempo, que es como
+    // queda una región al activar el warp antes de tocar el BPM.
+    session.songs[0].regions[0].warp_source_bpm = session.songs[0].bpm;
+    // Segunda pista con transposición propia de clip: NO es warp neutro, así
+    // que ya tiene voz caliente antes del cambio de nota.
+    Track pitched;
+    pitched.id   = "trk2";
+    pitched.kind = TrackKind::Audio;
+    pitched.transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
+    Clip pitched_clip{"clip2", "src1", /*tl*/0, /*src*/0, kSR * 4};
+    pitched_clip.semitones = 1;
+    pitched.clips.push_back(pitched_clip);
+    session.songs[0].tracks.push_back(pitched);
+
+    mgr.rebuild_for_session(session, sm, /*playhead=*/0);
+
+#if LT_ENGINE_HAVE_BUNGEE
+    CHECK(mgr.voice_for("clip1") == nullptr);   // warp neutro → camino Direct
+    BungeePitchVoice* warm = mgr.voice_for("clip2");
+    REQUIRE(warm != nullptr);
+    const long long fed_before = warm->fed_through();
+
+    // El usuario cambia la nota de la región.
+    session.songs[0].regions[0].transpose_semitones = +2;
+    mgr.retime_existing_for_session(session, sm, /*playhead=*/0, /*live=*/false);
+
+    // clip1 ya no es neutro: sin voz, render_path_stretched lo enmudece.
+    CHECK(mgr.voice_for("clip1") != nullptr);
+    // clip2 conserva su voz caliente y su fase: nada que enmascarar.
+    CHECK(mgr.voice_for("clip2") == warm);
+    CHECK(warm->fed_through() == fed_before);
+#endif
+}

@@ -2822,6 +2822,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // keeps its warm pipeline untouched (soft retime). This mirrors
                 // the BPM-only branch of CmdSetRegionWarp, which is exactly why
                 // warping (unlike transposing) never desynced the click.
+                //
+                // Lo que el retime SÍ tiene que hacer aquí es enrolar las voces
+                // que faltan: con warp a ratio 1.0 los clips sin transposición
+                // son warp NEUTRO y no tienen voz, y este comando los saca a
+                // todos de la neutralidad a la vez. Retimar sólo lo existente
+                // los dejaba mudos (render_path_stretched devuelve silencio sin
+                // voz) hasta que otro comando forzaba un build completo.
                 if (bungee_voices_ && bungee_voices_->is_available()
                     && source_manager_ && clock_) {
                     const Frame frame = clock_->position().frame;
