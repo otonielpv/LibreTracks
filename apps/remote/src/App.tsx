@@ -59,6 +59,7 @@ import {
   gainToPosition,
   positionToGain,
 } from "@libretracks/shared/faderScale";
+import { currentScreenSize, isPhoneShapedScreen } from "./deviceShape";
 import { getRemoteStrings } from "./i18n";
 import { buildMarkerCards, buildTimelineMarkerChips } from "./markerCards";
 import {
@@ -224,6 +225,7 @@ const MASTER_SNAP_TARGET = 1.0;
 const MASTER_SNAP_THRESHOLD = MASTER_GAIN_MAX * 0.03;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
 const MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY = "libretracks.remote.mixerFilterActiveSong";
+const ROTATE_GUARD_DISMISSED_STORAGE_KEY = "libretracks.remote.rotateGuardDismissed";
 
 const useMixerUiStore = create<{
   filterActiveSong: boolean;
@@ -317,6 +319,47 @@ function readRemoteSizeLevel() {
   }
 
   return Math.min(MAX_REMOTE_SIZE_LEVEL, Math.max(0, Math.floor(parsedLevel)));
+}
+
+function readRotateGuardDismissed() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.localStorage.getItem(ROTATE_GUARD_DISMISSED_STORAGE_KEY) === "1";
+}
+
+/** Landscape on a phone-shaped screen leaves the transport view too short to be
+ * usable, so we prompt for a rotate -- with an escape hatch, because no device
+ * heuristic is perfect and the user knows their screen better than we do. */
+function useRotateGuard() {
+  const [dismissed, setDismissed] = useState(readRotateGuardDismissed);
+  const [blocked, setBlocked] = useState(
+    () => typeof window !== "undefined" && isPhoneShapedScreen(currentScreenSize()) && window.innerWidth > window.innerHeight,
+  );
+
+  useEffect(() => {
+    const update = () => {
+      setBlocked(isPhoneShapedScreen(currentScreenSize()) && window.innerWidth > window.innerHeight);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+
+  const dismiss = useCallback(() => {
+    setDismissed(true);
+    try {
+      window.localStorage.setItem(ROTATE_GUARD_DISMISSED_STORAGE_KEY, "1");
+    } catch {
+      // Private browsing without storage still gets the dismissal for this session.
+    }
+  }, []);
+
+  return { showRotateGuard: blocked && !dismissed, dismissRotateGuard: dismiss };
 }
 
 /** Marker ids the user has hidden from the jump grid, persisted per-device. */
@@ -5126,6 +5169,7 @@ function LayoutCanvas({
 export function App() {
   useRemoteBridge();
   const [sizeLevel, setSizeLevel] = useState(readRemoteSizeLevel);
+  const { showRotateGuard, dismissRotateGuard } = useRotateGuard();
   const presetProfile = currentLayoutPresetProfile();
   const [layout, setLayout] = useState<RemoteLayout>(() => {
     const stored = readStoredLayout();
@@ -5273,17 +5317,21 @@ export function App() {
 
   return (
     <main
-      className={`remote-shell remote-profile-${presetProfile} remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""}`}
+      className={`remote-shell remote-profile-${presetProfile} remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""} ${showRotateGuard ? "is-rotate-locked" : ""}`}
     >
-      {/* Phones in landscape are too short to fit the transport view; the CSS
-          media query (orientation:landscape + short height) reveals this
-          overlay and hides the shell content, prompting a rotate to portrait.
-          Tablets (taller in landscape) are unaffected. */}
-      <div className="rotate-guard" role="alertdialog" aria-label={STRINGS.rotateTitle}>
-        <div className="rotate-guard-icon" aria-hidden="true">↻</div>
-        <strong>{STRINGS.rotateTitle}</strong>
-        <span>{STRINGS.rotateBody}</span>
-      </div>
+      {/* Phone-shaped screens in landscape are too short to fit the transport
+          view; this overlay hides the shell content and prompts a rotate to
+          portrait. Tablets are unaffected -- see isPhoneShapedScreen. */}
+      {showRotateGuard ? (
+        <div className="rotate-guard" role="alertdialog" aria-label={STRINGS.rotateTitle}>
+          <div className="rotate-guard-icon" aria-hidden="true">↻</div>
+          <strong>{STRINGS.rotateTitle}</strong>
+          <span>{STRINGS.rotateBody}</span>
+          <button type="button" className="rotate-guard-dismiss" onClick={dismissRotateGuard}>
+            {STRINGS.rotateDismiss}
+          </button>
+        </div>
+      ) : null}
 
       <header className="remote-header">
         <div className="remote-header-brand">

@@ -2656,47 +2656,54 @@ button {
   }
 }
 
-/* --- Phone landscape lock. Phones in landscape are too short to fit the
-   transport view usably, so instead of restructuring we show a rotate prompt
-   and hide the shell content. Targeted by orientation + short height so tablets
-   (much taller in landscape, ~768px+) are unaffected. --- */
-.rotate-guard {
-  display: none;
+/* --- Phone landscape lock. Phone-shaped screens in landscape are too short to
+   fit the transport view usably, so instead of restructuring we show a rotate
+   prompt and hide the shell content. Which devices qualify is decided in JS
+   (isPhoneShapedScreen) and signalled with .is-rotate-locked: a media query on
+   viewport height alone caught tablets, because the browser's address bar eats
+   into it and Android densities vary by vendor. --- */
+.remote-shell.is-rotate-locked > *:not(.rotate-guard) {
+  display: none !important;
 }
 
-@media (orientation: landscape) and (max-height: 500px) {
-  .remote-shell > *:not(.rotate-guard) {
-    display: none !important;
-  }
+.rotate-guard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  text-align: center;
+  height: 100%;
+  padding: 1.2rem calc(1.2rem + env(safe-area-inset-right)) 1.2rem
+    calc(1.2rem + env(safe-area-inset-left));
+}
 
-  .rotate-guard {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    text-align: center;
-    height: 100%;
-    padding: 1.2rem calc(1.2rem + env(safe-area-inset-right)) 1.2rem
-      calc(1.2rem + env(safe-area-inset-left));
-  }
+.rotate-guard-icon {
+  font-size: 2.4rem;
+  color: var(--accent);
+}
 
-  .rotate-guard-icon {
-    font-size: 2.4rem;
-    color: var(--accent);
-  }
+.rotate-guard strong {
+  font-size: 1.05rem;
+  color: var(--text);
+}
 
-  .rotate-guard strong {
-    font-size: 1.05rem;
-    color: var(--text);
-  }
+.rotate-guard span {
+  max-width: 22rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
 
-  .rotate-guard span {
-    max-width: 22rem;
-    color: var(--muted);
-    font-size: 0.82rem;
-    line-height: 1.35;
-  }
+.rotate-guard-dismiss {
+  margin-top: 0.2rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.82rem;
+  min-height: 2.25rem;
 }
 
 /* Live visualization widgets (Fase 1: fixed row under the timeline). Each tile
