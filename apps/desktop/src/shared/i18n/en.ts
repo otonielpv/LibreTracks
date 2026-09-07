@@ -24,6 +24,8 @@ const en = {
     create: "Add",
     addSection: "Section",
     addCue: "Cue",
+    addTempo: "Tempo",
+    addTimeSignature: "Time signature",
     addAudio: "Audio",
     more: "More actions",
   },

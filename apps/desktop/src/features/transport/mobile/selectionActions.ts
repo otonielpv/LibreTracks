@@ -126,6 +126,11 @@ export type MobileCreationHandlers = {
   onCreateCue: () => void;
   /** Abre el MISMO dialogo de importacion que la biblioteca. */
   onAddAudios: () => void;
+  /** Tempo y compas en el cabezal. Van los ultimos: la mayoria de sesiones
+   * tienen un tempo y un compas constantes, asi que son lo menos frecuente
+   * montando y pueden vivir tras el boton de puntos. */
+  onCreateTempoMarker: () => void;
+  onCreateTimeSignatureMarker: () => void;
 };
 
 export type MobileSelectionBarModel = {
@@ -226,6 +231,18 @@ export function mobileSelectionBarModel(args: {
               defaultValue: "Audio",
             }),
             onSelect: creation.onAddAudios,
+          },
+          {
+            label: t("mobileSelectionActions.addTempo", {
+              defaultValue: "Tempo",
+            }),
+            onSelect: creation.onCreateTempoMarker,
+          },
+          {
+            label: t("mobileSelectionActions.addTimeSignature", {
+              defaultValue: "Compás",
+            }),
+            onSelect: creation.onCreateTimeSignatureMarker,
           },
         ],
         count: null,

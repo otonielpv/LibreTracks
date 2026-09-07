@@ -277,6 +277,8 @@ beforeEach(async () => {
     selectedClipId: null,
     selectedClipIds: [],
     selectedSectionId: null,
+    selectedTempoMarkerId: null,
+    selectedTimeSignatureMarkerId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,

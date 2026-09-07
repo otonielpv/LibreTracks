@@ -63,6 +63,12 @@ export function useMobileSelectionBar({
       onCreateCue: () =>
         timelineMenus.openCreateCueKindMenu(getPlayheadSeconds()),
       onAddAudios,
+      onCreateTempoMarker: () => {
+        void timelineMenus.changeTimelineBpmAt(getPlayheadSeconds());
+      },
+      onCreateTimeSignatureMarker: () => {
+        void timelineMenus.createTimeSignatureMarkerAt(getPlayheadSeconds());
+      },
     }),
     [timelineMenus, getPlayheadSeconds, onAddAudios],
   );

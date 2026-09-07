@@ -502,68 +502,12 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       {
         label: t("transport.menu.changeTimelineBpm"),
         disabled: !song,
-        onSelect: async () => {
-          const nextBpm = Number(
-            await promptDialog(
-              t("transport.prompt.timelineBpm"),
-              d.songBaseBpm.toFixed(2),
-            ),
-          );
-          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
-            return;
-          }
-
-          await d.runAction(async () => {
-            const nextSnapshot =
-              positionSeconds <= 0.0001
-                ? await updateSongTempo(nextBpm)
-                : await upsertSongTempoMarker(positionSeconds, nextBpm);
-            d.optimisticallyAppliedRevisionsRef.current.add(
-              nextSnapshot.projectRevision,
-            );
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
-            d.applyPlaybackSnapshot(nextSnapshot);
-            d.tempoDraftDirtyRef.current = false;
-            d.setTempoDraft(formatBpmDraft(nextBpm));
-            d.setStatus(
-              positionSeconds <= 0.0001
-                ? t("transport.status.baseTimelineBpmUpdated", {
-                    bpm: nextBpm.toFixed(2),
-                  })
-                : t("transport.status.tempoMarkerCreated", {
-                    time: formatClock(positionSeconds),
-                    bpm: nextBpm.toFixed(2),
-                  }),
-            );
-          });
-        },
+        onSelect: () => changeTimelineBpmAt(positionSeconds),
       },
       {
         label: "Crear marca de metrica",
         disabled: !song,
-        onSelect: async () => {
-          const nextSignature = (
-            await promptDialog("Compas", d.displayedTimeSignature)
-          )?.trim();
-          if (!nextSignature) {
-            return;
-          }
-
-          await d.runAction(async () => {
-            const nextSnapshot =
-              positionSeconds <= 0.0001
-                ? await updateSongTimeSignature(nextSignature)
-                : await upsertSongTimeSignatureMarker(
-                    positionSeconds,
-                    nextSignature,
-                  );
-            d.applyPlaybackSnapshot(nextSnapshot);
-            d.setTimeSignatureDraft(nextSignature);
-            d.setStatus(
-              `Compas ${nextSignature} en ${formatClock(positionSeconds)}`,
-            );
-          });
-        },
+        onSelect: () => createTimeSignatureMarkerAt(positionSeconds),
       },
       {
         label: t("transport.automation.createCue"),
@@ -582,6 +526,71 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         },
       },
     ];
+  }
+
+  // Crear/cambiar tempo y compas, fuera del menu de la regla: la barra tactil
+  // los ofrece tambien, y en un movil el clic derecho no es una puerta.
+  async function changeTimelineBpmAt(positionSeconds: number) {
+    const d = getDeps();
+    const { t } = d;
+    const nextBpm = Number(
+      await promptDialog(
+        t("transport.prompt.timelineBpm"),
+        d.songBaseBpm.toFixed(2),
+      ),
+    );
+    if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+      return;
+    }
+
+    await d.runAction(async () => {
+      const nextSnapshot =
+        positionSeconds <= 0.0001
+          ? await updateSongTempo(nextBpm)
+          : await upsertSongTempoMarker(positionSeconds, nextBpm);
+      d.optimisticallyAppliedRevisionsRef.current.add(
+        nextSnapshot.projectRevision,
+      );
+      await d.refreshSongView({ includeWaveforms: false, sync: true });
+      d.applyPlaybackSnapshot(nextSnapshot);
+      d.tempoDraftDirtyRef.current = false;
+      d.setTempoDraft(formatBpmDraft(nextBpm));
+      d.setStatus(
+        positionSeconds <= 0.0001
+          ? t("transport.status.baseTimelineBpmUpdated", {
+              bpm: nextBpm.toFixed(2),
+            })
+          : t("transport.status.tempoMarkerCreated", {
+              time: formatClock(positionSeconds),
+              bpm: nextBpm.toFixed(2),
+            }),
+      );
+    });
+  }
+
+  async function createTimeSignatureMarkerAt(positionSeconds: number) {
+    const d = getDeps();
+    const nextSignature = (
+      await promptDialog("Compas", d.displayedTimeSignature)
+    )?.trim();
+    if (!nextSignature) {
+      return;
+    }
+
+    await d.runAction(async () => {
+      const nextSnapshot =
+        positionSeconds <= 0.0001
+          ? await updateSongTimeSignature(nextSignature)
+          : await upsertSongTimeSignatureMarker(
+              positionSeconds,
+              nextSignature,
+            );
+      d.applyPlaybackSnapshot(nextSnapshot);
+      d.setTimeSignatureDraft(nextSignature);
+      d.setStatus(
+        `Compas ${nextSignature} en ${formatClock(positionSeconds)}`,
+      );
+    });
   }
 
   // Split a specific song region at the current playhead. Shared by the song
@@ -1369,6 +1378,8 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     openCreateMarkerKindMenu,
     openCreateSectionKindMenu,
     openCreateCueKindMenu,
+    changeTimelineBpmAt,
+    createTimeSignatureMarkerAt,
     createAutomationCueAt,
     editAutomationCue,
     automationCueContextMenu,

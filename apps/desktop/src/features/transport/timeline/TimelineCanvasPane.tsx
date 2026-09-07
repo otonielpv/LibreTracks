@@ -1080,7 +1080,15 @@ export function TimelineCanvasPane({
                 onPointerCancel={markerTouchContextMenu.cancel}
                 onClick={(event) => {
                   event.stopPropagation();
-                  markerTouchContextMenu.consumeTriggered();
+                  if (markerTouchContextMenu.consumeTriggered()) {
+                    return;
+                  }
+                  // Tocarla la selecciona, y la barra tactil ensena sus
+                  // acciones. Solo en movil: en escritorio un clic aqui no
+                  // hacia nada y seguir haciendo nada es lo que se espera.
+                  if (isMobileApp) {
+                    useTimelineUIStore.getState().selectTempoMarker(marker.id);
+                  }
                 }}
                 onContextMenu={(event) => {
                   event.stopPropagation();
@@ -1113,7 +1121,14 @@ export function TimelineCanvasPane({
                 onPointerCancel={markerTouchContextMenu.cancel}
                 onClick={(event) => {
                   event.stopPropagation();
-                  markerTouchContextMenu.consumeTriggered();
+                  if (markerTouchContextMenu.consumeTriggered()) {
+                    return;
+                  }
+                  if (isMobileApp) {
+                    useTimelineUIStore
+                      .getState()
+                      .selectTimeSignatureMarker(marker.id);
+                  }
                 }}
                 onContextMenu={(event) => {
                   event.stopPropagation();

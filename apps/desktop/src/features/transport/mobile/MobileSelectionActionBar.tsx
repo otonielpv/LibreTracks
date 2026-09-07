@@ -63,6 +63,12 @@ export function MobileSelectionActionBar({
   const selectedTrackIds = useTimelineUIStore(
     (state) => state.selectedTrackIds,
   );
+  const selectedTempoMarkerId = useTimelineUIStore(
+    (state) => state.selectedTempoMarkerId,
+  );
+  const selectedTimeSignatureMarkerId = useTimelineUIStore(
+    (state) => state.selectedTimeSignatureMarkerId,
+  );
 
   if (!isMobileApp || !menus) {
     return null;
@@ -74,6 +80,8 @@ export function MobileSelectionActionBar({
     selectedSectionId,
     selectedRegionId,
     selectedTrackIds,
+    selectedTempoMarkerId,
+    selectedTimeSignatureMarkerId,
   });
   const model = mobileSelectionBarModel({ target, menus, creation, t });
   if (model.actions.length === 0) {

@@ -22,8 +22,8 @@ const song = {
   bpm: 120,
   timeSignature: "4/4",
   durationSeconds: 100,
-  tempoMarkers: [],
-  timeSignatureMarkers: [],
+  tempoMarkers: [{ id: "tempo-1", startSeconds: 4, bpm: 90 }],
+  timeSignatureMarkers: [{ id: "ts-1", startSeconds: 6, signature: "3/4" }],
   regions: [],
   sectionMarkers: [{ id: "m1", name: "Estrofa", startSeconds: 8 }],
   clips: [{ id: "c1", trackId: "t1", timelineStartSeconds: 0, durationSeconds: 4 }],
@@ -43,8 +43,10 @@ const markerActions: ContextMenuAction[] = [
 const menus: MobileSelectionMenus = {
   clipContextMenu: () => [{ label: "Eliminar", onSelect: vi.fn() }],
   sectionContextMenu: () => markerActions,
-  tempoMarkerContextMenu: () => [],
-  timeSignatureMarkerContextMenu: () => [],
+  tempoMarkerContextMenu: () => [{ label: "Cambiar BPM", onSelect: vi.fn() }],
+  timeSignatureMarkerContextMenu: () => [
+    { label: "Cambiar compas", onSelect: vi.fn() },
+  ],
   songRegionContextMenu: () => [],
   trackContextMenu: () => [],
 };
@@ -53,6 +55,8 @@ const creation = {
   onCreateSection: vi.fn(),
   onCreateCue: vi.fn(),
   onAddAudios: vi.fn(),
+  onCreateTempoMarker: vi.fn(),
+  onCreateTimeSignatureMarker: vi.fn(),
 };
 
 function renderBar(overrides: Partial<Parameters<typeof MobileSelectionActionBar>[0]> = {}) {
@@ -98,6 +102,32 @@ describe("la barra de la seleccion, generalizada", () => {
     fireEvent.click(screen.getByRole("button", { name: "Audio" }));
     expect(creation.onAddAudios).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Quitar selección" })).toBeNull();
+  });
+
+  it("tempo y compas se crean desde la barra, tras los puntos", () => {
+    const onOpenSheet =
+      vi.fn<(title: string, actions: ContextMenuAction[]) => void>();
+    renderBar({ onOpenSheet });
+    // Van los ultimos porque son lo menos frecuente montando, pero se llega a
+    // ellos sin clic derecho, que en tactil no existe.
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    const labels = onOpenSheet.mock.calls
+      .at(-1)![1]
+      .map((entry) => entry.label);
+    expect(labels).toContain("Tempo");
+    expect(labels).toContain("Compás");
+  });
+
+  it("seleccionar una marca de tempo ensena sus acciones", () => {
+    useTimelineUIStore.getState().selectTempoMarker("tempo-1");
+    renderBar();
+    expect(screen.getByRole("button", { name: "Cambiar BPM" })).toBeTruthy();
+  });
+
+  it("seleccionar una marca de compas ensena las suyas", () => {
+    useTimelineUIStore.getState().selectTimeSignatureMarker("ts-1");
+    renderBar();
+    expect(screen.getByRole("button", { name: "Cambiar compas" })).toBeTruthy();
   });
 
   it("seleccionar una marca muestra sus acciones sin mantener pulsado", () => {

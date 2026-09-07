@@ -38,6 +38,8 @@ const creation = {
   onCreateSection: vi.fn(),
   onCreateCue: vi.fn(),
   onAddAudios: vi.fn(),
+  onCreateTempoMarker: vi.fn(),
+  onCreateTimeSignatureMarker: vi.fn(),
 };
 
 const song = {
@@ -177,15 +179,23 @@ describe("las acciones de la barra son las del escritorio", () => {
       t,
     });
     // Seccion y aviso son vocabularios distintos y van separados: preguntar
-    // por el grupo en el gesto mas repetido del montaje sobra.
-    expect(model.actions).toHaveLength(3);
+    // por el grupo en el gesto mas repetido del montaje sobra. Tempo y compas
+    // van los ultimos: la mayoria de sesiones tienen uno constante.
+    const handlers = [
+      creation.onCreateSection,
+      creation.onCreateCue,
+      creation.onAddAudios,
+      creation.onCreateTempoMarker,
+      creation.onCreateTimeSignatureMarker,
+    ];
+    expect(model.actions).toHaveLength(handlers.length);
 
-    model.actions[0].onSelect();
-    expect(creation.onCreateSection).toHaveBeenCalledTimes(1);
-    model.actions[1].onSelect();
-    expect(creation.onCreateCue).toHaveBeenCalledTimes(1);
-    model.actions[2].onSelect();
-    expect(creation.onAddAudios).toHaveBeenCalledTimes(1);
+    model.actions.forEach((entry, index) => {
+      entry.onSelect();
+      expect(handlers[index], model.actions[index].label).toHaveBeenCalledTimes(
+        1,
+      );
+    });
   });
 
   it("dice cuantos clips van a recibir la accion", () => {

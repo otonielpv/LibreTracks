@@ -20,6 +20,26 @@ export const TIMELINE_DEFAULT_SNAP_ENABLED = true;
 export const TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED = false;
 export const DEFAULT_VIEW_MODE: ViewMode = "daw";
 
+/**
+ * Toda seleccion nueva apaga las demas. Vive en una constante porque son ya
+ * seis campos y en ocho sitios: olvidar uno significa que la barra tactil
+ * ensena las acciones de algo que el usuario dejo de tener seleccionado hace
+ * rato.
+ */
+const EMPTY_SELECTION = {
+  selectedTrackIds: [] as string[],
+  selectedClipId: null as string | null,
+  selectedClipIds: [] as string[],
+  selectedSectionId: null as string | null,
+  selectedTempoMarkerId: null as string | null,
+  selectedTimeSignatureMarkerId: null as string | null,
+};
+
+const CLEAR_RULER_MARKERS = {
+  selectedTempoMarkerId: null as string | null,
+  selectedTimeSignatureMarkerId: null as string | null,
+};
+
 function recordViewMode(viewMode: ViewMode): void {
   recordProductEvent(`feature_${viewMode}_view`);
 }
@@ -32,6 +52,10 @@ type TimelineUIState = {
   selectedClipId: string | null;
   selectedClipIds: string[];
   selectedSectionId: string | null;
+  /** Marcas de la regla inferior. Sólo las selecciona la app móvil, donde son
+   * la puerta a sus acciones; en escritorio siguen yendo por clic derecho. */
+  selectedTempoMarkerId: string | null;
+  selectedTimeSignatureMarkerId: string | null;
   snapEnabled: boolean;
   followPlayheadEnabled: boolean;
   midiLearnMode: string | null;
@@ -52,6 +76,8 @@ type TimelineUIState = {
   setSelectedClipIds: (clipIds: string[]) => void;
   toggleClipSelection: (clipId: string) => void;
   setSelectedSectionId: (sectionId: string | null) => void;
+  selectTempoMarker: (markerId: string | null) => void;
+  selectTimeSignatureMarker: (markerId: string | null) => void;
   clearSelection: () => void;
   clearSelectionIfAny: () => void;
   selectTrack: (trackIds: string[]) => void;
@@ -80,6 +106,8 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     selectedClipId: null,
     selectedClipIds: [],
     selectedSectionId: null,
+    selectedTempoMarkerId: null,
+    selectedTimeSignatureMarkerId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
@@ -131,10 +159,19 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       }));
     },
     setSelectedTrackIds: (selectedTrackIds) => {
-      set({ selectedTrackIds, selectedClipId: null, selectedClipIds: [] });
+      set({
+        selectedTrackIds,
+        selectedClipId: null,
+        selectedClipIds: [],
+        ...CLEAR_RULER_MARKERS,
+      });
     },
     setSelectedClipId: (selectedClipId) => {
-      set({ selectedClipId, selectedClipIds: selectedClipId ? [selectedClipId] : [] });
+      set({
+        selectedClipId,
+        selectedClipIds: selectedClipId ? [selectedClipId] : [],
+        ...CLEAR_RULER_MARKERS,
+      });
     },
     setSelectedClipIds: (selectedClipIds) => {
       set({
@@ -142,6 +179,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
         selectedClipId: selectedClipIds.at(-1) ?? null,
         selectedClipIds,
         selectedSectionId: null,
+        ...CLEAR_RULER_MARKERS,
       });
     },
     toggleClipSelection: (clipId) => {
@@ -154,19 +192,27 @@ export const useTimelineUIStore = create<TimelineUIState>()(
           selectedClipId: selectedClipIds.at(-1) ?? null,
           selectedClipIds,
           selectedSectionId: null,
+          ...CLEAR_RULER_MARKERS,
         };
       });
     },
     setSelectedSectionId: (selectedSectionId) => {
-      set({ selectedSectionId });
+      set({ selectedSectionId, ...CLEAR_RULER_MARKERS });
+    },
+    selectTempoMarker: (selectedTempoMarkerId) => {
+      set({
+        ...EMPTY_SELECTION,
+        selectedTempoMarkerId,
+      });
+    },
+    selectTimeSignatureMarker: (selectedTimeSignatureMarkerId) => {
+      set({
+        ...EMPTY_SELECTION,
+        selectedTimeSignatureMarkerId,
+      });
     },
     clearSelection: () => {
-      set({
-        selectedTrackIds: [],
-        selectedClipId: null,
-        selectedClipIds: [],
-        selectedSectionId: null,
-      });
+      set({ ...EMPTY_SELECTION });
     },
     /** Como `clearSelection`, pero no toca el estado si no había nada
      * seleccionado. El fondo del timeline llama a esto en CADA clic de salto y
@@ -178,7 +224,9 @@ export const useTimelineUIStore = create<TimelineUIState>()(
         state.selectedTrackIds.length === 0 &&
         state.selectedClipIds.length === 0 &&
         state.selectedClipId === null &&
-        state.selectedSectionId === null
+        state.selectedSectionId === null &&
+        state.selectedTempoMarkerId === null &&
+        state.selectedTimeSignatureMarkerId === null
       ) {
         return;
       }
@@ -186,25 +234,20 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     selectTrack: (selectedTrackIds) => {
       set({
+        ...EMPTY_SELECTION,
         selectedTrackIds,
-        selectedClipId: null,
-        selectedClipIds: [],
-        selectedSectionId: null,
       });
     },
     selectClip: (clipId, _trackId = null) => {
       set({
-        selectedTrackIds: [],
+        ...EMPTY_SELECTION,
         selectedClipId: clipId,
         selectedClipIds: clipId ? [clipId] : [],
-        selectedSectionId: null,
       });
     },
     selectSection: (sectionId) => {
       set({
-        selectedTrackIds: [],
-        selectedClipId: null,
-        selectedClipIds: [],
+        ...EMPTY_SELECTION,
         selectedSectionId: sectionId,
       });
     },
