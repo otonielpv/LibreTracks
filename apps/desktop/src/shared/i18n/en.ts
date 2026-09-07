@@ -13,9 +13,6 @@ const en = {
     seconds: "Seconds",
     action: "Position…",
   },
-  mobileLiveSettings: {
-    title: "Live",
-  },
   mobileSelectionActions: {
     clips_one: "{{count}} clip",
     clips_other: "{{count}} clips",

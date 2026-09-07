@@ -12,7 +12,7 @@ import {
 import {
   persistSelectionBarOpen,
   readSelectionBarOpen,
-} from "./liveSettingsGroup";
+} from "./selectionBarVisibility";
 
 /**
  * Cuantas acciones se pintan en la barra antes de mandar el resto a la hoja.

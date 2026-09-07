@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { getUiZoom } from "../../../shared/uiZoom";
 import { isMobileApp } from "../desktopApi";
@@ -13,6 +14,7 @@ export function TimelineContextMenus({
   contextMenu,
   onDismiss,
 }: TimelineContextMenusProps) {
+  const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const anchorX = contextMenu?.x ?? 0;
   const anchorY = contextMenu?.y ?? 0;
@@ -102,7 +104,26 @@ export function TimelineContextMenus({
       }
       onClick={(event) => event.stopPropagation()}
     >
-      <strong>{contextMenu.title}</strong>
+      {isMobileApp ? (
+        // Como hoja inferior no hay "fuera del menu" evidente: media pantalla
+        // es el propio menu y la otra media es timeline, donde tocar tiene sus
+        // propias consecuencias. Un aspa evita tener que adivinar donde pulsar.
+        <div className="lt-context-menu-sheet-header">
+          <strong>{contextMenu.title}</strong>
+          <button
+            type="button"
+            className="lt-icon-button"
+            aria-label={t("common.close", { defaultValue: "Cerrar" })}
+            onClick={onDismiss}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              close
+            </span>
+          </button>
+        </div>
+      ) : (
+        <strong>{contextMenu.title}</strong>
+      )}
       {contextMenu.actions.map((action) => (
         <button
           key={action.label}

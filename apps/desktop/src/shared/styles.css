@@ -8444,6 +8444,32 @@ html.lt-ios body {
   background: #161616;
 }
 
+/* Cabecera de la hoja: titulo a la izquierda, aspa a la derecha. Sin ella
+   habia que adivinar donde esta el "fuera" del menu, y media pantalla es
+   timeline, donde tocar tiene sus propias consecuencias. */
+.lt-mobile .lt-context-menu-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Especificidad por encima de `.is-mobile-sheet button`, que da a TODOS los
+   botones de la hoja el alto y la linea inferior de una fila de menu. */
+.lt-mobile .lt-context-menu.is-mobile-sheet .lt-context-menu-sheet-header
+  .lt-icon-button {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  padding: 0;
+  border: 0;
+  border-bottom: 0;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.06);
+  color: #bacac5;
+}
+
 .lt-mobile .lt-context-menu.is-mobile-sheet strong {
   padding-bottom: 0.5rem;
 }
@@ -11011,11 +11037,35 @@ html.lt-ios body {
   font-size: 8px;
 }
 
+/* El nombre crece con la fila. Fijo en 0.72rem, una fila alta se quedaba con
+   un nombre diminuto pegado arriba y todo lo demas en blanco. */
 .lt-mobile .lt-track-header strong {
-  font-size: 0.72rem;
+  font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lt-mobile .lt-track-header.is-condensed strong,
+.lt-mobile .lt-track-header.is-compact strong {
+  font-size: 0.86rem;
+}
+
+.lt-mobile .lt-track-header.is-micro strong {
+  font-size: 0.8rem;
+}
+
+.lt-mobile .lt-track-header.is-lane strong {
+  font-size: 0.72rem;
+}
+
+/* Y el contenido se centra en la fila en vez de pegarse arriba: lo que sobra
+   se reparte a los dos lados en vez de acumularse debajo. */
+.lt-mobile .lt-track-header-content,
+.lt-mobile .lt-track-header-summary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* La fila desplegada. Va superpuesta a proposito: el alto de la fila lo
@@ -11104,45 +11154,6 @@ html.lt-ios body {
   width: 2.4rem;
   height: 2.4rem;
   font-size: 11px;
-}
-
-/* Grupo "Directo" plegable en movil. Cerrado, es un solo boton y devuelve el
-   ancho superior a lo que importa montando; abierto, ofrece los mismos
-   controles de siempre, sin recortar ninguno. */
-.lt-mobile .lt-mobile-live-group {
-  display: contents;
-}
-
-.lt-mobile .lt-mobile-live-group-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-height: 2.2rem;
-  padding: 0 0.6rem;
-  border: 0;
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.12)),
-    #201f1f;
-  color: #e5e2e1;
-  font: 600 10px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.lt-mobile .lt-mobile-live-group-toggle .material-symbols-outlined {
-  font-size: 15px;
-}
-
-.lt-mobile .lt-mobile-live-group.is-open .lt-mobile-live-group-toggle {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.06)),
-    rgba(47, 46, 46, 0.92);
-  color: #57f1db;
-  box-shadow:
-    0 0 0 1px rgba(87, 241, 219, 0.18),
-    0 0 18px rgba(87, 241, 219, 0.16);
 }
 
 /* Editor de posicion de una marca. Gana sitio DENTRO de la vista y no la
