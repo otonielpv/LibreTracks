@@ -7,6 +7,7 @@ import {
 } from "../timeline/timelineMath";
 import {
   MobileTimelineNavigation,
+  isNativeTouchControl,
   type MobileNavigationOptions,
 } from "../mobile/MobileTimelineNavigation";
 
@@ -586,6 +587,14 @@ export class InputManager {
 
   private handleTouchStart = (event: TouchEvent) => {
     if (this.options.mobileNavigation?.enabled()) {
+      // Salvo sobre un control de verdad. Este `preventDefault` se lleva por
+      // delante los eventos de raton de compatibilidad, y con ellos el `click`
+      // sintetico: cualquier boton que viva DENTRO del area de carriles
+      // quedaba mudo sin dejar rastro —fue lo que tuvo muerto el boton
+      // "Anadir audios" del estado vacio—.
+      if (isNativeTouchControl(event.target)) {
+        return;
+      }
       if (event.cancelable) event.preventDefault();
       return;
     }

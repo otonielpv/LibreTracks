@@ -53,6 +53,9 @@ type TimelineTopbarProps = {
   onSaveProjectAs: () => void;
   onSaveAsTemplate: () => void;
   onStopTransport: () => void;
+  /** Dispara la MISMA accion que el atajo, por id: deshacer y rehacer no
+   * pueden hacer una cosa con el teclado y otra con el dedo. */
+  runShortcutAction: (action: "edit.undo" | "edit.redo") => void;
   onPlayTransport: () => void;
   onPauseTransport: () => void;
   onNextSong: () => void;
@@ -113,6 +116,7 @@ export function TimelineTopbar({
   onSaveProjectAs,
   onSaveAsTemplate,
   onStopTransport,
+  runShortcutAction,
   onPlayTransport,
   onPauseTransport,
   onNextSong,
@@ -501,6 +505,30 @@ export function TimelineTopbar({
             />
             <small>{displayedTimeSignature}</small>
           </label>
+
+          {/* Deshacer y rehacer, aparte del transporte. Sin teclado eran
+              inalcanzables, y pegados a "reproducir" un dedo torpe deshace
+              cuando queria sonar. */}
+          <div className="lt-topbar-history">
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.undo", { defaultValue: "Deshacer" })}
+              title={t("timelineTopbar.undo", { defaultValue: "Deshacer" })}
+              disabled={isProjectEmpty}
+              onClick={() => runShortcutAction("edit.undo")}
+            >
+              <span className="material-symbols-outlined">undo</span>
+            </button>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.redo", { defaultValue: "Rehacer" })}
+              title={t("timelineTopbar.redo", { defaultValue: "Rehacer" })}
+              disabled={isProjectEmpty}
+              onClick={() => runShortcutAction("edit.redo")}
+            >
+              <span className="material-symbols-outlined">redo</span>
+            </button>
+          </div>
 
           <div className="lt-transport-buttons" data-lt-tour={TOUR_TARGETS.topbarTransport}>
             <button type="button" aria-label={t("timelineTopbar.previous")} disabled={isProjectEmpty}>

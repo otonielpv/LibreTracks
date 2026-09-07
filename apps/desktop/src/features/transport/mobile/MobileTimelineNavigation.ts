@@ -15,7 +15,7 @@ type Point = { x: number; y: number };
  */
 const NATIVE_CONTROL_SELECTOR = "[data-lt-native-touch]";
 
-function isNativeControl(target: EventTarget | null): boolean {
+export function isNativeTouchControl(target: EventTarget | null): boolean {
   return (
     target instanceof Element && target.closest(NATIVE_CONTROL_SELECTOR) !== null
   );
@@ -95,7 +95,7 @@ export class MobileTimelineNavigation {
 
   private down = (event: PointerEvent) => {
     if (event.pointerType !== "touch" || !this.options.enabled()) return;
-    if (isNativeControl(event.target)) return;
+    if (isNativeTouchControl(event.target)) return;
     if (this.yielding) return;
     if (
       this.points.size === 0 &&
@@ -151,7 +151,7 @@ export class MobileTimelineNavigation {
 
   private suppressMouse = (event: MouseEvent) => {
     if (this.yielding) return;
-    if (isNativeControl(event.target)) return;
+    if (isNativeTouchControl(event.target)) return;
     if (Date.now() - this.lastTouch > 800) return;
     event.preventDefault(); event.stopImmediatePropagation();
   };

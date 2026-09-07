@@ -1005,6 +1005,8 @@ const en = {
     tapTempoShort: "Tap",
     previous: "Previous",
     stop: "Stop",
+    undo: "Undo",
+    redo: "Redo",
     play: "Play",
     pause: "Pause",
     metronome: "Metronome",

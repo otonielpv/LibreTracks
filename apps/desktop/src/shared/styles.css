@@ -371,6 +371,21 @@ html.lt-ios body {
   font-size: 16px;
 }
 
+/* Deshacer/rehacer: mismo aspecto que el transporte pero en su propio grupo,
+   con aire de por medio. Pegados a "reproducir", un dedo torpe deshace cuando
+   queria sonar. */
+.lt-topbar-history {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: #0e0e0e;
+  padding: 0.25rem 0.4rem;
+  border-radius: 2px;
+  box-shadow: inset 0 0 8px rgb(0 0 0 / 0.5);
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
 .lt-transport-buttons {
   display: flex;
   align-items: center;
@@ -383,6 +398,7 @@ html.lt-ios body {
 }
 
 .lt-transport-buttons button,
+.lt-topbar-history button,
 .lt-top-menu-trigger,
 .lt-top-menu-dropdown button,
 .lt-session-actions button,
@@ -408,7 +424,8 @@ html.lt-ios body {
   font: 800 10px/1 "Space Grotesk", sans-serif;
 }
 
-.lt-transport-buttons button {
+.lt-transport-buttons button,
+.lt-topbar-history button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -419,12 +436,14 @@ html.lt-ios body {
   color: #bacac5;
 }
 
-.lt-transport-buttons button:hover {
+.lt-transport-buttons button:hover,
+.lt-topbar-history button:hover {
   background: #2a2a2a;
   color: #57f1db;
 }
 
-.lt-transport-buttons button:disabled {
+.lt-transport-buttons button:disabled,
+.lt-topbar-history button:disabled {
   opacity: 0.38;
   cursor: not-allowed;
   background: transparent;
@@ -432,7 +451,8 @@ html.lt-ios body {
   box-shadow: none;
 }
 
-.lt-transport-buttons button:disabled:hover {
+.lt-transport-buttons button:disabled:hover,
+.lt-topbar-history button:disabled:hover {
   background: transparent;
   color: rgb(186 202 197 / 0.4);
 }

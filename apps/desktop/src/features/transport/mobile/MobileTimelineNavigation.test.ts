@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MobileTimelineNavigation, type MobileNavigationOptions } from "./MobileTimelineNavigation";
+import {
+  MobileTimelineNavigation,
+  isNativeTouchControl,
+  type MobileNavigationOptions,
+} from "./MobileTimelineNavigation";
 
 function pointer(target: EventTarget, type: string, id: number, x: number, y: number, pointerType = "touch") {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
@@ -107,5 +111,45 @@ describe("tocar selecciona; arrastrar lo ya seleccionado edita", () => {
     pointer(s.container, "pointerdown", 2, 100, 100);
     pointer(window, "pointermove", 2, 70, 100);
     expect(s.state.cameraX).toBe(130);
+  });
+});
+
+describe("los controles de verdad que viven dentro del timeline", () => {
+  it("se reconocen por la marca, tambien desde un hijo", () => {
+    const button = document.createElement("button");
+    button.setAttribute("data-lt-native-touch", "");
+    const icon = document.createElement("span");
+    button.append(icon);
+
+    expect(isNativeTouchControl(button)).toBe(true);
+    expect(isNativeTouchControl(icon)).toBe(true);
+  });
+
+  it("el fondo del timeline no lo es", () => {
+    expect(isNativeTouchControl(document.createElement("div"))).toBe(false);
+    expect(isNativeTouchControl(null)).toBe(false);
+  });
+
+  it("la navegacion no toca su pointerdown: sin eso no hay click", () => {
+    // El gesto se le pasa ENTERO al navegador —ni se cede con `yielding` ni se
+    // registra—, que es lo unico que devuelve un click de verdad.
+    const { container } = setup();
+    const button = document.createElement("button");
+    button.setAttribute("data-lt-native-touch", "");
+    container.append(button);
+
+    const event = new MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 10,
+      clientY: 10,
+    });
+    Object.defineProperties(event, {
+      pointerId: { value: 1 },
+      pointerType: { value: "touch" },
+    });
+    button.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
   });
 });

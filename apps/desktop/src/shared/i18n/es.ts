@@ -1034,6 +1034,8 @@ const es = {
     tapTempoShort: "Tap",
     previous: "Anterior",
     stop: "Detener",
+    undo: "Deshacer",
+    redo: "Rehacer",
     play: "Reproducir",
     pause: "Pausar",
     metronome: "Metronomo",

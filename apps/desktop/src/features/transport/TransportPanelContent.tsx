@@ -6975,6 +6975,7 @@ export function TransportPanelContent() {
         <MissingMidiWarningModal deviceName={missingMidiDeviceWarning} onDismiss={handleDismissMissingMidiDeviceWarning} onDontShowAgain={handleHideMissingMidiDeviceWarning} />
 
         <TimelineTopbar
+          runShortcutAction={runShortcutAction}
           openTopMenu={openTopMenu}
           menuBarRef={menuBarRef}
           canPersistProject={canPersistProject}
