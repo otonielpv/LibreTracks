@@ -5,7 +5,10 @@ import {
   getElementScaleX,
   getElementScaleY,
 } from "../timeline/timelineMath";
-import { MobileTimelineNavigation } from "../mobile/MobileTimelineNavigation";
+import {
+  MobileTimelineNavigation,
+  type MobileNavigationOptions,
+} from "../mobile/MobileTimelineNavigation";
 
 type NativeZoomView = {
   cameraX: number;
@@ -23,7 +26,10 @@ type InputManagerState = {
 };
 
 type InputManagerOptions = {
-  mobileNavigation?: { enabled: () => boolean; subscribe: (onChange: () => void) => () => void };
+  mobileNavigation?: Pick<
+    MobileNavigationOptions,
+    "enabled" | "subscribe" | "shouldEdit" | "onTap"
+  >;
   container: HTMLElement;
   getState: () => InputManagerState;
   dragThresholdPx: number;

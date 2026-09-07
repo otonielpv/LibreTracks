@@ -189,6 +189,78 @@ dispositivo, y la sesión con músicos.
   para stems, marcas, cues y tempo.
 - Manual en español con instrucciones móviles, hoy escrito para ratón.
 
+## Revisión de la propuesta (2026-09-07, tras implementarla y revertirla)
+
+La investigación de arriba se implementó, se probó en emulador y se revirtió.
+Esta sección separa lo que hay que conservar de lo que hay que descartar, para
+que la próxima iteración no repita el error.
+
+### Lo que se confirmó y hay que conservar
+
+Los avisos de dominio son lo más valioso del documento y siguen vigentes: no
+inferir alineación de stems quitando silencios; mover una marca **no** es
+reordenar el audio; auditar la semántica de pistas compartidas por varias
+canciones antes de ofrecer una lista «por canción»; no sustituir en silencio
+una salida de guía que no existe en el dispositivo. Nada de eso cambia.
+
+También se confirmó, y con causa raíz identificada, el síntoma de las marcas
+—pero **no** era ninguna de las cuatro hipótesis listadas. Era que
+`snapToTimelineGrid` recibía la escala y la ignoraba, ajustando siempre al beat
+más cercano, mientras la rejilla sólo dibuja beats si miden ≥16 px. Alejado el
+zoom, la marca caía en una línea invisible. Arreglado en `e227d1b0` unificando
+ambas decisiones en `timelineGridResolution`.
+
+### Dónde se torció: «Pantalla»
+
+El apartado «Recorrido propuesto» dice *«Pantalla con forma de onda…»*,
+*«Pantalla Salidas…»*. Esa palabra es la que produjo una segunda app encima de
+la DAW: un panel a pantalla completa que ocultaba el timeline. El resultado era
+contradictorio —«añadir marca en el cabezal» tapaba justo el cabezal— y
+duplicaba el `ViewModeSwitcher` que ya existe.
+
+**GarageBand no hace eso, y el propio documento lo describe bien antes de
+proponer lo contrario**: dice que su editor de automatización es uno donde
+*«las pistas se expanden»*. Se expanden **dentro** del timeline; la vista nunca
+se sustituye. Su lista de pistas *es* la columna de cabeceras, no otra
+pantalla. La regla que sí se puede copiar es: **una tarea de precisión gana
+espacio dentro de la vista, no la reemplaza.**
+
+Playback es una referencia de organización musical, pero es un *reproductor* de
+material ya preparado, no un editor de clips. Su arreglo por secciones se
+parece más a las regiones/canciones que LibreTracks ya tiene que a esto.
+
+### Lo que sí hay que construir, y ya estaba en el documento
+
+El apartado 5 acierta y contradice al resto: *«Para clips: seleccionar → barra
+con Mover, Cortar en cabezal, Duplicar, Borrar y Propiedades»*. Eso es una
+**barra contextual sobre el timeline**, no una pantalla. Es el patrón correcto
+y además resuelve el problema de gestos: tocar selecciona, la barra aparece, y
+arrastrar un clip ya seleccionado lo mueve. Sin modos que recordar y sin editar
+por accidente.
+
+Aplicando esa misma regla al resto del recorrido:
+
+| Tarea | En vez de una pantalla |
+|---|---|
+| Marcas | Botón «+ Marca» en la barra de transporte, donde el cabezal **sí se ve**; afinar en un inspector que no tape la regla |
+| Mezcla/salidas de una pista | Inspector de la pista seleccionada, junto al timeline |
+| Automatización | Expandir la fila de esa pista, como GarageBand |
+| Organizar pistas | Mejorar la columna de cabeceras existente (buscar, plegar, «mover antes de…»), que ya *es* la lista |
+| Importar stems | Destino explícito en el flujo de biblioteca actual |
+
+### Corrección factual
+
+El documento calcula el coste de la columna de cabeceras **en vertical**
+(`clamp(12rem, 34vw, 16.25rem)`, ~192 px de 360). Verificado: esa regla vive
+dentro de `@media (orientation: portrait)` en `shared/styles.css:9921`, y el
+manifiesto de Android fija `android:screenOrientation="sensorLandscape"`. En
+Android **esa regla nunca se aplica**, así que ese hallazgo no describe el
+problema real ahí. El proyecto de iOS no está generado en este checkout
+(`gen/apple` no existe), así que su orientación queda sin verificar.
+
+El problema de espacio en horizontal es otro y sigue abierto: la columna llega
+a 16,25 rem y la barra de herramientas es la de escritorio entera.
+
 ## Restricciones de implementación
 
 Usar factories/hooks/módulos con fronteras reales y reutilizar operaciones del proyecto. No añadir lógica o estado de la feature al monolito. Mantener previews y playhead fuera de renders React por frame según `docs/REDESIGN_transport_refs_to_stores.md`. Añadir pruebas de invariantes: navegación no edita; cancelación no confirma; tiempo mostrado coincide con persistido; movimiento múltiple conserva offsets. No reescribir todo el sistema de cámara como requisito previo a mejorar el flujo.

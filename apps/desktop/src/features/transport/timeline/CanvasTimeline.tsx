@@ -131,6 +131,10 @@ type TrackCanvasProps = {
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
   selectedClipIds: string[];
+  /** Tactil: true si el toque cae sobre algo ya seleccionado (mover, no navegar). */
+  onTouchShouldEdit?: (clientX: number, clientY: number, target: EventTarget | null) => boolean;
+  /** Tactil: toque sin arrastre; selecciona el clip bajo el dedo o limpia. */
+  onTouchTap?: (clientX: number, clientY: number, target: EventTarget | null) => void;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
   clipPreviewTrackIdRef: MutableRefObject<Record<string, string>>;
   trackHeightForInput: number;
@@ -754,6 +758,8 @@ export function TimelineTrackCanvas({
   timelineGrid,
   selectedClipId,
   selectedClipIds,
+  onTouchShouldEdit,
+  onTouchTap,
   clipPreviewSecondsRef,
   clipPreviewTrackIdRef,
   trackHeightForInput,
@@ -801,6 +807,13 @@ export function TimelineTrackCanvas({
     [waveformCache],
   );
 
+  // Espejo en refs: el efecto que crea el InputManager no puede depender de
+  // callbacks nuevos en cada render, o se recrearia el gesto a 60 fps.
+  const onTouchShouldEditRef = useRef(onTouchShouldEdit);
+  const onTouchTapRef = useRef(onTouchTap);
+  onTouchShouldEditRef.current = onTouchShouldEdit;
+  onTouchTapRef.current = onTouchTap;
+
   useEffect(() => {
     const container = interactionContainerRef.current;
     if (!container) {
@@ -834,9 +847,16 @@ export function TimelineTrackCanvas({
         if (!viewport) return;
         viewport.scrollTop += deltaY;
       },
+      // Sin modo navegar/editar: un dedo siempre desplaza el lienzo. El gesto
+      // solo se cede cuando cae sobre algo YA seleccionado, y un toque limpio
+      // selecciona. Asi no se edita por accidente ni hay estado que recordar.
       mobileNavigation: isMobileApp ? {
-        enabled: () => useTimelineUIStore.getState().mobileTimelineTool === "navigate",
-        subscribe: (onChange) => useTimelineUIStore.subscribe((state) => state.mobileTimelineTool, onChange),
+        enabled: () => true,
+        subscribe: () => () => {},
+        shouldEdit: (clientX, clientY, target) =>
+          onTouchShouldEditRef.current?.(clientX, clientY, target) ?? false,
+        onTap: (clientX, clientY, target) =>
+          onTouchTapRef.current?.(clientX, clientY, target),
       } : undefined,
       getGestureBounds: () =>
         intersectVisibleBounds(container, scrollViewportRef.current),

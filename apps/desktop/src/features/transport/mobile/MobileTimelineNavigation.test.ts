@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MobileTimelineNavigation } from "./MobileTimelineNavigation";
+import { MobileTimelineNavigation, type MobileNavigationOptions } from "./MobileTimelineNavigation";
 
 function pointer(target: EventTarget, type: string, id: number, x: number, y: number, pointerType = "touch") {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
@@ -8,7 +8,7 @@ function pointer(target: EventTarget, type: string, id: number, x: number, y: nu
   target.dispatchEvent(event);
 }
 const managers: MobileTimelineNavigation[] = [];
-function setup() {
+function setup(extra: Partial<MobileNavigationOptions> = {}) {
   const container = document.createElement("div"); document.body.append(container);
   Object.defineProperties(container, { offsetWidth: { value: 400 }, offsetHeight: { value: 800 } });
   container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 800 }) as DOMRect;
@@ -20,7 +20,7 @@ function setup() {
     subscribe: (callback) => { change = callback; return () => {}; }, getState: () => state,
     onPreviewCameraX: (camera) => (state.cameraX = Math.max(0, camera)), onCommitCameraX: commit,
     onPreviewZoom: (zoom) => ({ cameraX: state.cameraX, zoomLevel: (state.zoomLevel = zoom) }), onCommitZoom: zoomCommit,
-    onScrollVertical: vertical,
+    onScrollVertical: vertical, ...extra,
   });
   managers.push(manager);
   return { container, state, commit, zoomCommit, vertical, edit: () => { enabled = false; change(); } };
@@ -60,5 +60,52 @@ describe("mobile timeline navigation", () => {
   it("does not intercept a mouse on a tablet", () => {
     const s = setup(); const down = vi.fn(); s.container.addEventListener("pointerdown", down);
     pointer(s.container, "pointerdown", 1, 50, 50, "mouse"); expect(down).toHaveBeenCalledOnce();
+  });
+});
+
+describe("tocar selecciona; arrastrar lo ya seleccionado edita", () => {
+  it("avisa de un toque limpio y no lo confunde con un arrastre", () => {
+    const onTap = vi.fn();
+    const s = setup({ onTap });
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    pointer(window, "pointerup", 1, 100, 100);
+    expect(onTap).toHaveBeenCalledTimes(1);
+    expect(onTap.mock.calls[0].slice(0, 2)).toEqual([100, 100]);
+
+    onTap.mockClear();
+    pointer(s.container, "pointerdown", 2, 100, 100);
+    pointer(window, "pointermove", 2, 40, 100);
+    pointer(window, "pointerup", 2, 40, 100);
+    expect(onTap).not.toHaveBeenCalled();
+  });
+
+  it("cede el gesto entero cuando el toque cae sobre algo ya seleccionado", () => {
+    const s = setup({ shouldEdit: () => true });
+    const down = vi.fn();
+    const mouse = vi.fn();
+    s.container.addEventListener("pointerdown", down);
+    s.container.addEventListener("mousedown", mouse);
+
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    // El handler de arrastre existente recibe el evento...
+    expect(down).toHaveBeenCalledOnce();
+    // ...y su mousedown de compatibilidad NO se suprime.
+    s.container.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(mouse).toHaveBeenCalledOnce();
+    // La camara no se movio: la navegacion no toco este gesto.
+    pointer(window, "pointermove", 1, 40, 100);
+    expect(s.state.cameraX).toBe(100);
+    pointer(window, "pointerup", 1, 40, 100);
+  });
+
+  it("vuelve a navegar en el gesto siguiente al cedido", () => {
+    let edit = true;
+    const s = setup({ shouldEdit: () => edit });
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    pointer(window, "pointerup", 1, 100, 100);
+    edit = false;
+    pointer(s.container, "pointerdown", 2, 100, 100);
+    pointer(window, "pointermove", 2, 70, 100);
+    expect(s.state.cameraX).toBe(130);
   });
 });
