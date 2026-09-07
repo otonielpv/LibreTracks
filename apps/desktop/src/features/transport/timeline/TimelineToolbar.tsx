@@ -25,6 +25,7 @@ import type {
   ViewMode,
 } from "../uiStore";
 import { ViewModeSwitcher } from "./ViewModeSwitcher";
+import { MobileLiveSettingsGroup } from "../mobile/MobileLiveSettingsGroup";
 import { isMobileApp } from "../desktopApi";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
@@ -609,6 +610,10 @@ export function TimelineToolbar({
           ) : null}
 
 
+          {/* Ajustes de DIRECTO. En movil se pliegan bajo un solo grupo: en
+              una sesion nueva ocupan todo el ancho superior y son inutiles
+              antes de tener una pista. En escritorio no cambia nada. */}
+          <MobileLiveSettingsGroup>
           <ControlGroup
             title={t("timelineToolbar.vampModeLabel")}
             summary={
@@ -1062,6 +1067,7 @@ export function TimelineToolbar({
             }
           />
           ) : null}
+          </MobileLiveSettingsGroup>
 
           <ControlGroup
             title={t("timelineToolbar.regionTransposeLabel")}

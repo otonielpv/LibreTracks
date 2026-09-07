@@ -10900,6 +10900,34 @@ html.lt-ios body {
   letter-spacing: 0.06em;
 }
 
+/* Grupo "Directo" plegable en movil. Cerrado, es un solo boton y devuelve el
+   ancho superior a lo que importa montando; abierto, ofrece los mismos
+   controles de siempre, sin recortar ninguno. */
+.lt-mobile .lt-mobile-live-group {
+  display: contents;
+}
+
+.lt-mobile .lt-mobile-live-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 36px;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  border: 1px solid #3b474b;
+  background: #1b2427;
+  color: #dbe7e3;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.lt-mobile .lt-mobile-live-group.is-open .lt-mobile-live-group-toggle {
+  border-color: rgb(87 241 219 / 0.5);
+  color: rgb(87 241 219);
+}
+
 /* Editor de posicion de una marca. Gana sitio DENTRO de la vista y no la
    sustituye: panel flotante en escritorio, hoja inferior en movil. */
 .lt-marker-position-editor {

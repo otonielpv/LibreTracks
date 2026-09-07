@@ -13,6 +13,9 @@ const es = {
     seconds: "Segundos",
     action: "Posición…",
   },
+  mobileLiveSettings: {
+    title: "Directo",
+  },
   mobileSelectionActions: {
     clips_one: "{{count}} clip",
     clips_other: "{{count}} clips",
