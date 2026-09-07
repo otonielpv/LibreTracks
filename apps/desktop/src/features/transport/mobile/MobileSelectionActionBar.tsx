@@ -198,9 +198,14 @@ export function MobileSelectionActionBar({
           // Con un dedo no hay Ctrl que mantener. Activado, cada toque en una
           // cabecera suma o quita esa pista, y las acciones pasan a ser las de
           // la seleccion entera —incluido borrarlas de un tiron—.
-          onClick={() =>
-            useTimelineUIStore.getState().setTrackMultiSelect(!trackMultiSelect)
-          }
+          onClick={() => {
+            const store = useTimelineUIStore.getState();
+            store.setTrackMultiSelect(!trackMultiSelect);
+            // La pista sigue seleccionada, pero su panel de faders se cierra:
+            // estorba justo cuando vas a ir tocando otras cabeceras, y su
+            // desaparicion es la senal de que el modo ha entrado.
+            store.setExpandedTrackId(null);
+          }}
         >
           <span className="material-symbols-outlined" aria-hidden="true">
             checklist

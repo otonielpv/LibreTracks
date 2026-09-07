@@ -192,10 +192,15 @@ describe("la barra de la seleccion, generalizada", () => {
     useTimelineUIStore.getState().selectTrack(["t1"]);
     renderBar();
     // Con un dedo no hay Ctrl que mantener.
+    useTimelineUIStore.getState().setExpandedTrackId("t1");
     fireEvent.click(
       screen.getByRole("button", { name: "Seleccionar varias pistas" }),
     );
     expect(useTimelineUIStore.getState().trackMultiSelect).toBe(true);
+    // La pista sigue seleccionada; lo que se va es su panel de faders, que
+    // estorba justo cuando vas a ir tocando otras cabeceras.
+    expect(useTimelineUIStore.getState().selectedTrackIds).toEqual(["t1"]);
+    expect(useTimelineUIStore.getState().expandedTrackId).toBeNull();
   });
 
   it("con varias pistas las acciones son las del menu de varias", () => {

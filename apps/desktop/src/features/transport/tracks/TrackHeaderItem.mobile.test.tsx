@@ -65,7 +65,12 @@ const tapHeader = () => fireEvent.click(screen.getByText("Voz"));
 beforeEach(async () => {
   await i18n.changeLanguage("es");
   platform.mobile = true;
-  useTimelineUIStore.setState({ expandedTrackId: null, trackReorderMode: false });
+  useTimelineUIStore.setState({
+    expandedTrackId: null,
+    trackReorderMode: false,
+    trackMultiSelect: false,
+    selectedTrackIds: [],
+  });
 });
 afterEach(cleanup);
 
@@ -141,6 +146,33 @@ describe("cabeceras finas y expansion en fila", () => {
     expect(mute()).toBeTruthy();
     expect(solo()).toBeTruthy();
     expect(mute()!.closest(".lt-track-title-row")).not.toBeNull();
+  });
+
+  it("sumando pistas, el toque anade a la seleccion y no despliega", () => {
+    useTimelineUIStore.setState({
+      trackMultiSelect: true,
+      selectedTrackIds: ["otra"],
+    });
+    const props = renderHeader();
+    tapHeader();
+
+    expect(useTimelineUIStore.getState().selectedTrackIds).toEqual([
+      "otra",
+      "t1",
+    ]);
+    expect(useTimelineUIStore.getState().expandedTrackId).toBeNull();
+    // No pasa por el camino de "seleccionar UNA", que reemplazaria.
+    expect(props.onSelectTrack).not.toHaveBeenCalled();
+  });
+
+  it("sumando pistas, volver a tocarla la quita", () => {
+    useTimelineUIStore.setState({
+      trackMultiSelect: true,
+      selectedTrackIds: ["otra", "t1"],
+    });
+    renderHeader();
+    tapHeader();
+    expect(useTimelineUIStore.getState().selectedTrackIds).toEqual(["otra"]);
   });
 
   it("solo hay una fila desplegada a la vez", () => {

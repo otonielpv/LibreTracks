@@ -10971,6 +10971,19 @@ html.lt-ios body {
   margin: 0;
 }
 
+/* Debajo del nombre cuando hay sitio, a su derecha cuando no. La fila de una
+   sola linea (`is-lane`) es la unica que no tiene alto para una segunda
+   linea; en las demas los botones bajan y el nombre se queda con todo el
+   ancho, que es lo que se lee de un vistazo. */
+.lt-mobile .lt-track-header:not(.is-lane) .lt-track-title-row {
+  flex-wrap: wrap;
+  row-gap: 0.2rem;
+}
+
+.lt-mobile .lt-track-header:not(.is-lane) .lt-track-title-row strong {
+  flex: 1 1 100%;
+}
+
 /* Filas altas: el tamano mayor. */
 .lt-mobile .lt-track-header .lt-mobile-track-state button {
   width: 28px;
