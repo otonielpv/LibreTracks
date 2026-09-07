@@ -1,5 +1,6 @@
 import {
   memo,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -30,6 +31,17 @@ import { isMobileApp } from "../desktopApi";
  * borrar la pista.
  */
 const BOTTOM_RESERVED_PX = 108;
+
+/**
+ * Alto de fila por debajo del cual mute y solo desaparecen y queda solo el
+ * nombre.
+ *
+ * Con la fila al minimo (18 px) los botones eran mas altos que ella: estiraban
+ * la cabecera, que recorta lo que sobresale, y se llevaban por delante TAMBIEN
+ * el nombre. Mas vale perder los dos botones que perder de que pista es la
+ * fila; a partir de aqui caben encogidos.
+ */
+const TRACK_STATE_MIN_ROW_PX = 26;
 
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
@@ -163,6 +175,29 @@ function TrackHeaderItemComponent({
     const rect = panelRef.current.getBoundingClientRect();
     setOpenUpwards(rect.bottom > window.innerHeight - BOTTOM_RESERVED_PX);
   }, [isExpanded]);
+
+  // Tocar fuera lo cierra. En CAPTURA sobre window a proposito: la navegacion
+  // tactil escucha en captura sobre el area de carriles y hace
+  // `stopImmediatePropagation`, asi que un listener que no fuese antes que ella
+  // no se enteraria de los toques sobre el timeline —justo donde mas se toca
+  // con el panel abierto—.
+  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(".lt-mobile-track-row-panel, .lt-track-header-row")
+      ) {
+        return; // dentro del panel, o en la cabecera, que ya alterna sola
+      }
+      useTimelineUIStore.getState().setExpandedTrackId(null);
+    };
+    window.addEventListener("pointerdown", dismiss, true);
+    return () => window.removeEventListener("pointerdown", dismiss, true);
+  }, [isExpanded]);
   const effectivePanValue = optimisticMix?.pan ?? panValue;
   const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
   const effectiveTrackSolo = optimisticMix?.solo ?? trackSolo;
@@ -250,7 +285,7 @@ function TrackHeaderItemComponent({
   const muteButton = (
     <button
       type="button"
-      className={effectiveTrackMuted ? "is-active" : ""}
+      className={`lt-track-toggle-mute ${effectiveTrackMuted ? "is-active" : ""}`}
       aria-label={t("trackHeader.mute", { defaultValue: "Silenciar" })}
       onClick={(event) => {
         event.stopPropagation();
@@ -263,7 +298,7 @@ function TrackHeaderItemComponent({
   const soloButton = (
     <button
       type="button"
-      className={effectiveTrackSolo ? "is-active" : ""}
+      className={`lt-track-toggle-solo ${effectiveTrackSolo ? "is-active" : ""}`}
       aria-label={t("trackHeader.solo", { defaultValue: "Solo" })}
       onClick={(event) => {
         event.stopPropagation();
@@ -280,7 +315,7 @@ function TrackHeaderItemComponent({
               {isMobileApp ? null : soloButton}
               <button
                 type="button"
-                className={trackTransposeEnabled ? "is-active" : ""}
+                className={`lt-track-toggle-transpose ${trackTransposeEnabled ? "is-active" : ""}`}
                 aria-label={trackTransposeEnabled
                   ? t("trackHeader.transposeDisableAria", { name: trackName })
                   : t("trackHeader.transposeEnableAria", { name: trackName })}
@@ -458,7 +493,7 @@ function TrackHeaderItemComponent({
                 ) : null}
                 <strong>{trackName}</strong>
               </div>
-              {isMobileApp ? (
+              {isMobileApp && trackHeight >= TRACK_STATE_MIN_ROW_PX ? (
                 <div className="lt-track-toggle-group lt-mobile-track-state">
                   {muteButton}
                   {soloButton}

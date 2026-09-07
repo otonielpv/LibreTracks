@@ -4235,18 +4235,21 @@ html.lt-ios body {
   background: rgb(87 241 219 / 0.16);
 }
 
-/* Mute (first toggle) goes red when active, matching the compact mixer. */
-.lt-track-toggle-group button:nth-child(1).is-active {
+/* Por CLASE y no por `nth-child`. Iban por posicion, y en cuanto mute y solo
+   salieron del grupo -en movil viven fijos en la cabecera- la transposicion
+   paso a ser el primer hijo y se pintaba con el rojo del mute. */
+/* Mute goes red when active, matching the compact mixer. */
+.lt-track-toggle-group button.lt-track-toggle-mute.is-active {
   color: #0e0e0e;
   background: rgb(255 95 95 / 0.85);
 }
 
-.lt-track-toggle-group button:nth-child(2).is-active {
+.lt-track-toggle-group button.lt-track-toggle-solo.is-active {
   color: #402d00;
   background: #ffe2ab;
 }
 
-.lt-track-toggle-group button:nth-child(3) {
+.lt-track-toggle-group button.lt-track-toggle-transpose {
   grid-column: 1 / span 2;
 }
 
@@ -10956,6 +10959,30 @@ html.lt-ios body {
   font-size: 9px;
 }
 
+/* Fila de una sola linea (estilo Ableton): el nombre y el estado comparten
+   linea y los botones encogen para no estirar la fila. Estirandola, la
+   cabecera -que recorta lo que sobresale- se comia tambien el nombre. */
+.lt-mobile .lt-track-header.is-lane .lt-track-header-summary {
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.lt-mobile .lt-track-header.is-lane .lt-track-header-main {
+  min-width: 0;
+}
+
+.lt-mobile .lt-track-header.is-lane .lt-mobile-track-state {
+  margin-top: 0;
+  grid-auto-rows: 1.05rem;
+  flex: 0 0 auto;
+}
+
+.lt-mobile .lt-track-header.is-lane .lt-mobile-track-state button {
+  width: 1.35rem;
+  height: 1.05rem;
+  font-size: 8px;
+}
+
 .lt-mobile .lt-track-header strong {
   font-size: 0.72rem;
   overflow: hidden;
@@ -10973,8 +11000,8 @@ html.lt-ios body {
   left: 0;
   top: 100%;
   z-index: 40;
-  width: min(calc(100vw - 1rem), 32rem);
-  padding: 0.5rem 0.6rem;
+  width: min(calc(100vw - 1rem), 38rem);
+  padding: 0.4rem 0.5rem;
   border-radius: 0 8px 8px 0;
   background: rgba(24, 31, 34, 0.98);
   border: 1px solid #3b474b;
@@ -10990,28 +11017,59 @@ html.lt-ios body {
   bottom: 100%;
 }
 
+/* Todo en UNA linea. Apilado ocupaba tres filas y tapaba media pantalla, que
+   es justo lo que el panel venia a evitar: en un movil en horizontal hay ancho
+   de sobra y lo que escasea es el alto. */
 .lt-mobile .lt-mobile-track-row-panel .lt-track-control-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
 .lt-mobile .lt-mobile-track-row-panel .lt-track-mix-controls {
   display: flex;
-  flex: 1 1 12rem;
-  flex-direction: column;
-  gap: 0.4rem;
+  flex: 1 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.lt-mobile .lt-mobile-track-row-panel .lt-track-volume,
+.lt-mobile .lt-mobile-track-row-panel .lt-track-pan {
+  flex: 1 1 0;
+  min-width: 6.5rem;
+}
+
+.lt-mobile .lt-mobile-track-row-panel .lt-track-audio-to {
+  flex: 1 1 0;
+  min-width: 7rem;
+}
+
+.lt-mobile .lt-mobile-track-row-panel .lt-track-volume input,
+.lt-mobile .lt-mobile-track-row-panel .lt-track-pan input {
+  min-width: 0;
 }
 
 /* El grupo M/S/T es una rejilla de celdas de 24 px. Agrandar solo los botones
    los desbordaba y se montaban unos sobre otros fuera del panel: hay que mover
    la rejilla con ellos. Aqui hay ancho de sobra, asi que van los tres en fila
    y a tamano de dedo. */
+/* En el panel solo queda la transposicion: mute y solo viven fijos en la
+   cabecera. Una columna, o la rejilla reservaria tres y dejaria un hueco
+   muerto entre el boton y los faders. */
 .lt-mobile .lt-mobile-track-row-panel .lt-track-toggle-group {
-  grid-template-columns: repeat(3, 2.4rem);
+  grid-template-columns: 2.4rem;
   grid-auto-rows: 2.4rem;
   gap: 0.3rem;
+}
+
+.lt-mobile
+  .lt-mobile-track-row-panel
+  .lt-track-toggle-group
+  button.lt-track-toggle-transpose {
+  grid-column: auto;
 }
 
 .lt-mobile .lt-mobile-track-row-panel .lt-track-toggle-group button {

@@ -132,6 +132,21 @@ describe("cabeceras finas y expansion en fila", () => {
     expect(props.onVolumeChange).toHaveBeenCalled();
   });
 
+  it("con la fila al minimo se salva el nombre, no los botones", () => {
+    // Los botones eran mas altos que una fila de 18 px: estiraban la cabecera,
+    // que recorta lo que sobresale, y se llevaban por delante TAMBIEN el
+    // nombre. Saber de que pista es la fila importa mas que el mute.
+    renderHeader({ trackHeight: 18 });
+    expect(screen.getByText("Voz")).toBeTruthy();
+    expect(mute()).toBeNull();
+  });
+
+  it("en cuanto la fila da de si, el estado vuelve", () => {
+    renderHeader({ trackHeight: 30 });
+    expect(screen.getByText("Voz")).toBeTruthy();
+    expect(mute()).toBeTruthy();
+  });
+
   it("solo hay una fila desplegada a la vez", () => {
     useTimelineUIStore.getState().toggleExpandedTrackId("otra");
     renderHeader();
