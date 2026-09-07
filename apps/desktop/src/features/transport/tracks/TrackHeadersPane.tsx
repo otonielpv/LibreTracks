@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 import { densityFromHeight } from "../constants";
+import { isMobileApp } from "../desktopApi";
 import type { TrackRowLayout } from "./trackLayout";
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import { useSongStore } from "../songStore";
@@ -340,7 +341,15 @@ export function TrackHeadersPane({
               )}
               {/* Ableton's gesture: drag the row's bottom edge to resize this
                   track (Alt for every track), double-click to go back to the
-                  global height. Only real tracks have somewhere to store it. */}
+                  global height. Only real tracks have somewhere to store it.
+
+                  Fuera en movil: son 4 px invisibles con `touch-action: none`,
+                  o sea bastante menos que el error de un dedo. Un pan vertical
+                  que empezara cerca de un borde no scrolleaba, redimensionaba
+                  esa pista —el sintoma era "algunas pistas cambian de tamano
+                  solas al hacer scroll"—. El alto ya se ajusta con los botones
+                  de la cabecera de la columna, que no compiten con el scroll. */}
+              {isMobileApp ? null : (
               <div
                 className="lt-track-header-resize"
                 role="separator"
@@ -359,6 +368,7 @@ export function TrackHeadersPane({
                   onResetRowHeight(track.id);
                 }}
               />
+              )}
             </div>
           );
         })}
