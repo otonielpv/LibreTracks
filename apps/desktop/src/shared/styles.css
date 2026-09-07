@@ -10900,6 +10900,21 @@ html.lt-ios body {
   letter-spacing: 0.06em;
 }
 
+/* Con la columna a 104 px, los cuatro botones de la cabecera de la regla ya no
+   caben en fila: se salian por la derecha y pisaban la regla y las banderas de
+   las marcas. En rejilla de 2x2 caben de sobra, y el overflow del contenedor es
+   la red por si alguien anade un quinto. */
+.lt-mobile .lt-ruler-header {
+  overflow: hidden;
+}
+
+.lt-mobile .lt-ruler-header-actions {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 0.25rem;
+  justify-content: start;
+}
+
 /* Cabeceras finas en la app movil. 260 px fijos se llevaban el ancho antes de
    que vieras un solo pixel de audio (la regla de portrait nunca se aplica:
    Android fija sensorLandscape). Debe cuadrar con MOBILE_HEADER_WIDTH de
@@ -11084,7 +11099,9 @@ html.lt-ios body {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 1rem;
+  /* El hueco de abajo es para la barra de acciones, que flota sobre el
+     timeline: sin el, el boton "Anadir audios" queda justo detras de ella. */
+  padding: 1rem 1rem 5.5rem;
   text-align: center;
   pointer-events: none;
 }
