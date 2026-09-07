@@ -231,6 +231,8 @@ export type TimelineMenuDeps = {
     anchorTrack: TrackSummary | null,
     parentTrackId?: string | null,
   ) => Promise<void>;
+  /** Devuelve la fila al alto global. */
+  resetTrackRowHeight: (trackId: string) => void;
   handleSetTrackColor: (
     track: TrackSummary,
     color: string | null,
@@ -1066,6 +1068,15 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         label: t("transport.menu.insertFolderTrack"),
         onSelect: () =>
           d.handleCreateTrack("folder", createAnchor, createParentId),
+      },
+      {
+        // Alcanzable tambien sin puntero: en movil la franja de 4 px del
+        // borde de la fila -y con ella su doble clic- no existe, porque se
+        // comia los scrolls.
+        label: t("trackHeader.resetRowHeight", {
+          defaultValue: "Restablecer alto de la pista",
+        }),
+        onSelect: () => d.resetTrackRowHeight(track.id),
       },
       {
         label: t("common.rename"),

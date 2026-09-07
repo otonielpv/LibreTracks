@@ -5484,6 +5484,7 @@ export function TransportPanelContent() {
       syncSongLibraryFolderAfterRename,
       clearLibraryDragPreview,
       handleCreateTrack,
+      resetTrackRowHeight: resetRowHeight,
       handleSetTrackColor,
       handleSetTrackColors,
       handleSetClipColor,

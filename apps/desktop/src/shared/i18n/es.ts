@@ -1244,6 +1244,7 @@ const es = {
     laneFolderEmpty: "Carpeta vacia",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    resetRowHeight: "Restablecer alto de la pista",
     resizeRow: "Ajustar alto de la pista",
     resizeRowHint:
       "Arrastra para ajustar el alto de esta pista (Alt: todas). Doble clic para restablecer.",

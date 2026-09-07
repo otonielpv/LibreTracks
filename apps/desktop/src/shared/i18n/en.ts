@@ -1213,6 +1213,7 @@ const en = {
     laneFolderEmpty: "Empty folder",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    resetRowHeight: "Reset track height",
     resizeRow: "Resize track height",
     resizeRowHint:
       "Drag to resize this track (Alt: every track). Double-click to reset.",
