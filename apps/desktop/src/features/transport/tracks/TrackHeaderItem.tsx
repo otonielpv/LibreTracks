@@ -32,17 +32,6 @@ import { isMobileApp } from "../desktopApi";
  */
 const BOTTOM_RESERVED_PX = 108;
 
-/**
- * Alto de fila por debajo del cual mute y solo desaparecen y queda solo el
- * nombre.
- *
- * Con la fila al minimo (18 px) los botones eran mas altos que ella: estiraban
- * la cabecera, que recorta lo que sobresale, y se llevaban por delante TAMBIEN
- * el nombre. Mas vale perder los dos botones que perder de que pista es la
- * fila; a partir de aqui caben encogidos.
- */
-const TRACK_STATE_MIN_ROW_PX = 26;
-
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
 
@@ -492,13 +481,16 @@ function TrackHeaderItemComponent({
                   </button>
                 ) : null}
                 <strong>{trackName}</strong>
+                {/* En la MISMA linea que el nombre: colgando debajo estiraban
+                    la fila, y con la fila al minimo la cabecera -que recorta lo
+                    que sobresale- se llevaba por delante tambien el nombre. */}
+                {isMobileApp ? (
+                  <span className="lt-track-toggle-group lt-mobile-track-state">
+                    {muteButton}
+                    {soloButton}
+                  </span>
+                ) : null}
               </div>
-              {isMobileApp && trackHeight >= TRACK_STATE_MIN_ROW_PX ? (
-                <div className="lt-track-toggle-group lt-mobile-track-state">
-                  {muteButton}
-                  {soloButton}
-                </div>
-              ) : null}
               {metaLabel ? <span className="lt-track-meta">{metaLabel}</span> : null}
             </div>
           </div>

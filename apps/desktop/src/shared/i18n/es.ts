@@ -22,6 +22,7 @@ const es = {
     tracks_one: "{{count}} pista",
     tracks_other: "{{count}} pistas",
     multiSelect: "Seleccionar varias pistas",
+    multiSelectHint: "Toca más pistas",
     tempoMarker: "Tempo {{bpm}}",
     timeSignatureMarker: "Compás {{signature}}",
     create: "Añadir",

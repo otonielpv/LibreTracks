@@ -137,7 +137,16 @@ export function MobileSelectionActionBar({
         defaultValue: "Acciones de la selección",
       })}
     >
-      <span className="lt-mobile-selection-actions-title">{model.title}</span>
+      <span className="lt-mobile-selection-actions-title">
+        {/* Un modo sin rastro en pantalla es un modo que nadie encuentra:
+            activarlo no cambiaba NADA visible, asi que no habia forma de saber
+            que tocaba hacer despues. */}
+        {trackMultiSelect && target.kind === "track"
+          ? t("mobileSelectionActions.multiSelectHint", {
+              defaultValue: "Toca más pistas",
+            })
+          : model.title}
+      </span>
       {inline.map((action) => (
         <button
           key={action.label}

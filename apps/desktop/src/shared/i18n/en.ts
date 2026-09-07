@@ -22,6 +22,7 @@ const en = {
     tracks_one: "{{count}} track",
     tracks_other: "{{count}} tracks",
     multiSelect: "Select several tracks",
+    multiSelectHint: "Tap more tracks",
     tempoMarker: "Tempo {{bpm}}",
     timeSignatureMarker: "Time signature {{signature}}",
     create: "Add",
