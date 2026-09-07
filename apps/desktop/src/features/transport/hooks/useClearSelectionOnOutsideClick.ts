@@ -32,6 +32,16 @@ const SELECTION_OWNED_SURFACES = [
   // ../timeline/timelineBackgroundSeek): sin esto, volver a pulsar un clip ya
   // seleccionado lo deseleccionaría, porque el store no cambia.
   ".lt-track-lane-row",
+  // Lo que flota sobre el timeline en móvil: la barra de acciones, su pestaña
+  // recogida, la fila desplegada y el editor de posición. Sus botones actúan
+  // SOBRE la selección, igual que un menú contextual. Sin esto, pulsar
+  // "seleccionar varias pistas" soltaba la selección antes de que el modo
+  // sirviera de nada, y la barra volvía a su estado de crear —parecía que el
+  // botón cerrase el menú—.
+  ".lt-mobile-selection-actions",
+  ".lt-mobile-selection-actions-tab",
+  ".lt-mobile-track-row-panel",
+  ".lt-marker-position-editor",
   // Menús, diálogos y popovers: sus acciones operan sobre la selección.
   ".lt-context-menu",
   ".lt-color-popover",

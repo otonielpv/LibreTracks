@@ -54,6 +54,13 @@ describe("deseleccionar pulsando fuera", () => {
     ["un menú contextual", "lt-context-menu"],
     ["un popover de color", "lt-color-popover"],
     ["un diálogo", "lt-dialog-layer"],
+    // Lo que flota sobre el timeline en móvil actúa SOBRE la selección: sus
+    // botones no pueden soltarla antes de correr. "Seleccionar varias pistas"
+    // se quedaba sin selección en el acto y parecía que cerrase el menú.
+    ["la barra táctil de acciones", "lt-mobile-selection-actions"],
+    ["su pestaña recogida", "lt-mobile-selection-actions-tab"],
+    ["la fila desplegada de una pista", "lt-mobile-track-row-panel"],
+    ["el editor de posición de una marca", "lt-marker-position-editor"],
   ])("no toca la selección al pulsar %s", (_label, className) => {
     renderHook(() => useClearSelectionOnOutsideClick());
 
