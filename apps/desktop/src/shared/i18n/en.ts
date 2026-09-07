@@ -1,4 +1,12 @@
 const en = {
+  mobileClipActions: {
+    title: "Selection actions",
+    selected: "{{count}} sel.",
+    duplicate: "Duplicate",
+    split: "Split at playhead",
+    delete: "Delete",
+    clear: "Clear selection",
+  },
   common: {
     systemDefault: "System Default",
     close: "Close",

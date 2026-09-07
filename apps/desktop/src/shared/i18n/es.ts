@@ -1,4 +1,12 @@
 const es = {
+  mobileClipActions: {
+    title: "Acciones de la selección",
+    selected: "{{count}} sel.",
+    duplicate: "Duplicar",
+    split: "Cortar en el cabezal",
+    delete: "Eliminar",
+    clear: "Quitar selección",
+  },
   common: {
     systemDefault: "Predeterminado del sistema",
     close: "Cerrar",

@@ -203,6 +203,7 @@ import { MetronomePopover } from "./panels/MetronomePopover";
 import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
 import { MobileTrackHeaderActions } from "./mobile/MobileTrackHeaderActions";
+import { MobileClipActionBar } from "./mobile/MobileClipActionBar";
 import { touchContextPosition } from "./timeline/touchContextPosition";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
@@ -4863,7 +4864,7 @@ export function TransportPanelContent() {
     t,
   ]);
 
-  useTimelineKeyboardShortcuts({
+  const { runShortcutAction } = useTimelineKeyboardShortcuts({
     runAction,
     applyPlaybackSnapshot,
     forcePlaybackVisualAnchor: applyTransportVisualAnchor,
@@ -7456,9 +7457,17 @@ export function TransportPanelContent() {
                 )
               ) : (
                 <section className="lt-main-stage">
+                  <MobileClipActionBar runShortcutAction={runShortcutAction} />
                   {viewMode !== "live" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}
+                    onCreateMarkerAtPlayhead={() =>
+                      timelineMenus.createTypedMarker(
+                        displayPositionSecondsRef.current,
+                        null,
+                        null,
+                      )
+                    }
                     subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
                     selectedRegion={selectedRegion}
                     globalJumpMode={appSettings.globalJumpMode}

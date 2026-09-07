@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import type { SongView, TransportSnapshot } from "@libretracks/shared/models";
 import {
   cancelMarkerJump,
@@ -88,6 +88,13 @@ type TimelineKeyboardShortcutsProps = {
   toggleViewModeBackward: () => void;
 };
 
+/**
+ * Evento sintetico para disparar una accion desde un boton. Los handlers solo
+ * leen `shift`/`repeat` y llaman a `preventDefault`, asi que un KeyboardEvent
+ * vacio les vale y no hay que duplicar su cuerpo.
+ */
+const SYNTHETIC_ACTIVATION = () => new KeyboardEvent("keydown");
+
 export function useTimelineKeyboardShortcuts({
   runAction,
   applyPlaybackSnapshot,
@@ -131,6 +138,16 @@ export function useTimelineKeyboardShortcuts({
 
   // Subscribe to the user's binding overrides so a remap in the shortcuts
   // panel takes effect immediately (the effect re-runs when this changes).
+  // Las mismas acciones, alcanzables sin teclado: la barra de acciones tactil
+  // dispara por id en vez de reimplementar borrar/duplicar/cortar.
+  const handlersRef = useRef<Record<
+    ShortcutActionId,
+    (event: KeyboardEvent) => void
+  > | null>(null);
+  const runShortcutAction = useCallback((action: ShortcutActionId) => {
+    handlersRef.current?.[action]?.(SYNTHETIC_ACTIVATION());
+  }, []);
+
   const overrides = useKeybindingStore((state) => state.overrides);
 
   useEffect(() => {
@@ -472,8 +489,10 @@ export function useTimelineKeyboardShortcuts({
     };
 
     window.addEventListener("keydown", onKeyDown);
+    handlersRef.current = handlers;
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+      handlersRef.current = null;
     };
   }, [
     overrides,
@@ -508,4 +527,7 @@ export function useTimelineKeyboardShortcuts({
     toggleViewMode,
     toggleViewModeBackward,
   ]);
+
+  return { runShortcutAction };
+
 }

@@ -25,6 +25,7 @@ import type {
   ViewMode,
 } from "../uiStore";
 import { ViewModeSwitcher } from "./ViewModeSwitcher";
+import { isMobileApp } from "../desktopApi";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 type RegionMasterFaderProps = {
@@ -239,6 +240,8 @@ type TimelineToolbarProps = {
   onSelectedRegionMasterGainCommit: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  /** Movil: crear una marca en el cabezal, sin pulsacion larga. */
+  onCreateMarkerAtPlayhead?: () => void;
   /** Only meaningful in compact view: the compact mixer hides tracks
    * that don't have a clip in the active song when this is on.
    * Lifted to the toolbar so the toggle button has somewhere natural
@@ -376,6 +379,7 @@ export function TimelineToolbar({
   onSelectedRegionMasterGainCommit,
   viewMode,
   onViewModeChange,
+  onCreateMarkerAtPlayhead,
   compactMixerFilterActiveSong,
   onToggleCompactMixerFilterActiveSong,
   compactMixerFilterAvailable,
@@ -486,6 +490,25 @@ export function TimelineToolbar({
     <div className="lt-timeline-topline" ref={toolbarRootRef}>
       <div className="lt-timeline-meta">
         <div className="lt-timeline-controls lt-bottom-controls">
+          {/* Alternativa tactil a la pulsacion larga sobre la regla: aqui el
+              cabezal esta a la vista y no hay que acertar en un punto. */}
+          {isMobileApp && onCreateMarkerAtPlayhead ? (
+            <button
+              type="button"
+              className="lt-icon-button"
+              aria-label={t("timelineToolbar.markerAtPlayhead", {
+                defaultValue: "Marca en el cabezal",
+              })}
+              title={t("timelineToolbar.markerAtPlayhead", {
+                defaultValue: "Marca en el cabezal",
+              })}
+              onClick={onCreateMarkerAtPlayhead}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                bookmark_add
+              </span>
+            </button>
+          ) : null}
           <ViewModeSwitcher value={viewMode} onChange={onViewModeChange} />
 
           {viewMode === "compact" ? (

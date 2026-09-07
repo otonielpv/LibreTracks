@@ -10899,3 +10899,37 @@ html.lt-ios body {
   font-weight: 700;
   letter-spacing: 0.06em;
 }
+
+/* Acciones de la seleccion en movil. Flota SOBRE la linea de tiempo, pegada al
+   borde inferior y encima de la barra de transporte: la vista sigue visible,
+   que es justo lo que fallaba al hacerlo pantalla completa. Reutiliza
+   .lt-icon-button, sin paleta propia. */
+.lt-mobile .lt-mobile-clip-actions {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(0.6rem + var(--lt-safe-area-bottom));
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(18, 24, 27, 0.94);
+  border: 1px solid #3b474b;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  max-width: calc(100% - 1.2rem);
+  overflow-x: auto;
+}
+
+.lt-mobile .lt-mobile-clip-actions .lt-icon-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.lt-mobile .lt-mobile-clip-actions-count {
+  font-size: 0.75rem;
+  color: #bdc9c5;
+  white-space: nowrap;
+  padding: 0 0.25rem;
+}
