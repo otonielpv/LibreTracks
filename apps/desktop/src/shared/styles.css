@@ -11152,7 +11152,8 @@ html.lt-ios body {
   left: 50%;
   transform: translateX(-50%);
   bottom: 4.5rem;
-  z-index: 14;
+  /* Por delante de la barra de acciones (34) y de la columna (30). */
+  z-index: 35;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -11248,7 +11249,12 @@ html.lt-ios body {
   left: 50%;
   transform: translateX(-50%);
   bottom: var(--lt-mobile-float-bottom);
-  z-index: 12;
+  /* Por encima de la columna de cabeceras y del aviso de estado, los dos en
+     30. Debajo, la barra quedaba TAPADA a la izquierda y a la derecha, y los
+     toques en esos extremos no llegaban a sus botones: iban al fondo del
+     timeline, que suelta la seleccion. De ahi que pulsar "seleccionar varias"
+     pareciera cerrar el menu. */
+  z-index: 34;
   display: flex;
   align-items: center;
   gap: 0.3rem;
@@ -11268,7 +11274,12 @@ html.lt-ios body {
   left: 50%;
   transform: translateX(-50%);
   bottom: var(--lt-mobile-float-bottom);
-  z-index: 12;
+  /* Por encima de la columna de cabeceras y del aviso de estado, los dos en
+     30. Debajo, la barra quedaba TAPADA a la izquierda y a la derecha, y los
+     toques en esos extremos no llegaban a sus botones: iban al fondo del
+     timeline, que suelta la seleccion. De ahi que pulsar "seleccionar varias"
+     pareciera cerrar el menu. */
+  z-index: 34;
   display: inline-flex;
   align-items: center;
   justify-content: center;
