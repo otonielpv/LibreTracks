@@ -1,6 +1,25 @@
 import { clientXToLocalX, getElementScaleY } from "../timeline/timelineMath";
 
 type Point = { x: number; y: number };
+
+/**
+ * Controles que se pintan DENTRO del area de carriles y tienen que responder
+ * como botones normales.
+ *
+ * La navegacion escucha en captura y hace `preventDefault` +
+ * `stopImmediatePropagation` sobre el `pointerdown`, y ademas suprime el
+ * `click` de compatibilidad: cualquier boton que viva aqui dentro queda mudo
+ * sin decir por que. Le paso el gesto entero al navegador —ni lo cedo con
+ * `yielding` ni lo registro—, que es lo unico que devuelve un `click` de
+ * verdad.
+ */
+const NATIVE_CONTROL_SELECTOR = "[data-lt-native-touch]";
+
+function isNativeControl(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element && target.closest(NATIVE_CONTROL_SELECTOR) !== null
+  );
+}
 export type MobileNavigationOptions = {
   container: HTMLElement;
   enabled: () => boolean;
@@ -76,6 +95,7 @@ export class MobileTimelineNavigation {
 
   private down = (event: PointerEvent) => {
     if (event.pointerType !== "touch" || !this.options.enabled()) return;
+    if (isNativeControl(event.target)) return;
     if (this.yielding) return;
     if (
       this.points.size === 0 &&
@@ -131,6 +151,7 @@ export class MobileTimelineNavigation {
 
   private suppressMouse = (event: MouseEvent) => {
     if (this.yielding) return;
+    if (isNativeControl(event.target)) return;
     if (Date.now() - this.lastTouch > 800) return;
     event.preventDefault(); event.stopImmediatePropagation();
   };

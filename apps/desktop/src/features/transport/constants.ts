@@ -11,11 +11,15 @@ export const HEADER_WIDTH = 260;
  * porque Android fija `sensorLandscape`. Aqui solo caben nombre y estado; los
  * controles salen al tocar la fila, que los despliega SOBRE los carriles.
  *
+ * 136 y no menos porque los cuatro botones tactiles de la cabecera de la regla
+ * viven en esta columna: por debajo de eso no entran en dos filas y se salen
+ * por encima de la regla. Aun asi devuelve 124 px al audio.
+ *
  * Debe ir a la par con `grid-template-columns` de `.lt-mobile
  * .lt-timeline-main-grid` y `.lt-mobile .lt-timeline-bottom-grid` en
  * styles.css: si se separan, los carriles dejan de cuadrar con sus cabeceras.
  */
-export const MOBILE_HEADER_WIDTH = 104;
+export const MOBILE_HEADER_WIDTH = 136;
 /**
  * El ancho que la columna ocupa de verdad. Atado a la identidad NATIVA de
  * plataforma, no al ancho de ventana: redimensionar la ventana del escritorio

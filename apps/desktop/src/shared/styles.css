@@ -10908,11 +10908,18 @@ html.lt-ios body {
   overflow: hidden;
 }
 
-.lt-mobile .lt-ruler-header-actions {
-  display: grid;
-  grid-template-columns: repeat(2, auto);
+/* Envuelven los DOS niveles: los cuatro botones no son hermanos —tres cuelgan
+   de un <span> que la guia interactiva ilumina por `data-lt-tour`, asi que no
+   se puede aplanar con `display: contents` sin dejarla apuntando a una caja de
+   tamano cero—. */
+.lt-mobile .lt-ruler-header-actions,
+.lt-mobile .lt-mobile-track-view-controls {
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
-  justify-content: start;
+  justify-content: flex-start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Cabeceras finas en la app movil. 260 px fijos se llevaban el ancho antes de
@@ -10921,7 +10928,7 @@ html.lt-ios body {
    features/transport/constants.ts. */
 .lt-mobile .lt-timeline-main-grid,
 .lt-mobile .lt-timeline-bottom-grid {
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 136px minmax(0, 1fr);
 }
 
 /* Fina significa nombre y estado. Los controles no se pierden: salen al tocar
@@ -10987,21 +10994,32 @@ html.lt-ios body {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  min-height: 36px;
+  min-height: 2.2rem;
   padding: 0 0.6rem;
-  border-radius: 999px;
-  border: 1px solid #3b474b;
-  background: #1b2427;
-  color: #dbe7e3;
-  font-size: 0.72rem;
+  border: 0;
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.12)),
+    #201f1f;
+  color: #e5e2e1;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
+.lt-mobile .lt-mobile-live-group-toggle .material-symbols-outlined {
+  font-size: 15px;
+}
+
 .lt-mobile .lt-mobile-live-group.is-open .lt-mobile-live-group-toggle {
-  border-color: rgb(87 241 219 / 0.5);
-  color: rgb(87 241 219);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.06)),
+    rgba(47, 46, 46, 0.92);
+  color: #57f1db;
+  box-shadow:
+    0 0 0 1px rgba(87, 241, 219, 0.18),
+    0 0 18px rgba(87, 241, 219, 0.16);
 }
 
 /* Editor de posicion de una marca. Gana sitio DENTRO de la vista y no la
@@ -11015,12 +11033,19 @@ html.lt-ios body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.75rem 0.9rem;
-  border-radius: 10px;
-  background: rgba(18, 24, 27, 0.97);
-  border: 1px solid #3b474b;
+  padding: 0.6rem 0.7rem;
+  border-radius: 2px;
+  background: rgb(19 19 19 / 0.94);
+  border: 1px solid rgb(133 148 144 / 0.18);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
   min-width: 16rem;
+}
+
+.lt-marker-position-editor > strong {
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8fa09b;
 }
 
 .lt-marker-position-editor.is-mobile-sheet {
@@ -11037,19 +11062,23 @@ html.lt-ios body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.78rem;
-  color: #bdc9c5;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fa09b;
 }
 
 .lt-marker-position-field input {
   width: 8rem;
-  min-height: 40px;
+  min-height: 2.4rem;
   padding: 0 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #3b474b;
-  background: #101619;
-  color: #e6efec;
+  border-radius: 2px;
+  border: 1px solid rgb(133 148 144 / 0.18);
+  background: #131313;
+  color: #e5e2e1;
   font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .lt-marker-position-buttons {
@@ -11058,14 +11087,31 @@ html.lt-ios body {
   gap: 0.4rem;
 }
 
-.lt-marker-position-buttons .lt-button {
-  min-height: 40px;
+.lt-marker-position-buttons button {
+  min-height: 2.4rem;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.12)),
+    #201f1f;
+  color: #e5e2e1;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-marker-position-buttons button.is-primary {
+  background: linear-gradient(180deg, #57f1db, #35c6b2);
+  color: #08201d;
 }
 
 /* Acciones de la seleccion en movil. Flota SOBRE la linea de tiempo, pegada al
    borde inferior y encima de la barra de transporte: la vista sigue visible,
    que es justo lo que fallaba al hacerlo pantalla completa. Reutiliza
    .lt-icon-button, sin paleta propia. */
+/* Paleta y formas de la app: panel de 2 px como `.lt-context-menu`. Una
+   pildora redonda aqui se lee como si fuera de otro programa. */
 .lt-mobile .lt-mobile-selection-actions {
   position: absolute;
   left: 50%;
@@ -11074,19 +11120,25 @@ html.lt-ios body {
   z-index: 12;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 999px;
-  background: rgba(18, 24, 27, 0.94);
-  border: 1px solid #3b474b;
+  gap: 0.3rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 2px;
+  background: rgb(19 19 19 / 0.92);
+  border: 1px solid rgb(133 148 144 / 0.18);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   max-width: calc(100% - 1.2rem);
   overflow-x: auto;
 }
 
 .lt-mobile .lt-mobile-selection-actions .lt-icon-button {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  border: 0;
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.12)),
+    #201f1f;
+  color: #e5e2e1;
 }
 
 /* El area de carriles vacia propone el primer paso en vez de ser un muro
@@ -11113,6 +11165,7 @@ html.lt-ios body {
 
 .lt-mobile .lt-mobile-empty-lanes-title {
   margin: 0;
+  font-family: "Space Grotesk", sans-serif;
   font-size: 0.95rem;
   font-weight: 600;
   color: #d6e2df;
@@ -11125,21 +11178,38 @@ html.lt-ios body {
   color: #94a3a0;
 }
 
+/* `.lt-button` no existe en esta hoja: el boton salia con el gris por defecto
+   del navegador. Receta de la app, en su version llamativa: es la unica accion
+   de la pantalla. */
 .lt-mobile .lt-mobile-empty-lanes-cta {
   pointer-events: auto;
-  margin-top: 0.35rem;
+  margin-top: 0.55rem;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  min-height: 44px;
+  min-height: 2.6rem;
   padding: 0 1.1rem;
+  border: 0;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #57f1db, #35c6b2);
+  color: #08201d;
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow: 0 0 18px rgba(87, 241, 219, 0.22);
+}
+
+.lt-mobile .lt-mobile-empty-lanes-cta .material-symbols-outlined {
+  font-size: 17px;
 }
 
 .lt-mobile .lt-mobile-selection-actions-title {
-  font-size: 0.75rem;
-  color: #bdc9c5;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8fa09b;
   white-space: nowrap;
-  padding: 0 0.25rem;
+  padding: 0 0.3rem;
   max-width: 9rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11153,16 +11223,30 @@ html.lt-ios body {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  min-height: 44px;
-  padding: 0 0.7rem;
-  border-radius: 999px;
-  border: 1px solid #3b474b;
-  background: #1b2427;
-  color: #dbe7e3;
-  font-size: 0.78rem;
+  min-height: 2.4rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.12)),
+    #201f1f;
+  color: #e5e2e1;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .lt-mobile .lt-mobile-selection-action:disabled {
   opacity: 0.4;
+}
+
+.lt-mobile .lt-mobile-selection-action:active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.06)),
+    rgba(47, 46, 46, 0.92);
+  color: #57f1db;
+  box-shadow:
+    0 0 0 1px rgba(87, 241, 219, 0.18),
+    0 0 18px rgba(87, 241, 219, 0.16);
 }

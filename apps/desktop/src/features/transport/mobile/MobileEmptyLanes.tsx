@@ -46,7 +46,11 @@ export function MobileEmptyLanes({
       </p>
       <button
         type="button"
-        className="lt-button lt-mobile-empty-lanes-cta"
+        className="lt-mobile-empty-lanes-cta"
+        // La navegacion tactil escucha en captura sobre el area de carriles y
+        // se come el pointerdown y el click. Esta marca le dice que este gesto
+        // no es suyo; sin ella el boton no responde y no hay error que mirar.
+        data-lt-native-touch=""
         onClick={onAddAudios}
       >
         <span className="material-symbols-outlined" aria-hidden="true">

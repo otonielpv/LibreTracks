@@ -134,14 +134,13 @@ export function MarkerPositionEditor({
       <div className="lt-marker-position-buttons">
         <button
           type="button"
-          className="lt-button"
-          onClick={() => setMarkerId(null)}
+                    onClick={() => setMarkerId(null)}
         >
           {t("common.cancel", { defaultValue: "Cancelar" })}
         </button>
         <button
           type="button"
-          className="lt-button is-primary"
+          className="is-primary"
           onClick={() => {
             onCommit(marker.id, seconds);
             setMarkerId(null);
