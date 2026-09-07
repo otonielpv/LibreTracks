@@ -7,6 +7,16 @@ const es = {
     delete: "Eliminar",
     clear: "Quitar selección",
   },
+  mobileSelectionActions: {
+    clips_one: "{{count}} clip",
+    clips_other: "{{count}} clips",
+    tempoMarker: "Tempo {{bpm}}",
+    timeSignatureMarker: "Compás {{signature}}",
+    create: "Añadir",
+    addMarker: "Marca",
+    addAudio: "Audio",
+    more: "Más acciones",
+  },
   mobileEmptyLanes: {
     title: "Aún no hay audio en esta sesión",
     hint: "Añade los audios de la canción y aparecerán aquí como pistas.",

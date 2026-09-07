@@ -1590,6 +1590,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     openMenu,
     openColorMenu,
     createTypedMarker,
+    openCreateMarkerKindMenu,
     createAutomationCueAt,
     editAutomationCue,
     automationCueContextMenu,

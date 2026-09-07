@@ -10904,7 +10904,7 @@ html.lt-ios body {
    borde inferior y encima de la barra de transporte: la vista sigue visible,
    que es justo lo que fallaba al hacerlo pantalla completa. Reutiliza
    .lt-icon-button, sin paleta propia. */
-.lt-mobile .lt-mobile-clip-actions {
+.lt-mobile .lt-mobile-selection-actions {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -10922,7 +10922,7 @@ html.lt-ios body {
   overflow-x: auto;
 }
 
-.lt-mobile .lt-mobile-clip-actions .lt-icon-button {
+.lt-mobile .lt-mobile-selection-actions .lt-icon-button {
   min-width: 44px;
   min-height: 44px;
 }
@@ -10971,9 +10971,34 @@ html.lt-ios body {
   padding: 0 1.1rem;
 }
 
-.lt-mobile .lt-mobile-clip-actions-count {
+.lt-mobile .lt-mobile-selection-actions-title {
   font-size: 0.75rem;
   color: #bdc9c5;
   white-space: nowrap;
   padding: 0 0.25rem;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Las acciones van con su etiqueta, no con un icono a adivinar: la lista sale
+   de las factories del menu contextual, que solo dan texto, y un icono
+   inventado por accion seria justo la clase de traduccion que se desincroniza
+   del escritorio. */
+.lt-mobile .lt-mobile-selection-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 44px;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1px solid #3b474b;
+  background: #1b2427;
+  color: #dbe7e3;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.lt-mobile .lt-mobile-selection-action:disabled {
+  opacity: 0.4;
 }

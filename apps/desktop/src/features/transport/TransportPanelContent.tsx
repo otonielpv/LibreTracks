@@ -203,7 +203,8 @@ import { MetronomePopover } from "./panels/MetronomePopover";
 import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
 import { MobileTrackHeaderActions } from "./mobile/MobileTrackHeaderActions";
-import { MobileClipActionBar } from "./mobile/MobileClipActionBar";
+import { MobileSelectionActionBar } from "./mobile/MobileSelectionActionBar";
+import { useMobileSelectionBar } from "./mobile/useMobileSelectionBar";
 import { touchContextPosition } from "./timeline/touchContextPosition";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
@@ -6729,6 +6730,17 @@ export function TransportPanelContent() {
     dropFolder: dropLibraryFolder,
   };
 
+  // Barra tactil de la seleccion (docs/plans/mobile-daw, paso 2). Se instancia
+  // aqui y no junto a `timelineMenus` porque necesita
+  // `handleImportLibraryFromDialog`, que nace de la factoria de arrastre de la
+  // biblioteca, declarada mas arriba pero DESPUES de los menus.
+  const { menus: mobileSelectionMenus, creation: mobileSelectionCreation } =
+    useMobileSelectionBar({
+      timelineMenus,
+      getPlayheadSeconds: () => displayPositionSecondsRef.current,
+      onAddAudios: handleImportLibraryFromDialog,
+    });
+
   const handleRulerPointerDown = useTimelineRangeSelection({
     enabled: Boolean(song),
     seekLocked: rulerSeekLocked,
@@ -7457,7 +7469,19 @@ export function TransportPanelContent() {
                 )
               ) : (
                 <section className="lt-main-stage">
-                  <MobileClipActionBar runShortcutAction={runShortcutAction} />
+                  <MobileSelectionActionBar
+                    song={song}
+                    selectedRegionId={selectedRegionId}
+                    menus={mobileSelectionMenus}
+                    creation={mobileSelectionCreation}
+                    onOpenSheet={(title, actions) =>
+                      setContextMenu({ x: 0, y: 0, title, actions })
+                    }
+                    onClearSelection={() => {
+                      clearSelection();
+                      setSelectedRegionId(null);
+                    }}
+                  />
                   {viewMode !== "live" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}
@@ -7676,6 +7700,13 @@ export function TransportPanelContent() {
                           onSelectRegion={(regionId) => {
                             setSelectedRegionId(regionId);
                             setSelectedTimelineRange(null);
+                            // La region vive en un useState aparte que nadie
+                            // limpia. En movil, la barra tactil muestra UNA
+                            // seleccion, y un clip seleccionado hace rato le
+                            // ganaria a la region que el dedo acaba de tocar.
+                            if (isMobileApp) {
+                              clearSelection();
+                            }
                           }}
                           selectedSectionId={selectedSectionId}
                           pendingMarkerJump={pendingMarkerJump}
