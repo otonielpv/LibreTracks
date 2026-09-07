@@ -3,6 +3,7 @@ import {
   getSongBaseBpm,
   getSongBaseTimeSignature,
 } from "@libretracks/shared/models";
+import { isMobileApp } from "@libretracks/shared/desktopApi";
 import type {
   AppSettings,
   AudioBackendKind,
@@ -732,6 +733,11 @@ export function resolveTrackDropState(
         layoutHeight
       : 0.5;
   const mode =
+    // En movil el arrastre solo REORDENA. "Dentro de la carpeta" es el 40%
+    // central de la fila: con un raton se acierta, con un dedo es una moneda
+    // al aire entre dejarla dentro o encima. Meter pistas en carpetas se hace
+    // desde el menu ("Mover a carpeta…"), que ademas acepta varias de una vez.
+    !isMobileApp &&
     targetTrack.kind === "folder" &&
     verticalRatio >= 0.3 &&
     verticalRatio <= 0.7
@@ -782,6 +788,9 @@ export function resolveCompactTrackDropState(
         layoutWidth
       : 0.5;
   const mode =
+    // Misma razon que en el carril vertical: con un dedo, el 40% central no
+    // es un destino, es una moneda al aire.
+    !isMobileApp &&
     targetTrack.kind === "folder" &&
     horizontalRatio >= 0.3 &&
     horizontalRatio <= 0.7

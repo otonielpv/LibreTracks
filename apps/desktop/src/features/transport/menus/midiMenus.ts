@@ -117,10 +117,10 @@ function midiTrackContextMenu(track: TrackSummary): ContextMenuAction[] {
       },
     },
     {
-      label: "Seleccionar color...",
+      label: t("transport.menu.selectColor"),
       swatch: track.color ?? undefined,
       onSelect: () =>
-        openColorMenu(`Color: ${track.name}`, track.color, (color) =>
+        openColorMenu(t("transport.menu.colorOf", { name: track.name }), track.color, (color) =>
           d.handleSetTrackColor(track, color).then(() => undefined),
         ),
     },

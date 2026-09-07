@@ -328,7 +328,11 @@ describe("App / timeline-tracks", () => {
     // entrada de historial.
     expect(buttons.map((button) => button.textContent)).toEqual([
       expect.stringContaining("Delete"),
-      expect.stringContaining("Seleccionar color..."),
+      // Meter varias en una carpeta de un tiron: arrastrando habia que repetir
+      // el gesto una por una y acertar el 40% central de la fila de la carpeta.
+      expect.stringContaining("Move to folder"),
+      expect.stringContaining("Remove From Folder"),
+      expect.stringContaining("Select colour"),
     ]);
   });
 
@@ -440,13 +444,13 @@ describe("App / timeline-tracks", () => {
       fireEvent.contextMenu(keysHeader, { clientX: 180, clientY: 300 });
     });
 
-    // 2) Click "Seleccionar color..." — this no longer opens the
+    // 2) Click "Select colour…" — this no longer opens the
     //    custom-colour popover directly. The flow now shows a
     //    sub-menu with preset swatches plus a "Personalizado..."
     //    entry so users can pick a quick preset without going
     //    through the native colour picker every time.
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Seleccionar color..." }));
+      fireEvent.click(await screen.findByRole("button", { name: /Select colour/ }));
     });
 
     // 3) Click "Personalizado..." in the sub-menu to summon the

@@ -86,6 +86,7 @@ import type { AutomationCueDraft } from "../panels/AutomationCueModal";
 import type { MidiClipDraft } from "../panels/MidiClipModal";
 import { createMidiMenus } from "./midiMenus";
 import { createMarkerKindMenus } from "./markerKindMenus";
+import { createTrackFolderMenus } from "./trackFolderMenus";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import type { ShortcutActionId } from "../keyboard/actions";
 
@@ -508,7 +509,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         onSelect: () => changeTimelineBpmAt(positionSeconds),
       },
       {
-        label: "Crear marca de metrica",
+        label: t("transport.menu.createTimeSignatureMarker"),
         disabled: !song,
         onSelect: () => createTimeSignatureMarkerAt(positionSeconds),
       },
@@ -830,7 +831,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     const { t } = d;
     return [
       {
-        label: "Cambiar compas",
+        label: t("transport.menu.changeTimeSignature"),
         onSelect: async () => {
           const nextSignature = (
             await promptDialog("Compas", marker.signature)
@@ -872,6 +873,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     openCreateCueKindMenu,
     openMarkerKindMenu,
   } = createMarkerKindMenus(getDeps, bumpContextMenuPosition);
+  const { folderActions } = createTrackFolderMenus(
+    getDeps,
+    bumpContextMenuPosition,
+  );
 
   function sectionContextMenu(
     section: SectionMarkerSummary,
@@ -1099,10 +1104,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         },
       },
       {
-        label: "Seleccionar color...",
+        label: t("transport.menu.selectColor"),
         swatch: track.color ?? undefined,
         onSelect: () =>
-          openColorMenu(`Color: ${track.name}`, track.color, (color) =>
+          openColorMenu(t("transport.menu.colorOf", { name: track.name }), track.color, (color) =>
             d.handleSetTrackColor(track, color).then(() => undefined),
           ),
       },
@@ -1223,12 +1228,16 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           });
         },
       },
+      // Meter varias pistas en una carpeta de una vez. Arrastrando habia que
+      // repetir el gesto una por una, y acertar el 40% central de la fila de
+      // la carpeta con un dedo es una moneda al aire.
+      ...folderActions(tracks),
       {
-        label: "Seleccionar color...",
+        label: t("transport.menu.selectColor"),
         swatch: currentColor ?? undefined,
         onSelect: () =>
           openColorMenu(
-            `Color: ${tracks.length} tracks`,
+            t("transport.menu.colorOfTracks", { count: tracks.length }),
             currentColor,
             (color) => d.handleSetTrackColors(tracks, color).then(() => undefined),
           ),
@@ -1381,10 +1390,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         },
       },
       {
-        label: "Seleccionar color...",
+        label: t("transport.menu.selectColor"),
         swatch: clip.color ?? undefined,
         onSelect: () =>
-          openColorMenu(`Color: ${clipName}`, clip.color, (color) =>
+          openColorMenu(t("transport.menu.colorOf", { name: clipName }), clip.color, (color) =>
             d.handleSetClipColor(clip, color).then(() => undefined),
           ),
       },
