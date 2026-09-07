@@ -36,6 +36,8 @@ type TimelineUIState = {
   followPlayheadEnabled: boolean;
   midiLearnMode: string | null;
   trackReorderMode: boolean;
+  /** Marca cuya posición se está corrigiendo a mano; null con el editor cerrado. */
+  markerPositionEditorId: string | null;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
@@ -62,6 +64,7 @@ type TimelineUIState = {
   setMidiLearnMode: (midiLearnMode: string | null) => void;
   setTrackReorderMode: (enabled: boolean) => void;
   toggleTrackReorderMode: () => void;
+  setMarkerPositionEditorId: (markerId: string | null) => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -77,6 +80,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
     trackReorderMode: false,
+    markerPositionEditorId: null,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);
@@ -229,6 +233,9 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     toggleTrackReorderMode: () => {
       set((state) => ({ trackReorderMode: !state.trackReorderMode }));
+    },
+    setMarkerPositionEditorId: (markerPositionEditorId) => {
+      set({ markerPositionEditorId });
     },
   })),
 );

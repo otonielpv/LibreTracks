@@ -34,7 +34,11 @@ const desktopMenus: MobileSelectionMenus = {
   trackContextMenu: vi.fn(() => [action("Renombrar pista")]),
 };
 
-const creation = { onCreateMarker: vi.fn(), onAddAudios: vi.fn() };
+const creation = {
+  onCreateSection: vi.fn(),
+  onCreateCue: vi.fn(),
+  onAddAudios: vi.fn(),
+};
 
 const song = {
   id: "s",
@@ -172,11 +176,15 @@ describe("las acciones de la barra son las del escritorio", () => {
       creation,
       t,
     });
-    expect(model.actions).toHaveLength(2);
+    // Seccion y aviso son vocabularios distintos y van separados: preguntar
+    // por el grupo en el gesto mas repetido del montaje sobra.
+    expect(model.actions).toHaveLength(3);
 
     model.actions[0].onSelect();
-    expect(creation.onCreateMarker).toHaveBeenCalledTimes(1);
+    expect(creation.onCreateSection).toHaveBeenCalledTimes(1);
     model.actions[1].onSelect();
+    expect(creation.onCreateCue).toHaveBeenCalledTimes(1);
+    model.actions[2].onSelect();
     expect(creation.onAddAudios).toHaveBeenCalledTimes(1);
   });
 

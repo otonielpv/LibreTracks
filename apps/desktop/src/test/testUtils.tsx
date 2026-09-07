@@ -281,6 +281,7 @@ beforeEach(async () => {
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
     trackReorderMode: false,
+    markerPositionEditorId: null,
     viewMode: DEFAULT_VIEW_MODE,
   });
   // La guia interactiva arranca sola la primera vez y su store sobrevive al

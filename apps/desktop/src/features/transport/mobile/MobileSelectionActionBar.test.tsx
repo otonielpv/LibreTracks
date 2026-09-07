@@ -49,7 +49,11 @@ const menus: MobileSelectionMenus = {
   trackContextMenu: () => [],
 };
 
-const creation = { onCreateMarker: vi.fn(), onAddAudios: vi.fn() };
+const creation = {
+  onCreateSection: vi.fn(),
+  onCreateCue: vi.fn(),
+  onAddAudios: vi.fn(),
+};
 
 function renderBar(overrides: Partial<Parameters<typeof MobileSelectionActionBar>[0]> = {}) {
   const props = {
@@ -87,8 +91,10 @@ describe("la barra de la seleccion, generalizada", () => {
 
   it("sin seleccion propone crear, sin aspa que quitar", () => {
     renderBar();
-    fireEvent.click(screen.getByRole("button", { name: "Marca" }));
-    expect(creation.onCreateMarker).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Sección" }));
+    expect(creation.onCreateSection).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Aviso" }));
+    expect(creation.onCreateCue).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Audio" }));
     expect(creation.onAddAudios).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Quitar selección" })).toBeNull();

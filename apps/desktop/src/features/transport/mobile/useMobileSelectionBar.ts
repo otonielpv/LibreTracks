@@ -55,8 +55,13 @@ export function useMobileSelectionBar({
 
   const creation = useMemo<MobileCreationHandlers>(
     () => ({
-      onCreateMarker: () =>
-        timelineMenus.openCreateMarkerKindMenu(getPlayheadSeconds()),
+      // Los segundos se leen AQUI, al tocar el boton, no al elegir el tipo:
+      // la marca cae donde estaba el cabezal cuando lo pediste, aunque la
+      // reproduccion siga corriendo mientras eliges.
+      onCreateSection: () =>
+        timelineMenus.openCreateSectionKindMenu(getPlayheadSeconds()),
+      onCreateCue: () =>
+        timelineMenus.openCreateCueKindMenu(getPlayheadSeconds()),
       onAddAudios,
     }),
     [timelineMenus, getPlayheadSeconds, onAddAudios],

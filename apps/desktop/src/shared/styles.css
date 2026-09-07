@@ -10900,6 +10900,64 @@ html.lt-ios body {
   letter-spacing: 0.06em;
 }
 
+/* Editor de posicion de una marca. Gana sitio DENTRO de la vista y no la
+   sustituye: panel flotante en escritorio, hoja inferior en movil. */
+.lt-marker-position-editor {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 4.5rem;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(18, 24, 27, 0.97);
+  border: 1px solid #3b474b;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  min-width: 16rem;
+}
+
+.lt-marker-position-editor.is-mobile-sheet {
+  left: 0;
+  right: 0;
+  bottom: calc(0.6rem + var(--lt-safe-area-bottom));
+  transform: none;
+  border-radius: 12px 12px 0 0;
+  min-width: 0;
+}
+
+.lt-marker-position-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: #bdc9c5;
+}
+
+.lt-marker-position-field input {
+  width: 8rem;
+  min-height: 40px;
+  padding: 0 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #3b474b;
+  background: #101619;
+  color: #e6efec;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-marker-position-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.lt-marker-position-buttons .lt-button {
+  min-height: 40px;
+}
+
 /* Acciones de la seleccion en movil. Flota SOBRE la linea de tiempo, pegada al
    borde inferior y encima de la barra de transporte: la vista sigue visible,
    que es justo lo que fallaba al hacerlo pantalla completa. Reutiliza

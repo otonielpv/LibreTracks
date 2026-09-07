@@ -120,8 +120,10 @@ export type MobileSelectionMenus = {
 };
 
 export type MobileCreationHandlers = {
-  /** Crea una marca en el cabezal, pidiendo antes su tipo. */
-  onCreateMarker: () => void;
+  /** Pide el TIPO de seccion y crea la marca ya tipificada en el cabezal. */
+  onCreateSection: () => void;
+  /** Igual, con el vocabulario de avisos (Build, All In, Drums In...). */
+  onCreateCue: () => void;
   /** Abre el MISMO dialogo de importacion que la biblioteca. */
   onAddAudios: () => void;
 };
@@ -201,12 +203,23 @@ export function mobileSelectionBarModel(args: {
     case "none":
       return {
         title: t("mobileSelectionActions.create", { defaultValue: "Añadir" }),
+        // La marca nace ya tipificada y nombrada: un toque mas al crearla, y a
+        // cambio no deja trabajo pendiente ni sesiones llenas de marcas sin
+        // tipo. Seccion y aviso van separados porque son vocabularios
+        // distintos —la seccion anuncia con conteo, el aviso no— y preguntar
+        // por el grupo en el gesto mas repetido del montaje sobra.
         actions: [
           {
-            label: t("mobileSelectionActions.addMarker", {
-              defaultValue: "Marca",
+            label: t("mobileSelectionActions.addSection", {
+              defaultValue: "Sección",
             }),
-            onSelect: creation.onCreateMarker,
+            onSelect: creation.onCreateSection,
+          },
+          {
+            label: t("mobileSelectionActions.addCue", {
+              defaultValue: "Aviso",
+            }),
+            onSelect: creation.onCreateCue,
           },
           {
             label: t("mobileSelectionActions.addAudio", {

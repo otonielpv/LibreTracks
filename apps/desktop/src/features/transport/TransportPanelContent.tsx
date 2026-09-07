@@ -204,6 +204,7 @@ import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
 import { MobileTrackHeaderActions } from "./mobile/MobileTrackHeaderActions";
 import { MobileSelectionActionBar } from "./mobile/MobileSelectionActionBar";
+import { MarkerPositionEditor } from "./timeline/MarkerPositionEditor";
 import { useMobileSelectionBar } from "./mobile/useMobileSelectionBar";
 import { touchContextPosition } from "./timeline/touchContextPosition";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
@@ -7469,6 +7470,11 @@ export function TransportPanelContent() {
                 )
               ) : (
                 <section className="lt-main-stage">
+                  <MarkerPositionEditor
+                    song={song}
+                    workspaceEndSeconds={workspaceDurationSeconds}
+                    onCommit={handleMarkerMoveCommit}
+                  />
                   <MobileSelectionActionBar
                     song={song}
                     selectedRegionId={selectedRegionId}

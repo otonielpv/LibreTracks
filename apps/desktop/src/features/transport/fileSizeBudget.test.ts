@@ -43,7 +43,10 @@ const BUDGETS: Record<string, number> = {
   // docs/plans/ui-performance), y de 1700 tras sacar
   // timeline/describeAutomationCue.ts (paso 1 de docs/plans/mobile-daw).
   "timeline/TimelineCanvasPane.tsx": 1650,
-  "menus/timelineMenus.ts": 1650,
+  // Bajado de 1650 tras extraer menus/markerKindMenus.ts (paso 3 de
+  // docs/plans/mobile-daw): todo el vocabulario de tipos de marca -22
+  // secciones, 13 avisos y variantes- vive ahora aparte.
+  "menus/timelineMenus.ts": 1450,
   "panels/SettingsPanel.tsx": 1500,
   "timeline/TimelineToolbar.tsx": 1250,
   "compact/CompactView.tsx": 1150,
