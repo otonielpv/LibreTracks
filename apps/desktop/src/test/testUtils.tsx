@@ -282,6 +282,7 @@ beforeEach(async () => {
     midiLearnMode: null,
     trackReorderMode: false,
     markerPositionEditorId: null,
+    expandedTrackId: null,
     viewMode: DEFAULT_VIEW_MODE,
   });
   // La guia interactiva arranca sola la primera vez y su store sobrevive al

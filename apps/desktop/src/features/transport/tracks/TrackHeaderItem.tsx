@@ -16,9 +16,11 @@ import {
 
 import { AudioRouteCombobox } from "./AudioRouteCombobox";
 import { useFineDragRange } from "../timeline/useFineDragRange";
-import type { TrackKind } from "../desktopApi";
 import { TrackMeter } from "./TrackMeter";
+import type { TrackKind } from "../desktopApi";
 import { useTransportStore } from "../store";
+import { useTimelineUIStore } from "../uiStore";
+import { isMobileApp } from "../desktopApi";
 
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
@@ -132,6 +134,12 @@ function TrackHeaderItemComponent({
   const { t } = useTranslation();
   const lastTouchPointerDownAtRef = useRef(0);
   const optimisticMix = useTransportStore((state) => state.optimisticMix[trackId] ?? null);
+  // Se lee del store, no por prop: este componente esta memoizado con un
+  // comparador explicito, y una prop nueva habria que acordarse de anadirla
+  // ahi o la fila no se repintaria al desplegarse.
+  const isExpanded = useTimelineUIStore(
+    (state) => state.expandedTrackId === trackId,
+  );
   const effectivePanValue = optimisticMix?.pan ?? panValue;
   const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
   const effectiveTrackSolo = optimisticMix?.solo ?? trackSolo;
@@ -180,6 +188,12 @@ function TrackHeaderItemComponent({
     }
 
     onSelectTrack(trackId, trackName, event);
+    // En movil la cabecera es fina —solo nombre y estado— asi que el mismo
+    // toque que la selecciona despliega sus controles. Dos toques como mucho
+    // para llegar a cualquiera de ellos.
+    if (isMobileApp) {
+      useTimelineUIStore.getState().toggleExpandedTrackId(trackId);
+    }
   };
 
   const metaLabel = trackKind === "folder" ? t("trackHeader.childrenCount", { count: childCount }) : null;
@@ -194,49 +208,7 @@ function TrackHeaderItemComponent({
         ...audioRoutingOptions,
       ]
     : audioRoutingOptions;
-  const headerStyle = {
-    height: trackHeight,
-    paddingLeft: 8 + trackDepth * 12,
-    ...(trackColor ? { "--lt-track-color": trackColor } : {}),
-  } as CSSProperties;
-
-  return (
-    <div
-      className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${effectiveTrackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""}`}
-      style={headerStyle}
-      role="button"
-      tabIndex={0}
-      onPointerDown={handlePointerDown}
-      onMouseDown={handleMouseDown}
-      onClick={handleClick}
-      onContextMenu={(event) => onOpenContextMenu(event, trackId)}
-    >
-      <div className="lt-track-header-body">
-        <div className="lt-track-header-content">
-          <div className="lt-track-header-summary">
-            <div className="lt-track-header-main">
-              <div className="lt-track-title-row">
-                {trackKind === "folder" ? (
-                  <button
-                    type="button"
-                    className="lt-folder-toggle"
-                    aria-label={isCollapsed
-                      ? t("trackHeader.expand", { name: trackName })
-                      : t("trackHeader.collapse", { name: trackName })}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onToggleFolder(trackId);
-                    }}
-                  >
-                    {isCollapsed ? "+" : "-"}
-                  </button>
-                ) : null}
-                <strong>{trackName}</strong>
-              </div>
-              {metaLabel ? <span className="lt-track-meta">{metaLabel}</span> : null}
-            </div>
-          </div>
-
+  const controlRow = (
           <div className="lt-track-control-row">
             <div className="lt-track-toggle-group">
               <button
@@ -381,11 +353,75 @@ function TrackHeaderItemComponent({
               </label>
             </div>
           </div>
+  );
+
+  const headerStyle = {
+    height: trackHeight,
+    paddingLeft: 8 + trackDepth * 12,
+    ...(trackColor ? { "--lt-track-color": trackColor } : {}),
+  } as CSSProperties;
+
+  // El panel desplegado va FUERA de `.lt-track-header`: esa capa tiene
+  // `overflow: hidden` y se lo comeria. Colgado de `.lt-track-header-row`
+  // -que ya es `position: relative`- cae justo bajo su fila.
+  const expandedPanel =
+    isMobileApp && isExpanded ? (
+      <div
+        className="lt-mobile-track-row-panel"
+        onPointerDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {controlRow}
+      </div>
+    ) : null;
+
+  return (
+    <>
+    <div
+      className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${effectiveTrackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""}`}
+      style={headerStyle}
+      role="button"
+      tabIndex={0}
+      onPointerDown={handlePointerDown}
+      onMouseDown={handleMouseDown}
+      onClick={handleClick}
+      onContextMenu={(event) => onOpenContextMenu(event, trackId)}
+    >
+      <div className="lt-track-header-body">
+        <div className="lt-track-header-content">
+          <div className="lt-track-header-summary">
+            <div className="lt-track-header-main">
+              <div className="lt-track-title-row">
+                {trackKind === "folder" ? (
+                  <button
+                    type="button"
+                    className="lt-folder-toggle"
+                    aria-label={isCollapsed
+                      ? t("trackHeader.expand", { name: trackName })
+                      : t("trackHeader.collapse", { name: trackName })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleFolder(trackId);
+                    }}
+                  >
+                    {isCollapsed ? "+" : "-"}
+                  </button>
+                ) : null}
+                <strong>{trackName}</strong>
+              </div>
+              {metaLabel ? <span className="lt-track-meta">{metaLabel}</span> : null}
+            </div>
+          </div>
+
+          {isMobileApp ? null : controlRow}
         </div>
 
         <TrackMeter trackId={trackId} />
       </div>
     </div>
+    {expandedPanel}
+    </>
   );
 }
 

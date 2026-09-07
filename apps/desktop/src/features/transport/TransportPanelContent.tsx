@@ -357,7 +357,7 @@ import {
   DRAG_THRESHOLD_PX,
   DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
   HARDWARE_OUTPUT_CHANNEL_COUNT,
-  HEADER_WIDTH,
+  TRACK_HEADER_WIDTH,
   LIBRARY_DRAG_MAX_SCROLL_SPEED_PX,
   LIVE_TRACK_MIX_MIN_INTERVAL_MS,
   LIVE_ZOOM_COMMIT_DEBOUNCE_MS,
@@ -4202,7 +4202,7 @@ export function TransportPanelContent() {
         timelineScrollViewportRef.current?.clientWidth ??
         shell.clientWidth ??
         DEFAULT_TIMELINE_VIEWPORT_WIDTH;
-      const laneWidth = Math.max(320, measuredViewport - HEADER_WIDTH);
+      const laneWidth = Math.max(320, measuredViewport - TRACK_HEADER_WIDTH);
       setTimelineViewportWidth(laneWidth);
 
       const viewportHeight =
@@ -5635,7 +5635,7 @@ export function TransportPanelContent() {
       template.name.toLowerCase().includes(query),
     );
   }, [sessionTemplates, templateFilter]);
-  const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
+  const timelineRowWidth = TRACK_HEADER_WIDTH + laneViewportWidth;
   // Collapsed folders (restored from the song) and the rows they leave visible.
   // See ./hooks/useVisibleTracks.
   const { collapsedFolders, setCollapsedFolders, visibleTracks } =

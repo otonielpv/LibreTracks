@@ -1,6 +1,29 @@
+import { isMobileApp } from "@libretracks/shared/desktopApi";
+
 import type { MidiLearnCommand } from "./types";
 
 export const HEADER_WIDTH = 260;
+/**
+ * Ancho de la columna de cabeceras en la app movil.
+ *
+ * 260 px fijos se llevaban el ancho antes de que vieras un solo pixel de
+ * audio: la regla de portrait (`clamp(12rem, 34vw, 16.25rem)`) NUNCA se aplica
+ * porque Android fija `sensorLandscape`. Aqui solo caben nombre y estado; los
+ * controles salen al tocar la fila, que los despliega SOBRE los carriles.
+ *
+ * Debe ir a la par con `grid-template-columns` de `.lt-mobile
+ * .lt-timeline-main-grid` y `.lt-mobile .lt-timeline-bottom-grid` en
+ * styles.css: si se separan, los carriles dejan de cuadrar con sus cabeceras.
+ */
+export const MOBILE_HEADER_WIDTH = 104;
+/**
+ * El ancho que la columna ocupa de verdad. Atado a la identidad NATIVA de
+ * plataforma, no al ancho de ventana: redimensionar la ventana del escritorio
+ * nunca debe activar nada de esto.
+ */
+export const TRACK_HEADER_WIDTH = isMobileApp
+  ? MOBILE_HEADER_WIDTH
+  : HEADER_WIDTH;
 export const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
 export const TIMELINE_FIT_RIGHT_GUTTER_PX = 140;
 export const TRACK_HEIGHT_MIN = 18;

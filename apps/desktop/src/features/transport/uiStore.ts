@@ -38,6 +38,8 @@ type TimelineUIState = {
   trackReorderMode: boolean;
   /** Marca cuya posición se está corrigiendo a mano; null con el editor cerrado. */
   markerPositionEditorId: string | null;
+  /** Móvil: pista cuya fila está desplegada con sus controles; null si ninguna. */
+  expandedTrackId: string | null;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
@@ -65,6 +67,8 @@ type TimelineUIState = {
   setTrackReorderMode: (enabled: boolean) => void;
   toggleTrackReorderMode: () => void;
   setMarkerPositionEditorId: (markerId: string | null) => void;
+  toggleExpandedTrackId: (trackId: string) => void;
+  setExpandedTrackId: (trackId: string | null) => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -81,6 +85,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     midiLearnMode: null,
     trackReorderMode: false,
     markerPositionEditorId: null,
+    expandedTrackId: null,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);
@@ -236,6 +241,16 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     setMarkerPositionEditorId: (markerPositionEditorId) => {
       set({ markerPositionEditorId });
+    },
+    // Una sola fila desplegada a la vez: son controles a tamaño de dedo y dos
+    // abiertas se taparían entre ellas.
+    toggleExpandedTrackId: (trackId) => {
+      set((state) => ({
+        expandedTrackId: state.expandedTrackId === trackId ? null : trackId,
+      }));
+    },
+    setExpandedTrackId: (expandedTrackId) => {
+      set({ expandedTrackId });
     },
   })),
 );

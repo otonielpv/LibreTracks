@@ -10900,6 +10900,67 @@ html.lt-ios body {
   letter-spacing: 0.06em;
 }
 
+/* Cabeceras finas en la app movil. 260 px fijos se llevaban el ancho antes de
+   que vieras un solo pixel de audio (la regla de portrait nunca se aplica:
+   Android fija sensorLandscape). Debe cuadrar con MOBILE_HEADER_WIDTH de
+   features/transport/constants.ts. */
+.lt-mobile .lt-timeline-main-grid,
+.lt-mobile .lt-timeline-bottom-grid {
+  grid-template-columns: 104px minmax(0, 1fr);
+}
+
+/* Fina significa nombre y estado. Los controles no se pierden: salen al tocar
+   la fila, que los despliega SOBRE los carriles. */
+.lt-mobile .lt-track-header-content {
+  min-width: 0;
+}
+
+.lt-mobile .lt-track-header strong {
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La fila desplegada. Va superpuesta a proposito: el alto de la fila lo
+   comparten cabeceras y carriles, asi que empujarlo aqui desincronizaria las
+   dos columnas. Al no reflujo, desplegar no puede mover el zoom ni la camara.
+   El ancho se recorta al de la ventana; el viewport tiene overflow-x: hidden,
+   asi que un panel mas ancho que la pantalla se cortaria sin avisar. */
+.lt-mobile .lt-mobile-track-row-panel {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 40;
+  width: min(calc(100vw - 1rem), 32rem);
+  padding: 0.5rem 0.6rem;
+  border-radius: 0 8px 8px 0;
+  background: rgba(24, 31, 34, 0.98);
+  border: 1px solid #3b474b;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+
+/* Dentro del panel hay sitio: los controles vuelven a su disposicion completa,
+   la misma del escritorio, en vez de la comprimida de una fila estrecha. */
+.lt-mobile .lt-mobile-track-row-panel .lt-track-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.lt-mobile .lt-mobile-track-row-panel .lt-track-mix-controls {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lt-mobile .lt-mobile-track-row-panel .lt-track-toggle-group button {
+  min-width: 40px;
+  min-height: 40px;
+}
+
 /* Grupo "Directo" plegable en movil. Cerrado, es un solo boton y devuelve el
    ancho superior a lo que importa montando; abierto, ofrece los mismos
    controles de siempre, sin recortar ninguno. */
