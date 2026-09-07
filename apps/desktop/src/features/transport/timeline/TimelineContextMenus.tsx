@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { getUiZoom } from "../../../shared/uiZoom";
+import { isMobileApp } from "../desktopApi";
 import type { ContextMenuState } from "../types";
 
 type TimelineContextMenusProps = {
@@ -84,12 +85,21 @@ export function TimelineContextMenus({
   return (
     <div
       ref={menuRef}
-      className="lt-context-menu"
-      style={{
-        left: position.left,
-        top: position.top,
-        maxHeight: position.maxHeight,
-      }}
+      // En movil NO se ancla al dedo. Anclado, un menu largo -y el de tipos de
+      // marca tiene 35 entradas- se sale de pantalla, y sus filas quedan del
+      // tamano de un puntero. Como hoja inferior siempre cae dentro y los
+      // destinos crecen a tamano de dedo. Mismo tratamiento que ya usaba la
+      // biblioteca (`LibrarySidebarPanel`).
+      className={`lt-context-menu${isMobileApp ? " is-mobile-sheet" : ""}`}
+      style={
+        isMobileApp
+          ? undefined
+          : {
+              left: position.left,
+              top: position.top,
+              maxHeight: position.maxHeight,
+            }
+      }
       onClick={(event) => event.stopPropagation()}
     >
       <strong>{contextMenu.title}</strong>
