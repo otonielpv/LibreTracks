@@ -11174,7 +11174,7 @@ html.lt-ios body {
 .lt-marker-position-editor.is-mobile-sheet {
   left: 0;
   right: 0;
-  bottom: calc(0.6rem + var(--lt-safe-area-bottom));
+  bottom: var(--lt-mobile-float-bottom);
   transform: none;
   border-radius: 12px 12px 0 0;
   min-width: 0;
@@ -11233,13 +11233,21 @@ html.lt-ios body {
    borde inferior y encima de la barra de transporte: la vista sigue visible,
    que es justo lo que fallaba al hacerlo pantalla completa. Reutiliza
    .lt-icon-button, sin paleta propia. */
+/* Todo lo que flota sobre el timeline arranca por encima de la barra de
+   desplazamiento lateral (22 px), o el dedo que va a arrastrarla acaba
+   pulsando un boton. Una sola variable para que la barra, su pestana y el
+   editor de posicion no se separen. */
+.lt-mobile {
+  --lt-mobile-float-bottom: calc(2.6rem + var(--lt-safe-area-bottom));
+}
+
 /* Paleta y formas de la app: panel de 2 px como `.lt-context-menu`. Una
    pildora redonda aqui se lee como si fuera de otro programa. */
 .lt-mobile .lt-mobile-selection-actions {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(0.6rem + var(--lt-safe-area-bottom));
+  bottom: var(--lt-mobile-float-bottom);
   z-index: 12;
   display: flex;
   align-items: center;
@@ -11259,7 +11267,7 @@ html.lt-ios body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(0.6rem + var(--lt-safe-area-bottom));
+  bottom: var(--lt-mobile-float-bottom);
   z-index: 12;
   display: inline-flex;
   align-items: center;

@@ -26,11 +26,13 @@ import { useTimelineUIStore } from "../uiStore";
 import { isMobileApp } from "../desktopApi";
 
 /**
- * Sitio que hay que dejar libre en el borde inferior: la barra de acciones
- * flota ahi, y el panel de una pista de abajo la tapaba justo cuando ibas a
- * borrar la pista.
+ * Sitio que hay que dejar libre en el borde inferior: ahi flotan la barra de
+ * acciones y, debajo, la barra de desplazamiento lateral. El panel de una
+ * pista de abajo tapaba la primera justo cuando ibas a borrar la pista.
+ *
+ * Si `--lt-mobile-float-bottom` sube en styles.css, esto sube con ella.
  */
-const BOTTOM_RESERVED_PX = 108;
+const BOTTOM_RESERVED_PX = 140;
 
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
