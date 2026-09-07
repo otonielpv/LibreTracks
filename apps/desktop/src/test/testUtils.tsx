@@ -285,6 +285,7 @@ beforeEach(async () => {
     trackReorderMode: false,
     markerPositionEditorId: null,
     expandedTrackId: null,
+    trackMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,
   });
   // La guia interactiva arranca sola la primera vez y su store sobrevive al

@@ -97,6 +97,43 @@ const TEMPO_LABEL_TOP = 2;
 const METRIC_LABEL_TOP = MOBILE_RULER ? 13 : 20;
 const TIME_SIGNATURE_VERTICAL_OFFSET = 8;
 
+/**
+ * El carril de tempo/compas, partido en dos bandas que NO se solapan.
+ *
+ * Existe porque las zonas tactiles de las dos marcas cubrian el carril ENTERO
+ * cada una: con un tempo y un compas en el mismo punto, la de compas —que se
+ * pinta despues— se comia todos los clics y no habia forma de editar el BPM sin
+ * borrar antes el compas. Pasaba igual en escritorio.
+ *
+ * Las banderas ya se dibujan a alturas distintas; esto pone la misma division
+ * al alcance de quien coloca las zonas tactiles, para que no puedan
+ * desincronizarse del dibujo.
+ */
+export const TEMPO_FLAG_HEIGHT = 13;
+export const TIME_SIGNATURE_FLAG_HEIGHT = 12;
+
+const TEMPO_FLAG_TOP = LANE_TEMPO_METRIC.top + TEMPO_LABEL_TOP;
+const TIME_SIGNATURE_FLAG_TOP =
+  LANE_TEMPO_METRIC.top + METRIC_LABEL_TOP + TIME_SIGNATURE_VERTICAL_OFFSET;
+// La frontera va a MEDIO CAMINO entre las dos banderas, no pegada a la de
+// abajo: asi ninguna de las dos zonas se queda en 6 px, que es lo que salia
+// partiendo por el borde superior de la de compas.
+const BAND_SPLIT = Math.round(
+  (TEMPO_FLAG_TOP + TEMPO_FLAG_HEIGHT + TIME_SIGNATURE_FLAG_TOP) / 2,
+);
+
+export const TEMPO_FLAG_BAND = {
+  top: LANE_TEMPO_METRIC.top,
+  height: BAND_SPLIT - LANE_TEMPO_METRIC.top,
+};
+
+export const TIME_SIGNATURE_FLAG_BAND = {
+  top: BAND_SPLIT,
+  // La bandera de compas se dibuja un poco por debajo del carril; la zona
+  // tactil llega hasta donde llega ella.
+  height: TIME_SIGNATURE_FLAG_TOP + TIME_SIGNATURE_FLAG_HEIGHT - BAND_SPLIT,
+};
+
 function formatRulerMusicalPosition(barNumber: number, beatInBar: number) {
   return `${barNumber}.${beatInBar}.00`;
 }
@@ -686,7 +723,11 @@ export function drawRulerTempoMarker(
     LANE_TEMPO_METRIC.top +
     (isMetricMarker ? METRIC_LABEL_TOP : TEMPO_LABEL_TOP) +
     verticalOffset;
-  const flagHeight = isMetricMarker ? 12 : 13;
+  // Las MISMAS constantes de las que salen las bandas tactiles: si el dibujo
+  // se mueve y la zona no, vuelve el bug de "no puedo editar el BPM".
+  const flagHeight = isMetricMarker
+    ? TIME_SIGNATURE_FLAG_HEIGHT
+    : TEMPO_FLAG_HEIGHT;
   const alignRight = snappedX > width - labelWidth - 12;
   const flagLeft = alignRight ? snappedX - labelWidth - 7 : snappedX + 3;
   const flagRight = flagLeft + labelWidth;

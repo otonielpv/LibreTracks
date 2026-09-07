@@ -298,7 +298,7 @@ describe("App / timeline-tracks", () => {
     expect(screen.getByText("New track")).toBeTruthy();
   });
 
-  it("keeps multi-track selection on right click and only shows color change", async () => {
+  it("keeps multi-track selection on right click and offers what makes sense for several", async () => {
     const { container } = await renderApp();
     const rhythmHeader = getTrackHeader(container, "Rhythm");
     const keysHeader = getTrackHeader(container, "Keys");
@@ -321,8 +321,15 @@ describe("App / timeline-tracks", () => {
     const contextMenu = container.querySelector(".lt-context-menu") as HTMLElement | null;
     expect(contextMenu).toBeTruthy();
     const buttons = within(contextMenu as HTMLElement).getAllByRole("button");
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0].textContent).toContain("Seleccionar color...");
+    // Borrar y color: las dos unicas que tienen sentido sobre una seleccion
+    // de varias. Borrar entro con el borrado por lotes en movil -donde no hay
+    // teclado y eliminar de una en una es insufrible- y va por el MISMO
+    // comando batch que ya usaba el atajo: un solo sync del motor y una sola
+    // entrada de historial.
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      expect.stringContaining("Delete"),
+      expect.stringContaining("Seleccionar color..."),
+    ]);
   });
 
   // Antes de esto sólo Escape quitaba la selección, así que en móvil -donde no

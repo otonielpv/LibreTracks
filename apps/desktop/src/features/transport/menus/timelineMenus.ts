@@ -33,6 +33,7 @@ import {
   deleteSongTempoMarker,
   deleteSongTimeSignatureMarker,
   deleteTrack,
+  deleteTracks,
   moveTrack,
   removeAutomationTrack,
   scheduleMarkerJump,
@@ -1189,8 +1190,28 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
 
   function multiTrackContextMenu(tracks: TrackSummary[]): ContextMenuAction[] {
     const d = getDeps();
+    const { t } = d;
     const currentColor = resolveSharedTimelineColor(tracks);
     return [
+      {
+        // Una sola llamada al backend: un sync del motor, un snapshot y una
+        // entrada de historial, en vez de N idas y vueltas. Mismo camino que
+        // ya usaba el atajo de teclado.
+        label: t("common.delete"),
+        shortcut: d.shortcutHint("edit.delete"),
+        onSelect: async () => {
+          await d.runAction(async () => {
+            const nextSnapshot = await deleteTracks(
+              tracks.map((track) => track.id),
+            );
+            d.applyPlaybackSnapshot(nextSnapshot);
+            d.clearSelection();
+            d.setStatus(
+              t("transport.status.tracksDeleted", { count: tracks.length }),
+            );
+          });
+        },
+      },
       {
         label: "Seleccionar color...",
         swatch: currentColor ?? undefined,

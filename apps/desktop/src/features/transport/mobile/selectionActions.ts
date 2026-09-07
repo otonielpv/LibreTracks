@@ -22,7 +22,8 @@ export type MobileSelectionTarget =
   | { kind: "tempoMarker"; marker: TempoMarkerSummary }
   | { kind: "timeSignatureMarker"; marker: TimeSignatureMarkerSummary }
   | { kind: "region"; region: SongRegionSummary }
-  | { kind: "track"; track: TrackSummary };
+  | { kind: "track"; track: TrackSummary }
+  | { kind: "tracks"; tracks: TrackSummary[] };
 
 export type MobileSelectionInput = {
   song: SongView | null;
@@ -86,11 +87,14 @@ export function resolveMobileSelection(
     return { kind: "marker", marker };
   }
 
-  const track = input.selectedTrackIds.length
-    ? song.tracks.find((entry) => entry.id === input.selectedTrackIds[0])
-    : undefined;
-  if (track) {
-    return { kind: "track", track };
+  const tracks = input.selectedTrackIds
+    .map((id) => song.tracks.find((entry) => entry.id === id))
+    .filter((entry): entry is TrackSummary => Boolean(entry));
+  if (tracks.length > 1) {
+    return { kind: "tracks", tracks };
+  }
+  if (tracks.length === 1) {
+    return { kind: "track", track: tracks[0] };
   }
 
   const region = input.selectedRegionId
@@ -117,6 +121,7 @@ export type MobileSelectionMenus = {
   ) => ContextMenuAction[];
   songRegionContextMenu: (region: SongRegionSummary) => ContextMenuAction[];
   trackContextMenu: (track: TrackSummary) => ContextMenuAction[];
+  multiTrackContextMenu: (tracks: TrackSummary[]) => ContextMenuAction[];
 };
 
 export type MobileCreationHandlers = {
@@ -204,6 +209,15 @@ export function mobileSelectionBarModel(args: {
         title: target.track.name,
         actions: menus.trackContextMenu(target.track),
         count: null,
+      };
+    case "tracks":
+      return {
+        title: t("mobileSelectionActions.tracks", {
+          count: target.tracks.length,
+          defaultValue: "{{count}} pistas",
+        }),
+        actions: menus.multiTrackContextMenu(target.tracks),
+        count: target.tracks.length,
       };
     case "none":
       return {

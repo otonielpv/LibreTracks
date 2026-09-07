@@ -32,6 +32,10 @@ const desktopMenus: MobileSelectionMenus = {
   timeSignatureMarkerContextMenu: vi.fn(() => [action("Cambiar compas")]),
   songRegionContextMenu: vi.fn(() => [action("Renombrar cancion")]),
   trackContextMenu: vi.fn(() => [action("Renombrar pista")]),
+  multiTrackContextMenu: vi.fn(() => [
+    action("Eliminar"),
+    action("Seleccionar color..."),
+  ]),
 };
 
 const creation = {
@@ -60,7 +64,10 @@ const song = {
     { id: "c1", trackId: "t1", timelineStartSeconds: 0, durationSeconds: 4 },
     { id: "c2", trackId: "t1", timelineStartSeconds: 4, durationSeconds: 4 },
   ],
-  tracks: [{ id: "t1", name: "Voz", kind: "audio" }],
+  tracks: [
+    { id: "t1", name: "Voz", kind: "audio" },
+    { id: "t2", name: "Bajo", kind: "audio" },
+  ],
   projectRevision: 1,
 } as unknown as SongView;
 
@@ -141,6 +148,11 @@ describe("las acciones de la barra son las del escritorio", () => {
       name: "pista",
       input: { ...empty, selectedTrackIds: ["t1"] },
       desktop: () => desktopMenus.trackContextMenu(song.tracks[0]),
+    },
+    {
+      name: "varias pistas",
+      input: { ...empty, selectedTrackIds: ["t1", "t2"] },
+      desktop: () => desktopMenus.multiTrackContextMenu(song.tracks),
     },
     {
       name: "marca de tempo",

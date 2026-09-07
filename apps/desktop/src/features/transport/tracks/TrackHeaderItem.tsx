@@ -1,6 +1,8 @@
 import {
   memo,
+  useLayoutEffect,
   useRef,
+  useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -21,6 +23,13 @@ import type { TrackKind } from "../desktopApi";
 import { useTransportStore } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { isMobileApp } from "../desktopApi";
+
+/**
+ * Sitio que hay que dejar libre en el borde inferior: la barra de acciones
+ * flota ahi, y el panel de una pista de abajo la tapaba justo cuando ibas a
+ * borrar la pista.
+ */
+const BOTTOM_RESERVED_PX = 108;
 
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
@@ -140,6 +149,20 @@ function TrackHeaderItemComponent({
   const isExpanded = useTimelineUIStore(
     (state) => state.expandedTrackId === trackId,
   );
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Abrir hacia ARRIBA cuando no cabe debajo. Se mide en vez de calcularse
+  // porque el alto del panel depende de lo que quepa en la fila (el combo de
+  // salida envuelve o no), y una constante se quedaria corta en cuanto alguien
+  // anada un control.
+  const [openUpwards, setOpenUpwards] = useState(false);
+  useLayoutEffect(() => {
+    if (!isExpanded || !panelRef.current) {
+      setOpenUpwards(false);
+      return;
+    }
+    const rect = panelRef.current.getBoundingClientRect();
+    setOpenUpwards(rect.bottom > window.innerHeight - BOTTOM_RESERVED_PX);
+  }, [isExpanded]);
   const effectivePanValue = optimisticMix?.pan ?? panValue;
   const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
   const effectiveTrackSolo = optimisticMix?.solo ?? trackSolo;
@@ -187,11 +210,22 @@ function TrackHeaderItemComponent({
       return;
     }
 
+    // Sumando: el toque anade o quita esta pista de la seleccion y no despliega
+    // nada. Es la unica forma de juntar varias con un dedo —no hay Ctrl que
+    // mantener— y es lo que hace falta para borrarlas de un tiron.
+    if (isMobileApp && useTimelineUIStore.getState().trackMultiSelect) {
+      useTimelineUIStore.getState().toggleTrackSelection(trackId);
+      return;
+    }
+
     onSelectTrack(trackId, trackName, event);
     // En movil la cabecera es fina —solo nombre y estado— asi que el mismo
     // toque que la selecciona despliega sus controles. Dos toques como mucho
     // para llegar a cualquiera de ellos.
-    if (isMobileApp) {
+    //
+    // Salvo reordenando: ahi el dedo esta para mover pistas, y abrir un panel
+    // de faders encima es justo lo contrario de lo que se ha pedido.
+    if (isMobileApp && !useTimelineUIStore.getState().trackReorderMode) {
       useTimelineUIStore.getState().toggleExpandedTrackId(trackId);
     }
   };
@@ -208,29 +242,42 @@ function TrackHeaderItemComponent({
         ...audioRoutingOptions,
       ]
     : audioRoutingOptions;
+  // Mute y solo son los que se pulsan MIENTRAS suena, y comparando entre
+  // pistas. En movil se quedan fijos en la cabecera —son el "estado" que la
+  // cabecera fina tiene que mostrar— porque pagar un despliegue por cada uno
+  // impide justo eso: comparar dos pistas de un tiron. Volumen, pan y salida
+  // se ajustan una vez y viven en el panel.
+  const muteButton = (
+    <button
+      type="button"
+      className={effectiveTrackMuted ? "is-active" : ""}
+      aria-label={t("trackHeader.mute", { defaultValue: "Silenciar" })}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggleMute(trackId);
+      }}
+    >
+      M
+    </button>
+  );
+  const soloButton = (
+    <button
+      type="button"
+      className={effectiveTrackSolo ? "is-active" : ""}
+      aria-label={t("trackHeader.solo", { defaultValue: "Solo" })}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggleSolo(trackId);
+      }}
+    >
+      S
+    </button>
+  );
   const controlRow = (
           <div className="lt-track-control-row">
             <div className="lt-track-toggle-group">
-              <button
-                type="button"
-                className={effectiveTrackMuted ? "is-active" : ""}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleMute(trackId);
-                }}
-              >
-                M
-              </button>
-              <button
-                type="button"
-                className={effectiveTrackSolo ? "is-active" : ""}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleSolo(trackId);
-                }}
-              >
-                S
-              </button>
+              {isMobileApp ? null : muteButton}
+              {isMobileApp ? null : soloButton}
               <button
                 type="button"
                 className={trackTransposeEnabled ? "is-active" : ""}
@@ -367,7 +414,8 @@ function TrackHeaderItemComponent({
   const expandedPanel =
     isMobileApp && isExpanded ? (
       <div
-        className="lt-mobile-track-row-panel"
+        ref={panelRef}
+        className={`lt-mobile-track-row-panel ${openUpwards ? "is-above" : ""}`}
         onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
@@ -410,6 +458,12 @@ function TrackHeaderItemComponent({
                 ) : null}
                 <strong>{trackName}</strong>
               </div>
+              {isMobileApp ? (
+                <div className="lt-track-toggle-group lt-mobile-track-state">
+                  {muteButton}
+                  {soloButton}
+                </div>
+              ) : null}
               {metaLabel ? <span className="lt-track-meta">{metaLabel}</span> : null}
             </div>
           </div>

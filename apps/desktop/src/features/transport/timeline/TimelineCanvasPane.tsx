@@ -69,7 +69,8 @@ import {
   LANE_CUES,
   LANE_REGIONS,
   LANE_SECTIONS,
-  LANE_TEMPO_METRIC,
+  TEMPO_FLAG_BAND,
+  TIME_SIGNATURE_FLAG_BAND,
 } from "../Renderer/drawBackground";
 import { markerCategory } from "../markerKinds";
 import {
@@ -1065,10 +1066,13 @@ export function TimelineCanvasPane({
                 className="lt-tempo-hotspot"
                 aria-label={`Carril inferior: tempo ${marker.bpm.toFixed(2)} BPM`}
                 title={`Carril inferior: tempo ${marker.bpm.toFixed(2)} BPM`}
+                // Su banda, no el carril entero: con un tempo y un compas en el
+                // mismo punto, la zona del compas -que se pinta despues- se
+                // comia todos los clics.
                 style={{
                   left: marker.startSeconds * pixelsPerSecond,
-                  top: LANE_TEMPO_METRIC.top,
-                  height: LANE_TEMPO_METRIC.height,
+                  top: TEMPO_FLAG_BAND.top,
+                  height: TEMPO_FLAG_BAND.height,
                 }}
                 onMouseDown={(event) => {
                   event.preventDefault();
@@ -1108,8 +1112,8 @@ export function TimelineCanvasPane({
                 title={`Carril inferior: compás ${marker.signature}`}
                 style={{
                   left: marker.startSeconds * pixelsPerSecond,
-                  top: LANE_TEMPO_METRIC.top,
-                  height: LANE_TEMPO_METRIC.height,
+                  top: TIME_SIGNATURE_FLAG_BAND.top,
+                  height: TIME_SIGNATURE_FLAG_BAND.height,
                 }}
                 onMouseDown={(event) => {
                   event.preventDefault();

@@ -27,7 +27,10 @@ const song = {
   regions: [],
   sectionMarkers: [{ id: "m1", name: "Estrofa", startSeconds: 8 }],
   clips: [{ id: "c1", trackId: "t1", timelineStartSeconds: 0, durationSeconds: 4 }],
-  tracks: [{ id: "t1", name: "Voz", kind: "audio" }],
+  tracks: [
+    { id: "t1", name: "Voz", kind: "audio" },
+    { id: "t2", name: "Bajo", kind: "audio" },
+  ],
   projectRevision: 1,
 } as unknown as SongView;
 
@@ -48,7 +51,8 @@ const menus: MobileSelectionMenus = {
     { label: "Cambiar compas", onSelect: vi.fn() },
   ],
   songRegionContextMenu: () => [],
-  trackContextMenu: () => [],
+  trackContextMenu: () => [{ label: "Renombrar", onSelect: vi.fn() }],
+  multiTrackContextMenu: () => [{ label: "Eliminar", onSelect: vi.fn() }],
 };
 
 const creation = {
@@ -182,6 +186,30 @@ describe("la barra de la seleccion, generalizada", () => {
   it("de fabrica se ve: es la respuesta a no saber por donde empezar", () => {
     renderBar();
     expect(screen.getByRole("toolbar")).toBeTruthy();
+  });
+
+  it("con una pista ofrece sumar mas, para borrarlas de un tiron", () => {
+    useTimelineUIStore.getState().selectTrack(["t1"]);
+    renderBar();
+    // Con un dedo no hay Ctrl que mantener.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Seleccionar varias pistas" }),
+    );
+    expect(useTimelineUIStore.getState().trackMultiSelect).toBe(true);
+  });
+
+  it("con varias pistas las acciones son las del menu de varias", () => {
+    useTimelineUIStore.getState().selectTrack(["t1", "t2"]);
+    renderBar();
+    expect(screen.getByRole("button", { name: "Eliminar" })).toBeTruthy();
+    expect(screen.getByRole("toolbar").textContent).toContain("2");
+  });
+
+  it("sin pista seleccionada no ofrece sumar pistas", () => {
+    renderBar();
+    expect(
+      screen.queryByRole("button", { name: "Seleccionar varias pistas" }),
+    ).toBeNull();
   });
 
   it("permite soltar la seleccion sin tocar el audio", () => {

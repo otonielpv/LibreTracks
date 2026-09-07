@@ -64,6 +64,10 @@ type TimelineUIState = {
   markerPositionEditorId: string | null;
   /** Móvil: pista cuya fila está desplegada con sus controles; null si ninguna. */
   expandedTrackId: string | null;
+  /** Móvil: los toques en las cabeceras SUMAN a la selección en vez de
+   * reemplazarla. Sin esto no hay forma de borrar varias pistas de un tirón
+   * con un dedo: no hay Ctrl que mantener. */
+  trackMultiSelect: boolean;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
@@ -94,6 +98,8 @@ type TimelineUIState = {
   toggleTrackReorderMode: () => void;
   setMarkerPositionEditorId: (markerId: string | null) => void;
   toggleExpandedTrackId: (trackId: string) => void;
+  setTrackMultiSelect: (enabled: boolean) => void;
+  toggleTrackSelection: (trackId: string) => void;
   setExpandedTrackId: (trackId: string | null) => void;
 };
 
@@ -114,6 +120,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     trackReorderMode: false,
     markerPositionEditorId: null,
     expandedTrackId: null,
+    trackMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);
@@ -212,7 +219,10 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       });
     },
     clearSelection: () => {
-      set({ ...EMPTY_SELECTION });
+      // Soltar la seleccion sale tambien del modo de sumar pistas: si no,
+      // el siguiente toque en una cabecera volveria a sumar sin que nadie lo
+      // haya pedido.
+      set({ ...EMPTY_SELECTION, trackMultiSelect: false });
     },
     /** Como `clearSelection`, pero no toca el estado si no había nada
      * seleccionado. El fondo del timeline llama a esto en CADA clic de salto y
@@ -294,6 +304,17 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     setExpandedTrackId: (expandedTrackId) => {
       set({ expandedTrackId });
+    },
+    setTrackMultiSelect: (trackMultiSelect) => {
+      set({ trackMultiSelect });
+    },
+    toggleTrackSelection: (trackId) => {
+      set((state) => ({
+        ...EMPTY_SELECTION,
+        selectedTrackIds: state.selectedTrackIds.includes(trackId)
+          ? state.selectedTrackIds.filter((id) => id !== trackId)
+          : [...state.selectedTrackIds, trackId],
+      }));
     },
   })),
 );

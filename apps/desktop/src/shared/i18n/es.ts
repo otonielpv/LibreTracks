@@ -19,6 +19,9 @@ const es = {
   mobileSelectionActions: {
     clips_one: "{{count}} clip",
     clips_other: "{{count}} clips",
+    tracks_one: "{{count}} pista",
+    tracks_other: "{{count}} pistas",
+    multiSelect: "Seleccionar varias pistas",
     tempoMarker: "Tempo {{bpm}}",
     timeSignatureMarker: "Compás {{signature}}",
     create: "Añadir",
@@ -1219,6 +1222,8 @@ const es = {
     dragHintTimelineMultiple: "Suelta en el timeline para crear clips",
   },
   trackHeader: {
+    mute: "Silenciar",
+    solo: "Solo",
     childrenCount: "{{count}} hijos",
     expand: "Expandir {{name}}",
     collapse: "Colapsar {{name}}",

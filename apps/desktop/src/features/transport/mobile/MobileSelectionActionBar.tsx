@@ -75,6 +75,9 @@ export function MobileSelectionActionBar({
     (state) => state.selectedTimeSignatureMarkerId,
   );
   const [open, setOpen] = useState(readSelectionBarOpen);
+  const trackMultiSelect = useTimelineUIStore(
+    (state) => state.trackMultiSelect,
+  );
 
   if (!isMobileApp || !menus) {
     return null;
@@ -122,6 +125,7 @@ export function MobileSelectionActionBar({
   }
 
   const hasSelection = target.kind !== "none";
+  const isTrackTarget = target.kind === "track" || target.kind === "tracks";
   const inline = model.actions.slice(0, MAX_INLINE_ACTIONS);
   const hasMore = model.actions.length > inline.length;
 
@@ -171,6 +175,26 @@ export function MobileSelectionActionBar({
         >
           <span className="material-symbols-outlined" aria-hidden="true">
             more_horiz
+          </span>
+        </button>
+      ) : null}
+      {isTrackTarget ? (
+        <button
+          type="button"
+          className={`lt-icon-button ${trackMultiSelect ? "is-active" : ""}`}
+          aria-label={t("mobileSelectionActions.multiSelect", {
+            defaultValue: "Seleccionar varias pistas",
+          })}
+          aria-pressed={trackMultiSelect}
+          // Con un dedo no hay Ctrl que mantener. Activado, cada toque en una
+          // cabecera suma o quita esa pista, y las acciones pasan a ser las de
+          // la seleccion entera —incluido borrarlas de un tiron—.
+          onClick={() =>
+            useTimelineUIStore.getState().setTrackMultiSelect(!trackMultiSelect)
+          }
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            checklist
           </span>
         </button>
       ) : null}

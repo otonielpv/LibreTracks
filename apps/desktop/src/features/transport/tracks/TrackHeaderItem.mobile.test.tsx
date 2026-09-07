@@ -56,13 +56,16 @@ function renderHeader(overrides: Overrides = {}) {
   return props;
 }
 
-const mute = () => screen.queryByRole("button", { name: "M" });
+const mute = () => screen.queryByRole("button", { name: "Silenciar" });
+const solo = () => screen.queryByRole("button", { name: "Solo" });
+/** El panel desplegado: es lo unico que trae el fader de volumen. */
+const panel = () => screen.queryByLabelText("Volumen de Voz");
 const tapHeader = () => fireEvent.click(screen.getByText("Voz"));
 
 beforeEach(async () => {
   await i18n.changeLanguage("es");
   platform.mobile = true;
-  useTimelineUIStore.setState({ expandedTrackId: null });
+  useTimelineUIStore.setState({ expandedTrackId: null, trackReorderMode: false });
 });
 afterEach(cleanup);
 
@@ -73,27 +76,40 @@ describe("cabeceras finas y expansion en fila", () => {
     expect(MOBILE_HEADER_WIDTH).toBeLessThan(HEADER_WIDTH);
   });
 
-  it("en movil la cabecera solo lleva nombre y estado", () => {
+  it("en movil la cabecera lleva nombre y estado, y nada mas", () => {
     renderHeader();
     expect(screen.getByText("Voz")).toBeTruthy();
-    expect(mute()).toBeNull();
+    // Mute y solo son el ESTADO: se pulsan mientras suena y comparando entre
+    // pistas, asi que no pueden costar un despliegue cada uno.
+    expect(mute()).toBeTruthy();
+    expect(solo()).toBeTruthy();
+    expect(panel()).toBeNull();
   });
 
   it("en escritorio la cabecera no cambia", () => {
     platform.mobile = false;
     renderHeader();
     expect(mute()).toBeTruthy();
+    expect(panel()).toBeTruthy();
   });
 
   it("un toque despliega la fila con sus controles; otro la cierra", () => {
     renderHeader();
     tapHeader();
     expect(useTimelineUIStore.getState().expandedTrackId).toBe("t1");
-    expect(mute()).toBeTruthy();
+    expect(panel()).toBeTruthy();
 
     tapHeader();
     expect(useTimelineUIStore.getState().expandedTrackId).toBeNull();
-    expect(mute()).toBeNull();
+    expect(panel()).toBeNull();
+  });
+
+  it("reordenando, el dedo es para mover pistas: no despliega nada", () => {
+    useTimelineUIStore.setState({ trackReorderMode: true });
+    renderHeader();
+    tapHeader();
+    expect(useTimelineUIStore.getState().expandedTrackId).toBeNull();
+    expect(panel()).toBeNull();
   });
 
   it("desplegar no impide seleccionar: el toque hace las dos cosas", () => {
@@ -102,11 +118,18 @@ describe("cabeceras finas y expansion en fila", () => {
     expect(props.onSelectTrack).toHaveBeenCalledTimes(1);
   });
 
-  it("los controles siguen alcanzables en dos toques", () => {
+  it("mute y solo van a UN toque, sin desplegar", () => {
+    const props = renderHeader();
+    fireEvent.click(mute()!);
+    expect(props.onToggleMute).toHaveBeenCalledWith("t1");
+    expect(useTimelineUIStore.getState().expandedTrackId).toBeNull();
+  });
+
+  it("el resto sigue alcanzable en dos toques", () => {
     const props = renderHeader();
     tapHeader(); // 1: despliega
-    fireEvent.click(screen.getByRole("button", { name: "M" })); // 2: actua
-    expect(props.onToggleMute).toHaveBeenCalledWith("t1");
+    fireEvent.change(panel()!, { target: { value: "0.5" } }); // 2: actua
+    expect(props.onVolumeChange).toHaveBeenCalled();
   });
 
   it("solo hay una fila desplegada a la vez", () => {
