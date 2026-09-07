@@ -1,6 +1,4 @@
-import { mobilePreparationEn } from "../../features/transport/mobile/messages";
 const en = {
-  mobilePreparation: mobilePreparationEn,
   common: {
     systemDefault: "System Default",
     close: "Close",

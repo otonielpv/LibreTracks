@@ -15,6 +15,14 @@ import {
   snapToTimelineGrid,
 } from "./timelineMath";
 
+/**
+ * Escala a la que las lineas de beat SI se dibujan. Antes estas pruebas pasaban
+ * `1` como relleno porque `snapToTimelineGrid` ignoraba la escala; ahora la usa
+ * para no ajustar a una rejilla invisible (ver MIN_BEAT_GRID_PIXELS), asi que
+ * hay que declarar el zoom en el que se quiere ajuste por beat.
+ */
+const BEAT_GRID_VISIBLE_PPS = 126;
+
 describe("timelineMath", () => {
   it("uses the declared beat unit for musical positions", () => {
     expect(getMusicalPosition(0.25, 120, "6/8")).toEqual({
@@ -26,14 +34,14 @@ describe("timelineMath", () => {
   });
 
   it("snaps against the fixed timebase without drifting over long durations", () => {
-    expect(snapToTimelineGrid(3600.124, 120, "4/4", 1, 1)).toBe(3600);
-    expect(snapToTimelineGrid(3600.376, 120, "4/4", 1, 1)).toBe(3600.5);
+    expect(snapToTimelineGrid(3600.124, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS)).toBe(3600);
+    expect(snapToTimelineGrid(3600.376, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS)).toBe(3600.5);
   });
 
   it("snaps negative pre-roll positions before bar one", () => {
-    expect(snapToTimelineGrid(-0.26, 120, "4/4", 1, 1)).toBe(-0.5);
+    expect(snapToTimelineGrid(-0.26, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS)).toBe(-0.5);
     expect(
-      snapToTimelineGrid(-0.74, 120, "4/4", 1, 1, [
+      snapToTimelineGrid(-0.74, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS, [
         { startSeconds: 0, endSeconds: 8, bpm: 120, timeSignature: "4/4" },
       ]),
     ).toBe(-0.5);
@@ -158,7 +166,7 @@ describe("timelineMath", () => {
       beatInBar: 4,
       isBarStart: false,
     });
-    expect(snapToTimelineGrid(1.74, 120, "4/4", 1, 1, regions)).toBe(1.75);
+    expect(snapToTimelineGrid(1.74, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS, regions)).toBe(1.75);
   });
 
   it("falls back to a single implicit region when all provided regions are invalid", () => {
@@ -203,14 +211,14 @@ describe("timelineMath", () => {
       { startSeconds: 8, endSeconds: 14, bpm: 60, timeSignature: "4/4" },
     ];
 
-    expect(snapToTimelineGrid(8.49, 120, "4/4", 1, 1, regions)).toBe(8);
-    expect(snapToTimelineGrid(8.51, 120, "4/4", 1, 1, regions)).toBe(9);
+    expect(snapToTimelineGrid(8.49, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS, regions)).toBe(8);
+    expect(snapToTimelineGrid(8.51, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS, regions)).toBe(9);
   });
 
   it("clamps snapping to the end of the active region", () => {
     const regions = [{ startSeconds: 8, endSeconds: 8.6, bpm: 60, timeSignature: "4/4" }];
 
-    expect(snapToTimelineGrid(8.59, 120, "4/4", 1, 1, regions)).toBe(8.6);
+    expect(snapToTimelineGrid(8.59, 120, "4/4", 7, BEAT_GRID_VISIBLE_PPS, regions)).toBe(8.6);
   });
 
   it("uses fallback bpm and time signature when region values are invalid", () => {

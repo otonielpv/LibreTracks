@@ -203,7 +203,6 @@ import { MetronomePopover } from "./panels/MetronomePopover";
 import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
 import { MobileTrackHeaderActions } from "./mobile/MobileTrackHeaderActions";
-import { MobilePreparation } from "./mobile/MobilePreparation";
 import { touchContextPosition } from "./timeline/touchContextPosition";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
@@ -7457,16 +7456,6 @@ export function TransportPanelContent() {
                 )
               ) : (
                 <section className="lt-main-stage">
-                  <MobilePreparation
-                    positionRef={displayPositionSecondsRef} assets={libraryAssets}
-                    importing={isImportingLibrary} importMessage={libraryImportProgress?.message}
-                    fitZoomLevel={fitAllZoomLevel} laneViewportWidth={laneViewportWidth}
-                    routes={audioRoutingOptions} onImport={handleImportLibraryFromDialog}
-                    onLibrary={() => setActiveSidebarTab("library")} onSettings={handleSettingsButtonClick}
-                    onSave={handleSaveProjectClick} onSnapshot={applyPlaybackSnapshot}
-                    refreshSong={refreshSongView} onCreateCue={createAutomationCueAt}
-                    onEditCue={editAutomationCue} normalizeSeconds={normalizeTimelineSeekSeconds}
-                  />
                   {viewMode !== "live" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}

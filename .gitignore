@@ -64,6 +64,10 @@ bench-out*
 # Android release signing credentials — NEVER commit (contains passwords and
 # points at the private keystore). Each developer keeps their own copy.
 apps/desktop/src-tauri/gen/android/keystore.properties
+# Cualquier variante renombrada: apartar el keystore para una build local de
+# prueba es habitual, y sin este patron el fichero con las contrasenas deja de
+# estar ignorado y se cuela en un commit.
+apps/desktop/src-tauri/gen/android/keystore.properties.*
 *.jks
 *.keystore
 __pycache__/

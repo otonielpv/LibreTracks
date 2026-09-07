@@ -433,6 +433,30 @@ export function zoomCameraAtViewportX(params: {
   );
 }
 
+/**
+ * Ancho minimo en pixeles para que la linea de un beat se dibuje.
+ *
+ * Lo comparten el dibujo de la rejilla y el snap A PROPOSITO. Cuando cada uno
+ * decidia por su cuenta, `snapToTimelineGrid` ajustaba siempre al beat mas
+ * cercano mientras la rejilla, alejada, solo pintaba compases: la marca caia
+ * en una linea que no existia en pantalla y parecia "aparecer en otro sitio".
+ * Si cambias este umbral, cambia para los dos.
+ */
+export const MIN_BEAT_GRID_PIXELS = 16;
+
+/** "beat" si su linea se dibuja a este zoom; "bar" si solo se ven compases. */
+export function timelineGridResolution(
+  beatDurationSeconds: number,
+  pixelsPerSecond: number,
+): "beat" | "bar" {
+  if (!Number.isFinite(pixelsPerSecond) || pixelsPerSecond <= 0) {
+    return "beat";
+  }
+  return beatDurationSeconds * pixelsPerSecond >= MIN_BEAT_GRID_PIXELS
+    ? "beat"
+    : "bar";
+}
+
 export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGrid {
   const safeDuration = Math.max(0, params.durationSeconds);
   const safePixelsPerSecond = clampPositive(params.pixelsPerSecond, 1);
@@ -447,7 +471,8 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
   const subdivisionPerBeat = 1;
   const snapIntervalSeconds = beatDuration;
   const showBeatLabels = beatPixels >= 120 && params.zoomLevel >= 9;
-  const showBeatGridLines = beatPixels >= 16;
+  const showBeatGridLines =
+    timelineGridResolution(beatDuration, safePixelsPerSecond) === "beat";
   const barLabelStep =
     showBeatLabels ? 1 : barPixels >= 240 ? 1 : barPixels >= 120 ? 2 : barPixels >= 64 ? 4 : 8;
 
@@ -554,14 +579,45 @@ export function firstIndexAtOrAfter(
   return low;
 }
 
+/** Duracion del beat en esa posicion, respetando los cambios de tempo. */
+function beatDurationSecondsAt(
+  seconds: number,
+  bpm: number,
+  timeSignature: string,
+  regions: TimelineRegion[],
+): number {
+  if (regions.length > 0) {
+    const resolved = normalizeTimelineRegions({
+      durationSeconds: Math.max(0, ...regions.map((region) => region.endSeconds), seconds),
+      bpm,
+      timeSignature,
+      regions,
+    });
+    const region = resolveTimelineRegionAtSeconds(seconds, resolved) ?? resolved[0];
+    if (region) return region.beatDurationSeconds;
+  }
+  return timebaseFramesToSeconds(getBeatFrames(bpm, timeSignature));
+}
+
 export function snapToTimelineGrid(
   seconds: number,
   bpm: number,
   timeSignature: string,
   _zoomLevel: number,
-  _pixelsPerSecond: number,
+  pixelsPerSecond: number,
   regions: TimelineRegion[] = [],
 ) {
+  // Ajusta a lo que el usuario VE. Alejado, las lineas de beat no se dibujan
+  // (ver MIN_BEAT_GRID_PIXELS) y ajustar a ellas dejaba el contenido en una
+  // rejilla invisible; ahi el compas es la unidad visible.
+  if (
+    timelineGridResolution(
+      beatDurationSecondsAt(seconds, bpm, timeSignature, regions),
+      pixelsPerSecond,
+    ) === "bar"
+  ) {
+    return snapToTimelineBar(seconds, bpm, timeSignature, regions);
+  }
   if (regions.length > 0) {
     const resolvedRegions = normalizeTimelineRegions({
       durationSeconds: Math.max(0, ...regions.map((region) => region.endSeconds), seconds),

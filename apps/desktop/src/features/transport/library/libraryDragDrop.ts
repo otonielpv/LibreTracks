@@ -1740,7 +1740,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
   // Library "import audio" button. Unified with drag-and-drop: pick paths, show
   // the same per-file "analyzing" placeholders, and run the shared pipeline —
   // but WITHOUT the timeline tail (library-only, no tracks/clips created).
-  async function handleImportLibraryFromDialog(options?: { placeAfterImport?: boolean }) {
+  async function handleImportLibraryFromDialog() {
     if (!deps().playbackSongDirRef.current) {
       deps().setStatus(deps().t("transport.status.importRequiresSession"));
       return;
@@ -1787,7 +1787,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
         },
         importFn: () => importStagedAudioFiles(stagedPayloads),
         onImported: async (importedAssets) => {
-          if (importedAssets.length === 0 || options?.placeAfterImport === false) {
+          if (importedAssets.length === 0) {
             return;
           }
           const shouldPlace = await confirmDialog(
