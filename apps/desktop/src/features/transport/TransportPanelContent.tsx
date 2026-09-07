@@ -7995,6 +7995,13 @@ export function TransportPanelContent() {
                             handleDomExternalDropPreviewChange
                           }
                           onExternalDrop={handleExternalTimelineDrop}
+                          onAddAudios={
+                            isMobileApp
+                              ? () => {
+                                  void handleImportLibraryFromDialog();
+                                }
+                              : undefined
+                          }
                         />
                       </div>
                     </div>

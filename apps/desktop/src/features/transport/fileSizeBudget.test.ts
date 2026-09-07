@@ -40,9 +40,9 @@ const BUDGETS: Record<string, number> = {
   "TransportPanelContent.tsx": 8500,
   "library/libraryDragDrop.ts": 2300,
   // Bajado de 2000 tras extraer timeline/useRegionDrag.ts (paso 02 de
-  // docs/plans/ui-performance). La cabecera de este fichero pide bajar el
-  // numero cuando un fichero adelgaza de verdad, o deja de avisar de nada.
-  "timeline/TimelineCanvasPane.tsx": 1700,
+  // docs/plans/ui-performance), y de 1700 tras sacar
+  // timeline/describeAutomationCue.ts (paso 1 de docs/plans/mobile-daw).
+  "timeline/TimelineCanvasPane.tsx": 1650,
   "menus/timelineMenus.ts": 1650,
   "panels/SettingsPanel.tsx": 1500,
   "timeline/TimelineToolbar.tsx": 1250,

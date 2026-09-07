@@ -38,7 +38,6 @@ import {
   buildSongTempoRegions,
   type MarkerCategory,
 } from "@libretracks/shared/models";
-import { formatGainDb } from "@libretracks/shared/faderScale";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
@@ -46,6 +45,7 @@ import {
   markerFlagLabel,
   measureMarkerFlagWidth,
 } from "../Renderer/markerFlagMetrics";
+import { describeAutomationCue } from "./describeAutomationCue";
 import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
 import { useFollowerX } from "./useFollowerX";
 import { regionHotspotBounds } from "./regionHotspotBounds";
@@ -57,6 +57,7 @@ import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useTouchContextMenu } from "./useTouchContextMenu";
 import { rulerClientXToSeconds } from "../helpers";
 import { useTouchClipSelection } from "../mobile/touchClipSelection";
+import { MobileEmptyLanes } from "../mobile/MobileEmptyLanes";
 import { useTimelineUIStore } from "../uiStore";
 import { useBoundedTimelineScroll } from "./useBoundedTimelineScroll";
 import {
@@ -105,99 +106,6 @@ const RULER_HEIGHT = isMobileApp ? 94 : 134;
  * que el usuario apunta cuando quiere mover la marca- quedaria fuera de la zona
  * tactil. Un dedo no necesita mas: lo ancho del boton lo da la bandera. */
 const MARKER_HOTSPOT_PAD_LEFT_PX = 6;
-
-type Translate = (key: string, options?: Record<string, unknown>) => string;
-
-/** Human-readable, multi-line summary of a cue's job for the hover tooltip. */
-function describeAutomationCue(
-  cue: AutomationCueSummary,
-  song: SongView | null,
-  t: Translate,
-): string {
-  const trackName = (id: string) =>
-    song?.tracks.find((t) => t.id === id)?.name ?? id;
-  const sceneName = (id: string) =>
-    song?.mixScenes?.find((s) => s.id === id)?.name ?? id;
-  const targetName = (target: AutomationCueSummary["actions"][number]) => {
-    if (target.type !== "jump") return "";
-    const jumpTarget = target.target;
-    if (jumpTarget.kind === "region") {
-      return (
-        song?.regions.find((r) => r.id === jumpTarget.regionId)?.name ??
-        t("transport.automation.defaultRegionTarget")
-      );
-    }
-    if (jumpTarget.kind === "marker") {
-      return (
-        song?.sectionMarkers.find((m) => m.id === jumpTarget.markerId)?.name ??
-        t("transport.automation.defaultMarkerTarget")
-      );
-    }
-    return `${jumpTarget.seconds.toFixed(2)}s`;
-  };
-
-  const lines = (cue.actions ?? []).map((action) => {
-    switch (action.type) {
-      case "jump": {
-        const fade =
-          action.transition.mode === "fade_out" &&
-          (action.transition.durationSeconds ?? 0) > 0
-            ? t("transport.automation.cueFadeSuffix", {
-                seconds: (action.transition.durationSeconds ?? 0).toFixed(1),
-              })
-            : "";
-        return t("transport.automation.cueJumpLine", {
-          target: targetName(action),
-          fade,
-        });
-      }
-      case "setTrackMute":
-        return `${t(
-          action.muted
-            ? "transport.automation.cueMute"
-            : "transport.automation.cueUnmute",
-        )} ${trackName(action.trackId)}`;
-      case "setTrackSolo":
-        return `${t(
-          action.solo
-            ? "transport.automation.cueSolo"
-            : "transport.automation.cueUnsolo",
-        )} ${trackName(action.trackId)}`;
-      case "setTrackMix": {
-        const parts: string[] = [];
-        if (action.volume != null)
-          parts.push(`vol ${Math.round(action.volume * 100)}`);
-        if (action.pan != null)
-          parts.push(`pan ${Math.round(action.pan * 100)}`);
-        return `${trackName(action.trackId)}: ${parts.join(", ") || t("transport.automation.cueMixFallback")}`;
-      }
-      case "applyScene":
-        return t("transport.automation.cueScene", {
-          name: sceneName(action.sceneId),
-        });
-      case "setPad":
-        return t(action.enabled
-          ? "transport.automation.cuePadOn"
-          : "transport.automation.cuePadOff", {
-          pack: action.padId,
-          key: ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"][action.padKey] ?? "C",
-          volume: formatGainDb(action.volume),
-          output: action.output,
-        });
-      case "wait":
-        return t("transport.automation.cueWait", {
-          seconds: action.durationSeconds,
-        });
-    }
-  });
-
-  const runs =
-    cue.maxRuns != null
-      ? t("transport.automation.cueRuns", { count: cue.maxRuns })
-      : "";
-  const header = `${cue.name} - ${cue.atSeconds.toFixed(2)}s${runs}${cue.enabled ? "" : t("transport.automation.cueDisabled")}`;
-  return lines.length ? `${header}\n${lines.join("\n")}` : header;
-}
 
 type LibraryClipPreviewState = {
   trackId: string | null;
@@ -410,6 +318,8 @@ type TimelineCanvasPaneProps = {
     classification: DroppedFileClassification,
     seconds: number,
   ) => void;
+  /** Movil: abre el dialogo de importacion desde el area de carriles vacia. */
+  onAddAudios?: () => void;
 };
 
 export function TimelineCanvasPane({
@@ -489,6 +399,7 @@ export function TimelineCanvasPane({
   nativeDropKindRef,
   onExternalDropPreviewChange,
   onExternalDrop,
+  onAddAudios,
 }: TimelineCanvasPaneProps) {
   useRenderCounter("TimelineCanvasPane");
   const { t } = useTranslation();
@@ -1687,7 +1598,14 @@ export function TimelineCanvasPane({
             aria-label={t("transport.preview.newTracksDropzone")}
             onDragEnter={handleTimelineDragEnter}
             onMouseDown={onTimelineBackgroundMouseDown}
-          />
+          >
+            {onAddAudios ? (
+              <MobileEmptyLanes
+                trackCount={visibleTracks.length}
+                onAddAudios={onAddAudios}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

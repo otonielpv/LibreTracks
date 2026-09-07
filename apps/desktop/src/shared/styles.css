@@ -10927,6 +10927,50 @@ html.lt-ios body {
   min-height: 44px;
 }
 
+/* El area de carriles vacia propone el primer paso en vez de ser un muro
+   negro. Solo se pinta sin pistas, asi que no compite por sitio con el audio. */
+.lt-mobile .lt-mobile-empty-lanes {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 1rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.lt-mobile .lt-mobile-empty-lanes > .material-symbols-outlined {
+  font-size: 2.4rem;
+  color: #4d5c60;
+}
+
+.lt-mobile .lt-mobile-empty-lanes-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #d6e2df;
+}
+
+.lt-mobile .lt-mobile-empty-lanes-hint {
+  margin: 0;
+  max-width: 26rem;
+  font-size: 0.8rem;
+  color: #94a3a0;
+}
+
+.lt-mobile .lt-mobile-empty-lanes-cta {
+  pointer-events: auto;
+  margin-top: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 1.1rem;
+}
+
 .lt-mobile .lt-mobile-clip-actions-count {
   font-size: 0.75rem;
   color: #bdc9c5;

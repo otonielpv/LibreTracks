@@ -7,6 +7,11 @@ const en = {
     delete: "Delete",
     clear: "Clear selection",
   },
+  mobileEmptyLanes: {
+    title: "No audio in this session yet",
+    hint: "Add the song's audio files and they will show up here as tracks.",
+    addAudios: "Add audio",
+  },
   common: {
     systemDefault: "System Default",
     close: "Close",
