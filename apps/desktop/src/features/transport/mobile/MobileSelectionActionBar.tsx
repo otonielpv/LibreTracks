@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isMobileApp, type SongView } from "../desktopApi";
 import { useTimelineUIStore } from "../uiStore";
@@ -8,6 +9,10 @@ import {
   type MobileCreationHandlers,
   type MobileSelectionMenus,
 } from "./selectionActions";
+import {
+  persistSelectionBarOpen,
+  readSelectionBarOpen,
+} from "./liveSettingsGroup";
 
 /**
  * Cuantas acciones se pintan en la barra antes de mandar el resto a la hoja.
@@ -69,9 +74,37 @@ export function MobileSelectionActionBar({
   const selectedTimeSignatureMarkerId = useTimelineUIStore(
     (state) => state.selectedTimeSignatureMarkerId,
   );
+  const [open, setOpen] = useState(readSelectionBarOpen);
 
   if (!isMobileApp || !menus) {
     return null;
+  }
+
+  const setBarOpen = (next: boolean) => {
+    setOpen(next);
+    persistSelectionBarOpen(next);
+  };
+
+  // Recogida queda una pestana, no nada: esconderla del todo devolveria el
+  // problema que la barra vino a resolver —que no hay nada en pantalla que
+  // diga por donde se empieza—. Su estado sobrevive a cerrar la app, asi que
+  // quien ya se sabe la app la recoge una vez.
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="lt-mobile-selection-actions-tab"
+        aria-label={t("mobileSelectionActions.show", {
+          defaultValue: "Mostrar acciones",
+        })}
+        aria-expanded={false}
+        onClick={() => setBarOpen(true)}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">
+          expand_less
+        </span>
+      </button>
+    );
   }
 
   const target = resolveMobileSelection({
@@ -158,6 +191,19 @@ export function MobileSelectionActionBar({
           </span>
         </button>
       ) : null}
+      <button
+        type="button"
+        className="lt-icon-button lt-mobile-selection-actions-hide"
+        aria-label={t("mobileSelectionActions.hide", {
+          defaultValue: "Ocultar acciones",
+        })}
+        aria-expanded
+        onClick={() => setBarOpen(false)}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">
+          expand_more
+        </span>
+      </button>
     </div>
   );
 }

@@ -28,6 +28,8 @@ const en = {
     addTimeSignature: "Time signature",
     addAudio: "Audio",
     more: "More actions",
+    hide: "Hide actions",
+    show: "Show actions",
   },
   mobileEmptyLanes: {
     title: "No audio in this session yet",

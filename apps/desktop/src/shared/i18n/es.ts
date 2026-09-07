@@ -28,6 +28,8 @@ const es = {
     addTimeSignature: "Compás",
     addAudio: "Audio",
     more: "Más acciones",
+    hide: "Ocultar acciones",
+    show: "Mostrar acciones",
   },
   mobileEmptyLanes: {
     title: "Aún no hay audio en esta sesión",

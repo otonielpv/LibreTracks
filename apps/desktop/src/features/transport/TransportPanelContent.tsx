@@ -7487,13 +7487,6 @@ export function TransportPanelContent() {
                   {viewMode !== "live" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}
-                    onCreateMarkerAtPlayhead={() =>
-                      timelineMenus.createTypedMarker(
-                        displayPositionSecondsRef.current,
-                        null,
-                        null,
-                      )
-                    }
                     subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
                     selectedRegion={selectedRegion}
                     globalJumpMode={appSettings.globalJumpMode}

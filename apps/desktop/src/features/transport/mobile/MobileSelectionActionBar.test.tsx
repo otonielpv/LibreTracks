@@ -77,6 +77,7 @@ beforeEach(async () => {
   await i18n.changeLanguage("es");
   platform.mobile = true;
   vi.clearAllMocks();
+  window.localStorage.clear();
   useTimelineUIStore.getState().clearSelection();
 });
 afterEach(cleanup);
@@ -156,6 +157,31 @@ describe("la barra de la seleccion, generalizada", () => {
     renderBar();
     expect(screen.getByRole("button", { name: "Eliminar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
+  });
+
+  it("se puede recoger, y recogida deja una pestana para volver", () => {
+    renderBar();
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar acciones" }));
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    // Esconderla del todo devolveria el problema que vino a resolver.
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar acciones" }));
+    expect(screen.getByRole("toolbar")).toBeTruthy();
+  });
+
+  it("recogida sigue recogida al reabrir la app", () => {
+    renderBar();
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar acciones" }));
+    cleanup();
+
+    renderBar();
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.getByRole("button", { name: "Mostrar acciones" })).toBeTruthy();
+  });
+
+  it("de fabrica se ve: es la respuesta a no saber por donde empezar", () => {
+    renderBar();
+    expect(screen.getByRole("toolbar")).toBeTruthy();
   });
 
   it("permite soltar la seleccion sin tocar el audio", () => {

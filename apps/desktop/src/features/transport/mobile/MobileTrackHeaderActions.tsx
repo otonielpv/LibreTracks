@@ -23,46 +23,48 @@ export function MobileTrackHeaderActions({
 }: MobileTrackHeaderActionsProps) {
   const { t } = useTranslation();
   return (
-    <>
+    // Los CUATRO en el mismo contenedor. Separados —el de reordenar fuera del
+    // <span>— la columna estrecha los partia en una fila de uno y otra de
+    // tres, porque el <span> es UN item que envuelve por dentro. Juntos caen
+    // en dos filas de dos.
+    <span
+      className="lt-mobile-track-view-controls"
+      data-lt-tour={TOUR_TARGETS.mobileTouchControls}
+    >
       <MobileTrackReorderToggle />
-      <span
-        className="lt-mobile-track-view-controls"
-        data-lt-tour={TOUR_TARGETS.mobileTouchControls}
+      <button
+        type="button"
+        className="lt-icon-button"
+        aria-label={t("timelineToolbar.trackHeightDecrease", {
+          defaultValue: "Pistas más bajas",
+        })}
+        onClick={() => applyTrackHeight(trackHeight - TRACK_HEIGHT_STEP)}
       >
-        <button
-          type="button"
-          className="lt-icon-button"
-          aria-label={t("timelineToolbar.trackHeightDecrease", {
-            defaultValue: "Pistas más bajas",
-          })}
-          onClick={() => applyTrackHeight(trackHeight - TRACK_HEIGHT_STEP)}
-        >
-          <span className="material-symbols-outlined">unfold_less</span>
-        </button>
-        <button
-          type="button"
-          className="lt-icon-button"
-          aria-label={t("timelineToolbar.trackHeightIncrease", {
-            defaultValue: "Pistas más altas",
-          })}
-          onClick={() => applyTrackHeight(trackHeight + TRACK_HEIGHT_STEP)}
-        >
-          <span className="material-symbols-outlined">unfold_more</span>
-        </button>
-        <button
-          type="button"
-          className={`lt-icon-button ${rulerSeekLocked ? "is-active" : ""}`}
-          aria-label={t("timelineToolbar.rulerSeekLock", {
-            defaultValue: "Bloquear salto al tocar el ruler",
-          })}
-          aria-pressed={rulerSeekLocked}
-          onClick={toggleRulerSeekLock}
-        >
-          <span className="material-symbols-outlined">
-            {rulerSeekLocked ? "lock" : "lock_open"}
+        <span className="material-symbols-outlined">unfold_less</span>
+      </button>
+      <button
+        type="button"
+        className="lt-icon-button"
+        aria-label={t("timelineToolbar.trackHeightIncrease", {
+          defaultValue: "Pistas más altas",
+        })}
+        onClick={() => applyTrackHeight(trackHeight + TRACK_HEIGHT_STEP)}
+      >
+        <span className="material-symbols-outlined">unfold_more</span>
+      </button>
+      <button
+        type="button"
+        className={`lt-icon-button ${rulerSeekLocked ? "is-active" : ""}`}
+        aria-label={t("timelineToolbar.rulerSeekLock", {
+          defaultValue: "Bloquear salto al tocar el ruler",
+        })}
+        aria-pressed={rulerSeekLocked}
+        onClick={toggleRulerSeekLock}
+      >
+        <span className="material-symbols-outlined">
+          {rulerSeekLocked ? "lock" : "lock_open"}
           </span>
         </button>
-      </span>
-    </>
+    </span>
   );
 }
