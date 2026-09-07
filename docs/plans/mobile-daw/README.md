@@ -20,7 +20,8 @@ es sencillo, editar una canción que traes del PC sale gratis.
 
 ## Los dos planes
 
-- **[PLAN-A-daw-tactil.md](PLAN-A-daw-tactil.md) — elegido.** Mantiene los
+- **[PLAN-A-daw-tactil.md](PLAN-A-daw-tactil.md) — elegido e implementado**
+  (rama `mobile-daw-plan-a`, un commit por paso). Mantiene los
   carriles y hace táctil la vista DAW: estado vacío que propone el primer paso,
   acciones visibles al seleccionar, ajustes de directo agrupados pero
   accesibles, cabeceras de pista finas.

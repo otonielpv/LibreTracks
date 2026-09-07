@@ -1,6 +1,8 @@
 # Plan A — Hacer táctil la vista DAW
 
-**Estado: elegido.** Mantiene los carriles y el modelo mental de la DAW, y
+**Estado: implementado** (rama `mobile-daw-plan-a`, commits `e887a161`…`fd2e9750`,
+uno por paso). Falta el criterio de salida, que sólo se puede cerrar en un
+dispositivo real — ver el final de este documento. Mantiene los carriles y el modelo mental de la DAW, y
 ataca lo que la hace impracticable en un móvil: que la pantalla no propone
 ningún primer paso y que las acciones están escondidas tras el clic derecho.
 
@@ -174,17 +176,47 @@ tienen un tempo y un compás constantes.
   plataforma, **no** ancho de ventana—. Redimensionar la ventana de escritorio
   nunca debe activar nada de esto.
 
-## Preguntas abiertas
+## Preguntas abiertas (resueltas al implementar)
 
-1. **`+ Sección`: ¿pide el tipo al crear, o crea genérica y se tipifica
-   después?** Lo primero guía más pero mete un paso en el gesto más repetido; lo
-   segundo es más rápido pero deja trabajo pendiente.
-2. **Tablet.** ¿Misma densidad que el móvil, o las cabeceras completas cuando
-   hay ancho? Afecta al paso 5.
+1. **`+ Sección`: pide el tipo al crear.** La marca nace tipificada y nombrada.
+   Cuesta un toque más en el gesto más repetido, y a cambio no deja trabajo
+   pendiente ni sesiones llenas de marcas sin tipo. `+ Sección` y `+ Aviso` van
+   separados y cada uno entra directo en su lista, así que el toque extra no es
+   elegir el grupo, sólo el tipo.
+2. **Tablet: misma densidad que el móvil.** `TRACK_HEADER_WIDTH` cuelga de
+   `isMobileApp` y nada más. Un umbral por ancho metía un segundo camino que se
+   activaría al girar el dispositivo, y la expansión en fila ya da los controles
+   completos en dos toques con o sin ancho de sobra.
 
-## Criterio de salida
+## Lo que se decidió sobre la marcha
 
+- **La lista de la barra es la del escritorio, no una copia.** Cada rama de
+  `mobile/selectionActions.ts` devuelve lo que devuelve la factory del menú
+  contextual, y `selectionActions.test.ts` compara ambas listas objeto a objeto.
+  Por eso «Posición…» se añadió a la factory compartida y el escritorio la ganó
+  también: cualquier otra cosa habría roto esa invariante.
+- **Compás → segundos es la inversa de segundos → compás**, por búsqueda
+  binaria sobre la conversión que ya existe, no un mapa de tempos rehecho
+  (`mobile/musicalPosition.ts`). Vale porque el mapa es monótono, y así no puede
+  desincronizarse al tocar marcas de tempo o cambios de compás.
+- **La fila expandida se superpone, no empuja.** El alto de fila lo comparten la
+  columna de cabeceras y el área de carriles; crecer en un lado desincroniza los
+  dos. Al no haber reflujo, «expandir no cambia el zoom ni la cámara» sale
+  gratis en vez de haber que defenderlo.
+- **Presupuesto de tamaño: se extrajo tres veces, nunca se subió un límite.**
+  `timeline/describeAutomationCue.ts` (paso 1), `mobile/useMobileSelectionBar.ts`
+  (paso 2) y `menus/markerKindMenus.ts` (paso 3). Dos límites bajaron con los
+  ficheros: `TimelineCanvasPane` 1700→1650 y `timelineMenus` 1650→1450.
+
+## Criterio de salida — PENDIENTE
+
+Los seis pasos están implementados y con tests, pero **el plan no está cerrado**.
 No se declara resuelto hasta que **alguien que no conoce la aplicación monte una
 canción de cero en un teléfono**, sin ayuda: importar stems, crear secciones,
 corregir una, ajustar una salida y ensayar. Medido en dispositivo, no en
 emulador.
+
+Y sigue en pie lo que dice el README: **la fluidez real de los gestos no se ha
+medido**. Nada de lo hecho aquí toca el camino del gesto (la barra y el panel de
+fila son superposiciones sin reflujo), pero eso es un argumento, no una medida.
+Ver la batería de pruebas en `../mobile-authoring-research.md`.
