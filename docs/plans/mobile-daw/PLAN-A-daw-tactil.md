@@ -2,9 +2,11 @@
 
 **Estado: implementado** (rama `mobile-daw-plan-a`, commits `e887a161`…`fd2e9750`,
 uno por paso). Falta el criterio de salida, que sólo se puede cerrar en un
-dispositivo real — ver el final de este documento. Mantiene los carriles y el modelo mental de la DAW, y
-ataca lo que la hace impracticable en un móvil: que la pantalla no propone
-ningún primer paso y que las acciones están escondidas tras el clic derecho.
+dispositivo real — ver el final de este documento.
+
+Mantiene los carriles y el modelo mental de la DAW, y ataca lo que la hace
+impracticable en un móvil: que la pantalla no propone ningún primer paso y que
+las acciones están escondidas tras el clic derecho.
 
 ## Principio rector
 
@@ -166,9 +168,11 @@ tienen un tempo y un compás constantes.
 ## Riesgos
 
 - **Presupuesto de tamaño.** `fileSizeBudget.test.ts` vigila
-  `TransportPanelContent.tsx` (8500), `TimelineCanvasPane.tsx` (1700) y otros.
-  La regla del proyecto es **extraer, no subir el límite**. Todo lo nuevo va en
-  `features/transport/mobile/` con el patrón de factory con getters.
+  `TransportPanelContent.tsx` (8500), `TimelineCanvasPane.tsx` y otros. La regla
+  del proyecto es **extraer, no subir el límite**. Todo lo nuevo va en
+  `features/transport/mobile/` con el patrón de factory con getters. Se cumplió:
+  el presupuesto saltó tres veces y las tres se extrajo un bloque; dos límites
+  acabaron más bajos que al empezar.
 - **Estabilidad referencial.** De la navegación táctil cuelga el gesto. Nada que
   se recree por render puede entrar en ese camino; ver
   `docs/REDESIGN_transport_refs_to_stores.md`.
