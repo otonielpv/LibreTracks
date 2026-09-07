@@ -55,6 +55,7 @@ import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useTouchContextMenu } from "./useTouchContextMenu";
+import { rulerClientXToSeconds } from "../helpers";
 import { useBoundedTimelineScroll } from "./useBoundedTimelineScroll";
 import {
   LibraryPreviewLanes,
@@ -538,6 +539,9 @@ export function TimelineCanvasPane({
     }
   };
   const rulerTouchContextMenu = useTouchContextMenu({
+    captureSeconds: isMobileApp ? (clientX) => normalizePositionSeconds(rulerClientXToSeconds(
+      clientX, rulerTrackRef.current!, cameraXRef.current, playheadDurationSeconds, livePixelsPerSecondRef.current,
+    )) : undefined,
     ignoreTarget: (target) =>
       target instanceof Element &&
       Boolean(

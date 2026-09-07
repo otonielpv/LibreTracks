@@ -202,7 +202,9 @@ import { PadsPopover } from "./panels/PadsPopover";
 import { MetronomePopover } from "./panels/MetronomePopover";
 import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
-import { MobileTrackReorderToggle } from "./tracks/MobileTrackReorderToggle";
+import { MobileTrackHeaderActions } from "./mobile/MobileTrackHeaderActions";
+import { MobilePreparation } from "./mobile/MobilePreparation";
+import { touchContextPosition } from "./timeline/touchContextPosition";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
   createSeekCoalescer,
@@ -5268,7 +5270,7 @@ export function TransportPanelContent() {
     event: MouseEvent | ReactMouseEvent,
     durationSeconds: number,
   ) {
-    return normalizeTimelineSeekSeconds(
+    return touchContextPosition(event) ?? normalizeTimelineSeekSeconds(
       rulerClientXToSeconds(
         event.clientX,
         rulerTrackRef.current as HTMLElement,
@@ -7455,6 +7457,16 @@ export function TransportPanelContent() {
                 )
               ) : (
                 <section className="lt-main-stage">
+                  <MobilePreparation
+                    positionRef={displayPositionSecondsRef} assets={libraryAssets}
+                    importing={isImportingLibrary} importMessage={libraryImportProgress?.message}
+                    fitZoomLevel={fitAllZoomLevel} laneViewportWidth={laneViewportWidth}
+                    routes={audioRoutingOptions} onImport={handleImportLibraryFromDialog}
+                    onLibrary={() => setActiveSidebarTab("library")} onSettings={handleSettingsButtonClick}
+                    onSave={handleSaveProjectClick} onSnapshot={applyPlaybackSnapshot}
+                    refreshSong={refreshSongView} onCreateCue={createAutomationCueAt}
+                    onEditCue={editAutomationCue} normalizeSeconds={normalizeTimelineSeekSeconds}
+                  />
                   {viewMode !== "live" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}
@@ -7611,69 +7623,10 @@ export function TransportPanelContent() {
                     >
                       <div className="lt-timeline-main-grid">
                         <TrackHeadersPane
-                          headerActions={
-                            isMobileApp ? (
-                              <>
-                                <MobileTrackReorderToggle />
-                                <span
-                                  className="lt-mobile-track-view-controls"
-                                  data-lt-tour={TOUR_TARGETS.mobileTouchControls}
-                                >
-                                  <button
-                                    type="button"
-                                    className="lt-icon-button"
-                                    aria-label={t(
-                                      "timelineToolbar.trackHeightDecrease",
-                                      { defaultValue: "Pistas más bajas" },
-                                    )}
-                                    onClick={() =>
-                                      applyTrackHeight(
-                                        trackHeight - TRACK_HEIGHT_STEP,
-                                      )
-                                    }
-                                  >
-                                    <span className="material-symbols-outlined">
-                                      unfold_less
-                                    </span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="lt-icon-button"
-                                    aria-label={t(
-                                      "timelineToolbar.trackHeightIncrease",
-                                      { defaultValue: "Pistas más altas" },
-                                    )}
-                                    onClick={() =>
-                                      applyTrackHeight(
-                                        trackHeight + TRACK_HEIGHT_STEP,
-                                      )
-                                    }
-                                  >
-                                    <span className="material-symbols-outlined">
-                                      unfold_more
-                                    </span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`lt-icon-button ${rulerSeekLocked ? "is-active" : ""}`}
-                                    aria-label={t(
-                                      "timelineToolbar.rulerSeekLock",
-                                      {
-                                        defaultValue:
-                                          "Bloquear salto al tocar el ruler",
-                                      },
-                                    )}
-                                    aria-pressed={rulerSeekLocked}
-                                    onClick={toggleRulerSeekLock}
-                                  >
-                                    <span className="material-symbols-outlined">
-                                      {rulerSeekLocked ? "lock" : "lock_open"}
-                                    </span>
-                                  </button>
-                                </span>
-                              </>
-                            ) : undefined
-                          }
+                          headerActions={isMobileApp ? <MobileTrackHeaderActions
+                            trackHeight={trackHeight} applyTrackHeight={applyTrackHeight}
+                            rulerSeekLocked={rulerSeekLocked} toggleRulerSeekLock={toggleRulerSeekLock}
+                          /> : undefined}
                           visibleTracks={visibleTracks}
                           selectedTrackIds={selectedTrackIds}
                           trackHeight={trackHeight}

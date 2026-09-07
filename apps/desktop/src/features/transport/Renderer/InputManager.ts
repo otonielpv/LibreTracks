@@ -5,6 +5,7 @@ import {
   getElementScaleX,
   getElementScaleY,
 } from "../timeline/timelineMath";
+import { MobileTimelineNavigation } from "../mobile/MobileTimelineNavigation";
 
 type NativeZoomView = {
   cameraX: number;
@@ -22,6 +23,7 @@ type InputManagerState = {
 };
 
 type InputManagerOptions = {
+  mobileNavigation?: { enabled: () => boolean; subscribe: (onChange: () => void) => () => void };
   container: HTMLElement;
   getState: () => InputManagerState;
   dragThresholdPx: number;
@@ -116,6 +118,7 @@ type TouchSample = {
 const GESTURE_DECISION_PX = 14;
 
 export class InputManager {
+  private mobileNavigation: MobileTimelineNavigation | null = null;
   private readonly container: HTMLElement;
 
   private panCommitTimer: number | null = null;
@@ -138,6 +141,9 @@ export class InputManager {
 
   constructor(private readonly options: InputManagerOptions) {
     this.container = options.container;
+    if (options.mobileNavigation) {
+      this.mobileNavigation = new MobileTimelineNavigation({ ...options, ...options.mobileNavigation });
+    }
     this.container.addEventListener("wheel", this.handleWheel, { passive: false });
     this.container.addEventListener("mousedown", this.handleMouseDown, { passive: false });
     // Táctil: dos dedos desplazan y hacen zoom, como en una tableta de DAW. Un
@@ -159,6 +165,7 @@ export class InputManager {
   }
 
   destroy() {
+    this.mobileNavigation?.destroy();
     this.container.removeEventListener("wheel", this.handleWheel);
     this.container.removeEventListener("mousedown", this.handleMouseDown);
     this.container.removeEventListener("touchstart", this.handleTouchStart);
@@ -184,6 +191,7 @@ export class InputManager {
   }
 
   private handlePointerDown = (event: PointerEvent) => {
+    if (this.options.mobileNavigation?.enabled()) return;
     if (event.pointerType !== "touch") {
       return;
     }
@@ -571,6 +579,10 @@ export class InputManager {
   }
 
   private handleTouchStart = (event: TouchEvent) => {
+    if (this.options.mobileNavigation?.enabled()) {
+      if (event.cancelable) event.preventDefault();
+      return;
+    }
     const pair = this.touchesInside(event);
     if (!pair) {
       return;

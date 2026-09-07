@@ -1,4 +1,6 @@
+import { mobilePreparationEs } from "../../features/transport/mobile/messages";
 const es = {
+  mobilePreparation: mobilePreparationEs,
   common: {
     systemDefault: "Predeterminado del sistema",
     close: "Cerrar",

@@ -60,6 +60,8 @@ import {
   timelineVisibleTrackHeight,
 } from "../Renderer/canvasPixelRatio";
 import { intersectVisibleBounds } from "../Renderer/gestureBounds";
+import { isMobileApp } from "../desktopApi";
+import { useTimelineUIStore } from "../uiStore";
 
 type RulerCanvasProps = {
   width: number;
@@ -832,6 +834,10 @@ export function TimelineTrackCanvas({
         if (!viewport) return;
         viewport.scrollTop += deltaY;
       },
+      mobileNavigation: isMobileApp ? {
+        enabled: () => useTimelineUIStore.getState().mobileTimelineTool === "navigate",
+        subscribe: (onChange) => useTimelineUIStore.subscribe((state) => state.mobileTimelineTool, onChange),
+      } : undefined,
       getGestureBounds: () =>
         intersectVisibleBounds(container, scrollViewportRef.current),
     });

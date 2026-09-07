@@ -36,6 +36,8 @@ type TimelineUIState = {
   followPlayheadEnabled: boolean;
   midiLearnMode: string | null;
   trackReorderMode: boolean;
+  mobileTimelineTool: "navigate" | "edit";
+  setMobileTimelineTool: (tool: "navigate" | "edit") => void;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
@@ -77,6 +79,8 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     midiLearnMode: null,
     trackReorderMode: false,
+    mobileTimelineTool: "navigate",
+    setMobileTimelineTool: (mobileTimelineTool) => set({ mobileTimelineTool }),
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);

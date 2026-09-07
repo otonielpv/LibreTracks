@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { rememberTouchContextPosition } from "./touchContextPosition";
 
 type ActiveTouch = {
   pointerId: number;
@@ -7,12 +8,14 @@ type ActiveTouch = {
   startY: number;
   target: HTMLElement;
   timerId: number;
+  seconds?: number;
 };
 
 type TouchContextMenuOptions = {
   delayMs?: number;
   movementTolerancePx?: number;
   ignoreTarget?: (target: EventTarget | null) => boolean;
+  captureSeconds?: (clientX: number) => number;
 };
 
 /**
@@ -37,6 +40,7 @@ export function useTouchContextMenu({
   // el dedo TOCO, no donde acabo.
   movementTolerancePx = 16,
   ignoreTarget,
+  captureSeconds,
 }: TouchContextMenuOptions = {}) {
   const activeRef = useRef<ActiveTouch | null>(null);
   const triggeredRef = useRef(false);
@@ -68,6 +72,7 @@ export function useTouchContextMenu({
       target:
         event.target instanceof HTMLElement ? event.target : event.currentTarget,
       timerId: 0,
+      seconds: captureSeconds?.(event.clientX),
     };
     active.timerId = window.setTimeout(() => {
       if (activeRef.current !== active) {
@@ -79,16 +84,16 @@ export function useTouchContextMenu({
       // abre el menu para crear una marca la pone donde apunto, no donde le
       // haya llevado la deriva del dedo durante la espera: sin esto la marca
       // nacia hasta 10 px desplazada y habia que recolocarla a mano.
-      active.target.dispatchEvent(
-        new MouseEvent("contextmenu", {
+      const contextEvent = new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: active.startX,
           clientY: active.startY,
           button: 2,
           buttons: 0,
-        }),
-      );
+        });
+      rememberTouchContextPosition(contextEvent, active.seconds);
+      active.target.dispatchEvent(contextEvent);
     }, delayMs);
     activeRef.current = active;
   };
