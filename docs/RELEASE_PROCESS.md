@@ -210,26 +210,93 @@ Rules learned the hard way — a bad screenshot is worse than none:
   which contains the machine's account name. Check the frame before it ships.
 - The harness writes to whatever session it opens — always point it at a copy.
 
-## 6. Run sanity checks
+## 6. Full local verification (mandatory before pushing)
+
+**Nothing gets pushed until the whole local suite is green.** The tag triggers
+the release pipeline, and a red pipeline on a pushed tag is an unfinished
+release you then have to chase (step 9). Catching it here costs minutes;
+catching it there costs a tag move plus ~40 minutes of CI.
+
+This is not optional and it is not "whatever tests I touched": run **every**
+tier, including the E2E, and read the summary lines at the end of each.
+
+### 6.1 Types and lint
 
 ```bash
-# From apps/desktop:
-npx tsc -p tsconfig.json --noEmit
-npx vitest run
+npm run lint                                   # desktop + remote + shared
+npx tsc -p apps/desktop/tsconfig.json --noEmit
+```
 
-# From the repo root — the EXACT command the `test` job runs. Running the
-# crates piecemeal is not the same check and has missed real breakage.
+### 6.2 Every unit suite + the native engine
+
+```bash
+npm run test:full
+```
+
+`test:full` = `npm test` (shared, desktop frontend, remote frontend, the pure
+Rust crates, and the desktop crate with `no-link`) **plus** the native tier
+(`npm run test:native`: builds the real C++ engine and runs the DSP
+doctest/ctest suite). Both tiers always run, so one pass shows the whole
+picture; the exit code is non-zero if any tier failed.
+
+### 6.3 The exact commands the CI `test` job runs
+
+The orchestrator above is close to CI but not identical (CI adds `--locked` and
+`lt-audio-engine-v2`). Run the real thing — running the crates piecemeal is not
+the same check and has missed real breakage:
+
+```bash
 cargo test --locked -p libretracks-core -p libretracks-project \
   -p libretracks-audio -p lt-audio-engine-v2 --features lt-audio-engine-v2/no-link
+cargo test --locked --lib -p libretracks-desktop --features libretracks-desktop/no-link
 cargo check --all-targets
 ```
+
+### 6.4 E2E against the real compiled app (Windows)
+
+**This is the tier that matters most here, because CI does not run it.** The
+`e2e-windows` job is disabled on release runs (`if: false` — see step 9), so a
+local run is the *only* place the real, compiled, engine-linked app gets driven
+before the tag goes out.
+
+```powershell
+# Build the binary the specs drive (the capture seam lets them read the mix).
+$env:LIBRETRACKS_ENGINE_E2E_CAPTURE = "1"
+npm run build:desktop:native
+
+# From the repo root. ~20 specs, one app window at a time.
+npm run test:e2e
+```
+
+Notes:
+
+- **Windows only.** `tauri-driver` has no macOS support (WKWebView exposes no
+  WebDriver), so on macOS/Linux this tier simply cannot run — say so in the
+  release summary instead of pretending it passed.
+- The screenshot harnesses (`doc-shots.e2e.ts`, `marketing-shots.e2e.ts`) match
+  the spec glob but skip themselves unless `LT_DOCSHOTS=1` / `LT_SHOTS=1`.
+  Seeing them skipped is correct.
+- A single spec: `npx wdio run tests/e2e/wdio.conf.ts --spec tests/e2e/specs/<name>.e2e.ts`.
+- **A leftover `libretracks-desktop.exe` breaks everything downstream.** An
+  orphaned app process from an aborted run holds the binary (so
+  `build:desktop:native` fails to link) and steals the WebDriver session. If a
+  run dies oddly, check and kill it before re-running:
+
+  ```powershell
+  Get-Process libretracks-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
+  ```
+
+- Full details, prerequisites and the per-spec inventory: `tests/e2e/README.md`.
+
+### 6.5 Known flake
 
 Don't block the release on a known flaky test — the
 `timeline-tracks › pans the timeline by dragging over an empty lane`
 test is flaky under parallelism but passes in isolation. Re-run it alone
-to confirm it's not a real regression.
+to confirm it's not a real regression. Anything else red is a real failure:
+fix it, or drop it from the release, before you tag.
 
-### The Android compile trap (bit v1.10.0)
+### 6.6 The Android compile trap (bit v1.10.0)
 
 `cargo check --all-targets` on desktop does **not** compile anything behind
 `#[cfg(target_os = "android")]` (`platform/android_audio_devices.rs`,
@@ -265,6 +332,11 @@ Tag name format: `v<NEW>` (with the `v` prefix). The GitHub Releases page
 and the in-app update check both rely on this format.
 
 ## 8. Push (the default end-to-end flow)
+
+**Precondition: step 6 ran and everything was green.** Do not push a tag on a
+suite you didn't run — the E2E in particular, since CI doesn't run it. If a
+tier could not run at all (E2E on macOS/Linux), say so explicitly when handing
+the release back instead of letting it read as passed.
 
 The normal release flow is **commit → tag → push both**, not stopping at
 local commits. Unless the user explicitly says "local only" / "don't push",
@@ -590,6 +662,13 @@ Notes:
   the in-app modal shows these to end users.
 - Pushing the tag before the user confirms — the release pipeline is
   not idempotent for the version slot.
+- Pushing with only the fast suites run. `npm test` is the everyday loop, not
+  the release gate: it skips the native engine tier and the E2E, and the E2E
+  is disabled in CI, so whatever you don't run locally nobody runs. Step 6 is
+  the full list.
+- Running the E2E against a stale binary. `npm run test:e2e` drives whatever
+  sits at `target-desktop-native/release/libretracks-desktop.exe`; rebuild it
+  after the version bump or you're testing the previous release.
 - Shipping a poster that repeats the previous release's look — the whole
   point of the theme rotation is that each announcement looks new. If the
   themes start feeling used up, add one (step 11).
