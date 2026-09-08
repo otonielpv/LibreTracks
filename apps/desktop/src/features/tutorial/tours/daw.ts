@@ -27,6 +27,34 @@ export const dawTour: TourDefinition = {
       i18nKey: "tutorial.daw.steps.intro",
     },
     {
+      // Solo movil, y ANTES de la regla: en un telefono el area vacia es lo
+      // primero que ve alguien que abre una sesion nueva, y hasta que no mete
+      // audio no hay nada que explicar sobre regiones ni marcas.
+      id: "mobileEmptyLanes",
+      target: TOUR_TARGETS.mobileEmptyLanes,
+      platforms: ["mobile"],
+      viewMode: "daw",
+      i18nKey: "tutorial.daw.steps.mobileEmptyLanes",
+    },
+    {
+      // Solo movil: sustituye al clic derecho, asi que hay que presentarla
+      // antes de que los pasos siguientes la den por sabida.
+      id: "mobileSelectionBar",
+      target: TOUR_TARGETS.mobileSelectionBar,
+      platforms: ["mobile"],
+      viewMode: "daw",
+      i18nKey: "tutorial.daw.steps.mobileSelectionBar",
+    },
+    {
+      // Solo movil: el modelo de gestos no se adivina, y equivocarse aqui es
+      // lo que hace que la gente mueva audio sin querer.
+      id: "mobileGestures",
+      target: TOUR_TARGETS.timelineCanvas,
+      platforms: ["mobile"],
+      viewMode: "daw",
+      i18nKey: "tutorial.daw.steps.mobileGestures",
+    },
+    {
       id: "ruler",
       target: TOUR_TARGETS.timelineRuler,
       viewMode: "daw",

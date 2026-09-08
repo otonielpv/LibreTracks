@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isMobileApp, type SongView } from "../desktopApi";
 import { useTimelineUIStore } from "../uiStore";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import type { ContextMenuAction } from "../types";
 import {
   mobileSelectionBarModel,
@@ -97,6 +98,9 @@ export function MobileSelectionActionBar({
       <button
         type="button"
         className="lt-mobile-selection-actions-tab"
+        // El anclaje va en LAS DOS ramas: recogida, el tutorial senalaria al
+        // vacio, y su paso es justamente el que explica que la barra existe.
+        data-lt-tour={TOUR_TARGETS.mobileSelectionBar}
         aria-label={t("mobileSelectionActions.show", {
           defaultValue: "Mostrar acciones",
         })}
@@ -132,6 +136,7 @@ export function MobileSelectionActionBar({
   return (
     <div
       className="lt-mobile-selection-actions"
+      data-lt-tour={TOUR_TARGETS.mobileSelectionBar}
       role="toolbar"
       aria-label={t("mobileClipActions.title", {
         defaultValue: "Acciones de la selección",

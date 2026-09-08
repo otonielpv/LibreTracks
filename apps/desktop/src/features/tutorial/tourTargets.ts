@@ -46,6 +46,12 @@ export const TOUR_TARGETS = {
   trackHeaders: "track-headers",
   mobileTouchControls: "mobile-touch-controls",
   mobileTrackReorder: "mobile-track-reorder",
+  // Movil: las dos superficies que sustituyen al clic derecho. El cartel del
+  // area vacia es la unica puerta visible para meter audio, y la barra de la
+  // seleccion es de donde salen ahora las acciones que antes solo daba el
+  // menu contextual.
+  mobileEmptyLanes: "mobile-empty-lanes",
+  mobileSelectionBar: "mobile-selection-bar",
   topbarTempo: "topbar-tempo",
   topbarTimeSignature: "topbar-time-signature",
   toolbarSnap: "toolbar-snap",

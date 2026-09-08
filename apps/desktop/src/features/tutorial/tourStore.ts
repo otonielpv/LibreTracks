@@ -81,6 +81,70 @@ function persistProgress(progress: TourProgress): void {
   }
 }
 
+/**
+ * Revision del contenido MOVIL del recorrido de la DAW.
+ *
+ * Subirla vuelve a ofrecer ese recorrido a quien lo COMPLETO en un movil. Es
+ * el caso de la revision 2: la vista DAW tactil cambio de arriba abajo —el
+ * area vacia propone el primer paso, las acciones salen de una barra en vez
+ * del toque largo, y un dedo navega mientras que tocar selecciona— asi que lo
+ * que aprendio quien la vio antes ya no describe la app. Volver a ofrecersela
+ * no es insistir, es corregir.
+ *
+ * A quien lo SALTO no se le vuelve a ofrecer: un "Saltar" es un no explicito y
+ * esa regla vale para todo el tutorial. Y en escritorio no se toca nada,
+ * porque alli el recorrido no ha cambiado.
+ *
+ * Vive fuera de `TourProgress` a proposito: ese objeto se valida clave a clave
+ * contra los ids de recorrido, y meterle un numero lo haria descartar entero
+ * en la proxima lectura.
+ */
+const DAW_MOBILE_REVISION = 2;
+const DAW_MOBILE_REVISION_KEY = "lt.tutorial.dawMobileRevision";
+
+function readDawMobileRevision(): number {
+  if (typeof window === "undefined") return DAW_MOBILE_REVISION;
+  try {
+    const raw = window.localStorage.getItem(DAW_MOBILE_REVISION_KEY);
+    // Sin marca: es alguien de antes de que esto existiera. Si completo el
+    // recorrido, lo hizo con el contenido viejo.
+    if (raw === null) return 1;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : 1;
+  } catch {
+    return DAW_MOBILE_REVISION;
+  }
+}
+
+function persistDawMobileRevision(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      DAW_MOBILE_REVISION_KEY,
+      String(DAW_MOBILE_REVISION),
+    );
+  } catch {
+    // Si no se puede escribir, se volvera a ofrecer en el proximo arranque.
+    // Molesto, pero preferible a dar por visto algo que no se ha visto.
+  }
+}
+
+/**
+ * Devuelve el progreso con el recorrido de la DAW marcado como no visto cuando
+ * su contenido movil ha cambiado desde que el usuario lo completo.
+ */
+export function applyDawMobileRevision(
+  progress: TourProgress,
+  options: { isMobile: boolean; seenRevision: number },
+): TourProgress {
+  if (!options.isMobile) return progress;
+  if (options.seenRevision >= DAW_MOBILE_REVISION) return progress;
+  if (progress.daw !== "completed") return progress;
+  const next = { ...progress };
+  delete next.daw;
+  return next;
+}
+
 export function currentTourPlatform(): TourPlatform {
   return isMobileApp ? "mobile" : "desktop";
 }
@@ -130,11 +194,26 @@ type TourState = {
   previousStep: () => void;
 };
 
+/**
+ * El progreso con el que arranca la app: lo persistido, menos lo que una
+ * revision de contenido haya invalidado.
+ */
+function readInitialProgress(): TourProgress {
+  const stored = readProgress();
+  const adjusted = applyDawMobileRevision(stored, {
+    isMobile: isMobileApp,
+    seenRevision: readDawMobileRevision(),
+  });
+  if (adjusted !== stored) persistProgress(adjusted);
+  persistDawMobileRevision();
+  return adjusted;
+}
+
 export const useTourStore = create<TourState>()((set, get) => ({
   activeTourId: null,
   stepIndex: 0,
   steps: [],
-  progress: readProgress(),
+  progress: readInitialProgress(),
   isMenuOpen: false,
   setMenuOpen: (isMenuOpen) => set({ isMenuOpen }),
   resetProgress: () => {

@@ -1526,6 +1526,21 @@ const es = {
           title: "Montar una canción",
           body: "En la vista DAW se construye todo: dónde empieza y acaba cada canción, sus secciones, sus pistas y sus clips. Vamos a recorrerla entera, control por control.",
         },
+        mobileEmptyLanes: {
+          title: "Por aquí se empieza",
+          body: "Este cartel sólo sale en el móvil.",
+          bodyMobile: "Mientras la sesión no tenga audio, el área de pistas te ofrece el primer paso. «Añadir audios» abre el mismo selector que la biblioteca: elige los stems de la canción y aparecerán aquí, uno por pista. El cartel desaparece en cuanto hay audio; el sitio es para la música.",
+        },
+        mobileSelectionBar: {
+          title: "La barra de acciones",
+          body: "Esta barra sólo sale en el móvil.",
+          bodyMobile: "En el ordenador las acciones salen con el clic derecho. Aquí salen en esta barra: toca cualquier cosa —una marca, un clip, una pista, una canción— y la barra pasa a mostrar lo que puedes hacerle. Sin nada seleccionado te ofrece crear. Si hay más acciones de las que caben, el botón de puntos abre la lista entera. Y puedes recogerla con la flecha cuando quieras ver más timeline.",
+        },
+        mobileGestures: {
+          title: "Cómo se mueve el dedo",
+          body: "Estos gestos sólo aplican en el móvil.",
+          bodyMobile: "Un dedo arrastra el timeline en cualquier dirección, y dos hacen zoom pellizcando. Tocar una cosa la selecciona. Para mover un clip, tócalo primero y arrástralo después: así ningún arrastre suelto te descoloca el audio sin querer. No hay modos que recordar.",
+        },
         ruler: {
           title: "La regla manda",
           body: "Esta franja de arriba no es sólo una escala de compases: es donde viven las canciones —las regiones— y las marcas. Casi todo lo que viene ahora pasa aquí.",
@@ -1546,16 +1561,17 @@ const es = {
         createMarker: {
           title: "Añadir marcas",
           body: "Pon el cursor donde quieras y clic derecho en la regla: «Crear Marca». Las marcas son los puntos a los que saltas en directo y lo que ves desde el atril, así que vale la pena ponerlas mientras montas y no la noche antes.",
-          bodyMobile: "Pon el cursor donde quieras y mantén pulsada la regla para abrir el menú: «Crear Marca». Las marcas son los puntos a los que saltas en directo y lo que ves desde el atril, así que vale la pena ponerlas mientras montas y no la noche antes.",
+          bodyMobile: "Lleva el cabezal donde quieras y usa «Marca» en la barra de acciones: la marca cae exactamente donde está el cabezal, que lo tienes a la vista. Las marcas son los puntos a los que saltas en directo y lo que ves desde el atril, así que vale la pena ponerlas mientras montas y no la noche antes.",
         },
         markerKinds: {
           title: "Secciones y avisos",
           body: "En «Tipo de marca…» hay dos grupos, y no son lo mismo. Las Secciones son partes de la canción —intro, estrofa, estribillo, puente, solo, outro— y sirven para navegar. Los Avisos son instrucciones para la banda —preparados, subir, todos dentro, batería entra, parón, última vez— y se leen de un vistazo desde el atril.",
+          bodyMobile: "Hay dos grupos y no son lo mismo. Las Secciones son partes de la canción —intro, estrofa, estribillo, puente, solo, outro— y sirven para navegar. Los Avisos son instrucciones para la banda —preparados, subir, todos dentro, batería entra, parón, última vez— y se leen de un vistazo desde el atril. Toca una marca y la barra te deja cambiarle el tipo, el nombre y su posición exacta.",
         },
         dragMarkers: {
           title: "Mover marcas",
           body: "No hace falta borrarlas y rehacerlas: arrástralas por la regla. Se pegan a la rejilla mientras las mueves, y con Shift pulsado las colocas libremente.",
-          bodyMobile: "No hace falta borrarlas y rehacerlas: arrástralas por la regla con el dedo. Se pegan a la rejilla mientras las mueves.",
+          bodyMobile: "No hace falta borrarlas y rehacerlas: arrástralas por la regla con el dedo y se pegan a la rejilla. Si quieres precisión, tócala y usa «Posición» en la barra para escribir el compás y el tiempo exactos.",
         },
         tempo: {
           title: "El BPM es de la canción",
@@ -1601,7 +1617,7 @@ const es = {
         clips: {
           title: "Editar clips",
           body: "Arrástralos para moverlos de sitio o de pista. Con el clic derecho tienes «Cortar en cursor», «Duplicar» y borrar; las flechas mueven la selección poco a poco y Ctrl+A la selecciona entera.",
-          bodyMobile: "Arrástralos para moverlos de sitio o de pista. Mantén pulsado un clip para abrir su menú, con «Cortar en cursor», «Duplicar» y borrar.",
+          bodyMobile: "Toca un clip para seleccionarlo y arrástralo después para moverlo de sitio o de pista. Seleccionado, la barra te da «Cortar en cursor», «Duplicar» y borrar sin abrir ningún menú.",
         },
         done: {
           title: "Ya sabes montar",

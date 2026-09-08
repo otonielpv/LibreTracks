@@ -8,7 +8,11 @@ import {
   shouldAutoStartLandingTour,
   tourIdForContext,
 } from "./tourModel";
-import { tourForCurrentContext, useTourStore } from "./tourStore";
+import {
+  applyDawMobileRevision,
+  tourForCurrentContext,
+  useTourStore,
+} from "./tourStore";
 import { TOURS } from "./tours";
 import { TOUR_TARGETS } from "./tourTargets";
 
@@ -545,5 +549,61 @@ describe("oferta de recorridos al abrir una sesión", () => {
     expect(
       shouldOfferToursOnSessionOpen({ ...base, isTestRun: true, progress: {} }),
     ).toBe(false);
+  });
+});
+
+describe("revision del contenido movil del recorrido de la DAW", () => {
+  // Por que existe: la vista DAW tactil cambio de arriba abajo, asi que lo que
+  // aprendio quien completo el recorrido antes ya no describe la app.
+  const OLD = 1;
+  const CURRENT = 2;
+
+  it("vuelve a ofrecerlo a quien lo completo en un movil", () => {
+    const next = applyDawMobileRevision(
+      { workspace: "completed", daw: "completed", live: "completed" },
+      { isMobile: true, seenRevision: OLD },
+    );
+    expect(next.daw).toBeUndefined();
+    // Solo el de la DAW: los demas no han cambiado.
+    expect(next.workspace).toBe("completed");
+    expect(next.live).toBe("completed");
+  });
+
+  it("no insiste a quien lo salto", () => {
+    // Un "Saltar" es un no explicito y vale para todo el tutorial.
+    const progress = { daw: "dismissed" } as const;
+    expect(
+      applyDawMobileRevision(progress, { isMobile: true, seenRevision: OLD }),
+    ).toBe(progress);
+  });
+
+  it("no toca nada en escritorio", () => {
+    // Alli el recorrido no ha cambiado.
+    const progress = { daw: "completed" } as const;
+    expect(
+      applyDawMobileRevision(progress, { isMobile: false, seenRevision: OLD }),
+    ).toBe(progress);
+  });
+
+  it("no lo repite una vez visto el contenido nuevo", () => {
+    const progress = { daw: "completed" } as const;
+    expect(
+      applyDawMobileRevision(progress, {
+        isMobile: true,
+        seenRevision: CURRENT,
+      }),
+    ).toBe(progress);
+  });
+
+  it("deja el recorrido de la nube intacto, para que se encadenen", () => {
+    // Quien ya completo todo se encuentra dos cosas nuevas: el de la nube en
+    // el inicio y este al abrir una sesion. Ninguno pisa al otro.
+    const next = applyDawMobileRevision(
+      { landing: "completed", daw: "completed", cloud: "completed" },
+      { isMobile: true, seenRevision: OLD },
+    );
+    expect(next.cloud).toBe("completed");
+    expect(next.landing).toBe("completed");
+    expect(next.daw).toBeUndefined();
   });
 });

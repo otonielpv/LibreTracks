@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { isMobileApp } from "../desktopApi";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 type MobileEmptyLanesProps = {
   /** Cuantas pistas hay pintadas ahora mismo en el area de carriles. */
@@ -29,7 +30,10 @@ export function MobileEmptyLanes({
   }
 
   return (
-    <div className="lt-mobile-empty-lanes">
+    <div
+      className="lt-mobile-empty-lanes"
+      data-lt-tour={TOUR_TARGETS.mobileEmptyLanes}
+    >
       <span className="material-symbols-outlined" aria-hidden="true">
         graphic_eq
       </span>

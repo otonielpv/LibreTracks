@@ -1495,6 +1495,21 @@ const en = {
           title: "Building a song",
           body: "The DAW view is where everything gets built: where each song starts and ends, its sections, its tracks and its clips. We are going to walk the whole thing, control by control.",
         },
+        mobileEmptyLanes: {
+          title: "Start here",
+          body: "This panel only appears on mobile.",
+          bodyMobile: "While the session has no audio, the track area offers you the first step. “Add audio” opens the same picker as the library: choose the song’s stems and they appear here, one per track. The panel disappears as soon as there is audio — the space belongs to the music.",
+        },
+        mobileSelectionBar: {
+          title: "The action bar",
+          body: "This bar only appears on mobile.",
+          bodyMobile: "On a computer, actions come from right-click. Here they come from this bar: tap anything — a marker, a clip, a track, a song — and the bar shows what you can do to it. With nothing selected it offers you what you can create. If there are more actions than fit, the dots button opens the full list. You can fold it away with the arrow when you want more timeline.",
+        },
+        mobileGestures: {
+          title: "How your finger moves",
+          body: "These gestures only apply on mobile.",
+          bodyMobile: "One finger drags the timeline in any direction; two fingers pinch to zoom. Tapping something selects it. To move a clip, tap it first and then drag it — that way no stray drag shifts your audio by accident. There are no modes to remember.",
+        },
         ruler: {
           title: "The ruler runs the show",
           body: "That strip along the top is not just a bar count: it is where songs -- the regions -- and markers live. Nearly everything coming up happens here.",
@@ -1515,16 +1530,17 @@ const en = {
         createMarker: {
           title: "Add markers",
           body: "Put the playhead where you want it and right-click the ruler: \"Crear Marca\". Markers are what you jump to live and what you read from the music stand, so they are worth placing while you build, not the night before.",
-          bodyMobile: "Put the playhead where you want it and press and hold the ruler to open the menu: \"Crear Marca\". Markers are what you jump to live and what you read from the music stand, so they are worth placing while you build, not the night before.",
+          bodyMobile: "Move the playhead where you want it and use \"Marker\" in the action bar: the marker lands exactly on the playhead, which you can see. Markers are what you jump to live and what you read from the music stand, so they are worth placing while you build, not the night before.",
         },
         markerKinds: {
           title: "Sections and cues",
           body: "The \"Tipo de marca...\" menu has two groups, and they are not the same thing. Sections are parts of the song -- intro, verse, chorus, bridge, solo, outro -- and they are for navigating. Cues are instructions for the band -- get ready, build, all in, drums in, break, last time -- and they read at a glance from the stand.",
+          bodyMobile: "Two groups, and they are not the same thing. Sections are parts of the song -- intro, verse, chorus, bridge, solo, outro -- and they are for navigating. Cues are instructions for the band -- get ready, build, all in, drums in, break, last time -- and they read at a glance from the stand. Tap a marker and the bar lets you change its kind, its name and its exact position.",
         },
         dragMarkers: {
           title: "Move markers",
           body: "No need to delete and redo them: drag them along the ruler. They snap to the grid as you move them, and holding Shift places them freely.",
-          bodyMobile: "No need to delete and redo them: drag them along the ruler with your finger. They snap to the grid as you move them.",
+          bodyMobile: "No need to delete and redo them: drag them along the ruler with your finger and they snap to the grid. When you need precision, tap one and use \"Position\" in the bar to type the exact bar and beat.",
         },
         tempo: {
           title: "BPM belongs to the song",
@@ -1570,7 +1586,7 @@ const en = {
         clips: {
           title: "Editing clips",
           body: "Drag them to move them along the timeline or onto another track. Right-click gives you \"Cortar en cursor\", \"Duplicar\" and delete; the arrow keys nudge the selection and Ctrl+A selects everything.",
-          bodyMobile: "Drag them to move them along the timeline or onto another track. Press and hold a clip to open its menu, with \"Cortar en cursor\", \"Duplicar\" and delete.",
+          bodyMobile: "Tap a clip to select it, then drag it to move it along the timeline or onto another track. Once selected, the bar gives you \"Cortar en cursor\", \"Duplicar\" and delete without opening any menu.",
         },
         done: {
           title: "You can build now",
