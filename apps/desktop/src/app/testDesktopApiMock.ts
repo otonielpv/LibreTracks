@@ -403,7 +403,6 @@ function buildInitialState(): DesktopApiMockState {
       outputBufferSize: "default",
       outputChannelMapping: { channels: [0, 1] },
       outputSampleFormat: null,
-      audioSafeMode: false,
       lowLatencyOutput: false,
       audioSingleThreadRender: false,
       selectedMidiDevice: null,

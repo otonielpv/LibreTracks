@@ -1485,7 +1485,6 @@ pub(crate) fn plan_audio_settings_change(
         || previous.output_buffer_size != next.output_buffer_size
         || previous.output_sample_format != next.output_sample_format
         || previous.output_channel_mapping != next.output_channel_mapping
-        || previous.audio_safe_mode != next.audio_safe_mode
         || previous.low_latency_output != next.low_latency_output;
     let output_channels_changed = previous.enabled_output_channels != next.enabled_output_channels;
 

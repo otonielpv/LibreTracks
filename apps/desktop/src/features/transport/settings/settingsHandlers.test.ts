@@ -51,10 +51,10 @@ describe("createSettingsHandlers", () => {
       vampBars: 99,
     });
 
-    handlers.handleAudioSafeModeChange(true);
+    handlers.handleLowLatencyOutputChange(true);
 
     const patch = lastPatch(persistAudioSettings);
-    expect(patch.audioSafeMode).toBe(true);
+    expect(patch.lowLatencyOutput).toBe(true);
     // The unrelated field from the mutated ref is preserved → ref read is live.
     expect(patch.vampBars).toBe(99);
   });

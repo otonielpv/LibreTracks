@@ -151,8 +151,6 @@ pub struct AppSettings {
     pub output_channel_mapping: OutputChannelRequest,
     #[serde(default)]
     pub output_sample_format: Option<AudioSampleFormat>,
-    #[serde(default)]
-    pub audio_safe_mode: bool,
     /// Android only: open the output stream in AAudio low-latency mode
     /// (Oboe `PerformanceMode::LowLatency`) instead of the default deep-buffer
     /// mode. Off by default because low-latency streams get small internal
@@ -312,7 +310,6 @@ impl Default for AppSettings {
             output_buffer_size: AudioBufferSizeRequest::Default,
             output_channel_mapping: OutputChannelRequest::default(),
             output_sample_format: None,
-            audio_safe_mode: false,
             low_latency_output: false,
             audio_single_thread_render: false,
             selected_midi_device: None,

@@ -73,7 +73,6 @@ type SettingsPanelProps = {
   onDiscardEnabledOutputChannels: () => void;
   onSelectAllOutputChannels: () => void;
   onClearOutputChannels: () => void;
-  onAudioSafeModeChange: (checked: boolean) => void;
   onLowLatencyOutputChange: (checked: boolean) => void;
   onAudioSingleThreadRenderChange: (checked: boolean) => void;
 
@@ -146,7 +145,6 @@ export function SettingsPanel({
   onDiscardEnabledOutputChannels,
   onSelectAllOutputChannels,
   onClearOutputChannels,
-  onAudioSafeModeChange,
   onLowLatencyOutputChange,
   onAudioSingleThreadRenderChange,
   midiInputDevices,
@@ -543,22 +541,6 @@ export function SettingsPanel({
                         </span>
                       </div>
                     </div>
-
-                    <label className="lt-settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={appSettings.audioSafeMode}
-                        disabled={isSaving}
-                        onChange={(event) =>
-                          onAudioSafeModeChange(event.target.checked)
-                        }
-                      />
-                      <span>
-                        {t("transport.settingsModal.audioSafeMode", {
-                          defaultValue: "Safe Mode",
-                        })}
-                      </span>
-                    </label>
 
                     {/* Low-latency mode is an Android/AAudio-only knob; desktop
                         backends negotiate latency through buffer size. */}

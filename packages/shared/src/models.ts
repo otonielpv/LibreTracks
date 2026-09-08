@@ -879,7 +879,6 @@ export type AppSettings = {
   outputBufferSize: AudioBufferSizeRequest;
   outputChannelMapping: OutputChannelRequest;
   outputSampleFormat: AudioSampleFormat | null;
-  audioSafeMode: boolean;
   /** Android only: open the output stream in AAudio low-latency mode. */
   lowLatencyOutput: boolean;
   /**
@@ -992,7 +991,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   outputBufferSize: "default",
   outputChannelMapping: { channels: [0, 1] },
   outputSampleFormat: null,
-  audioSafeMode: false,
   lowLatencyOutput: false,
   audioSingleThreadRender: false,
   selectedMidiDevice: null,
@@ -1200,7 +1198,6 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
         : DEFAULT_APP_SETTINGS.enabledOutputChannels,
     },
     outputSampleFormat,
-    audioSafeMode: Boolean(settings.audioSafeMode),
     lowLatencyOutput: Boolean(settings.lowLatencyOutput),
     audioSingleThreadRender: Boolean(settings.audioSingleThreadRender),
     selectedMidiDevice,
