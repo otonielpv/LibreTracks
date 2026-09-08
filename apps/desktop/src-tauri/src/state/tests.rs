@@ -2965,11 +2965,9 @@ fn moving_a_marker_and_changing_its_lane_in_one_drag_stores_both() {
     // Reported: dragging a section marker sideways and THEN down into the cue
     // row left it still announcing with a count-in. A drag that changes both
     // position and lane arrives as a single update, so both must stick.
-    let mut session = DesktopSession::default();
-    session
-        .engine
-        .load_song(demo_song_with_section())
-        .expect("song should load into engine");
+    // Con carpeta de cancion: `update_section_marker` persiste el cambio, y sin
+    // `song_dir` falla con NoSongLoaded antes de llegar a lo que se comprueba.
+    let mut session = session_with_song_dir("marker-move-and-lane", demo_song_with_section());
     let audio = crate::audio::engine::AudioController::default();
 
     session
@@ -3003,11 +3001,8 @@ fn moving_a_marker_and_changing_its_lane_in_one_drag_stores_both() {
 
 #[test]
 fn dragging_a_marker_to_the_other_lane_stores_a_category_override() {
-    let mut session = DesktopSession::default();
-    session
-        .engine
-        .load_song(demo_song_with_section())
-        .expect("song should load into engine");
+    // Idem: `update_section_marker` persiste, asi que necesita carpeta.
+    let mut session = session_with_song_dir("marker-lane-override", demo_song_with_section());
     let audio = crate::audio::engine::AudioController::default();
 
     // A move with no lane change must not invent an override.
@@ -3346,7 +3341,12 @@ fn creating_a_song_region_beyond_song_duration_preserves_its_bounds() {
         .expect("created region should exist");
 
     assert!(snapshot.project_revision > 0);
-    assert_eq!(song_view.duration_seconds, 12.0);
+    // La cancion se estira para envolver la region. Este test esperaba 12.0,
+    // que era el comportamiento de antes de `refresh_song_duration` en
+    // `create_song_region`: dejar la duracion corta guardaba una sesion que
+    // luego el validador del motor se negaba a abrir ("Region X is outside its
+    // song"). Nadie lo vio porque el arnes de tests de este crate no arrancaba.
+    assert_eq!(song_view.duration_seconds, 24.0);
     assert_eq!(song_view.regions.len(), 2);
     // One region already exists, so the new one is named "Song 2".
     assert_eq!(created_region.name, "Song 2");

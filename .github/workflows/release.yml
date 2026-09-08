@@ -76,6 +76,19 @@ jobs:
       - name: Run Rust tests without native engine link
         run: cargo test --locked -p libretracks-core -p libretracks-project -p libretracks-audio -p lt-audio-engine-v2 --features lt-audio-engine-v2/no-link
 
+      # Los ~250 tests de apps/desktop/src-tauri, que hasta ahora no corrian en
+      # ningun sitio. `--lib` a proposito: el arnes del binario enlaza el
+      # recurso de manifest de tauri_build y chocaria con el que build.rs pone
+      # al de la lib (ver embed_common_controls_manifest_in_tests).
+      #
+      # Linux queda fuera: este job solo instala build-essential/cmake/ninja, y
+      # el crate de escritorio arrastra tauri + rfd, que ahi necesitan
+      # webkit2gtk y GTK. Con macOS en cada push y Windows en cada tag hay
+      # cobertura suficiente sin engordar el job.
+      - name: Run desktop crate tests
+        if: runner.os != 'Linux'
+        run: cargo test --locked --lib -p libretracks-desktop --features libretracks-desktop/no-link
+
       - name: Configure native engine tests
         run: >
           cmake -S native/audio-engine-v2 -B build/engine-ci-tests

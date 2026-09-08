@@ -5,9 +5,9 @@
 // non-zero if any suite fails (after running them all, so you see every
 // failure in one pass instead of stopping at the first).
 //
-// The native audio engine (src-tauri + lt-audio-engine-v2 FFI) is NOT run
-// here: its tests require the compiled C/C++ engine and the full native
-// toolchain. Run those with `npm run test:native`.
+// El motor de audio nativo compilado (C/C++) NO se ejecuta aqui: eso es
+// `npm run test:native`. El crate de escritorio si, con la feature `no-link`,
+// que cambia el FFI por stubs y no necesita ni el motor ni vcpkg.
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -53,6 +53,21 @@ const suites = [
       "libretracks-audio",
       "-p",
       "libretracks-remote",
+    ],
+  },
+  {
+    // `--lib` a proposito: el arnes del binario enlaza el recurso de manifest
+    // de tauri_build y chocaria con el que build.rs le pone al de la lib
+    // (ver embed_common_controls_manifest_in_tests en src-tauri/build.rs).
+    name: "desktop crate (cargo, no-link)",
+    cmd: "cargo",
+    args: [
+      "test",
+      "--lib",
+      "-p",
+      "libretracks-desktop",
+      "--features",
+      "libretracks-desktop/no-link",
     ],
   },
 ];
