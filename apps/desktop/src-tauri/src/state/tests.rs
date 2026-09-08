@@ -18,11 +18,11 @@ use crate::models::LibraryAssetSummary;
 use super::automation_runtime::native_region_jump_trigger_view_seconds;
 use super::{
     build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
-    place_bundled_audio_and_repoint, realign_regions_after_warp_tempo_change,
-    reconcile_regions_and_clips, write_library_manifest, write_library_manifest_assets,
-    AudioFileImportPayload, AudioFilePathImportPayload, ClipMoveRequest,
-    CreateAudioTrackWithClipRequest, CreateClipRequest, DesktopSession, TransportClock,
-    WaveformMemoryCache,
+    place_bundled_audio_and_repoint, plan_audio_settings_change,
+    realign_regions_after_warp_tempo_change, reconcile_regions_and_clips, write_library_manifest,
+    write_library_manifest_assets, AudioFileImportPayload, AudioFilePathImportPayload,
+    ClipMoveRequest, CreateAudioTrackWithClipRequest, CreateClipRequest, DesktopSession,
+    TransportClock, WaveformMemoryCache,
 };
 
 #[test]
@@ -5052,4 +5052,52 @@ fn dedupe_sessions_keeps_the_first_entry_for_a_repeated_name() {
         files,
         ["/actual/Concierto.ltsession", "/antiguo/Ensayo.ltsession"]
     );
+}
+
+// ---------------------------------------------------------------------------
+// plan_audio_settings_change
+//
+// El interruptor de multinúcleo se persistía pero no llegaba al motor hasta el
+// siguiente arranque: `update_audio_settings` hacía `return` antes de llamar a
+// `apply_settings` porque el ajuste no estaba en la lista de "algo cambió".
+// ---------------------------------------------------------------------------
+
+#[test]
+fn toggling_multicore_render_reaches_the_engine_without_reopening_the_device() {
+    let previous = crate::infra::settings::AppSettings::default();
+    let mut next = previous.clone();
+    next.audio_single_thread_render = !previous.audio_single_thread_render;
+
+    let plan = plan_audio_settings_change(&previous, &next);
+
+    assert!(
+        plan.apply,
+        "cambiar el pool de render tiene que llegar al motor, no sólo al disco"
+    );
+    assert!(
+        !plan.rebuild_stream,
+        "el pool cambia entre bloques: reabrir el dispositivo cortaría el audio"
+    );
+}
+
+#[test]
+fn unchanged_audio_settings_do_not_touch_the_engine() {
+    let settings = crate::infra::settings::AppSettings::default();
+
+    let plan = plan_audio_settings_change(&settings, &settings);
+
+    assert!(!plan.apply);
+    assert!(!plan.rebuild_stream);
+}
+
+#[test]
+fn changing_the_output_device_reopens_the_stream() {
+    let previous = crate::infra::settings::AppSettings::default();
+    let mut next = previous.clone();
+    next.selected_output_device_id = Some("otro-dispositivo".into());
+
+    let plan = plan_audio_settings_change(&previous, &next);
+
+    assert!(plan.apply);
+    assert!(plan.rebuild_stream);
 }

@@ -1456,6 +1456,76 @@ struct WaveformCacheToken {
     waveform_modified_millis: u128,
 }
 
+/// Qué hay que hacer con el motor cuando cambian los ajustes de audio.
+///
+/// Pura a propósito. La parte cara de `update_audio_settings` no es decidir si
+/// reabrir el dispositivo, sino el `return` temprano de "esto no le importa al
+/// motor": un ajuste que no aparezca aquí se persiste en disco y sólo llega al
+/// motor en el siguiente arranque, que es exactamente lo que le pasó al
+/// interruptor de multinúcleo. Y ese camino no se puede probar a través de
+/// `AudioController`, porque tocarlo abre un dispositivo de audio real.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AudioSettingsChangePlan {
+    /// Hay que mandar los ajustes al motor (`apply_settings`).
+    pub apply: bool,
+    /// Además hay que reabrir el stream. Caro: segundos en DirectSound, y corta
+    /// el audio, así que sólo para lo que de verdad toca el dispositivo.
+    pub rebuild_stream: bool,
+}
+
+pub(crate) fn plan_audio_settings_change(
+    previous: &AppSettings,
+    next: &AppSettings,
+) -> AudioSettingsChangePlan {
+    let device_changed = previous.selected_output_device != next.selected_output_device
+        || previous.selected_audio_backend != next.selected_audio_backend
+        || previous.selected_output_device_id != next.selected_output_device_id
+        || previous.selected_output_device_name != next.selected_output_device_name
+        || previous.output_sample_rate != next.output_sample_rate
+        || previous.output_buffer_size != next.output_buffer_size
+        || previous.output_sample_format != next.output_sample_format
+        || previous.output_channel_mapping != next.output_channel_mapping
+        || previous.audio_safe_mode != next.audio_safe_mode
+        || previous.low_latency_output != next.low_latency_output;
+    let output_channels_changed = previous.enabled_output_channels != next.enabled_output_channels;
+
+    // El pool de render se cambia entre bloques, sin reabrir nada: va en `apply`
+    // pero NUNCA en `rebuild_stream`, o tocar el interruptor cortaría el audio.
+    let render_threads_changed =
+        previous.audio_single_thread_render != next.audio_single_thread_render;
+
+    let midi_changed = previous.selected_midi_device != next.selected_midi_device;
+    let metronome_changed = previous.metronome_enabled != next.metronome_enabled
+        || (previous.metronome_volume - next.metronome_volume).abs() > f64::EPSILON
+        || previous.metronome_output != next.metronome_output
+        || previous.metronome_accent_enabled != next.metronome_accent_enabled
+        || previous.metronome_accent_preset != next.metronome_accent_preset
+        || previous.metronome_beat_preset != next.metronome_beat_preset
+        || (previous.metronome_accent_pitch - next.metronome_accent_pitch).abs() > f32::EPSILON
+        || (previous.metronome_beat_pitch - next.metronome_beat_pitch).abs() > f32::EPSILON
+        || previous.metronome_subdivision != next.metronome_subdivision
+        || previous.metronome_subdivision_preset != next.metronome_subdivision_preset
+        || (previous.metronome_subdivision_pitch - next.metronome_subdivision_pitch).abs()
+            > f32::EPSILON
+        || (previous.metronome_subdivision_gain - next.metronome_subdivision_gain).abs()
+            > f32::EPSILON;
+    let voice_guide_changed = previous.voice_guide_enabled != next.voice_guide_enabled
+        || previous.voice_guide_output != next.voice_guide_output
+        || (previous.voice_guide_volume - next.voice_guide_volume).abs() > f64::EPSILON
+        || previous.voice_guide_lead_bars != next.voice_guide_lead_bars
+        || previous.voice_guide_count_in_enabled != next.voice_guide_count_in_enabled;
+
+    AudioSettingsChangePlan {
+        apply: device_changed
+            || output_channels_changed
+            || render_threads_changed
+            || midi_changed
+            || metronome_changed
+            || voice_guide_changed,
+        rebuild_stream: device_changed || output_channels_changed,
+    }
+}
+
 impl DesktopSession {
     /// Import a set of already-picked audio files into the library, emitting
     /// progress events as it goes. The native file dialog is opened by the
@@ -1706,83 +1776,19 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<AppSettings, DesktopError> {
         let previous_settings = audio.current_settings()?;
-        let device_changed = previous_settings.selected_output_device
-            != next_settings.selected_output_device
-            || previous_settings.selected_audio_backend != next_settings.selected_audio_backend
-            || previous_settings.selected_output_device_id
-                != next_settings.selected_output_device_id
-            || previous_settings.selected_output_device_name
-                != next_settings.selected_output_device_name
-            || previous_settings.output_sample_rate != next_settings.output_sample_rate
-            || previous_settings.output_buffer_size != next_settings.output_buffer_size
-            || previous_settings.output_sample_format != next_settings.output_sample_format
-            || previous_settings.output_channel_mapping != next_settings.output_channel_mapping
-            || previous_settings.audio_safe_mode != next_settings.audio_safe_mode
-            || previous_settings.low_latency_output != next_settings.low_latency_output;
-        // Nota: audio_single_thread_render NO entra aqui. Cambiarlo no necesita
-        // reabrir el dispositivo -- el motor cambia el pool entre bloques -- y
-        // meterlo aqui haria que tocar el interruptor cortara el audio.
-        let midi_changed =
-            previous_settings.selected_midi_device != next_settings.selected_midi_device;
-        let output_channels_changed =
-            previous_settings.enabled_output_channels != next_settings.enabled_output_channels;
-        let metronome_enabled_changed =
-            previous_settings.metronome_enabled != next_settings.metronome_enabled;
-        let metronome_volume_changed =
-            (previous_settings.metronome_volume - next_settings.metronome_volume).abs()
-                > f64::EPSILON;
-        let metronome_output_changed =
-            previous_settings.metronome_output != next_settings.metronome_output;
-        let metronome_sound_changed = previous_settings.metronome_accent_enabled
-            != next_settings.metronome_accent_enabled
-            || previous_settings.metronome_accent_preset != next_settings.metronome_accent_preset
-            || previous_settings.metronome_beat_preset != next_settings.metronome_beat_preset
-            || (previous_settings.metronome_accent_pitch - next_settings.metronome_accent_pitch)
-                .abs()
-                > f32::EPSILON
-            || (previous_settings.metronome_beat_pitch - next_settings.metronome_beat_pitch).abs()
-                > f32::EPSILON
-            || previous_settings.metronome_subdivision != next_settings.metronome_subdivision
-            || previous_settings.metronome_subdivision_preset
-                != next_settings.metronome_subdivision_preset
-            || (previous_settings.metronome_subdivision_pitch
-                - next_settings.metronome_subdivision_pitch)
-                .abs()
-                > f32::EPSILON
-            || (previous_settings.metronome_subdivision_gain
-                - next_settings.metronome_subdivision_gain)
-                .abs()
-                > f32::EPSILON;
-        let voice_guide_config_changed = previous_settings.voice_guide_enabled
-            != next_settings.voice_guide_enabled
-            || previous_settings.voice_guide_output != next_settings.voice_guide_output
-            || (previous_settings.voice_guide_volume - next_settings.voice_guide_volume).abs()
-                > f64::EPSILON
-            || previous_settings.voice_guide_lead_bars != next_settings.voice_guide_lead_bars
-            || previous_settings.voice_guide_count_in_enabled
-                != next_settings.voice_guide_count_in_enabled;
-
-        if !device_changed
-            && !midi_changed
-            && !output_channels_changed
-            && !metronome_enabled_changed
-            && !metronome_volume_changed
-            && !metronome_output_changed
-            && !metronome_sound_changed
-            && !voice_guide_config_changed
-        {
+        let plan = plan_audio_settings_change(&previous_settings, &next_settings);
+        if !plan.apply {
             return Ok(next_settings);
         }
 
-        let rebuild_audio_stream = device_changed || output_channels_changed;
-        if rebuild_audio_stream && self.engine.playback_state() == PlaybackState::Playing {
+        if plan.rebuild_stream && self.engine.playback_state() == PlaybackState::Playing {
             let _ = audio.stop();
             self.engine.pause()?;
             self.transport_clock
                 .pause_at(self.engine.position_seconds());
         }
 
-        audio.apply_settings_with_stream_rebuild(next_settings.clone(), rebuild_audio_stream)?;
+        audio.apply_settings_with_stream_rebuild(next_settings.clone(), plan.rebuild_stream)?;
 
         Ok(next_settings)
     }
