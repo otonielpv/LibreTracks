@@ -1,242 +1,85 @@
-# El audio preparado como función: lo construido y lo que falta
+# El audio preparado: construido, medido y retirado
 
-Etapa iniciada el 2026-09-09, tras nueve etapas de banco. **Esto ya no es
-instrumentación: es código de producción.**
+Etapa del 2026-09-09. **El código que describe este documento ya no existe en el
+repositorio.** Se construyó entero, se midió, y se eliminó el mismo día. Esto es
+el registro de por qué, para que nadie lo reconstruya sin datos nuevos.
 
-## Por qué ahora
+## Qué era
 
-El plan tenía una regla —no ajustar hilos, precarga ni caché desde este i7—
-que es correcta y sigue en pie. Se estaba aplicando de más: el audio preparado
-no es una política sino una **función**, y una función se diseña, no se
-calibra. Nueve etapas y un solo commit que cambiara lo que oye un usuario era
-señal de que la regla se había convertido en excusa.
+Renderizar warp y tono a un archivo, una sola vez y fuera del hilo de audio,
+para que la reproducción leyera el archivo en vez de ejecutar el estirador. El
+Freeze de Ableton, básicamente.
 
-El presupuesto de disco, que era lo único que podía matar la estrategia, lo
-aceptó el mantenedor: 0,51 GiB por canción es asumible con almacenamiento
-moderno.
+Se llegó a construir de punta a punta —siete piezas, 51 tests, cada una
+verificada rompiéndola a propósito para comprobar que sus tests sabían fallar—
+en los commits `5b3b838c`, `69574b05`, `8ba99e6e`, `8377fc12`, `e98a6d46`,
+`93453b9c` y `b0b2907e`. El historial las guarda; recuperarlas es un `git
+revert`.
 
-## Lo construido
+## Por qué se retiró
 
-Siete piezas, cada una con sus tests y cada una verificada rompiéndola a
-propósito para comprobar que sus tests saben fallar.
+**El problema que resolvía ya no existe.** Medido en la aplicación real, no en
+el banco: **27 pistas con warp Y tono a la vez**, WASAPI, buffer 512,
+multinúcleo activado, dan **CPU ~10 % y audio ~14 %**. El presupuesto de un
+bloque de 512 a 48 kHz son 10,67 ms, así que son ~1,5 ms usados y unas siete
+veces de margen — con una sesión más cargada que los multitracks pesados
+habituales.
 
-| Commit | Pieza | Dónde | Tests |
-| --- | --- | --- | ---: |
-| `5b3b838c` | Identidad de la caché | `libretracks-project/src/prepared_render.rs` | 9 |
-| `69574b05` | Almacén en disco y presupuesto | `…/prepared_render_store.rs` | 8 |
-| `8ba99e6e` | Renderizador offline | `native/…/render/prepared_track_renderer.cpp` | 7 |
-| `8377fc12` | Entrada FFI | `lt_engine_ffi.cpp` + `lt-audio-engine-v2` | 5 |
-| `e98a6d46` | Orquestación | `…/prepared_render_job.rs` | 12 |
-| `93453b9c` | Cola en segundo plano y comandos | `apps/desktop/…/state/prepared_queue.rs` | 6 |
-| `b0b2907e` | Ruta de reproducción | `pitch_resolution.cpp` + intercambio de sesión | 4 |
+Lo que resolvió el problema fue **el multihilo**, que ya estaba hecho antes de
+empezar esta etapa. Todo lo posterior era un seguro contra una máquina más
+lenta.
 
-### Las decisiones que no eran obvias
+Y esa máquina, cuando se miró de cerca, no encajaba: el candidato era el Oppo
+CPH1931 de `docs/plans/android-low-end/`, con 2 GB de RAM, que **ya no podía con
+una canción normal de 15–20 pistas**. Escribirle 0,51 GiB por canción y entre 8
+y 15 minutos de preparación no arregla eso; su problema es otro y más básico.
 
-**La clave cubre lo que el renderer hornea y nada de lo que aplica el
-mezclador.** El prototipo del banco se dejaba fuera todo lo del clip, y como
-`TrackRenderer` multiplica `ganancia de pista × ganancia de clip`, editar la
-ganancia de un clip habría dejado sonando el audio viejo. Hay un test por cada
-mitad: trece ediciones que deben invalidar y siete controles en vivo que no.
+## Por qué no se dejó dormido
 
-**El archivo cubre el tramo de clips de la pista, no la canción.** Un clip de
-diez segundos en una canción de cinco minutos habría pagado cinco minutos de
-silencio, y una sesión dispersa es el caso normal.
+Se consideró. Se descartó porque una función que nadie usa se pudre igual que un
+test que nadie ejecuta, y porque mantenerla obligaba a arrastrar un campo
+(`prepared_render`) por los tres parsers de pista del motor, con el riesgo
+permanente de que un futuro cuarto parser lo olvidara y warpease dos veces.
 
-**Las fuentes se hacen residentes antes de renderizar.** La ruta estirada no
-puede repetir un paso que se quedó corto —el estirador ya consumió su entrada—
-así que esperar y reintentar no está disponible. Una pista cada vez lo acota:
-el pico medido es 112 MiB.
+## Qué se conservó, y por qué
 
-**El renderizador comparte el `SourceManager` del motor.** Uno privado
-decodificaría cada fuente por segunda vez y luego desalojaría la caché viva
-para guardar la copia: pagar el doble para empeorar la reproducción.
+- **El banco de fidelidad de saltos** (`bench_fidelity_jump`,
+  `scripts/audio-perf/`). Mide si un salto con warp aterriza donde debe
+  —desfase 0,00 ms contra el render continuo— y eso es una propiedad del
+  **motor que se envía**, no de la función retirada. No existía antes. Ver
+  [etapa 07](07-fidelidad-saltos.md).
+- **`disk_space.rs`**, que sacó `free_space_bytes` de `session_package` a un
+  módulo propio. Es una deduplicación buena por sí sola.
+- **Las medidas y los informes** de las etapas 02–09. Son el registro de qué se
+  probó y qué salió.
 
-**La clave se comprueba dos veces.** Un render tarda segundos y el usuario
-puede seguir editando. Se calcula antes para decidir qué hacer y otra vez
-contra el modelo actual antes de publicar; si se movió, el archivo se descarta.
-Publicar primero y validar después pondría audio obsoleto delante de quien
-escucha, que es el único desenlace que esta función no puede producir nunca.
+## Lo que este episodio enseña, y es lo más útil que deja
 
-**La publicación es atómica y el manifiesto va el último.** Audio sin
-manifiesto es invisible y se barre; un manifiesto sin audio anunciaría un
-archivo que no está.
+**El orden estaba mal.** La medida que decidió todo —27 pistas en la aplicación
+real— costó treinta segundos y llegó la última, después de nueve etapas de banco
+y siete fases de implementación. La pregunta *«¿el problema sigue existiendo a
+esta escala?»* se podía hacer el primer día.
 
-### La cola del escritorio
+El plan heredado asumía el problema abierto porque un usuario había reportado
+96 % de CPU. Eso era cierto **antes del multihilo**. Nadie volvió a comprobar la
+premisa después de arreglarlo.
 
-Sigue la forma de `WaveformGenerationQueue`, y por el mismo motivo que esa cola
-existe: el trabajo dura segundos por pista y `engine_snapshot` toma el lock de
-sesión en cada sondeo de medidores. Dos cosas cambian a propósito: **un solo
-trabajador**, porque la residencia de fuentes sólo está acotada para una pista
-a la vez; y **los errores no se tragan**, porque esto es una acción del usuario
-y no una optimización que pueda fallar en silencio.
+Corolario para la próxima vez: antes de optimizar, medir que el problema existe
+**en la aplicación**, en la máquina que lo tenía, con la configuración real. Un
+banco puede confirmar una hipótesis durante semanas sin que nadie note que la
+hipótesis caducó.
 
-Sólo se preparan las pistas que de verdad pasan por el estirador. Una sin warp
-ni tono ya suena directa desde su fuente, así que prepararla gastaría 11 MiB por
-pista-minuto para no ahorrar nada.
+## Si alguna vez vuelve
 
-`PREPARED_DSP_REVISION` es la constante que hay que **subir a mano** cuando
-cambie el estirador o cómo se le alimenta. Nada más en la clave lo notaría: la
-sesión sería idéntica y el audio no.
+Haría falta un dato nuevo: un equipo donde la reproducción con warp sufra **y**
+que pueda permitirse preparar. Las dos condiciones, no una.
 
-### La ruta de reproducción
+Y dos decisiones ya tomadas que seguirían valiendo:
 
-Resultó mucho menos invasiva de lo esperado, y conviene explicar por qué: un
-archivo preparado ya contiene warp y tono, así que reproducirlo es un clip
-**directo** sobre otra fuente. No hace falta un camino nuevo en el mezclador ni
-tocar el bucle de render.
-
-1. Un campo `prepared_render` en `Track`, espejado en los **tres** sitios que
-   parsean pistas. Hay un test que lo comprueba porque el fallo de las regiones
-   fue exactamente ese: uno de tres sitios omitía un campo y editar durante la
-   reproducción reseteaba estado del motor. Aquí el precio sería una pista
-   preparada warpeada dos veces a mitad de actuación.
-2. Un corte en `resolve_pitch_render_decision`: pista preparada → ruta directa,
-   ratio 1,0, sin tono. No es una optimización sino la única respuesta correcta.
-3. El intercambio al construir la sesión, con ganancia unitaria y sin fundidos
-   porque el archivo ya los lleva.
-
-**Es aditivo:** una sesión que nunca preparó nada se comporta exactamente igual
-que antes.
-
-## La medida que lo cambia todo: no hace falta en este equipo
-
-El 2026-09-09, con la aplicación real y no con el banco, el mantenedor midió
-**27 pistas con warp Y tono a la vez**: WASAPI, buffer 512, multinúcleo
-activado. Resultado: **CPU ~10 %, audio ~14 %**.
-
-El presupuesto de un bloque de 512 a 48 kHz son 10,67 ms, así que eso son
-~1,5 ms usados y **unas 7 veces de margen** — con una sesión de 27 pistas, más
-cargada que los multitracks pesados habituales (25 stems).
-
-### Por qué esto no contradice la etapa 05
-
-La matriz de DSP activo midió 12 pistas con warp+tono al 81 % del presupuesto.
-Parece incompatible y no lo es: **esa matriz forzaba un solo hilo de render**,
-a propósito, para comparar el coste de cada ruta. La aplicación usa el pool
-multinúcleo, que reparte las voces y escala ~3,8× con cuatro hilos. No son la
-misma medida y nunca lo fueron.
-
-Conviene dejarlo escrito porque es fácil leer el 81 % como una predicción de lo
-que hace la app, y no lo es.
-
-### La decisión
-
-**La función queda construida y sin activar. No se le pone interfaz.**
-
-No porque el trabajo esté mal, sino porque ponerle un botón sería prometerle al
-usuario algo que no sabemos si necesita. En este equipo, medido, no lo necesita:
-sobra margen para el doble de pistas. El caso entero descansa ahora en máquinas
-que nadie ha medido, que es lo que lleva pendiente desde el 2026-09-08.
-
-Lo construido queda **inerte y sano**: nada marca una pista como preparada si no
-corre una preparación, nada corre una preparación si no se invoca el comando, y
-ningún sitio de la interfaz lo invoca. Con sus 51 tests, que sí se ejecutan en
-`npm test`. Si aparece el equipo modesto, están las siete piezas y el criterio
-medido para decidir en una tarde.
-
-### Restricción del mantenedor: si se activa, es automático
-
-**Decisión, no preferencia:** nada manual. Un botón por canción no lo va a usar
-nadie, y ya está razonado más abajo por qué el referente correcto es el prime de
-waveforms y no el Freeze de Ableton.
-
-Eso convierte los comandos existentes (`prepare_song_tracks`,
-`cancel_song_preparation`) en un atajo de depuración, no en el camino. El camino
-sería un disparador en segundo plano por canción, con la misma forma que
-`needs_prime` / `enqueue_prime`.
-
-### La tensión que hay que resolver ANTES de dar por buena la prueba del Oppo
-
-Prevista para el 2026-09-11 sobre el Oppo CPH1931 del plan de Android.
-
-«Automático» y «Android de gama baja» tiran en direcciones contrarias, y la
-prueba tiene que medir las dos cosas o dará una respuesta engañosa:
-
-1. **¿La reproducción con warp sufre de verdad ahí?** Es la pregunta que decide
-   si la función hace falta. La sesión de referencia son las 27 pistas con warp
-   y tono que en el i7 dan 14 %.
-2. **Si sufre, ¿puede ese aparato permitirse prepararla?** Porque preparar
-   automáticamente en ese dispositivo significa:
-   - **Disco.** 0,51 GiB por canción escritos solos. Ese teléfono ya reinició el
-     sistema importando un `.ltset` de 2 GB
-     (`docs/plans/android-low-end/`). El presupuesto por defecto que hay hoy en
-     el código son **2 GiB por canción**, que para ese aparato es absurdo y hay
-     que bajar antes de que nada se active allí.
-   - **Tiempo.** En el i7 la preparación va a ~58× tiempo real, unos 50 s por
-     canción. Si el Oppo va 10–20× más lento son **8 a 15 minutos por canción**,
-     en segundo plano, con lo que eso implica de batería y temperatura.
-
-Si la respuesta a (1) es sí y a (2) es no, la conclusión **no** es «preparar
-automáticamente»: es otra cosa —menos voces con warp, otra calidad, o negar el
-warp en esa clase de dispositivo—. Conviene tenerlo claro antes de mirar los
-números, para no forzarlos hacia la función que ya está construida.
-
-### Qué reabriría esto
-
-- **Un equipo modesto o un Android real.** Para que la función importara haría
-  falta uno ~7× más lento en esta carga. Es plausible en gama baja o en un
-  portátil de dos núcleos, donde el pool no tiene dónde repartir.
-- **El multinúcleo desactivado.** Estimando desde la escala medida del pool
-  (~3,8× con cuatro hilos), esa misma sesión rondaría el 50 % en vez del 14 %.
-  Es una estimación, no una medida — y se comprueba en treinta segundos
-  apagando el interruptor y mirando el medidor con la misma canción.
-
-## Lo que faltaría si se reabriera
-
-### 1. Interfaz
-
-Los comandos existen (`prepare_song_tracks`, `cancel_song_preparation`,
-`song_preparation_status`) pero nada los invoca.
-
-**Y no debería ser un botón por canción.** Ableton tiene Freeze y es manual,
-pero allí congelas una pista concreta con un plugin pesado que tú elegiste
-poner: un problema puntual que tú identificas. Aquí no hay plugins, el warp es
-una propiedad de la canción conocida de antemano, y si un equipo no puede con 12
-pistas warpeadas no puede con ninguna canción del repertorio. Pedirle a alguien
-que pulse un botón en las veinte canciones de un bolo es pedirle que no lo use.
-
-El referente correcto es el otro automatismo de Ableton —el análisis y la
-decodificación, los `.asd`, que nadie pide y aparecen— y el patrón ya existe en
-esta app: **el prime de waveforms en segundo plano**. Preparación automática por
-canción cuando tenga warp o tono y no se esté editando, con el botón manual
-como atajo y un «liberar» para recuperar disco.
-
-Lo que **no** debe hacerse es decidirlo automáticamente en función de la CPU
-observada: eso sí es una política de rendimiento, y no hay ni una medida en un
-equipo modesto que la justifique.
-
-Falta también el aviso cuando el contador de recorte se dispara, que tiene que
-decir qué hacer —bajar el nivel del clip y volver a preparar—, no sólo que pasó
-algo.
-
-### 2. Verificación en la aplicación real
-
-**Nadie ha ejecutado la cadena entera.** Está probada por piezas y no de punta a
-punta: preparar una canción de verdad, cerrarla, abrirla y comprobar que suena
-desde el archivo. Es lo primero que habría que hacer si se reabre, y el banco de
-fidelidad dice exactamente qué comprobar (desfase 0,00 ms respecto al DSP vivo,
-media ganancia = −6,02 dB en ambas rutas).
-
-### 3. Sin resolver
-
-- **Política de margen para el techo de PCM16.** El warp añade 3,3 dB de pico;
-  un stem por encima de unos −3,3 dBFS recortaría. El preparador ya cuenta las
-  muestras recortadas y la orquestación las propaga hasta el informe, pero
-  nadie decide qué hacer con ese número.
-- **Publicación atómica frente a cambios en caliente de warp/tono.** La caché se
-  invalida correctamente, pero no está probado que un cambio de parámetros
-  durante la reproducción no llegue a sonar desde caché obsoleta.
-- **Ninguna medida en PC modesto ni Android real.** Los MiB por pista-minuto se
-  trasladan; los segundos no.
-
-## Cómo verificar lo construido
-
-```powershell
-cargo test -p libretracks-project
-cargo test -p lt-audio-engine-v2 --features no-link
-cmake --build native/audio-engine-v2/build-tests --config Release --target lt_engine_tests -j 4
-native\audio-engine-v2\build-tests\tests\Release\lt_engine_tests.exe
-```
-
-396 casos nativos, 150 tests del crate de proyecto, 79 del crate del motor y
-259 del de escritorio, más las seis suites de `npm test`.
+- **Nada manual.** Un botón por canción no lo usaría nadie; el referente
+  correcto es el prime de waveforms de esta misma app —automático, en segundo
+  plano, invisible— y no el Freeze de Ableton, que es manual porque allí
+  congelas una pista concreta con un plugin que tú elegiste poner.
+- **PCM16, con el recorte vigilado.** El formato ya está decidido y medido en la
+  [etapa 08](08-presupuesto-y-formato.md): el ruido queda 80 dB por debajo del
+  programa, pero el warp sube 3,3 dB de pico y un stem caliente tocaría el techo.

@@ -36,29 +36,20 @@ Secuencia de trabajo hasta la fecha:
 | `6e456519` | Presupuesto de disco medido, PCM16 en el preparador y fidelidad revalidada en PCM16 |
 | `a5140be2` | Ganancia, panorama y mute comprobados en vivo sobre el audio preparado |
 | `f62d8e36` | Fin de la fase de medida: instrumentación agrupada y tests conectados a `npm test` |
-| `5b3b838c` | **Producción**: identidad de la caché de audio preparado |
-| `69574b05` | **Producción**: almacén en disco con presupuesto |
-| `8ba99e6e` | **Producción**: renderizador offline en el motor |
-| `8377fc12` | **Producción**: entrada FFI con progreso y cancelación |
-| `e98a6d46` | **Producción**: orquestación de la preparación |
-| `93453b9c` | **Producción**: cola en segundo plano y comandos del escritorio |
-| `b0b2907e` | **Producción**: reproducción desde el archivo preparado |
+| `5b3b838c` … `b0b2907e` | Audio preparado, construido entero y **retirado** el mismo día (ver [etapa 10](10-integracion-produccion.md)) |
 
-Hasta `f62d8e36`, sólo `849e8e98` cambiaba lo que oye un usuario. A partir de
-ahí el trabajo es de producción: siete piezas que construyen la función de audio
-preparado de punta a punta (ver [etapa 10](10-integracion-produccion.md)).
+Hasta `f62d8e36`, sólo `849e8e98` cambiaba lo que oye un usuario. Después se
+construyó entera la función de audio preparado y **se retiró el mismo día**, así
+que el árbol vuelve a estar donde estaba: la única mejora del motor que llegó a
+producción en todo este plan sigue siendo `849e8e98`, la retirada segura de
+trabajos del pool de render.
 
-**La función está construida y DESACTIVADA a propósito.** El mantenedor midió en
-la aplicación real 27 pistas con warp y tono a la vez —WASAPI, buffer 512,
-multinúcleo— y salió a **CPU ~10 %, audio ~14 %**: unas siete veces de margen
-sobre el presupuesto del bloque. En este equipo la función no hace falta, así
-que no se le pone interfaz. Ver la etapa 10 para el razonamiento completo.
-La reproducción desde audio con warp/tono preparados **existe como camino
-completo pero inerte**: identidad, almacén, renderizador, FFI, orquestación,
-cola de fondo, comandos y ruta de reproducción. Nada marca una pista como
-preparada si no corre una preparación, nada la corre si no se invoca el comando,
-y ningún sitio de la interfaz lo invoca. No tocar esto sin leer antes la
-decisión de la etapa 10.
+**No reconstruir el audio preparado sin un dato nuevo.** El motivo está en la
+[etapa 10](10-integracion-produccion.md) y se resume así: 27 pistas con warp Y
+tono a la vez miden CPU ~10 % y audio ~14 % en la aplicación real —unas siete
+veces de margen— porque el multihilo ya resolvió el problema. El candidato a
+«equipo modesto», el Oppo de 2 GB, ni siquiera puede con 15–20 pistas normales,
+así que escribirle medio giga por canción no lo arregla.
 
 No revertir cambios ajenos ni asumir que todo cambio encontrado pertenece a
 este trabajo. Consultar `git status` y los diffs antes de editar o commitear.
@@ -205,71 +196,17 @@ tenemos. La siguiente etapa es de producción.
 
 ## Siguiente tarea concreta recomendada
 
-**Ninguna hasta la prueba del Oppo, prevista para el 2026-09-11.** La función
-está terminada y desactivada, y lo que decidiría si merece activarse es esa
-medida, no más código.
+**Ninguna sobre el audio preparado: está retirado y no se reconstruye.**
 
-Dos cosas que el mantenedor ha dejado fijadas y no hay que volver a discutir:
+Lo que sí sigue abierto de este plan es lo que nunca se midió, no lo que se
+construyó. En orden de valor:
 
-- **Si se activa, es automático.** Nada manual: un botón por canción no lo usaría
-  nadie. Los comandos que existen son un atajo de depuración, no el camino.
-- La prueba del Oppo tiene que medir **dos** cosas, no una: si la reproducción
-  con warp sufre ahí, y si ese aparato puede permitirse preparar (0,51 GiB por
-  canción escritos solos, y de 8 a 15 minutos estimados por canción). Si lo
-  primero es sí y lo segundo es no, la respuesta no es esta función. El
-  razonamiento completo está en la etapa 10; leerlo antes de mirar los números,
-  para no forzarlos hacia lo que ya está construido.
-
-El presupuesto por defecto que hay hoy en el código son 2 GiB por canción
-(`DEFAULT_BUDGET_BYTES` en `state/prepared_queue.rs`), pensado para escritorio.
-Para ese teléfono es absurdo y hay que bajarlo antes de que nada se active allí.
-
-Si aparece ese equipo, el orden es: (1) medir la misma sesión de 27 pistas allí,
-(2) si va apretado, ejecutar la cadena entera una vez de punta a punta —está
-probada por piezas y nunca completa—, y (3) sólo entonces la interfaz, que **no
-debe ser un botón por canción**: el razonamiento está en la etapa 10.
-
-Hay una medida gratis que acota el margen sin hardware nuevo: repetir la misma
-canción de 27 pistas con el **multinúcleo apagado**. Estimando desde la escala
-del pool (~3,8× con cuatro hilos) rondaría el 50 % en vez del 14 %, pero es una
-estimación y el interruptor está ahí.
-
-Y sigue abierta, desde el principio del plan, la deuda de método: ningún «render
-tardío» del banco se ha correlacionado nunca con un corte audible real en un
-driver.
-
-## Lo que ya no aplica de las etapas de banco
-
-El usuario ha aceptado el presupuesto de disco (0,51 GiB por canción es
-asumible con almacenamiento moderno) y ha señalado, con razón, que llevamos seis
-commits sin tocar producción. La regla de no ajustar políticas desde este i7
-sigue en pie para hilos, precarga y caché, pero **no aplica a construir la
-función**: una función se diseña, no se calibra. La siguiente etapa debería ser
-de producción, no de banco.
-
-Lo que queda de banco, si hiciera falta, sobre PCM16:
-
-1. Regiones múltiples, offsets de clip distintos de cero y ganancia de clip no
-   unitaria. El fixture y el banco ya soportan añadirlo; hoy sólo montan una
-   región y un clip.
-2. Cambios de warp y de tono en caliente durante la reproducción, comprobando
-   que una invalidación nunca reproduce caché obsoleta. Esto necesita la
-   publicación atómica, así que probablemente sea diseño además de medida.
-3. Política de margen para el techo de PCM16: qué hacer cuando el contador de
-   muestras recortadas del preparador se dispara. Bajar el nivel del preparado y
-   compensarlo al reproducir mueve la frontera con el mezclador, así que es
-   diseño, no sólo medida.
-
-Después: diseñar preparación explícita con presupuesto de disco, cancelación,
-publicación segura y respuesta a ediciones. Medir preparación y playback en PC
-modesto/Android real, con memoria, almacenamiento y 15–30 minutos de carga.
-Si no hay dispositivo, dejar esa validación explícitamente pendiente y avanzar
-en las pruebas independientes; no sustituirla por limitar núcleos del i7.
-
-La instrumentación vive ahora en `scripts/audio-perf/`, con su propio README.
-No es producto: nada del ejecutable importa de ahí. Cada archivo es el paso de
-reproducción de una medida publicada, por eso se agrupó en vez de borrarse.
-Los tres `.test.mjs` ya los ejecuta `npm test`; antes no los ejecutaba nadie.
+1. **Correlacionar el proxy con la realidad.** Ningún «render tardío» del banco
+   se ha comparado nunca con un corte audible real en un driver. Toda la cadena
+   de medida optimiza una métrica sustituta que nadie ha validado.
+2. **Medir en un Android real lo que sí falla ahí.** El Oppo no puede con 15–20
+   pistas normales, y eso no es un problema de warp: es el plan
+   `docs/plans/android-low-end/`.
 
 Hay además una deuda de método que sigue abierta desde el principio del plan:
 **ningún render tardío del banco se ha correlacionado nunca con un corte audible

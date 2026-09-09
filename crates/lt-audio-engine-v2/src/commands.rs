@@ -343,13 +343,6 @@ pub struct TrackUpsert {
     /// Serialized token, e.g. "follows_song_or_region" | "never_transpose".
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub transpose_behavior: String,
-    /// This track's clips point at a prepared render that already carries warp
-    /// and pitch, so the engine must take the direct path over them. Sending it
-    /// as false on a track that IS prepared warps it a second time and walks it
-    /// away from the click, so every place that builds a `TrackUpsert` has to
-    /// carry it — the engine's own parsers mirror it for the same reason.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub prepared_render: bool,
     /// Serialized token, e.g. "normal" | "click" | "guide".
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub role: String,

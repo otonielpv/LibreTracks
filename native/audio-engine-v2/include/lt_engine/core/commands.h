@@ -290,9 +290,6 @@ struct CmdUpsertSongTracks {
         bool        solo = false;
         // Serialized tokens; converted to the engine enums when applied.
         std::string transpose_behavior;  // e.g. "follows_song_or_region" | "never"
-        // The track's clips already carry warp and pitch from a prepared
-        // render, so the renderer must take the direct path over them.
-        bool        prepared_render = false;
         std::string role;                // e.g. "normal" | "click" | "guide"
         std::string kind;                // e.g. "audio" | "folder"
         Id          parent_track_id;     // empty = top level

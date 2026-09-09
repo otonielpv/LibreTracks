@@ -18,27 +18,14 @@ use libretracks_core::{
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineError, EngineSnapshot, JumpTarget,
-    JumpTargetKind, JumpTrigger, MarkerUpdate, PreparedTrackRenderer, RegionUpdate, SourceRef,
-    TempoMarkerUpdate,
+    JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, SourceRef, TempoMarkerUpdate,
     TimeSignatureMarkerUpdate, TrackClipUpdate, TrackUpsert,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use libretracks_project::{
-    usable_prepared_renders, PreparedRenderFormat, PreparedRenderOutput,
-};
-
 use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
-use crate::state::prepared_queue::PREPARED_DSP_REVISION;
 
-/// One track's prepared file, as playback needs to see it.
-struct PreparedTrackPlayback {
-    /// The engine keys sources by path, so the path is the id.
-    source_id: String,
-    timeline_start_frames: i64,
-    frames: u64,
-}
 use crate::{infra::error::DesktopError, infra::settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
@@ -1147,64 +1134,6 @@ impl AudioController {
                     });
             }
 
-            // Tracks with a usable prepared render play from their file
-            // instead of running the stretcher: one clip covering the rendered
-            // span, and a flag telling the engine not to warp what is already
-            // warped. A track without one is untouched and plays live, so this
-            // is additive — a session that never prepared anything behaves
-            // exactly as it did before.
-            let prepared: std::collections::HashMap<String, PreparedTrackPlayback> = state
-                .song_dir
-                .as_deref()
-                .map(|dir| {
-                    let output = PreparedRenderOutput {
-                        sample_rate: 48_000,
-                        channels: 2,
-                        format: PreparedRenderFormat::Pcm16,
-                        dsp_identity: PREPARED_DSP_REVISION.to_string(),
-                    };
-                    usable_prepared_renders(song, dir, &output)
-                        .into_iter()
-                        .map(|render| {
-                            (
-                                render.track_id.clone(),
-                                PreparedTrackPlayback {
-                                    source_id: render.audio_path.to_string_lossy().into_owned(),
-                                    timeline_start_frames: render.timeline_start_frames,
-                                    frames: render.frames,
-                                },
-                            )
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            for (track_id, playback) in &prepared {
-                if seen_sources.insert(playback.source_id.clone()) {
-                    sources.push(SourceRef {
-                        id: playback.source_id.clone(),
-                        file_path: playback.source_id.clone(),
-                    });
-                }
-                // The prepared file replaces every clip on the track: it already
-                // contains them, laid out across the span it was rendered over.
-                clips_by_track.insert(
-                    track_id.clone(),
-                    vec![TrackClipUpdate {
-                        id: format!("{track_id}-prepared"),
-                        source_id: playback.source_id.clone(),
-                        timeline_start_frame: playback.timeline_start_frames,
-                        source_start_frame: 0,
-                        length_frames: playback.frames as i64,
-                        gain: 1.0,
-                        // Clip gain and fades are already in the file; applying
-                        // them again would square the gain and fade twice.
-                        fade_in_frames: 0,
-                        fade_out_frames: 0,
-                        semitones: 0,
-                    }],
-                );
-            }
-
             let tracks = resolved_song
                 .tracks
                 .iter()
@@ -1233,7 +1162,6 @@ impl AudioController {
                         TrackKind::Audio | TrackKind::Midi => "audio".to_string(),
                     },
                     parent_track_id: track.parent_track_id.clone().unwrap_or_default(),
-                    prepared_render: prepared.contains_key(&track.id),
                     clips: clips_by_track.remove(&track.id).unwrap_or_default(),
                 })
                 .collect();
@@ -1693,34 +1621,6 @@ impl AudioController {
         // its current device rate.
         loader.load(pads_dir, pad_id, key, 0);
         Ok(())
-    }
-
-    /// A detached handle for preparing tracks through warp and pitch.
-    ///
-    /// Same shape, and same reason, as `pad_loader`: a preparation takes
-    /// seconds per track and writes tens of MB per track-minute, and
-    /// `engine_snapshot` — polled constantly for meters and the playhead —
-    /// takes this same lock. Hold it for a preparation and playback and the UI
-    /// freeze for the whole run. So the lock is taken only to obtain the
-    /// handle, and the work happens after it is released.
-    pub fn prepared_track_renderer(&self) -> Result<PreparedTrackRenderer, DesktopError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
-        if state.engine.is_none() {
-            let engine =
-                Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-            engine
-                .initialize()
-                .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-            state.engine = Some(engine);
-        }
-        Ok(state
-            .engine
-            .as_ref()
-            .expect("engine initialized above")
-            .prepared_track_renderer())
     }
 
     pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {

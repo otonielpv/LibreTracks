@@ -17,13 +17,6 @@ pub type LtResult = i32;
 /// The pointers are the analyser's own buffers: valid only for the duration of
 /// the call and only for `bucket_count` entries. The right-channel pointers are
 /// null for mono sources. Mirrors `LtPeakProgressCallback` in lt_engine.h.
-/// Progress of an offline prepared-track render. Return non-zero to continue,
-/// zero to cancel — cancelling removes the partial file. Called between render
-/// steps on the calling thread, never from audio. Mirrors
-/// `LtPreparedRenderProgressCallback` in lt_engine.h.
-pub type LtPreparedRenderProgressCallback =
-    unsafe extern "C" fn(ctx: *mut c_void, rendered_frames: i64, total_frames: i64) -> i32;
-
 pub type LtPeakProgressCallback = unsafe extern "C" fn(
     ctx: *mut c_void,
     sample_rate: i32,
@@ -107,15 +100,6 @@ extern "C" {
         file_path: *const c_char,
         resolution_frames: i32,
         on_progress: Option<LtPeakProgressCallback>,
-        progress_ctx: *mut c_void,
-    ) -> *const c_char;
-    pub fn lt_audio_engine_render_prepared_track(
-        engine: *mut LtEngine,
-        song_id: *const c_char,
-        track_id: *const c_char,
-        output_path: *const c_char,
-        format_pcm16: i32,
-        on_progress: Option<LtPreparedRenderProgressCallback>,
         progress_ctx: *mut c_void,
     ) -> *const c_char;
     pub fn lt_audio_engine_load_pad_clip(
@@ -314,23 +298,6 @@ pub unsafe fn lt_audio_engine_analyze_file_peaks_progressive(
     _: *mut c_void,
 ) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
-}
-#[cfg(any(
-    feature = "no-link",
-    all(target_os = "android", not(lt_engine_android_link))
-))]
-pub unsafe fn lt_audio_engine_render_prepared_track(
-    _: *mut LtEngine,
-    _: *const c_char,
-    _: *const c_char,
-    _: *const c_char,
-    _: i32,
-    _: Option<LtPreparedRenderProgressCallback>,
-    _: *mut c_void,
-) -> *const c_char {
-    b"{\"ok\":false,\"cancelled\":false,\"error\":\"no-link\"}\0"
-        .as_ptr()
-        .cast()
 }
 #[cfg(any(
     feature = "no-link",

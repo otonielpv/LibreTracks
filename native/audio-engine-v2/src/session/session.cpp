@@ -234,7 +234,6 @@ std::string session_to_json(const Session& session) {
             jtrack["mute"]                = track.mute;
             jtrack["solo"]                = track.solo;
             jtrack["transpose_behavior"]  = transpose_behavior_str(track.transpose_behavior);
-            jtrack["prepared_render"]     = track.prepared_render;
             jtrack["role"]                = track_role_str(track.role);
 
             json clips = json::array();

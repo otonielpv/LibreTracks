@@ -1583,33 +1583,6 @@ void EngineImpl::reload_pad_clip_for_new_sample_rate() {
     mixer_->set_pad_clip(std::move(clip));
 }
 
-PreparedRenderResult EngineImpl::render_prepared_track_now(
-    const std::string& song_id,
-    const std::string& track_id,
-    const std::string& output_path,
-    PreparedSampleFormat format,
-    PreparedRenderProgressFn on_progress,
-    void* progress_ctx) {
-    PreparedRenderResult result;
-    // A snapshot, not the live pointer: the user is free to keep editing while
-    // this runs, and the render must be of one consistent session. The caller
-    // re-checks its own cache key before publishing, so a session that moved
-    // under us produces a file that is simply discarded.
-    const auto session = std::atomic_load(&session_);
-    if (!session || !source_manager_) {
-        result.error = "no session loaded";
-        return result;
-    }
-    PreparedRenderRequest request;
-    request.session = session.get();
-    request.sources = source_manager_.get();
-    request.song_id = song_id;
-    request.track_id = track_id;
-    request.output_path = output_path;
-    request.format = format;
-    return render_prepared_track(request, on_progress, progress_ctx);
-}
-
 void EngineImpl::load_pad_clip_now(const std::string& pads_dir,
                                    const std::string& pad_id,
                                    int key,
@@ -3397,7 +3370,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                          || tu.transpose_behavior == "NeverTranspose")
                             ? TransposeBehavior::NeverTranspose
                             : TransposeBehavior::FollowsSongOrRegion;
-                    track.prepared_render = tu.prepared_render;
                     track.kind = (tu.kind == "folder")
                         ? TrackKind::Folder : TrackKind::Audio;
                     track.parent_track_id = tu.parent_track_id;

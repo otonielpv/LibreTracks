@@ -12,7 +12,6 @@
 #include <lt_engine/core/events.h>
 #include <lt_engine/core/snapshot.h>
 #include <lt_engine/core/result.h>
-#include <lt_engine/render/prepared_track_renderer.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/session/session_adapter.h>
 #include <lt_engine/sources/source_manager.h>
@@ -70,22 +69,6 @@ public:
                            const std::string& pad_id,
                            int key,
                            int sample_rate);
-
-    // Render one track through warp and pitch into `output_path`, RIGHT NOW, on
-    // the calling thread. Same reasoning as load_pad_clip_now: this takes
-    // seconds per track and writes tens of MB, so it must not run under the
-    // caller's engine lock.
-    //
-    // It renders from the session this engine is holding and reads through this
-    // engine's SourceManager. That is the point — a prepared file has to be
-    // what live DSP would have produced, and a separately parsed model or a
-    // second decode of the sources could drift from it.
-    PreparedRenderResult render_prepared_track_now(const std::string& song_id,
-                                                   const std::string& track_id,
-                                                   const std::string& output_path,
-                                                   PreparedSampleFormat format,
-                                                   PreparedRenderProgressFn on_progress,
-                                                   void* progress_ctx);
 
 private:
 #ifdef LT_ENGINE_BENCHMARK_HOOKS
