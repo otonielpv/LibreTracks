@@ -268,6 +268,59 @@ LT_API const char* lt_audio_engine_analyze_file_peaks_progressive(
     return buf.c_str();
 }
 
+namespace {
+
+// Bridges the C callback's "non-zero to continue" to the renderer's bool.
+struct PreparedProgressBridge {
+    LtPreparedRenderProgressCallback fn = nullptr;
+    void* ctx = nullptr;
+};
+
+bool forward_prepared_progress(void* ctx, lt::Frame rendered, lt::Frame total) {
+    auto* bridge = static_cast<PreparedProgressBridge*>(ctx);
+    if (!bridge || !bridge->fn) return true;
+    return bridge->fn(bridge->ctx, static_cast<int64_t>(rendered),
+                      static_cast<int64_t>(total)) != 0;
+}
+
+
+} // namespace
+
+LT_API const char* lt_audio_engine_render_prepared_track(
+    LtEngine* engine,
+    const char* song_id,
+    const char* track_id,
+    const char* output_path,
+    int32_t format_pcm16,
+    LtPreparedRenderProgressCallback on_progress,
+    void* progress_ctx) {
+    thread_local std::string buf;
+    if (!engine || !song_id || !track_id || !output_path) {
+        lt::PreparedRenderResult failure;
+        failure.error = "invalid arguments";
+        buf = lt::prepared_render_result_to_json(failure);
+        return buf.c_str();
+    }
+    PreparedProgressBridge bridge{on_progress, progress_ctx};
+    try {
+        const auto result = as_impl(engine)->render_prepared_track_now(
+            song_id, track_id, output_path,
+            format_pcm16 ? lt::PreparedSampleFormat::Pcm16 : lt::PreparedSampleFormat::Float32,
+            on_progress ? &forward_prepared_progress : nullptr,
+            on_progress ? &bridge : nullptr);
+        buf = lt::prepared_render_result_to_json(result);
+    } catch (const std::exception& e) {
+        lt::PreparedRenderResult failure;
+        failure.error = e.what();
+        buf = lt::prepared_render_result_to_json(failure);
+    } catch (...) {
+        lt::PreparedRenderResult failure;
+        failure.error = "prepared render failed";
+        buf = lt::prepared_render_result_to_json(failure);
+    }
+    return buf.c_str();
+}
+
 LT_API void lt_audio_engine_load_pad_clip(LtEngine* engine,
                                           const char* pads_dir,
                                           const char* pad_id,

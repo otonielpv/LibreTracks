@@ -323,3 +323,41 @@ TEST_CASE("a request that cannot be rendered fails without writing a file") {
     CHECK_FALSE(result.ok);
     CHECK_FALSE(std::filesystem::exists(output));
 }
+
+TEST_CASE("the JSON handed to the host has the shape the host parses") {
+    // The Rust wrapper parses these exact keys. Pinning the shape on both sides
+    // is what stops a rename here from turning into a silent "la preparacion
+    // fallo sin explicar por que" over there.
+    PreparedRenderResult ok;
+    ok.ok = true;
+    ok.timeline_start_frame = 480000;
+    ok.frames = 96000;
+    ok.output_bytes = 384044;
+    ok.clipped_samples = 7;
+    CHECK(prepared_render_result_to_json(ok) ==
+          "{\"ok\":true,\"timelineStartFrames\":480000,\"frames\":96000,"
+          "\"outputBytes\":384044,\"clippedSamples\":7}");
+
+    PreparedRenderResult cancelled;
+    cancelled.cancelled = true;
+    cancelled.error = "cancelled";
+    CHECK(prepared_render_result_to_json(cancelled) ==
+          "{\"ok\":false,\"cancelled\":true,\"error\":\"cancelled\"}");
+
+    // An error carrying a Windows path is the normal case, and a raw backslash
+    // or quote would make the reply unparseable exactly when it matters most.
+    PreparedRenderResult failed;
+    // The runtime text is:  cannot create C:\songs\my "set".wav
+    failed.error = "cannot create C:\\songs\\my \"set\".wav";
+    const auto json = prepared_render_result_to_json(failed);
+    // ...which must reach the host with its backslashes doubled and its quotes
+    // escaped, or the reply is unparseable exactly when it matters most.
+    CHECK(json ==
+          "{\"ok\":false,\"cancelled\":false,\"error\":\"cannot create "
+          "C:\\\\songs\\\\my \\\"set\\\".wav\"}");
+    // A control character has to survive too, as \u00XX rather than raw.
+    PreparedRenderResult control;
+    control.error = std::string("line") + '\n' + "next";
+    CHECK(prepared_render_result_to_json(control) ==
+          "{\"ok\":false,\"cancelled\":false,\"error\":\"line\\nnext\"}");
+}

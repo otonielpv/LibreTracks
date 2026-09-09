@@ -96,4 +96,9 @@ PreparedRenderResult render_prepared_track(const PreparedRenderRequest& request,
                                            PreparedRenderProgressFn on_progress,
                                            void* progress_ctx);
 
+// The exact JSON the FFI hands the host. Lives here, and is tested here, so the
+// shape the Rust side parses is pinned by something other than both sides having
+// been written on the same afternoon.
+std::string prepared_render_result_to_json(const PreparedRenderResult& result);
+
 } // namespace lt

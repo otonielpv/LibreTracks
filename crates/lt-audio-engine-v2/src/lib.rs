@@ -145,6 +145,225 @@ impl PadClipLoader {
     }
 }
 
+/// What an offline prepared-track render produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparedRenderOutcome {
+    /// Where the rendered span starts on the timeline. The file covers the
+    /// track's own clips, not the whole song.
+    pub timeline_start_frames: i64,
+    pub frames: i64,
+    pub output_bytes: u64,
+    /// Samples the format's ceiling had to clamp. Warp raises peaks above the
+    /// source's, so in PCM16 a hot stem can reach it; non-zero means the file
+    /// carries distortion, not just quantization noise.
+    #[serde(default)]
+    pub clipped_samples: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PreparedRenderError {
+    /// The progress callback asked to stop. The partial file is already gone.
+    Cancelled,
+    Failed(String),
+}
+
+impl std::fmt::Display for PreparedRenderError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PreparedRenderError::Cancelled => write!(formatter, "preparación cancelada"),
+            PreparedRenderError::Failed(reason) => write!(formatter, "{reason}"),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PreparedRenderReply {
+    ok: bool,
+    #[serde(default)]
+    cancelled: bool,
+    #[serde(default)]
+    error: String,
+    #[serde(default)]
+    timeline_start_frames: i64,
+    #[serde(default)]
+    frames: i64,
+    #[serde(default)]
+    output_bytes: u64,
+    #[serde(default)]
+    clipped_samples: u64,
+}
+
+/// A handle for rendering prepared tracks off the host's engine lock.
+///
+/// Detached from the engine for the same reason as [`PadClipLoader`]: a render
+/// takes seconds and writes tens of MB per track-minute, and holding the lock
+/// for that would stall playback and every snapshot the UI asks for.
+#[derive(Clone, Copy)]
+pub struct PreparedTrackRenderer {
+    handle: *mut LtEngine,
+}
+
+// SAFETY: the FFI target takes a snapshot of the session, renders through the
+// engine's SourceManager — which is already read concurrently by the audio
+// thread and written by the fill workers — and touches no other engine state.
+unsafe impl Send for PreparedTrackRenderer {}
+
+extern "C" fn prepared_progress_trampoline(
+    ctx: *mut std::ffi::c_void,
+    rendered_frames: i64,
+    total_frames: i64,
+) -> i32 {
+    if ctx.is_null() {
+        return 1;
+    }
+    // The callback runs on the rendering thread. A panic here would unwind
+    // across the C++ frame (UB), so it is contained — and a panicking callback
+    // cancels rather than silently continuing a render nobody is watching.
+    let callback = unsafe { &mut *(ctx as *mut &mut dyn FnMut(i64, i64) -> bool) };
+    let keep_going = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback(rendered_frames, total_frames)
+    }))
+    .unwrap_or(false);
+    i32::from(keep_going)
+}
+
+impl PreparedTrackRenderer {
+    /// Render one track through warp and pitch into `output_path`.
+    ///
+    /// Blocks for as long as the render takes; call it from a blocking task,
+    /// never while holding the host's engine lock. `on_progress` returns false
+    /// to cancel, and a cancelled render leaves no file behind.
+    pub fn render(
+        &self,
+        song_id: &str,
+        track_id: &str,
+        output_path: &str,
+        pcm16: bool,
+        on_progress: &mut dyn FnMut(i64, i64) -> bool,
+    ) -> Result<PreparedRenderOutcome, PreparedRenderError> {
+        let to_c = |value: &str| {
+            std::ffi::CString::new(value).map_err(|_| {
+                PreparedRenderError::Failed(format!("texto no válido para el motor: {value}"))
+            })
+        };
+        let song = to_c(song_id)?;
+        let track = to_c(track_id)?;
+        let output = to_c(output_path)?;
+
+        let mut callback: &mut dyn FnMut(i64, i64) -> bool = on_progress;
+        let ctx = &mut callback as *mut &mut dyn FnMut(i64, i64) -> bool;
+        let raw = unsafe {
+            lt_audio_engine_render_prepared_track(
+                self.handle,
+                song.as_ptr(),
+                track.as_ptr(),
+                output.as_ptr(),
+                i32::from(pcm16),
+                Some(prepared_progress_trampoline),
+                ctx.cast(),
+            )
+        };
+        if raw.is_null() {
+            return Err(PreparedRenderError::Failed(
+                "el motor no devolvió respuesta".into(),
+            ));
+        }
+        let json = unsafe { std::ffi::CStr::from_ptr(raw) }
+            .to_string_lossy()
+            .into_owned();
+        parse_prepared_render_reply(&json)
+    }
+}
+
+/// Turns the engine's reply into a result. Split out from the FFI call so the
+/// contract with `lt_audio_engine_render_prepared_track` can be tested without
+/// a linked engine — the shapes below are copied verbatim from the strings
+/// `lt_engine_ffi.cpp` builds.
+fn parse_prepared_render_reply(
+    json: &str,
+) -> Result<PreparedRenderOutcome, PreparedRenderError> {
+    let reply: PreparedRenderReply =
+        serde_json::from_str(json).map_err(|error| PreparedRenderError::Failed(error.to_string()))?;
+    // Cancellation is checked before `ok`: a cancelled render reports ok:false
+    // too, and reporting it as a failure would put an error in front of a user
+    // who pressed stop.
+    if reply.cancelled {
+        return Err(PreparedRenderError::Cancelled);
+    }
+    if !reply.ok {
+        return Err(PreparedRenderError::Failed(if reply.error.is_empty() {
+            "la preparación falló sin explicar por qué".into()
+        } else {
+            reply.error
+        }));
+    }
+    Ok(PreparedRenderOutcome {
+        timeline_start_frames: reply.timeline_start_frames,
+        frames: reply.frames,
+        output_bytes: reply.output_bytes,
+        clipped_samples: reply.clipped_samples,
+    })
+}
+
+#[cfg(test)]
+mod prepared_render_tests {
+    use super::*;
+
+    #[test]
+    fn a_successful_reply_carries_the_span_and_the_clipping_count() {
+        let outcome = parse_prepared_render_reply(
+            r#"{"ok":true,"timelineStartFrames":480000,"frames":96000,"outputBytes":384044,"clippedSamples":7}"#,
+        )
+        .expect("ok");
+        assert_eq!(outcome.timeline_start_frames, 480_000);
+        assert_eq!(outcome.frames, 96_000);
+        assert_eq!(outcome.output_bytes, 384_044);
+        // Clipping is not an error, but it must survive to the caller: it means
+        // the file carries distortion and the format needs headroom.
+        assert_eq!(outcome.clipped_samples, 7);
+    }
+
+    #[test]
+    fn a_cancelled_reply_is_not_reported_as_a_failure() {
+        // The engine sets ok:false for a cancellation too. Reading only `ok`
+        // would put an error in front of a user who pressed stop.
+        assert_eq!(
+            parse_prepared_render_reply(r#"{"ok":false,"cancelled":true,"error":"cancelled"}"#),
+            Err(PreparedRenderError::Cancelled)
+        );
+    }
+
+    #[test]
+    fn a_failure_keeps_the_engine_s_own_words() {
+        assert_eq!(
+            parse_prepared_render_reply(
+                r#"{"ok":false,"cancelled":false,"error":"source not loaded: kick"}"#
+            ),
+            Err(PreparedRenderError::Failed("source not loaded: kick".into()))
+        );
+        // The stub the no-link build returns must also read as a failure.
+        assert!(matches!(
+            parse_prepared_render_reply(r#"{"ok":false,"cancelled":false,"error":"no-link"}"#),
+            Err(PreparedRenderError::Failed(_))
+        ));
+    }
+
+    #[test]
+    fn a_reply_we_cannot_read_is_a_failure_and_never_a_silent_success() {
+        assert!(matches!(
+            parse_prepared_render_reply("not json at all"),
+            Err(PreparedRenderError::Failed(_))
+        ));
+        // An `ok:false` with nothing to say still has to say something.
+        match parse_prepared_render_reply(r#"{"ok":false}"#) {
+            Err(PreparedRenderError::Failed(message)) => assert!(!message.is_empty()),
+            other => panic!("expected a failure, got {other:?}"),
+        }
+    }
+}
+
 impl Engine {
     /// Allocate a new engine instance.
     pub fn new() -> Result<Self, EngineError> {
@@ -267,6 +486,14 @@ impl Engine {
     /// Obtain a detached [`PadClipLoader`] for decoding a pad key off the host's
     /// engine lock. Grab this under a brief lock, drop the lock, then call
     /// `.load(...)` so the slow MP3 decode never blocks playback/snapshots.
+    /// Obtain a detached [`PreparedTrackRenderer`] so a preparation can run on
+    /// a blocking task without the host's engine lock held.
+    pub fn prepared_track_renderer(&self) -> PreparedTrackRenderer {
+        PreparedTrackRenderer {
+            handle: self.handle,
+        }
+    }
+
     pub fn pad_loader(&self) -> PadClipLoader {
         PadClipLoader {
             handle: self.handle,

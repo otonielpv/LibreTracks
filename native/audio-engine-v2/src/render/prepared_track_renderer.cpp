@@ -232,4 +232,44 @@ PreparedRenderResult render_prepared_track(const PreparedRenderRequest& request,
     return result;
 }
 
+
+// The error text can carry a path or a source id, so it cannot go in raw.
+namespace {
+std::string escape_json_text(const std::string& value) {
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (char c : value) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                    out += buf;
+                } else {
+                    out += c;
+                }
+        }
+    }
+    return out;
+}
+}  // namespace
+
+std::string prepared_render_result_to_json(const PreparedRenderResult& result) {
+    if (result.ok) {
+        return "{\"ok\":true,\"timelineStartFrames\":"
+            + std::to_string(static_cast<long long>(result.timeline_start_frame))
+            + ",\"frames\":" + std::to_string(static_cast<long long>(result.frames))
+            + ",\"outputBytes\":" + std::to_string(result.output_bytes)
+            + ",\"clippedSamples\":" + std::to_string(result.clipped_samples) + "}";
+    }
+    return std::string("{\"ok\":false,\"cancelled\":")
+        + (result.cancelled ? "true" : "false")
+        + ",\"error\":\"" + escape_json_text(result.error) + "\"}";
+}
+
 } // namespace lt

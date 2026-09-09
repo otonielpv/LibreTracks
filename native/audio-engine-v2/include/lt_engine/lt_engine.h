@@ -182,6 +182,34 @@ LT_API const char* lt_audio_engine_analyze_file_peaks_progressive(
     LtPeakProgressCallback on_progress,
     void* progress_ctx);
 
+/** Progress of an offline prepared-track render. Return non-zero to continue,
+ *  zero to cancel — cancelling removes the partial file. Called between render
+ *  steps on the calling thread, never from audio. */
+typedef int32_t (*LtPreparedRenderProgressCallback)(void* ctx,
+                                                    int64_t rendered_frames,
+                                                    int64_t total_frames);
+
+/** Render one track of the loaded session through warp and pitch into
+ *  `output_path`, so playback can read the file instead of running the
+ *  stretcher. Blocks for as long as the render takes and MUST NOT be called
+ *  with the host's engine lock held: it makes the track's sources resident and
+ *  writes tens of MB per track-minute.
+ *
+ *  `format_pcm16` non-zero writes 16-bit PCM (half the disk, the format the
+ *  decode cache already uses); zero writes 32-bit float.
+ *
+ *  Returns JSON: {"ok":true,"timelineStartFrames":N,"frames":N,"outputBytes":N,
+ *  "clippedSamples":N} or {"ok":false,"cancelled":bool,"error":"..."}. The
+ *  buffer is thread-local and valid until this thread calls the engine again. */
+LT_API const char* lt_audio_engine_render_prepared_track(
+    LtEngine* engine,
+    const char* song_id,
+    const char* track_id,
+    const char* output_path,
+    int32_t format_pcm16,
+    LtPreparedRenderProgressCallback on_progress,
+    void* progress_ctx);
+
 /** Decode a pad key (`<pads_dir>/<pad_id>/<key>.<ext>`) and swap it into the
  *  ambient-pad renderer immediately, on the calling thread. Intended to be
  *  called WITHOUT holding the host's engine lock, so the multi-second MP3
