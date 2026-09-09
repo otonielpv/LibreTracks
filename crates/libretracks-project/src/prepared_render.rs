@@ -363,6 +363,10 @@ pub struct PreparedRenderManifest {
     pub sample_rate: u32,
     pub channels: u16,
     pub format: PreparedRenderFormat,
+    /// Where the prepared audio starts on the timeline. The file covers the
+    /// track's own clip span, not the whole song: a ten-second clip in a
+    /// five-minute song must not cost five minutes of silence on disk.
+    pub timeline_start_frames: i64,
     pub frames: u64,
     pub output_bytes: u64,
     /// Samples the format's ceiling had to clamp. Warp and pitch raise peaks
@@ -828,6 +832,7 @@ mod tests {
             version: PREPARED_RENDER_VERSION,
             key: spec.key(),
             track_id: spec.track_id.clone(),
+            timeline_start_frames: 0,
             sample_rate: spec.sample_rate,
             channels: spec.channels,
             format: spec.format,

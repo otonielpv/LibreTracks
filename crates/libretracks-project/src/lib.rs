@@ -1,9 +1,11 @@
 //! Persistencia y operaciones de proyecto.
 
+mod disk_space;
 mod importer;
 mod package;
 mod prepared_audio;
 mod prepared_render;
+mod prepared_render_store;
 mod session_package;
 mod session_sample_rate;
 mod song_store;
@@ -28,6 +30,12 @@ pub use prepared_render::{
     PreparedRenderManifest, PreparedRenderOutput, PreparedRenderRegion, PreparedRenderRejection,
     PreparedRenderSpec,
     PreparedRenderTempo, SourceSignature, PREPARED_RENDER_VERSION,
+};
+pub use prepared_render_store::{
+    check_room, create_prepared_dir, discard, estimated_bytes, free_space_for,
+    in_progress_audio_path, plan_preparation, publish_audio, reclaim, span_frames,
+    span_start_frames, stored_bytes, PlannedRender, PreparationPlan, PreparationRefusal,
+    ReclaimReport, PREPARATION_HEADROOM_BYTES,
 };
 pub use session_package::{
     audio_folder_for_seconds, export_session_as_package_with_audio, sanitize_audio_folder_name,
