@@ -148,7 +148,7 @@ unos pocos bloques por pasada: confirmar sus cambios con ventanas mayores.
 | --- | --- | --- |
 | Nuevos umbrales/número de trabajadores | p95/p99, CPU total y consumo sostenido en PC modesto y Android real | No cambiar con datos del i7 solamente |
 | Regulación dinámica de decode/precarga | Frames ausentes, profundidad de colas, lecturas y presión de RAM durante importación + playback | [Streaming](02-streaming.md), [importación](03-import-concurrente.md), [salto protegido](04-salto-protegido.md) y [DSP activo](05-dsp-activo.md); pendiente dispositivo modesto |
-| Preparar warp/tono para directo | CPU evitada frente a tiempo de preparación, disco, RAM y respuesta a saltos/cambios | [Prototipo medido y contrato de invalidación](06-audio-preparado.md); [fidelidad de arranques y saltos comprobada](07-fidelidad-saltos.md); pendiente regiones/automatización, controles en vivo, cuotas de disco y dispositivo modesto |
+| Preparar warp/tono para directo | CPU evitada frente a tiempo de preparación, disco, RAM y respuesta a saltos/cambios | [Prototipo medido y contrato de invalidación](06-audio-preparado.md); [fidelidad de arranques y saltos comprobada](07-fidelidad-saltos.md); [presupuesto de disco medido y formato decidido](08-presupuesto-y-formato.md); pendiente regiones/automatización, controles en vivo, cuotas de disco y dispositivo modesto |
 | Render anticipado | Margen ganado frente a respuesta de controles y coste de invalidar colas | Posterior al prototipo anterior |
 | Audio Workgroups en Apple | Pruebas y medidas en hardware Apple | Pendiente de dispositivo |
 

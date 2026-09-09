@@ -6,9 +6,11 @@ if (metadata.mode !== 'fidelity' || !Number.isInteger(metadata.repeats) || metad
   throw new Error('Expected a fidelity capture');
 if (preparations.length !== 2 || new Set(preparations.map(p => p.block)).size !== 2)
   throw new Error('Incomplete preparations');
+const format = metadata.format ?? 'float32';
 for (const p of preparations) {
   if (![128, 512].includes(p.block) || p.tracks !== 1 || p.seconds !== metadata.timeline_seconds
     || p.ratio !== metadata.warp_ratio || p.semitones !== metadata.semitones
+    || (p.format ?? 'float32') !== format
     || p.samples_verified !== metadata.timeline_seconds * metadata.sample_rate * 2 || !(p.energy > 0))
     throw new Error('Preparation did not verify the whole continuous render');
 }
@@ -42,7 +44,7 @@ const LABEL = { start: 'Arranque', forward: 'Salto adelante', backward: 'Salto a
 
 const lines = ['# Fidelidad del audio preparado en arranques y saltos', '',
   `${metadata.cpu}; Release; una pista, warp ${String(metadata.warp_ratio).replace('.', ',')} y tono ${metadata.semitones >= 0 ? '+' : ''}${metadata.semitones}; `
-  + `${metadata.repeats} repeticiones por caso.`, '',
+  + `archivo preparado en ${format}; ${metadata.repeats} repeticiones por caso.`, '',
   'Se compara el DSP vivo contra el archivo preparado en la misma línea de tiempo, con los manejadores reales de `CmdSeekAbsolute`, `CmdPlay` y `CmdPause`. '
   + 'No se exige igualdad muestra a muestra: el DSP vivo reconstruye las voces en el destino del salto y el archivo preparado conserva la historia de un render continuo, así que la fase de grano difiere por construcción. '
   + 'Lo que sí debe cumplirse es que llegue el mismo contenido, en el mismo instante y al mismo nivel.', ''];

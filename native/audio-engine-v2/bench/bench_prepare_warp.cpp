@@ -105,11 +105,27 @@ static void le32(std::ostream& out, std::uint32_t value) {
     const char bytes[] = {char(value), char(value >> 8), char(value >> 16), char(value >> 24)};
     out.write(bytes, 4);
 }
+
+// libsndfile normalizes 16-bit PCM by 2^15 when reading into float (the
+// default, and nothing in the engine turns it off), so scaling by 32768 makes
+// the round trip exactly invertible and the verification below can stay strict.
+static int quantize_pcm16(float value) noexcept {
+    return static_cast<int>(std::clamp<long>(std::lrintf(value * 32768.0f), -32768, 32767));
+}
+static float dequantize_pcm16(int value) noexcept {
+    return static_cast<float>(value) / 32768.0f;
+}
 static double ms(Clock::time_point begin) { return std::chrono::duration<double, std::milli>(Clock::now()-begin).count(); }
 
 int main(int argc, char** argv) try {
-    if (argc != 8) throw std::runtime_error("Usage: bench_prepare_warp INPUT_DIR NEW_OUTPUT_DIR TRACKS BLOCK SECONDS RATIO SEMITONES");
+    if (argc != 8 && argc != 9) throw std::runtime_error(
+        "Usage: bench_prepare_warp INPUT_DIR NEW_OUTPUT_DIR TRACKS BLOCK SECONDS RATIO SEMITONES [FORMAT=float32|pcm16]");
     const int tracks=std::stoi(argv[3]), block=std::stoi(argv[4]), seconds=std::stoi(argv[5]), semitones=std::stoi(argv[7]);
+    const std::string format = argc == 9 ? argv[8] : "float32";
+    if (format != "float32" && format != "pcm16") throw std::runtime_error("Format must be float32 or pcm16");
+    const bool pcm16 = format == "pcm16";
+    const std::uint32_t sample_bytes = pcm16 ? 2u : 4u;
+    const std::uint32_t frame_bytes = 2u * sample_bytes;  // Always stereo.
     const double ratio=std::stod(argv[6]);
     const Frame frames=Frame(seconds)*sr;
     if (tracks<1 || tracks>64 || (block!=128 && block!=512) || seconds<1 || seconds>600
@@ -118,7 +134,7 @@ int main(int argc, char** argv) try {
     const std::filesystem::path output(argv[2]);
     if (!std::filesystem::create_directory(output)) throw std::runtime_error("Output directory must be new");
     double prepare_ms=0, verify_ms=0, energy=0;
-    std::uint64_t samples_verified=0;
+    std::uint64_t samples_verified=0, clipped=0;
     for (int i=0;i<tracks;++i) {
         const auto name=std::to_string(i)+".wav";
         const auto input=(std::filesystem::path(argv[1])/name).string();
@@ -126,22 +142,33 @@ int main(int argc, char** argv) try {
         auto began=Clock::now();
         {
             Pass pass(input,block,frames,ratio,semitones);
+            const auto data_bytes=static_cast<std::uint32_t>(frames)*frame_bytes;
             std::ofstream wav(path,std::ios::binary);
-            wav.write("RIFF",4); le32(wav,36+static_cast<std::uint32_t>(frames*8));
+            wav.write("RIFF",4); le32(wav,36+data_bytes);
             wav.write("WAVEfmt ",8); le32(wav,16);
-            le32(wav,0x00020003); // IEEE float, stereo (two little-endian uint16s).
-            le32(wav,sr); le32(wav,sr*8); le32(wav,0x00200008); // block align 8, bits 32.
-            wav.write("data",4); le32(wav,static_cast<std::uint32_t>(frames*8));
-            std::vector<char> bytes(static_cast<std::size_t>(block)*8);
+            le32(wav,(2u<<16)|(pcm16?1u:3u)); // Channels, then PCM or IEEE float.
+            le32(wav,sr); le32(wav,sr*frame_bytes);
+            le32(wav,((sample_bytes*8u)<<16)|frame_bytes); // Bits, then block align.
+            wav.write("data",4); le32(wav,data_bytes);
+            std::vector<char> bytes(static_cast<std::size_t>(block)*frame_bytes);
             for (Frame f=0;f<frames;f+=block) {
                 pass.render(f);
                 for (int k=0;k<block;++k) for(int ch=0;ch<2;++ch) {
                     const float v=ch ? pass.right[k] : pass.left[k];
                     if (!std::isfinite(v)) throw std::runtime_error("Non-finite prepared audio");
                     energy+=double(v)*v;
-                    const auto bits=std::bit_cast<std::uint32_t>(v);
-                    const auto offset=static_cast<std::size_t>(k*2+ch)*4;
-                    for(int b=0;b<4;++b) bytes[offset+b]=static_cast<char>(bits>>(b*8));
+                    const auto offset=static_cast<std::size_t>(k*2+ch)*sample_bytes;
+                    if (pcm16) {
+                        // Counted, not silently clamped: float32 has no ceiling
+                        // here and PCM16 does, so this belongs in the decision.
+                        if (std::abs(v)>=1.0f) ++clipped;
+                        const int q=quantize_pcm16(v);
+                        bytes[offset]=static_cast<char>(q&0xff);
+                        bytes[offset+1]=static_cast<char>((q>>8)&0xff);
+                    } else {
+                        const auto bits=std::bit_cast<std::uint32_t>(v);
+                        for(int b=0;b<4;++b) bytes[offset+b]=static_cast<char>(bits>>(b*8));
+                    }
                 }
                 wav.write(bytes.data(),bytes.size());
             }
@@ -161,7 +188,11 @@ int main(int argc, char** argv) try {
                 reference.render(f);
                 if(decoder->read_frames(samples.data(),block)!=block) throw std::runtime_error("Prepared file truncated");
                 for(int k=0;k<block;++k) for(int ch=0;ch<2;++ch) {
-                    const float expected=ch ? reference.right[k] : reference.left[k];
+                    const float rendered=ch ? reference.right[k] : reference.left[k];
+                    // PCM16 cannot match the render bit for bit, so the check
+                    // becomes exact against the value the format can hold. It
+                    // still proves the write and the read back are lossless.
+                    const float expected=pcm16 ? dequantize_pcm16(quantize_pcm16(rendered)) : rendered;
                     if(std::bit_cast<std::uint32_t>(expected)!=std::bit_cast<std::uint32_t>(samples[k*2+ch]))
                         throw std::runtime_error("Prepared audio differs from fresh continuous DSP");
                     ++samples_verified;
@@ -175,9 +206,10 @@ int main(int argc, char** argv) try {
     std::ofstream stats(output/"preparation.json");
     stats << "{\"tracks\":" << tracks << ",\"block\":" << block << ",\"seconds\":" << seconds
           << ",\"ratio\":" << ratio << ",\"semitones\":" << semitones
+          << ",\"format\":\"" << format << "\",\"clipped_samples\":" << clipped
           << ",\"prepare_ms\":" << prepare_ms << ",\"verify_ms\":" << verify_ms
           << ",\"peak_rss_bytes\":" << peak_rss()
-          << ",\"output_bytes\":" << tracks*(44+frames*8)
+          << ",\"output_bytes\":" << tracks*(44+static_cast<long long>(frames)*frame_bytes)
           << ",\"samples_verified\":" << samples_verified << ",\"energy\":" << energy << "}\n";
     stats.close();
     if(!stats) throw std::runtime_error("Stats write failed");

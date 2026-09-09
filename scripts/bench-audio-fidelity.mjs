@@ -18,12 +18,16 @@ import { writeFixture, SAMPLE_RATE } from './audio-fidelity-fixture.mjs';
 import { compareRoutes } from './audio-fidelity-analysis.mjs';
 import { fileHash } from './audio-prepared-cache.mjs';
 
-const [captureArg, prepareArg, outArg, repeatsArg = '3'] = process.argv.slice(2);
+const [captureArg, prepareArg, outArg, repeatsArg = '3', formatArg = 'float32'] = process.argv.slice(2);
 if (!outArg) throw new Error(
-  'Usage: node scripts/bench-audio-fidelity.mjs BENCH_FIDELITY_JUMP BENCH_PREPARE_WARP NEW_OUT [REPEATS=3]');
+  'Usage: node scripts/bench-audio-fidelity.mjs BENCH_FIDELITY_JUMP BENCH_PREPARE_WARP NEW_OUT [REPEATS=3] [FORMAT=float32|pcm16]');
 const capture = resolve(captureArg), preparer = resolve(prepareArg), out = resolve(outArg);
 const repeats = Number(repeatsArg);
 if (!Number.isInteger(repeats) || repeats < 1 || repeats > 10) throw new Error('Invalid repetitions');
+// The format the prepared file is written in. If the disk budget forces 16-bit
+// PCM on modest devices, the fidelity of that version has to be measured too:
+// validating float32 and shipping PCM16 would prove nothing about what plays.
+if (!['float32', 'pcm16'].includes(formatArg)) throw new Error('Format must be float32 or pcm16');
 
 // 48 s of timeline is divisible by both block sizes; the source has to outlast
 // it at the warp ratio, with the DSP's own read-ahead on top.
@@ -45,7 +49,7 @@ const git = args => {
 const metadata = {
   mode: 'fidelity', started_at: new Date().toISOString(), repeats,
   timeline_seconds: TIMELINE_SECONDS, source_seconds: SOURCE_SECONDS,
-  warp_ratio: WARP_RATIO, semitones: SEMITONES, sample_rate: SAMPLE_RATE,
+  warp_ratio: WARP_RATIO, semitones: SEMITONES, sample_rate: SAMPLE_RATE, format: formatArg,
   fixture, cpu: cpus()[0]?.model, logical_cpus: cpus().length,
   platform: platform(), architecture: arch(), ram_bytes: totalmem(),
   commit: git(['rev-parse', 'HEAD']), dirty: git(['status', '--short']),
@@ -74,9 +78,9 @@ for (const block of BLOCKS) {
   const directory = join(out, `prepared-${block}`);
   console.log(`Preparing and verifying block ${block}`);
   run(preparer, [fixtures, directory, '1', String(block), String(TIMELINE_SECONDS),
-    String(WARP_RATIO), String(SEMITONES)], `prepare-${block}.log`);
+    String(WARP_RATIO), String(SEMITONES), formatArg], `prepare-${block}.log`);
   const stats = JSON.parse(readFileSync(join(directory, 'preparation.json'), 'utf8'));
-  if (stats.samples_verified !== TIMELINE_SECONDS * SAMPLE_RATE * 2)
+  if (stats.samples_verified !== TIMELINE_SECONDS * SAMPLE_RATE * 2 || stats.format !== formatArg)
     throw new Error('Preparation did not verify every sample of the continuous render');
   preparations.push({ ...stats, sha256: fileHash(join(directory, '0.wav')),
     bytes: statSync(join(directory, '0.wav')).size });

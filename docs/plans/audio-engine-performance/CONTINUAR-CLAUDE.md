@@ -1,6 +1,6 @@
 # Relevo: rendimiento del motor de audio
 
-Actualizado: 2026-09-09, tras la etapa de fidelidad. Lee este documento antes de
+Actualizado: 2026-09-09, tras la etapa de presupuesto y formato. Lee este documento antes de
 continuar y comprueba el estado real del checkout: puede haber commits
 posteriores al relevo.
 
@@ -32,14 +32,16 @@ Secuencia de trabajo hasta la fecha:
 | `5b665762` | Saltos mediante el handler real de SeekAbsolute |
 | `5ea7bfdf` | Medidas de warp, transposición y ambos activos |
 | `0fda4282` | Prototipo de preparación por pista, validación de caché y medidas |
-| *(este)* | Fidelidad de arranques y saltos: banco, analizador con tests y medidas |
+| `5249a02d` | Fidelidad de arranques y saltos: banco, analizador con tests y medidas |
+| *(este)* | Presupuesto de disco medido, PCM16 en el preparador y fidelidad revalidada en PCM16 |
 
 **De todos estos, sólo `849e8e98` cambia lo que oye un usuario.** Es una
 corrección de concurrencia del pool de render. Todo lo demás es infraestructura
 de medición y un prototipo que vive únicamente en la compilación del banco.
 La reproducción desde audio con warp/tono preparados **no existe como función
-de la aplicación**, y este trabajo no la ha acercado a existir: ha comprobado
-que la sustitución sería honesta en cuatro momentos concretos.
+de la aplicación**. Lo que estas dos últimas etapas han hecho es comprobar que
+la sustitución sería honesta en cuatro momentos concretos y cuánto costaría en
+disco; ninguna de las dos la acerca a existir.
 
 No revertir cambios ajenos ni asumir que todo cambio encontrado pertenece a
 este trabajo. Consultar `git status` y los diffs antes de editar o commitear.
@@ -47,8 +49,9 @@ este trabajo. Consultar `git status` y los diffs antes de editar o commitear.
 ## Qué está hecho y dónde leer
 
 El [plan principal](README.md) contiene las decisiones y puertas de aceptación.
-Leer después [DSP activo](05-dsp-activo.md), [audio preparado](06-audio-preparado.md)
-y [fidelidad de saltos](07-fidelidad-saltos.md). Las etapas 02–04 explican el
+Leer después [DSP activo](05-dsp-activo.md), [audio preparado](06-audio-preparado.md),
+[fidelidad de saltos](07-fidelidad-saltos.md) y
+[presupuesto y formato](08-presupuesto-y-formato.md). Las etapas 02–04 explican el
 streaming, las importaciones y el salto protegido.
 
 La transposición sin warp utiliza varispeed en el motor actual; no confundirla
@@ -66,10 +69,22 @@ con Bungee manteniendo duración. Los bancos verifican qué ruta se ejecuta.
 | `scripts/bench-audio-fidelity.mjs` / `report-audio-fidelity.mjs` | Matriz de fidelidad y su informe |
 | `scripts/audio-prepared-cache.mjs` (+ `.test.mjs`) | Clave canónica y validación de tamaño/hash |
 | `scripts/bench-audio-prepared.mjs` / `report-audio-prepared.mjs` | Matriz A/B de coste y su informe |
+| `scripts/audio-wav.mjs` (+ `.test.mjs`) | Lector de los WAV del banco y estadísticas de error |
+| `scripts/bench-audio-budget.mjs` / `report-audio-budget.mjs` | Presupuesto de disco y formato, y su informe |
 
 Las rutas son relativas a la raíz del repositorio.
 
-## Evidencia de la última etapa
+## Evidencia de las dos últimas etapas
+
+### Presupuesto y formato (la más reciente)
+
+[JSON crudo](measurements/2026-09-09-budget.json) e
+[informe](measurements/2026-09-09-budget.md), más la matriz de fidelidad repetida
+en PCM16 ([datos](measurements/2026-09-09-fidelity-pcm16.json),
+[informe](measurements/2026-09-09-fidelity-pcm16.md)). Resumen en la sección
+«Presupuesto y formato» de más abajo.
+
+### Fidelidad de arranques y saltos
 
 [JSON crudo](measurements/2026-09-09-fidelity.json) e
 [informe](measurements/2026-09-09-fidelity.md). 24 comparaciones Release:
@@ -108,10 +123,10 @@ musical es casi periódico. Las dos trampas son genéricas de esta clase de medi
 4. El salto de fidelidad se ejecuta síncrono entre dos renders, a propósito, para
    que ambas rutas recorran la misma línea de tiempo. La latencia del salto
    concurrente la mide `bench_streaming_playback`.
-5. Original PCM16 frente a preparado float32. Se compara la estrategia completa,
-   incluido su mayor coste de disco. No reducir a PCM16 sin evaluar calidad —
-   y ver la decisión pendiente de abajo, porque cambia qué formato hay que
-   validar.
+5. El formato del preparado ya está decidido (PCM16, etapa 08) pero **no su
+   política de margen**: warp y tono añaden 3,3 dB de pico y un stem caliente
+   recortaría. El preparador cuenta las muestras recortadas; nadie actúa aún
+   sobre ese contador.
 6. Los bancos no abren dispositivo ni incluyen UI o estrés térmico sostenido.
    Un render tardío no es un xrun medido en un driver. Nada aquí demuestra
    ausencia de cortes audibles.
@@ -120,24 +135,35 @@ musical es casi periódico. Las dos trampas son genéricas de esta clase de medi
 8. Fuera de Windows falta identificar la biblioteca Bungee dinámica en el
    manifiesto. No tratarlo como contrato portable de producción.
 
-## Decisión pendiente del usuario, antes de más fidelidad
+## Presupuesto y formato: ya resuelto
 
-El coste de disco no está dimensionado y determina qué hay que validar después.
-Extrapolando las cifras de la etapa 06 (float32 estéreo 48 kHz = 0,384 MB/s por
-pista), **una canción de 4 minutos con 12 pistas ocupa ~1,1 GB preparada**, o
-~550 MB en PCM16. Y la preparación costó ~58× tiempo real en este i7: esa misma
-canción serían ~49 s aquí, y varios minutos en un Android modesto.
+La extrapolación que había aquí es ahora una medida ([etapa 08](08-presupuesto-y-formato.md)).
 
-Son estimaciones desde el i7, no medidas. Pero significan que la función no
-puede ser automática y que en Android quizá exija PCM16. Si la respuesta es
-PCM16, la fidelidad hay que revalidarla sobre PCM16, no sobre float32. Conviene
-resolver el presupuesto antes de ampliar la matriz de fidelidad, para no validar
-una ruta que después no se envía.
+- Disco, exacto y transferible: **21,97 MiB por pista-minuto en float32 y 10,99
+  en PCM16**. Una canción de 4 minutos con 12 pistas preparadas ocupa **1,03 GiB
+  o 0,51 GiB**. Se multiplica por las pistas con warp o tono, no por todas.
+- Tiempo: 0,74–1,00 s por pista-minuto en este i7, pero **no es una tasa**: la
+  misma combinación se degradó de 0,88 a 1,44 s/pista-minuto según el lote
+  acumulaba escrituras. Preparar una sesión entera se ralentiza a sí misma.
+- **PCM16 no es una concesión nueva**: la caché de decodificación del escritorio
+  ya guarda 16 bits en WAV con Ableton como referente explícito
+  (`cache_sample_format` en `source_manager.cpp`).
+- El ruido de cuantización queda en −102,3 dBFS, 79,8 dB por debajo del programa,
+  y la matriz de fidelidad repetida en PCM16 da **exactamente el mismo resultado**
+  que en float32.
+- Lo único genuinamente nuevo es el **techo**: warp y tono añaden 3,3 dB de pico,
+  así que un stem por encima de unos −3,3 dBFS recortaría. Ese riesgo ya mordió a
+  este repositorio en la caché de decodificación (libsndfile envolvía en vez de
+  recortar hasta que se activó `SFC_SET_CLIPPING`).
+
+**Decisión: PCM16 con margen vigilado.** Lo que sigue sin decidir es si la
+función debe existir: 0,51 GiB por canción sigue siendo mucho para un móvil, y
+sigue sin haber una sola medida en un dispositivo así.
 
 ## Siguiente tarea concreta recomendada
 
-**Extender la cobertura de fidelidad a lo que una sesión real tiene**, sobre el
-formato que decida el presupuesto anterior:
+**Extender la cobertura de fidelidad a lo que una sesión real tiene**, sobre
+PCM16, que es el formato decidido en la etapa 08:
 
 1. Regiones múltiples, offsets de clip distintos de cero y ganancia de clip no
    unitaria. El fixture y el banco ya soportan añadirlo; hoy sólo montan una
@@ -147,6 +173,10 @@ formato que decida el presupuesto anterior:
    publicación atómica, así que probablemente sea diseño además de medida.
 3. Gain, pan y mute moviéndose durante el playback preparado, para asegurar que
    siguen actuando en el mezclador y no quedaron horneados en el WAV.
+4. Política de margen para el techo de PCM16: qué hacer cuando el contador de
+   muestras recortadas del preparador se dispara. Bajar el nivel del preparado y
+   compensarlo al reproducir mueve la frontera con el mezclador, así que es
+   diseño, no sólo medida.
 
 Después: diseñar preparación explícita con presupuesto de disco, cancelación,
 publicación segura y respuesta a ediciones. Medir preparación y playback en PC
@@ -180,13 +210,12 @@ git diff --check
 `bench-out-engine/` está ignorado: no versionar cientos de MiB de WAV. Sí
 versionar código, resultados JSON e informes.
 
-Validación de esta etapa: compilación Release de los tres bancos, 24 pasadas
-completas con capturas idénticas entre repeticiones, 13 tests de Node en verde,
-y una pasada de humo de `bench_streaming_playback` para comprobar que el cambio
-del arnés no lo altera. **Esta etapa no toca ningún fichero del motor** —el
-diff son el objetivo de CMake, la cabecera del banco, scripts y documentación—,
-así que no se han vuelto a ejecutar los 385 tests nativos ni los 75 de Rust;
-ejecutarlos en cuanto se toque `native/audio-engine-v2/src`.
+Validación: compilación Release de los bancos, 12 preparaciones del presupuesto
+con orden alternado, 24 comparaciones de fidelidad en PCM16, y los tests de Node
+en verde. **Ninguna de estas dos etapas toca un fichero del motor** —el diff son
+objetivos de CMake, ficheros bajo `bench/`, scripts y documentación—, así que no
+se han vuelto a ejecutar los 385 tests nativos ni los 75 de Rust; ejecutarlos en
+cuanto se toque `native/audio-engine-v2/src`.
 No presentar resultados históricos como validación de cambios futuros.
 
 Al terminar la siguiente etapa, actualizar este relevo y el plan con lo probado,
