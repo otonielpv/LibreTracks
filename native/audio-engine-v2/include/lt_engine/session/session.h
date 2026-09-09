@@ -85,6 +85,14 @@ struct Track {
     bool                mute               = false;
     bool                solo               = false;
     TransposeBehavior   transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
+    // This track's clips already carry warp and pitch, rendered offline into a
+    // prepared file. Running the stretcher over them again would apply the
+    // ratio twice, so the renderer takes the direct path instead.
+    //
+    // Set by the host when it swaps a track's source to its prepared render;
+    // meaningless on its own. See
+    // docs/plans/audio-engine-performance/10-integracion-produccion.md.
+    bool                prepared_render    = false;
     TrackRole           role               = TrackRole::Normal;
     TrackKind           kind               = TrackKind::Audio;
     Id                  parent_track_id;      // empty if top-level

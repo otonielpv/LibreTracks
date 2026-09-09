@@ -358,6 +358,10 @@ EngineCommand command_from_json(const std::string& raw) {
             track.mute = t.value("mute", false);
             track.solo = t.value("solo", false);
             track.transpose_behavior = t.value("transpose_behavior", std::string{});
+            // Must mirror session_adapter.cpp. Omitting it here would clear the
+            // flag on any hot edit and warp a prepared track a second time —
+            // the same shape of bug the region parsers already had.
+            track.prepared_render = t.value("prepared_render", false);
             track.role = t.value("role", std::string{});
             track.kind = t.value("kind", std::string{});
             track.parent_track_id = t.value("parent_track_id", std::string{});

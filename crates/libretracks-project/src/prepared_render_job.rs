@@ -26,8 +26,10 @@
 
 use std::path::{Path, PathBuf};
 
+use libretracks_core::model::Song;
+
 use crate::prepared_render::{
-    load_usable_prepared_render, prepared_render_audio_path, publish_prepared_render_manifest,
+    load_usable_prepared_render, PreparedRenderOutput, prepared_render_audio_path, publish_prepared_render_manifest,
     now_millis, PreparedRenderManifest, PreparedRenderSpec, PREPARED_RENDER_VERSION,
 };
 use crate::prepared_render_store::{
@@ -294,6 +296,44 @@ fn finish_track(
         clipped_samples: rendered.clipped_samples,
         bytes,
     }
+}
+
+/// A prepared render a track can play from right now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsablePreparedRender {
+    pub track_id: String,
+    pub audio_path: PathBuf,
+    /// Where the file sits on the timeline. It covers the track's own clips,
+    /// not the whole song, so playback has to place it rather than assume zero.
+    pub timeline_start_frames: i64,
+    pub frames: u64,
+}
+
+/// Which of a song's tracks have a prepared render that still matches them.
+///
+/// This is the read side of the whole feature: called while the session is
+/// being handed to the engine, once per load. A track that appears here plays
+/// from its file with the stretcher switched off; every other track plays live,
+/// exactly as before. A stale file simply does not appear — the key check is
+/// what makes "stale" impossible to confuse with "usable".
+pub fn usable_prepared_renders(
+    song: &Song,
+    song_dir: &Path,
+    output: &PreparedRenderOutput,
+) -> Vec<UsablePreparedRender> {
+    song.tracks
+        .iter()
+        .filter_map(|track| {
+            let spec = PreparedRenderSpec::from_song(song, &track.id, song_dir, output)?;
+            let manifest = load_usable_prepared_render(song_dir, &spec).ok()?;
+            Some(UsablePreparedRender {
+                track_id: track.id.clone(),
+                audio_path: prepared_render_audio_path(song_dir, &manifest.key),
+                timeline_start_frames: manifest.timeline_start_frames,
+                frames: manifest.frames,
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -662,5 +702,97 @@ mod tests {
         };
         let report = fixture.run(&FakeSink::new());
         assert_eq!(report.prepared_count(), 1);
+    }
+
+    #[test]
+    fn only_tracks_with_a_matching_file_are_offered_for_playback() {
+        let fixture = Fixture::new(vec![spec("t1", 1, 1.0)]);
+        let output = PreparedRenderOutput {
+            sample_rate: 48_000,
+            channels: 2,
+            format: PreparedRenderFormat::Pcm16,
+            dsp_identity: "engine-1".into(),
+        };
+        let song = song_with_one_track(fixture.dir.path());
+
+        // Nothing prepared yet: every track plays live, exactly as before.
+        assert!(usable_prepared_renders(&song, fixture.dir.path(), &output).is_empty());
+
+        let built =
+            PreparedRenderSpec::from_song(&song, "t1", fixture.dir.path(), &output).expect("spec");
+        let prepared = Fixture {
+            dir: TempDir::new().expect("tempdir"),
+            specs: vec![built.clone()],
+        };
+        fs::create_dir_all(prepared.dir.path().join("audio")).expect("audio");
+        fs::write(prepared.dir.path().join("audio/x.wav"), vec![1u8; 64]).expect("source");
+        let built =
+            PreparedRenderSpec::from_song(&song, "t1", prepared.dir.path(), &output).expect("spec");
+        let prepared = Fixture {
+            dir: prepared.dir,
+            specs: vec![built],
+        };
+        prepared.run(&FakeSink::new());
+
+        let offered = usable_prepared_renders(&song, prepared.dir.path(), &output);
+        assert_eq!(offered.len(), 1);
+        assert_eq!(offered[0].track_id, "t1");
+        assert!(offered[0].audio_path.exists());
+
+        // A stale file must never be offered: that is the whole point of the
+        // key, and offering it would play audio the song no longer describes.
+        let mut edited = song.clone();
+        edited.clips[0].gain = 0.5;
+        assert!(usable_prepared_renders(&edited, prepared.dir.path(), &output).is_empty());
+    }
+
+    fn song_with_one_track(dir: &Path) -> libretracks_core::Song {
+        use libretracks_core::{Clip, Song, Track, TrackKind};
+        let _ = dir;
+        Song {
+            id: "s".into(),
+            title: "S".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 30.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![],
+            tracks: vec![Track {
+                id: "t1".into(),
+                name: "T".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".into(),
+                color: None,
+                auto_created: false,
+                midi_port: None,
+                midi_channel: 1,
+                midi_enabled: true,
+                collapsed: false,
+                height_offset: None,
+            }],
+            clips: vec![Clip {
+                id: "c".into(),
+                track_id: "t1".into(),
+                file_path: "audio/x.wav".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 1.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+                color: None,
+            }],
+            midi_clips: vec![],
+            section_markers: vec![],
+        }
     }
 }

@@ -66,6 +66,22 @@ PitchRenderDecision resolve_pitch_render_decision(
     const Track& track, const Clip& clip, const Song& song, Frame timeline_frame) noexcept {
     PitchRenderDecision d;
 
+    // A prepared track's audio already went through warp and pitch offline.
+    // Everything below would apply them a second time: the ratio would compound
+    // and the track would drift away from the click. The direct path is not an
+    // optimisation here, it is the only correct answer.
+    if (track.prepared_render) {
+        d.path = ClipPathKind::Direct;
+        d.warp_active = false;
+        d.warp_time_ratio = 1.0;
+        d.effective_semitones = 0;
+        d.needs_pitch = false;
+        d.pitch_scale = 1.0;
+        d.is_never_transpose =
+            track.transpose_behavior == TransposeBehavior::NeverTranspose;
+        return d;
+    }
+
     const Region* region = region_at_frame(song, timeline_frame);
     const bool warp_mode_active =
         region && region->warp_enabled && region->warp_source_bpm > 0.0;

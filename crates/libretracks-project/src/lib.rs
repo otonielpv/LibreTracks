@@ -33,8 +33,9 @@ pub use prepared_render::{
     PreparedRenderTempo, SourceSignature, PREPARED_RENDER_VERSION,
 };
 pub use prepared_render_job::{
-    prepare_tracks, PreparationProgress, PreparationReport, PreparationRequest, RenderFailure,
-    RenderedTrack, TrackOutcome, TrackRenderSink,
+    prepare_tracks, usable_prepared_renders, PreparationProgress, PreparationReport,
+    PreparationRequest, RenderFailure, RenderedTrack, TrackOutcome, TrackRenderSink,
+    UsablePreparedRender,
 };
 pub use prepared_render_store::{
     check_room, create_prepared_dir, discard, estimated_bytes, free_space_for,

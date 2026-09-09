@@ -135,6 +135,8 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     track.mute = jtrack.value("mute", jtrack.value("muted", false));
                     track.solo = jtrack.value("solo", false);
                     track.role = parse_track_role(jtrack.value("role", "Normal"));
+                    track.prepared_render = jtrack.value(
+                        "preparedRender", jtrack.value("prepared_render", false));
                     if (jtrack.contains("transposeEnabled")) {
                         track.transpose_behavior = jtrack["transposeEnabled"].get<bool>()
                             ? TransposeBehavior::FollowsSongOrRegion

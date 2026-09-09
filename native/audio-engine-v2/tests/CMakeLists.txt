@@ -24,6 +24,7 @@ add_executable(lt_engine_tests
     test_resampler_seek_continuity.cpp
     test_audio_fixtures.cpp
     test_prepared_track_renderer.cpp
+    test_prepared_playback_route.cpp
     test_fade_processor.cpp
     test_metronome_renderer.cpp
     test_voice_guide_renderer.cpp

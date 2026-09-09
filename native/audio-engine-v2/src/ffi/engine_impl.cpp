@@ -3397,6 +3397,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                          || tu.transpose_behavior == "NeverTranspose")
                             ? TransposeBehavior::NeverTranspose
                             : TransposeBehavior::FollowsSongOrRegion;
+                    track.prepared_render = tu.prepared_render;
                     track.kind = (tu.kind == "folder")
                         ? TrackKind::Folder : TrackKind::Audio;
                     track.parent_track_id = tu.parent_track_id;
