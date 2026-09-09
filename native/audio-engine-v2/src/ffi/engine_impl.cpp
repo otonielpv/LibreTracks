@@ -1098,6 +1098,7 @@ std::string EngineImpl::get_snapshot() const {
         snap.cpu.render_threads_active = mixer_->render_pool_diagnostics().threads;
         snap.cpu.callback_count       = mixer_->callback_count();
         snap.cpu.callback_over_budget_count = mixer_->callback_over_budget_count();
+        snap.cpu.callback_deadline_miss_count = mixer_->callback_deadline_miss_count();
         snap.cpu.mixer_rendered_track_count = mixer_->rendered_track_count();
         snap.cpu.mixer_skipped_track_count = mixer_->skipped_track_count();
         auto tr = TrackRenderer::diagnostics();
@@ -1334,6 +1335,21 @@ std::string EngineImpl::get_snapshot() const {
             // reading at all, how much that cost, and whether the audio thread
             // was re-asking for work already in flight (req >> enq).
             const auto io = source_manager_->take_fill_io_stats();
+            // Absolute totals for this mixer lifetime: no process-static delta
+            // baseline that can underflow when a session/device replaces it.
+            const auto pool = mixer_->render_pool_diagnostics();
+            lt_debug_log(
+                "[LT_AUDIO_DIAG] render_pool[threads=%d parallel_total=%llu serial_total=%llu "
+                "timed_total=%llu dispatch_ns_total=%llu wait_ns_total=%llu parallel_ns_total=%llu] "
+                "render_deadline_miss_total=%llu (current mixer)\n",
+                pool.threads,
+                static_cast<unsigned long long>(pool.blocks_run),
+                static_cast<unsigned long long>(pool.blocks_serial),
+                static_cast<unsigned long long>(pool.timed_blocks),
+                static_cast<unsigned long long>(pool.dispatch_ns),
+                static_cast<unsigned long long>(pool.trailing_wait_ns),
+                static_cast<unsigned long long>(pool.parallel_ns),
+                static_cast<unsigned long long>(mixer_->callback_deadline_miss_count()));
             lt_debug_log(
                 "[LT_AUDIO_DIAG] cb_max_ms=%.2f cbgap_ms=%.2f cbwork_ms=%.2f "
                 "phase_us[load=%llu sched=%llu tracks=%llu post=%llu] sched_lock_us=%llu "

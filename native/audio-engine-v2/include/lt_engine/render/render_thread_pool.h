@@ -25,6 +25,9 @@
 // 4. thread_count == 1 NO PASA POR AQUÍ. El llamante ejecuta su bucle tal cual;
 //    ni barrera, ni atómicos, ni un camino nuevo que probar.
 // 5. NADA DE ASIGNAR, BLOQUEAR NI LANZAR dentro de run_block.
+// 6. RETIRADA SEGURA. Antes de devolver, cerrar la admision de la generacion
+//    y esperar a quienes entraron. Acabar las tareas no basta si un trabajador
+//    tardio aun puede leer el job o la cola que pertenece al bloque siguiente.
 //
 // ── Lo que NO resuelve ────────────────────────────────────────────────────
 //
@@ -68,6 +71,12 @@ struct RenderThreadPoolDiagnostics {
     std::uint64_t wait_entries = 0;      // entradas en espera atomica
     int           spinning_threads = 0;  // trabajadores en el giro corto
     int           waiting_threads = 0;   // trabajadores dormidos
+    // Cumulative wall-clock nanoseconds, only with timing enabled. Dispatch
+    // and trailing wait are subsets of parallel_ns, not additional CPU work.
+    std::uint64_t timed_blocks = 0;
+    std::uint64_t dispatch_ns = 0;
+    std::uint64_t trailing_wait_ns = 0;
+    std::uint64_t parallel_ns = 0;
 };
 
 class RenderThreadPool {
@@ -83,6 +92,7 @@ public:
     // en el llamante, por el camino serie.
     void start(int thread_count);
     void stop() noexcept;
+    void set_timing_enabled(bool enabled) noexcept; // control thread, between blocks
 
     // Desde el HILO DE AUDIO. Ejecuta job(i) para i en [0, count) y no vuelve
     // hasta que han terminado todos. El llamante participa.

@@ -350,6 +350,8 @@ TEST_CASE("snapshot has required top-level keys") {
     snap.current_frame   = 48000;
     snap.playback_state  = PlaybackState::Playing;
     snap.device.backend  = "WASAPI";
+    snap.cpu.callback_over_budget_count = 7;
+    snap.cpu.callback_deadline_miss_count = 2;
 
     auto json = snapshot_to_json(snap);
     CHECK(json.find("\"current_frame\"")  != std::string::npos);
@@ -361,6 +363,8 @@ TEST_CASE("snapshot has required top-level keys") {
     CHECK(json.find("\"metronome\"")      != std::string::npos);
     CHECK(json.find("\"pitch\"")          != std::string::npos);
     CHECK(json.find("\"mixer_scheduled_jump_executed_count\"") != std::string::npos);
+    CHECK(json.find("\"callback_over_budget_count\":7") != std::string::npos);
+    CHECK(json.find("\"callback_deadline_miss_count\":2") != std::string::npos);
 }
 
 TEST_CASE("snapshot serializes pending jumps array") {

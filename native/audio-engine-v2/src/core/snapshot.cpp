@@ -59,6 +59,7 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"underrun_count",        snap.cpu.underrun_count},
         {"callback_count",        snap.cpu.callback_count},
         {"callback_over_budget_count", snap.cpu.callback_over_budget_count},
+        {"callback_deadline_miss_count", snap.cpu.callback_deadline_miss_count},
         {"mixer_rendered_track_count", snap.cpu.mixer_rendered_track_count},
         {"mixer_skipped_track_count", snap.cpu.mixer_skipped_track_count},
         {"track_renderer_prepare_count", snap.cpu.track_renderer_prepare_count},

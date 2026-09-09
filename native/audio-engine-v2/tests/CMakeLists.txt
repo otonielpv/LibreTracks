@@ -36,6 +36,7 @@ add_executable(lt_engine_tests
     warp_timing_tests.cpp
     prearmed_jump_tests.cpp
     test_rt_guard.cpp
+    test_callback_budget.cpp
     test_rt_no_allocations.cpp
     test_mixer_routing_step03.cpp
     test_mixer_strings_step04.cpp

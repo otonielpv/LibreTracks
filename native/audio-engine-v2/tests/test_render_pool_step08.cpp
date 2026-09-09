@@ -15,6 +15,7 @@
 #include <lt_engine/pitch/bungee_voice_manager.h>
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/render/render_thread_pool.h>
+#include <lt_engine/render/render_block_admission.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/sources/source_manager.h>
@@ -23,6 +24,7 @@
 #include <atomic>
 #include <latch>
 #include <memory>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -85,7 +87,7 @@ Session build_session(SourceManager& sm, Frame length, bool warp_enabled = true,
 }
 
 // Renderiza la sesión con `threads` hilos y devuelve todas las muestras.
-std::vector<float> render_with(int threads) {
+std::vector<float> render_with(int threads, bool automate = false) {
     const Frame length = static_cast<Frame>(kBlock) * (kBlocks + 32);
     SourceManager sm;
     auto session = std::make_shared<const Session>(build_session(sm, length));
@@ -114,11 +116,21 @@ std::vector<float> render_with(int threads) {
 
     std::vector<float> out;
     out.reserve(static_cast<std::size_t>(kBlocks) * kBlock * 4);
+    const auto rt_before = lt::rt::all_threads_violations();
     for (int b = 0; b < kBlocks; ++b) {
+        if (automate) {
+            if (b == 20) mixer.set_track_mute("folder", true);
+            if (b == 40) mixer.set_track_mute("folder", false);
+            if (b == 60) mixer.set_track_solo("trk-1", true);
+            if (b == 80) mixer.set_track_solo("trk-1", false);
+        }
         for (auto& c : chans) std::fill(c.begin(), c.end(), 0.0f);
         mixer.render(ptrs.data(), 4, kBlock, clock.sample_rate());
         for (const auto& c : chans) out.insert(out.end(), c.begin(), c.end());
     }
+    const auto rt_after = lt::rt::all_threads_violations();
+    CHECK(rt_after.allocations == rt_before.allocations);
+    CHECK(rt_after.deallocations == rt_before.deallocations);
     mixer.set_render_thread_count(1);   // para los trabajadores antes de salir
     return out;
 }
@@ -253,6 +265,13 @@ TEST_CASE("el mixer solo paraleliza cuando hay suficientes pistas DSP caras") {
     CHECK(large_warp.barrier_entries == 1);
 }
 
+TEST_CASE("render pool remains bit exact through live folder mute and solo changes") {
+    const auto serial = render_with(1, true);
+    const auto parallel = render_with(4, true);
+    REQUIRE(serial.size() == parallel.size());
+    CHECK(serial == parallel);
+}
+
 TEST_CASE("step08 C6: arrancar y parar el pool repetidamente no cuelga") {
     RenderThreadPool pool;
     std::atomic<int> calls{0};
@@ -323,21 +342,18 @@ TEST_CASE("step08: cada indice se ejecuta exactamente una vez") {
 }
 
 TEST_CASE("step08 C4: la fase A no asigna memoria, tampoco en los trabajadores") {
-    // El detector del paso 02 es por hilo, asi que hay que marcar la seccion
-    // DENTRO del trabajo, que es lo que corre en los trabajadores.
+    // The production pool must establish the guard, not the test job.
     RenderThreadPool pool;
     pool.start(4);
 
-    std::atomic<std::uint64_t> allocations{0};
+    const auto before = lt::rt::all_threads_violations();
+    std::atomic<int> unguarded{0};
     auto job = [&](int) noexcept {
-        lt::rt::reset_violations();
-        lt::rt::ScopedRealtimeSection guard;
+        if (!lt::rt::in_realtime_section()) ++unguarded;
         // Trabajo representativo sin asignar: escribir en memoria ya reservada.
         volatile float acc = 0.0f;
         for (int i = 0; i < 64; ++i) acc += static_cast<float>(i);
         (void)acc;
-        allocations.fetch_add(lt::rt::violations().allocations,
-                              std::memory_order_relaxed);
     };
 
     for (int b = 0; b < 20; ++b) {
@@ -345,5 +361,68 @@ TEST_CASE("step08 C4: la fase A no asigna memoria, tampoco en los trabajadores")
         pool.run_block(32, ref);
     }
     pool.stop();
-    CHECK(allocations.load() == 0);
+    const auto after = lt::rt::all_threads_violations();
+    CHECK(unguarded.load() == 0);
+    CHECK(after.allocations == before.allocations);
+    CHECK(after.deallocations == before.deallocations);
+}
+
+TEST_CASE("render pool detects real allocations on both participants from its first block") {
+    RenderThreadPool pool;
+    pool.start(2);
+    const auto director = std::this_thread::get_id();
+    std::atomic<int> worker_calls{0};
+    // Neither participant can do both jobs. No scheduler timings are asserted.
+    std::latch rendezvous{2};
+    const auto before = lt::rt::all_threads_violations();
+    auto job = [&](int) noexcept {
+        if (std::this_thread::get_id() != director) ++worker_calls;
+        rendezvous.count_down();
+        rendezvous.wait();
+        void* allocation = ::operator new(64);
+        ::operator delete(allocation);
+    };
+    RenderJobRef ref(job);
+    pool.run_block(2, ref);
+    const auto after = lt::rt::all_threads_violations();
+    pool.stop();
+    CHECK(worker_calls.load() == 1);
+    CHECK(after.allocations - before.allocations == 2);
+    CHECK(after.deallocations - before.deallocations == 2);
+}
+
+TEST_CASE("render pool timing is optional and excludes serial blocks") {
+    RenderThreadPool pool;
+    pool.start(2);
+    auto job = [](int) noexcept {};
+    RenderJobRef ref(job);
+    pool.run_block(16, ref);
+    CHECK(pool.diagnostics().timed_blocks == 0);
+    CHECK(pool.diagnostics().parallel_ns == 0);
+    pool.set_timing_enabled(true);
+    pool.run_block(16, ref, false);
+    CHECK(pool.diagnostics().timed_blocks == 0);
+    pool.run_block(16, ref);
+    CHECK(pool.diagnostics().timed_blocks == 1);
+    pool.stop();
+}
+
+TEST_CASE("render block retirement rejects delayed and stale worker admission") {
+    RenderBlockAdmission admission;
+    admission.open(1);
+    REQUIRE(admission.try_enter(1));
+    REQUIRE(admission.try_enter(1));
+    admission.close();
+    CHECK_FALSE(admission.try_enter(1));
+    CHECK_FALSE(admission.quiescent());
+    admission.leave();
+    CHECK_FALSE(admission.quiescent());
+    admission.leave();
+    REQUIRE(admission.quiescent());
+    admission.open(2);
+    CHECK_FALSE(admission.try_enter(1));
+    REQUIRE(admission.try_enter(2));
+    admission.leave();
+    admission.close();
+    CHECK(admission.quiescent());
 }

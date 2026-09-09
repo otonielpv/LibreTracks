@@ -296,6 +296,9 @@ option(LT_ENGINE_BUILD_BENCHES "Build developer benchmarks" OFF)
 option(LT_ENGINE_BENCH_BUNGEE  "Add Bungee backend to the pitch DSP benchmark" OFF)
 
 if(LT_ENGINE_BUILD_BENCHES)
+    # Consistent class layout in the static engine and its benchmark clients.
+    # This override cannot reach the production shared library.
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_BENCHMARK_HOOKS=1)
     # Phase 10 prearm bench: measures end-to-end seek latency for prearmed
     # vs reactive paths. Links lt_audio_engine_v2 directly.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_prearm_vs_reactive.cpp")

@@ -137,6 +137,9 @@ pub struct CpuDiagnostics {
     pub callback_count: i32,
     #[serde(default)]
     pub callback_over_budget_count: u64,
+    /// Render wall time exceeded one buffer period; distinct from a driver xrun.
+    #[serde(default)]
+    pub callback_deadline_miss_count: u64,
     #[serde(default)]
     pub mixer_rendered_track_count: u64,
     #[serde(default)]

@@ -75,6 +75,11 @@ public:
     // un bloque. threads <= 1 deja el camino serie exacto de siempre.
     void set_render_thread_count(int threads);
     RenderThreadPoolDiagnostics render_pool_diagnostics() const noexcept;
+#if defined(LT_ENGINE_BENCHMARK_HOOKS)
+    void set_render_parallel_threshold_for_benchmark(int count) noexcept {
+        render_parallel_threshold_for_benchmark_ = count;
+    }
+#endif
     void trigger_crossfade() noexcept;
     void set_metronome_config(const MetronomeConfig& config);
     void set_metronome_enabled(bool enabled);
@@ -121,6 +126,7 @@ public:
         return callback_duration_max_ms_.exchange(0.0, std::memory_order_relaxed);
     }
     std::uint64_t callback_over_budget_count() const noexcept;
+    std::uint64_t callback_deadline_miss_count() const noexcept;
     std::uint64_t rendered_track_count() const noexcept;
     std::uint64_t skipped_track_count() const noexcept;
     std::uint64_t scheduled_jump_executed_count() const noexcept;
@@ -309,6 +315,9 @@ private:
     // por aqui nunca: es la reduccion, y su orden es el contrato de
     // bit-exactitud del plan.
     RenderThreadPool render_pool_;
+#if defined(LT_ENGINE_BENCHMARK_HOOKS)
+    int render_parallel_threshold_for_benchmark_ = 8;
+#endif
 
     // Meters (peak hold, updated each block).
     std::atomic<float> meter_l_{0.f};
@@ -376,6 +385,7 @@ private:
         return v && *v && !(v[0] == '0' && v[1] == '\0');
     }();
     std::atomic<std::uint64_t> callback_over_budget_count_{0};
+    std::atomic<std::uint64_t> callback_deadline_miss_count_{0};
     std::atomic<std::uint64_t> rendered_track_count_{0};
     std::atomic<std::uint64_t> skipped_track_count_{0};
     std::atomic<std::uint64_t> scheduled_jump_executed_count_{0};

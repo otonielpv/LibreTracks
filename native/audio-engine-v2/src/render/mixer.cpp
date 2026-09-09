@@ -2,6 +2,7 @@
 #include <lt_engine/devices/device_channel_layout.h>
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/diagnostics/rt_guard.h>
+#include <lt_engine/diagnostics/callback_budget.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
@@ -29,16 +30,13 @@ void Mixer::force_control_count_zero_for_test() noexcept {
 
 namespace {
 
-// Despertar varios hilos tiene un coste fijo. El banco de Release mide que una
-// voz Bungee cuesta aproximadamente un 1 % del presupuesto del buffer, así que
-// por debajo de ocho pistas caras el camino serie conserva margen de sobra y
-// gasta menos CPU total. Las rutas Direct no justifican despertar el pool ni
-// siquiera con muchas pistas: son copias y medidores de unas pocas decenas de
-// microsegundos.
+// Release measurements and acceptance criteria:
+// docs/plans/audio-engine-performance/README.md. Keep the existing threshold
+// until modest hardware is measured.
 constexpr int kMinCostlyTracksForParallelRender = 8;
 
 bool block_has_enough_costly_tracks(const Song& song, Frame timeline_frame,
-                                    int block_frames) noexcept {
+                                    int block_frames, int threshold) noexcept {
     int costly_tracks = 0;
     const Frame block_end = timeline_frame + static_cast<Frame>(block_frames);
 
@@ -57,8 +55,7 @@ bool block_has_enough_costly_tracks(const Song& song, Frame timeline_frame,
             }
         }
 
-        if (costly && ++costly_tracks >= kMinCostlyTracksForParallelRender)
-            return true;
+        if (costly && ++costly_tracks >= threshold) return true;
     }
     return false;
 }
@@ -1266,7 +1263,13 @@ void Mixer::render(float** output_channels,
                 RenderJobRef job(phase_a);
                 render_pool_.run_block(
                     static_cast<int>(phase_a_count), job,
-                    block_has_enough_costly_tracks(song, timeline_frame, num_frames));
+                    block_has_enough_costly_tracks(song, timeline_frame, num_frames,
+#if defined(LT_ENGINE_BENCHMARK_HOOKS)
+                        render_parallel_threshold_for_benchmark_
+#else
+                        kMinCostlyTracksForParallelRender
+#endif
+                    ));
             }
             rendered_this_block += rendered_atomic.exchange(0, std::memory_order_relaxed);
             skipped_this_block  += skipped_atomic.exchange(0, std::memory_order_relaxed);
@@ -1440,9 +1443,11 @@ void Mixer::render(float** output_channels,
                max_prev, dur, std::memory_order_relaxed)) {}
     const double budget_ms = clock_ ? (static_cast<double>(num_frames) * 1000.0
         / static_cast<double>(std::max(1, clock_->sample_rate()))) : 0.0;
-    const bool over_budget = budget_ms > 0.0 && dur > budget_ms * 0.75;
-    if (over_budget)
+    const auto budget_status = classify_callback_budget(dur, budget_ms);
+    if (budget_status.low_headroom)
         callback_over_budget_count_.fetch_add(1, std::memory_order_relaxed);
+    if (budget_status.deadline_missed)
+        callback_deadline_miss_count_.fetch_add(1, std::memory_order_relaxed);
 
     // Callback load = fraction of the per-buffer time budget spent rendering,
     // as a percentage (Ableton's transport "CPU meter"; >100% => dropouts).
@@ -1581,6 +1586,7 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
 void Mixer::set_render_thread_count(int threads) {
     // Solo hebra de control. start() para el pool anterior antes de crear el
     // nuevo, asi que cambiar en caliente entre bloques es seguro.
+    render_pool_.set_timing_enabled(diag_phases_);
     render_pool_.start(threads);
 }
 
@@ -1964,6 +1970,7 @@ double Mixer::callback_duration_ms() const noexcept { return callback_duration_m
 double Mixer::callback_duration_max_ms() const noexcept { return callback_duration_max_ms_.load(std::memory_order_relaxed); }
 double Mixer::callback_load_percent() const noexcept { return callback_load_percent_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::callback_over_budget_count() const noexcept { return callback_over_budget_count_.load(std::memory_order_relaxed); }
+std::uint64_t Mixer::callback_deadline_miss_count() const noexcept { return callback_deadline_miss_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::rendered_track_count() const noexcept { return rendered_track_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::skipped_track_count() const noexcept { return skipped_track_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::scheduled_jump_executed_count() const noexcept { return scheduled_jump_executed_count_.load(std::memory_order_relaxed); }

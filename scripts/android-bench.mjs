@@ -29,6 +29,9 @@ const ENGINE_LOG_TAGS = [
   "LT_DEVICE",
   "LT_THREADS",
   "LT_MEMPRESSURE",
+  "LT_ENGINE_INFO",
+  "LT_AUDIO_DIAG",
+  "LT_PITCH_DEBUG",
 ];
 
 // ---------------------------------------------------------------------------
@@ -78,6 +81,28 @@ const SCENARIOS = {
       "Deja sonar 60 segundos y escucha si hay cortes",
     ],
     endHint: "tras 60 s de reproduccion",
+  },
+  "playback-warp": {
+    description: "Reproduccion con warp durante 15 minutos en el dispositivo real",
+    metric: "Estabilidad sostenida, RSS, margen de audio y estado termico",
+    manual: [
+      "Usa una build Release y anota pistas, tempo/tono, backend, buffer e hilos en --notes",
+      "Abre una sesion de 8+ pistas; activa warp con un cambio real de tempo o tono",
+      "Deja sonar 15 minutos con la politica de hilos habitual del telefono",
+      "Prueba mute/unmute y saltos entre regiones; anota cuando oigas cortes",
+      "Repite con el mismo repertorio y condiciones para la version candidata",
+    ],
+    endHint: "tras 15 minutos de reproduccion",
+  },
+  "playback-import": {
+    description: "Importar otra cancion mientras suenan 8+ pistas",
+    metric: "Cortes, RAM disponible, pico de RSS y competencia con la preparacion",
+    manual: [
+      "Con una build Release, reproduce una cancion ya preparada de 8+ pistas",
+      "Importa otra cancion sin detener la reproduccion",
+      "Anota cortes y respuesta de los controles; espera a que termine la preparacion",
+    ],
+    endHint: "cuando termine la preparacion de la cancion importada",
   },
   pressure: {
     description: "Provocar presion de memoria durante una carga",
@@ -495,6 +520,9 @@ async function runScenario(scenarioId, options) {
   readJank({ reset: true });
   const dataUsedBefore = readDataUsedKb();
   const memAvailableBefore = readMemAvailableKb();
+  // Boundary snapshots only: do not add expensive dumpsys calls to each tick.
+  // Keep raw output, since available sensors/status vary by Android version.
+  const thermalBefore = shell("dumpsys thermalservice", { allowFailure: true }) || null;
 
   await ask("Pulsa Intro JUSTO ANTES de empezar la operacion en el telefono... ");
 
@@ -531,6 +559,7 @@ async function runScenario(scenarioId, options) {
   const durationMs = Date.now() - startedAt;
   const dataUsedAfter = readDataUsedKb();
   const jank = readJank();
+  const thermalAfter = shell("dumpsys thermalservice", { allowFailure: true }) || null;
   const kills = collectKills();
   const engineLogs = collectEngineLogs();
 
@@ -570,6 +599,7 @@ async function runScenario(scenarioId, options) {
       hwm_peak_kb: hwmValues.length ? Math.max(...hwmValues) : null,
     },
     ui: jank,
+    thermal: { before_raw: thermalBefore, after_raw: thermalAfter },
     kills: {
       total: kills.length,
       libretracks: appKills.length,

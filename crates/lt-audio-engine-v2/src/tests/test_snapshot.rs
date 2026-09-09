@@ -120,6 +120,7 @@ fn cpu_diagnostics_round_trip() {
         underrun_count: 2,
         callback_count: 1000,
         callback_over_budget_count: 3,
+        callback_deadline_miss_count: 2,
         mixer_rendered_track_count: 4,
         mixer_skipped_track_count: 5,
         track_renderer_prepare_count: 6,
@@ -139,6 +140,12 @@ fn cpu_diagnostics_round_trip() {
     assert!((rt.cpu.callback_duration_ms - 1.23).abs() < 1e-9);
     assert_eq!(rt.cpu.callback_count, 1000);
     assert_eq!(rt.cpu.underrun_count, 2);
+    assert_eq!(rt.cpu.callback_over_budget_count, 3);
+    assert_eq!(rt.cpu.callback_deadline_miss_count, 2);
+    let mut legacy = serde_json::to_value(&snap.cpu).unwrap();
+    legacy.as_object_mut().unwrap().remove("callback_deadline_miss_count");
+    let legacy: CpuDiagnostics = serde_json::from_value(legacy).unwrap();
+    assert_eq!(legacy.callback_deadline_miss_count, 0);
     assert_eq!(rt.cpu.source_cache_miss_frames, 9);
     // Estos cuatro son la UNICA forma de comprobar los invariantes de tiempo
     // del warp contra un motor en marcha (ver el comentario de CpuDiagnostics):

@@ -55,7 +55,8 @@ struct CpuDiagnostics {
     int render_threads_active = 1;
     int    underrun_count        = 0;
     int    callback_count        = 0;
-    uint64_t callback_over_budget_count = 0;
+    uint64_t callback_over_budget_count = 0; // legacy: >75%, reduced headroom
+    uint64_t callback_deadline_miss_count = 0; // render >100%; not a driver xrun
     uint64_t mixer_rendered_track_count = 0;
     uint64_t mixer_skipped_track_count = 0;
     uint64_t track_renderer_prepare_count = 0;

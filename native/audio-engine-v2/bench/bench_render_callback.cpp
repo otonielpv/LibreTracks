@@ -69,6 +69,7 @@
 #    define NOMINMAX
 #  endif
 #  include <windows.h>
+#  include <psapi.h>
 #else
 #  include <sys/resource.h>
 #endif
@@ -90,6 +91,8 @@ struct Config {
     double ratio      = 1.0;
     int    semitones  = 0;
     int    threads    = 1;   // pool de render (paso 08)
+    int    muted_tracks = 0;
+    int    parallel_threshold = 8;
     int    blocks     = 600;
     int    warmup     = 150;
     bool   paced      = false;
@@ -115,6 +118,7 @@ struct BenchResult {
     double measured_total_us = 0.0;   // suma de los bloques medidos
     double process_cpu_seconds = 0.0;
     double wall_seconds = 0.0;
+    std::uint64_t peak_rss_bytes = 0;
     PhaseSums phases;
 
     // Contadores estructurales. Éstos NO pueden variar entre dos ejecuciones de
@@ -122,6 +126,8 @@ struct BenchResult {
     std::uint64_t rendered_tracks = 0;
     std::uint64_t skipped_tracks  = 0;
     std::uint64_t over_budget     = 0;
+    std::uint64_t deadline_misses = 0;
+    RenderThreadPoolDiagnostics pool;
     std::uint64_t path_direct     = 0;
     std::uint64_t path_varispeed  = 0;
     std::uint64_t path_stretched  = 0;
@@ -159,6 +165,23 @@ double process_cpu_seconds() noexcept {
 #endif
 }
 
+std::uint64_t process_peak_rss_bytes() noexcept {
+#if defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS memory{};
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &memory, sizeof(memory)))
+        return static_cast<std::uint64_t>(memory.PeakWorkingSetSize);
+    return 0;
+#else
+    rusage usage{};
+    if (getrusage(RUSAGE_SELF, &usage) != 0) return 0;
+#if defined(__APPLE__)
+    return static_cast<std::uint64_t>(usage.ru_maxrss);
+#else
+    return static_cast<std::uint64_t>(usage.ru_maxrss) * 1024;
+#endif
+#endif
+}
+
 // ── Construcción de la sesión sintética ──────────────────────────────────────
 
 std::vector<float> make_sine(Frame frames, int sample_rate, double hz) {
@@ -179,6 +202,12 @@ std::vector<float> make_sine(Frame frames, int sample_rate, double hz) {
 // target tomado en el frame de INICIO de la región. Así que fijando
 // warp_source_bpm = song.bpm / ratio sale exactamente el ratio pedido.
 Session build_session(const Config& cfg, SourceManager& sources, Frame length) {
+    // A fast warp consumes more source frames than timeline frames. Keep the
+    // complete measured window fed, including Bungee's lookahead.
+    const double source_rate = std::max({1.0, cfg.warp ? cfg.ratio : 1.0,
+                                        std::pow(2.0, cfg.semitones / 12.0)});
+    const Frame source_length = static_cast<Frame>(std::ceil(length * source_rate))
+                              + cfg.sample_rate;
     Session session;
     session.id          = "bench-session";
     session.sample_rate = cfg.sample_rate;
@@ -208,9 +237,9 @@ Session build_session(const Config& cfg, SourceManager& sources, Frame length) {
     for (int i = 0; i < cfg.tracks; ++i) {
         const std::string src_id = "src-" + std::to_string(i);
         sources.register_source(src_id, "");
-        auto pcm = make_sine(length, cfg.sample_rate, 110.0 + 13.0 * i);
+        auto pcm = make_sine(source_length, cfg.sample_rate, 110.0 + 13.0 * i);
         if (!sources.store_decoded_source(src_id, std::move(pcm), kChannels,
-                                          cfg.sample_rate, length).is_ok()) {
+                                          cfg.sample_rate, source_length).is_ok()) {
             std::fprintf(stderr, "no se pudo registrar la fuente %s\n", src_id.c_str());
             std::exit(2);
         }
@@ -221,6 +250,7 @@ Session build_session(const Config& cfg, SourceManager& sources, Frame length) {
         track.name = track.id;
         track.kind = TrackKind::Audio;
         track.gain = 0.5f;
+        track.mute = i < cfg.muted_tracks;
         track.transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
         track.clips.push_back(Clip{"clip-" + std::to_string(i), src_id, 0, 0, length});
         song.tracks.push_back(std::move(track));
@@ -259,6 +289,7 @@ BenchResult run(const Config& cfg) {
 
     mixer.prepare_render_resources(cfg.block);
     mixer.set_render_thread_count(cfg.threads);
+    mixer.set_render_parallel_threshold_for_benchmark(cfg.parallel_threshold);
     clock.play();
 
     std::vector<float> left(static_cast<std::size_t>(cfg.block), 0.0f);
@@ -277,6 +308,7 @@ BenchResult run(const Config& cfg) {
     const std::uint64_t rendered0 = mixer.rendered_track_count();
     const std::uint64_t skipped0  = mixer.skipped_track_count();
     const std::uint64_t over0     = mixer.callback_over_budget_count();
+    const auto pool0 = mixer.render_pool_diagnostics();
     (void)mixer.take_phase_max_us();   // descarta el residuo del calentamiento
 
     std::vector<double> samples;
@@ -291,7 +323,9 @@ BenchResult run(const Config& cfg) {
         const auto t0 = Clock::now();
         mixer.render(out, kChannels, cfg.block, clock.sample_rate());
         const auto t1 = Clock::now();
-        samples.push_back(std::chrono::duration<double, std::micro>(t1 - t0).count());
+        const double elapsed_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+        samples.push_back(elapsed_us);
+        if (elapsed_us > cfg.budget_us()) ++r.deadline_misses;
 
         // Leído y reiniciado cada bloque: el "máximo desde la última lectura"
         // es entonces el valor de ESTE bloque, no un máximo histórico.
@@ -332,11 +366,19 @@ BenchResult run(const Config& cfg) {
     r.wall_seconds = std::chrono::duration<double>(
         measured_end - measured_start).count();
     r.phases = phases;
+    r.peak_rss_bytes = process_peak_rss_bytes();
 
     r.rendered_tracks = mixer.rendered_track_count() - rendered0;
     r.skipped_tracks  = mixer.skipped_track_count()  - skipped0;
     r.over_budget     = mixer.callback_over_budget_count() - over0;
     r.blocks_rendered = static_cast<std::uint64_t>(cfg.blocks);
+    r.pool = mixer.render_pool_diagnostics();
+    r.pool.blocks_run -= pool0.blocks_run;
+    r.pool.blocks_serial -= pool0.blocks_serial;
+    r.pool.timed_blocks -= pool0.timed_blocks;
+    r.pool.dispatch_ns -= pool0.dispatch_ns;
+    r.pool.trailing_wait_ns -= pool0.trailing_wait_ns;
+    r.pool.parallel_ns -= pool0.parallel_ns;
 
     const auto td = TrackRenderer::diagnostics();
     r.path_direct    = td.path_direct_count;
@@ -486,6 +528,15 @@ void write_json(const std::vector<BenchResult>& results, const std::string& path
           << "\"ratio\": " << r.cfg.ratio << ", "
           << "\"semitones\": " << r.cfg.semitones << ", "
           << "\"threads\": " << r.cfg.threads << ", "
+          << "\"muted_tracks\": " << r.cfg.muted_tracks << ", "
+          << "\"parallel_threshold\": " << r.cfg.parallel_threshold << ", "
+          << "\"effective_threads\": " << r.pool.threads << ", "
+          << "\"parallel_blocks\": " << r.pool.blocks_run << ", "
+          << "\"serial_blocks\": " << r.pool.blocks_serial << ", "
+          << "\"pool_timed_blocks\": " << r.pool.timed_blocks << ", "
+          << "\"pool_dispatch_ns\": " << r.pool.dispatch_ns << ", "
+          << "\"pool_trailing_wait_ns\": " << r.pool.trailing_wait_ns << ", "
+          << "\"pool_parallel_ns\": " << r.pool.parallel_ns << ", "
           << "\"paced\": " << (r.cfg.paced ? "true" : "false") << ", "
           << "\"blocks\": " << r.cfg.blocks << ", "
           << "\"budget_us\": " << r.cfg.budget_us() << ", "
@@ -495,6 +546,7 @@ void write_json(const std::vector<BenchResult>& results, const std::string& path
           << "\"p99_us\": " << r.p99_us << ", "
           << "\"max_us\": " << r.max_us << ", "
           << "\"process_cpu_seconds\": " << r.process_cpu_seconds << ", "
+          << "\"peak_rss_bytes\": " << r.peak_rss_bytes << ", "
           << "\"wall_seconds\": " << r.wall_seconds << ", "
           << "\"process_cpu_percent\": " << r.process_cpu_percent() << ", "
           << "\"avg_pct_budget\": " << r.pct(r.avg_us) << ", "
@@ -503,6 +555,8 @@ void write_json(const std::vector<BenchResult>& results, const std::string& path
           << "\"rendered_tracks\": " << r.rendered_tracks << ", "
           << "\"skipped_tracks\": " << r.skipped_tracks << ", "
           << "\"over_budget_blocks\": " << r.over_budget << ", "
+          << "\"over_budget_threshold_percent\": 75, "
+          << "\"deadline_misses\": " << r.deadline_misses << ", "
           << "\"path_direct\": " << r.path_direct << ", "
           << "\"path_varispeed\": " << r.path_varispeed << ", "
           << "\"path_stretched\": " << r.path_stretched;
@@ -582,6 +636,8 @@ int main(int argc, char** argv) {
         else if (a == "--ratio")     cfg.ratio       = std::atof(next("--ratio"));
         else if (a == "--semitones") cfg.semitones   = std::atoi(next("--semitones"));
         else if (a == "--threads")   cfg.threads     = std::atoi(next("--threads"));
+        else if (a == "--muted-tracks") cfg.muted_tracks = std::atoi(next("--muted-tracks"));
+        else if (a == "--parallel-threshold") cfg.parallel_threshold = std::atoi(next("--parallel-threshold"));
         else if (a == "--blocks")    cfg.blocks      = std::atoi(next("--blocks"));
         else if (a == "--warmup")    cfg.warmup      = std::atoi(next("--warmup"));
         else if (a == "--paced")     cfg.paced       = true;
@@ -594,7 +650,10 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (cfg.tracks <= 0 || cfg.block <= 0 || cfg.sample_rate <= 0 || cfg.blocks <= 0) {
+    if (cfg.tracks <= 0 || cfg.block <= 0 || cfg.sample_rate <= 0 || cfg.blocks <= 0
+        || cfg.muted_tracks < 0 || cfg.muted_tracks > cfg.tracks || cfg.warmup < 0
+        || cfg.parallel_threshold < 1 || cfg.parallel_threshold > 256
+        || !std::isfinite(cfg.ratio) || cfg.ratio <= 0.0) {
         std::fprintf(stderr, "parámetros fuera de rango\n");
         return 2;
     }
