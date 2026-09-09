@@ -15,7 +15,9 @@ for (const p of preparations) {
     throw new Error('Preparation did not verify the whole continuous render');
 }
 
-const SCENARIOS = ['start', 'forward', 'backward', 'resume'];
+const TRANSPORT_SCENARIOS = ['start', 'forward', 'backward', 'resume'];
+const CONTROL_SCENARIOS = ['none', 'gain', 'pan', 'mute'];
+const SCENARIOS = [...TRANSPORT_SCENARIOS, ...CONTROL_SCENARIOS];
 const BLOCKS = [128, 512];
 const groups = new Map();
 for (const r of rows) {
@@ -32,15 +34,21 @@ for (const r of rows) {
     throw new Error(`Live route did not run warp and pitch: ${r.scenario}/${r.block}`);
   if (r.prepared.active_voices_end !== 0 || r.prepared.path_stretched || r.prepared.path_varispeed)
     throw new Error(`Prepared route ran DSP it should not: ${r.scenario}/${r.block}`);
-  if (!r.metrics) throw new Error(`Missing metrics: ${r.scenario}/${r.block}`);
+  const control = CONTROL_SCENARIOS.includes(r.scenario);
+  if (control ? !r.control : !r.metrics) throw new Error(`Missing metrics: ${r.scenario}/${r.block}`);
   const key = `${r.block}/${r.scenario}`;
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(r);
 }
-if (groups.size !== BLOCKS.length * SCENARIOS.length) throw new Error('Incomplete fidelity matrix');
+const hasControls = SCENARIOS.some(sc => CONTROL_SCENARIOS.includes(sc) && groups.has(`${BLOCKS[0]}/${sc}`));
+const scenariosPresent = hasControls ? SCENARIOS : TRANSPORT_SCENARIOS;
+if (groups.size !== BLOCKS.length * scenariosPresent.length) throw new Error('Incomplete fidelity matrix');
 
 const median = xs => { const s = [...xs].sort((a, b) => a - b), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
-const LABEL = { start: 'Arranque', forward: 'Salto adelante', backward: 'Salto atrás', resume: 'Reanudación' };
+const LABEL = {
+  start: 'Arranque', forward: 'Salto adelante', backward: 'Salto atrás', resume: 'Reanudación',
+  none: 'Sin tocar nada (referencia)', gain: 'Ganancia a la mitad', pan: 'Panorama a la izquierda', mute: 'Enmudecer',
+};
 
 const lines = ['# Fidelidad del audio preparado en arranques y saltos', '',
   `${metadata.cpu}; Release; una pista, warp ${String(metadata.warp_ratio).replace('.', ',')} y tono ${metadata.semitones >= 0 ? '+' : ''}${metadata.semitones}; `
@@ -52,7 +60,7 @@ const lines = ['# Fidelidad del audio preparado en arranques y saltos', '',
 const problems = [], unstable = [], explain = [];
 lines.push('| Escenario | Buffer | Nivel ref. dBFS | Nivel 0-100 ms | Desfase ms | Correlación | Fiable | Error mediano dB | p95 dB | Máx dB >-40 dBFS | Recuperación ms | Silencio vivo | Silencio preparado | Clic vivo/preparado |',
   '| --- | ---: | ---: | ---: | ---: | ---: | :---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
-for (const block of BLOCKS) for (const scenario of SCENARIOS) {
+for (const block of BLOCKS) for (const scenario of TRANSPORT_SCENARIOS) {
   const group = groups.get(`${block}/${scenario}`);
   if (group.length !== metadata.repeats || new Set(group.map(r => r.repetition)).size !== metadata.repeats)
     throw new Error(`Missing or duplicate repetitions: ${scenario}/${block}`);
@@ -81,7 +89,53 @@ for (const block of BLOCKS) for (const scenario of SCENARIOS) {
     + `${m(x => x.click.live_slew_ratio).toFixed(2)} / ${m(x => x.click.prepared_slew_ratio).toFixed(2)} |`);
 }
 
-const anyRow = rows[0].metrics;
+// Mixer controls. The prepared file is written before gain, pan and mute, so
+// each route's own level has to move by the same amount when one of them does.
+// A route-to-route envelope comparison cannot answer this: it would look
+// perfect for a prepared file with the gain baked in, right up until the user
+// touches the fader.
+if (hasControls) {
+  lines.push('', '## Los controles del mezclador siguen vivos', '',
+    'El archivo preparado se escribe ANTES de ganancia, panorama y enmudecido. La prueba no es que las dos rutas se parezcan '
+    + '—eso ya se sabe—, sino que cada una cambie de nivel **lo mismo** cuando se mueve el control: si el preparado hubiera '
+    + 'horneado la ganancia, las dos rutas seguirían pareciéndose hasta que alguien tocara el fader.', '',
+    '| Control | Buffer | Canal | Efecto en vivo dB | Efecto en preparado dB | Diferencia dB |',
+    '| --- | ---: | :---: | ---: | ---: | ---: |');
+  for (const block of BLOCKS) for (const scenario of CONTROL_SCENARIOS) {
+    const group = groups.get(`${block}/${scenario}`);
+    if (!group || group.length !== metadata.repeats)
+      throw new Error(`Missing or duplicate repetitions: ${scenario}/${block}`);
+    for (const route of ['live', 'prepared'])
+      if (new Set(group.map(r => r[route].sha256)).size !== 1) unstable.push(`${LABEL[scenario]} ${block} (${route})`);
+    if (scenario === 'none') continue;  // It is the reference, not a result.
+    for (const [channel, name] of ['I', 'D'].entries()) {
+      const effectLive = median(group.map(r => r.control.effect_db.live[channel]));
+      const effectPrepared = median(group.map(r => r.control.effect_db.prepared[channel]));
+      const difference = effectLive - effectPrepared;
+      // A control that acts on one route and not the other is the whole point.
+      if (Math.abs(difference) > 0.5)
+        problems.push(`${LABEL[scenario]} ${block}, canal ${name}: el control mueve la ruta viva ${difference.toFixed(2)} dB `
+          + 'más que la preparada; una de las dos lo lleva horneado');
+      lines.push(`| ${LABEL[scenario]} | ${block} | ${name} | ${effectLive.toFixed(2)} | `
+        + `${effectPrepared.toFixed(2)} | ${difference.toFixed(2)} |`);
+    }
+  }
+  const referenceRow = groups.get(`${BLOCKS[0]}/none`)[0].control;
+  lines.push('', 'Los niveles son medias cuadráticas de medio segundo a cada lado del cambio, saltándose 50 ms.', '',
+    'El suelo de enmudecer y de panorama **no es el mismo con los dos buffers**, y no es un fallo: el mezclador suaviza ganancia, '
+    + 'panorama y mute con un polo simple cuyo coeficiente es `num_frames / (sample_rate · 10 ms)`, e interpola por muestra dentro del bloque. '
+    + 'Con 512 ese coeficiente se satura a 1, así que el cambio es una rampa lineal limpia de 10,67 ms y a los 50 ms ya hay silencio digital. '
+    + 'Con 128 vale 0,27 y el nivel decae geométricamente: sigue en −92 dBFS a los 50 ms y tarda unos 55 ms en apagarse del todo. '
+    + 'Ninguna de las dos produce clics, y la diferencia es inaudible; se deja anotada, no corregida.', '',
+    '**El efecto es un A/B, no una resta contra cero.** El nivel antes y después del evento no es el mismo material: con warp 1,2 las dos '
+    + 'ventanas caen sobre trozos distintos del fixture, y ese cambio propio vale varios dB. '
+    + `La pasada de referencia, que hace la captura idéntica sin tocar nada, midió ${referenceRow.live.delta_db.map(v => v.toFixed(2)).join(' / ')} dB `
+    + 'en la ruta viva; cada efecto de arriba es la pasada con el control menos esa. Sin restarla, bajar la ganancia a la mitad se leía como +2,15 dB.', '',
+    'Enmudecer lleva las dos rutas al suelo del medidor, así que su efecto no es una cifra con sentido físico; '
+    + 'lo que importa ahí es que las dos caigan lo mismo.', '');
+}
+
+const anyRow = rows.find(r => r.metrics).metrics;
 lines.push('', 'El nivel de referencia es el del archivo preparado: mediana de toda la ventana y de los primeros 100 ms. '
   + 'Sin él, un motor que tarda en asentarse y un evento que cae sobre silencio producen exactamente los mismos números de error.', '',
   `El error en dB sólo se calcula donde la referencia supera ${anyRow.envelope_error.reference_floor_db} dBFS. `

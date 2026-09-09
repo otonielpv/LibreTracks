@@ -297,3 +297,46 @@ export function compareRoutes({
     },
   };
 }
+
+/**
+ * How much a route's own level changed across an event, per channel.
+ *
+ * This answers a different question from compareRoutes. There the two captures
+ * are compared to each other; here each capture is compared to ITSELF before
+ * and after a mixer control moved. If the prepared file had baked in a control
+ * that is supposed to stay live, the two routes would still track each other
+ * before the change and respond by different amounts after it — which is
+ * exactly what the delta below catches and a route-to-route comparison does not.
+ *
+ * `guardSeconds` skips the block the change lands on: the mixer reads the
+ * control once per block, so the change is a step at a block boundary, not a
+ * ramp, and the straddling window would mix both levels.
+ */
+export function controlResponse(samples, channels, eventFrame, {
+  sampleRate = 48000, windowSeconds = 0.5, guardSeconds = 0.05,
+} = {}) {
+  const frames = Math.floor(samples.length / channels);
+  const window = Math.round(windowSeconds * sampleRate);
+  const guard = Math.round(guardSeconds * sampleRate);
+  const beforeTo = eventFrame - guard, beforeFrom = beforeTo - window;
+  const afterFrom = eventFrame + guard, afterTo = afterFrom + window;
+  if (beforeFrom < 0 || afterTo > frames)
+    throw new Error(`Capture is too short for a ${windowSeconds}s window either side of the event`);
+  const rms = (from, to) => {
+    const out = [];
+    for (let ch = 0; ch < channels; ch++) {
+      let sum = 0;
+      for (let f = from; f < to; f++) { const v = samples[f * channels + ch]; sum += v * v; }
+      out.push(toDb(Math.sqrt(sum / (to - from))));
+    }
+    return out;
+  };
+  const before = rms(beforeFrom, beforeTo), after = rms(afterFrom, afterTo);
+  return {
+    before_db: before,
+    after_db: after,
+    delta_db: before.map((v, ch) => after[ch] - v),
+    window_seconds: windowSeconds,
+    guard_seconds: guardSeconds,
+  };
+}

@@ -33,7 +33,8 @@ Secuencia de trabajo hasta la fecha:
 | `5ea7bfdf` | Medidas de warp, transposición y ambos activos |
 | `0fda4282` | Prototipo de preparación por pista, validación de caché y medidas |
 | `5249a02d` | Fidelidad de arranques y saltos: banco, analizador con tests y medidas |
-| *(este)* | Presupuesto de disco medido, PCM16 en el preparador y fidelidad revalidada en PCM16 |
+| `6e456519` | Presupuesto de disco medido, PCM16 en el preparador y fidelidad revalidada en PCM16 |
+| *(este)* | Ganancia, panorama y mute comprobados en vivo sobre el audio preparado |
 
 **De todos estos, sólo `849e8e98` cambia lo que oye un usuario.** Es una
 corrección de concurrencia del pool de render. Todo lo demás es infraestructura
@@ -50,8 +51,9 @@ este trabajo. Consultar `git status` y los diffs antes de editar o commitear.
 
 El [plan principal](README.md) contiene las decisiones y puertas de aceptación.
 Leer después [DSP activo](05-dsp-activo.md), [audio preparado](06-audio-preparado.md),
-[fidelidad de saltos](07-fidelidad-saltos.md) y
-[presupuesto y formato](08-presupuesto-y-formato.md). Las etapas 02–04 explican el
+[fidelidad de saltos](07-fidelidad-saltos.md),
+[presupuesto y formato](08-presupuesto-y-formato.md) y
+[controles en vivo](09-controles-en-vivo.md). Las etapas 02–04 explican el
 streaming, las importaciones y el salto protegido.
 
 La transposición sin warp utiliza varispeed en el motor actual; no confundirla
@@ -114,9 +116,11 @@ musical es casi periódico. Las dos trampas son genéricas de esta clase de medi
 1. El fixture de fidelidad cubre **una región, offsets cero, ganancia de clip
    unitaria y parámetros constantes**. No demuestra regiones múltiples,
    automatización, edición durante playback ni cambios de warp/tono en caliente.
-2. Gain, pan y mute deben seguir siendo controles en vivo. Están documentados
-   como frontera del archivo preparado, pero **no se han medido moviéndose
-   durante la reproducción preparada**.
+2. Gain, pan y mute ya están comprobados moviéndose durante la reproducción
+   preparada (etapa 09): media ganancia da −6,02 dB exactos en ambas rutas. Lo
+   que **no** está resuelto es que la clave de la caché no incluye la ganancia
+   de clip ni la disposición de clips, y el preparador sí hornea la de clip:
+   editarla no invalidaría el archivo.
 3. La invalidación de caché está probada como función pura. **No está probado
    que un cambio de parámetros durante la reproducción no llegue a sonar desde
    caché obsoleta**: eso exige la publicación atómica que el prototipo no tiene.
@@ -162,8 +166,14 @@ sigue sin haber una sola medida en un dispositivo así.
 
 ## Siguiente tarea concreta recomendada
 
-**Extender la cobertura de fidelidad a lo que una sesión real tiene**, sobre
-PCM16, que es el formato decidido en la etapa 08:
+El usuario ha aceptado el presupuesto de disco (0,51 GiB por canción es
+asumible con almacenamiento moderno) y ha señalado, con razón, que llevamos seis
+commits sin tocar producción. La regla de no ajustar políticas desde este i7
+sigue en pie para hilos, precarga y caché, pero **no aplica a construir la
+función**: una función se diseña, no se calibra. La siguiente etapa debería ser
+de producción, no de banco.
+
+Lo que queda de banco, si hiciera falta, sobre PCM16:
 
 1. Regiones múltiples, offsets de clip distintos de cero y ganancia de clip no
    unitaria. El fixture y el banco ya soportan añadirlo; hoy sólo montan una
@@ -171,9 +181,7 @@ PCM16, que es el formato decidido en la etapa 08:
 2. Cambios de warp y de tono en caliente durante la reproducción, comprobando
    que una invalidación nunca reproduce caché obsoleta. Esto necesita la
    publicación atómica, así que probablemente sea diseño además de medida.
-3. Gain, pan y mute moviéndose durante el playback preparado, para asegurar que
-   siguen actuando en el mezclador y no quedaron horneados en el WAV.
-4. Política de margen para el techo de PCM16: qué hacer cuando el contador de
+3. Política de margen para el techo de PCM16: qué hacer cuando el contador de
    muestras recortadas del preparador se dispara. Bajar el nivel del preparado y
    compensarlo al reproducir mueve la frontera con el mezclador, así que es
    diseño, no sólo medida.
@@ -211,8 +219,8 @@ git diff --check
 versionar código, resultados JSON e informes.
 
 Validación: compilación Release de los bancos, 12 preparaciones del presupuesto
-con orden alternado, 24 comparaciones de fidelidad en PCM16, y los tests de Node
-en verde. **Ninguna de estas dos etapas toca un fichero del motor** —el diff son
+con orden alternado, 48 comparaciones de fidelidad en PCM16 (8 escenarios), y
+21 tests de Node en verde. **Ninguna de estas dos etapas toca un fichero del motor** —el diff son
 objetivos de CMake, ficheros bajo `bench/`, scripts y documentación—, así que no
 se han vuelto a ejecutar los 385 tests nativos ni los 75 de Rust; ejecutarlos en
 cuanto se toque `native/audio-engine-v2/src`.

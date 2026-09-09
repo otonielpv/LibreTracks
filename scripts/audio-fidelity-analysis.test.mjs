@@ -3,7 +3,7 @@
 // a fidelity report is only worth reading if its analyzer knows how to.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compareRoutes, envelope, bestLag, toDb } from './audio-fidelity-analysis.mjs';
+import { compareRoutes, controlResponse, envelope, bestLag, toDb } from './audio-fidelity-analysis.mjs';
 
 const SR = 48000, CH = 2, EVENT = 4800, FADE = 128, SECONDS = 2;
 
@@ -178,4 +178,50 @@ test('envelope and lag helpers behave as the comparison assumes', () => {
   // a[i] == b[i + 4], so `a` leads `b`: the reported lag must be negative.
   assert.equal(bestLag(a, b, 12).lag, -4);
   assert.ok(toDb(0) < -100, 'digital silence must map to a finite floor');
+});
+
+// The control-response tests need a stationary level: the bursty signal above
+// carries a 1,7 s envelope on purpose, and over half-second windows that drift
+// is bigger than the step being measured. Here the level itself is the subject.
+const CONTROL_EVENT = 48000;
+const steadyFrames = CONTROL_EVENT + 2 * SR;
+function steady() {
+  const out = new Float32Array(steadyFrames * CH);
+  for (let f = 0; f < steadyFrames; f++) {
+    const value = 0.3 * Math.sin((2 * Math.PI * 220 * f) / SR);
+    out[f * CH] = value;
+    out[f * CH + 1] = value * 0.85;
+  }
+  return out;
+}
+const response = (samples, options = {}) =>
+  controlResponse(samples, CH, CONTROL_EVENT, { sampleRate: SR, ...options });
+
+test('a gain change is reported as its exact dB step, per channel', () => {
+  const live = steady();
+  for (let f = CONTROL_EVENT; f < steadyFrames; f++)
+    for (let ch = 0; ch < CH; ch++) live[f * CH + ch] *= 0.5;
+  for (const delta of response(live).delta_db)
+    assert.ok(Math.abs(delta + 6.02) < 0.2, `delta ${delta} dB, expected -6,02`);
+  // An unchanged route must report no step, or the metric flags every run.
+  for (const delta of response(steady()).delta_db)
+    assert.ok(Math.abs(delta) < 0.1, `unchanged route reported ${delta} dB`);
+});
+
+test('a one-channel change is not hidden by the other channel', () => {
+  const live = steady();
+  for (let f = CONTROL_EVENT; f < steadyFrames; f++) live[f * CH + 1] = 0; // hard left
+  const result = response(live);
+  assert.ok(Math.abs(result.delta_db[0]) < 0.1, `left moved ${result.delta_db[0]} dB`);
+  assert.ok(result.delta_db[1] < -60, `right only dropped ${result.delta_db[1]} dB`);
+});
+
+test('muting reads as a drop to the floor, and a short capture is refused', () => {
+  const live = steady();
+  for (let f = CONTROL_EVENT; f < steadyFrames; f++)
+    for (let ch = 0; ch < CH; ch++) live[f * CH + ch] = 0;
+  for (const delta of response(live).delta_db)
+    assert.ok(delta < -80, `mute only dropped ${delta} dB`);
+  // The window must not be allowed to run off either end of the capture.
+  assert.throws(() => response(live, { windowSeconds: 5 }), /too short/);
 });

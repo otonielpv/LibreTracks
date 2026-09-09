@@ -15,7 +15,7 @@ import { resolve, join, dirname } from 'node:path';
 import { cpus, platform, arch, totalmem } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { writeFixture, SAMPLE_RATE } from './audio-fidelity-fixture.mjs';
-import { compareRoutes } from './audio-fidelity-analysis.mjs';
+import { compareRoutes, controlResponse } from './audio-fidelity-analysis.mjs';
 import { fileHash } from './audio-prepared-cache.mjs';
 
 const [captureArg, prepareArg, outArg, repeatsArg = '3', formatArg = 'float32'] = process.argv.slice(2);
@@ -32,7 +32,13 @@ if (!['float32', 'pcm16'].includes(formatArg)) throw new Error('Format must be f
 // 48 s of timeline is divisible by both block sizes; the source has to outlast
 // it at the warp ratio, with the DSP's own read-ahead on top.
 const TIMELINE_SECONDS = 48, SOURCE_SECONDS = 90, WARP_RATIO = 1.2, SEMITONES = 3;
-const BLOCKS = [128, 512], SCENARIOS = ['start', 'forward', 'backward', 'resume'], ROUTES = ['live', 'prepared'];
+const BLOCKS = [128, 512], ROUTES = ['live', 'prepared'];
+// The first four move the transport; the last three move a mixer control while
+// playing, to check that the prepared file did not bake in what must stay live.
+const TRANSPORT_SCENARIOS = ['start', 'forward', 'backward', 'resume'];
+// `none` is the reference of the control A/B and must run before the others.
+const CONTROL_SCENARIOS = ['none', 'gain', 'pan', 'mute'];
+const SCENARIOS = [...TRANSPORT_SCENARIOS, ...CONTROL_SCENARIOS];
 if ((TIMELINE_SECONDS * SAMPLE_RATE) % Math.max(...BLOCKS))
   throw new Error('Timeline length must be a whole number of blocks');
 
@@ -102,6 +108,9 @@ function writeWav(path, samples, channels = 2) {
   writeFileSync(path, Buffer.concat([header, Buffer.from(samples.buffer, samples.byteOffset, dataBytes)]));
 }
 
+// Each route's own level change with nothing touched, per repetition and
+// buffer. The controls are measured against this, never against zero.
+const reference = new Map();
 const rows = [];
 for (let repetition = 0; repetition < repeats; repetition++) {
   for (const block of BLOCKS) {
@@ -127,20 +136,45 @@ for (let repetition = 0; repetition < repeats; repetition++) {
       const sameTimeline = live.meta.timeline_frames.length === prepared.meta.timeline_frames.length
         && live.meta.timeline_frames.every((v, i) => v === prepared.meta.timeline_frames[i]);
       const eventFrame = live.meta.event_block * block;
-      const metrics = sameTimeline ? compareRoutes({
+      const isControl = CONTROL_SCENARIOS.includes(scenario);
+      // A muted capture is four seconds of digital silence in BOTH routes, so a
+      // route-to-route envelope comparison has nothing to compare. What matters
+      // there is whether each route's OWN level moved by the same amount, which
+      // is a different measurement.
+      const metrics = sameTimeline && !isControl ? compareRoutes({
         live: live.samples, prepared: prepared.samples, sampleRate: SAMPLE_RATE,
         eventFrame, settleSeconds: 4,
       }) : null;
+      const control = isControl ? {
+        applied: scenario, value: live.meta.control_value,
+        live: controlResponse(live.samples, 2, eventFrame, { sampleRate: SAMPLE_RATE }),
+        prepared: controlResponse(prepared.samples, 2, eventFrame, { sampleRate: SAMPLE_RATE }),
+      } : null;
+      if (control) {
+        const key = `${repetition}/${block}`;
+        if (scenario === 'none') reference.set(key, control);
+        const base = reference.get(key);
+        if (!base) throw new Error(`The untouched reference for ${key} has not been captured`);
+        // The effect of the control alone: what this route did, minus what it
+        // would have done anyway. Both terms come from the same repetition and
+        // buffer, so the material's own change cancels.
+        control.effect_db = {
+          live: control.live.delta_db.map((v, ch) => v - base.live.delta_db[ch]),
+          prepared: control.prepared.delta_db.map((v, ch) => v - base.prepared.delta_db[ch]),
+        };
+        control.difference_db =
+          control.effect_db.live.map((v, ch) => v - control.effect_db.prepared[ch]);
+      }
       rows.push({
         repetition, block, scenario, event_frame: eventFrame,
-        same_timeline: sameTimeline,
+        same_timeline: sameTimeline, is_control: isControl,
         live: { ...live.meta, timeline_frames: undefined, sha256: live.sha256 },
         prepared: { ...prepared.meta, timeline_frames: undefined, sha256: prepared.sha256 },
-        metrics,
+        metrics, control,
       });
       // Audible examples for the differences the numbers cannot settle. One
       // buffer size is enough; the WAVs are for listening, not for measuring.
-      if (repetition === 0 && block === 512) {
+      if (repetition === 0 && block === 512 && !['mute', 'none'].includes(scenario)) {
         const from = eventFrame * 2, to = Math.min(live.samples.length, from + 4 * SAMPLE_RATE * 2);
         const a = live.samples.subarray(from, to), b = prepared.samples.subarray(from, to);
         const difference = Float32Array.from(a, (v, i) => v - b[i]);
@@ -148,8 +182,11 @@ for (let repetition = 0; repetition < repeats; repetition++) {
         writeWav(join(directory, `example-${scenario}-prepared.wav`), b);
         writeWav(join(directory, `example-${scenario}-difference.wav`), difference);
       }
-      console.log(`r${repetition} b${block} ${scenario}: lag=${metrics?.alignment.lag_ms?.toFixed(2)} ms `
-        + `median=${metrics?.envelope_error.median_db?.toFixed(2)} dB recovery=${metrics?.recovery_ms} ms`);
+      console.log(control
+        ? `r${repetition} b${block} ${scenario}: efecto vivo ${control.effect_db.live.map(v => v.toFixed(2)).join('/')} dB, `
+          + `preparado ${control.effect_db.prepared.map(v => v.toFixed(2)).join('/')} dB`
+        : `r${repetition} b${block} ${scenario}: lag=${metrics?.alignment.lag_ms?.toFixed(2)} ms `
+          + `median=${metrics?.envelope_error.median_db?.toFixed(2)} dB recovery=${metrics?.recovery_ms} ms`);
       writeFileSync(join(out, 'results.json'), JSON.stringify({ metadata, preparations, rows }, null, 2) + '\n');
     }
   }

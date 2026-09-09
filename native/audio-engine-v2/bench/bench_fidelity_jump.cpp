@@ -42,15 +42,41 @@ constexpr int kSampleRate = 48000;
 
 namespace {
 
-enum class Scenario { Start, Forward, Backward, Resume };
+// The first four move the transport. The last three move a mixer control while
+// playing: the prepared file is written BEFORE gain, pan and mute, so those must
+// still act on it exactly as they act on the live route. Nothing proves that
+// today — the boundary is documented and never measured.
+enum class Scenario { Start, Forward, Backward, Resume, None, Gain, Pan, Mute };
 
 Scenario parse_scenario(const std::string& name) {
     if (name == "start") return Scenario::Start;
     if (name == "forward") return Scenario::Forward;
     if (name == "backward") return Scenario::Backward;
     if (name == "resume") return Scenario::Resume;
-    throw std::runtime_error("Scenario must be start, forward, backward or resume");
+    if (name == "none") return Scenario::None;
+    if (name == "gain") return Scenario::Gain;
+    if (name == "pan") return Scenario::Pan;
+    if (name == "mute") return Scenario::Mute;
+    throw std::runtime_error(
+        "Scenario must be start, forward, backward, resume, none, gain, pan or mute");
 }
+
+bool moves_transport(Scenario scenario) noexcept {
+    return scenario == Scenario::Start || scenario == Scenario::Forward
+        || scenario == Scenario::Backward || scenario == Scenario::Resume;
+}
+
+// Half gain is exactly -6,02 dB, a value a wrong result cannot land on by
+// accident; hard left and mute are the unambiguous ends of the other two.
+constexpr float kGainUnderTest = 0.5f;
+constexpr float kPanUnderTest = -1.0f;
+
+// `none` runs the identical capture and touches nothing. It exists because the
+// level before and after the event is NOT the same material: at warp 1,2 the
+// two half-second windows land on different parts of the fixture, and the
+// material's own change is several dB. Without subtracting this reference,
+// halving the gain reads as +2,15 dB. It is the reference of an A/B, not a
+// scenario anybody needs to look at on its own.
 
 // Resident before the capture so playback never reads from disk. Waiting here
 // is the point: a miss during the window would be indistinguishable from a
@@ -74,7 +100,7 @@ void make_resident(SourceManager& sources, const Id& id) {
 int main(int argc, char** argv) try {
     if (argc != 9) throw std::runtime_error(
         "Usage: bench_fidelity_jump SOURCE_DIR OUT_DIR BLOCK ROUTE(live|prepared) "
-        "SCENARIO(start|forward|backward|resume) RATIO SEMITONES TIMELINE_SECONDS");
+        "SCENARIO(start|forward|backward|resume|none|gain|pan|mute) RATIO SEMITONES TIMELINE_SECONDS");
     const std::filesystem::path source_dir(argv[1]);
     const std::filesystem::path out_dir(argv[2]);
     const int block = std::stoi(argv[3]);
@@ -196,6 +222,19 @@ int main(int argc, char** argv) try {
                     engine.seek(event_target);
                     engine.play();
                     break;
+                case Scenario::None:
+                    break;  // The reference: same capture, nothing touched.
+                // The transport does not move for these: the capture stays on
+                // the same timeline and only the mixer control changes.
+                case Scenario::Gain:
+                    engine.command(CmdSetTrackGain{"track", kGainUnderTest});
+                    break;
+                case Scenario::Pan:
+                    engine.command(CmdSetTrackPan{"track", kPanUnderTest});
+                    break;
+                case Scenario::Mute:
+                    engine.command(CmdSetTrackMute{"track", true});
+                    break;
             }
         }
         timeline.push_back(static_cast<long long>(engine.position()));
@@ -228,6 +267,12 @@ int main(int argc, char** argv) try {
          << ",\"anchor_frame\":" << anchor << ",\"event_target_frame\":" << event_target
          << ",\"pre_blocks\":" << pre_blocks << ",\"post_blocks\":" << post_blocks
          << ",\"event_block\":" << event_block
+         << ",\"moves_transport\":" << (moves_transport(scenario) ? 1 : 0)
+         << ",\"control_value\":"
+         << (scenario == Scenario::Gain ? kGainUnderTest
+             : scenario == Scenario::Pan ? kPanUnderTest
+             : scenario == Scenario::Mute ? 0.0f : 1.0f)
+         << ",\"is_reference\":" << (scenario == Scenario::None ? 1 : 0)
          << ",\"capture\":\"" << stem << ".f32\""
          << ",\"channels\":2,\"frames\":" << static_cast<long long>(total_blocks) * block
          << ",\"max_abs\":" << max_abs
@@ -254,10 +299,19 @@ int main(int argc, char** argv) try {
         throw std::runtime_error("Output reached the master soft limiter; lower the fixture level");
     if (diag.pitch_missing_stream_silence_count)
         throw std::runtime_error("A stretched render had no voice");
-    if (live && (voices.active_voice_count != 1 || diag.path_stretched_count != expected))
-        throw std::runtime_error("Live route did not run one Bungee voice for every block");
-    if (!live && (voices.active_voice_count != 0 || diag.path_direct_count != expected))
-        throw std::runtime_error("Prepared route did not run the direct path for every block");
+    // A muted stretched track takes the renderer's silent path, which advances
+    // the voice cursor without producing a stretched block, so the per-block
+    // count only holds where the transport is what moved. The route each
+    // capture took is still checked, just not block by block.
+    const bool strict_counts = moves_transport(scenario);
+    if (live && (voices.active_voice_count != 1
+                 || (strict_counts ? diag.path_stretched_count != expected
+                                   : diag.path_stretched_count == 0)))
+        throw std::runtime_error("Live route did not run the Bungee voice it should have");
+    if (!live && (voices.active_voice_count != 0
+                  || (strict_counts ? diag.path_direct_count != expected
+                                    : diag.path_direct_count == 0)))
+        throw std::runtime_error("Prepared route did not run the direct path it should have");
     std::cout << "captured " << stem << " max_abs=" << max_abs << "\n";
     return 0;
 } catch (const std::exception& e) {
