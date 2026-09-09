@@ -35,15 +35,21 @@ Secuencia de trabajo hasta la fecha:
 | `5249a02d` | Fidelidad de arranques y saltos: banco, analizador con tests y medidas |
 | `6e456519` | Presupuesto de disco medido, PCM16 en el preparador y fidelidad revalidada en PCM16 |
 | `a5140be2` | Ganancia, panorama y mute comprobados en vivo sobre el audio preparado |
-| *(este)* | Fin de la fase de medida: instrumentación agrupada y tests conectados a `npm test` |
+| `f62d8e36` | Fin de la fase de medida: instrumentación agrupada y tests conectados a `npm test` |
+| `5b3b838c` | **Producción**: identidad de la caché de audio preparado |
+| `69574b05` | **Producción**: almacén en disco con presupuesto |
+| `8ba99e6e` | **Producción**: renderizador offline en el motor |
+| `8377fc12` | **Producción**: entrada FFI con progreso y cancelación |
+| `e98a6d46` | **Producción**: orquestación de la preparación |
 
-**De todos estos, sólo `849e8e98` cambia lo que oye un usuario.** Es una
-corrección de concurrencia del pool de render. Todo lo demás es infraestructura
-de medición y un prototipo que vive únicamente en la compilación del banco.
-La reproducción desde audio con warp/tono preparados **no existe como función
-de la aplicación**. Lo que estas dos últimas etapas han hecho es comprobar que
-la sustitución sería honesta en cuatro momentos concretos y cuánto costaría en
-disco; ninguna de las dos la acerca a existir.
+Hasta `f62d8e36`, sólo `849e8e98` cambiaba lo que oye un usuario. A partir de
+ahí el trabajo es de producción: cinco piezas que construyen la función de audio
+preparado (ver [etapa 10](10-integracion-produccion.md)). **Todavía no se oye
+nada**: falta el cableado del escritorio y la ruta de reproducción.
+La reproducción desde audio con warp/tono preparados **todavía no existe como
+función de la aplicación**, pero ya no por falta de piezas: la identidad, el
+almacén, el renderizador, el FFI y la orquestación están construidos y probados.
+Falta unirlos al escritorio y enseñarle al motor a leer el archivo.
 
 No revertir cambios ajenos ni asumir que todo cambio encontrado pertenece a
 este trabajo. Consultar `git status` y los diffs antes de editar o commitear.
@@ -189,6 +195,19 @@ No queda ninguna medida que pueda cambiar una decisión sin hardware que no
 tenemos. La siguiente etapa es de producción.
 
 ## Siguiente tarea concreta recomendada
+
+**Cablear la preparación al escritorio.** El detalle está en la
+[etapa 10](10-integracion-produccion.md), pero lo esencial: se escribió un
+módulo síncrono para esto y **se retiró antes de commitear**, porque el patrón
+correcto ya existe y es otro — `WaveformGenerationQueue` en
+`apps/desktop/src-tauri/src/state/mod.rs`, con su `WaveformTask::Prime`. Esa
+cola ya resuelve el trabajo pesado fuera del lock de sesión, y hacerlo síncrono
+desde un comando reintroduciría el problema. No repetir ese error.
+
+Después: la ruta de reproducción (leer el archivo en vez de ejecutar Bungee) y
+la interfaz.
+
+## Lo que ya no aplica de las etapas de banco
 
 El usuario ha aceptado el presupuesto de disco (0,51 GiB por canción es
 asumible con almacenamiento moderno) y ha señalado, con razón, que llevamos seis
