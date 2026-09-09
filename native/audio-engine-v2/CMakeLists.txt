@@ -444,6 +444,12 @@ if(LT_ENGINE_BUILD_BENCHES)
         if(WIN32)
             target_link_libraries(bench_streaming_playback PRIVATE psapi)
         endif()
+        # Compara el DSP vivo con el audio preparado tras arrancar, saltar y
+        # reanudar. Ver docs/plans/audio-engine-performance/07-fidelidad-saltos.md
+        add_executable(bench_fidelity_jump bench/bench_fidelity_jump.cpp)
+        target_compile_features(bench_fidelity_jump PRIVATE cxx_std_20)
+        target_link_libraries(bench_fidelity_jump PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_fidelity_jump PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     endif()
 
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_render_callback.cpp")

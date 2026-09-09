@@ -34,8 +34,16 @@ public:
         mixer().prepare_render_resources(block);
         engine_.state_ = EngineImpl::State::Initialized;
     }
-    void seek(Frame target) {
-        const auto result = engine_.dispatch_command(CmdSeekAbsolute{target});
+    void seek(Frame target) { command(CmdSeekAbsolute{target}); }
+    // Play/Pause are pure clock transitions in EngineImpl, so a bench can use
+    // the real handlers without a device. The application always sends
+    // SeekAbsolute(position) before Play; benches that model start or resume
+    // must do the same or they exercise a path the app never takes.
+    void play() { command(CmdPlay{}); }
+    void pause() { command(CmdPause{}); }
+    Frame position() const { return engine_.clock_->position().frame; }
+    void command(const EngineCommand& cmd) {
+        const auto result = engine_.dispatch_command(cmd);
         if (result.is_err()) throw std::runtime_error(result.error());
     }
 private:
