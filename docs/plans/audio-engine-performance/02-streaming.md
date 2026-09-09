@@ -90,10 +90,11 @@ La caché del motor empieza fría en cada proceso; **la del sistema operativo
 está caliente** tras generar los archivos. No se expulsa la caché del SO.
 El director tiene prioridad normal y no hay backend de dispositivo ni UI.
 El salto es inmediato mediante el reloj: evita deliberadamente el gate de
-`JumpScheduler`, por lo que mide recuperación tras discontinuidad, no la
+la capa de comandos, por lo que mide recuperación tras discontinuidad, no la
 latencia de un salto solicitado desde la aplicación.
 
-Faltan importación concurrente por la cola de preparación real, warp,
-almacenamiento lento y dispositivos modestos reales. Esta matriz permite
+La [siguiente entrega](03-import-concurrente.md) añade importación concurrente
+por la cola de preparación real. Siguen pendientes warp, almacenamiento lento
+y dispositivos modestos reales. Esta matriz permite
 observar precarga y recuperación, pero no basta para adoptar regulación
 dinámica ni aumentar hilos/RAM. La comprobación Android sigue pendiente.

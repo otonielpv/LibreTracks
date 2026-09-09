@@ -8,6 +8,7 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/io_throttle.h>
 #include <lt_engine/transport/transport_clock.h>
+#include "streaming_import_workload.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -63,12 +64,13 @@ static std::uint64_t peak_rss_bytes() {
 }
 
 int main(int argc, char** argv) try {
-    if (argc != 8) throw std::runtime_error(
-        "Usage: bench_streaming_playback DIR JSON TRACKS BLOCK BLOCKS PRELOAD(0|1) TRIM(0|1)");
+    if (argc != 8 && argc != 9) throw std::runtime_error(
+        "Usage: bench_streaming_playback DIR JSON TRACKS BLOCK BLOCKS PRELOAD(0|1) TRIM(0|1) [IMPORTS]");
     const int tracks = std::stoi(argv[3]), block = std::stoi(argv[4]);
     const int blocks = std::stoi(argv[5]), preload = std::stoi(argv[6]), trim = std::stoi(argv[7]);
+    const int imports = argc == 9 ? std::stoi(argv[8]) : 0;
     if (tracks < 1 || tracks > 128 || block < 64 || block > 2048 || blocks < 10 || blocks > 100000
-        || preload < 0 || preload > 1 || trim < 0 || trim > 1)
+        || preload < 0 || preload > 1 || trim < 0 || trim > 1 || imports < 0 || imports > 16)
         throw std::runtime_error("Invalid configuration");
     constexpr int sr = 48000;
     const Frame start = 5 * sr, target = 30 * sr;
@@ -131,6 +133,10 @@ int main(int argc, char** argv) try {
     double energy = 0;
     int recovery_blocks = -1, consecutive_ready = 0;
     const int jump_block = blocks / 2;
+    std::unique_ptr<StreamingImportWorkload> importing;
+    if (imports) importing = std::make_unique<StreamingImportWorkload>(sources, argv[1], imports);
+    int import_overlap_blocks = 0;
+    bool import_active_at_jump = false;
     transport.seek(start);
     transport.play();
     transport.clear_pending_start();
@@ -140,7 +146,9 @@ int main(int argc, char** argv) try {
     const auto began = Clock::now();
     const auto cpu0 = cpu_seconds();
     for (int b = 0; b < blocks; ++b) {
+        if (importing && b == jump_block - 1) importing->start();
         if (b == jump_block) {
+            import_active_at_jump = importing && importing->active();
             misses_before_jump = sources.total_cache_miss_frames() - miss0;
             sources.drop_pending_readahead();
             if (trim) freed = sources.release_cached_blocks_under_pressure(1);
@@ -148,6 +156,7 @@ int main(int argc, char** argv) try {
             transport.clear_pending_start();
         }
         const auto missing_before = sources.total_cache_miss_frames();
+        if (importing && importing->active()) ++import_overlap_blocks;
         const auto t0 = Clock::now();
         mixer.render(output, 2, block, sr);
         const double us = std::chrono::duration<double, std::micro>(Clock::now() - t0).count();
@@ -174,14 +183,23 @@ int main(int argc, char** argv) try {
     const auto io = sources.take_fill_io_stats();
     const auto cache = sources.cache_diagnostics();
     const auto missing = sources.total_cache_miss_frames() - miss0;
+    const auto playback_peak_rss = peak_rss_bytes();
+    // Freeze playback observations before waiting for unfinished imports.
+    if (importing) importing->finish();
     std::sort(times.begin(), times.end());
     const auto percentile = [&](double p) { return times[static_cast<std::size_t>(p * (times.size() - 1))]; };
     std::ofstream json(argv[2]);
     if (!json) throw std::runtime_error("Cannot create JSON");
     json << "{\n\"tracks\":" << tracks << ",\"block\":" << block << ",\"blocks\":" << blocks
          << ",\"sample_rate\":48000,\"preload\":" << preload << ",\"trim\":" << trim
+         << ",\"imports_requested\":" << imports
+         << ",\"imports_completed\":" << (importing ? importing->completed() : 0)
+         << ",\"import_ms\":" << (importing ? importing->elapsed_ms() : 0)
+         << ",\"import_overlap_blocks\":" << import_overlap_blocks
+         << ",\"import_active_at_jump\":" << (import_active_at_jump ? 1 : 0)
          << ",\"prepare_ms\":" << prepare_ms << ",\"wall_seconds\":" << wall_s
-         << ",\"process_cpu_seconds\":" << cpu_s << ",\"peak_rss_bytes\":" << peak_rss_bytes()
+         << ",\"process_cpu_seconds\":" << cpu_s << ",\"peak_rss_bytes\":" << playback_peak_rss
+         << ",\"peak_rss_after_import_bytes\":" << peak_rss_bytes()
          << ",\"rendered_tracks\":" << mixer.rendered_track_count()
          << ",\"p50_us\":" << percentile(.5) << ",\"p95_us\":" << percentile(.95)
          << ",\"p99_us\":" << percentile(.99) << ",\"max_us\":" << times.back()
@@ -199,7 +217,8 @@ int main(int argc, char** argv) try {
          << ",\"queue_urgent_end\":" << io.queue_urgent << ",\"queue_normal_end\":" << io.queue_normal << "\n}\n";
     json.close();
     if (!json || !std::isfinite(energy) || energy <= 0 || io.read_failures || io.open_failures || !io.read_count
-        || mixer.rendered_track_count() != static_cast<std::uint64_t>(tracks) * blocks)
+        || mixer.rendered_track_count() != static_cast<std::uint64_t>(tracks) * blocks
+        || (imports && !import_overlap_blocks))
         throw std::runtime_error("Invalid run: missing output, no streaming reads, I/O failure or JSON write failure");
     std::cout << "p95_us=" << percentile(.95) << " missing_source_frames=" << missing
               << " reads=" << io.read_count << "\n";
