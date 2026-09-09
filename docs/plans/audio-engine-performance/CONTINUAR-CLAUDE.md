@@ -205,9 +205,24 @@ tenemos. La siguiente etapa es de producción.
 
 ## Siguiente tarea concreta recomendada
 
-**Ninguna sobre el audio preparado.** La función está terminada y desactivada, y
-lo que decidiría si merece activarse es una medida en un equipo modesto o un
-Android real, no más código.
+**Ninguna hasta la prueba del Oppo, prevista para el 2026-09-11.** La función
+está terminada y desactivada, y lo que decidiría si merece activarse es esa
+medida, no más código.
+
+Dos cosas que el mantenedor ha dejado fijadas y no hay que volver a discutir:
+
+- **Si se activa, es automático.** Nada manual: un botón por canción no lo usaría
+  nadie. Los comandos que existen son un atajo de depuración, no el camino.
+- La prueba del Oppo tiene que medir **dos** cosas, no una: si la reproducción
+  con warp sufre ahí, y si ese aparato puede permitirse preparar (0,51 GiB por
+  canción escritos solos, y de 8 a 15 minutos estimados por canción). Si lo
+  primero es sí y lo segundo es no, la respuesta no es esta función. El
+  razonamiento completo está en la etapa 10; leerlo antes de mirar los números,
+  para no forzarlos hacia lo que ya está construido.
+
+El presupuesto por defecto que hay hoy en el código son 2 GiB por canción
+(`DEFAULT_BUDGET_BYTES` en `state/prepared_queue.rs`), pensado para escritorio.
+Para ese teléfono es absurdo y hay que bajarlo antes de que nada se active allí.
 
 Si aparece ese equipo, el orden es: (1) medir la misma sesión de 27 pistas allí,
 (2) si va apretado, ejecutar la cadena entera una vez de punta a punta —está

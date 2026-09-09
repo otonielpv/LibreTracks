@@ -134,6 +134,43 @@ ningún sitio de la interfaz lo invoca. Con sus 51 tests, que sí se ejecutan en
 `npm test`. Si aparece el equipo modesto, están las siete piezas y el criterio
 medido para decidir en una tarde.
 
+### Restricción del mantenedor: si se activa, es automático
+
+**Decisión, no preferencia:** nada manual. Un botón por canción no lo va a usar
+nadie, y ya está razonado más abajo por qué el referente correcto es el prime de
+waveforms y no el Freeze de Ableton.
+
+Eso convierte los comandos existentes (`prepare_song_tracks`,
+`cancel_song_preparation`) en un atajo de depuración, no en el camino. El camino
+sería un disparador en segundo plano por canción, con la misma forma que
+`needs_prime` / `enqueue_prime`.
+
+### La tensión que hay que resolver ANTES de dar por buena la prueba del Oppo
+
+Prevista para el 2026-09-11 sobre el Oppo CPH1931 del plan de Android.
+
+«Automático» y «Android de gama baja» tiran en direcciones contrarias, y la
+prueba tiene que medir las dos cosas o dará una respuesta engañosa:
+
+1. **¿La reproducción con warp sufre de verdad ahí?** Es la pregunta que decide
+   si la función hace falta. La sesión de referencia son las 27 pistas con warp
+   y tono que en el i7 dan 14 %.
+2. **Si sufre, ¿puede ese aparato permitirse prepararla?** Porque preparar
+   automáticamente en ese dispositivo significa:
+   - **Disco.** 0,51 GiB por canción escritos solos. Ese teléfono ya reinició el
+     sistema importando un `.ltset` de 2 GB
+     (`docs/plans/android-low-end/`). El presupuesto por defecto que hay hoy en
+     el código son **2 GiB por canción**, que para ese aparato es absurdo y hay
+     que bajar antes de que nada se active allí.
+   - **Tiempo.** En el i7 la preparación va a ~58× tiempo real, unos 50 s por
+     canción. Si el Oppo va 10–20× más lento son **8 a 15 minutos por canción**,
+     en segundo plano, con lo que eso implica de batería y temperatura.
+
+Si la respuesta a (1) es sí y a (2) es no, la conclusión **no** es «preparar
+automáticamente»: es otra cosa —menos voces con warp, otra calidad, o negar el
+warp en esa clase de dispositivo—. Conviene tenerlo claro antes de mirar los
+números, para no forzarlos hacia la función que ya está construida.
+
 ### Qué reabriría esto
 
 - **Un equipo modesto o un Android real.** Para que la función importara haría
