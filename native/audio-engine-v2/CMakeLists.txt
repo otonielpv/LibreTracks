@@ -429,6 +429,16 @@ if(LT_ENGINE_BUILD_BENCHES)
     # lt_audio_engine_v2: es a propósito, aíslan el coste de la librería del de
     # nuestro código. Por eso sólo se construyen si Bungee está disponible.
     # Ver docs/plans/audio-thread-parallelism/01-banco-y-linea-base.md
+    if(LT_ENGINE_USE_LIBSNDFILE)
+        add_executable(bench_streaming_playback bench/bench_streaming_playback.cpp)
+        target_compile_features(bench_streaming_playback PRIVATE cxx_std_20)
+        target_link_libraries(bench_streaming_playback PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_streaming_playback PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        if(WIN32)
+            target_link_libraries(bench_streaming_playback PRIVATE psapi)
+        endif()
+    endif()
+
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_render_callback.cpp")
         add_executable(bench_render_callback bench/bench_render_callback.cpp)
         target_compile_features(bench_render_callback PRIVATE cxx_std_20)

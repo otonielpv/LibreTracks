@@ -147,7 +147,7 @@ unos pocos bloques por pasada: confirmar sus cambios con ventanas mayores.
 | Cambio | Medida que debe justificarlo | Situación |
 | --- | --- | --- |
 | Nuevos umbrales/número de trabajadores | p95/p99, CPU total y consumo sostenido en PC modesto y Android real | No cambiar con datos del i7 solamente |
-| Regulación dinámica de decode/precarga | Frames ausentes, profundidad de colas, lecturas y presión de RAM durante importación + playback | Pendiente de banco con streaming real |
+| Regulación dinámica de decode/precarga | Frames ausentes, profundidad de colas, lecturas y presión de RAM durante importación + playback | [Banco de archivos, saltos y liberación de caché](02-streaming.md); pendiente importación concurrente y dispositivo modesto |
 | Preparar warp/tono para directo | CPU evitada frente a tiempo de preparación, disco, RAM y respuesta a saltos/cambios | Pendiente de prototipo y contrato de invalidación |
 | Render anticipado | Margen ganado frente a respuesta de controles y coste de invalidar colas | Posterior al prototipo anterior |
 | Audio Workgroups en Apple | Pruebas y medidas en hardware Apple | Pendiente de dispositivo |
