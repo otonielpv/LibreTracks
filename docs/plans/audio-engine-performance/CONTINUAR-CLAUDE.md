@@ -46,14 +46,19 @@ Secuencia de trabajo hasta la fecha:
 
 Hasta `f62d8e36`, sólo `849e8e98` cambiaba lo que oye un usuario. A partir de
 ahí el trabajo es de producción: siete piezas que construyen la función de audio
-preparado de punta a punta (ver [etapa 10](10-integracion-produccion.md)). La
-cadena está cerrada —preparar, publicar y reproducir desde el archivo— pero
-**nadie la ha ejecutado todavía en la aplicación real**: no hay interfaz que
-invoque los comandos.
-La reproducción desde audio con warp/tono preparados **existe ya como camino
-completo**: identidad, almacén, renderizador, FFI, orquestación, cola de fondo,
-comandos y ruta de reproducción. Lo que falta es la interfaz que lo invoque y,
-antes que eso, ejecutarlo una vez en la aplicación real de punta a punta.
+preparado de punta a punta (ver [etapa 10](10-integracion-produccion.md)).
+
+**La función está construida y DESACTIVADA a propósito.** El mantenedor midió en
+la aplicación real 27 pistas con warp y tono a la vez —WASAPI, buffer 512,
+multinúcleo— y salió a **CPU ~10 %, audio ~14 %**: unas siete veces de margen
+sobre el presupuesto del bloque. En este equipo la función no hace falta, así
+que no se le pone interfaz. Ver la etapa 10 para el razonamiento completo.
+La reproducción desde audio con warp/tono preparados **existe como camino
+completo pero inerte**: identidad, almacén, renderizador, FFI, orquestación,
+cola de fondo, comandos y ruta de reproducción. Nada marca una pista como
+preparada si no corre una preparación, nada la corre si no se invoca el comando,
+y ningún sitio de la interfaz lo invoca. No tocar esto sin leer antes la
+decisión de la etapa 10.
 
 No revertir cambios ajenos ni asumir que todo cambio encontrado pertenece a
 este trabajo. Consultar `git status` y los diffs antes de editar o commitear.
@@ -200,16 +205,23 @@ tenemos. La siguiente etapa es de producción.
 
 ## Siguiente tarea concreta recomendada
 
-**Ejecutar la cadena una vez en la aplicación real**, antes de añadir interfaz.
-Preparar una canción de verdad, cerrarla, abrirla y comprobar que suena desde el
-archivo. Todo está probado por piezas y nada de punta a punta, que es
-exactamente el hueco donde se esconden los fallos de integración.
+**Ninguna sobre el audio preparado.** La función está terminada y desactivada, y
+lo que decidiría si merece activarse es una medida en un equipo modesto o un
+Android real, no más código.
 
-Qué comprobar lo dicen las etapas 07 y 09: desfase 0,00 ms respecto al DSP vivo
-y media ganancia = −6,02 dB en ambas rutas. Y mirar el contador de muestras
-recortadas: si se dispara, el archivo lleva distorsión.
+Si aparece ese equipo, el orden es: (1) medir la misma sesión de 27 pistas allí,
+(2) si va apretado, ejecutar la cadena entera una vez de punta a punta —está
+probada por piezas y nunca completa—, y (3) sólo entonces la interfaz, que **no
+debe ser un botón por canción**: el razonamiento está en la etapa 10.
 
-Después: la interfaz (preparar/liberar por canción, progreso, espacio ocupado).
+Hay una medida gratis que acota el margen sin hardware nuevo: repetir la misma
+canción de 27 pistas con el **multinúcleo apagado**. Estimando desde la escala
+del pool (~3,8× con cuatro hilos) rondaría el 50 % en vez del 14 %, pero es una
+estimación y el interruptor está ahí.
+
+Y sigue abierta, desde el principio del plan, la deuda de método: ningún «render
+tardío» del banco se ha correlacionado nunca con un corte audible real en un
+driver.
 
 ## Lo que ya no aplica de las etapas de banco
 
