@@ -4,8 +4,9 @@ import type { SongView, TransportSnapshot } from "@libretracks/shared/models";
 import { getElementScaleY } from "@libretracks/shared/timelineMath";
 
 import { TRACK_HEIGHT_STEP } from "../constants";
-import { updateTrackHeightOffset } from "../desktopApi";
+import { isMobileApp, updateTrackHeightOffset } from "../desktopApi";
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
+import { uniformMobileTrackRows } from "../mobile/mobileTrackHeights";
 import { useTimelineUIStore } from "../uiStore";
 import { createTrackHeightHandlers } from "./trackHeightHandlers";
 import { buildTrackRowLayout } from "./trackLayout";
@@ -51,7 +52,14 @@ export function useTrackHeights({
   // the vertical clip drag all read the row geometry from here so they cannot
   // disagree.
   const trackRowLayout = useMemo(
-    () => buildTrackRowLayout(visibleTracks, trackHeight),
+    // A per-track height is useful on a desktop, but makes a touch timeline
+    // unpredictable and can leak in through a project edited on desktop.
+    // Keep the persisted offsets intact while presenting uniform rows on mobile.
+    () =>
+      buildTrackRowLayout(
+        isMobileApp ? uniformMobileTrackRows(visibleTracks) : visibleTracks,
+        trackHeight,
+      ),
     [trackHeight, visibleTracks],
   );
   const trackRowLayoutRef = useRef(trackRowLayout);
@@ -93,7 +101,7 @@ export function useTrackHeights({
    */
   const handleHeaderAltWheel = useCallback(
     (event: WheelEvent) => {
-      if (!event.altKey) {
+      if (isMobileApp || !event.altKey) {
         return false;
       }
       const headersList = event.currentTarget as HTMLElement | null;

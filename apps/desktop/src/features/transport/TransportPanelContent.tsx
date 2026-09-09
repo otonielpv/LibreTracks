@@ -205,6 +205,7 @@ import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
 import { MobileTrackHeaderActions } from "./mobile/MobileTrackHeaderActions";
 import { MobileDawOverlays } from "./mobile/MobileDawOverlays";
 import { useMobileSelectionBar } from "./mobile/useMobileSelectionBar";
+import { resolveMobileTrackHeightChange } from "./mobile/mobileTrackHeights";
 import { touchContextPosition } from "./timeline/touchContextPosition";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
 import {
@@ -6162,7 +6163,9 @@ export function TransportPanelContent() {
 
   function applyTrackHeight(nextTrackHeight: number) {
     setTrackHeight(
-      clamp(Math.round(nextTrackHeight), TRACK_HEIGHT_MIN, TRACK_HEIGHT_MAX),
+      isMobileApp
+        ? resolveMobileTrackHeightChange(trackHeight, nextTrackHeight)
+        : clamp(Math.round(nextTrackHeight), TRACK_HEIGHT_MIN, TRACK_HEIGHT_MAX),
     );
   }
 
@@ -8032,24 +8035,26 @@ export function TransportPanelContent() {
                         />
                       </div>
                     </div>
-                    <div
-                      className="lt-timeline-bottom-grid"
-                      aria-hidden={!song}
-                    >
-                      <div className="lt-horizontal-scrollbar-spacer" />
-                      <div className="lt-horizontal-scrollbar">
-                        <HorizontalScrollbar
-                          ariaLabel={t("transport.shell.horizontalScroll")}
-                          cameraXRef={cameraXRef}
-                          maxCameraX={maxTimelineCameraX}
-                          onScrollTo={(nextCameraX) => {
-                            updateCameraX(nextCameraX, {
-                              commitToStore: false,
-                            });
-                          }}
-                        />
+                    {isMobileApp ? null : (
+                      <div
+                        className="lt-timeline-bottom-grid"
+                        aria-hidden={!song}
+                      >
+                        <div className="lt-horizontal-scrollbar-spacer" />
+                        <div className="lt-horizontal-scrollbar">
+                          <HorizontalScrollbar
+                            ariaLabel={t("transport.shell.horizontalScroll")}
+                            cameraXRef={cameraXRef}
+                            maxCameraX={maxTimelineCameraX}
+                            onScrollTo={(nextCameraX) => {
+                              updateCameraX(nextCameraX, {
+                                commitToStore: false,
+                              });
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   ) : null}

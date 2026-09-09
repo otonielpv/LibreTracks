@@ -1508,7 +1508,7 @@ const en = {
         mobileGestures: {
           title: "How your finger moves",
           body: "These gestures only apply on mobile.",
-          bodyMobile: "One finger drags the timeline in any direction; two fingers pinch to zoom. Tapping something selects it. To move a clip, tap it first and then drag it — that way no stray drag shifts your audio by accident. There are no modes to remember.",
+          bodyMobile: "Slide one finger in any direction: left and right move through time; up and down move through the tracks. Pinch with two fingers only to zoom. Tapping something selects it. To move a clip, tap it first and then drag it — that way no stray drag shifts your audio by accident. There are no modes to remember.",
         },
         ruler: {
           title: "The ruler runs the show",
@@ -1576,7 +1576,7 @@ const en = {
         touchControls: {
           title: "Track height and lock",
           body: "These controls only exist on mobile.",
-          bodyMobile: "These controls only exist on mobile. The height buttons fit more tracks on screen or make them easier to hit. The lock prevents ruler seeking, so brushing the screen with your palm no longer moves playback.",
+          bodyMobile: "These controls only exist on mobile. The height buttons cycle through four fixed sizes and apply them to every track: the lowest fits more tracks on screen and the others make them easier to hit. Individual tracks cannot be resized. The lock prevents ruler seeking, so brushing the screen with your palm no longer moves playback.",
         },
         trackReorderMode: {
           title: "Track reorder mode",

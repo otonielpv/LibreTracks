@@ -1539,7 +1539,7 @@ const es = {
         mobileGestures: {
           title: "Cómo se mueve el dedo",
           body: "Estos gestos sólo aplican en el móvil.",
-          bodyMobile: "Un dedo arrastra el timeline en cualquier dirección, y dos hacen zoom pellizcando. Tocar una cosa la selecciona. Para mover un clip, tócalo primero y arrástralo después: así ningún arrastre suelto te descoloca el audio sin querer. No hay modos que recordar.",
+          bodyMobile: "Desliza con un dedo en cualquier dirección: izquierda y derecha recorren el tiempo; arriba y abajo recorren las pistas. Pellizca con dos dedos sólo para hacer zoom. Tocar una cosa la selecciona. Para mover un clip, tócalo primero y arrástralo después: así ningún arrastre suelto te descoloca el audio sin querer. No hay modos que recordar.",
         },
         ruler: {
           title: "La regla manda",
@@ -1607,7 +1607,7 @@ const es = {
         touchControls: {
           title: "Altura de pistas y bloqueo",
           body: "Estos controles sólo existen en el móvil.",
-          bodyMobile: "Estos controles sólo existen en el móvil. Los botones de altura hacen que quepan más pistas o que se vean mejor con el dedo. El candado bloquea el salto al tocar la regla: con él activado, un roce con la palma durante el ensayo ya no mueve la reproducción.",
+          bodyMobile: "Estos controles sólo existen en el móvil. Los botones de altura recorren cuatro tamaños definidos y los aplican a todas las pistas: el más bajo permite ver muchas y los siguientes dan más espacio para tocar con el dedo. No se cambia una pista individual. El candado bloquea el salto al tocar la regla: con él activado, un roce con la palma durante el ensayo ya no mueve la reproducción.",
         },
         trackReorderMode: {
           title: "Modo de reordenar pistas",

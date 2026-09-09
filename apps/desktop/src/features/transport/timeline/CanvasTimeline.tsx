@@ -841,7 +841,11 @@ export function TimelineTrackCanvas({
       onPreviewZoom: onNativeZoomPreview,
       onCommitZoom: onNativeZoomCommit,
       onTrackHeightChange: onNativeTrackHeightChange,
-      onTrackRowHeightStep: onNativeTrackRowHeightStep,
+      // Tablets may have a mouse or trackpad attached, but row-specific height
+      // is intentionally a desktop-only editing affordance.
+      onTrackRowHeightStep: isMobileApp
+        ? undefined
+        : onNativeTrackRowHeightStep,
       onScrollVertical: (deltaY) => {
         const viewport = scrollViewportRef.current;
         if (!viewport) return;

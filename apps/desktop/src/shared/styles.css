@@ -3165,6 +3165,14 @@ html.lt-ios body {
   scrollbar-gutter: stable;
 }
 
+/* The mobile timeline owns both axes itself so one pointer can pan diagonally.
+   Without this, WebKit may claim the vertical component for native pan-y and
+   cancel the pointer stream before the timeline can update both axes. */
+.lt-mobile-navigation-surface {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
 .lt-timeline-main-grid {
   min-height: 100%;
   min-width: 0;
@@ -8197,40 +8205,12 @@ html.lt-ios body {
    opens a dead black band between the ruler and the first track. */
 .lt-android .lt-timeline-canvas-pane {
   grid-template-rows: 94px minmax(0, 1fr);
-  /* One finger may scroll the track list vertically (browser-native);
-     horizontal pan and zoom belong to the two-finger gestures in
-     Renderer/InputManager.ts, so the browser must not claim them. */
-  touch-action: pan-y;
 }
 
-/* ── Barra de desplazamiento horizontal: fuera de la zona de gestos ──── */
-/* En apaisado -la orientacion normal del DAW en un telefono- esta barra es lo
-   ultimo que hay antes del borde inferior de la pantalla, y en iOS ese borde no
-   es de la app: los ~20 px del indicador de inicio pertenecen al sistema, asi
-   que arrastrar el pulgar por la barra sacaba el gesto de salir de la app en
-   vez de mover la vista. El carril se aparta del borde por el inset seguro (y
-   crece un poco, porque un pulgar no acierta en 22 px) de modo que TODO su
-   recorrido cae dentro de la app. */
-.lt-mobile .lt-horizontal-scrollbar {
-  box-sizing: border-box;
-  height: calc(30px + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* La celda izquierda de la misma fila de la rejilla: sin esto el fondo del
-   carril de cabeceras se queda corto y aparece una banda a distinto color. */
-.lt-mobile .lt-horizontal-scrollbar-spacer {
-  box-sizing: border-box;
-  height: calc(30px + env(safe-area-inset-bottom, 0px));
-}
-
-.lt-mobile .lt-horizontal-scrollbar-thumb {
-  top: 5px;
-  bottom: 5px;
-  border-radius: 5px;
-  /* Mas contraste: a este tamano el pulgar tapa el carril y hay que ver donde
-     esta antes de tocarlo. */
-  background: rgb(87 241 219 / 0.5);
+/* Touch navigation replaces the desktop scrollbar and gives its full row back
+   to the arrangement, clear of the iOS home-indicator gesture. */
+.lt-mobile .lt-timeline-shell {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 /* ── Library panel: narrower on a phone ──────────────────────────────── */
@@ -10982,6 +10962,12 @@ html.lt-ios body {
 .lt-mobile .lt-timeline-main-grid,
 .lt-mobile .lt-timeline-bottom-grid {
   grid-template-columns: 136px minmax(0, 1fr);
+}
+
+/* Keep this after every shared main/bottom-grid rule: mobile does not render
+   the desktop scrollbar row, even when later responsive columns are added. */
+.lt-mobile .lt-timeline-bottom-grid {
+  display: none;
 }
 
 /* Fina significa nombre y estado. Los controles no se pierden: salen al tocar

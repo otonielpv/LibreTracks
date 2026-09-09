@@ -49,14 +49,15 @@ describe("contrato responsive móvil", () => {
     expect(sideNav).toContain("env(safe-area-inset-left");
   });
 
-  // En apaisado la barra de desplazamiento del timeline es lo ultimo antes del
-  // borde inferior. En iOS ese borde es del sistema (indicador de inicio), asi
-  // que sin apartarla el arrastre saca el gesto de salir de la app.
-  it("aparta la barra de desplazamiento de la zona de gestos inferior", () => {
-    const scrollbar = declarationsFor(".lt-mobile .lt-horizontal-scrollbar");
+  it("reemplaza la barra horizontal por navegacion tactil en ambos ejes", () => {
+    const shell = declarationsFor(".lt-mobile .lt-timeline-shell");
+    const scrollbarRow = declarationsFor(".lt-mobile .lt-timeline-bottom-grid");
+    const navigation = declarationsFor(".lt-mobile-navigation-surface");
 
-    expect(scrollbar).toContain("env(safe-area-inset-bottom");
-    expect(scrollbar).toContain("box-sizing: border-box");
+    expect(shell).toContain("grid-template-rows: minmax(0, 1fr)");
+    expect(scrollbarRow).toContain("display: none");
+    expect(navigation).toContain("touch-action: none");
+    expect(navigation).toContain("overscroll-behavior: contain");
   });
 
   // En un teléfono apaisado el notch y las esquinas redondeadas comen por los
