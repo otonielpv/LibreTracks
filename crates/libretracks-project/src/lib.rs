@@ -5,6 +5,7 @@ mod importer;
 mod package;
 mod prepared_audio;
 mod prepared_render;
+mod prepared_render_job;
 mod prepared_render_store;
 mod session_package;
 mod session_sample_rate;
@@ -30,6 +31,10 @@ pub use prepared_render::{
     PreparedRenderManifest, PreparedRenderOutput, PreparedRenderRegion, PreparedRenderRejection,
     PreparedRenderSpec,
     PreparedRenderTempo, SourceSignature, PREPARED_RENDER_VERSION,
+};
+pub use prepared_render_job::{
+    prepare_tracks, PreparationProgress, PreparationReport, PreparationRequest, RenderFailure,
+    RenderedTrack, TrackOutcome, TrackRenderSink,
 };
 pub use prepared_render_store::{
     check_room, create_prepared_dir, discard, estimated_bytes, free_space_for,
