@@ -7,8 +7,8 @@ import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const [benchArg, outArg, repeatArg = '3', mode = 'streaming'] = process.argv.slice(2);
-if (!benchArg || !outArg) throw new Error('Usage: node scripts/bench-audio-streaming.mjs BENCH NEW_OUTPUT_DIR [REPEATS=3] [streaming|import]');
-if (!['streaming', 'import'].includes(mode)) throw new Error('Invalid mode');
+if (!benchArg || !outArg) throw new Error('Usage: node scripts/bench-audio-streaming.mjs BENCH NEW_OUTPUT_DIR [REPEATS=3] [streaming|import|jump]');
+if (!['streaming', 'import', 'jump'].includes(mode)) throw new Error('Invalid mode');
 const repeats = Number(repeatArg);
 if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20) throw new Error('Invalid repetitions');
 const bench = resolve(benchArg), out = resolve(outArg);
@@ -20,7 +20,7 @@ mkdirSync(fixtures);
 const tracks = 12, seconds = 40;
 const files = [];
 // One-second chunks bound fixture creation memory independently of duration.
-for (let track = 0; track < tracks + (mode === 'import' ? 4 : 0); track++) {
+for (let track = 0; track < tracks + (mode !== 'streaming' ? 4 : 0); track++) {
   const sr = track < tracks ? 48000 : 44100;
   const name = track < tracks ? `${track}.wav` : `import-${track - tracks}.wav`;
   const chunk = Buffer.alloc(sr * 4);
@@ -58,26 +58,27 @@ const metadata = {
   total_memory_bytes: totalmem(), repeats, files, cache_mb: 64, read_ahead_blocks: 16,
   render_threads: 1, decode_threads: 1, diagnostic_phases: false, mode,
   streaming_decode: true, eager_blocks: 64, decode_playing_yield_ms: 6, decode_gate: false, cache_float: false,
-  limitations: 'Warm OS cache; native PCM16 playback; normal director priority; no device, GUI or thermal emulation. Immediate seek bypasses command-layer jump gate. Cache and queues sampled every 16 callbacks. Import mode uses the preparation queue with 44.1 kHz sources and fresh cache per run.',
+  limitations: 'Warm OS cache; native PCM16 playback; normal director priority; no device, GUI or thermal emulation. command_seek=0 bypasses the jump gate; command_seek=1 executes the real SeekAbsolute handler on a control thread. Cache and queues sampled every 16 callbacks. Imports use the preparation queue with 44.1 kHz sources and fresh cache per run.',
 };
 const rows = [];
 for (let repetition = 0; repetition < repeats; repetition++) {
   const cases = [];
   for (const fillThreads of [1, 2]) for (const block of [128, 512]) {
-    if (mode === 'import') {
-      for (const imports of [0, 4]) cases.push({ fillThreads, block, trim: 0, preload: 1, imports });
+    if (mode !== 'streaming') {
+      for (const imports of [0, 4]) for (const commandSeek of (mode === 'jump' ? [0, 1] : [0]))
+        cases.push({ fillThreads, block, trim: 0, preload: 1, imports, commandSeek });
     } else {
-      for (const trim of [0, 1]) for (const preload of [0, 1]) cases.push({ fillThreads, block, trim, preload, imports: 0 });
+      for (const trim of [0, 1]) for (const preload of [0, 1]) cases.push({ fillThreads, block, trim, preload, imports: 0, commandSeek: 0 });
     }
   }
   if (repetition % 2) cases.reverse();
   for (const cfg of cases) {
-    const id = `r${repetition}-f${cfg.fillThreads}-b${cfg.block}-t${cfg.trim}-p${cfg.preload}-i${cfg.imports}`;
+    const id = `r${repetition}-f${cfg.fillThreads}-b${cfg.block}-t${cfg.trim}-p${cfg.preload}-i${cfg.imports}-j${cfg.commandSeek}`;
     console.log(id);
     const jsonPath = join(out, `${id}.json`);
     const cacheDir = join(out, `${id}-cache`);
     mkdirSync(cacheDir);
-    const result = spawnSync(bench, [fixtures, jsonPath, String(tracks), String(cfg.block), '512', String(cfg.preload), String(cfg.trim), String(cfg.imports)], {
+    const result = spawnSync(bench, [fixtures, jsonPath, String(tracks), String(cfg.block), '512', String(cfg.preload), String(cfg.trim), String(cfg.imports), String(cfg.commandSeek)], {
       encoding: 'utf8', timeout: 60000,
       env: { ...process.env, LIBRETRACKS_AUDIO_DIAG: '0', LIBRETRACKS_FILL_THREADS: String(cfg.fillThreads), LIBRETRACKS_SOURCE_CACHE_MB: '64', LIBRETRACKS_SOURCE_READ_AHEAD_BLOCKS: '16', LIBRETRACKS_CACHE_DIR: cacheDir, LIBRETRACKS_STREAMING_DECODE: '1', LIBRETRACKS_SOURCE_EAGER_BLOCKS: '64', LIBRETRACKS_DECODE_PLAYING_YIELD_MS: '6', LIBRETRACKS_DECODE_GATE: '0', LIBRETRACKS_CACHE_FLOAT: '0' },
     });
@@ -88,6 +89,8 @@ for (let repetition = 0; repetition < repeats; repetition++) {
       throw new Error(`Unexpected configuration: ${id}`);
     if (row.imports_requested !== cfg.imports || row.imports_completed !== cfg.imports || (cfg.imports && !row.import_overlap_blocks))
       throw new Error(`Import workload invalid: ${id}`);
+    if (row.command_seek !== cfg.commandSeek || row.jump_applied_block < 0)
+      throw new Error(`Jump workload invalid: ${id}`);
     rows.push({ repetition, fill_threads: cfg.fillThreads, ...row });
     writeFileSync(join(out, 'results.json'), JSON.stringify({ metadata, rows }, null, 2) + '\n');
   }

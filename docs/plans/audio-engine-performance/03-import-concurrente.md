@@ -85,9 +85,10 @@ de la interfaz ni cambios de sesión tras importar. Los archivos recién
 generados están en la caché del sistema operativo. El proceso no incluye UI,
 dispositivo de audio, warp ni condiciones térmicas de Android.
 
-El salto sigue siendo inmediato. La espera de audio de destino de producción
+En esta matriz el salto es inmediato. La espera de audio de destino de producción
 vive en `engine_impl.cpp`, en la capa de comandos; `JumpScheduler` por sí solo
 no aplica esa protección. Para medir un salto protegido fiel hay que integrar
 esa ruta y la preparación de voces, sin copiar una versión aproximada al banco.
-Por eso no se atribuyen las ausencias del salto frío a la experiencia de la
+La [entrega siguiente](04-salto-protegido.md) conecta el banco a ese manejador
+real. Por eso no se atribuyen las ausencias del salto frío a la experiencia de la
 aplicación. Este trabajo no reabre el incidente de CPU ya resuelto.

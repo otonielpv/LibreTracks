@@ -9,6 +9,7 @@
 #include <lt_engine/sources/io_throttle.h>
 #include <lt_engine/transport/transport_clock.h>
 #include "streaming_import_workload.h"
+#include "streaming_jump_workload.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -64,18 +65,21 @@ static std::uint64_t peak_rss_bytes() {
 }
 
 int main(int argc, char** argv) try {
-    if (argc != 8 && argc != 9) throw std::runtime_error(
-        "Usage: bench_streaming_playback DIR JSON TRACKS BLOCK BLOCKS PRELOAD(0|1) TRIM(0|1) [IMPORTS]");
+    if (argc < 8 || argc > 10) throw std::runtime_error(
+        "Usage: bench_streaming_playback DIR JSON TRACKS BLOCK BLOCKS PRELOAD(0|1) TRIM(0|1) [IMPORTS] [COMMAND_SEEK(0|1)]");
     const int tracks = std::stoi(argv[3]), block = std::stoi(argv[4]);
     const int blocks = std::stoi(argv[5]), preload = std::stoi(argv[6]), trim = std::stoi(argv[7]);
-    const int imports = argc == 9 ? std::stoi(argv[8]) : 0;
+    const int imports = argc >= 9 ? std::stoi(argv[8]) : 0;
+    const int command_seek = argc == 10 ? std::stoi(argv[9]) : 0;
     if (tracks < 1 || tracks > 128 || block < 64 || block > 2048 || blocks < 10 || blocks > 100000
-        || preload < 0 || preload > 1 || trim < 0 || trim > 1 || imports < 0 || imports > 16)
+        || preload < 0 || preload > 1 || trim < 0 || trim > 1 || imports < 0 || imports > 16
+        || command_seek < 0 || command_seek > 1)
         throw std::runtime_error("Invalid configuration");
     constexpr int sr = 48000;
     const Frame start = 5 * sr, target = 30 * sr;
     const Frame needed = target + Frame(block) * blocks;
-    SourceManager sources;
+    StreamingBenchmarkEngine engine;
+    SourceManager& sources = engine.sources();
     auto session = std::make_shared<Session>();
     session->id = "streaming-bench";
     session->sample_rate = sr;
@@ -101,10 +105,9 @@ int main(int argc, char** argv) try {
         heads.emplace_back(id, start);
     }
     session->songs.push_back(std::move(song));
-    TransportClock transport(sr);
-    JumpScheduler scheduler;
-    Mixer mixer(session, &sources, &transport, &scheduler);
-    mixer.prepare_render_resources(block);
+    engine.prepare(session, block);
+    auto& transport = engine.clock();
+    auto& mixer = engine.mixer();
 
     // Explicitly paid outside playback; only preload the start, never the jump.
     const auto prepare_start = Clock::now();
@@ -137,6 +140,9 @@ int main(int argc, char** argv) try {
     if (imports) importing = std::make_unique<StreamingImportWorkload>(sources, argv[1], imports);
     int import_overlap_blocks = 0;
     bool import_active_at_jump = false;
+    std::unique_ptr<StreamingJumpWorkload> jumping;
+    if (command_seek) jumping = std::make_unique<StreamingJumpWorkload>(engine, target);
+    int jump_applied_block = -1;
     transport.seek(start);
     transport.play();
     transport.clear_pending_start();
@@ -150,10 +156,10 @@ int main(int argc, char** argv) try {
         if (b == jump_block) {
             import_active_at_jump = importing && importing->active();
             misses_before_jump = sources.total_cache_miss_frames() - miss0;
-            sources.drop_pending_readahead();
+            if (!command_seek) sources.drop_pending_readahead();
             if (trim) freed = sources.release_cached_blocks_under_pressure(1);
-            transport.seek(target);
-            transport.clear_pending_start();
+            if (jumping) jumping->start();
+            else { transport.seek(target); transport.clear_pending_start(); }
         }
         const auto missing_before = sources.total_cache_miss_frames();
         if (importing && importing->active()) ++import_overlap_blocks;
@@ -161,6 +167,8 @@ int main(int argc, char** argv) try {
         mixer.render(output, 2, block, sr);
         const double us = std::chrono::duration<double, std::micro>(Clock::now() - t0).count();
         times.push_back(us);
+        if (b >= jump_block && jump_applied_block < 0 && transport.position().frame >= target)
+            jump_applied_block = b - jump_block;
         if (us > 1e6 * block / sr) ++late;
         const bool missing = sources.total_cache_miss_frames() != missing_before;
         if (missing) ++affected;
@@ -184,6 +192,7 @@ int main(int argc, char** argv) try {
     const auto cache = sources.cache_diagnostics();
     const auto missing = sources.total_cache_miss_frames() - miss0;
     const auto playback_peak_rss = peak_rss_bytes();
+    const double command_seek_ms = jumping ? jumping->finish() : 0;
     // Freeze playback observations before waiting for unfinished imports.
     if (importing) importing->finish();
     std::sort(times.begin(), times.end());
@@ -192,6 +201,8 @@ int main(int argc, char** argv) try {
     if (!json) throw std::runtime_error("Cannot create JSON");
     json << "{\n\"tracks\":" << tracks << ",\"block\":" << block << ",\"blocks\":" << blocks
          << ",\"sample_rate\":48000,\"preload\":" << preload << ",\"trim\":" << trim
+         << ",\"command_seek\":" << command_seek << ",\"command_seek_ms\":" << command_seek_ms
+         << ",\"jump_applied_block\":" << jump_applied_block
          << ",\"imports_requested\":" << imports
          << ",\"imports_completed\":" << (importing ? importing->completed() : 0)
          << ",\"import_ms\":" << (importing ? importing->elapsed_ms() : 0)
@@ -218,7 +229,7 @@ int main(int argc, char** argv) try {
     json.close();
     if (!json || !std::isfinite(energy) || energy <= 0 || io.read_failures || io.open_failures || !io.read_count
         || mixer.rendered_track_count() != static_cast<std::uint64_t>(tracks) * blocks
-        || (imports && !import_overlap_blocks))
+        || (imports && !import_overlap_blocks) || jump_applied_block < 0)
         throw std::runtime_error("Invalid run: missing output, no streaming reads, I/O failure or JSON write failure");
     std::cout << "p95_us=" << percentile(.95) << " missing_source_frames=" << missing
               << " reads=" << io.read_count << "\n";

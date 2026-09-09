@@ -71,6 +71,9 @@ public:
                            int sample_rate);
 
 private:
+#ifdef LT_ENGINE_BENCHMARK_HOOKS
+    friend class StreamingBenchmarkEngine;
+#endif
     // ── State machine ────────────────────────────────────────────────────
     enum class State { Created, Initialized, ShutDown };
     State state_ = State::Created;
