@@ -17,6 +17,9 @@
 //! The trade is honest and worth stating: a prepared package is BIGGER than the
 //! original (compressed sources become PCM), so it moves cost from the phone's
 //! CPU to the transfer. See docs/plans/android-low-end/06-export-optimizado.md.
+//!
+//! Not to be confused with [`crate::prepared_render`]: this module decodes and
+//! applies no DSP, that one renders warp and pitch into a playback cache.
 
 use std::fs;
 use std::io;
