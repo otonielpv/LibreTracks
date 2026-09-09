@@ -430,6 +430,13 @@ if(LT_ENGINE_BUILD_BENCHES)
     # nuestro código. Por eso sólo se construyen si Bungee está disponible.
     # Ver docs/plans/audio-thread-parallelism/01-banco-y-linea-base.md
     if(LT_ENGINE_USE_LIBSNDFILE)
+        add_executable(bench_prepare_warp bench/bench_prepare_warp.cpp)
+        target_compile_features(bench_prepare_warp PRIVATE cxx_std_20)
+        target_link_libraries(bench_prepare_warp PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_prepare_warp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        if(WIN32)
+            target_link_libraries(bench_prepare_warp PRIVATE psapi)
+        endif()
         add_executable(bench_streaming_playback bench/bench_streaming_playback.cpp)
         target_compile_features(bench_streaming_playback PRIVATE cxx_std_20)
         target_link_libraries(bench_streaming_playback PRIVATE lt_audio_engine_v2)
