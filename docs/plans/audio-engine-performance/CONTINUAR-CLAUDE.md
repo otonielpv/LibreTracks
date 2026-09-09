@@ -41,15 +41,19 @@ Secuencia de trabajo hasta la fecha:
 | `8ba99e6e` | **Producción**: renderizador offline en el motor |
 | `8377fc12` | **Producción**: entrada FFI con progreso y cancelación |
 | `e98a6d46` | **Producción**: orquestación de la preparación |
+| `93453b9c` | **Producción**: cola en segundo plano y comandos del escritorio |
+| `b0b2907e` | **Producción**: reproducción desde el archivo preparado |
 
 Hasta `f62d8e36`, sólo `849e8e98` cambiaba lo que oye un usuario. A partir de
-ahí el trabajo es de producción: cinco piezas que construyen la función de audio
-preparado (ver [etapa 10](10-integracion-produccion.md)). **Todavía no se oye
-nada**: falta el cableado del escritorio y la ruta de reproducción.
-La reproducción desde audio con warp/tono preparados **todavía no existe como
-función de la aplicación**, pero ya no por falta de piezas: la identidad, el
-almacén, el renderizador, el FFI y la orquestación están construidos y probados.
-Falta unirlos al escritorio y enseñarle al motor a leer el archivo.
+ahí el trabajo es de producción: siete piezas que construyen la función de audio
+preparado de punta a punta (ver [etapa 10](10-integracion-produccion.md)). La
+cadena está cerrada —preparar, publicar y reproducir desde el archivo— pero
+**nadie la ha ejecutado todavía en la aplicación real**: no hay interfaz que
+invoque los comandos.
+La reproducción desde audio con warp/tono preparados **existe ya como camino
+completo**: identidad, almacén, renderizador, FFI, orquestación, cola de fondo,
+comandos y ruta de reproducción. Lo que falta es la interfaz que lo invoque y,
+antes que eso, ejecutarlo una vez en la aplicación real de punta a punta.
 
 No revertir cambios ajenos ni asumir que todo cambio encontrado pertenece a
 este trabajo. Consultar `git status` y los diffs antes de editar o commitear.
@@ -196,16 +200,16 @@ tenemos. La siguiente etapa es de producción.
 
 ## Siguiente tarea concreta recomendada
 
-**Cablear la preparación al escritorio.** El detalle está en la
-[etapa 10](10-integracion-produccion.md), pero lo esencial: se escribió un
-módulo síncrono para esto y **se retiró antes de commitear**, porque el patrón
-correcto ya existe y es otro — `WaveformGenerationQueue` en
-`apps/desktop/src-tauri/src/state/mod.rs`, con su `WaveformTask::Prime`. Esa
-cola ya resuelve el trabajo pesado fuera del lock de sesión, y hacerlo síncrono
-desde un comando reintroduciría el problema. No repetir ese error.
+**Ejecutar la cadena una vez en la aplicación real**, antes de añadir interfaz.
+Preparar una canción de verdad, cerrarla, abrirla y comprobar que suena desde el
+archivo. Todo está probado por piezas y nada de punta a punta, que es
+exactamente el hueco donde se esconden los fallos de integración.
 
-Después: la ruta de reproducción (leer el archivo en vez de ejecutar Bungee) y
-la interfaz.
+Qué comprobar lo dicen las etapas 07 y 09: desfase 0,00 ms respecto al DSP vivo
+y media ganancia = −6,02 dB en ambas rutas. Y mirar el contador de muestras
+recortadas: si se dispara, el archivo lleva distorsión.
+
+Después: la interfaz (preparar/liberar por canción, progreso, espacio ocupado).
 
 ## Lo que ya no aplica de las etapas de banco
 

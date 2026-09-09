@@ -17,7 +17,7 @@ moderno.
 
 ## Lo construido
 
-Cinco piezas, cada una con sus tests y cada una verificada rompiéndola a
+Siete piezas, cada una con sus tests y cada una verificada rompiéndola a
 propósito para comprobar que sus tests saben fallar.
 
 | Commit | Pieza | Dónde | Tests |
@@ -26,7 +26,9 @@ propósito para comprobar que sus tests saben fallar.
 | `69574b05` | Almacén en disco y presupuesto | `…/prepared_render_store.rs` | 8 |
 | `8ba99e6e` | Renderizador offline | `native/…/render/prepared_track_renderer.cpp` | 7 |
 | `8377fc12` | Entrada FFI | `lt_engine_ffi.cpp` + `lt-audio-engine-v2` | 5 |
-| `e98a6d46` | Orquestación | `…/prepared_render_job.rs` | 11 |
+| `e98a6d46` | Orquestación | `…/prepared_render_job.rs` | 12 |
+| `93453b9c` | Cola en segundo plano y comandos | `apps/desktop/…/state/prepared_queue.rs` | 6 |
+| `b0b2907e` | Ruta de reproducción | `pitch_resolution.cpp` + intercambio de sesión | 4 |
 
 ### Las decisiones que no eran obvias
 
@@ -59,49 +61,61 @@ escucha, que es el único desenlace que esta función no puede producir nunca.
 manifiesto es invisible y se barre; un manifiesto sin audio anunciaría un
 archivo que no está.
 
-## Lo que falta, y cómo debería hacerse
+### La cola del escritorio
 
-### 1. Cableado del escritorio (siguiente paso)
+Sigue la forma de `WaveformGenerationQueue`, y por el mismo motivo que esa cola
+existe: el trabajo dura segundos por pista y `engine_snapshot` toma el lock de
+sesión en cada sondeo de medidores. Dos cosas cambian a propósito: **un solo
+trabajador**, porque la residencia de fuentes sólo está acotada para una pista
+a la vez; y **los errores no se tragan**, porque esto es una acción del usuario
+y no una optimización que pueda fallar en silencio.
 
-Se escribió un módulo síncrono para esto y **se retiró antes de commitear**,
-porque el patrón correcto ya existe en el repositorio y es otro:
-`WaveformGenerationQueue` (`apps/desktop/src-tauri/src/state/mod.rs`), con su
-`WaveformTask::Prime { app, song_dir, song }`. Esa cola ya resuelve el problema
-que aquí importa —trabajo pesado fuera del lock de sesión— y hacerlo síncrono
-desde un comando lo reintroduciría.
+Sólo se preparan las pistas que de verdad pasan por el estirador. Una sin warp
+ni tono ya suena directa desde su fuente, así que prepararla gastaría 11 MiB por
+pista-minuto para no ahorrar nada.
 
-Lo que hay que construir, entonces:
+`PREPARED_DSP_REVISION` es la constante que hay que **subir a mano** cuando
+cambie el estirador o cómo se le alimenta. Nada más en la clave lo notaría: la
+sesión sería idéntica y el audio no.
 
-- Una tarea de preparación en esa cola (o una hermana), que reciba `song_dir` y
-  el `Song` clonado, construya los specs con `PreparedRenderSpec::from_song` y
-  llame a `prepare_tracks`.
-- Un `TrackRenderSink` sobre `Engine::prepared_track_renderer()`. El manejador
-  es `Send` y detached justo para esto: se obtiene bajo un lock brevísimo, se
-  suelta el lock, y se renderiza.
-- Cancelación por `AtomicBool` compartido, visible desde el hilo del botón.
-- Progreso emitido como evento, siguiendo el mismo camino que el progreso de
-  importación.
-- La identidad del DSP (`dsp_identity`) tiene que salir de una constante que se
-  suba a mano cuando cambie el estirador o cómo se le alimenta. Nada más en el
-  spec lo detectaría.
+### La ruta de reproducción
 
-### 2. La ruta de reproducción
+Resultó mucho menos invasiva de lo esperado, y conviene explicar por qué: un
+archivo preparado ya contiene warp y tono, así que reproducirlo es un clip
+**directo** sobre otra fuente. No hace falta un camino nuevo en el mezclador ni
+tocar el bucle de render.
 
-Nada de lo anterior se oye todavía. Falta que el motor lea el archivo preparado
-en vez de ejecutar Bungee para esa pista, con el interruptor por canción, y que
-respete `timeline_start_frames` del manifiesto.
+1. Un campo `prepared_render` en `Track`, espejado en los **tres** sitios que
+   parsean pistas. Hay un test que lo comprueba porque el fallo de las regiones
+   fue exactamente ese: uno de tres sitios omitía un campo y editar durante la
+   reproducción reseteaba estado del motor. Aquí el precio sería una pista
+   preparada warpeada dos veces a mitad de actuación.
+2. Un corte en `resolve_pitch_render_decision`: pista preparada → ruta directa,
+   ratio 1,0, sin tono. No es una optimización sino la única respuesta correcta.
+3. El intercambio al construir la sesión, con ganancia unitaria y sin fundidos
+   porque el archivo ya los lleva.
 
-Es la pieza más invasiva —toca el camino caliente— y la que más se beneficia de
-que la fidelidad ya esté medida: las etapas 07 y 09 dicen exactamente qué tiene
-que seguir cumpliéndose (desfase 0,00 ms, ganancia a la mitad = −6,02 dB en
-ambas rutas).
+**Es aditivo:** una sesión que nunca preparó nada se comporta exactamente igual
+que antes.
 
-### 3. Interfaz
+## Lo que falta
 
-Preparar/liberar por canción, progreso, espacio ocupado y el aviso cuando el
-contador de recorte se dispara.
+### 1. Interfaz
 
-### 4. Sin resolver
+Los comandos existen (`prepare_song_tracks`, `cancel_song_preparation`,
+`song_preparation_status`) pero nada los invoca todavía. Falta el botón de
+preparar/liberar por canción, la barra de progreso, el espacio ocupado y el
+aviso cuando el contador de recorte se dispara.
+
+### 2. Verificación en la aplicación real
+
+Todo lo anterior está probado por piezas, pero **la cadena entera no se ha
+ejecutado en la aplicación**: preparar una canción de verdad, cerrarla, abrirla
+y comprobar que suena desde el archivo. Es lo primero que hay que hacer, y el
+banco de fidelidad dice exactamente qué comprobar (desfase 0,00 ms, media
+ganancia = −6,02 dB en ambas rutas).
+
+### 3. Sin resolver
 
 - **Política de margen para el techo de PCM16.** El warp añade 3,3 dB de pico;
   un stem por encima de unos −3,3 dBFS recortaría. El preparador ya cuenta las
@@ -122,4 +136,5 @@ cmake --build native/audio-engine-v2/build-tests --config Release --target lt_en
 native\audio-engine-v2\build-tests\tests\Release\lt_engine_tests.exe
 ```
 
-149 tests del crate de proyecto, 79 del crate del motor y 392 casos nativos.
+396 casos nativos, 150 tests del crate de proyecto, 79 del crate del motor y
+259 del de escritorio, más las seis suites de `npm test`.
