@@ -18,7 +18,8 @@ use libretracks_core::{
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineError, EngineSnapshot, JumpTarget,
-    JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, SourceRef, TempoMarkerUpdate,
+    JumpTargetKind, JumpTrigger, MarkerUpdate, PreparedTrackRenderer, RegionUpdate, SourceRef,
+    TempoMarkerUpdate,
     TimeSignatureMarkerUpdate, TrackClipUpdate, TrackUpsert,
 };
 use serde::{Deserialize, Serialize};
@@ -1620,6 +1621,34 @@ impl AudioController {
         // its current device rate.
         loader.load(pads_dir, pad_id, key, 0);
         Ok(())
+    }
+
+    /// A detached handle for preparing tracks through warp and pitch.
+    ///
+    /// Same shape, and same reason, as `pad_loader`: a preparation takes
+    /// seconds per track and writes tens of MB per track-minute, and
+    /// `engine_snapshot` — polled constantly for meters and the playhead —
+    /// takes this same lock. Hold it for a preparation and playback and the UI
+    /// freeze for the whole run. So the lock is taken only to obtain the
+    /// handle, and the work happens after it is released.
+    pub fn prepared_track_renderer(&self) -> Result<PreparedTrackRenderer, DesktopError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
+        if state.engine.is_none() {
+            let engine =
+                Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+            engine
+                .initialize()
+                .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+            state.engine = Some(engine);
+        }
+        Ok(state
+            .engine
+            .as_ref()
+            .expect("engine initialized above")
+            .prepared_track_renderer())
     }
 
     pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {

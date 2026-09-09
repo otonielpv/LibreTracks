@@ -64,6 +64,7 @@ mod history;
 mod library;
 mod midi_edit;
 mod midi_runtime;
+pub mod prepared_queue;
 mod regions;
 mod session;
 mod song_edit;
@@ -228,6 +229,10 @@ pub struct DesktopState {
     /// `midi` (input): a show can send without any controller attached.
     pub midi_output: Arc<MidiOutputManager>,
     pub waveform_jobs: WaveformGenerationQueue,
+    /// Renders warped/transposed tracks to disk in the background. Separate
+    /// from `waveform_jobs` on purpose: one worker, because source residency
+    /// only stays bounded one track at a time.
+    pub prepared_jobs: prepared_queue::PreparationQueue,
     pub session: Arc<Mutex<DesktopSession>>,
     midi_runtime_started: AtomicBool,
     midi_runtime_stop: Arc<AtomicBool>,
@@ -257,6 +262,7 @@ impl Default for DesktopState {
             midi: MidiManager::default(),
             midi_output,
             waveform_jobs,
+            prepared_jobs: prepared_queue::PreparationQueue::default(),
             session: Arc::new(Mutex::new(session)),
             midi_runtime_started: AtomicBool::new(false),
             midi_runtime_stop: Arc::new(AtomicBool::new(false)),
