@@ -76,7 +76,7 @@ medida, no de este banco.
 
 ## El analizador tiene que saber fallar
 
-`scripts/audio-fidelity-analysis.test.mjs` inyecta doce defectos que el
+`scripts/audio-perf/audio-fidelity-analysis.test.mjs` inyecta doce defectos que el
 analizador debe nombrar: una ruta que llega tarde, otra que llega pronto, 6 dB
 de diferencia de nivel, una diferencia que converge, silencio en una sola ruta,
 contenido presente sólo en una, un escalón que suena a clic, una diferencia
@@ -101,12 +101,14 @@ ninguna medida que interpretar:
 1. Una región, offsets cero, ganancia de clip unitaria y parámetros constantes.
    No cubre regiones múltiples, automatización, edición durante playback ni
    cambios de warp/tono en caliente. La invalidación de caché está probada en
-   `scripts/audio-prepared-cache.test.mjs`, pero **no se ha probado que un
+   `scripts/audio-perf/audio-prepared-cache.test.mjs`, pero **no se ha probado que un
    cambio de parámetros durante la reproducción no llegue a sonar desde caché
    obsoleta**: eso exige la publicación atómica que el prototipo no tiene.
 2. Gain, pan y mute siguen sin ejercitarse durante el playback preparado. El
    archivo se escribe antes de los controles del mezclador, y esa frontera está
    documentada, pero no medida con los controles moviéndose.
+   *(Resuelto después en la [etapa 09](09-controles-en-vivo.md): media ganancia
+   da −6,02 dB exactos en las dos rutas.)*
 3. El salto se ejecuta de forma síncrona entre dos renders para que ambas rutas
    recorran la misma línea de tiempo. La latencia del salto concurrente sigue
    siendo cosa de `bench_streaming_playback`.
@@ -118,9 +120,9 @@ ninguna medida que interpretar:
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_fidelity_jump bench_prepare_warp -j 4
-node --test scripts/audio-fidelity-analysis.test.mjs
-node scripts/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/fidelidad-nueva 3
-node scripts/report-audio-fidelity.mjs bench-out-engine/fidelidad-nueva/results.json bench-out-engine/fidelidad-nueva/report.md
+node --test scripts/audio-perf/audio-fidelity-analysis.test.mjs
+node scripts/audio-perf/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/fidelidad-nueva 3
+node scripts/audio-perf/report-audio-fidelity.mjs bench-out-engine/fidelidad-nueva/results.json bench-out-engine/fidelidad-nueva/report.md
 ```
 
 El directorio de salida debe ser nuevo. El fixture (90 s) y los archivos
@@ -131,8 +133,8 @@ escenario, tres WAV para escuchar: ruta viva, ruta preparada y su diferencia.
 | Archivo | Papel |
 | --- | --- |
 | `native/audio-engine-v2/bench/bench_fidelity_jump.cpp` | Captura una ruta y un escenario con los comandos reales |
-| `scripts/audio-fidelity-fixture.mjs` | Fixture con impulsos, ráfagas, barrido y silencio |
-| `scripts/audio-fidelity-analysis.mjs` | Alineación, error de nivel, convergencia, mudez y clic |
-| `scripts/audio-fidelity-analysis.test.mjs` | Doce defectos inyectados que el analizador debe nombrar |
-| `scripts/bench-audio-fidelity.mjs` | Prepara, captura la matriz y compara |
-| `scripts/report-audio-fidelity.mjs` | Valida la matriz y genera el informe |
+| `scripts/audio-perf/audio-fidelity-fixture.mjs` | Fixture con impulsos, ráfagas, barrido y silencio |
+| `scripts/audio-perf/audio-fidelity-analysis.mjs` | Alineación, error de nivel, convergencia, mudez y clic |
+| `scripts/audio-perf/audio-fidelity-analysis.test.mjs` | Doce defectos inyectados que el analizador debe nombrar |
+| `scripts/audio-perf/bench-audio-fidelity.mjs` | Prepara, captura la matriz y compara |
+| `scripts/audio-perf/report-audio-fidelity.mjs` | Valida la matriz y genera el informe |

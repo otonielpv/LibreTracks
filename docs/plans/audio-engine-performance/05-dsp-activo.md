@@ -90,8 +90,8 @@ una pasada adicional de varispeed y otra de warp+tono; no se incluyeron en las
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_streaming_playback -j 4
-node scripts/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/dsp-nuevo 3 dsp
-node scripts/report-audio-dsp.mjs bench-out-engine/dsp-nuevo/results.json bench-out-engine/dsp-nuevo/report.md
+node scripts/audio-perf/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/dsp-nuevo 3 dsp
+node scripts/audio-perf/report-audio-dsp.mjs bench-out-engine/dsp-nuevo/results.json bench-out-engine/dsp-nuevo/report.md
 ```
 
 Build Release con Bungee y libsndfile. Se mantienen las limitaciones del banco:

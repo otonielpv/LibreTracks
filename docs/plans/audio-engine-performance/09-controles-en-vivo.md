@@ -70,7 +70,7 @@ entre configuraciones no justifica tocarlo.
 1. Regiones múltiples, offsets de clip distintos de cero y ganancia de clip no
    unitaria. El fixture sigue montando una región y un clip.
 2. **La clave de la caché preparada no incluye la ganancia de clip ni la
-   disposición de clips** (`scripts/audio-prepared-cache.mjs`). Como el
+   disposición de clips** (`scripts/audio-perf/audio-prepared-cache.mjs`). Como el
    preparador sí hornea la ganancia de clip, editarla no invalidaría el archivo.
    Es un fallo del contrato y hay que arreglarlo antes de que la función exista.
 3. Cambios de warp/tono en caliente con publicación atómica.
@@ -81,7 +81,7 @@ entre configuraciones no justifica tocarlo.
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_fidelity_jump bench_prepare_warp -j 4
-node --test scripts/audio-fidelity-analysis.test.mjs
-node scripts/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/controles-nuevo 3 pcm16
-node scripts/report-audio-fidelity.mjs bench-out-engine/controles-nuevo/results.json bench-out-engine/controles-nuevo/report.md
+node --test scripts/audio-perf/audio-fidelity-analysis.test.mjs
+node scripts/audio-perf/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/controles-nuevo 3 pcm16
+node scripts/audio-perf/report-audio-fidelity.mjs bench-out-engine/controles-nuevo/results.json bench-out-engine/controles-nuevo/report.md
 ```

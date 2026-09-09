@@ -70,6 +70,23 @@ const suites = [
       "libretracks-desktop/no-link",
     ],
   },
+  {
+    // Herramienta de los bancos del motor, no producto — pero un test que nadie
+    // ejecuta se pudre, y estos son los que impiden que un analizador roto
+    // publique medidas que parecen buenas. Node puro, sin nativo ni vcpkg:
+    // cuestan alrededor de un segundo.
+    name: "audio bench tooling (node:test)",
+    // "node" del PATH, no process.execPath: runSuite lanza con shell en
+    // Windows y ahi una ruta con espacios ("C:\\Program Files\\nodejs\\...")
+    // se parte en el espacio. Las demas suites ya dependen del PATH igual.
+    cmd: "node",
+    args: [
+      "--test",
+      "scripts/audio-perf/audio-fidelity-analysis.test.mjs",
+      "scripts/audio-perf/audio-prepared-cache.test.mjs",
+      "scripts/audio-perf/audio-wav.test.mjs",
+    ],
+  },
 ];
 
 /**

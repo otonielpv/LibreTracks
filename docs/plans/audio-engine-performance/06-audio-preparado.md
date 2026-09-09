@@ -81,7 +81,7 @@ ignorada `bench-out-engine`; sólo JSON e informes se versionan.
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_streaming_playback bench_prepare_warp -j 4
-node scripts/bench-audio-prepared.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/2026-09-09-dsp-final/fixtures bench-out-engine/nuevo-preparado 3
-node scripts/report-audio-prepared.mjs bench-out-engine/nuevo-preparado/results.json bench-out-engine/nuevo-preparado/report.md
-node --test scripts/audio-prepared-cache.test.mjs
+node scripts/audio-perf/bench-audio-prepared.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/2026-09-09-dsp-final/fixtures bench-out-engine/nuevo-preparado 3
+node scripts/audio-perf/report-audio-prepared.mjs bench-out-engine/nuevo-preparado/results.json bench-out-engine/nuevo-preparado/report.md
+node --test scripts/audio-perf/audio-prepared-cache.test.mjs
 ```

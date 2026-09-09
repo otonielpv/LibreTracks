@@ -107,15 +107,15 @@ Bungee habilitado y configuración Release. En esta máquina ya existe:
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_render_callback -j 4
-node scripts/bench-audio-render.mjs --bench native/audio-engine-v2/build-bench/Release/bench_render_callback.exe --out bench-out-engine/nueva-medida --threads 1,2,4 --blocks 512 --repeats 3
+node scripts/audio-perf/bench-audio-render.mjs --bench native/audio-engine-v2/build-bench/Release/bench_render_callback.exe --out bench-out-engine/nueva-medida --threads 1,2,4 --blocks 512 --repeats 3
 ```
 
 Antes de modificar el motor, conservar el ejecutable de referencia y sus
 dependencias. Para alternar ambos binarios en cada caso:
 
 ```powershell
-node scripts/bench-audio-render.mjs --bench native/audio-engine-v2/build-bench/Release/bench_render_callback.exe --reference native/audio-engine-v2/build-bench/Release/bench_render_baseline.exe --out bench-out-engine/nuevo-ab --threads 1,2,4 --cases warp-small,warp,muted --blocks 512 --repeats 3
-node scripts/compare-audio-render.mjs bench-out-engine/nuevo-ab/reference-results.json bench-out-engine/nuevo-ab/results.json bench-out-engine/nuevo-ab/comparison.md
+node scripts/audio-perf/bench-audio-render.mjs --bench native/audio-engine-v2/build-bench/Release/bench_render_callback.exe --reference native/audio-engine-v2/build-bench/Release/bench_render_baseline.exe --out bench-out-engine/nuevo-ab --threads 1,2,4 --cases warp-small,warp,muted --blocks 512 --repeats 3
+node scripts/audio-perf/compare-audio-render.mjs bench-out-engine/nuevo-ab/reference-results.json bench-out-engine/nuevo-ab/results.json bench-out-engine/nuevo-ab/comparison.md
 ```
 
 El directorio de salida debe ser nuevo. Los JSON registran CPU, SO, RAM,

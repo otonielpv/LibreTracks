@@ -44,8 +44,8 @@ registran como observaciones, sin un umbral temporal de PASS/FAIL.
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_streaming_playback -j 4
-node scripts/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/streaming-nuevo 3
-node scripts/report-audio-streaming.mjs bench-out-engine/streaming-nuevo/results.json bench-out-engine/streaming-nuevo/report.md
+node scripts/audio-perf/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/streaming-nuevo 3
+node scripts/audio-perf/report-audio-streaming.mjs bench-out-engine/streaming-nuevo/results.json bench-out-engine/streaming-nuevo/report.md
 ```
 
 Requiere build Release con `LT_ENGINE_BUILD_BENCHES=ON` y libsndfile. El

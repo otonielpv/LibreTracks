@@ -42,8 +42,8 @@ ocho configuraciones y tres repeticiones, alternando el orden.
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_streaming_playback -j 4
-node scripts/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/import-nuevo 3 import
-node scripts/report-audio-streaming.mjs bench-out-engine/import-nuevo/results.json bench-out-engine/import-nuevo/report.md
+node scripts/audio-perf/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/import-nuevo 3 import
+node scripts/audio-perf/report-audio-streaming.mjs bench-out-engine/import-nuevo/results.json bench-out-engine/import-nuevo/report.md
 ```
 
 Los archivos originales y caches quedan dentro de la captura; nunca se usa

@@ -128,11 +128,11 @@ un dispositivo así.
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_prepare_warp bench_fidelity_jump -j 4
-node --test scripts/audio-wav.test.mjs scripts/audio-fidelity-analysis.test.mjs scripts/audio-prepared-cache.test.mjs
-node scripts/bench-audio-budget.mjs native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/presupuesto-nuevo 240 3
-node scripts/report-audio-budget.mjs bench-out-engine/presupuesto-nuevo/results.json bench-out-engine/presupuesto-nuevo/report.md
-node scripts/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/fidelidad-pcm16 3 pcm16
-node scripts/report-audio-fidelity.mjs bench-out-engine/fidelidad-pcm16/results.json bench-out-engine/fidelidad-pcm16/report.md
+node --test scripts/audio-perf/audio-wav.test.mjs scripts/audio-perf/audio-fidelity-analysis.test.mjs scripts/audio-perf/audio-prepared-cache.test.mjs
+node scripts/audio-perf/bench-audio-budget.mjs native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/presupuesto-nuevo 240 3
+node scripts/audio-perf/report-audio-budget.mjs bench-out-engine/presupuesto-nuevo/results.json bench-out-engine/presupuesto-nuevo/report.md
+node scripts/audio-perf/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/fidelidad-pcm16 3 pcm16
+node scripts/audio-perf/report-audio-fidelity.mjs bench-out-engine/fidelidad-pcm16/results.json bench-out-engine/fidelidad-pcm16/report.md
 ```
 
 El directorio de salida debe ser nuevo. El presupuesto escribe ~2 GiB de WAV en
@@ -142,6 +142,6 @@ tiempos ya se degradan por sí solos dentro del propio lote.
 | Archivo | Papel |
 | --- | --- |
 | `native/audio-engine-v2/bench/bench_prepare_warp.cpp` | Prepara en float32 o PCM16 y cuenta las muestras recortadas |
-| `scripts/audio-wav.mjs` (+ `.test.mjs`) | Lector de los WAV del banco y estadísticas de error |
-| `scripts/bench-audio-budget.mjs` | Matriz de formatos y tamaños con orden alternado |
-| `scripts/report-audio-budget.mjs` | Valida la matriz y genera el informe |
+| `scripts/audio-perf/audio-wav.mjs` (+ `.test.mjs`) | Lector de los WAV del banco y estadísticas de error |
+| `scripts/audio-perf/bench-audio-budget.mjs` | Matriz de formatos y tamaños con orden alternado |
+| `scripts/audio-perf/report-audio-budget.mjs` | Valida la matriz y genera el informe |

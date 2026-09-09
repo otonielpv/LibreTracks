@@ -34,7 +34,8 @@ Secuencia de trabajo hasta la fecha:
 | `0fda4282` | Prototipo de preparación por pista, validación de caché y medidas |
 | `5249a02d` | Fidelidad de arranques y saltos: banco, analizador con tests y medidas |
 | `6e456519` | Presupuesto de disco medido, PCM16 en el preparador y fidelidad revalidada en PCM16 |
-| *(este)* | Ganancia, panorama y mute comprobados en vivo sobre el audio preparado |
+| `a5140be2` | Ganancia, panorama y mute comprobados en vivo sobre el audio preparado |
+| *(este)* | Fin de la fase de medida: instrumentación agrupada y tests conectados a `npm test` |
 
 **De todos estos, sólo `849e8e98` cambia lo que oye un usuario.** Es una
 corrección de concurrencia del pool de render. Todo lo demás es infraestructura
@@ -65,14 +66,14 @@ con Bungee manteniendo duración. Los bancos verifican qué ruta se ejecuta.
 | `native/audio-engine-v2/bench/streaming_benchmark_engine.h` | EngineImpl sin dispositivo, con los handlers reales de comandos |
 | `native/audio-engine-v2/bench/bench_prepare_warp.cpp` | Preparación secuencial por pista con TrackRenderer/Bungee y verificación |
 | `native/audio-engine-v2/bench/bench_fidelity_jump.cpp` | Captura una ruta y un escenario de transporte con los comandos reales |
-| `scripts/audio-fidelity-fixture.mjs` | Fixture con impulsos, ráfagas, barrido y silencio |
-| `scripts/audio-fidelity-analysis.mjs` | Alineación, error de nivel, convergencia, mudez y clic |
-| `scripts/audio-fidelity-analysis.test.mjs` | Doce defectos inyectados que el analizador debe nombrar |
-| `scripts/bench-audio-fidelity.mjs` / `report-audio-fidelity.mjs` | Matriz de fidelidad y su informe |
-| `scripts/audio-prepared-cache.mjs` (+ `.test.mjs`) | Clave canónica y validación de tamaño/hash |
-| `scripts/bench-audio-prepared.mjs` / `report-audio-prepared.mjs` | Matriz A/B de coste y su informe |
-| `scripts/audio-wav.mjs` (+ `.test.mjs`) | Lector de los WAV del banco y estadísticas de error |
-| `scripts/bench-audio-budget.mjs` / `report-audio-budget.mjs` | Presupuesto de disco y formato, y su informe |
+| `scripts/audio-perf/audio-fidelity-fixture.mjs` | Fixture con impulsos, ráfagas, barrido y silencio |
+| `scripts/audio-perf/audio-fidelity-analysis.mjs` | Alineación, error de nivel, convergencia, mudez y clic |
+| `scripts/audio-perf/audio-fidelity-analysis.test.mjs` | Doce defectos inyectados que el analizador debe nombrar |
+| `scripts/audio-perf/bench-audio-fidelity.mjs` / `report-audio-fidelity.mjs` | Matriz de fidelidad y su informe |
+| `scripts/audio-perf/audio-prepared-cache.mjs` (+ `.test.mjs`) | Clave canónica y validación de tamaño/hash |
+| `scripts/audio-perf/bench-audio-prepared.mjs` / `report-audio-prepared.mjs` | Matriz A/B de coste y su informe |
+| `scripts/audio-perf/audio-wav.mjs` (+ `.test.mjs`) | Lector de los WAV del banco y estadísticas de error |
+| `scripts/audio-perf/bench-audio-budget.mjs` / `report-audio-budget.mjs` | Presupuesto de disco y formato, y su informe |
 
 Las rutas son relativas a la raíz del repositorio.
 
@@ -164,6 +165,29 @@ La extrapolación que había aquí es ahora una medida ([etapa 08](08-presupuest
 función debe existir: 0,51 GiB por canción sigue siendo mucho para un móvil, y
 sigue sin haber una sola medida en un dispositivo así.
 
+## La fase de medida está cerrada
+
+Las cinco puertas del plan se revisaron una por una el 2026-09-09:
+
+| Puerta | Estado |
+| --- | --- |
+| Umbrales / número de trabajadores | Bloqueada: necesita PC modesto o Android |
+| Regulación de decode/precarga | Bloqueada: mismo motivo |
+| Preparar warp/tono para directo | Medida en las etapas 06–09 |
+| Render anticipado | **Ya respondida, y en negativo** |
+| Audio Workgroups en Apple | Bloqueada: necesita hardware Apple |
+
+Sobre el render anticipado: la rama `feature/rubberband-4-live-shifter-backend`
+ya probó esa arquitectura —renderizar por delante a un búfer circular— y se
+abandonó con un 80 % de underflow. Inicializar el estirador cuesta ~100 ms por
+pista, con 7 pistas son ~820 ms de reconstrucción, y el reloj avanza más de lo
+que el búfer tenía guardado. La conclusión fue que el camino correcto es DSP
+síncrono en el hilo de audio, que es lo que el motor hace hoy. **No volver a
+medirlo sin una idea nueva que no sea un búfer circular.**
+
+No queda ninguna medida que pueda cambiar una decisión sin hardware que no
+tenemos. La siguiente etapa es de producción.
+
 ## Siguiente tarea concreta recomendada
 
 El usuario ha aceptado el presupuesto de disco (0,51 GiB por canción es
@@ -192,6 +216,11 @@ modesto/Android real, con memoria, almacenamiento y 15–30 minutos de carga.
 Si no hay dispositivo, dejar esa validación explícitamente pendiente y avanzar
 en las pruebas independientes; no sustituirla por limitar núcleos del i7.
 
+La instrumentación vive ahora en `scripts/audio-perf/`, con su propio README.
+No es producto: nada del ejecutable importa de ahí. Cada archivo es el paso de
+reproducción de una medida publicada, por eso se agrupó en vez de borrarse.
+Los tres `.test.mjs` ya los ejecuta `npm test`; antes no los ejecutaba nadie.
+
 Hay además una deuda de método que sigue abierta desde el principio del plan:
 **ningún render tardío del banco se ha correlacionado nunca con un corte audible
 real en un driver.** Toda la cadena optimiza una métrica sustituta. Una sola
@@ -209,9 +238,9 @@ configurar Release con bancos y Bungee. Cada captura exige una salida nueva.
 git status --short
 git log -8 --oneline
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_streaming_playback bench_prepare_warp bench_fidelity_jump -j 4
-node --test scripts/audio-prepared-cache.test.mjs scripts/audio-fidelity-analysis.test.mjs
-node scripts/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/fidelidad-nueva 3
-node scripts/report-audio-fidelity.mjs bench-out-engine/fidelidad-nueva/results.json bench-out-engine/fidelidad-nueva/report.md
+node --test scripts/audio-perf/audio-prepared-cache.test.mjs scripts/audio-perf/audio-fidelity-analysis.test.mjs
+node scripts/audio-perf/bench-audio-fidelity.mjs native/audio-engine-v2/build-bench/Release/bench_fidelity_jump.exe native/audio-engine-v2/build-bench/Release/bench_prepare_warp.exe bench-out-engine/fidelidad-nueva 3
+node scripts/audio-perf/report-audio-fidelity.mjs bench-out-engine/fidelidad-nueva/results.json bench-out-engine/fidelidad-nueva/report.md
 git diff --check
 ```
 

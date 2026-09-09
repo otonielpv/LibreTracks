@@ -70,8 +70,8 @@ ninguna fila medida.
 
 ```powershell
 cmake --build native/audio-engine-v2/build-bench --config Release --target bench_streaming_playback -j 4
-node scripts/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/jump-nuevo 3 jump
-node scripts/report-audio-streaming.mjs bench-out-engine/jump-nuevo/results.json bench-out-engine/jump-nuevo/report.md
+node scripts/audio-perf/bench-audio-streaming.mjs native/audio-engine-v2/build-bench/Release/bench_streaming_playback.exe bench-out-engine/jump-nuevo 3 jump
+node scripts/audio-perf/report-audio-streaming.mjs bench-out-engine/jump-nuevo/results.json bench-out-engine/jump-nuevo/report.md
 ```
 
 No se inicia el dispositivo, la UI, la preparación automática de todos los
