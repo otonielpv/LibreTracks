@@ -14,6 +14,7 @@ public:
     SourceManager& sources() { return *engine_.source_manager_; }
     TransportClock& clock() { return *engine_.clock_; }
     Mixer& mixer() { return *engine_.mixer_; }
+    BungeeVoiceManagerDiagnostics voice_diagnostics() const { return engine_.bungee_voices_->diagnostics(); }
     void prepare(std::shared_ptr<const Session> session, int block) {
         // Unopened JUCE device reports 0; fallback reports 512. Both produce
         // the production 4096-frame live gate for the 128/512 cases measured.

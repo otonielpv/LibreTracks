@@ -17,7 +17,8 @@ de 4096 frames del gate de producción (`max(4096, buffer * 8)`). El banco
 rechaza buffers mayores: no simula un buffer negociado con un dispositivo.
 Esta versión requiere Bungee. Las pistas de la matriz son directas, sin warp
 ni transposición: se llama al constructor de mapas de voces, pero todavía
-no se mide el coste de preparar voces DSP activas.
+no se mide el coste de preparar voces DSP activas. La [matriz siguiente](05-dsp-activo.md)
+añade esa carga.
 
 ## Matriz y métricas
 

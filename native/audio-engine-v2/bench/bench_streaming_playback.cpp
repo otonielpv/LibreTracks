@@ -3,6 +3,7 @@
 // Seek is deliberately immediate: measures cache recovery, not JumpScheduler's
 // gated transition. Never translate missing source frames into driver xruns.
 #include <lt_engine/render/mixer.h>
+#include <lt_engine/render/track_renderer.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/sources/source_manager.h>
@@ -65,19 +66,26 @@ static std::uint64_t peak_rss_bytes() {
 }
 
 int main(int argc, char** argv) try {
-    if (argc < 8 || argc > 10) throw std::runtime_error(
-        "Usage: bench_streaming_playback DIR JSON TRACKS BLOCK BLOCKS PRELOAD(0|1) TRIM(0|1) [IMPORTS] [COMMAND_SEEK(0|1)]");
+    if (argc < 8 || argc > 12) throw std::runtime_error(
+        "Usage: bench_streaming_playback DIR JSON TRACKS BLOCK BLOCKS PRELOAD(0|1) TRIM(0|1) [IMPORTS] [COMMAND_SEEK(0|1)] [DSP(0=direct,1=warp,2=pitch,3=both)] [PRIME_START(0|1)]");
     const int tracks = std::stoi(argv[3]), block = std::stoi(argv[4]);
     const int blocks = std::stoi(argv[5]), preload = std::stoi(argv[6]), trim = std::stoi(argv[7]);
     const int imports = argc >= 9 ? std::stoi(argv[8]) : 0;
-    const int command_seek = argc == 10 ? std::stoi(argv[9]) : 0;
+    const int command_seek = argc >= 10 ? std::stoi(argv[9]) : 0;
+    const int dsp = argc >= 11 ? std::stoi(argv[10]) : 0;
+    const int prime_start = argc == 12 ? std::stoi(argv[11]) : (dsp ? 1 : 0);
     if (tracks < 1 || tracks > 128 || block < 64 || block > 2048 || blocks < 10 || blocks > 100000
         || preload < 0 || preload > 1 || trim < 0 || trim > 1 || imports < 0 || imports > 16
-        || command_seek < 0 || command_seek > 1)
+        || command_seek < 0 || command_seek > 1 || dsp < 0 || dsp > 3 || (dsp && (!command_seek || !preload || !prime_start))
+        || prime_start < 0 || prime_start > 1)
         throw std::runtime_error("Invalid configuration");
     constexpr int sr = 48000;
     const Frame start = 5 * sr, target = 30 * sr;
     const Frame needed = target + Frame(block) * blocks;
+    const bool warp = dsp == 1 || dsp == 3;
+    const int semitones = dsp >= 2 ? 3 : 0;
+    const double source_ratio = warp ? 1.2 : std::pow(2.0, semitones / 12.0);
+    const Frame source_needed = static_cast<Frame>(std::ceil(needed * source_ratio)) + (dsp ? sr : 0);
     StreamingBenchmarkEngine engine;
     SourceManager& sources = engine.sources();
     auto session = std::make_shared<Session>();
@@ -87,6 +95,15 @@ int main(int argc, char** argv) try {
     song.id = "song";
     song.start_frame = 0;
     song.end_frame = needed;
+    song.bpm = 120.0;
+    Region region;
+    region.id = "dsp-region";
+    region.start_frame = 0;
+    region.end_frame = needed;
+    region.transpose_semitones = static_cast<Semitones>(semitones);
+    region.warp_enabled = warp;
+    region.warp_source_bpm = song.bpm / source_ratio;
+    song.regions.push_back(region);
     std::vector<std::pair<Id, Frame>> heads;
     for (int i = 0; i < tracks; ++i) {
         const Id id = "streaming-source-" + std::to_string(i);
@@ -95,14 +112,15 @@ int main(int argc, char** argv) try {
         if (!sources.try_install_native_file(id, sr))
             throw std::runtime_error("Cannot stream native file: " + path);
         const auto source = sources.get_shared(id);
-        if (!source || source->duration_frames() < needed)
+        if (!source || source->duration_frames() < source_needed)
             throw std::runtime_error("Source too short: " + path);
         Track track;
         track.id = "track-" + std::to_string(i);
         track.gain = 0.5f / tracks;
+        track.transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
         track.clips.push_back(Clip{"clip-" + std::to_string(i), id, 0, 0, needed, 1.0f});
         song.tracks.push_back(std::move(track));
-        heads.emplace_back(id, start);
+        heads.emplace_back(id, static_cast<Frame>(start * source_ratio));
     }
     session->songs.push_back(std::move(song));
     engine.prepare(session, block);
@@ -124,9 +142,19 @@ int main(int argc, char** argv) try {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
+    // Prime active DSP at the actual start through the stopped command path.
+    // Do not count its source reads as playback starvation or measured render.
+    double startup_seek_ms = 0;
+    if (prime_start) {
+        const auto t0 = Clock::now();
+        engine.seek(start);
+        startup_seek_ms = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+    }
     const double prepare_ms = std::chrono::duration<double, std::milli>(Clock::now() - prepare_start).count();
     (void)sources.take_fill_io_stats();
     const Frame miss0 = sources.total_cache_miss_frames();
+    TrackRenderer::reset_diagnostics();
+    const auto voices0 = engine.voice_diagnostics();
     std::vector<double> times;
     times.reserve(blocks);
     std::vector<float> left(block), right(block);
@@ -134,6 +162,7 @@ int main(int argc, char** argv) try {
     std::uint64_t late = 0, affected = 0, misses_before_jump = 0, freed = 0;
     std::size_t peak_queue = 0, peak_cache = 0;
     double energy = 0;
+    std::uint64_t zero_output_blocks = 0;
     int recovery_blocks = -1, consecutive_ready = 0;
     const int jump_block = blocks / 2;
     std::unique_ptr<StreamingImportWorkload> importing;
@@ -176,7 +205,10 @@ int main(int argc, char** argv) try {
             consecutive_ready = missing ? 0 : consecutive_ready + 1;
             if (consecutive_ready == 8) recovery_blocks = b - jump_block - 7;
         }
-        for (int f = 0; f < block; ++f) energy += double(left[f]) * left[f] + double(right[f]) * right[f];
+        double block_energy = 0;
+        for (int f = 0; f < block; ++f) block_energy += double(left[f]) * left[f] + double(right[f]) * right[f];
+        energy += block_energy;
+        if (block_energy == 0) ++zero_output_blocks;
         // Off-render sampling still perturbs pacing: preserve this cadence in A/B.
         if (b % 16 == 0) {
             peak_queue = std::max(peak_queue, sources.fill_queue_depth());
@@ -193,6 +225,8 @@ int main(int argc, char** argv) try {
     const auto missing = sources.total_cache_miss_frames() - miss0;
     const auto playback_peak_rss = peak_rss_bytes();
     const double command_seek_ms = jumping ? jumping->finish() : 0;
+    const auto td = TrackRenderer::diagnostics();
+    const auto voices = engine.voice_diagnostics();
     // Freeze playback observations before waiting for unfinished imports.
     if (importing) importing->finish();
     std::sort(times.begin(), times.end());
@@ -201,6 +235,19 @@ int main(int argc, char** argv) try {
     if (!json) throw std::runtime_error("Cannot create JSON");
     json << "{\n\"tracks\":" << tracks << ",\"block\":" << block << ",\"blocks\":" << blocks
          << ",\"sample_rate\":48000,\"preload\":" << preload << ",\"trim\":" << trim
+         << ",\"dsp\":" << dsp << ",\"source_ratio\":" << source_ratio
+         << ",\"warp_ratio\":" << (warp ? source_ratio : 1.0) << ",\"semitones\":" << semitones
+         << ",\"warp_enabled\":" << (warp ? 1 : 0)
+         << ",\"prime_start\":" << prime_start
+         << ",\"startup_seek_ms\":" << startup_seek_ms << ",\"zero_output_blocks\":" << zero_output_blocks
+         << ",\"active_voices_start\":" << voices0.active_voice_count << ",\"active_voices_end\":" << voices.active_voice_count
+         << ",\"voices_built_during_measurement\":" << voices.voices_built_total - voices0.voices_built_total
+         << ",\"path_direct\":" << td.path_direct_count << ",\"path_stretched\":" << td.path_stretched_count
+         << ",\"path_varispeed\":" << td.path_varispeed_count
+         << ",\"missing_voice_blocks\":" << td.pitch_missing_stream_silence_count
+         << ",\"stretched_source_frames\":" << td.stretched_source_frames_fed
+         << ",\"stretched_output_frames\":" << td.stretched_output_frames_made
+         << ",\"stretched_feed_gap_frames\":" << td.stretched_feed_gap_frames
          << ",\"command_seek\":" << command_seek << ",\"command_seek_ms\":" << command_seek_ms
          << ",\"jump_applied_block\":" << jump_applied_block
          << ",\"imports_requested\":" << imports
@@ -229,7 +276,12 @@ int main(int argc, char** argv) try {
     json.close();
     if (!json || !std::isfinite(energy) || energy <= 0 || io.read_failures || io.open_failures || !io.read_count
         || mixer.rendered_track_count() != static_cast<std::uint64_t>(tracks) * blocks
-        || (imports && !import_overlap_blocks) || jump_applied_block < 0)
+        || (imports && !import_overlap_blocks) || jump_applied_block < 0
+        || (warp && (voices0.active_voice_count != tracks || voices.active_voice_count != tracks
+            || td.path_stretched_count != static_cast<std::uint64_t>(tracks) * blocks
+            || td.pitch_missing_stream_silence_count || !td.stretched_output_frames_made))
+        || (dsp == 2 && (voices0.active_voice_count || voices.active_voice_count
+            || td.path_varispeed_count != static_cast<std::uint64_t>(tracks) * blocks)))
         throw std::runtime_error("Invalid run: missing output, no streaming reads, I/O failure or JSON write failure");
     std::cout << "p95_us=" << percentile(.95) << " missing_source_frames=" << missing
               << " reads=" << io.read_count << "\n";

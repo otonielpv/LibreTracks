@@ -7,8 +7,8 @@ import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const [benchArg, outArg, repeatArg = '3', mode = 'streaming'] = process.argv.slice(2);
-if (!benchArg || !outArg) throw new Error('Usage: node scripts/bench-audio-streaming.mjs BENCH NEW_OUTPUT_DIR [REPEATS=3] [streaming|import|jump]');
-if (!['streaming', 'import', 'jump'].includes(mode)) throw new Error('Invalid mode');
+if (!benchArg || !outArg) throw new Error('Usage: node scripts/bench-audio-streaming.mjs BENCH NEW_OUTPUT_DIR [REPEATS=3] [streaming|import|jump|dsp]');
+if (!['streaming', 'import', 'jump', 'dsp'].includes(mode)) throw new Error('Invalid mode');
 const repeats = Number(repeatArg);
 if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20) throw new Error('Invalid repetitions');
 const bench = resolve(benchArg), out = resolve(outArg);
@@ -17,7 +17,7 @@ const executableSha = sha(readFileSync(bench));
 mkdirSync(out); // Refuse to overwrite a previous capture.
 const fixtures = join(out, 'fixtures');
 mkdirSync(fixtures);
-const tracks = 12, seconds = 40;
+const tracks = 12, seconds = mode === 'dsp' ? 60 : 40;
 const files = [];
 // One-second chunks bound fixture creation memory independently of duration.
 for (let track = 0; track < tracks + (mode !== 'streaming' ? 4 : 0); track++) {
@@ -63,8 +63,11 @@ const metadata = {
 const rows = [];
 for (let repetition = 0; repetition < repeats; repetition++) {
   const cases = [];
-  for (const fillThreads of [1, 2]) for (const block of [128, 512]) {
-    if (mode !== 'streaming') {
+  for (const fillThreads of (mode === 'dsp' ? [1] : [1, 2])) for (const block of [128, 512]) {
+    if (mode === 'dsp') {
+      for (const imports of [0, 4]) for (const dsp of [0, 1, 2, 3])
+        cases.push({ fillThreads, block, trim: 0, preload: 1, imports, commandSeek: 1, dsp });
+    } else if (mode !== 'streaming') {
       for (const imports of [0, 4]) for (const commandSeek of (mode === 'jump' ? [0, 1] : [0]))
         cases.push({ fillThreads, block, trim: 0, preload: 1, imports, commandSeek });
     } else {
@@ -73,12 +76,13 @@ for (let repetition = 0; repetition < repeats; repetition++) {
   }
   if (repetition % 2) cases.reverse();
   for (const cfg of cases) {
-    const id = `r${repetition}-f${cfg.fillThreads}-b${cfg.block}-t${cfg.trim}-p${cfg.preload}-i${cfg.imports}-j${cfg.commandSeek}`;
+    cfg.dsp ??= 0;
+    const id = `r${repetition}-f${cfg.fillThreads}-b${cfg.block}-t${cfg.trim}-p${cfg.preload}-i${cfg.imports}-j${cfg.commandSeek}-d${cfg.dsp}`;
     console.log(id);
     const jsonPath = join(out, `${id}.json`);
     const cacheDir = join(out, `${id}-cache`);
     mkdirSync(cacheDir);
-    const result = spawnSync(bench, [fixtures, jsonPath, String(tracks), String(cfg.block), '512', String(cfg.preload), String(cfg.trim), String(cfg.imports), String(cfg.commandSeek)], {
+    const result = spawnSync(bench, [fixtures, jsonPath, String(tracks), String(cfg.block), '512', String(cfg.preload), String(cfg.trim), String(cfg.imports), String(cfg.commandSeek), String(cfg.dsp), mode === 'dsp' ? '1' : '0'], {
       encoding: 'utf8', timeout: 60000,
       env: { ...process.env, LIBRETRACKS_AUDIO_DIAG: '0', LIBRETRACKS_FILL_THREADS: String(cfg.fillThreads), LIBRETRACKS_SOURCE_CACHE_MB: '64', LIBRETRACKS_SOURCE_READ_AHEAD_BLOCKS: '16', LIBRETRACKS_CACHE_DIR: cacheDir, LIBRETRACKS_STREAMING_DECODE: '1', LIBRETRACKS_SOURCE_EAGER_BLOCKS: '64', LIBRETRACKS_DECODE_PLAYING_YIELD_MS: '6', LIBRETRACKS_DECODE_GATE: '0', LIBRETRACKS_CACHE_FLOAT: '0' },
     });
@@ -91,6 +95,11 @@ for (let repetition = 0; repetition < repeats; repetition++) {
       throw new Error(`Import workload invalid: ${id}`);
     if (row.command_seek !== cfg.commandSeek || row.jump_applied_block < 0)
       throw new Error(`Jump workload invalid: ${id}`);
+    if (row.dsp !== cfg.dsp || ([1, 3].includes(cfg.dsp) && (row.active_voices_start !== tracks || row.active_voices_end !== tracks
+        || row.path_stretched !== tracks * 512 || row.missing_voice_blocks || !row.stretched_output_frames)))
+      throw new Error(`DSP workload invalid: ${id}`);
+    if (cfg.dsp === 2 && (row.active_voices_start || row.active_voices_end || row.path_varispeed !== tracks * 512))
+      throw new Error(`Varispeed workload invalid: ${id}`);
     rows.push({ repetition, fill_threads: cfg.fillThreads, ...row });
     writeFileSync(join(out, 'results.json'), JSON.stringify({ metadata, rows }, null, 2) + '\n');
   }
