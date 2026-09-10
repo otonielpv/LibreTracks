@@ -1,22 +1,57 @@
 {
   "version": 7,
   "id": "song_demo",
-  "title": "Cancion de demostracion",
+  "title": "Demo de LibreTracks",
   "artist": "LibreTracks",
   "key": "G",
   "bpm": 88.0,
   "timeSignature": "4/4",
-  "durationSeconds": 33.727,
-  "tempoMarkers": [],
-  "timeSignatureMarkers": [],
+  "durationSeconds": 75.636,
+  "tempoMarkers": [
+    {
+      "id": "tempo-adelante",
+      "startSeconds": 0.0,
+      "bpm": 88.0
+    },
+    {
+      "id": "tempo-descanso",
+      "startSeconds": 45.636,
+      "bpm": 72.0
+    }
+  ],
+  "timeSignatureMarkers": [
+    {
+      "id": "signature-adelante",
+      "startSeconds": 0.0,
+      "signature": "4/4"
+    },
+    {
+      "id": "signature-descanso",
+      "startSeconds": 45.636,
+      "signature": "3/4"
+    }
+  ],
   "regions": [
     {
-      "id": "region-demo",
-      "name": "Cancion de demostracion",
+      "id": "region-adelante",
+      "name": "Adelante",
       "startSeconds": 0.0,
-      "endSeconds": 33.727,
+      "endSeconds": 43.636,
       "transposeSemitones": 0,
       "key": "G",
+      "warpEnabled": false,
+      "warpSourceBpm": null,
+      "master": {
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "region-descanso",
+      "name": "Descanso",
+      "startSeconds": 45.636,
+      "endSeconds": 75.636,
+      "transposeSemitones": 0,
+      "key": "D",
       "warpEnabled": false,
       "warpSourceBpm": null,
       "master": {
@@ -88,45 +123,89 @@
   ],
   "clips": [
     {
-      "id": "clip-bateria",
+      "id": "clip-adelante-bateria",
       "trackId": "track-bateria",
-      "filePath": "audio/bateria.mp3",
+      "filePath": "audio/adelante/bateria.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 33.727,
+      "durationSeconds": 43.636,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-bajo",
+      "id": "clip-adelante-bajo",
       "trackId": "track-bajo",
-      "filePath": "audio/bajo.mp3",
+      "filePath": "audio/adelante/bajo.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 33.727,
+      "durationSeconds": 43.636,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-teclado",
+      "id": "clip-adelante-teclado",
       "trackId": "track-teclado",
-      "filePath": "audio/teclado.mp3",
+      "filePath": "audio/adelante/teclado.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 33.727,
+      "durationSeconds": 43.636,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-melodia",
+      "id": "clip-adelante-melodia",
       "trackId": "track-melodia",
-      "filePath": "audio/melodia.mp3",
+      "filePath": "audio/adelante/melodia.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 33.727,
+      "durationSeconds": 43.636,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-descanso-bateria",
+      "trackId": "track-bateria",
+      "filePath": "audio/descanso/bateria.mp3",
+      "timelineStartSeconds": 45.636,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 30.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-descanso-bajo",
+      "trackId": "track-bajo",
+      "filePath": "audio/descanso/bajo.mp3",
+      "timelineStartSeconds": 45.636,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 30.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-descanso-teclado",
+      "trackId": "track-teclado",
+      "filePath": "audio/descanso/teclado.mp3",
+      "timelineStartSeconds": 45.636,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 30.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-descanso-melodia",
+      "trackId": "track-melodia",
+      "filePath": "audio/descanso/melodia.mp3",
+      "timelineStartSeconds": 45.636,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 30.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
@@ -135,30 +214,58 @@
   "midiClips": [],
   "sectionMarkers": [
     {
-      "id": "marker-intro",
+      "id": "marker-adelante-intro",
       "name": "Intro",
       "startSeconds": 0.0,
       "digit": null,
       "kind": "intro"
     },
     {
-      "id": "marker-verse",
+      "id": "marker-adelante-verse",
       "name": "Estrofa",
-      "startSeconds": 5.455,
+      "startSeconds": 10.909,
       "digit": null,
       "kind": "verse"
     },
     {
-      "id": "marker-chorus",
+      "id": "marker-adelante-chorus",
       "name": "Estribillo",
-      "startSeconds": 16.364,
+      "startSeconds": 21.818,
       "digit": null,
       "kind": "chorus"
     },
     {
-      "id": "marker-outro",
+      "id": "marker-adelante-outro",
       "name": "Final",
-      "startSeconds": 27.273,
+      "startSeconds": 32.727,
+      "digit": null,
+      "kind": "outro"
+    },
+    {
+      "id": "marker-descanso-intro",
+      "name": "Intro",
+      "startSeconds": 45.636,
+      "digit": null,
+      "kind": "intro"
+    },
+    {
+      "id": "marker-descanso-verse",
+      "name": "Estrofa",
+      "startSeconds": 53.136,
+      "digit": null,
+      "kind": "verse"
+    },
+    {
+      "id": "marker-descanso-chorus",
+      "name": "Estribillo",
+      "startSeconds": 60.636,
+      "digit": null,
+      "kind": "chorus"
+    },
+    {
+      "id": "marker-descanso-outro",
+      "name": "Final",
+      "startSeconds": 68.136,
       "digit": null,
       "kind": "outro"
     }

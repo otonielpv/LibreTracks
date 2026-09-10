@@ -167,14 +167,45 @@ mod tests {
         let raw = fs::read_to_string(&path).expect("la sesion de demo debe existir");
         let song: Song = serde_json::from_str(&raw).expect("la sesion de demo debe deserializar");
 
-        assert_eq!(song.tracks.len(), 4, "la demo tiene cuatro stems");
-        assert_eq!(song.clips.len(), 4, "un clip por stem");
-        assert_eq!(
-            song.section_markers.len(),
-            4,
-            "intro, estrofa, estribillo y final"
+        assert_eq!(song.tracks.len(), 4, "cuatro stems compartidos");
+        assert_eq!(song.regions.len(), 2, "la demo es un repertorio de dos canciones");
+        assert_eq!(song.clips.len(), 8, "cuatro clips por cancion");
+        assert_eq!(song.section_markers.len(), 8, "cuatro secciones por cancion");
+        assert!(song.duration_seconds > 60.0);
+    }
+
+    /// The point of shipping two songs instead of one is that a session is a
+    /// setlist: each song carries its own key, tempo and metre. If a future
+    /// edit collapses them into one uniform block the demo still plays, but it
+    /// stops demonstrating the thing the app exists for — so pin the contrast.
+    #[test]
+    fn the_two_demo_songs_differ_in_key_tempo_and_metre() {
+        let raw = fs::read_to_string(shipped_demo_dir().join("song.ltsession")).unwrap();
+        let song: Song = serde_json::from_str(&raw).unwrap();
+
+        let keys: Vec<_> = song.regions.iter().map(|region| region.key.clone()).collect();
+        assert!(keys.iter().all(Option::is_some), "cada cancion declara tonalidad");
+        assert_ne!(keys[0], keys[1], "dos tonalidades distintas");
+
+        assert_eq!(song.tempo_markers.len(), 2, "un cambio de tempo por cancion");
+        assert_ne!(
+            song.tempo_markers[0].bpm, song.tempo_markers[1].bpm,
+            "dos tempos distintos"
         );
-        assert!(song.duration_seconds > 30.0);
+
+        assert_eq!(song.time_signature_markers.len(), 2);
+        assert_ne!(
+            song.time_signature_markers[0].signature,
+            song.time_signature_markers[1].signature,
+            "un compas binario y otro ternario"
+        );
+
+        // The second song must actually start after the first ends, or the
+        // regions overlap and the transport cannot tell them apart.
+        assert!(
+            song.regions[1].start_seconds >= song.regions[0].end_seconds,
+            "las regiones no pueden solaparse"
+        );
     }
 
     /// Every clip must point at a file that is actually bundled, by a relative
