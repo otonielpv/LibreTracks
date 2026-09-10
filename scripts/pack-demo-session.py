@@ -64,7 +64,7 @@ TRACKS = [
 # — converting them to seconds is this script's job precisely so nobody has to
 # do that arithmetic by hand twice. The last field is the quick-jump digit;
 # digits must be unique across the whole session or saving rejects the document
-# ("marker digit is duplicated"), so the turnarounds deliberately have none.
+# ("marker digit is duplicated").
 SONGS = [
     {
         "folder": "Costa-Norte",
@@ -97,12 +97,11 @@ SONGS = [
         "sections": [
             # Two 12-bar choruses: the electric plays the head over the first
             # and solos over the second, which is why they get different kinds.
-            # The turnaround closing each one is in the marker vocabulary too,
-            # and marking it is exactly what a player would do.
+            # Do not insert a marker on bar 12 or 24: with only one bar before
+            # the next section, the voice guide can fit the count-in but not a
+            # reliable spoken section name on every device.
             ("verse", "Vuelta 1", 1, 5),
-            ("turnaround", "Turnaround", 12, None),
             ("solo", "Vuelta 2", 13, 6),
-            ("turnaround", "Turnaround", 24, None),
             ("ending", "Golpe final", 25, 7),
         ],
     },
@@ -220,23 +219,13 @@ def main() -> int:
             "bpm": song["bpm"],
         })
         for kind, label, bar_number, digit in song["sections"]:
-            marker = {
-                # The bar goes in the id: a song can hold two turnarounds, and
-                # kind alone would collide.
+            markers.append({
                 "id": f"marker-{song['slug']}-{kind}-{bar_number}",
                 "name": label,
                 "startSeconds": round(timeline + (bar_number - 1) * bar, 3),
                 "digit": digit,
                 "kind": kind,
-            }
-            if kind == "turnaround":
-                # A one-bar turnaround is too short to behave as a section:
-                # while it is still the "next section", the following marker's
-                # one-bar lead-in has already begun and its spoken name misses
-                # its trigger frame. Keep the musical marker at the exact bar,
-                # but announce it as a cue chained before the following section.
-                marker["categoryOverride"] = "cue"
-            markers.append(marker)
+            })
 
         print(f"{song['title']:16s} {song['key']:2s} {song['bpm']:5.0f} BPM  "
               f"{song['bars']:2d} compases  {seconds:5.2f}s  "

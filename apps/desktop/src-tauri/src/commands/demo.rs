@@ -151,7 +151,7 @@ pub fn create_demo_session(app: AppHandle) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libretracks_core::{validate_song, MarkerCategory, MarkerKind, Song, TrackKind};
+    use libretracks_core::{validate_song, Song, TrackKind};
 
     fn shipped_demo_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/demo")
@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(song.clips.len(), 10, "cinco clips por cancion");
         assert_eq!(
             song.section_markers.len(),
-            9,
+            7,
             "marcas musicales de las dos canciones"
         );
         let jump_digits: Vec<_> = song
@@ -190,17 +190,11 @@ mod tests {
             .filter_map(|marker| marker.digit)
             .collect();
         assert_eq!(jump_digits, vec![1, 2, 3, 4, 5, 6, 7]);
-        let turnarounds: Vec<_> = song
-            .section_markers
-            .iter()
-            .filter(|marker| marker.kind == MarkerKind::Turnaround)
-            .collect();
-        assert_eq!(turnarounds.len(), 2);
         assert!(
-            turnarounds
-                .iter()
-                .all(|marker| marker.category() == MarkerCategory::Cue),
-            "los turnarounds de un compas deben encadenarse como avisos"
+            song.section_markers.windows(2).all(|pair| {
+                pair[1].start_seconds - pair[0].start_seconds >= 4.0
+            }),
+            "cada marca debe dejar sitio para anunciar seccion y conteo"
         );
         assert!(song.duration_seconds > 120.0);
     }

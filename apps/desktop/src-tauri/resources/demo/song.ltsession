@@ -296,27 +296,11 @@
       "kind": "verse"
     },
     {
-      "id": "marker-callejon-blues-turnaround-12",
-      "name": "Turnaround",
-      "startSeconds": 84.333,
-      "digit": null,
-      "kind": "turnaround",
-      "categoryOverride": "cue"
-    },
-    {
       "id": "marker-callejon-blues-solo-13",
       "name": "Vuelta 2",
       "startSeconds": 87.0,
       "digit": 6,
       "kind": "solo"
-    },
-    {
-      "id": "marker-callejon-blues-turnaround-24",
-      "name": "Turnaround",
-      "startSeconds": 116.333,
-      "digit": null,
-      "kind": "turnaround",
-      "categoryOverride": "cue"
     },
     {
       "id": "marker-callejon-blues-ending-25",
