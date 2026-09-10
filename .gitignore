@@ -89,3 +89,5 @@ tests/e2e/specs/marketing-shots.e2e.ts
 # (samples/ o perf-*) se tragaría fuentes por nombre — ya hubo un caso con
 # `build*` en este mismo fichero.
 samples/perf-setlist/
+.agents/skills
+skills-lock.json
