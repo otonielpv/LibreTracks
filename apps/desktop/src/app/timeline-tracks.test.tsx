@@ -321,11 +321,10 @@ describe("App / timeline-tracks", () => {
     const contextMenu = container.querySelector(".lt-context-menu") as HTMLElement | null;
     expect(contextMenu).toBeTruthy();
     const buttons = within(contextMenu as HTMLElement).getAllByRole("button");
-    // Borrar y color: las dos unicas que tienen sentido sobre una seleccion
-    // de varias. Borrar entro con el borrado por lotes en movil -donde no hay
-    // teclado y eliminar de una en una es insufrible- y va por el MISMO
-    // comando batch que ya usaba el atajo: un solo sync del motor y una sola
-    // entrada de historial.
+    // Lo que tiene sentido sobre una seleccion de varias. Borrar entro con el
+    // borrado por lotes en movil -donde no hay teclado y eliminar de una en
+    // una es insufrible- y va por el MISMO comando batch que ya usaba el
+    // atajo: un solo sync del motor y una sola entrada de historial.
     expect(buttons.map((button) => button.textContent)).toEqual([
       expect.stringContaining("Delete"),
       // Meter varias en una carpeta de un tiron: arrastrando habia que repetir
@@ -333,6 +332,13 @@ describe("App / timeline-tracks", () => {
       expect.stringContaining("Move to folder"),
       expect.stringContaining("Remove From Folder"),
       expect.stringContaining("Select colour"),
+      // Mezcla de la seleccion. Arrastrar un fader ya se repartia entre las
+      // seleccionadas, pero en movil las cabeceras se quedan en nombre +
+      // mute/solo y no habia fader que arrastrar: sin estas tres no existe
+      // ninguna via para tocar volumen, paneo o salida de varias pistas.
+      "Volume: 2 tracks",
+      "Pan: 2 tracks",
+      "Output: 2 tracks",
     ]);
   });
 

@@ -87,6 +87,11 @@ import type { MidiClipDraft } from "../panels/MidiClipModal";
 import { createMidiMenus } from "./midiMenus";
 import { createMarkerKindMenus } from "./markerKindMenus";
 import { createTrackFolderMenus } from "./trackFolderMenus";
+import { colorPickerActions } from "./colorPickerMenu";
+import {
+  multiTrackMixActions,
+  type MultiTrackMixActions,
+} from "./multiTrackMixMenu";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import type { ShortcutActionId } from "../keyboard/actions";
 
@@ -246,6 +251,9 @@ export type TimelineMenuDeps = {
     clip: ClipSummary,
     color: string | null,
   ) => Promise<unknown>;
+  audioRoutingOptions: Array<{ value: string; label: string }>;
+  /** Mix edits over an explicit set of tracks - see trackHeaderHandlers. */
+  multiTrackMix: MultiTrackMixActions;
 };
 
 export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
@@ -292,39 +300,20 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     });
   }
 
-  function colorPickerActions(args: {
-    title: string;
-    currentColor?: string | null;
-    onColor: (color: string | null) => Promise<void>;
-  }): ContextMenuAction[] {
+  /** Open a nested menu offset from the current one, the way the colour
+   * picker already does. The multi-selection mix entries need it: there is no
+   * submenu support in ContextMenuAction, and a phone has no fader to drag. */
+  function openSubMenu(title: string, actions: ContextMenuAction[]) {
     const d = getDeps();
-    // Single funnel: record every applied non-null colour as "recent" so the
-    // popover's Recientes row stays in sync regardless of entry point (preset,
-    // custom popover, or recent swatch).
-    const applyColor = async (color: string | null) => {
-      d.recordRecentColor(color);
-      await args.onColor(color);
-    };
-    return [
-      ...TIMELINE_COLOR_PRESETS.map((preset) => ({
-        label: `${preset.label}${args.currentColor === preset.value ? " (actual)" : ""}`,
-        swatch: preset.value,
-        onSelect: () => applyColor(preset.value),
-      })),
-      {
-        label: "Personalizado...",
-        swatch: args.currentColor ?? "#3CDDC7",
-        onSelect: () =>
-          openCustomColorPopover(args.title, args.currentColor, (color) =>
-            applyColor(color),
-          ),
-      },
-      {
-        label: "Quitar color",
-        disabled: !args.currentColor,
-        onSelect: () => args.onColor(null),
-      },
-    ];
+    const position = d.contextMenuPositionRef.current;
+    const nextPosition = { x: position.x + 12, y: position.y + 12 };
+    d.contextMenuPositionRef.current = nextPosition;
+    d.setContextMenu({
+      x: nextPosition.x,
+      y: nextPosition.y,
+      title,
+      actions,
+    });
   }
 
   function openColorMenu(
@@ -333,18 +322,16 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     onColor: (color: string | null) => Promise<void>,
   ) {
     const d = getDeps();
-    const position = d.contextMenuPositionRef.current;
-    const nextPosition = {
-      x: position.x + 12,
-      y: position.y + 12,
-    };
-    d.contextMenuPositionRef.current = nextPosition;
-    d.setContextMenu({
-      x: nextPosition.x,
-      y: nextPosition.y,
+    openSubMenu(
       title,
-      actions: colorPickerActions({ title, currentColor, onColor }),
-    });
+      colorPickerActions({
+        title,
+        currentColor,
+        onColor,
+        recordRecentColor: d.recordRecentColor,
+        openCustomColorPopover,
+      }),
+    );
   }
 
   // Shared by the ruler menu and the automation-lane menu: open the visual cue
@@ -1242,6 +1229,13 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             (color) => d.handleSetTrackColors(tracks, color).then(() => undefined),
           ),
       },
+      ...multiTrackMixActions({
+        tracks,
+        t,
+        routingOptions: d.audioRoutingOptions,
+        mix: d.multiTrackMix,
+        openSubMenu,
+      }),
     ];
   }
 

@@ -380,6 +380,59 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     }
   };
 
+  /**
+   * Mix edits over an EXPLICIT list of tracks, for callers with no fader to
+   * drag — the multi-selection menu on a phone, where the headers collapse to
+   * a name and the mute/solo pair.
+   *
+   * The nudges are relative on purpose, exactly like dragging one fader of a
+   * selection: the group keeps its internal balance. The setters are absolute,
+   * for the "reset" entries where making every track equal IS the point.
+   */
+  const applyTrackMixToAll = (
+    trackIds: string[],
+    key: "volume" | "pan",
+    nextValueOf: (current: number) => number,
+  ) => {
+    const applied = trackIds.filter((id) => findTrack(id) !== null);
+    if (!applied.length) {
+      return;
+    }
+
+    for (const id of applied) {
+      const track = findTrack(id);
+      if (!track) {
+        continue;
+      }
+      patchTrackOptimisticMix(id, {
+        [key]: nextValueOf(resolveTrackMix(track, id)[key]),
+      });
+      queueTrackMixLiveUpdate(id, [key]);
+    }
+
+    void runAction(async () => {
+      await Promise.all(applied.map((id) => persistTrackMix(id, [key])));
+    });
+  };
+
+  const nudgeTracksVolumeDb = (trackIds: string[], deltaDb: number) =>
+    applyTrackMixToAll(trackIds, "volume", (current) =>
+      offsetGainByDb(current, deltaDb, maxTrackGain),
+    );
+
+  const setTracksVolume = (trackIds: string[], volume: number) =>
+    applyTrackMixToAll(trackIds, "volume", () =>
+      clamp(volume, 0, maxTrackGain),
+    );
+
+  const nudgeTracksPan = (trackIds: string[], deltaPan: number) =>
+    applyTrackMixToAll(trackIds, "pan", (current) =>
+      clamp(current + deltaPan, -1, 1),
+    );
+
+  const setTracksPan = (trackIds: string[], pan: number) =>
+    applyTrackMixToAll(trackIds, "pan", () => clamp(pan, -1, 1));
+
   const handleTrackHeaderVolumeCommit = (trackId: string) => {
     const targets = editTargets(trackId);
     void runAction(async () => {
@@ -499,10 +552,15 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
   const handleTrackHeaderAudioToChange = (
     trackId: string,
     nextAudioTo: string,
-  ) => {
-    // Routing is absolute: a track inside a multi-selection re-routes the whole
-    // selection to the same output.
-    const targets = editTargets(trackId).filter((id) => {
+  ) => setTracksAudioTo(editTargets(trackId), nextAudioTo);
+
+  /**
+   * Routing is absolute: every target ends up on the same output. Split out
+   * from the header handler so the multi-selection menu can route a set of
+   * tracks it already knows, without going through the selection.
+   */
+  const setTracksAudioTo = (trackIds: string[], nextAudioTo: string) => {
+    const targets = trackIds.filter((id) => {
       // "inherit" only exists for tracks inside a folder; applying it to a
       // top-level track would be rejected, so skip those instead of failing
       // the whole batch.
@@ -549,6 +607,14 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     handleTrackHeaderPanCommit,
     handleTrackHeaderTransposeToggle,
     handleTrackHeaderAudioToChange,
+    /** Grouped: the multi-selection menu takes the whole set at once. */
+    multiTrackMix: {
+      nudgeVolumeDb: nudgeTracksVolumeDb,
+      setVolume: setTracksVolume,
+      nudgePan: nudgeTracksPan,
+      setPan: setTracksPan,
+      setAudioTo: setTracksAudioTo,
+    },
   };
 }
 

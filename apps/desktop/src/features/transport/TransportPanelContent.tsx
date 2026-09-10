@@ -5495,6 +5495,8 @@ export function TransportPanelContent() {
       handleSetTrackColor,
       handleSetTrackColors,
       handleSetClipColor,
+      audioRoutingOptions,
+      multiTrackMix,
     };
   });
   const timelineMenus = useMemo(
@@ -6268,6 +6270,7 @@ export function TransportPanelContent() {
     handleTrackHeaderPanCommit,
     handleTrackHeaderTransposeToggle,
     handleTrackHeaderAudioToChange,
+    multiTrackMix,
   } = useMemo(
     () =>
       createTrackHeaderHandlers({
