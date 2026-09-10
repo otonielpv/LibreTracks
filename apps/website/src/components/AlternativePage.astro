@@ -39,7 +39,7 @@ const {
   eyebrow,
   heading,
   intro,
-  heroImage = "/screenshots/Compact-View.png",
+  heroImage = "/screenshots/Compact-View.webp",
   heroAlt,
   rows,
   strengths,
@@ -98,6 +98,10 @@ const t = isSpanish
         <div class="product-shot">
           <img
             src={heroImage}
+            width={heroImage.includes("Proyecto") ? "1000" : "1100"}
+            height={heroImage.includes("Proyecto") ? "556" : "590"}
+            fetchpriority="high"
+            decoding="async"
             alt={heroAlt ?? (isSpanish
               ? "Vista Compacta de LibreTracks con una columna por canción"
               : "LibreTracks Compact View with one column per song")}

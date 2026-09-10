@@ -94,7 +94,7 @@ const labels = {
   assets: isSpanish ? "Instaladores" : "Installers",
   notes: isSpanish ? "Notas de la version" : "Release notes",
   olderTitle: isSpanish ? "Versiones anteriores" : "Older versions",
-  olderHint: isSpanish ? "Elige una versión para ver sus instaladores." : "Pick a version to see its installers.",
+  olderHint: isSpanish ? "Abre una versión en GitHub para ver sus instaladores y notas." : "Open a version on GitHub to see its installers and release notes.",
   supportTitle: isSpanish ? "Apoya LibreTracks" : "Support LibreTracks",
   supportText: isSpanish
     ? "LibreTracks es gratuito. Las donaciones voluntarias ayudan con mantenimiento, pruebas, documentacion, releases y desarrollo continuo."
@@ -142,10 +142,11 @@ function iconForAsset(name: string): string {
   return "📦";
 }
 
-// Pre-render each release panel server-side (notes → HTML). The newest is
-// shown by default; the rest are hidden and revealed by the client switcher.
+// Render only the current release in the page. Older release notes are useful
+// to users but dilute the download page when shipped as hidden HTML, so older
+// versions link to their permanent GitHub release pages.
 const panels = await Promise.all(
-  releases.map(async (release, index) => {
+  releases.slice(0, 1).map(async (release, index) => {
     const localizedBody = release.body
       ? extractReleaseNotesForLanguage(release.body, isSpanish ? "es" : "en")
       : "";
@@ -154,7 +155,11 @@ const panels = await Promise.all(
       index,
       isLatest: index === 0,
       date: formatDate(release.published_at),
-      bodyHtml: localizedBody ? await marked.parse(localizedBody) : null,
+      // The surrounding panel already labels this section. Demote headings
+      // from release-authored Markdown so the document keeps one clear H1.
+      bodyHtml: localizedBody
+        ? await marked.parse(localizedBody.replace(/^#{1,3}\s+/gm, "#### "))
+        : null,
     };
   }),
 );
@@ -172,11 +177,11 @@ const panels = await Promise.all(
         >
           <div class="release-header">
             <p class="eyebrow">{labels.currentVersion}</p>
-            <h1 class="release-version">
+            <h2 class="release-version">
               {panel.release.tag_name}
               {panel.isLatest ? <span class="release-badge latest">{labels.latestBadge}</span> : null}
               {panel.release.prerelease ? <span class="release-badge pre">{labels.prereleaseBadge}</span> : null}
-            </h1>
+            </h2>
             {panel.date ? <p class="release-date">{labels.published}: {panel.date}</p> : null}
           </div>
 
@@ -224,22 +229,21 @@ const panels = await Promise.all(
         </div>
       ))}
 
-      {panels.length > 1 ? (
+      {releases.length > 1 ? (
         <div class="older-releases">
           <h3 class="release-section-title">{labels.olderTitle}</h3>
           <p class="older-hint">{labels.olderHint}</p>
           <div class="version-chip-list">
-            {panels.map((panel) => (
-              <button
-                type="button"
-                class={`version-chip${panel.isLatest ? " active" : ""}`}
-                data-version-chip={panel.release.tag_name}
-                aria-pressed={panel.isLatest ? "true" : "false"}
+            {releases.slice(1).map((release) => (
+              <a
+                class="version-chip"
+                href={release.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                {panel.release.tag_name}
-                {panel.isLatest ? <span class="version-chip-tag">{labels.latestBadge}</span> : null}
-                {panel.release.prerelease ? <span class="version-chip-tag pre">{labels.prereleaseBadge}</span> : null}
-              </button>
+                {release.tag_name}
+                {release.prerelease ? <span class="version-chip-tag pre">{labels.prereleaseBadge}</span> : null}
+              </a>
             ))}
           </div>
         </div>
@@ -276,12 +280,6 @@ const panels = await Promise.all(
 </dialog>
 
 <script>
-  // ── Version switcher ──────────────────────────────────────────────────────
-  // Every release panel is rendered server-side; the chips just toggle which
-  // one is visible. The donation reminder must be (re)bound after each switch
-  // because the visible download links change.
-  const views = Array.from(document.querySelectorAll<HTMLElement>("[data-release-view]"));
-  const chips = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-version-chip]"));
   const dialog = document.querySelector("[data-donation-dialog]");
 
   function showDonationReminder() {
@@ -309,25 +307,6 @@ const panels = await Promise.all(
       });
     });
   }
-
-  function selectVersion(tag: string) {
-    views.forEach((view) => {
-      view.hidden = view.dataset.releaseTag !== tag;
-    });
-    chips.forEach((chip) => {
-      const active = chip.dataset.versionChip === tag;
-      chip.classList.toggle("active", active);
-      chip.setAttribute("aria-pressed", active ? "true" : "false");
-    });
-    bindDownloadLinks();
-  }
-
-  chips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const tag = chip.dataset.versionChip;
-      if (tag) selectVersion(tag);
-    });
-  });
 
   bindDownloadLinks();
 

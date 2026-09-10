@@ -28,6 +28,9 @@ export default defineConfig({
     }),
     tailwind({ applyBaseStyles: false }),
     starlight({
+      components: {
+        Head: "./src/components/StarlightHead.astro",
+      },
       // Starlight renders docs pages with its own layout, so the verification
       // tag in SiteLayout never reaches them. Inject it here too.
       head: [

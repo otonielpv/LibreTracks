@@ -1,0 +1,51 @@
+---
+import GuidePage from "../../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "Empieza por un mapa de salidas, no por los cables",
+    paragraphs: [
+      "Anota cada señal que necesitan el técnico de sala y los músicos. Los stems musicales pueden enviarse por separado, agrupados como Ritmo e Instrumentos o en una sola mezcla estéreo. El click y la voz guía necesitan una ruta independiente que llegue solo a monitores.",
+      "Elige el esquema más sencillo que dé al técnico un control útil. Tener más salidas no ayuda si añade cables, adaptadores y etapas de ganancia que nadie ha probado.",
+    ],
+    checklist: ["1–2: mezcla estéreo de música", "3: click", "4: voz guía", "Pares opcionales: batería, bajo, instrumentos y voces"],
+  },
+  {
+    heading: "Haz coincidir la interfaz y las rutas del programa",
+    paragraphs: [
+      "Selecciona la interfaz, frecuencia de muestreo y tamaño de búfer antes de asignar pistas. Envía cada stem o bus de carpeta a la salida física indicada en el mapa y configura el metrónomo por separado.",
+      "Los buses de carpeta sirven para enviar varias pistas al mismo par de salidas. Mantienen el timeline legible y permiten controlar el nivel del grupo desde un único fader.",
+    ],
+  },
+  {
+    heading: "Ajusta niveles sin perder margen",
+    paragraphs: [
+      "Mantén los canales de playback por debajo de saturación y deja el nivel final del sistema en manos de la mesa. Iguala el volumen percibido entre canciones para que el técnico no tenga que rescatar un estribillo débil o una introducción demasiado fuerte.",
+      "Escucha cada salida física por separado durante la preparación. La salida de click no debe contener música y las salidas destinadas al público no deben llevar click ni avisos hablados.",
+    ],
+  },
+  {
+    heading: "Usa una prueba de sonido repetible",
+    paragraphs: [
+      "Conecta y enciende el sistema siempre en el mismo orden. Confirma que está seleccionada la interfaz correcta, reproduce una señal identificable por cada salida y pide al técnico que nombre el canal recibido.",
+      "Guarda la sesión verificada y evita cambiar rutas justo antes del concierto. Si la sala exige otro esquema, duplica primero el proyecto para conservar disponible la versión probada.",
+    ],
+    checklist: ["Comprueba izquierda y derecha por separado.", "Verifica click y guía en cada mezcla de monitores.", "Reproduce la parte más fuerte y comprueba que no satura.", "Desconecta y reconecta el control remoto antes de abrir puertas."],
+  },
+];
+---
+
+<GuidePage
+  title="Salidas de Audio Multitrack en Directo | LibreTracks"
+  description="Configura salidas de audio multitrack para directo: elige canales de la interfaz, separa música, click y voz guía, ajusta niveles y prueba cada ruta."
+  lang="es"
+  eyebrow="Salidas de audio"
+  heading="Cómo rutear audio multitrack en directo"
+  intro="Un mapa de salidas claro hace que el playback sea más fácil de probar y recuperar. Sigue esta secuencia para llevar los stems del timeline a canales identificados en la mesa."
+  sections={sections}
+  related={[
+    { href: "/es/download/", label: "Descargar LibreTracks" },
+    { href: "/es/docs/audio-routing-metronome/", label: "Documentación de salidas" },
+    { href: "/es/docs/integration-ecosystem/", label: "Montaje recomendado" },
+  ]}
+/>

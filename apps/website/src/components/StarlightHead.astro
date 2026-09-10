@@ -1,0 +1,18 @@
+---
+// Keep Starlight's generated metadata, but fix the documentation favicon and
+// add the English documentation URL as the language-neutral fallback.
+const { head } = Astro.locals.starlightRoute;
+const normalizedHead = head.map((entry) => {
+  if (entry.tag === "link" && entry.attrs?.href === "/favicon.svg") {
+    return { ...entry, attrs: { ...entry.attrs, href: "/icon.svg" } };
+  }
+  return entry;
+});
+
+const path = Astro.url.pathname;
+const englishPath = path.replace(/^\/es(?=\/|$)/, "") || "/";
+const xDefault = new URL(englishPath, Astro.site ?? "https://libretracks.com");
+---
+
+{normalizedHead.map(({ tag: Tag, attrs, content }) => <Tag {...attrs} set:html={content} />)}
+{path !== "/404" && <link rel="alternate" hreflang="x-default" href={xDefault.href} />}

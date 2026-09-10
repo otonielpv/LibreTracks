@@ -10,9 +10,11 @@ interface Props {
   image?: string;
   /** Emit the SoftwareApplication schema (home pages only, to avoid duplicates). */
   schema?: boolean;
+  /** Additional page-specific JSON-LD objects. */
+  structuredData?: Record<string, unknown> | Record<string, unknown>[];
 }
 
-const { title, description, lang = "en", noIndex = false, image, schema = false } = Astro.props;
+const { title, description, lang = "en", noIndex = false, image, schema = false, structuredData } = Astro.props;
 const isSpanish = lang === "es";
 const socialCard = image ?? (isSpanish ? "/og-image.png" : "/og-image-en.png");
 const prefix = isSpanish ? "/es" : "";
@@ -31,6 +33,9 @@ const TRANSLATED_SLUGS: Record<string, string> = {
   "/reaper-live-alternative": "/es/alternativa-reaper-directo",
   "/playback-multitracks-alternative": "/es/alternativa-playback-multitracks",
   "/prime-worship-alternative": "/es/alternativa-prime-worship",
+  "/guides": "/es/guias",
+  "/guides/run-backing-tracks-live": "/es/guias/lanzar-pistas-en-directo",
+  "/guides/multitrack-audio-routing": "/es/guias/salidas-audio-multitrack",
 };
 const ES_TO_EN = Object.fromEntries(
   Object.entries(TRANSLATED_SLUGS).map(([en, es]) => [es, en]),
@@ -110,6 +115,9 @@ const websiteSchema = {
     "https://www.youtube.com/@LibreTracks",
   ],
 };
+const pageSchemas = structuredData
+  ? (Array.isArray(structuredData) ? structuredData : [structuredData])
+  : [];
 ---
 
 <!doctype html>
@@ -150,6 +158,9 @@ const websiteSchema = {
     {schema && !noIndex && (
       <script type="application/ld+json" set:html={JSON.stringify(softwareSchema)} />
     )}
+    {!noIndex && pageSchemas.map((data) => (
+      <script type="application/ld+json" set:html={JSON.stringify(data)} />
+    ))}
   </head>
   <body>
     <div class="site-page">
@@ -163,6 +174,9 @@ const websiteSchema = {
           <a href={`${prefix}/docs/`}>{isSpanish ? "Documentación" : "Docs"}</a>
           <a href={`${prefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
             {isSpanish ? "Alternativas" : "Alternatives"}
+          </a>
+          <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>
+            {isSpanish ? "Guías" : "Guides"}
           </a>
           <a href={switchHref} hreflang={isSpanish ? "en" : "es"}>{isSpanish ? "English" : "Español"}</a>
           <a

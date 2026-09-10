@@ -1,0 +1,51 @@
+---
+import GuidePage from "../../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. Exporta stems preparados para el escenario",
+    paragraphs: [
+      "Termina la edición, afinación y procesamiento en tu DAW de producción. Exporta todos los stems desde el mismo punto inicial y con la misma duración para que permanezcan alineados al colocarlos en el timeline de playback.",
+      "Usa nombres que sigan siendo evidentes bajo presión: Batería, Bajo, Teclados, Guitarras, Coros, Click y Guía. Separa el click y los avisos hablados de las pistas musicales porque normalmente deben llegar a los músicos, no al público.",
+    ],
+    checklist: ["Usa la misma frecuencia de muestreo en todos los archivos.", "Deja margen suficiente para evitar saturar la salida de la interfaz.", "Escucha cada archivo exportado antes de importar el repertorio."],
+  },
+  {
+    heading: "2. Decide qué escuchan el público y los músicos",
+    paragraphs: [
+      "La configuración más sencilla envía los stems musicales a la mesa principal y el click con la voz guía a los monitores in-ear. Una interfaz grande permite entregar pistas individuales; con menos salidas puedes enviar una mezcla estéreo de música y otra salida para avisos.",
+      "Escribe el mapa de salidas antes de abrir el programa. Una lista como 1–2 Música, 3 Click y 4 Guía evita improvisaciones durante la prueba de sonido.",
+    ],
+  },
+  {
+    heading: "3. Construye canciones, marcas y transiciones",
+    paragraphs: [
+      "Importa los stems, crea una región por canción y añade marcas en las secciones donde la banda pueda necesitar reaccionar. Mantén visible el orden del repertorio y usa nombres claros para las canciones.",
+      "Añade únicamente saltos en vivo, bucles Vamp o transiciones automáticas que la banda haya ensayado. La flexibilidad funciona cuando todos entienden qué significa el siguiente aviso.",
+    ],
+  },
+  {
+    heading: "4. Ensaya también los fallos",
+    paragraphs: [
+      "Ejecuta el concierto completo con el mismo ordenador, interfaz, cables y tamaño de búfer previstos para la sala. Prueba a detener, reiniciar, saltar una canción y continuar si se desconecta el control remoto.",
+      "Lleva una mezcla estéreo de emergencia en otro dispositivo y acuerda una salida musical si el playback se detiene. El objetivo no es prometer que nada fallará, sino que la banda sepa qué hacer si ocurre.",
+    ],
+    checklist: ["Desactiva suspensión, notificaciones y actualizaciones durante el concierto.", "Etiqueta las salidas y los cables.", "Comprueba que click y guía no llegan al público."],
+  },
+];
+---
+
+<GuidePage
+  title="Cómo Lanzar Pistas en Directo | LibreTracks"
+  description="Aprende a lanzar pistas en directo: prepara stems, separa click y voz guía, construye el repertorio, ensaya transiciones y crea un plan de respaldo."
+  lang="es"
+  eyebrow="Flujo de playback en vivo"
+  heading="Cómo lanzar pistas en directo"
+  intro="Un sistema de playback fiable empieza antes de llevar el portátil al escenario. Este flujo mantiene la preparación, las salidas, el control musical y el plan de respaldo claros para toda la banda."
+  sections={sections}
+  related={[
+    { href: "/es/download/", label: "Descargar LibreTracks" },
+    { href: "/es/docs/core-concepts/", label: "Crear el primer repertorio" },
+    { href: "/es/docs/live-control-flow/", label: "Guía de control en vivo" },
+  ]}
+/>

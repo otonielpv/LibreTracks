@@ -9,9 +9,9 @@ const capabilities = [
 ];
 
 const workflow = [
-  ["Construye la biblioteca", "Importa WAVs preparados, organiza recursos en carpetas virtuales y reutiliza canciones con paquetes LibreTracks.", "/screenshots/Library-Assets-Import.gif"],
-  ["Da forma al repertorio", "Organiza clips en un timeline musical, crea regiones de canción, colorea sesiones densas y coloca marcas donde ocurren las decisiones en vivo.", "/screenshots/Proyecto.png"],
-  ["Ensaya y toca", "Cambia a Vista Compacta para ver una columna por canción, ajustar la mezcla compartida, disparar canciones y leer el repertorio bajo presión.", "/screenshots/Compact-View.png"],
+  ["Construye la biblioteca", "Importa WAVs preparados, organiza recursos en carpetas virtuales y reutiliza canciones con paquetes LibreTracks.", "/screenshots/Library-Assets-Import.webm"],
+  ["Da forma al repertorio", "Organiza clips en un timeline musical, crea regiones de canción, colorea sesiones densas y coloca marcas donde ocurren las decisiones en vivo.", "/screenshots/Proyecto.webp"],
+  ["Ensaya y toca", "Cambia a Vista Compacta para ver una columna por canción, ajustar la mezcla compartida, disparar canciones y leer el repertorio bajo presión.", "/screenshots/Compact-View.webp"],
 ];
 
 const viewHighlights = [
@@ -35,8 +35,8 @@ const fit = [
 ---
 
 <SiteLayout
-  title="LibreTracks — Reproductor Multitrack Gratuito para Directo"
-  description="Reproductor de multitracks gratuito y de código abierto para tocar en directo: pistas por canción, click, voz guía, cambio de tono y tempo, MIDI y control remoto desde el móvil. Windows, macOS, Linux y Android."
+  title="Reproductor Multitrack Gratis para Directo | LibreTracks"
+  description="Reproductor multitrack gratis y de código abierto para directo, con stems, click, voz guía, MIDI, cambios de tono y tempo, y control remoto móvil."
   lang="es"
   schema
 >
@@ -53,7 +53,7 @@ const fit = [
           </div>
         </div>
         <div class="product-shot">
-          <img src="/screenshots/Compact-View.png" alt="Vista Compacta de LibreTracks con columnas de canciones y controles de mezcla" />
+          <img src="/screenshots/Compact-View.webp" alt="Vista Compacta de LibreTracks con columnas de canciones y controles de mezcla" width="1100" height="590" fetchpriority="high" decoding="async" />
         </div>
       </div>
     </section>
@@ -85,7 +85,13 @@ const fit = [
         <div class="workflow-grid">
           {workflow.map(([title, body, image]) => (
             <article class="workflow-card">
-              <img src={image} alt={`${title} en LibreTracks`} loading="lazy" />
+              {image.endsWith(".webm") ? (
+                <video autoplay loop muted playsinline preload="none" poster="/screenshots/Library-Assets-Import-poster.webp" width="820" height="442" aria-label={`${title} en LibreTracks`}>
+                  <source src={image} type="video/webm" />
+                </video>
+              ) : (
+                <img src={image} alt={`${title} en LibreTracks`} loading="lazy" decoding="async" width={image.includes("Proyecto") ? "1000" : "1100"} height={image.includes("Proyecto") ? "556" : "590"} />
+              )}
               <div>
                 <strong>{title}</strong>
                 <p>{body}</p>

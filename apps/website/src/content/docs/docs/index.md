@@ -7,7 +7,7 @@ LibreTracks is a multitrack playback workstation for live musicians, music direc
 
 LibreTracks runs on desktop (Windows, macOS, Linux) and is now available on Android as an early beta — you can install it on a phone or tablet, open recent sessions, create new sessions from reusable templates, and work with real playback, audio import, and touch control of the timeline. On a phone the interface adapts to the screen in portrait, tracks get their own touch controls, and USB audio interfaces are recognised as soon as you plug them in. The Android build is still in testing, so use it with care and don't rely on it for an important show yet.
 
-![LibreTracks project timeline](/screenshots/Proyecto.png)
+![LibreTracks project timeline](/screenshots/Proyecto.webp)
 
 ## What LibreTracks Is For
 

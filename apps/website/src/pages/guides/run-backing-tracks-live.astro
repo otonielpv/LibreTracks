@@ -1,0 +1,51 @@
+---
+import GuidePage from "../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "1. Export stems that are ready for the stage",
+    paragraphs: [
+      "Finish editing, tuning and processing in your production DAW. Export every stem from the same start point and with the same duration so all files stay aligned when they are placed on the playback timeline.",
+      "Use names that remain obvious under pressure: Drums, Bass, Keys, Guitars, BGV, Click and Guide. Keep click and spoken cues separate from musical stems because they should normally reach the performers, not the audience.",
+    ],
+    checklist: ["Use the same sample rate for every file.", "Leave enough headroom to avoid clipping at the interface output.", "Play every exported file once before importing the set."],
+  },
+  {
+    heading: "2. Decide what the audience and musicians should hear",
+    paragraphs: [
+      "The simplest setup sends the musical stems to the front-of-house mixer and sends click plus guide vocals to an in-ear monitor path. A larger interface lets the engineer receive individual stems; a smaller interface can send a stereo music mix and a separate cue output.",
+      "Write the output map down before opening the software. A numbered list such as 1–2 Music, 3 Click and 4 Guide prevents last-minute guessing at soundcheck.",
+    ],
+  },
+  {
+    heading: "3. Build songs, markers and transitions",
+    paragraphs: [
+      "Import the stems, create one song region per song and add markers for sections where the band may need to react. Keep the set order visible and use clear song names rather than file-system abbreviations.",
+      "Only add live jumps, Vamp loops or automatic transitions that the band has rehearsed. Flexibility is useful when every performer understands what the next cue means.",
+    ],
+  },
+  {
+    heading: "4. Rehearse the failure cases",
+    paragraphs: [
+      "Run the complete show using the same computer, interface, cables and buffer settings planned for the venue. Test stopping, restarting, skipping a song and recovering from a disconnected remote.",
+      "Carry a stereo emergency mix on a separate device and agree on a musical fallback if playback stops. The goal is not a setup that can never fail; it is a band that knows exactly what to do if it does.",
+    ],
+    checklist: ["Disable sleep, notifications and automatic updates for the show.", "Label interface outputs and cables.", "Soundcheck click and guide without sending them to the audience."],
+  },
+];
+---
+
+<GuidePage
+  title="How to Run Backing Tracks Live | LibreTracks"
+  description="Learn how to run backing tracks live: prepare stems, route click and guide vocals, build the set, rehearse transitions and create a practical fallback plan."
+  lang="en"
+  eyebrow="Live playback workflow"
+  heading="How to run backing tracks live"
+  intro="A dependable playback rig starts before the laptop reaches the stage. This workflow keeps audio preparation, routing, musical control and failure planning understandable for the whole band."
+  sections={sections}
+  related={[
+    { href: "/download/", label: "Download LibreTracks" },
+    { href: "/docs/core-concepts/", label: "Build the first set" },
+    { href: "/docs/live-control-flow/", label: "Live control guide" },
+  ]}
+/>

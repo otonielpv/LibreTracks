@@ -1,0 +1,51 @@
+---
+import GuidePage from "../../components/GuidePage.astro";
+
+const sections = [
+  {
+    heading: "Start with an output plan, not a cable pile",
+    paragraphs: [
+      "List every signal the front-of-house engineer and the performers need. Musical stems may be delivered individually, in groups such as Rhythm and Instruments, or as one stereo mix. Click and guide vocals need their own monitor-only path.",
+      "Choose the smallest layout that gives the engineer useful control. More outputs are not automatically better if they add untested cables, adapters and gain stages.",
+    ],
+    checklist: ["1–2: stereo music mix", "3: click", "4: spoken guide", "Optional extra pairs: drums, bass, instruments and vocals"],
+  },
+  {
+    heading: "Match the interface and software routes",
+    paragraphs: [
+      "Select the interface, sample rate and buffer size before assigning tracks. Route each stem or folder bus to the numbered hardware output in your written plan, then route the metronome separately.",
+      "Folder buses are useful when several tracks should reach the same pair of outputs. They keep the timeline readable while allowing one level change to control the whole group.",
+    ],
+  },
+  {
+    heading: "Set levels without stealing headroom",
+    paragraphs: [
+      "Keep playback channels below clipping and let the mixer provide the final system level. Match perceived levels between songs so the engineer does not need to rescue a quiet chorus or an unexpectedly loud intro.",
+      "Solo each physical output during preparation. The click output should contain no music, and the front-of-house outputs should contain no click or spoken cues.",
+    ],
+  },
+  {
+    heading: "Use a repeatable soundcheck",
+    paragraphs: [
+      "Connect and power the system in the same order every time. Confirm that the expected audio device is selected, play a labelled test signal through each output and ask the engineer to name the channel received.",
+      "Save the verified session and avoid routing changes immediately before the show. If the venue requires a different layout, duplicate the project first so the tested version remains available.",
+    ],
+    checklist: ["Confirm left and right channels independently.", "Verify click and guide in every required monitor mix.", "Play the loudest section of the set and check for clipping.", "Disconnect and reconnect the remote before doors open."],
+  },
+];
+---
+
+<GuidePage
+  title="Multitrack Audio Routing for Live Shows | LibreTracks"
+  description="Plan multitrack audio routing for live shows: choose interface outputs, separate music from click and guide vocals, set levels and run a repeatable soundcheck."
+  lang="en"
+  eyebrow="Audio routing"
+  heading="Multitrack audio routing for live shows"
+  intro="A clear output map makes a playback system easier to soundcheck and easier to recover. Use this practical sequence to move from stems on the timeline to labelled channels at the mixer."
+  sections={sections}
+  related={[
+    { href: "/download/", label: "Download LibreTracks" },
+    { href: "/docs/audio-routing-metronome/", label: "Routing documentation" },
+    { href: "/docs/integration-ecosystem/", label: "Recommended live setup" },
+  ]}
+/>

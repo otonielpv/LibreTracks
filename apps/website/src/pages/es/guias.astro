@@ -1,0 +1,38 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+
+const guides = [
+  {
+    href: "/es/guias/lanzar-pistas-en-directo/",
+    title: "Cómo lanzar pistas en directo",
+    body: "Un flujo práctico para stems, click, voz guía, orden de canciones, ensayo y un plan de respaldo más seguro.",
+  },
+  {
+    href: "/es/guias/salidas-audio-multitrack/",
+    title: "Cómo rutear audio multitrack en directo",
+    body: "Planifica las salidas de la interfaz, separa la mezcla de público de los avisos y verifica cada ruta antes de la prueba de sonido.",
+  },
+];
+---
+
+<SiteLayout
+  title="Guías para Lanzar Pistas en Directo | LibreTracks"
+  description="Guías prácticas para lanzar pistas en directo: prepara stems, configura salidas multitrack, click y voz guía, ensaya y construye un repertorio fiable."
+  lang="es"
+>
+  <main class="site-shell band">
+    <header class="section-heading">
+      <p class="eyebrow">Guías prácticas</p>
+      <h1>Lanza pistas en directo con un flujo claro y repetible</h1>
+      <p>Instrucciones orientadas al escenario para músicos, grupos de alabanza y operadores de playback que usan sus propios audios.</p>
+    </header>
+    <div class="feature-grid">
+      {guides.map((guide) => (
+        <article class="feature-card">
+          <h2><a href={guide.href}>{guide.title}</a></h2>
+          <p>{guide.body}</p>
+        </article>
+      ))}
+    </div>
+  </main>
+</SiteLayout>

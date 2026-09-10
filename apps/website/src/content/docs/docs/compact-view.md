@@ -1,11 +1,11 @@
 ---
 title: Compact View
-description: LibreTracks' Ableton Session-style projection — songs as columns, shared mixer, drag-and-drop, .ltpkg import/export, Reaper/Ableton project import, multi-selection and track reorder.
+description: Use LibreTracks Compact View for song columns, a shared mixer, drag-and-drop, packages, Reaper or Ableton imports, track selection and reordering.
 ---
 
 The **Compact View** is a second projection of the same project. The DAW view (linear timeline) and the compact view share one underlying model: anything you change in one shows up immediately in the other.
 
-![Compact View](/screenshots/Compact-View.png)
+![Compact View](/screenshots/Compact-View.webp)
 
 Cycle through the views with `Tab` (and `Shift+Tab` to go the other way), or pick one with the `view_timeline` / `view_module` / `stadium` buttons in the toolbar. The third one is the [Live View](/docs/live-view/), for the show itself.
 

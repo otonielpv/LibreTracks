@@ -1,0 +1,38 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+const guides = [
+  {
+    href: "/guides/run-backing-tracks-live/",
+    title: "How to run backing tracks live",
+    body: "A practical workflow for stems, click, guide vocals, song order, rehearsal and a safer fallback plan.",
+  },
+  {
+    href: "/guides/multitrack-audio-routing/",
+    title: "Multitrack audio routing for live shows",
+    body: "Plan interface outputs, separate the audience mix from cues and verify every route before soundcheck.",
+  },
+];
+---
+
+<SiteLayout
+  title="Live Backing Track Guides | LibreTracks"
+  description="Practical guides for running backing tracks live: prepare stems, route multitrack audio, configure click and guide vocals, rehearse and build a reliable set."
+  lang="en"
+>
+  <main class="site-shell band">
+    <header class="section-heading">
+      <p class="eyebrow">Practical guides</p>
+      <h1>Run backing tracks with a clear, repeatable workflow</h1>
+      <p>Stage-focused instructions for musicians, worship teams and playback operators using their own audio files.</p>
+    </header>
+    <div class="feature-grid">
+      {guides.map((guide) => (
+        <article class="feature-card">
+          <h2><a href={guide.href}>{guide.title}</a></h2>
+          <p>{guide.body}</p>
+        </article>
+      ))}
+    </div>
+  </main>
+</SiteLayout>

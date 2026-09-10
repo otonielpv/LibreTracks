@@ -982,7 +982,8 @@ h1 {
   padding: 0;
 }
 
-.workflow-card img {
+.workflow-card img,
+.workflow-card video {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
@@ -1409,6 +1410,7 @@ h1 {
   border: 1px solid color-mix(in srgb, var(--lt-muted) 22%, transparent);
   background: linear-gradient(180deg, #201f1f, #161515);
   color: var(--lt-text, #e9e6e1);
+  text-decoration: none;
   font: 700 0.9rem/1 "Space Grotesk", ui-sans-serif, sans-serif;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
@@ -1619,13 +1621,14 @@ h1 {
   .nav-links {
     width: 100%;
     justify-content: flex-start;
+    gap: 0.15rem;
   }
 
   .nav-links a,
   .button-link {
     min-height: 2.2rem;
-    padding-inline: 0.65rem;
-    font-size: 0.72rem;
+    padding-inline: 0.35rem;
+    font-size: 0.66rem;
   }
 
   .nav-links .social-link {

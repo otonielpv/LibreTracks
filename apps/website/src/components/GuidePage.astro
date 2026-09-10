@@ -1,0 +1,95 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+interface Section {
+  heading: string;
+  paragraphs: string[];
+  checklist?: string[];
+}
+
+interface RelatedLink {
+  href: string;
+  label: string;
+}
+
+interface Props {
+  title: string;
+  description: string;
+  lang: "en" | "es";
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  sections: Section[];
+  related: RelatedLink[];
+}
+
+const { title, description, lang, eyebrow, heading, intro, sections, related } = Astro.props;
+const isSpanish = lang === "es";
+const prefix = isSpanish ? "/es" : "";
+const canonical = new URL(Astro.url.pathname, Astro.site ?? "https://libretracks.com");
+const guidesUrl = new URL(`${prefix}/${isSpanish ? "guias" : "guides"}/`, canonical);
+const structuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: heading,
+    description,
+    inLanguage: lang,
+    mainEntityOfPage: canonical.href,
+    author: {
+      "@type": "Person",
+      name: "otonielpv",
+      url: "https://github.com/otonielpv",
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: isSpanish ? "Guías" : "Guides", item: guidesUrl.href },
+      { "@type": "ListItem", position: 2, name: heading, item: canonical.href },
+    ],
+  },
+];
+---
+
+<SiteLayout title={title} description={description} lang={lang} structuredData={structuredData}>
+  <main class="site-shell band legal-page">
+    <nav aria-label={isSpanish ? "Migas de pan" : "Breadcrumb"}>
+      <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>
+        {isSpanish ? "Guías" : "Guides"}
+      </a>
+    </nav>
+    <header class="section-heading">
+      <p class="eyebrow">{eyebrow}</p>
+      <h1>{heading}</h1>
+      <p>{intro}</p>
+    </header>
+
+    <article>
+      {sections.map((section) => (
+        <section>
+          <h2>{section.heading}</h2>
+          {section.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+          {section.checklist && (
+            <ul>
+              {section.checklist.map((item) => <li>{item}</li>)}
+            </ul>
+          )}
+        </section>
+      ))}
+    </article>
+
+    <aside class="docs-preview">
+      <div class="section-heading">
+        <p class="eyebrow">{isSpanish ? "Siguiente paso" : "Next step"}</p>
+        <h2>{isSpanish ? "Prepara tu primer repertorio" : "Prepare your first set"}</h2>
+        <div class="hero-actions">
+          {related.map((link, index) => (
+            <a class={`button-link${index === 0 ? " primary" : ""}`} href={link.href}>{link.label}</a>
+          ))}
+        </div>
+      </div>
+    </aside>
+  </main>
+</SiteLayout>

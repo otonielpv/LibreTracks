@@ -9,9 +9,9 @@ const capabilities = [
 ];
 
 const workflow = [
-  ["Build the library", "Import prepared WAV files, keep assets organized in virtual folders, and reuse songs through LibreTracks packages.", "/screenshots/Library-Assets-Import.gif"],
-  ["Shape the set", "Arrange clips on a musical timeline, create song regions, color-code dense sessions, and place markers where live decisions happen.", "/screenshots/Proyecto.png"],
-  ["Rehearse and perform", "Switch to Compact View to see one column per song, adjust the shared mix, trigger songs, and keep the set readable under pressure.", "/screenshots/Compact-View.png"],
+  ["Build the library", "Import prepared WAV files, keep assets organized in virtual folders, and reuse songs through LibreTracks packages.", "/screenshots/Library-Assets-Import.webm"],
+  ["Shape the set", "Arrange clips on a musical timeline, create song regions, color-code dense sessions, and place markers where live decisions happen.", "/screenshots/Proyecto.webp"],
+  ["Rehearse and perform", "Switch to Compact View to see one column per song, adjust the shared mix, trigger songs, and keep the set readable under pressure.", "/screenshots/Compact-View.webp"],
 ];
 
 const viewHighlights = [
@@ -35,8 +35,8 @@ const fit = [
 ---
 
 <SiteLayout
-  title="LibreTracks — Free Multitrack Playback Software for Live Shows"
-  description="Free, open-source multitrack player for live performance: per-song stems, click, guide vocals, pitch and tempo change, MIDI and a mobile remote. Windows, macOS, Linux and Android."
+  title="Free Multitrack Playback Software | LibreTracks"
+  description="Free, open-source multitrack playback software for live shows, with stems, click, guide vocals, MIDI, pitch and tempo changes, and mobile remote control."
   lang="en"
   schema
 >
@@ -53,7 +53,7 @@ const fit = [
           </div>
         </div>
         <div class="product-shot">
-          <img src="/screenshots/Compact-View.png" alt="LibreTracks Compact View with song columns and mixer controls" />
+          <img src="/screenshots/Compact-View.webp" alt="LibreTracks Compact View with song columns and mixer controls" width="1100" height="590" fetchpriority="high" decoding="async" />
         </div>
       </div>
     </section>
@@ -85,7 +85,13 @@ const fit = [
         <div class="workflow-grid">
           {workflow.map(([title, body, image]) => (
             <article class="workflow-card">
-              <img src={image} alt={`${title} workflow in LibreTracks`} loading="lazy" />
+              {image.endsWith(".webm") ? (
+                <video autoplay loop muted playsinline preload="none" poster="/screenshots/Library-Assets-Import-poster.webp" width="820" height="442" aria-label={`${title} workflow in LibreTracks`}>
+                  <source src={image} type="video/webm" />
+                </video>
+              ) : (
+                <img src={image} alt={`${title} workflow in LibreTracks`} loading="lazy" decoding="async" width={image.includes("Proyecto") ? "1000" : "1100"} height={image.includes("Proyecto") ? "556" : "590"} />
+              )}
               <div>
                 <strong>{title}</strong>
                 <p>{body}</p>
