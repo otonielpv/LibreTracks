@@ -151,7 +151,7 @@ pub fn create_demo_session(app: AppHandle) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libretracks_core::{validate_song, Song, TrackKind};
+    use libretracks_core::{validate_song, MarkerCategory, MarkerKind, Song, TrackKind};
 
     fn shipped_demo_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/demo")
@@ -190,6 +190,18 @@ mod tests {
             .filter_map(|marker| marker.digit)
             .collect();
         assert_eq!(jump_digits, vec![1, 2, 3, 4, 5, 6, 7]);
+        let turnarounds: Vec<_> = song
+            .section_markers
+            .iter()
+            .filter(|marker| marker.kind == MarkerKind::Turnaround)
+            .collect();
+        assert_eq!(turnarounds.len(), 2);
+        assert!(
+            turnarounds
+                .iter()
+                .all(|marker| marker.category() == MarkerCategory::Cue),
+            "los turnarounds de un compas deben encadenarse como avisos"
+        );
         assert!(song.duration_seconds > 120.0);
     }
 
@@ -277,6 +289,30 @@ mod tests {
                 "falta el audio {} en el paquete",
                 clip.file_path
             );
+        }
+    }
+
+    #[test]
+    fn shipped_demo_library_groups_assets_by_song() {
+        let dir = shipped_demo_dir();
+        let raw = fs::read_to_string(dir.join("library.json"))
+            .expect("la demo debe incluir el manifiesto de biblioteca");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&raw).expect("library.json debe ser valido");
+
+        assert_eq!(
+            manifest["folders"],
+            serde_json::json!(["Costa Norte", "Callejón Blues"])
+        );
+        let assets = manifest["assets"]
+            .as_array()
+            .expect("library.json debe declarar sus assets");
+        assert_eq!(assets.len(), 10, "cinco stems por carpeta de cancion");
+        for asset in assets {
+            let path = asset["filePath"].as_str().expect("ruta de asset");
+            let folder = asset["folderPath"].as_str().expect("carpeta de asset");
+            assert!(matches!(folder, "Costa Norte" | "Callejón Blues"));
+            assert!(dir.join(path).is_file(), "falta {path}");
         }
     }
 

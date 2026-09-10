@@ -158,7 +158,7 @@ def main() -> int:
         return 1
 
     audio_dir.mkdir(parents=True, exist_ok=True)
-    regions, clips, markers, tempo_markers = [], [], [], []
+    regions, clips, markers, tempo_markers, library_assets = [], [], [], [], []
     expected = set()
     timeline = 0.0
 
@@ -182,6 +182,10 @@ def main() -> int:
                 check=True,
             )
             expected.add(mp3.relative_to(audio_dir).as_posix())
+            library_assets.append({
+                "filePath": f"audio/{song['slug']}/{track_id}.mp3",
+                "folderPath": song["title"],
+            })
             clips.append({
                 "id": f"clip-{song['slug']}-{track_id}",
                 "trackId": f"track-{track_id}",
@@ -216,7 +220,7 @@ def main() -> int:
             "bpm": song["bpm"],
         })
         for kind, label, bar_number, digit in song["sections"]:
-            markers.append({
+            marker = {
                 # The bar goes in the id: a song can hold two turnarounds, and
                 # kind alone would collide.
                 "id": f"marker-{song['slug']}-{kind}-{bar_number}",
@@ -224,7 +228,15 @@ def main() -> int:
                 "startSeconds": round(timeline + (bar_number - 1) * bar, 3),
                 "digit": digit,
                 "kind": kind,
-            })
+            }
+            if kind == "turnaround":
+                # A one-bar turnaround is too short to behave as a section:
+                # while it is still the "next section", the following marker's
+                # one-bar lead-in has already begun and its spoken name misses
+                # its trigger frame. Keep the musical marker at the exact bar,
+                # but announce it as a cue chained before the following section.
+                marker["categoryOverride"] = "cue"
+            markers.append(marker)
 
         print(f"{song['title']:16s} {song['key']:2s} {song['bpm']:5.0f} BPM  "
               f"{song['bars']:2d} compases  {seconds:5.2f}s  "
@@ -291,6 +303,15 @@ def main() -> int:
     }
     (demo_dir / "song.ltsession").write_text(
         json.dumps(document, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    library_document = {
+        "filePaths": sorted(asset["filePath"] for asset in library_assets),
+        "assets": sorted(library_assets, key=lambda asset: asset["filePath"]),
+        "folders": [song["title"] for song in SONGS],
+    }
+    (demo_dir / "library.json").write_text(
+        json.dumps(library_document, indent=2, ensure_ascii=True) + "\n",
+        encoding="utf-8",
+    )
 
     megabytes = sum(p.stat().st_size for p in audio_dir.rglob("*.mp3")) / 1024 / 1024
     print(f"\n{len(SONGS)} canciones | {len(TRACKS)} pistas "

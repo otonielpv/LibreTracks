@@ -1,0 +1,60 @@
+{
+  "filePaths": [
+    "audio/callejon-blues/acustica.mp3",
+    "audio/callejon-blues/bajo.mp3",
+    "audio/callejon-blues/bateria.mp3",
+    "audio/callejon-blues/electrica.mp3",
+    "audio/callejon-blues/piano.mp3",
+    "audio/costa-norte/acustica.mp3",
+    "audio/costa-norte/bajo.mp3",
+    "audio/costa-norte/bateria.mp3",
+    "audio/costa-norte/electrica.mp3",
+    "audio/costa-norte/piano.mp3"
+  ],
+  "assets": [
+    {
+      "filePath": "audio/callejon-blues/acustica.mp3",
+      "folderPath": "Callej\u00f3n Blues"
+    },
+    {
+      "filePath": "audio/callejon-blues/bajo.mp3",
+      "folderPath": "Callej\u00f3n Blues"
+    },
+    {
+      "filePath": "audio/callejon-blues/bateria.mp3",
+      "folderPath": "Callej\u00f3n Blues"
+    },
+    {
+      "filePath": "audio/callejon-blues/electrica.mp3",
+      "folderPath": "Callej\u00f3n Blues"
+    },
+    {
+      "filePath": "audio/callejon-blues/piano.mp3",
+      "folderPath": "Callej\u00f3n Blues"
+    },
+    {
+      "filePath": "audio/costa-norte/acustica.mp3",
+      "folderPath": "Costa Norte"
+    },
+    {
+      "filePath": "audio/costa-norte/bajo.mp3",
+      "folderPath": "Costa Norte"
+    },
+    {
+      "filePath": "audio/costa-norte/bateria.mp3",
+      "folderPath": "Costa Norte"
+    },
+    {
+      "filePath": "audio/costa-norte/electrica.mp3",
+      "folderPath": "Costa Norte"
+    },
+    {
+      "filePath": "audio/costa-norte/piano.mp3",
+      "folderPath": "Costa Norte"
+    }
+  ],
+  "folders": [
+    "Costa Norte",
+    "Callej\u00f3n Blues"
+  ]
+}

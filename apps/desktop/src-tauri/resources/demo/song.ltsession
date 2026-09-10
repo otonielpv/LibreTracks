@@ -300,7 +300,8 @@
       "name": "Turnaround",
       "startSeconds": 84.333,
       "digit": null,
-      "kind": "turnaround"
+      "kind": "turnaround",
+      "categoryOverride": "cue"
     },
     {
       "id": "marker-callejon-blues-solo-13",
@@ -314,7 +315,8 @@
       "name": "Turnaround",
       "startSeconds": 116.333,
       "digit": null,
-      "kind": "turnaround"
+      "kind": "turnaround",
+      "categoryOverride": "cue"
     },
     {
       "id": "marker-callejon-blues-ending-25",
