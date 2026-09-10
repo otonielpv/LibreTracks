@@ -5314,20 +5314,6 @@ html.lt-ios body {
   gap: 0.2rem;
 }
 
-/* A selected view is persistent state, not a transient hover. Give it the
-   same unmistakable illuminated treatment as the other mobile toggles: the
-   DAW glyph is mostly empty space and the generic grey active background made
-   it look switched off next to the solid snap icon. */
-.lt-view-mode-switcher .lt-icon-button.is-active {
-  background:
-    linear-gradient(180deg, rgba(87, 241, 219, 0.14), rgba(0, 0, 0, 0.04)),
-    rgba(24, 69, 63, 0.92);
-  color: #57f1db;
-  box-shadow:
-    0 0 0 1px rgba(87, 241, 219, 0.32),
-    0 0 18px rgba(87, 241, 219, 0.22);
-}
-
 .lt-compact-action {
   height: 1.9rem;
   display: inline-flex;
@@ -8188,6 +8174,14 @@ html.lt-ios body {
 .lt-android .lt-timeline-meta {
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+/* The horizontal scroller clips shadows at its edges. Its first control was
+   flush enough to the left edge that the active view's teal halo lost that
+   whole side. Reserve only the blur's breathing room; the button itself keeps
+   the same colours and intensity as every other toolbar toggle. */
+.lt-android .lt-timeline-meta > .lt-timeline-controls {
+  padding-left: 0.55rem;
 }
 
 .lt-android .lt-timeline-meta::-webkit-scrollbar {
