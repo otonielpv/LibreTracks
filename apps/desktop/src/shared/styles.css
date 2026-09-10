@@ -2978,6 +2978,44 @@ html.lt-ios body {
   font: 400 12px/1.4 "Space Grotesk", sans-serif;
 }
 
+/* The demo song answers an empty screen: someone who just installed the app
+   has no multitracks yet, and an App Store reviewer has none at all. Accented
+   more than a session row and less than CREATE — it is an invitation, not the
+   main action. Mobile only; desktop ships no `resources/demo`, so on desktop
+   this class is never rendered. */
+.lt-empty-state-demo-song {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgb(87 241 219 / 0.3);
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.08);
+  color: #57f1db;
+  font: 500 12px/1.4 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.lt-empty-state-demo-song:hover {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.14);
+}
+
+/* The copy takes a moment on a phone: say so instead of looking dead. */
+.lt-empty-state-demo-song:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.lt-empty-state-demo-song .material-symbols-outlined {
+  font-size: 18px;
+}
+
 /* Recents rows hold two controls (open the session, drop it from the MRU).
    A button can't nest inside another button, so the <li> itself carries the
    card chrome — border, background, radius — and both children are painted
