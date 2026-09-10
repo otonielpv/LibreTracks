@@ -64,6 +64,21 @@ const limits = [
   "Playback is highly polished on tablet and solves catalogue, preparation and playback in one go. LibreTracks gives you the player; the material and the prep are on you.",
   "If your team is happy on the subscription and nobody wants to touch the rig before Sunday, switching has a real cost in time and learning. Try it midweek, not at a dress rehearsal.",
 ];
+
+const faq = [
+  [
+    "Is there a free alternative to Playback by MultiTracks?",
+    "LibreTracks is a free, open-source alternative when you already have your own stems. It provides the player, click, spoken guide, key changes, MIDI and remote control, but it does not include a licensed song catalogue.",
+  ],
+  [
+    "Does LibreTracks work without a Playback subscription?",
+    "Yes. LibreTracks has no subscription or account and runs locally. Your sessions and audio remain on your device and can be used offline.",
+  ],
+  [
+    "Can a worship team use its own multitracks?",
+    "Yes. Import stems produced by your team, bought elsewhere or exported from a DAW, then configure markers, guide cues, click, song key and audio outputs for the set.",
+  ],
+];
 ---
 
 <AlternativePage
@@ -72,11 +87,14 @@ const limits = [
   title="Free Alternative to Playback by MultiTracks | LibreTracks"
   description="LibreTracks is a free, open-source multitrack player for worship teams: spoken guide vocals, click, key changes and a mobile remote, with no subscription. Plays your own tracks, offline."
   eyebrow="Free Playback alternative"
-  heading="A multitrack player with no monthly fee, running your own tracks"
+  heading="Free Playback by MultiTracks alternative for worship teams"
   intro="Playback solves two things at once: it gives you the multitrack catalogue and it gives you the player. If your team already has its stems — produced, bought, or exported from your own DAW — the only missing piece is the second one. LibreTracks is that second piece: spoken guide vocals, click, key changes, MIDI and a mobile remote, free and open source."
+  heroImage="/screenshots/Voice-Guide-Settings.png"
+  heroAlt="LibreTracks spoken guide vocal settings for live multitrack playback"
   rows={rows}
   strengths={strengths}
   limitsTitle="Where Playback does something we do not"
   limits={limits}
+  faq={faq}
   closing="Take the stems for a song you already play, build the session with its section markers, and try it at a midweek rehearsal. It is free and works offline, so there is nothing to risk."
 />

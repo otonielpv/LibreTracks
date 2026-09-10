@@ -5,6 +5,8 @@ description: Anuncios de sección hablados, avisos dinámicos y conteo de entrad
 
 La **Voz Guia** anuncia la seccion que viene y te da la entrada antes de cada marca, igual que la app Playback de iPad guia a una banda. Cuando el cursor se acerca a una marca con tipo —o cuando un salto programado esta a punto de ejecutarse— una voz dice la seccion ("Coro", "Verso 2", "Puente") y cuenta los beats del compas previo ("1, 2, 3, 4") para que la banda entre junta en el downbeat. Tambien puede dar **avisos dinamicos** —instrucciones cortas habladas como "Sube Intensidad", "Toda La Banda", "Entra Bateria" o "Sube Tono"— en los momentos donde los coloques.
 
+Si vuestro equipo busca un reproductor sin cuota recurrente, consulta cómo encaja este flujo en las guías de [alternativa gratuita a Playback de MultiTracks](/es/alternativa-playback-multitracks/) y [alternativa gratuita a Prime Worship](/es/alternativa-prime-worship/).
+
 Es una senal de **monitoreo**: como el metronomo, la voz no pasa por la cadena de audio de la cancion. Elige su propia salida en configuracion: el bus de monitor legacy, la salida principal o un canal de hardware concreto.
 
 ![Configuracion de la voz guia](/screenshots/Voice-Guide-Settings.png)

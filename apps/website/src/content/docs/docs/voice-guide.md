@@ -5,6 +5,8 @@ description: Spoken section announcements, dynamic cues, and beat count-in befor
 
 The **Voice Guide** speaks the upcoming section and counts you in before each marker, the way the Playback iPad app cues a band. As the playhead approaches a typed marker — or when a scheduled jump is about to fire — a voice announces the section ("Chorus", "Verse 2", "Bridge") and counts the beats of the lead bar ("1, 2, 3, 4") so the band lands together on the downbeat. It can also call out **dynamic cues** — short spoken instructions like "Build", "All In", "Drums In" or "Key Change Up" — at the moments you place them.
 
+For teams evaluating a player without a recurring fee, see how this workflow compares in the [free Playback by MultiTracks alternative](/playback-multitracks-alternative/) and [free Prime Worship alternative](/prime-worship-alternative/) guides.
+
 It is a **monitoring** cue: like the metronome, the voice does not pass through the song's audio chain. Choose its own output in settings: the legacy monitor bus, the main output, or a specific hardware channel.
 
 ![Voice guide settings](/screenshots/Voice-Guide-Settings.png)

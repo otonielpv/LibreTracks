@@ -1,0 +1,95 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+
+const alternatives = [
+  {
+    name: "Ableton Live",
+    href: "/es/alternativa-ableton-live/",
+    fit: "Cuando utilizas Ableton principalmente para lanzar backing tracks ya renderizados en directo.",
+    libre: "LibreTracks importa arrangements .als y aporta canciones, click, voz guía, saltos musicales, MIDI y control remoto.",
+    keep: "Mantén Ableton Live si necesitas grabación, instrumentos, plugins, diseño sonoro o dispositivos de producción en tiempo real.",
+  },
+  {
+    name: "Playback de MultiTracks",
+    href: "/es/alternativa-playback-multitracks/",
+    fit: "Cuando vuestro grupo de alabanza ya posee, compra por separado o produce sus stems.",
+    libre: "LibreTracks es un reproductor gratuito con voz guía en español, click, cambio de tono por canción, MIDI, routing de hardware y funcionamiento offline.",
+    keep: "Mantén Playback si su catálogo integrado de canciones licenciadas es esencial para vuestro flujo.",
+  },
+  {
+    name: "Prime Worship",
+    href: "/es/alternativa-prime-worship/",
+    fit: "Para equipos que necesitan el reproductor, pero no un catálogo mediante suscripción.",
+    libre: "LibreTracks reproduce vuestro audio localmente, guarda el repertorio completo y funciona sin cuenta ni conexión a Internet.",
+    keep: "Mantén Prime si lo más importante es obtener pistas de alabanza licenciadas y listas para usar dentro del mismo servicio.",
+  },
+  {
+    name: "Reaper",
+    href: "/es/alternativa-reaper-directo/",
+    fit: "Cuando el proyecto de Reaper está terminado y prefieres controles de escenario dedicados a mantener una plantilla de directo propia.",
+    libre: "LibreTracks importa proyectos .rpp y convierte regiones y marcas en un repertorio organizado por canciones.",
+    keep: "Mantén Reaper si todavía necesitas grabar, editar, mezclar, ejecutar plugins o personalizar profundamente la sesión de producción.",
+  },
+];
+---
+
+<SiteLayout
+  title="Alternativas gratuitas para reproducir pistas en directo | LibreTracks"
+  description="Compara LibreTracks con Ableton Live, Playback de MultiTracks, Prime Worship y Reaper para lanzar pistas en directo. Gratis, código abierto, offline y para tus propios stems."
+  lang="es"
+>
+  <main>
+    <section class="site-shell hero">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Alternativas gratuitas para directo</p>
+          <h1>Alternativas gratuitas para lanzar backing tracks en directo</h1>
+          <p>LibreTracks es un reproductor multitrack gratuito y de código abierto para bandas, grupos de alabanza y técnicos de directo. Puede sustituir la parte de playback de un rig con Ableton Live, Playback o Prime cuando ya tienes tus propios stems. No sustituye las herramientas de producción musical ni un catálogo de canciones licenciadas.</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href="/es/download/">Descargar gratis</a>
+            <a class="button-link" href="/es/docs/core-concepts/">Ver cómo funciona</a>
+          </div>
+        </div>
+        <div class="product-shot">
+          <img src="/screenshots/Compact-View.png" alt="Repertorio de backing tracks en LibreTracks con canciones, stems y controles de mezcla" />
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">Elige según tu flujo</p>
+          <h2>¿Qué alternativa encaja con tu directo?</h2>
+          <p>La respuesta depende de dónde procede vuestro audio y de si necesitáis funciones de producción o solamente un reproductor fiable para el escenario.</p>
+        </div>
+        <div class="feature-grid alternative-grid">
+          {alternatives.map((alternative) => (
+            <article class="feature-card">
+              <h3>Alternativa a {alternative.name}</h3>
+              <p><strong>Buen encaje:</strong> {alternative.fit}</p>
+              <p>{alternative.libre}</p>
+              <p><strong>Mantén {alternative.name}:</strong> {alternative.keep}</p>
+              <a class="button-link" href={alternative.href}>Comparar con {alternative.name}</a>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell docs-preview">
+        <div class="section-heading">
+          <p class="eyebrow">Lo que permanece gratis</p>
+          <h2>Sin suscripción, cuenta ni formato de proyecto cerrado.</h2>
+          <p>LibreTracks usa la licencia AGPL-3.0. La aplicación funciona localmente en Windows, macOS, Linux y Android, y reproduce sin conexión el audio que tú aportas.</p>
+        </div>
+        <div class="docs-list">
+          <article><strong>Para el escenario</strong><p>Stems por canción, click, voz guía, marcas, saltos, Vamp, transiciones, MIDI y salidas de audio configurables.</p></article>
+          <article><strong>Para tu material</strong><p>Importa audio directamente o usa un proyecto .rpp de Reaper o .als de Ableton como punto de partida para el directo.</p></article>
+          <article><strong>Para todo el equipo</strong><p>Controla transporte, marcas y mezcla desde un móvil o tablet en la red local.</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+</SiteLayout>

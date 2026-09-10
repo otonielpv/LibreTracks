@@ -64,6 +64,21 @@ const limits = [
   "Playback está muy pulido en tablet y resuelve la parte de catálogo, preparación y reproducción de una sola vez. LibreTracks te da el reproductor; el material y la preparación corren de tu cuenta.",
   "Si tu equipo funciona bien con la suscripción y nadie quiere tocar el sistema antes del domingo, cambiar tiene un coste real de tiempo y de aprendizaje. Pruébalo entre semana, no en un ensayo general.",
 ];
+
+const faq = [
+  [
+    "¿Existe una alternativa gratuita a Playback de MultiTracks?",
+    "LibreTracks es una alternativa gratuita y de código abierto si ya tienes tus propios stems. Incluye reproductor, click, voz guía, cambios de tono, MIDI y control remoto, pero no un catálogo de canciones licenciadas.",
+  ],
+  [
+    "¿LibreTracks funciona sin una suscripción a Playback?",
+    "Sí. No requiere suscripción ni cuenta y funciona localmente. Tus sesiones y audios permanecen en tu dispositivo y puedes reproducirlos sin conexión.",
+  ],
+  [
+    "¿Puede un grupo de alabanza usar sus propios multitracks?",
+    "Sí. Importa stems producidos por el grupo, comprados por separado o exportados desde una DAW y configura marcas, avisos, click, tonalidad y salidas de audio para el repertorio.",
+  ],
+];
 ---
 
 <AlternativePage
@@ -72,11 +87,14 @@ const limits = [
   title="Alternativa gratuita a Playback de MultiTracks | LibreTracks"
   description="LibreTracks es un reproductor multitrack gratuito y de código abierto para grupos de alabanza: voz guía en español, click, cambio de tono y control remoto, sin suscripción. Reproduce tus propias pistas."
   eyebrow="Alternativa gratuita a Playback"
-  heading="Un reproductor multitrack sin cuota mensual, con tus propias pistas"
+  heading="Alternativa gratuita a Playback de MultiTracks para grupos de alabanza"
   intro="Playback resuelve dos cosas a la vez: te da el catálogo de multitracks y te da el reproductor. Si tu equipo ya tiene sus pistas —producidas, compradas o exportadas de vuestra DAW—, lo único que os falta es la segunda parte. LibreTracks es esa segunda parte: voz guía en español, click, cambio de tono, MIDI y control remoto, gratis y en código abierto."
+  heroImage="/screenshots/Voice-Guide-Settings.png"
+  heroAlt="Configuración de la voz guía hablada de LibreTracks para playback multitrack"
   rows={rows}
   strengths={strengths}
   limitsTitle="Dónde Playback hace algo que nosotros no"
   limits={limits}
+  faq={faq}
   closing="Coge las pistas de una canción que ya toquéis, monta la sesión con sus marcas de sección y pruébalo en un ensayo entre semana. Es gratis y funciona sin conexión, así que no arriesgas nada."
 />

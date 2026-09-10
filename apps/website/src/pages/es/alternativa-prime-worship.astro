@@ -64,6 +64,21 @@ const limits = [
   "Un servicio de suscripción trae soporte y todo integrado. Aquí el soporte es la documentación, el repositorio en GitHub y el grupo de la comunidad.",
   "El cambio tiene un coste de aprendizaje real. Probadlo en un ensayo entre semana antes de llevarlo a un domingo.",
 ];
+
+const faq = [
+  [
+    "¿Existe una alternativa gratuita a Prime para reproducir multitracks?",
+    "LibreTracks es gratis y de código abierto e incluye reproducción multitrack, click, voz guía, cambio de tono, MIDI y control remoto. Encaja cuando el equipo ya produce o posee sus stems.",
+  ],
+  [
+    "¿LibreTracks incluye canciones de alabanza?",
+    "No. LibreTracks es el reproductor, no un catálogo musical. El equipo aporta los audios que haya creado u obtenido con los derechos correspondientes.",
+  ],
+  [
+    "¿LibreTracks funciona sin conexión durante una reunión?",
+    "Sí. La aplicación, los proyectos y los audios funcionan localmente después de instalarla. No necesitas cuenta ni conexión a Internet para reproducir el repertorio.",
+  ],
+];
 ---
 
 <AlternativePage
@@ -72,11 +87,14 @@ const limits = [
   title="Alternativa gratuita a Prime Worship | LibreTracks"
   description="LibreTracks es un reproductor multitrack gratuito y de código abierto para equipos de alabanza: voz guía en español, click, cambio de tono, MIDI y control remoto, sin suscripción y sin conexión."
   eyebrow="Alternativa gratuita a Prime"
-  heading="Reproductor multitrack para el equipo de alabanza, sin suscripción"
+  heading="Alternativa gratuita a Prime Worship para reproducir multitracks"
   intro="Prime junta el catálogo de canciones y el reproductor en un mismo servicio de pago. Si vuestro equipo ya tiene sus propias pistas, lo que necesitáis es solo el reproductor. LibreTracks lo es: voz guía hablada en español, click, cambio de tono por canción, MIDI y control remoto desde el móvil, gratis y funcionando sin conexión."
+  heroImage="/screenshots/Live-View-Phone.png"
+  heroAlt="Controles de LibreTracks para un repertorio de alabanza desde el móvil"
   rows={rows}
   strengths={strengths}
   limitsTitle="Dónde Prime cubre algo que nosotros no"
   limits={limits}
+  faq={faq}
   closing="Montad una canción que ya toquéis, colocad sus marcas de sección y probadlo en un ensayo. No hay cuenta que crear ni periodo de prueba que caduque."
 />

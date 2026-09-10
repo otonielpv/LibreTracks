@@ -248,6 +248,24 @@ h1 {
   line-height: 1.55;
 }
 
+.alternative-grid .feature-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.alternative-grid h3 {
+  margin: 0;
+  color: #f3f0ef;
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.alternative-grid .button-link {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
 .usage-stats {
   display: grid;
   gap: 1rem;
@@ -988,6 +1006,19 @@ h1 {
 .docs-list {
   display: grid;
   gap: 0.75rem;
+}
+
+.faq-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 0.75rem;
+}
+
+.faq-list h3 {
+  margin: 0 0 0.55rem;
+  color: #f3f0ef;
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 .compare-table {

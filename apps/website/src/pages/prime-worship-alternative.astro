@@ -64,6 +64,21 @@ const limits = [
   "A subscription service comes with support and everything integrated. Here, support is the documentation, the GitHub repository and the community group.",
   "Switching has a real learning cost. Try it at a midweek rehearsal before taking it to a Sunday.",
 ];
+
+const faq = [
+  [
+    "Is there a free alternative to Prime for worship playback?",
+    "LibreTracks is free and open source and covers multitrack playback, click, spoken guide, key changes, MIDI and remote control. It is a fit when your team already owns or produces its stems.",
+  ],
+  [
+    "Does LibreTracks include worship songs?",
+    "No. LibreTracks is the playback application, not a music catalogue. You bring audio that your team has created or obtained with the appropriate rights.",
+  ],
+  [
+    "Can LibreTracks run offline during a service?",
+    "Yes. The application, projects and audio run locally after installation. No account or internet connection is required for playback.",
+  ],
+];
 ---
 
 <AlternativePage
@@ -72,11 +87,14 @@ const limits = [
   title="Free Alternative to Prime Worship | LibreTracks"
   description="LibreTracks is a free, open-source multitrack player for worship teams: spoken guide vocals, click, key changes, MIDI and a mobile remote — no subscription, works offline."
   eyebrow="Free Prime alternative"
-  heading="A multitrack player for the worship team, without the subscription"
+  heading="Free Prime Worship alternative for multitrack playback"
   intro="Prime bundles the song catalogue and the player into one paid service. If your team already has its own stems, the player is all you need. LibreTracks is exactly that: spoken guide vocals, click, per-song key changes, MIDI and a mobile remote — free, open source and working offline."
+  heroImage="/screenshots/Live-View-Phone.png"
+  heroAlt="LibreTracks live worship set controls on a phone"
   rows={rows}
   strengths={strengths}
   limitsTitle="Where Prime covers something we do not"
   limits={limits}
+  faq={faq}
   closing="Build one song you already play, drop in its section markers and try it at a rehearsal. There is no account to create and no trial to expire."
 />

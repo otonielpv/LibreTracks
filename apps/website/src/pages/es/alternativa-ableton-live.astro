@@ -64,6 +64,21 @@ const limits = [
   "Si ya tienes Live pagado y montado, y te funciona, cambiar solo por ahorrar no compensa. Esta página es para quien está empezando, para quien usa Live únicamente como reproductor de pistas, o para quien necesita montar un segundo equipo sin pagar otra licencia.",
   "La importación conserva la estructura útil para el directo —clips, pistas, tempo, compás y locators—, no cada detalle interno del Set. Revisa el resultado antes de tocar con él.",
 ];
+
+const faq = [
+  [
+    "¿LibreTracks es una alternativa a Ableton Live completamente gratuita?",
+    "LibreTracks es gratis y de código abierto, sin cuenta ni suscripción. Sustituye la parte de reproducción de pistas en directo, no las herramientas de grabación, instrumentos, plugins o producción de Ableton Live.",
+  ],
+  [
+    "¿Puedo usar LibreTracks para lanzar backing tracks en directo?",
+    "Sí. Está diseñado para trabajar con stems por canción, salidas independientes de click y voz guía, marcas de sección, saltos musicales, MIDI y control remoto desde móvil o tablet.",
+  ],
+  [
+    "¿LibreTracks puede abrir un Set de Ableton?",
+    "Sí. Importa los clips de audio del Arrangement, recrea las pistas, convierte los locators en marcas de sección e importa tempo y compás. Los instrumentos y efectos de Live deben renderizarse primero como audio.",
+  ],
+];
 ---
 
 <AlternativePage
@@ -72,11 +87,14 @@ const limits = [
   title="Alternativa gratuita a Ableton Live para directo | LibreTracks"
   description="¿Usas Ableton Live solo para lanzar pistas en directo? LibreTracks es un reproductor multitrack gratuito y de código abierto que importa tus Sets .als y añade click, voz guía, cambio de tono y control remoto."
   eyebrow="Alternativa gratuita a Ableton Live"
-  heading="Si solo usas Ableton Live para lanzar pistas, esto pesa mucho menos"
+  heading="Alternativa gratuita a Ableton Live para pistas en directo"
   intro="Mucha gente paga una licencia de Live y acaba usando una fracción mínima: poner pistas en la Session View y darle al play en el concierto. LibreTracks hace exactamente esa parte —pistas por canción, click, voz guía, cambio de tono, MIDI y control remoto— gratis, en código abierto, y sabe abrir tus archivos .als."
+  heroImage="/screenshots/Proyecto.png"
+  heroAlt="Arrangement de Ableton importado en el timeline multitrack de LibreTracks"
   rows={rows}
   strengths={strengths}
   limitsTitle="Dónde Ableton Live sigue siendo la elección correcta"
   limits={limits}
+  faq={faq}
   closing="Importa un Set que ya tengas, coloca las marcas de sección y prueba a saltar entre ellas con la banda. Si no te convence, no has perdido más que un rato: no hay licencia ni cuenta de por medio."
 />

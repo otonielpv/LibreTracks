@@ -64,6 +64,21 @@ const limits = [
   "If you already own Live and your rig works, switching purely to save money is not worth it. This page is for people starting out, people who use Live only as a track player, or anyone building a second rig without buying another licence.",
   "The importer keeps what matters live — clips, tracks, tempo, time signature and locators — not every internal detail of the Set. Check the result before you gig with it.",
 ];
+
+const faq = [
+  [
+    "Is LibreTracks a completely free Ableton Live alternative?",
+    "LibreTracks is free and open source, with no account or subscription. It replaces the live backing-track part of an Ableton rig, not Live's recording, instruments, plugins or production tools.",
+  ],
+  [
+    "Can I use LibreTracks for backing tracks at a live show?",
+    "Yes. It is designed around song stems, click and spoken guide outputs, section markers, musical jumps, MIDI control and a phone or tablet remote.",
+  ],
+  [
+    "Can LibreTracks open an Ableton Live Set?",
+    "Yes. It imports audio clips from the Arrangement, recreates tracks, converts locators into section markers and brings across tempo and time-signature data. Live instruments and effects must be rendered to audio first.",
+  ],
+];
 ---
 
 <AlternativePage
@@ -72,11 +87,14 @@ const limits = [
   title="Free Ableton Live Alternative for Live Playback | LibreTracks"
   description="Using Ableton Live just to fire backing tracks? LibreTracks is a free, open-source multitrack player that imports your .als Sets and adds click, guide vocals, key changes and a mobile remote."
   eyebrow="Free Ableton Live alternative"
-  heading="If you only use Ableton Live to fire tracks, this is a lot lighter"
+  heading="Free Ableton Live alternative for live backing tracks"
   intro="Plenty of bands buy a Live licence and end up using a sliver of it: load the stems into Session View and hit play at the gig. LibreTracks does exactly that part — per-song stems, click, guide vocals, key changes, MIDI and a mobile remote — for free, in the open, and it reads your .als files."
+  heroImage="/screenshots/Proyecto.png"
+  heroAlt="Ableton arrangement imported into the LibreTracks multitrack timeline"
   rows={rows}
   strengths={strengths}
   limitsTitle="Where Ableton Live is still the right call"
   limits={limits}
+  faq={faq}
   closing="Import a Set you already have, drop in the section markers and try jumping between them with the band. If it does not click, you have lost an afternoon and nothing else — there is no licence or account involved."
 />

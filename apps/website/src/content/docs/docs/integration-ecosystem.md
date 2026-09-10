@@ -25,6 +25,8 @@ For day-to-day prep, the session can also accept external drops more directly: a
 
 Use `File` -> `Import Reaper/Ableton` to convert an external DAW project into LibreTracks instead of exporting every stem and rebuilding the set manually. LibreTracks currently accepts Reaper `.rpp` files and Ableton Live `.als` files.
 
+If the production session is finished and you only need its playback structure on stage, see the detailed [free Ableton Live alternative for backing tracks](/ableton-live-alternative/) and [Reaper alternative for live playback](/reaper-live-alternative/) comparisons.
+
 When importing into an open session, the project is appended after the current setlist. From the empty start screen, `Import Reaper/Ableton` first asks for the external project, then asks where to save the new LibreTracks `.ltsession`.
 
 You can also drag a single `.rpp` or `.als` from the operating system onto the timeline. The imported project tries to land at the drop position; if that would overlap an existing song, LibreTracks places it after the setlist. Dropping a Reaper/Ableton project onto the Compact View strip imports it as a new song at the end.

@@ -16,6 +16,8 @@ interface Props {
   eyebrow: string;
   heading: string;
   intro: string;
+  heroImage?: string;
+  heroAlt?: string;
   /** [need, rival's approach, LibreTracks' approach] */
   rows: string[][];
   /** Points in LibreTracks' favour: [title, body] */
@@ -23,6 +25,8 @@ interface Props {
   /** Honest limits: cases where the rival is the right pick. */
   limitsTitle: string;
   limits: string[];
+  /** Search questions answered in plain language: [question, answer]. */
+  faq?: string[][];
   /** Closing paragraph before the download CTA. */
   closing: string;
 }
@@ -35,10 +39,13 @@ const {
   eyebrow,
   heading,
   intro,
+  heroImage = "/screenshots/Compact-View.png",
+  heroAlt,
   rows,
   strengths,
   limitsTitle,
   limits,
+  faq = [],
   closing,
 } = Astro.props;
 
@@ -54,6 +61,8 @@ const t = isSpanish
       compareEyebrow: "Comparativa",
       compareHeading: `LibreTracks y ${rival}, lado a lado`,
       limitsEyebrow: "Sé realista",
+      faqEyebrow: "Preguntas frecuentes",
+      faqHeading: `Preguntas sobre LibreTracks como alternativa a ${rival}`,
       closingEyebrow: "Pruébalo",
       closingHeading: "Descárgalo y monta un set en una tarde",
     }
@@ -66,6 +75,8 @@ const t = isSpanish
       compareEyebrow: "Comparison",
       compareHeading: `LibreTracks and ${rival}, side by side`,
       limitsEyebrow: "Being realistic",
+      faqEyebrow: "Frequently asked questions",
+      faqHeading: `Questions about LibreTracks and ${rival}`,
       closingEyebrow: "Try it",
       closingHeading: "Download it and build a set this afternoon",
     };
@@ -86,14 +97,33 @@ const t = isSpanish
         </div>
         <div class="product-shot">
           <img
-            src="/screenshots/Compact-View.png"
-            alt={isSpanish
+            src={heroImage}
+            alt={heroAlt ?? (isSpanish
               ? "Vista Compacta de LibreTracks con una columna por canción"
-              : "LibreTracks Compact View with one column per song"}
+              : "LibreTracks Compact View with one column per song")}
           />
         </div>
       </div>
     </section>
+
+    {faq.length > 0 && (
+      <section class="band">
+        <div class="site-shell">
+          <div class="section-heading">
+            <p class="eyebrow">{t.faqEyebrow}</p>
+            <h2>{t.faqHeading}</h2>
+          </div>
+          <div class="faq-list">
+            {faq.map(([question, answer]) => (
+              <article class="feature-card">
+                <h3>{question}</h3>
+                <p>{answer}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    )}
 
     <section class="band">
       <div class="site-shell">
