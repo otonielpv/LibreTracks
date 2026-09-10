@@ -621,6 +621,10 @@ const es = {
         "Este formato de audio no es compatible. Convierte el archivo a WAV, FLAC, MP3, OGG, M4A o AAC.",
       audioDecodeFailed:
         "LibreTracks no pudo decodificar este audio. Puede estar dañado o usar un códec no compatible.",
+      importSkippedFiles_one:
+        "Se importó todo menos {{files}}, que no se pudo leer.",
+      importSkippedFiles_other:
+        "Se importó todo menos {{count}} archivos, que no se pudieron leer: {{files}}.",
       invalidPlaybackPosition:
         "Esa posición de reproducción no es válida. Coloca el cursor dentro del timeline y vuelve a intentarlo.",
       invalidVampRange:

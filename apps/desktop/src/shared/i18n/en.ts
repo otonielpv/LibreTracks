@@ -602,6 +602,10 @@ const en = {
         "This audio format is not supported. Convert the file to WAV, FLAC, MP3, OGG, M4A or AAC.",
       audioDecodeFailed:
         "LibreTracks could not decode this audio file. The file may be damaged or use an unsupported codec.",
+      importSkippedFiles_one:
+        "Imported everything except {{files}}, which could not be read.",
+      importSkippedFiles_other:
+        "Imported everything except {{count}} files, which could not be read: {{files}}.",
       invalidPlaybackPosition:
         "That playback position is invalid. Move the cursor inside the timeline and try again.",
       invalidVampRange:

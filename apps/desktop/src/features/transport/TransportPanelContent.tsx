@@ -419,7 +419,10 @@ import {
 import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
 import { createLibraryHandlers } from "./library/libraryHandlers";
-import { runAudioImportPipeline } from "./library/importPipeline";
+import {
+  runAudioImportPipeline,
+  skippedImportsMessage,
+} from "./library/importPipeline";
 import {
   createLibraryDragDrop,
   type LibraryDragDropDeps,
@@ -2369,7 +2372,7 @@ export function TransportPanelContent() {
             const importedAssets = await importStagedAudioFiles([
               stagedPayload,
             ]);
-            const relocated = importedAssets[0];
+            const relocated = importedAssets.assets[0];
             if (!relocated) {
               return;
             }
@@ -3891,17 +3894,21 @@ export function TransportPanelContent() {
         const nativePayloads = isTauriApp
           ? resolveNativeAudioImportPayloads(accepted)
           : null;
-        let importedAssets: LibraryAssetSummary[] = [];
-        if (nativePayloads) {
-          importedAssets = await importAudioFilesFromPaths(nativePayloads);
-        } else {
-          const byteloads = await Promise.all(
-            accepted.map(async (file) => ({
-              fileName: file.name,
-              bytes: new Uint8Array(await file.arrayBuffer()),
-            })),
-          );
-          importedAssets = await importAudioFilesFromBytes(byteloads);
+        const importResult = nativePayloads
+          ? await importAudioFilesFromPaths(nativePayloads)
+          : await importAudioFilesFromBytes(
+              await Promise.all(
+                accepted.map(async (file) => ({
+                  fileName: file.name,
+                  bytes: new Uint8Array(await file.arrayBuffer()),
+                })),
+              ),
+            );
+        const importedAssets = importResult.assets;
+        // A file the decoder cannot read no longer sinks the whole drop, so
+        // the ones it did skip have to be named or they vanish silently.
+        if (importResult.skipped.length) {
+          setStatus(skippedImportsMessage(importResult.skipped, t));
         }
         mergeLibraryAssets(importedAssets);
         await refreshLibraryState({ preserveAssets: importedAssets });

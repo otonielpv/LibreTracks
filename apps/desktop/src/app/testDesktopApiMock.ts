@@ -1147,7 +1147,7 @@ export const testDesktopApiMock = {
     }
 
     state.libraryAssets = sortLibraryAssets(state.libraryAssets);
-    return clone(importedAssets);
+    return clone({ assets: importedAssets, skipped: [] });
   },
   importAudioFilesFromBytes: async (
     files: Array<{ fileName: string; bytes: Uint8Array | number[] }>,
@@ -1177,7 +1177,7 @@ export const testDesktopApiMock = {
     }
 
     state.libraryAssets = sortLibraryAssets(state.libraryAssets);
-    return clone(importedAssets);
+    return clone({ assets: importedAssets, skipped: [] });
   },
   exportRegionAsPackage: async (_regionId: string) => {},
   importSongPackage: async (_packagePath: string, _insertAtSeconds: number) => {

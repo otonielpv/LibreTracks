@@ -49,6 +49,10 @@ type TransportStore = {
   ) => void;
   removePendingAudioImports: (ids: string[]) => void;
   markPendingAudioImportsFailed: (ids: string[], error: string) => void;
+  /** Drop the placeholders of imports that already failed. They survive until
+   * the user acknowledges the dialog, so a new import has to sweep them or the
+   * old failure keeps being reported alongside the new one. */
+  clearFailedPendingAudioImports: () => void;
 };
 
 export function meterDictionaryFromLevels(
@@ -257,6 +261,17 @@ export const useTransportStore = create<TransportStore>()(
           (item) => !idSet.has(item.id),
         ),
       }));
+    },
+    clearFailedPendingAudioImports: () => {
+      set((state) =>
+        state.pendingAudioImports.some((item) => item.status === "failed")
+          ? {
+              pendingAudioImports: state.pendingAudioImports.filter(
+                (item) => item.status !== "failed",
+              ),
+            }
+          : state,
+      );
     },
     markPendingAudioImportsFailed: (ids, error) => {
       if (!ids.length) {

@@ -578,6 +578,21 @@ export type LibraryAssetSummary = {
   folderPath?: string | null;
 };
 
+/** One file an import could not read, and why. The rest of the batch still
+ * went in: an unsupported file must not cost the user the other twenty-four. */
+export type SkippedImport = {
+  fileName: string;
+  sourcePath: string;
+  reason: string;
+};
+
+/** What an audio import produced: what went in, and what was left out.
+ * `skipped` is empty on a clean import. */
+export type LibraryImportResult = {
+  assets: LibraryAssetSummary[];
+  skipped: SkippedImport[];
+};
+
 export type SongPackageImportResponse = {
   snapshot: TransportSnapshot;
   libraryAssets: LibraryAssetSummary[];
@@ -1441,6 +1456,8 @@ export type SessionExportProgressEvent = {
 
 export type LibraryImportCompleteEvent = {
   assets: LibraryAssetSummary[] | null;
+  /** Files that could not be read. Not an `error`: the rest did import. */
+  skipped?: SkippedImport[];
   error: string | null;
 };
 

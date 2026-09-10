@@ -43,11 +43,21 @@ pub struct ImportedAudioFile {
     pub duration_seconds: f64,
 }
 
+/// A file the import could not read, and why. An import reports these next to
+/// what it DID import: one unreadable file used to abort the whole batch, which
+/// is the worst outcome when the other twenty-four stems are fine.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkippedImportFile {
+    pub source_path: PathBuf,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportedSong {
     pub song_dir: PathBuf,
     pub song: Song,
     pub imported_files: Vec<ImportedAudioFile>,
+    pub skipped: Vec<SkippedImportFile>,
     pub metrics: ImportOperationMetrics,
 }
 
@@ -62,12 +72,14 @@ pub struct ImportedLibraryAsset {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportLibraryAssetsResult {
     pub assets: Vec<ImportedLibraryAsset>,
+    pub skipped: Vec<SkippedImportFile>,
     pub metrics: ImportOperationMetrics,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppendWavFilesResult {
     pub song: Song,
+    pub skipped: Vec<SkippedImportFile>,
     pub metrics: ImportOperationMetrics,
 }
 
@@ -161,11 +173,12 @@ pub fn import_wav_files_to_library(
     metrics.copy_millis = 0;
     announce_probe_progress(audio_files, &mut on_progress);
     let planned_files = plan_import_files(audio_files)?;
-    let (imported_files, analysis_metrics) =
-        analyze_import_files_in_parallel(song_dir, planned_files)?;
-    merge_import_metrics(&mut metrics, &analysis_metrics);
+    let batch = analyze_import_files_in_parallel(song_dir, planned_files)?;
+    batch.require_any_readable()?;
+    merge_import_metrics(&mut metrics, &batch.metrics);
 
-    let assets = imported_files
+    let assets = batch
+        .analyzed
         .into_iter()
         .map(|file| ImportedLibraryAsset {
             source_path: file.source_path,
@@ -175,7 +188,11 @@ pub fn import_wav_files_to_library(
         })
         .collect();
 
-    Ok(ImportLibraryAssetsResult { assets, metrics })
+    Ok(ImportLibraryAssetsResult {
+        assets,
+        skipped: batch.skipped,
+        metrics,
+    })
 }
 
 pub fn import_wav_song(
@@ -193,9 +210,11 @@ pub fn import_wav_song(
     metrics.copy_millis = 0;
     announce_probe_progress(&request.wav_files, &mut on_progress);
     let planned_files = plan_import_files(&request.wav_files)?;
-    let (analyzed_files, analysis_metrics) =
-        analyze_import_files_in_parallel(&song_dir, planned_files)?;
-    merge_import_metrics(&mut metrics, &analysis_metrics);
+    let batch = analyze_import_files_in_parallel(&song_dir, planned_files)?;
+    batch.require_any_readable()?;
+    merge_import_metrics(&mut metrics, &batch.metrics);
+    let analyzed_files = batch.analyzed;
+    let skipped_files = batch.skipped;
 
     let mut imported_files = Vec::with_capacity(analyzed_files.len());
     let mut duration_seconds = 0.0_f64;
@@ -292,6 +311,7 @@ pub fn import_wav_song(
         song_dir,
         song,
         imported_files,
+        skipped: skipped_files,
         metrics,
     })
 }
@@ -316,11 +336,12 @@ pub fn append_wav_files_to_song(
     metrics.copy_millis = 0;
     announce_probe_progress(audio_files, &mut on_progress);
     let planned_files = plan_import_files(audio_files)?;
-    let (analyzed_files, analysis_metrics) =
-        analyze_import_files_in_parallel(song_dir, planned_files)?;
-    merge_import_metrics(&mut metrics, &analysis_metrics);
+    let batch = analyze_import_files_in_parallel(song_dir, planned_files)?;
+    batch.require_any_readable()?;
+    merge_import_metrics(&mut metrics, &batch.metrics);
+    let skipped_files = batch.skipped;
 
-    for analyzed_file in analyzed_files {
+    for analyzed_file in batch.analyzed {
         let stem = analyzed_file
             .source_path
             .file_stem()
@@ -376,6 +397,7 @@ pub fn append_wav_files_to_song(
     validate_song(&next_song)?;
     Ok(AppendWavFilesResult {
         song: next_song,
+        skipped: skipped_files,
         metrics,
     })
 }
@@ -432,12 +454,16 @@ fn announce_probe_progress(audio_files: &[PathBuf], on_progress: &mut impl FnMut
     }
 }
 
+/// Read every planned file, keeping the ones that work and describing the ones
+/// that do not. Nothing in here fails the batch: deciding what to do with an
+/// import where NOTHING could be read belongs to the caller, which is the only
+/// level that knows whether a song with no audio is worth creating.
 fn analyze_import_files_in_parallel(
     _song_dir: &Path,
     planned_files: Vec<PlannedImportFile>,
-) -> Result<(Vec<AnalyzedImportFile>, ImportOperationMetrics), ProjectError> {
+) -> Result<AnalyzedImportBatch, ProjectError> {
     if planned_files.is_empty() {
-        return Ok((Vec::new(), ImportOperationMetrics::default()));
+        return Ok(AnalyzedImportBatch::default());
     }
 
     let worker_count = planned_files.len().min(
@@ -451,37 +477,74 @@ fn analyze_import_files_in_parallel(
         ..ImportOperationMetrics::default()
     };
     let mut analyzed_files = Vec::new();
+    let mut skipped_files = Vec::new();
     let mut collected_results = planned_files
         .into_par_iter()
         .map(|next_file| {
             let analysis_started_at = Instant::now();
-            let metadata = read_audio_metadata(&next_file.source_path)?;
+            let metadata = read_audio_metadata(&next_file.source_path);
             let wav_analysis_millis = analysis_started_at.elapsed().as_millis();
             let waveform_write_millis = 0;
 
-            Ok((
+            (
                 next_file,
                 metadata,
                 wav_analysis_millis,
                 waveform_write_millis,
-            ))
+            )
         })
-        .collect::<Result<Vec<_>, ProjectError>>()?;
+        .collect::<Vec<_>>();
     collected_results.sort_by_key(|(planned, _, _, _)| planned.index);
 
     for (planned_file, metadata, wav_analysis_millis, waveform_write_millis) in collected_results {
         metrics.wav_analysis_millis += wav_analysis_millis;
         metrics.waveform_write_millis += waveform_write_millis;
-        analyzed_files.push(AnalyzedImportFile {
-            index: planned_file.index,
-            source_path: planned_file.source_path,
-            imported_relative_path: planned_file.imported_relative_path,
-            metadata,
-        });
+        match metadata {
+            Ok(metadata) => analyzed_files.push(AnalyzedImportFile {
+                index: planned_file.index,
+                source_path: planned_file.source_path,
+                imported_relative_path: planned_file.imported_relative_path,
+                metadata,
+            }),
+            Err(error) => skipped_files.push(SkippedImportFile {
+                source_path: planned_file.source_path,
+                reason: error.to_string(),
+            }),
+        }
     }
 
     analyzed_files.sort_by_key(|file| file.index);
-    Ok((analyzed_files, metrics))
+    Ok(AnalyzedImportBatch {
+        analyzed: analyzed_files,
+        skipped: skipped_files,
+        metrics,
+    })
+}
+
+/// What `analyze_import_files_in_parallel` produced: the readable files, the
+/// ones that were left out, and the timing for the whole pass.
+#[derive(Debug, Default)]
+struct AnalyzedImportBatch {
+    analyzed: Vec<AnalyzedImportFile>,
+    skipped: Vec<SkippedImportFile>,
+    metrics: ImportOperationMetrics,
+}
+
+impl AnalyzedImportBatch {
+    /// An import that read nothing is a failure, and it has to arrive as the
+    /// reason the FIRST file was rejected rather than as an empty success the
+    /// user has to notice on their own.
+    fn require_any_readable(&self) -> Result<(), ProjectError> {
+        if self.analyzed.is_empty() {
+            if let Some(first) = self.skipped.first() {
+                return Err(ProjectError::UnsupportedAudioFormat {
+                    path: first.source_path.clone(),
+                });
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn merge_import_metrics(target: &mut ImportOperationMetrics, source: &ImportOperationMetrics) {

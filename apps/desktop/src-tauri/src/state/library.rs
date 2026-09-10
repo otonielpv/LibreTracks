@@ -17,7 +17,7 @@ use libretracks_project::{
 use serde::{Deserialize, Serialize};
 
 use crate::infra::error::DesktopError;
-use crate::models::LibraryAssetSummary;
+use crate::models::{LibraryAssetSummary, LibraryImportResult, SkippedImport};
 
 use super::{
     decoding_cache_root, resolve_audio_file_path, slugify, AudioFileImportPayload,
@@ -74,7 +74,7 @@ impl DesktopSession {
     pub fn import_audio_files_from_bytes(
         &mut self,
         files: &[AudioFileImportPayload],
-    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    ) -> Result<LibraryImportResult, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         import_audio_files_from_bytes_to_library(&song_dir, self.engine.song(), files)
     }
@@ -83,7 +83,7 @@ impl DesktopSession {
     pub fn import_audio_files_from_paths(
         &mut self,
         files: &[AudioFilePathImportPayload],
-    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    ) -> Result<LibraryImportResult, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         import_audio_files_from_paths_to_library(&song_dir, self.engine.song(), files)
     }
@@ -597,7 +597,7 @@ pub fn import_audio_files_from_bytes_to_library(
     song_dir: &Path,
     song: Option<&Song>,
     files: &[AudioFileImportPayload],
-) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+) -> Result<LibraryImportResult, DesktopError> {
     if files.is_empty() {
         return Err(DesktopError::AudioCommand(
             "at least one audio file is required".into(),
@@ -610,6 +610,7 @@ pub fn import_audio_files_from_bytes_to_library(
     let mut written_paths = Vec::with_capacity(files.len());
     let import_result = (|| {
         let mut imported_assets = Vec::with_capacity(files.len());
+        let mut skipped = Vec::new();
         let mut reserved_paths = collect_library_file_paths(song_dir, song)?
             .into_iter()
             .collect::<HashSet<_>>();
@@ -623,7 +624,23 @@ pub fn import_audio_files_from_bytes_to_library(
             fs::write(&absolute_path, &file.bytes)?;
             written_paths.push(absolute_path.clone());
 
-            let metadata = read_audio_metadata(&absolute_path)?;
+            // Same rule as the path import: skip what cannot be read instead of
+            // losing the whole batch. The bytes are already on disk here, so the
+            // copy has to go back out too — leaving it would put a file in the
+            // session that nothing can open.
+            let metadata = match read_audio_metadata(&absolute_path) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    skipped.push(skipped_import(
+                        absolute_path.to_string_lossy().as_ref(),
+                        &file.file_name,
+                        &error,
+                    ));
+                    written_paths.retain(|path| path != &absolute_path);
+                    let _ = fs::remove_file(&absolute_path);
+                    continue;
+                }
+            };
             let file_name = Path::new(&relative_path)
                 .file_name()
                 .and_then(|value| value.to_str())
@@ -657,7 +674,7 @@ pub fn import_audio_files_from_bytes_to_library(
                 .then_with(|| left.file_name.cmp(&right.file_name))
         });
         write_library_manifest_assets(song_dir, &library_assets)?;
-        Ok::<Vec<LibraryAssetSummary>, DesktopError>(imported_assets)
+        finish_library_import(imported_assets, skipped)
     })();
 
     if import_result.is_err() {
@@ -684,7 +701,7 @@ pub fn import_staged_audio_files_to_library(
     song_dir: &Path,
     song: Option<&Song>,
     files: &[AudioFilePathImportPayload],
-) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+) -> Result<LibraryImportResult, DesktopError> {
     if files.is_empty() {
         return Err(DesktopError::AudioCommand(
             "at least one audio file is required".into(),
@@ -697,6 +714,7 @@ pub fn import_staged_audio_files_to_library(
     let mut written_paths = Vec::with_capacity(files.len());
     let import_result = (|| {
         let mut imported_assets = Vec::with_capacity(files.len());
+        let mut skipped = Vec::new();
         let mut reserved_paths = collect_library_file_paths(song_dir, song)?
             .into_iter()
             .collect::<HashSet<_>>();
@@ -704,10 +722,12 @@ pub fn import_staged_audio_files_to_library(
         for file in files {
             let source_path = PathBuf::from(file.source_path.trim());
             if !source_path.is_file() {
-                return Err(DesktopError::AudioCommand(format!(
-                    "staged import source not found: {}",
-                    source_path.display()
-                )));
+                skipped.push(skipped_import(
+                    file.source_path.trim(),
+                    &file.file_name,
+                    &format!("staged import source not found: {}", source_path.display()),
+                ));
+                continue;
             }
 
             let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
@@ -725,7 +745,21 @@ pub fn import_staged_audio_files_to_library(
                 let _ = fs::remove_dir(parent);
             }
 
-            let metadata = read_audio_metadata(&absolute_path)?;
+            // Skip what cannot be read instead of losing the batch; the copy
+            // already made it into the session, so it has to go back out.
+            let metadata = match read_audio_metadata(&absolute_path) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    skipped.push(skipped_import(
+                        file.source_path.trim(),
+                        &file.file_name,
+                        &error,
+                    ));
+                    written_paths.retain(|path| path != &absolute_path);
+                    let _ = fs::remove_file(&absolute_path);
+                    continue;
+                }
+            };
             let file_name = Path::new(&relative_path)
                 .file_name()
                 .and_then(|value| value.to_str())
@@ -759,7 +793,7 @@ pub fn import_staged_audio_files_to_library(
                 .then_with(|| left.file_name.cmp(&right.file_name))
         });
         write_library_manifest_assets(song_dir, &library_assets)?;
-        Ok(imported_assets)
+        finish_library_import(imported_assets, skipped)
     })();
 
     if import_result.is_err() {
@@ -774,7 +808,7 @@ pub fn import_audio_files_from_paths_to_library(
     song_dir: &Path,
     song: Option<&Song>,
     files: &[AudioFilePathImportPayload],
-) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+) -> Result<LibraryImportResult, DesktopError> {
     if files.is_empty() {
         return Err(DesktopError::AudioCommand(
             "at least one audio file is required".into(),
@@ -782,6 +816,7 @@ pub fn import_audio_files_from_paths_to_library(
     }
 
     let mut imported_assets = Vec::with_capacity(files.len());
+    let mut skipped = Vec::new();
     let mut seen_import_paths = HashSet::new();
 
     for file in files {
@@ -796,7 +831,17 @@ pub fn import_audio_files_from_paths_to_library(
         let source_path = source_path
             .canonicalize()
             .unwrap_or_else(|_| source_path.clone());
-        let metadata = read_audio_metadata(&source_path)?;
+        // One file the decoder cannot read must not cost the user the other
+        // twenty-four. Collect it and carry on; the caller reports the whole
+        // skipped list once, and only an import where NOTHING survived is an
+        // error.
+        let metadata = match read_audio_metadata(&source_path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                skipped.push(skipped_import(trimmed_source_path, &file.file_name, &error));
+                continue;
+            }
+        };
         let normalized_path = normalize_library_file_path(source_path.to_string_lossy().as_ref());
 
         if !seen_import_paths.insert(normalized_path.clone()) {
@@ -841,7 +886,46 @@ pub fn import_audio_files_from_paths_to_library(
             .then_with(|| left.file_name.cmp(&right.file_name))
     });
     write_library_manifest_assets(song_dir, &library_assets)?;
-    Ok(imported_assets)
+    finish_library_import(imported_assets, skipped)
+}
+
+/// Describe a file the import had to leave out. `requested_source_path` is the
+/// caller's own string, untouched — callers join on it to drop the same entry
+/// from their input list, so canonicalizing it here would break that join.
+fn skipped_import(
+    requested_source_path: &str,
+    payload_name: &str,
+    error: &dyn std::fmt::Display,
+) -> SkippedImport {
+    let file_name = Path::new(payload_name)
+        .file_name()
+        .or_else(|| Path::new(requested_source_path).file_name())
+        .and_then(|value| value.to_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| requested_source_path.to_string());
+
+    SkippedImport {
+        file_name,
+        source_path: requested_source_path.to_string(),
+        reason: error.to_string(),
+    }
+}
+
+/// An import that read nothing is still a failure — the user asked for files
+/// and got none, so it must arrive as an error rather than as an empty success
+/// they have to notice for themselves. Anything else is a partial success and
+/// carries its skipped list along.
+fn finish_library_import(
+    assets: Vec<LibraryAssetSummary>,
+    skipped: Vec<SkippedImport>,
+) -> Result<LibraryImportResult, DesktopError> {
+    if assets.is_empty() {
+        if let Some(first) = skipped.first() {
+            return Err(DesktopError::AudioCommand(first.reason.clone()));
+        }
+    }
+
+    Ok(LibraryImportResult { assets, skipped })
 }
 
 pub(super) fn normalize_library_folder_path(folder_path: &str) -> Option<String> {

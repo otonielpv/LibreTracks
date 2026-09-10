@@ -482,6 +482,31 @@ pub struct LibraryAssetSummary {
     pub folder_path: Option<String>,
 }
 
+/// One file an import could not read, and why. Reported alongside the files
+/// that DID import: a single unreadable file used to abort the whole batch and
+/// leave the user with nothing, which is the worst possible outcome when 24 of
+/// 25 stems are fine. The reason is the backend error text, already shaped by
+/// `formatUserFacingError` on the way to the user.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkippedImport {
+    pub file_name: String,
+    /// The path the caller asked for. Callers that pair inputs with results by
+    /// position need this to drop the same entries from their own list — a
+    /// partial import shifts every position after the first skip.
+    pub source_path: String,
+    pub reason: String,
+}
+
+/// What an audio import produced: the assets that went in, and the files that
+/// were left out. `skipped` is empty on a clean import.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryImportResult {
+    pub assets: Vec<LibraryAssetSummary>,
+    pub skipped: Vec<SkippedImport>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SongPackageImportResponse {

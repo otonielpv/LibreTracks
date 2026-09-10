@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { LibraryAssetSummary } from "@libretracks/shared/models";
+import type {
+  LibraryAssetSummary,
+  LibraryImportResult,
+} from "@libretracks/shared/models";
 import { importErrorMessage, runAudioImportPipeline } from "./importPipeline";
 import { forgetLibraryAssets } from "../desktopApi";
 import { useTransportStore } from "../store";
@@ -16,6 +19,12 @@ function asset(fileName: string): LibraryAssetSummary {
     isMissing: false,
     folderPath: null,
   };
+}
+
+/** The backend returns what went in AND what it had to leave out; most tests
+ * only care about the first half. */
+function importedOk(...assets: LibraryAssetSummary[]): LibraryImportResult {
+  return { assets, skipped: [] };
 }
 
 function seedPending(ids: string[]) {
@@ -58,7 +67,7 @@ describe("runAudioImportPipeline", () => {
       pendingIds: ["a"],
       importFn: async () => {
         order.push(`status:${statusOf("a")}`);
-        return imported;
+        return importedOk(...imported);
       },
       onImported: async (assets) => {
         order.push(`tail:${statusOf("a")}:${assets.length}`);
@@ -91,7 +100,7 @@ describe("runAudioImportPipeline", () => {
       },
       importFn: async () => {
         order.push(`importing:${statusOf("b")}`);
-        return [asset("b.wav")];
+        return importedOk(asset("b.wav"));
       },
       mergeLibraryAssets: () => {},
       refreshLibraryState: async () => {},
@@ -108,7 +117,7 @@ describe("runAudioImportPipeline", () => {
 
     await runAudioImportPipeline({
       pendingIds: ["c"],
-      importFn: async () => [asset("c.wav")],
+      importFn: async () => importedOk(asset("c.wav")),
       mergeLibraryAssets: () => {},
       refreshLibraryState: async () => {},
       setStatus: () => {},
@@ -154,7 +163,7 @@ describe("runAudioImportPipeline", () => {
 
     await runAudioImportPipeline({
       pendingIds: ["e"],
-      importFn: async () => [asset("e.wav")],
+      importFn: async () => importedOk(asset("e.wav")),
       onImported: async () => {
         // eslint-disable-next-line @typescript-eslint/no-throw-literal
         throw backendReason;
@@ -183,7 +192,7 @@ describe("runAudioImportPipeline", () => {
 
     await runAudioImportPipeline({
       pendingIds: ["f"],
-      importFn: async () => [asset("f.wav")],
+      importFn: async () => importedOk(asset("f.wav")),
       onImported: async () => {
         // eslint-disable-next-line @typescript-eslint/no-throw-literal
         throw "no cabe en este hueco";
@@ -195,6 +204,67 @@ describe("runAudioImportPipeline", () => {
     });
 
     expect(forgetLibraryAssets).toHaveBeenCalledWith(["audio/f.wav"]);
+  });
+
+  it("reports the files it had to skip instead of a plain success", async () => {
+    seedPending(["p1", "p2"]);
+    const skipped: string[] = [];
+    let status = "";
+
+    await runAudioImportPipeline({
+      pendingIds: ["p1", "p2"],
+      importFn: async () => ({
+        assets: [asset("p1.wav")],
+        skipped: [
+          {
+            fileName: "p2.ogg",
+            sourcePath: "C:/audio/p2.ogg",
+            reason: "unsupported audio format for file: C:/audio/p2.ogg",
+          },
+        ],
+      }),
+      mergeLibraryAssets: () => {},
+      refreshLibraryState: async () => {},
+      setStatus: (next) => {
+        status = next;
+      },
+      successMessage: () => "todo bien",
+      reportSkipped: (entries) => {
+        skipped.push(...entries.map((entry) => entry.fileName));
+      },
+    });
+
+    // The good file went in, so the placeholders are gone either way...
+    expect(statusOf("p1")).toBeUndefined();
+    expect(statusOf("p2")).toBeUndefined();
+    // ...but the caller hears about the one that did not, and the "all good"
+    // message never claims otherwise.
+    expect(skipped).toEqual(["p2.ogg"]);
+    expect(status).not.toBe("todo bien");
+  });
+
+  it("clears the placeholders a previous failed import left behind", async () => {
+    // A failed import keeps its placeholders until the user acknowledges the
+    // dialog. Without a sweep at the start of the next one, importing a WAV
+    // after a rejected OGG reported the OGG's error all over again.
+    seedPending(["stale"]);
+    useTransportStore
+      .getState()
+      .markPendingAudioImportsFailed(["stale"], "unsupported audio format");
+    expect(statusOf("stale")).toBe("failed");
+
+    seedPending(["fresh"]);
+    await runAudioImportPipeline({
+      pendingIds: ["fresh"],
+      importFn: async () => importedOk(asset("fresh.wav")),
+      mergeLibraryAssets: () => {},
+      refreshLibraryState: async () => {},
+      setStatus: () => {},
+      successMessage: () => "ok",
+    });
+
+    expect(statusOf("stale")).toBeUndefined();
+    expect(statusOf("fresh")).toBeUndefined();
   });
 
   it("keeps the library untouched when the import itself never succeeded", async () => {
@@ -221,7 +291,7 @@ describe("runAudioImportPipeline", () => {
 
     await runAudioImportPipeline({
       pendingIds: ["h"],
-      importFn: async () => [asset("h.wav")],
+      importFn: async () => importedOk(asset("h.wav")),
       onImported: async () => {},
       mergeLibraryAssets: () => {},
       refreshLibraryState: async () => {},

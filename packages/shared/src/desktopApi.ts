@@ -12,6 +12,7 @@ import type {
   DesktopPerformanceSnapshot,
   LibraryAssetSummary,
   LibraryImportCompleteEvent,
+  LibraryImportResult,
   LibraryImportProgressEvent,
   MarkerCategory,
   MarkerKind,
@@ -902,14 +903,14 @@ export async function pickLibraryFiles(): Promise<string[]> {
 
 export async function importAudioFilesFromBytes(
   files: AudioFileImportPayload[],
-): Promise<LibraryAssetSummary[]> {
-  return invokeCommand<LibraryAssetSummary[]>("import_audio_files_from_bytes", { files });
+): Promise<LibraryImportResult> {
+  return invokeCommand<LibraryImportResult>("import_audio_files_from_bytes", { files });
 }
 
 export async function importAudioFilesFromPaths(
   files: AudioFilePathImportPayload[],
-): Promise<LibraryAssetSummary[]> {
-  return invokeCommand<LibraryAssetSummary[]>("import_audio_files_from_paths", { files });
+): Promise<LibraryImportResult> {
+  return invokeCommand<LibraryImportResult>("import_audio_files_from_paths", { files });
 }
 
 /**
@@ -919,8 +920,8 @@ export async function importAudioFilesFromPaths(
  */
 export async function importStagedAudioFiles(
   files: AudioFilePathImportPayload[],
-): Promise<LibraryAssetSummary[]> {
-  return invokeCommand<LibraryAssetSummary[]>("import_staged_audio_files", { files });
+): Promise<LibraryImportResult> {
+  return invokeCommand<LibraryImportResult>("import_staged_audio_files", { files });
 }
 
 // Returns false if the user cancelled the save dialog (nothing was written).

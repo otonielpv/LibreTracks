@@ -27,7 +27,10 @@ use crate::commands::events::{
     LibraryImportCompleteEventPayload, ProjectLoadCompleteEventPayload,
 };
 use crate::infra::error::DesktopError;
-use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
+use crate::models::{
+    LibraryAssetSummary, LibraryImportResult, SkippedImport, SongPackageImportResponse, SongView,
+    TransportSnapshot,
+};
 use crate::state::{
     AudioFileImportPayload, AudioFilePathImportPayload, CreateAudioTrackWithClipRequest,
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession, DesktopState,
@@ -1461,7 +1464,7 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
         // Mirror the drag-import flow: hold the session lock only BRIEFLY to
         // clone (song_dir, current_song), then do the heavy copy+probe OUTSIDE
         // the lock. Holding the lock across the whole import froze the UI.
-        let result = (|| -> Result<Vec<LibraryAssetSummary>, String> {
+        let result = (|| -> Result<(Vec<LibraryAssetSummary>, Vec<SkippedImport>), String> {
             let (song_dir, current_song) = {
                 let session = state
                     .session
@@ -1494,7 +1497,7 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
                 })
                 .collect();
 
-            crate::state::import_audio_files_from_paths_to_library(
+            let outcome = crate::state::import_audio_files_from_paths_to_library(
                 &song_dir,
                 current_song.as_ref(),
                 &payloads,
@@ -1509,16 +1512,29 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
 
             // Emit the FULL list (the frontend currently replaces its asset list
             // wholesale from this event).
-            crate::state::list_library_assets(&song_dir, current_song.as_ref())
-                .map_err(|error| error.to_string())
+            let assets = crate::state::list_library_assets(&song_dir, current_song.as_ref())
+                .map_err(|error| error.to_string())?;
+            Ok((assets, outcome.skipped))
         })();
 
         match result {
-            Ok(assets) => {
+            Ok((assets, skipped)) => {
+                if !skipped.is_empty() {
+                    crate::infra::error_log::write_error(&format!(
+                        "library import skipped {} file(s): {}",
+                        skipped.len(),
+                        skipped
+                            .iter()
+                            .map(|entry| format!("{} ({})", entry.file_name, entry.reason))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    ));
+                }
                 emit_library_import_complete_event(
                     &worker_app,
                     LibraryImportCompleteEventPayload {
                         assets: Some(assets),
+                        skipped,
                         error: None,
                     },
                 );
@@ -1529,6 +1545,7 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
                     &worker_app,
                     LibraryImportCompleteEventPayload {
                         assets: None,
+                        skipped: Vec::new(),
                         error: Some(error),
                     },
                 );
@@ -1543,7 +1560,7 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
 pub async fn import_audio_files_from_bytes(
     files: Vec<AudioFileImportPayload>,
     state: State<'_, DesktopState>,
-) -> Result<Vec<LibraryAssetSummary>, String> {
+) -> Result<LibraryImportResult, String> {
     let (song_dir, current_song) = {
         let session = state
             .session
@@ -1558,7 +1575,7 @@ pub async fn import_audio_files_from_bytes(
     };
 
     let song_dir_for_prepare = song_dir.clone();
-    let assets = tauri::async_runtime::spawn_blocking(move || {
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
         crate::state::import_audio_files_from_bytes_to_library(
             &song_dir,
             current_song.as_ref(),
@@ -1570,8 +1587,8 @@ pub async fn import_audio_files_from_bytes(
     .map_err(|error| crate::infra::error_log::log_command_err("import_audio_files_from_bytes", error))?;
 
     // Start decoding the imported library files now (see the paths variant).
-    prepare_library_assets(&state, &song_dir_for_prepare, &assets);
-    Ok(assets)
+    prepare_library_assets(&state, &song_dir_for_prepare, &outcome.assets);
+    Ok(outcome)
 }
 
 /// Kick off background decode→cache (+ same-pass waveform peaks) for freshly
@@ -1596,7 +1613,7 @@ fn prepare_library_assets(
 pub async fn import_audio_files_from_paths(
     files: Vec<AudioFilePathImportPayload>,
     state: State<'_, DesktopState>,
-) -> Result<Vec<LibraryAssetSummary>, String> {
+) -> Result<LibraryImportResult, String> {
     let (song_dir, current_song) = {
         let session = state
             .session
@@ -1611,7 +1628,7 @@ pub async fn import_audio_files_from_paths(
     };
 
     let song_dir_for_prepare = song_dir.clone();
-    let assets = tauri::async_runtime::spawn_blocking(move || {
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
         crate::state::import_audio_files_from_paths_to_library(
             &song_dir,
             current_song.as_ref(),
@@ -1625,9 +1642,9 @@ pub async fn import_audio_files_from_paths(
     // Ableton-style: start decoding the imported files to cache + waveform peaks
     // NOW, while they sit in the library — so by the time they're dragged to the
     // timeline the audio + waveform are already prepared (no re-decode, no wait).
-    prepare_library_assets(&state, &song_dir_for_prepare, &assets);
+    prepare_library_assets(&state, &song_dir_for_prepare, &outcome.assets);
 
-    Ok(assets)
+    Ok(outcome)
 }
 
 /// Android: consume files staged by `stage_imported_audio_chunk` — they are
@@ -1640,7 +1657,7 @@ pub async fn import_audio_files_from_paths(
 pub async fn import_staged_audio_files(
     files: Vec<AudioFilePathImportPayload>,
     state: State<'_, DesktopState>,
-) -> Result<Vec<LibraryAssetSummary>, String> {
+) -> Result<LibraryImportResult, String> {
     let (song_dir, current_song) = {
         let session = state
             .session
@@ -1655,7 +1672,7 @@ pub async fn import_staged_audio_files(
     };
 
     let song_dir_for_prepare = song_dir.clone();
-    let assets = tauri::async_runtime::spawn_blocking(move || {
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
         crate::state::import_staged_audio_files_to_library(
             &song_dir,
             current_song.as_ref(),
@@ -1666,9 +1683,9 @@ pub async fn import_staged_audio_files(
     .map_err(|error| crate::infra::error_log::log_command_err("import_staged_audio_files", error))?
     .map_err(|error| crate::infra::error_log::log_command_err("import_staged_audio_files", error))?;
 
-    prepare_library_assets(&state, &song_dir_for_prepare, &assets);
+    prepare_library_assets(&state, &song_dir_for_prepare, &outcome.assets);
 
-    Ok(assets)
+    Ok(outcome)
 }
 
 /// Android import staging. The WebView file chooser hands us `File` objects

@@ -1,4 +1,8 @@
-import type { LibraryAssetSummary } from "@libretracks/shared/models";
+import type {
+  LibraryAssetSummary,
+  LibraryImportResult,
+  SkippedImport,
+} from "@libretracks/shared/models";
 import { alertDialog } from "../../../shared/dialog/dialogService";
 import { recordProductEvent } from "../../telemetry/telemetry";
 import { forgetLibraryAssets } from "../desktopApi";
@@ -14,10 +18,11 @@ import { useTransportStore } from "../store";
 export type RunAudioImportPipelineArgs = {
   /** ids of the pending placeholders already added to the store. */
   pendingIds: string[];
-  /** Performs the actual import (paths/bytes) and returns the imported assets.
-   * Status is "importing" while this runs. For flows that must do prep work
-   * first (e.g. reading File bytes), use `beforeImport`. */
-  importFn: () => Promise<LibraryAssetSummary[]>;
+  /** Performs the actual import (paths/bytes) and returns what went in plus
+   * whatever had to be left out. Status is "importing" while this runs. For
+   * flows that must do prep work first (e.g. reading File bytes), use
+   * `beforeImport`. */
+  importFn: () => Promise<LibraryImportResult>;
   /** Optional prep before the import call, run while status is "reading". */
   beforeImport?: () => Promise<void>;
   /** Optional flow-specific tail run while status is "analyzing" (drag adds
@@ -32,7 +37,24 @@ export type RunAudioImportPipelineArgs = {
   /** Success status message builder (lets callers pick "clip added" vs
    * "library updated"). */
   successMessage: (importedAssets: LibraryAssetSummary[]) => string;
+  /** Reports the files the backend could not read. The import itself
+   * SUCCEEDED for everything else, so this is not the error path. */
+  reportSkipped?: (skipped: SkippedImport[]) => void;
 };
+
+/** Name the files an import had to leave out, in one sentence. Shared so the
+ * drop paths and the compact view word a partial import identically — they
+ * used to build the same string twice, and the second copy is exactly where a
+ * wording change gets forgotten. */
+export function skippedImportsMessage(
+  skipped: SkippedImport[],
+  t: (key: string, options: Record<string, unknown>) => string,
+): string {
+  return t("transport.errors.importSkippedFiles", {
+    count: skipped.length,
+    files: skipped.map((entry) => entry.fileName).join(", "),
+  });
+}
 
 /** Fallback shown only when the failure carries no usable text at all. */
 const GENERIC_IMPORT_ERROR =
@@ -73,8 +95,14 @@ export async function runAudioImportPipeline({
   refreshLibraryState,
   setStatus,
   successMessage,
+  reportSkipped,
 }: RunAudioImportPipelineArgs): Promise<void> {
   const store = useTransportStore.getState();
+  // Drop the placeholders left behind by an EARLIER failed import before this
+  // one starts. They only clear once the user acknowledges the dialog, so
+  // without this a rejected file kept reporting itself on every later import:
+  // the user imported a WAV and got the previous OGG's error again.
+  store.clearFailedPendingAudioImports();
   // Assets that made it into the library before a later step failed. Files are
   // registered BEFORE they are placed, so a drop the region rules reject would
   // otherwise leave its audio in the library while telling the user nothing was
@@ -87,7 +115,7 @@ export async function runAudioImportPipeline({
     }
 
     store.updatePendingAudioImportStatus(pendingIds, "importing");
-    const importedAssets = await importFn();
+    const { assets: importedAssets, skipped } = await importFn();
 
     store.updatePendingAudioImportStatus(pendingIds, "metadata");
     mergeLibraryAssets(importedAssets);
@@ -104,7 +132,14 @@ export async function runAudioImportPipeline({
 
     store.removePendingAudioImports(pendingIds);
     recordProductEvent("audio_imported");
-    setStatus(successMessage(importedAssets));
+    // A partial import is a success with a caveat, not a failure: the files
+    // that worked are already on the timeline, so the caveat is reported after
+    // the success message rather than instead of it.
+    if (skipped.length) {
+      reportSkipped?.(skipped);
+    } else {
+      setStatus(successMessage(importedAssets));
+    }
   } catch (error) {
     recordProductEvent("audio_import_failed");
     const message = importErrorMessage(error);

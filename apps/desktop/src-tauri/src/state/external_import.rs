@@ -202,18 +202,37 @@ impl DesktopSession {
             })
             .collect::<Result<Vec<_>, DesktopError>>()?;
 
-        let imported_assets = import_audio_files_from_paths_to_library(
+        let import_outcome = import_audio_files_from_paths_to_library(
             &song_dir,
             Some(&current_song),
             &import_payloads,
         )?;
         eprintln!(
-            "[libretracks-import] imported assets count={}",
-            imported_assets.len()
+            "[libretracks-import] imported assets count={} skipped={}",
+            import_outcome.assets.len(),
+            import_outcome.skipped.len()
         );
 
+        // The assets come back in input order MINUS whatever could not be read,
+        // so the sources have to lose the same entries before they are paired
+        // up: one skipped stem would otherwise shift every later item onto the
+        // wrong file. Joined on the caller's own path string, which is exactly
+        // what the payloads carried in.
+        let skipped_sources = import_outcome
+            .skipped
+            .iter()
+            .map(|entry| entry.source_path.as_str())
+            .collect::<HashSet<_>>();
+        let imported_sources = source_paths
+            .iter()
+            .filter(|source_path| {
+                !skipped_sources.contains(source_path.to_string_lossy().as_ref())
+            })
+            .collect::<Vec<_>>();
+        let imported_assets = &import_outcome.assets;
+
         let mut imported_path_by_source = HashMap::<String, String>::new();
-        for (source_path, imported_asset) in source_paths.iter().zip(imported_assets.iter()) {
+        for (source_path, imported_asset) in imported_sources.iter().zip(imported_assets.iter()) {
             imported_path_by_source.insert(
                 normalize_external_source_key(source_path),
                 imported_asset.file_path.clone(),

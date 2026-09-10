@@ -13,7 +13,7 @@ pub use importer::{
     append_wav_files_to_song, import_wav_files_to_library, import_wav_song, read_audio_metadata,
     read_wav_metadata, AppendWavFilesResult, AudioMetadata, ImportLibraryAssetsResult,
     ImportOperationMetrics, ImportedAudioFile, ImportedLibraryAsset, ImportedSong,
-    ProjectImportRequest, WavMetadata,
+    ProjectImportRequest, SkippedImportFile, WavMetadata,
 };
 pub use package::{
     export_region_as_package, extract_song_package, import_song_package,
@@ -466,6 +466,55 @@ mod tests {
         let error = load_waveform_summary(&song_dir, "audio/click.wav")
             .expect_err("invalid waveform should fail");
         assert!(matches!(error, ProjectError::InvalidWaveformSummary(_)));
+    }
+
+    #[test]
+    fn one_unreadable_file_does_not_cost_the_rest_of_the_import() {
+        let root = tempdir().expect("temp dir should exist");
+        let good_one = root.path().join("voz.wav");
+        let good_two = root.path().join("bateria.wav");
+        write_test_wav(&good_one, 44_100, 2, 1);
+        write_test_wav(&good_two, 44_100, 2, 1);
+        // Sits BETWEEN the two good files on purpose: the analysis runs in
+        // parallel and reorders by index, so a middle failure is what catches a
+        // batch that gives up early or pairs results with the wrong input.
+        let unreadable = root.path().join("roto.ogg");
+        fs::write(&unreadable, b"not audio at all").expect("fixture should be written");
+
+        let result = import_wav_files_to_library(
+            root.path(),
+            &[good_one.clone(), unreadable.clone(), good_two.clone()],
+            |_, _| {},
+        )
+        .expect("the readable files should still import");
+
+        let imported: Vec<_> = result
+            .assets
+            .iter()
+            .map(|asset| asset.source_path.file_name().expect("file name").to_owned())
+            .collect();
+        assert_eq!(imported, vec!["voz.wav", "bateria.wav"]);
+        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(
+            result.skipped[0].source_path.file_name(),
+            unreadable.file_name()
+        );
+        assert!(
+            result.skipped[0].reason.contains("unsupported audio format"),
+            "the reason must say why: {}",
+            result.skipped[0].reason
+        );
+    }
+
+    #[test]
+    fn an_import_where_nothing_is_readable_is_still_an_error() {
+        let root = tempdir().expect("temp dir should exist");
+        let unreadable = root.path().join("roto.ogg");
+        fs::write(&unreadable, b"not audio at all").expect("fixture should be written");
+
+        let error = import_wav_files_to_library(root.path(), &[unreadable], |_, _| {})
+            .expect_err("an import that read nothing must fail");
+        assert!(matches!(error, ProjectError::UnsupportedAudioFormat { .. }));
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::models::{LibraryAssetSummary, TransportSnapshot};
+use crate::models::{LibraryAssetSummary, SkippedImport, TransportSnapshot};
 use crate::state::{DesktopSession, DesktopState, WaveformReadyEvent, WAVEFORM_READY_EVENT};
 
 const TRANSPORT_LIFECYCLE_EVENT: &str = "transport:lifecycle";
@@ -30,6 +30,10 @@ pub(crate) struct ProjectLoadCompleteEventPayload {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LibraryImportCompleteEventPayload {
     pub assets: Option<Vec<LibraryAssetSummary>>,
+    /// Files the import could not read. The import still succeeded for the
+    /// rest, so this is not an `error`: the frontend reports both.
+    #[serde(default)]
+    pub skipped: Vec<SkippedImport>,
     pub error: Option<String>,
 }
 

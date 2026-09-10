@@ -1609,14 +1609,17 @@ fn import_audio_files_from_bytes_returns_only_newly_imported_assets() {
         ])
         .expect("byte import should succeed");
 
-    assert_eq!(imported_assets.len(), 2);
+    assert_eq!(imported_assets.assets.len(), 2);
     assert!(imported_assets
+        .assets
         .iter()
         .any(|asset| asset.file_path == "audio/dropped-a.wav"));
     assert!(imported_assets
+        .assets
         .iter()
         .any(|asset| asset.file_path == "audio/dropped-b.wav"));
     assert!(imported_assets
+        .assets
         .iter()
         .all(|asset| asset.file_name.starts_with("dropped-")));
 
@@ -1647,8 +1650,8 @@ fn import_audio_files_from_paths_registers_original_without_project_audio_copy()
         }])
         .expect("path import should succeed");
 
-    assert_eq!(imported_assets.len(), 1);
-    assert_eq!(imported_assets[0].file_path, external_audio_path);
+    assert_eq!(imported_assets.assets.len(), 1);
+    assert_eq!(imported_assets.assets[0].file_path, external_audio_path);
     assert!(
         !song_dir.join("audio").join("external-loop.wav").exists(),
         "path-based imports must not copy source audio into the project audio folder"
@@ -2034,8 +2037,8 @@ fn import_never_overwrites_an_existing_file_that_differs_only_in_case() {
         }])
         .expect("import should succeed");
 
-    assert_eq!(imported.len(), 1);
-    assert_eq!(imported[0].file_path, "audio/bajo-1.wav");
+    assert_eq!(imported.assets.len(), 1);
+    assert_eq!(imported.assets[0].file_path, "audio/bajo-1.wav");
     assert_eq!(
         fs::read(&existing_path).expect("existing audio should still read"),
         existing_bytes,
@@ -2071,7 +2074,7 @@ fn import_never_overwrites_audio_missing_from_the_manifest() {
         }])
         .expect("import should succeed");
 
-    assert_eq!(imported[0].file_path, "audio/huerfano-1.wav");
+    assert_eq!(imported.assets[0].file_path, "audio/huerfano-1.wav");
     assert_eq!(
         fs::read(&orphan_path).expect("orphan audio should still read"),
         orphan_bytes

@@ -3,10 +3,14 @@ import {
   getSongTempoRegionAtPosition,
   type ClipSummary,
   type LibraryAssetSummary,
+  type SkippedImport,
   type SongView,
   type TransportSnapshot,
 } from "@libretracks/shared/models";
-import { confirmDialog } from "../../../shared/dialog/dialogService";
+import {
+  alertDialog,
+  confirmDialog,
+} from "../../../shared/dialog/dialogService";
 import {
   createAudioTracksWithClips,
   createClipsBatch,
@@ -37,7 +41,10 @@ import {
   type TimelineTrackSummary,
 } from "./pendingAudioImports";
 import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
-import { runAudioImportPipeline } from "./importPipeline";
+import {
+  runAudioImportPipeline,
+  skippedImportsMessage,
+} from "./importPipeline";
 import { placeLibraryFolderOnTimeline } from "./libraryFolderDrop";
 import {
   buildTimelineDropPreviewGeometry,
@@ -1542,6 +1549,20 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     }
   }
 
+  /** Tell the user which files were left out of an import that otherwise
+   * worked. A modal, not just the status bar: the good files land on the
+   * timeline straight away, so a skipped one is easy to miss — and missing it
+   * means believing audio was imported that never was. */
+  function reportSkippedImports(skipped: SkippedImport[]) {
+    if (!skipped.length) {
+      return;
+    }
+
+    const message = skippedImportsMessage(skipped, deps().t);
+    deps().setStatus(message);
+    void alertDialog(message);
+  }
+
   async function createRealTracksAndClipsForImportedAssets(args: {
     importedAssets: LibraryAssetSummary[];
     dropSeconds: number;
@@ -1615,6 +1636,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       mergeLibraryAssets: deps().mergeLibraryAssets,
       refreshLibraryState: deps().refreshLibraryState,
       setStatus: deps().setStatus,
+      reportSkipped: reportSkippedImports,
       successMessage: (importedAssets) =>
         importedAssets.length === 1
           ? deps().t("transport.status.clipAdded", {
@@ -1667,6 +1689,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       mergeLibraryAssets: deps().mergeLibraryAssets,
       refreshLibraryState: deps().refreshLibraryState,
       setStatus: deps().setStatus,
+      reportSkipped: reportSkippedImports,
       successMessage: (importedAssets) =>
         importedAssets.length === 1
           ? deps().t("transport.status.clipAdded", {
@@ -1732,6 +1755,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       mergeLibraryAssets: deps().mergeLibraryAssets,
       refreshLibraryState: deps().refreshLibraryState,
       setStatus: deps().setStatus,
+      reportSkipped: reportSkippedImports,
       successMessage: (importedAssets) =>
         deps().t("transport.status.libraryUpdated", { count: importedAssets.length }),
     });
@@ -1812,6 +1836,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
         mergeLibraryAssets: deps().mergeLibraryAssets,
         refreshLibraryState: deps().refreshLibraryState,
         setStatus: deps().setStatus,
+        reportSkipped: reportSkippedImports,
         successMessage: (importedAssets) =>
           deps().t("transport.status.libraryUpdated", {
             count: importedAssets.length,
@@ -2131,7 +2156,9 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
             fileName: path.split(/[\\/]/).pop() ?? path,
             sourcePath: path,
           }));
-          const importedAssets = await importAudioFilesFromPaths(payloads);
+          const { assets: importedAssets, skipped } =
+            await importAudioFilesFromPaths(payloads);
+          reportSkippedImports(skipped);
           deps().mergeLibraryAssets(importedAssets);
           await deps().refreshLibraryState({ preserveAssets: importedAssets });
           if (importedAssets.length === 0) return;
