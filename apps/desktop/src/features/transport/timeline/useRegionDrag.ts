@@ -244,10 +244,28 @@ export function useRegionDrag({
       nextEnd = drag.initialEndSeconds + deltaSeconds;
     }
 
-    // Snap to BAR grid (downbeat). Song boundaries are bar-aligned;
-    // snapping mid-bar would produce off-grid edges. Alt bypasses
-    // snap for ad-hoc resizing.
-    const shouldSnap = Boolean(snapEnabled) && !event.altKey;
+    // Los dos bordes NO se imantan igual, y la asimetria es deliberada.
+    //
+    // El borde DERECHO no re-fasea nada: alargar o recortar la cola solo
+    // cambia donde acaba la cancion. Se imanta a la misma rejilla que el
+    // usuario ve — `snapToTimelineGrid` da el pulso cuando sus lineas se
+    // dibujan y degrada solo al compas cuando el zoom no da para mas
+    // (MIN_BEAT_GRID_PIXELS) —, igual que mover la cancion, una marca o un
+    // clip. Antes era siempre el compas: a 60 BPM, 4 segundos por escalon.
+    //
+    // El borde IZQUIERDO se queda en el compas. El motor reinicia la fase
+    // del clic y su ACENTO en `max(song.start_frame, ultimo marcador)`
+    // (`timing_segment_start`, metronome_renderer.cpp), mientras que la fase
+    // de compas de la regla es acumulativa desde t=0. Encoger el inicio un
+    // pulso pondria el acento del metronomo medio compas por delante de las
+    // lineas de compas dibujadas (a 120/4-4, inicio 10 -> 10,5: el motor
+    // acentua en 10,5 y 12,5; la regla pinta compas en 12 y 14). Para
+    // liberar tambien este borde hay que reanclar la cuenta de compases en
+    // el inicio de cada cancion, que es un cambio de la numeracion global.
+    //
+    // Shift salta el snap en ambos, la misma tecla que el resto de
+    // arrastres del ruler (mover cancion, marcas, clips MIDI).
+    const shouldSnap = Boolean(snapEnabled) && !event.shiftKey;
     if (shouldSnap) {
       const songBpm = song.bpm;
       const songTs = song.timeSignature;
@@ -255,7 +273,14 @@ export function useRegionDrag({
       if (drag.edge === "start") {
         nextStart = snapToTimelineBar(nextStart, songBpm, songTs, tempoRegions);
       } else {
-        nextEnd = snapToTimelineBar(nextEnd, songBpm, songTs, tempoRegions);
+        nextEnd = snapToTimelineGrid(
+          nextEnd,
+          songBpm,
+          songTs,
+          1,
+          effectivePixelsPerSecond,
+          tempoRegions,
+        );
       }
     }
 

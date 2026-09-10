@@ -91,6 +91,26 @@ Reglas:
 
 ![Crear region de cancion](/screenshots/Create-Region.png)
 
+### Alargar o recortar una cancion
+
+Los dos bordes de la banda son handles de redimensionado. Redimensionar NO mueve
+el contenido: la region es el tramo con nombre que contiene los clips, no una
+transformacion sobre ellos. Alargar el borde izquierdo anade sitio vacio delante
+de lo que ya hay; recortar cualquiera de los dos recupera espacio sin usar.
+
+Reglas:
+
+- Con `Snap to Grid` activo, el **borde derecho** se ajusta al pulso que ves
+  dibujado (al compas cuando el zoom es tan bajo que las lineas de pulso no se
+  pintan), asi que puedes recortar la cola o alargarla en fracciones de compas.
+- El **borde izquierdo** se ajusta siempre al compas. Ahi empieza la cuenta del
+  metronomo, y moverlo a un subcompas dejaria el acento del clic fuera de las
+  lineas de compas de la regla.
+- Mantén `Shift` durante el arrastre para saltarte el snap en cualquiera de los
+  dos bordes.
+- Los bordes se imantan tambien a los clips que la cancion contiene: no puedes
+  encogerla por encima de su propio audio.
+
 ### Partir una cancion
 
 Usa `Shift + S`, o el menu contextual de la cancion, para partir la cancion bajo el playhead. LibreTracks crea una segunda region para la mitad derecha, mueve el limite de forma atomica y parte cualquier clip que cruce el corte para que cada lado siga perteneciendo a una sola cancion.

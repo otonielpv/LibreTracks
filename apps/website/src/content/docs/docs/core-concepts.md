@@ -91,6 +91,25 @@ Rules:
 
 ![Create a song region](/screenshots/Create-Region.png)
 
+### Resizing a song
+
+Both edges of the band are resize handles. Resizing does NOT move the contents:
+the region is the named span that holds the clips, not a transform on them.
+Extending the left edge adds empty room before whatever is already there;
+shrinking either edge reclaims unused space.
+
+Rules:
+
+- With `Snap to Grid` on, the **right edge** snaps to the beat you actually see
+  drawn (to the bar when the zoom is too low for beat lines), so you can trim or
+  extend the tail in fractions of a bar.
+- The **left edge** always snaps to the bar. That is where the metronome's count
+  restarts, and moving it to a sub-bar position would leave the click's accent
+  off the ruler's bar lines.
+- Hold `Shift` while dragging to bypass snap on either edge.
+- Both edges also magnet to the clips the song contains: you cannot shrink a
+  song past its own audio.
+
 ### Splitting a song
 
 Use `Shift + S`, or the song context menu, to split the song under the playhead. LibreTracks creates a second song region for the right half, moves the boundary atomically, and splits any clip that crosses the cut so each side still belongs to exactly one song.

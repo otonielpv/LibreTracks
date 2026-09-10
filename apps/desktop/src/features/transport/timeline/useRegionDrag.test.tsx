@@ -116,6 +116,23 @@ function pointer(type: string, clientX: number) {
   return event;
 }
 
+/** Como `pointer`, pero con teclas modificadoras. */
+function pointerWithModifiers(
+  type: string,
+  clientX: number,
+  modifiers: { shiftKey?: boolean; altKey?: boolean },
+) {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    button: 0,
+    ...modifiers,
+  });
+  Object.defineProperty(event, "pointerId", { value: 1 });
+  return event;
+}
+
 /** Como `pointer`, pero con otro botón del ratón. */
 function pointerWithButton(type: string, clientX: number, button: number) {
   const event = new MouseEvent(type, {
@@ -210,5 +227,128 @@ describe("useRegionDrag", () => {
     expect(leftPx(hotspot)).toBe(1000);
     fireEvent(hotspot, pointer("pointerup", 1400));
     expect(onRegionMoveCommit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Arnés del redimensionado. La banda se registra igual que en `setup` (el
+ * commit imperativo la devuelve a su sitio), pero el arrastre sale de una de
+ * las dos asas hijas, que es como lo monta `TimelineCanvasPane`.
+ */
+function setupResize(
+  edge: "start" | "end",
+  onRegionResizeCommit: ReturnType<typeof vi.fn>,
+) {
+  const ppsRef = createRef<number>() as MutableRefObject<number>;
+  ppsRef.current = PPS;
+
+  function Harness() {
+    const drag = useRegionDrag({
+      song: SONG,
+      pixelsPerSecond: PPS,
+      livePixelsPerSecondRef: ppsRef,
+      clipsByTrack: {},
+      snapEnabled: true,
+      onRegionResizeCommit,
+    });
+    const region = SONG.regions[0];
+    const { leftPx, widthPx } = regionHotspotBounds(
+      region.startSeconds,
+      region.endSeconds,
+      PPS,
+    );
+    return (
+      <button
+        type="button"
+        data-testid="hotspot"
+        ref={(element) => drag.registerRegionHotspot(region.id, element)}
+        style={{ position: "absolute", left: leftPx, width: widthPx }}
+      >
+        <div
+          data-testid="handle"
+          onPointerDown={(event) => drag.beginRegionResize(event, region, edge)}
+          onPointerMove={drag.updateRegionResize}
+          onPointerUp={drag.endRegionResize}
+        />
+      </button>
+    );
+  }
+
+  const view = render(<Harness />);
+  const handle = view.getByTestId("handle") as HTMLDivElement;
+  // jsdom no implementa la captura de puntero.
+  handle.setPointerCapture = () => {};
+  handle.releasePointerCapture = () => {};
+  return { handle };
+}
+
+/**
+ * 120 BPM en 4/4 con la rejilla completa a la vista: el pulso son 0,5 s y el
+ * compás 2 s. Los dos números caen en sitios distintos a propósito, para que
+ * cada test sepa distinguir a cuál de los dos se imantó el borde.
+ */
+describe("useRegionDrag · redimensionado", () => {
+  it("imanta el borde derecho al PULSO, no al compás", () => {
+    const onRegionResizeCommit = vi.fn();
+    const { handle } = setupResize("end", onRegionResizeCommit);
+
+    // La región acaba en 20 s. +0,7 s cae en 20,7: el pulso más cercano es
+    // 20,5 y el compás más cercano es 20. Si esto devolviera 20, el borde
+    // seguiría imantado al compás como antes.
+    fireEvent(handle, pointer("pointerdown", 2000));
+    fireEvent(handle, pointer("pointermove", 2070));
+    fireEvent(handle, pointer("pointerup", 2070));
+
+    expect(onRegionResizeCommit).toHaveBeenCalledTimes(1);
+    const [, startSeconds, endSeconds] = onRegionResizeCommit.mock.calls[0];
+    expect(startSeconds).toBeCloseTo(10, 6);
+    expect(endSeconds).toBeCloseTo(20.5, 6);
+  });
+
+  it("imanta el borde izquierdo al COMPÁS", () => {
+    const onRegionResizeCommit = vi.fn();
+    const { handle } = setupResize("start", onRegionResizeCommit);
+
+    // La región empieza en 10 s. +1,7 s cae en 11,7: el compás más cercano es
+    // 12 y el pulso más cercano 11,5. Este borde re-fasea el acento del
+    // metrónomo (`timing_segment_start`), así que se queda en el compás.
+    fireEvent(handle, pointer("pointerdown", 1000));
+    fireEvent(handle, pointer("pointermove", 1170));
+    fireEvent(handle, pointer("pointerup", 1170));
+
+    expect(onRegionResizeCommit).toHaveBeenCalledTimes(1);
+    const [, startSeconds, endSeconds] = onRegionResizeCommit.mock.calls[0];
+    expect(startSeconds).toBeCloseTo(12, 6);
+    expect(endSeconds).toBeCloseTo(20, 6);
+  });
+
+  it("Shift salta el snap", () => {
+    const onRegionResizeCommit = vi.fn();
+    const { handle } = setupResize("end", onRegionResizeCommit);
+
+    fireEvent(handle, pointer("pointerdown", 2000));
+    fireEvent(
+      handle,
+      pointerWithModifiers("pointermove", 2070, { shiftKey: true }),
+    );
+    fireEvent(handle, pointer("pointerup", 2070));
+
+    const [, , endSeconds] = onRegionResizeCommit.mock.calls[0];
+    expect(endSeconds).toBeCloseTo(20.7, 6);
+  });
+
+  it("Alt ya NO salta el snap: es Shift, como el resto del ruler", () => {
+    const onRegionResizeCommit = vi.fn();
+    const { handle } = setupResize("end", onRegionResizeCommit);
+
+    fireEvent(handle, pointer("pointerdown", 2000));
+    fireEvent(
+      handle,
+      pointerWithModifiers("pointermove", 2070, { altKey: true }),
+    );
+    fireEvent(handle, pointer("pointerup", 2070));
+
+    const [, , endSeconds] = onRegionResizeCommit.mock.calls[0];
+    expect(endSeconds).toBeCloseTo(20.5, 6);
   });
 });
