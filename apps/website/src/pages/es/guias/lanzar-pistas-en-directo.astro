@@ -9,6 +9,7 @@ const sections = [
       "Usa nombres que sigan siendo evidentes bajo presión: Batería, Bajo, Teclados, Guitarras, Coros, Click y Guía. Separa el click y los avisos hablados de las pistas musicales porque normalmente deben llegar a los músicos, no al público.",
     ],
     checklist: ["Usa la misma frecuencia de muestreo en todos los archivos.", "Deja margen suficiente para evitar saturar la salida de la interfaz.", "Escucha cada archivo exportado antes de importar el repertorio."],
+    media: { src: "/screenshots/Library-Assets-Import.webm", poster: "/screenshots/Library-Assets-Import-poster.webp", alt: "Importación de audios preparados en la biblioteca de LibreTracks", width: 820, height: 442, type: "video" as const },
   },
   {
     heading: "2. Decide qué escuchan el público y los músicos",
@@ -16,6 +17,7 @@ const sections = [
       "La configuración más sencilla envía los stems musicales a la mesa principal y el click con la voz guía a los monitores in-ear. Una interfaz grande permite entregar pistas individuales; con menos salidas puedes enviar una mezcla estéreo de música y otra salida para avisos.",
       "Escribe el mapa de salidas antes de abrir el programa. Una lista como 1–2 Música, 3 Click y 4 Guía evita improvisaciones durante la prueba de sonido.",
     ],
+    media: { src: "/screenshots/Track-Audio-Route.webp", alt: "Selección de una salida física para una pista de click en LibreTracks", width: 572, height: 431 },
   },
   {
     heading: "3. Construye canciones, marcas y transiciones",
@@ -23,6 +25,7 @@ const sections = [
       "Importa los stems, crea una región por canción y añade marcas en las secciones donde la banda pueda necesitar reaccionar. Mantén visible el orden del repertorio y usa nombres claros para las canciones.",
       "Añade únicamente saltos en vivo, bucles Vamp o transiciones automáticas que la banda haya ensayado. La flexibilidad funciona cuando todos entienden qué significa el siguiente aviso.",
     ],
+    media: { src: "/screenshots/Live-View.webp", alt: "Vista Live de LibreTracks con marcas y controles de salto", width: 1200, height: 632 },
   },
   {
     heading: "4. Ensaya también los fallos",
@@ -42,10 +45,12 @@ const sections = [
   eyebrow="Flujo de playback en vivo"
   heading="Cómo lanzar pistas en directo"
   intro="Un sistema de playback fiable empieza antes de llevar el portátil al escenario. Este flujo mantiene la preparación, las salidas, el control musical y el plan de respaldo claros para toda la banda."
+  hero={{ src: "/screenshots/Compact-View.webp", alt: "Repertorio por canciones en la Vista Compacta de LibreTracks", width: 1100, height: 590 }}
   sections={sections}
   related={[
     { href: "/es/download/", label: "Descargar LibreTracks" },
     { href: "/es/docs/core-concepts/", label: "Crear el primer repertorio" },
     { href: "/es/docs/live-control-flow/", label: "Guía de control en vivo" },
   ]}
+  nextGuide={{ href: "/es/guias/salidas-audio-multitrack/", label: "Cómo rutear audio multitrack en directo" }}
 />

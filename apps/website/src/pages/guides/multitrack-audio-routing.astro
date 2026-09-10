@@ -9,6 +9,7 @@ const sections = [
       "Choose the smallest layout that gives the engineer useful control. More outputs are not automatically better if they add untested cables, adapters and gain stages.",
     ],
     checklist: ["1–2: stereo music mix", "3: click", "4: spoken guide", "Optional extra pairs: drums, bass, instruments and vocals"],
+    media: { src: "/screenshots/Click-Config.webp", alt: "LibreTracks metronome output and volume configuration", width: 912, height: 486 },
   },
   {
     heading: "Match the interface and software routes",
@@ -16,6 +17,7 @@ const sections = [
       "Select the interface, sample rate and buffer size before assigning tracks. Route each stem or folder bus to the numbered hardware output in your written plan, then route the metronome separately.",
       "Folder buses are useful when several tracks should reach the same pair of outputs. They keep the timeline readable while allowing one level change to control the whole group.",
     ],
+    media: { src: "/screenshots/Track-Audio-Route.webp", alt: "Hardware output choices on a LibreTracks audio track", width: 572, height: 431 },
   },
   {
     heading: "Set levels without stealing headroom",
@@ -42,10 +44,12 @@ const sections = [
   eyebrow="Audio routing"
   heading="Multitrack audio routing for live shows"
   intro="A clear output map makes a playback system easier to soundcheck and easier to recover. Use this practical sequence to move from stems on the timeline to labelled channels at the mixer."
+  hero={{ src: "/screenshots/Track-Audio-Route.webp", alt: "Routing a click track to an external output in LibreTracks", width: 572, height: 431 }}
   sections={sections}
   related={[
     { href: "/download/", label: "Download LibreTracks" },
     { href: "/docs/audio-routing-metronome/", label: "Routing documentation" },
     { href: "/docs/integration-ecosystem/", label: "Recommended live setup" },
   ]}
+  nextGuide={{ href: "/guides/run-backing-tracks-live/", label: "How to run backing tracks live" }}
 />

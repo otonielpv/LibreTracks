@@ -9,6 +9,7 @@ const sections = [
       "Elige el esquema más sencillo que dé al técnico un control útil. Tener más salidas no ayuda si añade cables, adaptadores y etapas de ganancia que nadie ha probado.",
     ],
     checklist: ["1–2: mezcla estéreo de música", "3: click", "4: voz guía", "Pares opcionales: batería, bajo, instrumentos y voces"],
+    media: { src: "/screenshots/Click-Config.webp", alt: "Configuración de salida y volumen del metrónomo en LibreTracks", width: 912, height: 486 },
   },
   {
     heading: "Haz coincidir la interfaz y las rutas del programa",
@@ -16,6 +17,7 @@ const sections = [
       "Selecciona la interfaz, frecuencia de muestreo y tamaño de búfer antes de asignar pistas. Envía cada stem o bus de carpeta a la salida física indicada en el mapa y configura el metrónomo por separado.",
       "Los buses de carpeta sirven para enviar varias pistas al mismo par de salidas. Mantienen el timeline legible y permiten controlar el nivel del grupo desde un único fader.",
     ],
+    media: { src: "/screenshots/Track-Audio-Route.webp", alt: "Opciones de salida física en una pista de audio de LibreTracks", width: 572, height: 431 },
   },
   {
     heading: "Ajusta niveles sin perder margen",
@@ -42,10 +44,12 @@ const sections = [
   eyebrow="Salidas de audio"
   heading="Cómo rutear audio multitrack en directo"
   intro="Un mapa de salidas claro hace que el playback sea más fácil de probar y recuperar. Sigue esta secuencia para llevar los stems del timeline a canales identificados en la mesa."
+  hero={{ src: "/screenshots/Track-Audio-Route.webp", alt: "Ruteo de una pista de click a una salida externa en LibreTracks", width: 572, height: 431 }}
   sections={sections}
   related={[
     { href: "/es/download/", label: "Descargar LibreTracks" },
     { href: "/es/docs/audio-routing-metronome/", label: "Documentación de salidas" },
     { href: "/es/docs/integration-ecosystem/", label: "Montaje recomendado" },
   ]}
+  nextGuide={{ href: "/es/guias/lanzar-pistas-en-directo/", label: "Cómo lanzar pistas en directo" }}
 />

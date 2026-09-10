@@ -6,11 +6,17 @@ const guides = [
     href: "/guides/run-backing-tracks-live/",
     title: "How to run backing tracks live",
     body: "A practical workflow for stems, click, guide vocals, song order, rehearsal and a safer fallback plan.",
+    image: "/screenshots/Compact-View.webp",
+    alt: "Songs and stems prepared in LibreTracks Compact View",
+    meta: "4 practical steps · 6 min",
   },
   {
     href: "/guides/multitrack-audio-routing/",
     title: "Multitrack audio routing for live shows",
     body: "Plan interface outputs, separate the audience mix from cues and verify every route before soundcheck.",
+    image: "/screenshots/Track-Audio-Route.webp",
+    alt: "Audio track output routing in LibreTracks",
+    meta: "Output checklist · 5 min",
   },
 ];
 ---
@@ -20,18 +26,26 @@ const guides = [
   description="Practical guides for running backing tracks live: prepare stems, route multitrack audio, configure click and guide vocals, rehearse and build a reliable set."
   lang="en"
 >
-  <main class="site-shell band">
-    <header class="section-heading">
-      <p class="eyebrow">Practical guides</p>
-      <h1>Run backing tracks with a clear, repeatable workflow</h1>
-      <p>Stage-focused instructions for musicians, worship teams and playback operators using their own audio files.</p>
+  <main class="site-shell band guide-hub">
+    <header class="guide-hub-hero">
+      <div>
+        <p class="eyebrow">Practical guides</p>
+        <h1>Build a live playback rig you understand</h1>
+        <p>Visual, stage-focused instructions for musicians, worship teams and playback operators using their own audio files.</p>
+      </div>
+      <img src="/screenshots/Live-View.webp" alt="LibreTracks Live View prepared for a performance" width="1200" height="632" fetchpriority="high" />
     </header>
-    <div class="feature-grid">
+    <div class="guide-card-grid">
       {guides.map((guide) => (
-        <article class="feature-card">
-          <h2><a href={guide.href}>{guide.title}</a></h2>
-          <p>{guide.body}</p>
-        </article>
+        <a class="guide-card" href={guide.href}>
+          <img src={guide.image} alt={guide.alt} width="1100" height="590" loading="lazy" />
+          <div>
+            <span class="guide-card-meta">{guide.meta}</span>
+            <h2>{guide.title}</h2>
+            <p>{guide.body}</p>
+            <strong>Read the guide <span aria-hidden="true">→</span></strong>
+          </div>
+        </a>
       ))}
     </div>
   </main>

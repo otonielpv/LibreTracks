@@ -6,11 +6,17 @@ const guides = [
     href: "/es/guias/lanzar-pistas-en-directo/",
     title: "Cómo lanzar pistas en directo",
     body: "Un flujo práctico para stems, click, voz guía, orden de canciones, ensayo y un plan de respaldo más seguro.",
+    image: "/screenshots/Compact-View.webp",
+    alt: "Canciones y stems preparados en la Vista Compacta de LibreTracks",
+    meta: "4 pasos prácticos · 6 min",
   },
   {
     href: "/es/guias/salidas-audio-multitrack/",
     title: "Cómo rutear audio multitrack en directo",
     body: "Planifica las salidas de la interfaz, separa la mezcla de público de los avisos y verifica cada ruta antes de la prueba de sonido.",
+    image: "/screenshots/Track-Audio-Route.webp",
+    alt: "Ruteo de la salida de una pista de audio en LibreTracks",
+    meta: "Checklist de salidas · 5 min",
   },
 ];
 ---
@@ -20,18 +26,26 @@ const guides = [
   description="Guías prácticas para lanzar pistas en directo: prepara stems, configura salidas multitrack, click y voz guía, ensaya y construye un repertorio fiable."
   lang="es"
 >
-  <main class="site-shell band">
-    <header class="section-heading">
-      <p class="eyebrow">Guías prácticas</p>
-      <h1>Lanza pistas en directo con un flujo claro y repetible</h1>
-      <p>Instrucciones orientadas al escenario para músicos, grupos de alabanza y operadores de playback que usan sus propios audios.</p>
+  <main class="site-shell band guide-hub">
+    <header class="guide-hub-hero">
+      <div>
+        <p class="eyebrow">Guías prácticas</p>
+        <h1>Construye un sistema de playback que entiendas</h1>
+        <p>Instrucciones visuales y orientadas al escenario para músicos, grupos de alabanza y operadores que usan sus propios audios.</p>
+      </div>
+      <img src="/screenshots/Live-View.webp" alt="Vista Live de LibreTracks preparada para un directo" width="1200" height="632" fetchpriority="high" />
     </header>
-    <div class="feature-grid">
+    <div class="guide-card-grid">
       {guides.map((guide) => (
-        <article class="feature-card">
-          <h2><a href={guide.href}>{guide.title}</a></h2>
-          <p>{guide.body}</p>
-        </article>
+        <a class="guide-card" href={guide.href}>
+          <img src={guide.image} alt={guide.alt} width="1100" height="590" loading="lazy" />
+          <div>
+            <span class="guide-card-meta">{guide.meta}</span>
+            <h2>{guide.title}</h2>
+            <p>{guide.body}</p>
+            <strong>Leer la guía <span aria-hidden="true">→</span></strong>
+          </div>
+        </a>
       ))}
     </div>
   </main>

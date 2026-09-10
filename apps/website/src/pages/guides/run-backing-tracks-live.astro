@@ -9,6 +9,7 @@ const sections = [
       "Use names that remain obvious under pressure: Drums, Bass, Keys, Guitars, BGV, Click and Guide. Keep click and spoken cues separate from musical stems because they should normally reach the performers, not the audience.",
     ],
     checklist: ["Use the same sample rate for every file.", "Leave enough headroom to avoid clipping at the interface output.", "Play every exported file once before importing the set."],
+    media: { src: "/screenshots/Library-Assets-Import.webm", poster: "/screenshots/Library-Assets-Import-poster.webp", alt: "Importing prepared audio into the LibreTracks library", width: 820, height: 442, type: "video" as const },
   },
   {
     heading: "2. Decide what the audience and musicians should hear",
@@ -16,6 +17,7 @@ const sections = [
       "The simplest setup sends the musical stems to the front-of-house mixer and sends click plus guide vocals to an in-ear monitor path. A larger interface lets the engineer receive individual stems; a smaller interface can send a stereo music mix and a separate cue output.",
       "Write the output map down before opening the software. A numbered list such as 1–2 Music, 3 Click and 4 Guide prevents last-minute guessing at soundcheck.",
     ],
+    media: { src: "/screenshots/Track-Audio-Route.webp", alt: "Choosing a hardware output for a click track in LibreTracks", width: 572, height: 431 },
   },
   {
     heading: "3. Build songs, markers and transitions",
@@ -23,6 +25,7 @@ const sections = [
       "Import the stems, create one song region per song and add markers for sections where the band may need to react. Keep the set order visible and use clear song names rather than file-system abbreviations.",
       "Only add live jumps, Vamp loops or automatic transitions that the band has rehearsed. Flexibility is useful when every performer understands what the next cue means.",
     ],
+    media: { src: "/screenshots/Live-View.webp", alt: "LibreTracks Live View with song markers and jump controls", width: 1200, height: 632 },
   },
   {
     heading: "4. Rehearse the failure cases",
@@ -42,10 +45,12 @@ const sections = [
   eyebrow="Live playback workflow"
   heading="How to run backing tracks live"
   intro="A dependable playback rig starts before the laptop reaches the stage. This workflow keeps audio preparation, routing, musical control and failure planning understandable for the whole band."
+  hero={{ src: "/screenshots/Compact-View.webp", alt: "A live set arranged by song in LibreTracks Compact View", width: 1100, height: 590 }}
   sections={sections}
   related={[
     { href: "/download/", label: "Download LibreTracks" },
     { href: "/docs/core-concepts/", label: "Build the first set" },
     { href: "/docs/live-control-flow/", label: "Live control guide" },
   ]}
+  nextGuide={{ href: "/guides/multitrack-audio-routing/", label: "Multitrack audio routing for live shows" }}
 />

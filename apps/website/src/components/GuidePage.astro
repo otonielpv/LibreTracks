@@ -5,6 +5,14 @@ interface Section {
   heading: string;
   paragraphs: string[];
   checklist?: string[];
+  media?: {
+    src: string;
+    alt: string;
+    width: number;
+    height: number;
+    type?: "image" | "video";
+    poster?: string;
+  };
 }
 
 interface RelatedLink {
@@ -19,11 +27,18 @@ interface Props {
   eyebrow: string;
   heading: string;
   intro: string;
+  hero: {
+    src: string;
+    alt: string;
+    width: number;
+    height: number;
+  };
   sections: Section[];
   related: RelatedLink[];
+  nextGuide?: RelatedLink;
 }
 
-const { title, description, lang, eyebrow, heading, intro, sections, related } = Astro.props;
+const { title, description, lang, eyebrow, heading, intro, hero, sections, related, nextGuide } = Astro.props;
 const isSpanish = lang === "es";
 const prefix = isSpanish ? "/es" : "";
 const canonical = new URL(Astro.url.pathname, Astro.site ?? "https://libretracks.com");
@@ -54,42 +69,78 @@ const structuredData = [
 ---
 
 <SiteLayout title={title} description={description} lang={lang} structuredData={structuredData}>
-  <main class="site-shell band legal-page">
-    <nav aria-label={isSpanish ? "Migas de pan" : "Breadcrumb"}>
+  <main class="site-shell band guide-page">
+    <nav class="guide-breadcrumb" aria-label={isSpanish ? "Migas de pan" : "Breadcrumb"}>
       <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>
-        {isSpanish ? "Guías" : "Guides"}
+        <span aria-hidden="true">←</span> {isSpanish ? "Todas las guías" : "All guides"}
       </a>
     </nav>
-    <header class="section-heading">
-      <p class="eyebrow">{eyebrow}</p>
-      <h1>{heading}</h1>
-      <p>{intro}</p>
+
+    <header class="guide-hero">
+      <div>
+        <p class="eyebrow">{eyebrow}</p>
+        <h1>{heading}</h1>
+        <p>{intro}</p>
+      </div>
+      <figure>
+        <img src={hero.src} alt={hero.alt} width={hero.width} height={hero.height} fetchpriority="high" decoding="async" />
+      </figure>
     </header>
 
-    <article>
-      {sections.map((section) => (
-        <section>
-          <h2>{section.heading}</h2>
-          {section.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
-          {section.checklist && (
-            <ul>
-              {section.checklist.map((item) => <li>{item}</li>)}
-            </ul>
+    <nav class="guide-toc" aria-label={isSpanish ? "Pasos de la guía" : "Guide steps"}>
+      {sections.map((section, index) => (
+        <a href={`#step-${index + 1}`}><span>{index + 1}</span>{section.heading.replace(/^\d+\.\s*/, "")}</a>
+      ))}
+    </nav>
+
+    <article class="guide-sections">
+      {sections.map((section, index) => (
+        <section class="guide-step" id={`step-${index + 1}`}>
+          <div class="guide-step-copy">
+            <span class="guide-step-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+            <h2>{section.heading.replace(/^\d+\.\s*/, "")}</h2>
+            {section.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+            {section.checklist && (
+              <ul class="guide-checklist">
+                {section.checklist.map((item) => <li>{item}</li>)}
+              </ul>
+            )}
+          </div>
+          {section.media && (
+            <figure class="guide-step-media">
+              {section.media.type === "video" ? (
+                <video controls muted playsinline preload="metadata" poster={section.media.poster} width={section.media.width} height={section.media.height} aria-label={section.media.alt}>
+                  <source src={section.media.src} type="video/webm" />
+                </video>
+              ) : (
+                <img src={section.media.src} alt={section.media.alt} width={section.media.width} height={section.media.height} loading="lazy" decoding="async" />
+              )}
+            </figure>
           )}
         </section>
       ))}
     </article>
 
-    <aside class="docs-preview">
-      <div class="section-heading">
-        <p class="eyebrow">{isSpanish ? "Siguiente paso" : "Next step"}</p>
+    <aside class="guide-actions-panel">
+      <div>
+        <p class="eyebrow">{isSpanish ? "Ponlo en práctica" : "Put it into practice"}</p>
         <h2>{isSpanish ? "Prepara tu primer repertorio" : "Prepare your first set"}</h2>
-        <div class="hero-actions">
-          {related.map((link, index) => (
-            <a class={`button-link${index === 0 ? " primary" : ""}`} href={link.href}>{link.label}</a>
-          ))}
-        </div>
+        <p>{isSpanish ? "Descarga LibreTracks o abre la documentación exacta para configurar este flujo." : "Download LibreTracks or open the exact documentation needed to configure this workflow."}</p>
+      </div>
+      <div class="guide-action-links">
+        {related.map((link, index) => (
+          <a class={`button-link${index === 0 ? " primary" : ""}`} href={link.href}>
+            {link.label} <span aria-hidden="true">→</span>
+          </a>
+        ))}
       </div>
     </aside>
+
+    {nextGuide && (
+      <nav class="guide-next" aria-label={isSpanish ? "Siguiente guía" : "Next guide"}>
+        <span>{isSpanish ? "Siguiente guía" : "Next guide"}</span>
+        <a href={nextGuide.href}>{nextGuide.label} <span aria-hidden="true">→</span></a>
+      </nav>
+    )}
   </main>
 </SiteLayout>
