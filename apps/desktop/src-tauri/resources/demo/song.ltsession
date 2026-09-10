@@ -3,42 +3,37 @@
   "id": "song_demo",
   "title": "Demo de LibreTracks",
   "artist": "LibreTracks",
-  "key": "G",
-  "bpm": 88.0,
+  "key": "D",
+  "bpm": 110.0,
   "timeSignature": "4/4",
-  "durationSeconds": 75.636,
+  "durationSeconds": 123.0,
   "tempoMarkers": [
     {
-      "id": "tempo-adelante",
+      "id": "tempo-costa-norte",
       "startSeconds": 0.0,
-      "bpm": 88.0
+      "bpm": 110.0
     },
     {
-      "id": "tempo-descanso",
-      "startSeconds": 45.636,
-      "bpm": 72.0
+      "id": "tempo-callejon-blues",
+      "startSeconds": 55.0,
+      "bpm": 90.0
     }
   ],
   "timeSignatureMarkers": [
     {
-      "id": "signature-adelante",
+      "id": "signature-demo",
       "startSeconds": 0.0,
       "signature": "4/4"
-    },
-    {
-      "id": "signature-descanso",
-      "startSeconds": 45.636,
-      "signature": "3/4"
     }
   ],
   "regions": [
     {
-      "id": "region-adelante",
-      "name": "Adelante",
+      "id": "region-costa-norte",
+      "name": "Costa Norte",
       "startSeconds": 0.0,
-      "endSeconds": 43.636,
+      "endSeconds": 53.0,
       "transposeSemitones": 0,
-      "key": "G",
+      "key": "D",
       "warpEnabled": false,
       "warpSourceBpm": null,
       "master": {
@@ -46,12 +41,12 @@
       }
     },
     {
-      "id": "region-descanso",
-      "name": "Descanso",
-      "startSeconds": 45.636,
-      "endSeconds": 75.636,
+      "id": "region-callejon-blues",
+      "name": "Callej\u00f3n Blues",
+      "startSeconds": 55.0,
+      "endSeconds": 123.0,
       "transposeSemitones": 0,
-      "key": "D",
+      "key": "A",
       "warpEnabled": false,
       "warpSourceBpm": null,
       "master": {
@@ -62,7 +57,7 @@
   "tracks": [
     {
       "id": "track-bateria",
-      "name": "Bateria",
+      "name": "Bater\u00eda",
       "kind": "audio",
       "parentTrackId": null,
       "volume": 1.0,
@@ -91,12 +86,12 @@
       "collapsed": false
     },
     {
-      "id": "track-teclado",
-      "name": "Teclado",
+      "id": "track-piano",
+      "name": "Piano",
       "kind": "audio",
       "parentTrackId": null,
-      "volume": 1.0,
-      "pan": 0.0,
+      "volume": 0.7943,
+      "pan": -0.35,
       "muted": false,
       "solo": false,
       "transposeEnabled": true,
@@ -106,106 +101,158 @@
       "collapsed": false
     },
     {
-      "id": "track-melodia",
-      "name": "Melodia",
-      "kind": "audio",
+      "id": "track-guitarras",
+      "name": "Guitarras",
+      "kind": "folder",
       "parentTrackId": null,
-      "volume": 1.0,
+      "volume": 0.8913,
       "pan": 0.0,
       "muted": false,
       "solo": false,
       "transposeEnabled": true,
       "audioTo": "master",
+      "color": "#8a7fd0",
+      "autoCreated": false,
+      "collapsed": false
+    },
+    {
+      "id": "track-acustica",
+      "name": "Ac\u00fastica",
+      "kind": "audio",
+      "parentTrackId": "track-guitarras",
+      "volume": 0.7079,
+      "pan": -0.6,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "inherit",
       "color": "#5a8fd6",
+      "autoCreated": false,
+      "collapsed": false
+    },
+    {
+      "id": "track-electrica",
+      "name": "El\u00e9ctrica",
+      "kind": "audio",
+      "parentTrackId": "track-guitarras",
+      "volume": 0.7943,
+      "pan": 0.6,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "inherit",
+      "color": "#b07bd4",
       "autoCreated": false,
       "collapsed": false
     }
   ],
   "clips": [
     {
-      "id": "clip-adelante-bateria",
+      "id": "clip-costa-norte-bateria",
       "trackId": "track-bateria",
-      "filePath": "audio/adelante/bateria.mp3",
+      "filePath": "audio/costa-norte/bateria.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 43.636,
+      "durationSeconds": 53.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-adelante-bajo",
+      "id": "clip-costa-norte-bajo",
       "trackId": "track-bajo",
-      "filePath": "audio/adelante/bajo.mp3",
+      "filePath": "audio/costa-norte/bajo.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 43.636,
+      "durationSeconds": 53.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-adelante-teclado",
-      "trackId": "track-teclado",
-      "filePath": "audio/adelante/teclado.mp3",
+      "id": "clip-costa-norte-piano",
+      "trackId": "track-piano",
+      "filePath": "audio/costa-norte/piano.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 43.636,
+      "durationSeconds": 53.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-adelante-melodia",
-      "trackId": "track-melodia",
-      "filePath": "audio/adelante/melodia.mp3",
+      "id": "clip-costa-norte-acustica",
+      "trackId": "track-acustica",
+      "filePath": "audio/costa-norte/acustica.mp3",
       "timelineStartSeconds": 0.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 43.636,
+      "durationSeconds": 53.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-descanso-bateria",
+      "id": "clip-costa-norte-electrica",
+      "trackId": "track-electrica",
+      "filePath": "audio/costa-norte/electrica.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 53.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-callejon-blues-bateria",
       "trackId": "track-bateria",
-      "filePath": "audio/descanso/bateria.mp3",
-      "timelineStartSeconds": 45.636,
+      "filePath": "audio/callejon-blues/bateria.mp3",
+      "timelineStartSeconds": 55.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 30.0,
+      "durationSeconds": 68.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-descanso-bajo",
+      "id": "clip-callejon-blues-bajo",
       "trackId": "track-bajo",
-      "filePath": "audio/descanso/bajo.mp3",
-      "timelineStartSeconds": 45.636,
+      "filePath": "audio/callejon-blues/bajo.mp3",
+      "timelineStartSeconds": 55.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 30.0,
+      "durationSeconds": 68.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-descanso-teclado",
-      "trackId": "track-teclado",
-      "filePath": "audio/descanso/teclado.mp3",
-      "timelineStartSeconds": 45.636,
+      "id": "clip-callejon-blues-piano",
+      "trackId": "track-piano",
+      "filePath": "audio/callejon-blues/piano.mp3",
+      "timelineStartSeconds": 55.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 30.0,
+      "durationSeconds": 68.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
     },
     {
-      "id": "clip-descanso-melodia",
-      "trackId": "track-melodia",
-      "filePath": "audio/descanso/melodia.mp3",
-      "timelineStartSeconds": 45.636,
+      "id": "clip-callejon-blues-acustica",
+      "trackId": "track-acustica",
+      "filePath": "audio/callejon-blues/acustica.mp3",
+      "timelineStartSeconds": 55.0,
       "sourceStartSeconds": 0.0,
-      "durationSeconds": 30.0,
+      "durationSeconds": 68.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-callejon-blues-electrica",
+      "trackId": "track-electrica",
+      "filePath": "audio/callejon-blues/electrica.mp3",
+      "timelineStartSeconds": 55.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 68.0,
       "gain": 1.0,
       "fadeInSeconds": null,
       "fadeOutSeconds": null
@@ -214,60 +261,67 @@
   "midiClips": [],
   "sectionMarkers": [
     {
-      "id": "marker-adelante-intro",
+      "id": "marker-costa-norte-intro-1",
       "name": "Intro",
       "startSeconds": 0.0,
-      "digit": null,
+      "digit": 1,
       "kind": "intro"
     },
     {
-      "id": "marker-adelante-verse",
+      "id": "marker-costa-norte-verse-5",
       "name": "Estrofa",
-      "startSeconds": 10.909,
-      "digit": null,
+      "startSeconds": 8.727,
+      "digit": 2,
       "kind": "verse"
     },
     {
-      "id": "marker-adelante-chorus",
+      "id": "marker-costa-norte-chorus-13",
       "name": "Estribillo",
-      "startSeconds": 21.818,
-      "digit": null,
+      "startSeconds": 26.182,
+      "digit": 3,
       "kind": "chorus"
     },
     {
-      "id": "marker-adelante-outro",
-      "name": "Final",
-      "startSeconds": 32.727,
-      "digit": null,
-      "kind": "outro"
+      "id": "marker-costa-norte-ending-21",
+      "name": "Acorde final",
+      "startSeconds": 43.636,
+      "digit": 4,
+      "kind": "ending"
     },
     {
-      "id": "marker-descanso-intro",
-      "name": "Intro",
-      "startSeconds": 45.636,
-      "digit": null,
-      "kind": "intro"
-    },
-    {
-      "id": "marker-descanso-verse",
-      "name": "Estrofa",
-      "startSeconds": 53.136,
-      "digit": null,
+      "id": "marker-callejon-blues-verse-1",
+      "name": "Vuelta 1",
+      "startSeconds": 55.0,
+      "digit": 5,
       "kind": "verse"
     },
     {
-      "id": "marker-descanso-chorus",
-      "name": "Estribillo",
-      "startSeconds": 60.636,
+      "id": "marker-callejon-blues-turnaround-12",
+      "name": "Turnaround",
+      "startSeconds": 84.333,
       "digit": null,
-      "kind": "chorus"
+      "kind": "turnaround"
     },
     {
-      "id": "marker-descanso-outro",
-      "name": "Final",
-      "startSeconds": 68.136,
+      "id": "marker-callejon-blues-solo-13",
+      "name": "Vuelta 2",
+      "startSeconds": 87.0,
+      "digit": 6,
+      "kind": "solo"
+    },
+    {
+      "id": "marker-callejon-blues-turnaround-24",
+      "name": "Turnaround",
+      "startSeconds": 116.333,
       "digit": null,
-      "kind": "outro"
+      "kind": "turnaround"
+    },
+    {
+      "id": "marker-callejon-blues-ending-25",
+      "name": "Golpe final",
+      "startSeconds": 119.0,
+      "digit": 7,
+      "kind": "ending"
     }
   ]
 }

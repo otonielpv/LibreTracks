@@ -73,7 +73,7 @@ class MainActivity : TauriActivity() {
   // changes so the Rust side can point at a real directory.
   //
   //   voices - the voice-guide WAV bank (~33 MB)
-  //   demo   - the bundled demo song: session document + four stems (~2 MB),
+  //   demo   - the bundled demo set: session document + recorded stems (~7 MB),
   //            which is what makes a first run, and an App Store review, show
   //            something instead of an empty timeline.
   //
@@ -89,7 +89,7 @@ class MainActivity : TauriActivity() {
         return@Thread
       }
       // Independent per folder on purpose: a failure copying the 33 MB voice
-      // bank must not cost the user the 2 MB demo, or the other way round.
+      // bank must not cost the user the 7 MB demo, or the other way round.
       for (name in listOf("voices", "demo")) {
         try {
           val dest = File(filesDir, name)
