@@ -30,7 +30,7 @@ class MainActivity : TauriActivity() {
       Intent(this, AudioPlaybackService::class.java),
     )
 
-    installVoiceGuideAssets()
+    installBundledAssets()
   }
 
   // Android warns before it kills. Ignoring that warning is how importing a
@@ -67,31 +67,43 @@ class MainActivity : TauriActivity() {
   // sync for no benefit.
   private external fun nativeOnTrimMemory(level: Int): Long
 
-  // The voice-guide WAV bank ships as Android assets (assets/voices/), but the
-  // native decoder needs fopen-able paths and Tauri's resource bundler doesn't
-  // ship `resources` on Android. Copy the bank to filesDir/voices when the
-  // install changes so the Rust side can point the engine at a real directory.
+  // Bundled asset folders ship inside the APK (assets/<name>/), but the native
+  // decoder needs fopen-able paths and Tauri's resource bundler doesn't ship
+  // `resources` on Android. Copy each one to filesDir/<name> when the install
+  // changes so the Rust side can point at a real directory.
+  //
+  //   voices - the voice-guide WAV bank (~33 MB)
+  //   demo   - the bundled demo song: session document + four stems (~2 MB),
+  //            which is what makes a first run, and an App Store review, show
+  //            something instead of an empty timeline.
+  //
   // Keyed by lastUpdateTime (not versionCode) so re-installing a build that
-  // changed the bank without bumping the version still refreshes it. Runs off
-  // the UI thread — ~33 MB of WAVs.
-  private fun installVoiceGuideAssets() {
+  // changed an asset without bumping the version still refreshes it. Runs off
+  // the UI thread.
+  private fun installBundledAssets() {
     Thread {
-      try {
-        val dest = File(filesDir, "voices")
-        val stamp = File(filesDir, "voices/.version")
-        val version = packageManager
-          .getPackageInfo(packageName, 0)
-          .lastUpdateTime
-          .toString()
-        if (dest.isDirectory && stamp.isFile && stamp.readText() == version) {
-          return@Thread
-        }
-        dest.deleteRecursively()
-        copyAssetDir("voices", dest)
-        stamp.writeText(version)
-        Log.i("LTVoiceGuide", "voice-guide assets installed to ${dest.absolutePath}")
+      val version = try {
+        packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
       } catch (e: Exception) {
-        Log.e("LTVoiceGuide", "failed to install voice-guide assets", e)
+        Log.e("LTAssets", "could not read the install stamp", e)
+        return@Thread
+      }
+      // Independent per folder on purpose: a failure copying the 33 MB voice
+      // bank must not cost the user the 2 MB demo, or the other way round.
+      for (name in listOf("voices", "demo")) {
+        try {
+          val dest = File(filesDir, name)
+          val stamp = File(filesDir, "$name/.version")
+          if (dest.isDirectory && stamp.isFile && stamp.readText() == version) {
+            continue
+          }
+          dest.deleteRecursively()
+          copyAssetDir(name, dest)
+          stamp.writeText(version)
+          Log.i("LTAssets", "$name assets installed to ${dest.absolutePath}")
+        } catch (e: Exception) {
+          Log.e("LTAssets", "failed to install $name assets", e)
+        }
       }
     }.start()
   }

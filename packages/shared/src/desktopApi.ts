@@ -799,6 +799,21 @@ export async function deleteSessionAt(songFile: string): Promise<void> {
   await invokeCommand<null>("delete_session_at", { songFile });
 }
 
+/**
+ * Copy the bundled demo song into the device's songs folder and return the
+ * new `.ltsession` path.
+ *
+ * The caller opens it with `openProjectFromPath`, exactly as it would any
+ * session the landing lists: the demo gets no loading path of its own, so it
+ * cannot drift away from the real one.
+ *
+ * Mobile only. Desktop ships no `resources/demo`, and the backend answers with
+ * a plain message rather than pretending to succeed.
+ */
+export async function createDemoSession(): Promise<string> {
+  return invokeCommand<string>("create_demo_session");
+}
+
 /** Open a session whose `.ltsession` path is already known (Android landing). */
 export async function openProjectFromPath(
   songFile: string,

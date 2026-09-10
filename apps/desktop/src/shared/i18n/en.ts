@@ -142,6 +142,10 @@ const en = {
       mobileSessionNamePlaceholder: "Session name",
       mobileSessionNameTaken: "A session with that name already exists.",
       mobileSessionsHeading: "Your sessions",
+      demoSong: "Demo song",
+      demoSongHint:
+        "Creates a sample session with four tracks to try the app out",
+      demoSongFailed: "Could not create the demo song",
       mobileNoSessions:
         "You don't have any sessions yet. Create your first one with the button above.",
       importSession: "Import session",
@@ -1370,6 +1374,10 @@ const en = {
         welcome: {
           title: "Welcome to LibreTracks",
           body: "LibreTracks plays your backing tracks live: a whole set list, each song with its own tracks, markers and sections, ready to launch without fighting the computer. This tutorial covers this screen; open a session and it carries on by itself with the work area.",
+        },
+        demo: {
+          title: "Try the sample song",
+          body: "If you have no multitracks to hand yet, this creates a session with a four-track sample song: drums, bass, keys and melody. It comes with its sections marked and its key set, so you can play it, jump between markers, transpose it and try the mixer without bringing anything of your own.",
         },
         create: {
           title: "Create a session",

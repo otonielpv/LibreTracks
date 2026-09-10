@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  createDemoSession,
   deleteSessionAt,
   isAndroidApp,
   isMobileApp,
@@ -85,6 +86,7 @@ export function MobileLanding({
   // Failure of a delete (the session is open, the folder is gone). Kept apart
   // from `folderError`, which belongs to the create form.
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [creatingDemo, setCreatingDemo] = useState(false);
 
   useEffect(() => {
     if (!isAndroidApp) {
@@ -115,6 +117,26 @@ export function MobileLanding({
    * The MRU entry goes too, but only once the folder is actually gone —
    * dropping it on a failed delete would hide a session that still exists.
    */
+  // The demo exists so a first run — and an App Store review — has something
+  // to press. It is a normal session once created, so it opens through the
+  // same prop the listed sessions use.
+  const openDemoSession = async () => {
+    setSessionError(null);
+    setCreatingDemo(true);
+    try {
+      onOpenSessionFromPath?.(await createDemoSession());
+    } catch (error: unknown) {
+      setSessionError(
+        typeof error === "string"
+          ? error
+          : ((error as Error)?.message ??
+              t("transport.shell.demoSongFailed")),
+      );
+    } finally {
+      setCreatingDemo(false);
+    }
+  };
+
   const deleteSession = async (path: string, name: string) => {
     setSessionError(null);
     const confirmed = await confirmDialog(
@@ -339,6 +361,21 @@ export function MobileLanding({
                   : t("transport.shell.recentsHeading")}
               </span>
             </div>
+            {isMobileApp ? (
+              <button
+                type="button"
+                className="lt-empty-state-demo-song"
+                data-lt-tour={TOUR_TARGETS.landingDemoSong}
+                disabled={creatingDemo}
+                title={t("transport.shell.demoSongHint")}
+                onClick={() => {
+                  void openDemoSession();
+                }}
+              >
+                <span className="material-symbols-outlined">graphic_eq</span>
+                <span>{t("transport.shell.demoSong")}</span>
+              </button>
+            ) : null}
             {isAndroidApp ? (
               deviceSessions.length > 0 ? (
                 <ul className="lt-empty-state-template-list">

@@ -28,6 +28,14 @@ export const landingTour: TourDefinition = {
       i18nKey: "tutorial.landing.steps.welcome",
     },
     {
+      // Solo movil: en escritorio la demo no se empaqueta y el boton no se
+      // renderiza, asi que el paso apuntaria al vacio.
+      id: "demo",
+      target: TOUR_TARGETS.landingDemoSong,
+      platforms: ["mobile"],
+      i18nKey: "tutorial.landing.steps.demo",
+    },
+    {
       id: "create",
       target: TOUR_TARGETS.landingCreate,
       i18nKey: "tutorial.landing.steps.create",

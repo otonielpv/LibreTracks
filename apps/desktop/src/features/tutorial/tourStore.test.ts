@@ -239,13 +239,19 @@ describe("recorrido por plataforma", () => {
   it("el recorrido de inicio sólo se salta en móvil lo que allí no existe", () => {
     // Crear, abrir e importar están en las dos pantallas de inicio y sólo
     // cambian de texto (`bodyMobile`). Lo único que se cae es traer un montaje
-    // de Reaper/Ableton, que `MobileLanding` no ofrece.
+    // de Reaper/Ableton, que `MobileLanding` no ofrece. En sentido contrario,
+    // el móvil suma la canción de ejemplo: sólo las builds de tienda empaquetan
+    // `resources/demo`, así que en escritorio ese botón no existe.
     useTourStore.getState().startTour("landing", "desktop");
     const desktop = stepIds();
     useTourStore.getState().endTour();
     useTourStore.getState().startTour("landing", "mobile");
 
-    expect(stepIds()).toEqual(desktop.filter((id) => id !== "importExternal"));
+    const mobile = stepIds();
+    expect(mobile).toContain("demo");
+    expect(mobile.filter((id) => id !== "demo")).toEqual(
+      desktop.filter((id) => id !== "importExternal"),
+    );
     expect(stepIds()).toEqual(
       expect.arrayContaining(["create", "open", "import"]),
     );

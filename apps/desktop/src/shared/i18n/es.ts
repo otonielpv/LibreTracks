@@ -142,6 +142,10 @@ const es = {
       mobileSessionNamePlaceholder: "Nombre de la sesion",
       mobileSessionNameTaken: "Ya existe una sesion con ese nombre.",
       mobileSessionsHeading: "Tus sesiones",
+      demoSong: "Cancion de demostracion",
+      demoSongHint:
+        "Crea una sesion de ejemplo con cuatro pistas para probar la app",
+      demoSongFailed: "No se pudo crear la cancion de demostracion",
       mobileNoSessions:
         "Aun no tienes sesiones. Crea la primera con el boton de arriba.",
       importSession: "Importar sesión",
@@ -1401,6 +1405,10 @@ const es = {
         welcome: {
           title: "Bienvenido a LibreTracks",
           body: "LibreTracks reproduce tus pistas de acompañamiento en directo: un repertorio entero, cada canción con sus pistas, sus marcas y sus secciones, listo para lanzarlo sin pelearte con el ordenador. Este tutorial te enseña esta pantalla; cuando abras una sesión, seguirá solo con el área de trabajo.",
+        },
+        demo: {
+          title: "Prueba con la cancion de ejemplo",
+          body: "Si todavia no tienes multipistas a mano, esto crea una sesion con una cancion de ejemplo de cuatro pistas: bateria, bajo, teclado y melodia. Trae sus secciones marcadas y su tonalidad, asi que puedes reproducirla, moverte por las marcas, cambiarle el tono y probar la mezcla sin traer nada tuyo.",
         },
         create: {
           title: "Crear una sesión",

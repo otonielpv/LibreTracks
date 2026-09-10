@@ -8,6 +8,7 @@
   "bundle": {
     "resources": {
       "resources/voices": "voices",
+      "resources/demo": "demo",
       "../../../LICENSE": "licenses/LICENSE",
       "../../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
       "../../../licenses/*": "licenses"

@@ -16,6 +16,7 @@
 
 export const TOUR_TARGETS = {
   // Rail lateral (presente con y sin sesión abierta).
+  landingDemoSong: "landing-demo-song",
   sideNavHelp: "side-nav-help",
   sideNavSessions: "side-nav-sessions",
   sideNavLibrary: "side-nav-library",

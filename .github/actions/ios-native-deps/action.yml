@@ -1,0 +1,154 @@
+name: Build iOS native dependencies
+description: >-
+  Builds Bungee, the LGPL FFmpeg decoder stack and the LibreTracks audio engine
+  as static arm64 archives for iPhoneOS, and leaves them in one directory ready
+  for the Rust linker.
+
+  Shared by the unsigned smoke build and the signed distribution build. Those
+  two must link byte-for-byte the same engine: if they drift, the IPA that gets
+  tested stops being the IPA that ships, and the guardrails below (no JUCE, no
+  silent stub) would only protect whichever copy still had them.
+
+inputs:
+  bungee-version:
+    description: Bungee release tag to build.
+    required: true
+  ffmpeg-version:
+    description: FFmpeg release to build.
+    required: true
+  deployment-target:
+    description: Minimum iOS version, matching bundle.iOS.minimumSystemVersion.
+    required: false
+    default: "15.0"
+
+outputs:
+  lib-dir:
+    description: Directory holding every static archive the Rust link step needs.
+    value: ${{ steps.link-dir.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Verify Apple build tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        xcodebuild -version
+        xcrun --sdk iphoneos --show-sdk-version
+        if ! command -v pod >/dev/null 2>&1; then
+          brew install cocoapods
+        fi
+        pod --version
+
+    - name: Cache Bungee iOS build
+      id: bungee-cache
+      uses: actions/cache@v4
+      with:
+        path: bungee-ios-sdk
+        key: bungee-ios-${{ inputs.bungee-version }}-arm64-ios${{ inputs.deployment-target }}
+
+    - name: Build Bungee for iPhone
+      if: steps.bungee-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        BUNGEE_VERSION: ${{ inputs.bungee-version }}
+        IOS_DEPLOYMENT_TARGET: ${{ inputs.deployment-target }}
+      run: |
+        set -euo pipefail
+        git clone --depth 1 --branch "$BUNGEE_VERSION" --recurse-submodules \
+          https://github.com/bungee-audio-stretch/bungee.git bungee-ios-src
+        cmake -S bungee-ios-src -B bungee-ios-src/build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_SYSROOT=iphoneos \
+          -DCMAKE_OSX_ARCHITECTURES=arm64 \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+          -DBUNGEE_BUILD_SHARED_LIBRARY=OFF \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DBUNGEE_VERSION="${BUNGEE_VERSION#v}"
+        cmake --build bungee-ios-src/build --target bungee_library pffft --parallel 3
+        mkdir -p bungee-ios-sdk/include/bungee bungee-ios-sdk/ios-arm64
+        cp bungee-ios-src/bungee/*.h bungee-ios-sdk/include/bungee/
+        cp bungee-ios-src/build/libbungee.a bungee-ios-src/build/libpffft.a \
+          bungee-ios-sdk/ios-arm64/
+        lipo -info bungee-ios-sdk/ios-arm64/libbungee.a
+        lipo -info bungee-ios-sdk/ios-arm64/libpffft.a
+
+    - name: Cache FFmpeg iOS build
+      id: ffmpeg-cache
+      uses: actions/cache@v4
+      with:
+        path: vendor/ffmpeg-ios-arm64
+        key: ffmpeg-ios-${{ inputs.ffmpeg-version }}-arm64-ios${{ inputs.deployment-target }}-static-lgpl-v1
+
+    - name: Build LGPL FFmpeg for iPhone
+      if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        FFMPEG_VERSION: ${{ inputs.ffmpeg-version }}
+        IOS_DEPLOYMENT_TARGET: ${{ inputs.deployment-target }}
+      run: bash scripts/build-ffmpeg-ios.sh "$PWD/vendor/ffmpeg-ios-arm64"
+
+    - name: Build native audio engine for iPhone
+      id: link-dir
+      shell: bash
+      env:
+        IOS_DEPLOYMENT_TARGET: ${{ inputs.deployment-target }}
+      run: |
+        set -euo pipefail
+        build_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-arm64"
+        link_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-link"
+        ffmpeg_dir="$GITHUB_WORKSPACE/vendor/ffmpeg-ios-arm64"
+        bungee_dir="$GITHUB_WORKSPACE/bungee-ios-sdk"
+
+        export PKG_CONFIG_PATH="$ffmpeg_dir/lib/pkgconfig"
+
+        cmake -S native/audio-engine-v2 -B "$build_dir" -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_SYSROOT=iphoneos \
+          -DCMAKE_OSX_ARCHITECTURES=arm64 \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+          -DLT_ENGINE_BUILD_TESTS=OFF \
+          -DLT_ENGINE_BUILD_BENCHES=OFF \
+          -DLT_ENGINE_USE_JUCE=OFF \
+          -DLT_ENGINE_USE_OBOE=OFF \
+          -DLT_ENGINE_USE_FFMPEG=ON \
+          -DLT_ENGINE_USE_LIBSNDFILE=ON \
+          -DLT_ENGINE_USE_R8BRAIN=ON \
+          -DLT_ENGINE_USE_BUNGEE=ON \
+          -DLT_BUNGEE_DIR="$bungee_dir"
+        cmake --build "$build_dir" --parallel 3
+
+        mkdir -p "$link_dir"
+        engine_archive="$(find "$build_dir" -name 'liblt_audio_engine_v2.a' -print -quit)"
+        sndfile_archive="$(find "$build_dir" -name 'libsndfile.a' -print -quit)"
+        test -n "$engine_archive"
+        test -n "$sndfile_archive"
+        cp "$engine_archive" "$link_dir/liblt_audio_engine_v2.a"
+        cp "$sndfile_archive" "$link_dir/libsndfile.a"
+        cp "$bungee_dir/ios-arm64/libbungee.a" \
+           "$bungee_dir/ios-arm64/libpffft.a" \
+           "$ffmpeg_dir/lib/libavformat.a" \
+           "$ffmpeg_dir/lib/libavcodec.a" \
+           "$ffmpeg_dir/lib/libavutil.a" \
+           "$ffmpeg_dir/lib/libswresample.a" \
+           "$link_dir/"
+        lipo -info "$link_dir/liblt_audio_engine_v2.a"
+        lipo -info "$link_dir/libsndfile.a"
+        for library in libbungee.a libpffft.a libavformat.a libavcodec.a \
+                       libavutil.a libswresample.a; do
+          lipo -info "$link_dir/$library"
+        done
+
+        grep -q 'LT_ENGINE_USE_BUNGEE:BOOL=ON' "$build_dir/CMakeCache.txt"
+        grep -q 'LT_ENGINE_USE_FFMPEG:BOOL=ON' "$build_dir/CMakeCache.txt"
+        # JUCE must stay out of the iOS build. Its AGPLv3 licensing option is
+        # incompatible with App Store distribution terms, and on iOS it only
+        # ever wrapped RemoteIO — which audio_device_manager_ios.mm now owns.
+        # A silent flip back to ON would build a shippable-looking IPA that
+        # cannot legally ship, so fail the job instead.
+        grep -q 'LT_ENGINE_USE_JUCE:BOOL=OFF' "$build_dir/CMakeCache.txt"
+
+        echo "LT_ENGINE_IOS_LIB_DIR=$link_dir" >> "$GITHUB_ENV"
+        echo "path=$link_dir" >> "$GITHUB_OUTPUT"

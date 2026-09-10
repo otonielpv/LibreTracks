@@ -1,0 +1,166 @@
+{
+  "version": 7,
+  "id": "song_demo",
+  "title": "Cancion de demostracion",
+  "artist": "LibreTracks",
+  "key": "G",
+  "bpm": 88.0,
+  "timeSignature": "4/4",
+  "durationSeconds": 33.727,
+  "tempoMarkers": [],
+  "timeSignatureMarkers": [],
+  "regions": [
+    {
+      "id": "region-demo",
+      "name": "Cancion de demostracion",
+      "startSeconds": 0.0,
+      "endSeconds": 33.727,
+      "transposeSemitones": 0,
+      "key": "G",
+      "warpEnabled": false,
+      "warpSourceBpm": null,
+      "master": {
+        "gain": 1.0
+      }
+    }
+  ],
+  "tracks": [
+    {
+      "id": "track-bateria",
+      "name": "Bateria",
+      "kind": "audio",
+      "parentTrackId": null,
+      "volume": 1.0,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "color": "#e0625f",
+      "autoCreated": false,
+      "collapsed": false
+    },
+    {
+      "id": "track-bajo",
+      "name": "Bajo",
+      "kind": "audio",
+      "parentTrackId": null,
+      "volume": 1.0,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "color": "#e8a33d",
+      "autoCreated": false,
+      "collapsed": false
+    },
+    {
+      "id": "track-teclado",
+      "name": "Teclado",
+      "kind": "audio",
+      "parentTrackId": null,
+      "volume": 1.0,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "color": "#4c9f70",
+      "autoCreated": false,
+      "collapsed": false
+    },
+    {
+      "id": "track-melodia",
+      "name": "Melodia",
+      "kind": "audio",
+      "parentTrackId": null,
+      "volume": 1.0,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "color": "#5a8fd6",
+      "autoCreated": false,
+      "collapsed": false
+    }
+  ],
+  "clips": [
+    {
+      "id": "clip-bateria",
+      "trackId": "track-bateria",
+      "filePath": "audio/bateria.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 33.727,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-bajo",
+      "trackId": "track-bajo",
+      "filePath": "audio/bajo.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 33.727,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-teclado",
+      "trackId": "track-teclado",
+      "filePath": "audio/teclado.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 33.727,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-melodia",
+      "trackId": "track-melodia",
+      "filePath": "audio/melodia.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 33.727,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    }
+  ],
+  "midiClips": [],
+  "sectionMarkers": [
+    {
+      "id": "marker-intro",
+      "name": "Intro",
+      "startSeconds": 0.0,
+      "digit": null,
+      "kind": "intro"
+    },
+    {
+      "id": "marker-verse",
+      "name": "Estrofa",
+      "startSeconds": 5.455,
+      "digit": null,
+      "kind": "verse"
+    },
+    {
+      "id": "marker-chorus",
+      "name": "Estribillo",
+      "startSeconds": 16.364,
+      "digit": null,
+      "kind": "chorus"
+    },
+    {
+      "id": "marker-outro",
+      "name": "Final",
+      "startSeconds": 27.273,
+      "digit": null,
+      "kind": "outro"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 pub mod cloud;
+pub mod demo;
 pub mod engine_v2;
 pub mod events;
 pub mod library;
