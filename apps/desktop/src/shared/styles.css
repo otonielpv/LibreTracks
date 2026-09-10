@@ -811,6 +811,7 @@ html.lt-ios body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.25rem;
   border-radius: 2px;
   padding: 0.8rem 0.2rem;
@@ -2602,11 +2603,15 @@ html.lt-ios body {
   box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.12);
 }
 
+/* Flex, not a fixed grid: the name is the only part that needs room to grow,
+   and the old `0.9rem minmax(0,1fr) 4rem 3.5rem` reserved 7.5rem on the right
+   of EVERY row — one column for the duration and one that nothing has rendered
+   into since the delete button moved out. On a narrow panel that left the name
+   with barely half the width and every asset read "bass-1.w...". */
 .lt-library-asset {
   box-sizing: border-box;
   width: 100%;
-  display: grid;
-  grid-template-columns: 0.9rem minmax(0, 1fr) 4rem 3.5rem;
+  display: flex;
   align-items: center;
   gap: 0.35rem;
   border-radius: 2px;
@@ -2642,6 +2647,7 @@ html.lt-ios body {
 
 .lt-library-asset.is-missing .lt-library-asset-icon,
 .lt-library-asset.is-missing .lt-library-asset-copy,
+.lt-library-asset.is-missing .lt-library-asset-status,
 .lt-library-asset.is-missing .lt-library-asset-duration {
   color: #ffb4ab;
 }
@@ -2651,12 +2657,16 @@ html.lt-ios body {
 }
 
 .lt-library-asset-icon {
+  flex: 0 0 auto;
   color: #57f1db;
   font-size: 14px;
 }
 
 .lt-library-asset-copy {
   display: block;
+  /* Grows into the whole row and is the ONLY part allowed to shrink, so the
+     ellipsis lands on the name and never on the duration. */
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -2667,6 +2677,7 @@ html.lt-ios body {
 }
 
 .lt-library-asset-bpm,
+.lt-library-asset-status,
 .lt-library-asset-duration {
   color: rgb(229 226 225 / 0.62);
   font: 600 9px/1 "Space Grotesk", sans-serif;
@@ -2684,9 +2695,22 @@ html.lt-ios body {
 }
 
 .lt-library-asset-duration {
-  text-align: right;
+  flex: 0 0 auto;
   overflow: visible;
   text-overflow: clip;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Only while importing, and only then does it earn the right-hand slot: the
+   labels are words ("ANALIZANDO ONDA"), not four digits. `margin-left: auto`
+   pins it to the end without reserving anything once the import is done. */
+.lt-library-asset-status {
+  flex: 0 1 auto;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
   letter-spacing: 0.04em;
 }
 
@@ -8087,8 +8111,20 @@ html.lt-ios body {
   padding: 0.7rem 0.2rem;
 }
 
+/* Square line box for the glyph.
+   With the label hidden the icon is the button's only content, so the
+   highlight is drawn around the icon's LINE box — and at the inherited
+   line-height of 1.1 that box is taller than the glyph, with the leftover
+   split by the font's own ascent/descent rather than evenly. The icon ended up
+   riding high inside its own highlight. A line box exactly one em tall centres
+   the glyph, because that is how the Material Symbols em square is drawn. */
 .lt-android .lt-side-nav button .material-symbols-outlined {
+  display: block;
+  width: 22px;
+  height: 22px;
   font-size: 22px;
+  line-height: 1;
+  text-align: center;
 }
 
 /* ── Timeline toolbar: one row of chips, timeline gets the space ─────── */
@@ -8235,6 +8271,10 @@ html.lt-ios body {
   align-items: flex-start;
   justify-content: space-between;
   padding: 0.35rem 0.5rem 0.5rem;
+  /* A floor under the space-between: with the 2x2 button grid nearly filling
+     the 94px cell there was no slack left to distribute, so the label sat
+     directly on the buttons. */
+  gap: 0.5rem;
 }
 
 .lt-android .lt-ruler-header-actions {
@@ -8250,8 +8290,8 @@ html.lt-ios body {
 /* Same visual recipe as the timeline-toolbar buttons — these sit outside
    .lt-bottom-controls, which is where that styling normally comes from. */
 .lt-android .lt-ruler-header-actions .lt-icon-button {
-  min-width: 2.2rem;
-  min-height: 1.9rem;
+  min-width: 1.85rem;
+  min-height: 1.55rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8269,7 +8309,7 @@ html.lt-ios body {
 }
 
 .lt-android .lt-ruler-header-actions .lt-icon-button .material-symbols-outlined {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 /* ── Compact-view mixer toggle (Android) ─────────────────────────────── */
