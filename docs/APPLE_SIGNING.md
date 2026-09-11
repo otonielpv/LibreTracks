@@ -104,8 +104,19 @@ openssl pkcs12 -export -inkey developer-id.key -in developer-id.pem \
 base64 -w0 developer-id.p12 > developer-id.p12.base64
 ```
 
-En Git Bash la **doble barra** de `-subj` no es una errata: sin ella, MSYS
-convierte el argumento en una ruta de Windows y el `subj` sale mal.
+OpenSSL ya viene dentro de Git for Windows
+(`C:\Program Files\Git\usr\bin\openssl.exe`), así que no hay que instalar nada.
+
+En **Git Bash** la doble barra de `-subj` no es una errata: sin ella, MSYS
+convierte el argumento en una ruta de Windows y el `subj` sale mal. Desde
+**PowerShell** —con `openssl` en el PATH— es justo al revés: la barra va
+simple, `-subj "/emailAddress=…/CN=…/C=ES"`. Mezclar las dos versiones es la
+forma más fácil de acabar con un certificado cuyo nombre no coincide con el
+secreto, así que comprueba siempre lo que ha quedado:
+
+```bash
+openssl req -in developer-id.certSigningRequest -noout -subject
+```
 
 Y el nombre exacto de `APPLE_SIGNING_IDENTITY`, que en un Mac daría
 `security find-identity`, está dentro del propio `.cer`:
