@@ -149,7 +149,7 @@
       }
     },
     "macOS": {
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "11.0",
       "entitlements": "entitlements.plist",
       "frameworks": [
         "../../../vendor/bin/native/liblt_audio_engine_v2.dylib",
