@@ -8295,9 +8295,9 @@ export function TransportPanelContent() {
                         setIsMobileSessionsModalOpen(false);
                         handleOpenProjectClick();
                       }}
-                      onOpenSessionFromPath={(path) => {
+                      onOpenSessionFromPath={(path, options) => {
                         setIsMobileSessionsModalOpen(false);
-                        handleOpenProjectFromPath(path);
+                        handleOpenProjectFromPath(path, options);
                       }}
                       onImportSession={() => {
                         setIsMobileSessionsModalOpen(false);

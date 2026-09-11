@@ -9813,8 +9813,39 @@ html.lt-ios body {
 .lt-mobile .lt-transport-buttons {
   flex: 1 1 13rem;
   min-width: 0;
+  /* Crece con el hueco que sobre, pero NUNCA mas alla de su contenido: el
+     cuadro negro vacio de una tablet sale sobrando, y ese hueco lo aprovecha
+     el reloj, que se aparta con `margin-left: auto`. */
+  max-width: max-content;
+  /* Cada toggle y su flecha van pegados a proposito, asi que lo que tiene que
+     leerse es la separacion ENTRE grupos. Con 0.18rem, la flecha del metronomo
+     quedaba tan pegada al boton de voz guia que parecia abrirle el menu a el
+     —y con el toggle encendido, su fondo tenido la tocaba—. */
+  gap: 0.3rem;
+  padding-inline: clamp(0.15rem, 0.5vw, 0.35rem);
+  /* `safe` solo lo entiende Safari 16+; los de antes se quedan con `center`,
+     que es lo que habia. Sin el, un grupo que desborda deja su primer boton
+     fuera por la izquierda y ahi no se llega ni desplazando. */
   justify-content: center;
-  padding-inline: clamp(0.2rem, 0.8vw, 0.45rem);
+  justify-content: safe center;
+  /* Si no cabe, el grupo se desplaza; lo que no hace es aplastar sus botones
+     —ver la regla de abajo—. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lt-mobile .lt-transport-buttons::-webkit-scrollbar {
+  display: none;
+}
+
+/* Nada se comprime. El grupo pide menos ancho del que ocupa (13rem son solo
+   para el reparto en filas), asi que al quedarse corto los botones lisos se
+   encogian hasta ~20 px y los fondos tenidos de los toggles acababan pegados a
+   la flecha del grupo anterior. */
+.lt-mobile .lt-transport-buttons > button,
+.lt-mobile .lt-transport-buttons .lt-topbar-split,
+.lt-mobile .lt-transport-buttons .lt-topbar-split > button {
+  flex: 0 0 auto;
 }
 
 /* Deshacer/rehacer: el mismo aire, sin reservar de mas. El margen suelto de
@@ -9827,7 +9858,6 @@ html.lt-ios body {
 }
 
 .lt-mobile .lt-transport-buttons .lt-topbar-split {
-  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -9838,8 +9868,8 @@ html.lt-ios body {
 }
 
 .lt-mobile .lt-transport-buttons .lt-topbar-split button.lt-split-caret {
-  width: 1.25rem;
-  flex: 0 0 1.25rem;
+  width: 1.1rem;
+  flex: 0 0 1.1rem;
 }
 
 .lt-mobile .lt-transport-readout {

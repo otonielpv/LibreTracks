@@ -64,6 +64,14 @@ type TimelineUIState = {
   markerPositionEditorId: string | null;
   /** Móvil: pista cuya fila está desplegada con sus controles; null si ninguna. */
   expandedTrackId: string | null;
+  /**
+   * Móvil: el panel de mezcla que abre la barra de la selección.
+   *
+   * Vive aquí y no en la barra porque es EXCLUYENTE con la fila desplegada de
+   * una cabecera: son el mismo panel: con una sola pista seleccionada salían
+   * los dos, uno debajo del otro.
+   */
+  selectionMixOpen: boolean;
   /** Móvil: los toques en las cabeceras SUMAN a la selección en vez de
    * reemplazarla. Sin esto no hay forma de borrar varias pistas de un tirón
    * con un dedo: no hay Ctrl que mantener. */
@@ -101,6 +109,7 @@ type TimelineUIState = {
   setTrackMultiSelect: (enabled: boolean) => void;
   toggleTrackSelection: (trackId: string) => void;
   setExpandedTrackId: (trackId: string | null) => void;
+  setSelectionMixOpen: (open: boolean) => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -120,6 +129,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     trackReorderMode: false,
     markerPositionEditorId: null,
     expandedTrackId: null,
+    selectionMixOpen: false,
     trackMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
@@ -296,14 +306,29 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       set({ markerPositionEditorId });
     },
     // Una sola fila desplegada a la vez: son controles a tamaño de dedo y dos
-    // abiertas se taparían entre ellas.
+    // abiertas se taparían entre ellas. Y el panel de mezcla de la barra es esa
+    // misma fila para la selección, así que tampoco puede convivir con ella.
     toggleExpandedTrackId: (trackId) => {
-      set((state) => ({
-        expandedTrackId: state.expandedTrackId === trackId ? null : trackId,
-      }));
+      set((state) => {
+        const expandedTrackId =
+          state.expandedTrackId === trackId ? null : trackId;
+        return {
+          expandedTrackId,
+          selectionMixOpen: expandedTrackId ? false : state.selectionMixOpen,
+        };
+      });
     },
     setExpandedTrackId: (expandedTrackId) => {
-      set({ expandedTrackId });
+      set((state) => ({
+        expandedTrackId,
+        selectionMixOpen: expandedTrackId ? false : state.selectionMixOpen,
+      }));
+    },
+    setSelectionMixOpen: (selectionMixOpen) => {
+      set((state) => ({
+        selectionMixOpen,
+        expandedTrackId: selectionMixOpen ? null : state.expandedTrackId,
+      }));
     },
     setTrackMultiSelect: (trackMultiSelect) => {
       set({ trackMultiSelect });

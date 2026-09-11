@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileSelectionActionBar } from "./MobileSelectionActionBar";
 import type { MobileSelectionMenus } from "./selectionActions";
@@ -94,6 +94,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   window.localStorage.clear();
   useTimelineUIStore.getState().clearSelection();
+  useTimelineUIStore.setState({ selectionMixOpen: false, expandedTrackId: null });
 });
 afterEach(cleanup);
 
@@ -256,6 +257,23 @@ describe("la mezcla de la seleccion", () => {
     expect(mix.setVolume.mock.calls[0][0]).toBe("t1");
 
     fireEvent.click(screen.getByRole("button", { name: "Mezcla" }));
+    expect(screen.queryByLabelText("Volumen de Voz")).toBeNull();
+  });
+
+  // El panel de la barra y la fila desplegada de una cabecera son el MISMO
+  // panel: con una sola pista seleccionada salian los dos, uno debajo del otro.
+  it("no convive con la fila desplegada de una cabecera", () => {
+    useTimelineUIStore.setState({ selectedTrackIds: ["t1"] });
+    renderBar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mezcla" }));
+    expect(useTimelineUIStore.getState().expandedTrackId).toBeNull();
+
+    // Y desplegar una cabecera cierra el de la barra.
+    act(() => {
+      useTimelineUIStore.getState().toggleExpandedTrackId("t1");
+    });
+    expect(useTimelineUIStore.getState().selectionMixOpen).toBe(false);
     expect(screen.queryByLabelText("Volumen de Voz")).toBeNull();
   });
 

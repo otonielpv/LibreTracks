@@ -162,6 +162,12 @@ export function useProjectActions({
     loader: () => Promise<TransportSnapshot | null>,
     loadingMessage: string,
     successEvent: Extract<ProductEventName, "project_created" | "project_opened">,
+    /**
+     * Apuntar la sesion en "recientes". La demostracion no: es una sesion
+     * normal, pero se abre desde su propio boton y aparecer en la lista de
+     * recientes solo la llena de ruido.
+     */
+    { remember = true }: { remember?: boolean } = {},
   ) {
     void runAction(
       async () => {
@@ -185,7 +191,7 @@ export function useProjectActions({
             setBusyFeedback(null);
             return;
           }
-          if (nextSnapshot.songFilePath) {
+          if (remember && nextSnapshot.songFilePath) {
             pushRecentSession(nextSnapshot.songFilePath);
           }
           const nextSong = await refreshSongView({ sync: true });
@@ -259,13 +265,17 @@ export function useProjectActions({
     );
   }
 
-  function handleOpenProjectFromPath(songFile: string) {
+  function handleOpenProjectFromPath(
+    songFile: string,
+    options?: { remember?: boolean },
+  ) {
     runProjectLoadFlow(
       () => openProjectFromPath(songFile),
       t("transport.shell.loadingProject", {
         defaultValue: "Opening project...",
       }),
       "project_opened",
+      options,
     );
   }
 

@@ -285,6 +285,7 @@ beforeEach(async () => {
     trackReorderMode: false,
     markerPositionEditorId: null,
     expandedTrackId: null,
+    selectionMixOpen: false,
     trackMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,
   });

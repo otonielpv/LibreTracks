@@ -116,6 +116,15 @@ describe("contrato responsive móvil", () => {
     expect(basis).toBeLessThanOrEqual(14);
     expect(buttons).toContain("min-width: 0");
     expect(history).toContain("margin-right: 0");
+    // Pedir menos ancho no puede acabar aplastando los botones: si el grupo se
+    // queda corto, se desplaza. Antes los botones lisos se encogian hasta ~20 px
+    // y el fondo tenido de un toggle tocaba la flecha del grupo anterior.
+    expect(buttons).toContain("overflow-x: auto");
+    expect(buttons).toContain("max-width: max-content");
+    const items = declarationsFor(
+      ".lt-mobile .lt-transport-buttons .lt-topbar-split > button",
+    );
+    expect(items).toContain("flex: 0 0 auto");
   });
 
   // El fader es de 6 px de alto y su pulgar de 9: con el dedo no se coge. Y sin

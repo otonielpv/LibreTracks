@@ -85,7 +85,9 @@ export function MobileSelectionActionBar({
     (state) => state.selectedTimeSignatureMarkerId,
   );
   const [open, setOpen] = useState(readSelectionBarOpen);
-  const [mixOpen, setMixOpen] = useState(false);
+  // En el store, no aqui: es EXCLUYENTE con la fila desplegada de una cabecera
+  // (son el mismo panel), y con una sola pista seleccionada salian los dos.
+  const mixOpen = useTimelineUIStore((state) => state.selectionMixOpen);
   const trackMultiSelect = useTimelineUIStore(
     (state) => state.trackMultiSelect,
   );
@@ -231,7 +233,9 @@ export function MobileSelectionActionBar({
           })}
           title={t("mobileSelectionActions.mix", { defaultValue: "Mezcla" })}
           aria-pressed={showMix}
-          onClick={() => setMixOpen((value) => !value)}
+          onClick={() =>
+            useTimelineUIStore.getState().setSelectionMixOpen(!mixOpen)
+          }
         >
           <span className="material-symbols-outlined" aria-hidden="true">
             tune
