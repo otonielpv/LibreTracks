@@ -46,10 +46,24 @@ shot() {
   local file
   file="$(printf '%s/%02d-%s.png' "$OUT" "$step" "$name")"
   xcrun simctl io "$UDID" screenshot "$file" >/dev/null 2>&1
-  local size
-  size="$(sips -g pixelWidth -g pixelHeight "$file" 2>/dev/null \
-    | awk '/pixelWidth/ {w=$2} /pixelHeight/ {h=$2} END {print w "x" h}')"
-  log "  📸 $(basename "$file")  $size"
+
+  local w h
+  w="$(sips -g pixelWidth "$file" 2>/dev/null | awk '/pixelWidth/ {print $2}')"
+  h="$(sips -g pixelHeight "$file" 2>/dev/null | awk '/pixelHeight/ {print $2}')"
+
+  # simctl writes the DEVICE framebuffer, which stays portrait even when the
+  # app runs landscape: the app is drawn rotated inside it, status bar down
+  # the right-hand edge. Rotating 270° puts that edge back on top, and the
+  # result is both readable and the exact size App Store Connect expects for
+  # a landscape screenshot.
+  if [ "${SCREEN_W:-0}" -gt "${SCREEN_H:-0}" ] 2>/dev/null && [ "$h" -gt "$w" ] 2>/dev/null; then
+    sips -r 270 "$file" >/dev/null 2>&1
+    w="$(sips -g pixelWidth "$file" 2>/dev/null | awk '/pixelWidth/ {print $2}')"
+    h="$(sips -g pixelHeight "$file" 2>/dev/null | awk '/pixelHeight/ {print $2}')"
+    log "  📸 $(basename "$file")  ${w}x${h} (rotada)"
+    return
+  fi
+  log "  📸 $(basename "$file")  ${w}x${h}"
 }
 
 # The accessibility tree, as idb sees it. Cached per call because every lookup
@@ -143,54 +157,34 @@ read_screen_size
 shot "launch"
 
 log "── Despachando el tutorial y el aviso de estadísticas ──────"
-# Order is not guaranteed, and either may be absent on a warm container, so
-# both are attempted twice rather than assumed.
-tap_label_optional "Skip tutorial"
-tap_label_optional "No, thanks"
-tap_label_optional "Skip tutorial"
-tap_label_optional "No, thanks"
+# Coordinates, not labels: the WebView publishes nothing to the accessibility
+# tree, so there is nothing to look up. These fractions were measured off the
+# iPad screenshots — both dialogs are centred cards, and "Skip tutorial" sits
+# in the lower-left of the card with the primary button to its right.
+tap_frac "Skip tutorial" 0.44 0.56
+shot "after-skip"
+# The analytics consent usually appears right after, in a card of the same
+# shape. A second tap in the same place dismisses it when it is there and
+# lands on empty background when it is not.
+tap_frac "No, thanks (mismo sitio)" 0.44 0.56
+shot "after-consent"
 
 log "── 01 Portada ──────────────────────────────────────────────"
 shot "home"
 
-log "── 02 Configuración ────────────────────────────────────────"
-if tap_label "Settings"; then
-  shot "settings"
-  key 41   # Escape
-else
-  failures=$((failures + 1))
-  shot "settings-FAILED"
-fi
-
-log "── 03 Canción de demostración en la vista DAW ──────────────"
-if tap_label "Demo song" 5; then
-  # Creating the demo unpacks audio and analyses waveforms; the timeline is
-  # not worth photographing until that settles.
-  sleep 25
-  shot "daw"
-else
-  failures=$((failures + 1))
-  shot "daw-FAILED"
-fi
-
-log "── 04 Vista compacta ───────────────────────────────────────"
-key 43   # Tab: daw → compact
-# On a tablet the mixer band starts open, so close it for the clean shot and
-# open it again for the next one.
-tap_label_optional "Hide mixer"
-shot "compact"
-
-log "── 05 Mixer de la vista compacta ───────────────────────────"
-require tap_label "Mixer"
-shot "mixer"
-
-log "── 06 Vista live ───────────────────────────────────────────"
-key 43   # Tab: compact → live
-shot "live"
+# CALIBRATION STAGE. The three view modes already work (the app cycles them
+# with Tab), but the sidebar, the demo button and the mixer toggle need
+# coordinates measured off a clean screenshot of the landing — which is
+# exactly what "home" above now provides. Until those are measured, walking
+# blind would only produce six pictures of the same screen.
+log "── Vistas, que sí se ciclan con Tab ────────────────────────"
+key 43   # daw → compact
+shot "compact-empty"
+key 43   # compact → live
+shot "live-empty"
+key 43   # live → daw
+shot "daw-empty"
 
 log "────────────────────────────────────────────────────────────"
-if [ "$failures" -gt 0 ]; then
-  log "El recorrido terminó con $failures paso(s) fallidos; mira las capturas -FAILED y los árboles tree-missing-*.json"
-  exit 1
-fi
-log "Las seis capturas salieron sin incidencias"
+log "Etapa de calibración: faltan Configuración, la demo y el mixer,"
+log "que necesitan coordenadas tomadas de 02-home.png"
