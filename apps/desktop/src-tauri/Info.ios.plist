@@ -40,6 +40,18 @@
        Ableton en escritorio. -->
   <key>UIRequiresFullScreen</key>
   <true/>
+  <!-- Y esta clave es la que realmente decide en iPad. La plantilla de
+       cargo-mobile2 la genera con LAS CUATRO orientaciones, y en iPad tiene
+       prioridad sobre la lista generica de arriba: por eso el simulador
+       seguia dibujando en vertical aunque UIRequiresFullScreen estuviera
+       puesto (comprobado leyendo el Info.plist del .app construido, no
+       adivinado). Si algun dia el panel de transporte se adapta a vertical,
+       esto es lo que hay que quitar. -->
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
   <!-- Expose the sandbox Documents directory in Files so a tester can send us
        LibreTracks-picker.log without Xcode or a signed development build. -->
   <key>UIFileSharingEnabled</key>

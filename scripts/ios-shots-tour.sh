@@ -58,6 +58,36 @@ describe() {
   idb ui describe-all --udid "$UDID" 2>/dev/null
 }
 
+# Screen size in POINTS, read from the one element the tree does contain: the
+# application itself. idb taps in points, and the app is the whole screen.
+SCREEN_W=0
+SCREEN_H=0
+read_screen_size() {
+  local tree
+  tree="$(describe)"
+  SCREEN_W="$(printf '%s' "$tree" | jq -r '[.[] | select(.type == "Application") | .frame.width] | .[0] // 0' 2>/dev/null)"
+  SCREEN_H="$(printf '%s' "$tree" | jq -r '[.[] | select(.type == "Application") | .frame.height] | .[0] // 0' 2>/dev/null)"
+  log "  pantalla: ${SCREEN_W}x${SCREEN_H} puntos"
+}
+
+# Tap a point given as a fraction of the screen. The WebView publishes nothing
+# to the accessibility tree — `describe-all` returns the application and
+# nothing else — so labels cannot be looked up and this is what is left.
+# Fractions rather than pixels so the same tour survives a different device.
+tap_frac() {
+  local what="$1" fx="$2" fy="$3"
+  if [ "$SCREEN_W" = "0" ] || [ "$SCREEN_H" = "0" ]; then
+    read_screen_size
+  fi
+  local x y
+  x="$(awk "BEGIN { printf \"%d\", $SCREEN_W * $fx }")"
+  y="$(awk "BEGIN { printf \"%d\", $SCREEN_H * $fy }")"
+  idb ui tap --udid "$UDID" "$x" "$y" >/dev/null 2>&1 \
+    && log "  👆 $what en ($x, $y)" \
+    || log "  ⚠️  el toque de $what no llegó"
+  sleep 2
+}
+
 # Tap the centre of the first element whose label matches, case-insensitively.
 # Retries: the WebView publishes its tree a beat after the view appears, and a
 # single miss would otherwise derail the whole tour.
@@ -109,6 +139,7 @@ key() {
 log "── Esperando a que la app termine de arrancar ──────────────"
 sleep 20
 describe > "$OUT/tree-at-launch.json" 2>/dev/null || true
+read_screen_size
 shot "launch"
 
 log "── Despachando el tutorial y el aviso de estadísticas ──────"
