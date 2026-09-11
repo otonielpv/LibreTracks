@@ -192,12 +192,14 @@ log "── Despachando el tutorial y el aviso de estadísticas ─────�
 # tree, so there is nothing to look up. These fractions were measured off the
 # iPad screenshots — both dialogs are centred cards, and "Skip tutorial" sits
 # in the lower-left of the card with the primary button to its right.
-tap_frac "Skip tutorial" 0.44 0.56
+tap_frac "Skip tutorial" 0.437 0.563
+# The analytics consent only appears AFTER the tutorial closes, and it takes a
+# moment: tapping its position too early hits the tutorial's backdrop instead.
+sleep 4
 shot "after-skip"
-# The analytics consent usually appears right after, in a card of the same
-# shape. A second tap in the same place dismisses it when it is there and
-# lands on empty background when it is not.
-tap_frac "No, thanks (mismo sitio)" 0.44 0.56
+# Its card is wider than the tutorial's, so "No, thanks" sits elsewhere —
+# measured off 04-home.png of run 34645588357.
+tap_frac "No, thanks" 0.465 0.593
 shot "after-consent"
 
 log "── 01 Portada ──────────────────────────────────────────────"
