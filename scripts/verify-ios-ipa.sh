@@ -123,11 +123,39 @@ if [ "$(printf '%s' "$build_number" | tr -cd '.' | wc -c)" -gt 2 ]; then
   exit 1
 fi
 
+# ── Background audio ───────────────────────────────────────────────────────
+# Without UIBackgroundModes=audio, iOS suspends the app the moment the screen
+# locks and playback stops mid-song. It is one line in Info.ios.plist and its
+# absence is invisible until someone pockets the phone during a set, so assert
+# it here rather than trusting the merge.
+if ! /usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes' "$plist" 2>/dev/null \
+  | grep -w 'audio' >/dev/null; then
+  echo "::error::The IPA does not declare UIBackgroundModes=audio, so playback dies when the screen locks." >&2
+  /usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes' "$plist" >&2 2>/dev/null || true
+  exit 1
+fi
+
+# Declared once in Info.ios.plist so App Store Connect stops asking about
+# export compliance on every single submission.
+encryption="$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$plist" 2>/dev/null || echo '<absent>')"
+
+# Informational: which devices Apple will review the app on. Declaring iPad
+# means iPad screenshots become mandatory and a reviewer will run it there.
+device_family="$(plutil -extract UIDeviceFamily json -o - "$plist" 2>/dev/null || echo '?')"
+case "$device_family" in
+  '[1]')   device_family="iPhone only" ;;
+  '[1,2]') device_family="iPhone + iPad (Apple reviews it on iPad too)" ;;
+  '[2]')   device_family="iPad only" ;;
+esac
+
 echo "IPA:              $ipa_path"
 echo "Bundle:           $bundle_id"
 echo "Version:          $short_version ($build_number)"
 echo "Minimum iOS:      $minimum_ios"
 echo "Architectures:    $archs"
+echo "Device family:    $device_family"
+echo "Background audio: declared"
+echo "Encryption:       ITSAppUsesNonExemptEncryption = $encryption"
 echo "Audio engine:     native static C++ engine linked (RemoteIO, no JUCE)"
 echo "Full pack:        Bungee + FFmpeg + voice guide + pads enabled"
 echo "Privacy manifest: present at the bundle root"

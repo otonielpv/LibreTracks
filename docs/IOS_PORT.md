@@ -124,15 +124,41 @@ La CI lo protege por dos vías: `LT_ENGINE_USE_JUCE:BOOL=OFF` verificado en el
 `CMakeCache.txt`, y la cadena `coreaudio-ios` buscada dentro del ejecutable del
 IPA (si el backend no se enlazara, el motor caería al stub mudo).
 
-### Pendiente de validar en hardware
+### Qué está verificado y qué no
 
-El backend RemoteIO no se ha probado todavía en un iPhone físico. Hay que
-comprobar, con build **Release** y la interfaz USB conectada:
+El audio de iOS se puede ejercitar sin iPhone, hasta cierto punto. Lo hace
+`.github/workflows/ios-audio-probe.yml`, a mano, en dos pasos:
 
-1. Reproducción, pausa, seek y medidores por el altavoz.
-2. Que la interfaz USB aparece con su nombre y **todas** sus salidas.
-3. Desconectar y reconectar en caliente: la ruta se recupera sola.
-4. Una llamada entrante: el transporte sigue y el audio vuelve al colgar.
+1. **La sonda** (`tests/ios/remoteio_probe.m`) responde primero a la pregunta
+   de la que depende todo lo demás: si un runner —una VM sin tarjeta de
+   sonido— entrega callbacks de RemoteIO. Los entrega: ruta "Speaker", 48 kHz,
+   2 canales, callbacks en tiempo real. Sin ese dato, cualquier test de audio
+   montado encima estaría midiendo el vacío.
+2. **El self-test** (`tests/ios/device_manager_selftest.mm`) compila
+   `audio_device_manager_ios.mm` y `ios_audio_session.mm` tal cual —con las
+   flags que les da CMake— y los ejercita dentro del simulador.
+
+Queda **verificado**:
+
+- que RemoteIO abre por el camino del engine y negocia tasa y buffer;
+- que las muestras que escribe el motor llegan a los buffers del hardware
+  (señal, no solo fontanería);
+- que el mapa de canales físicos se publica antes del primer callback;
+- el **camino de recuperación de la llamada entrante**: la notificación sube la
+  generación de ruta, el monitor desmonta el stream y pasa el reloj a la bomba
+  de reserva —el transporte no se para—, y la siguiente `open_device` (la que
+  emite el watchdog de Rust cada 2 s) recupera el hardware. Es el mismo camino
+  que usa enchufar una interfaz USB en caliente.
+
+Sigue **sin verificar**, y necesita un iPhone de verdad:
+
+1. Que la interfaz USB aparece con su nombre y **todas** sus salidas. El
+   simulador tiene una salida estéreo y punto, así que la negociación de ancho
+   de canales no se puede probar.
+2. Desconectar y reconectar en caliente el aparato físico.
+3. Una llamada entrante real. Todo lo que va *después* de la notificación es
+   código de producción probado; quien la postea en el test es el test.
+4. Latencia y underruns, que en una VM no significan nada.
 
 ## Manifiesto de privacidad (App Store)
 

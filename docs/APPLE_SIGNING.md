@@ -81,6 +81,45 @@ significa emitir otro certificado (hay un límite por cuenta) y, aunque las
 sesiones guardadas sobreviven, cambiar de identidad rompe la continuidad de los
 *security-scoped bookmarks* de [entitlements.plist](../apps/desktop/src-tauri/entitlements.plist).
 
+#### Sin un Mac a mano (Windows o Linux)
+
+Todo lo anterior se puede hacer con OpenSSL; el Mac solo aporta la comodidad de
+Acceso a Llaveros. Vale igual para el *Apple Distribution* de iOS: es el mismo
+procedimiento cambiando el tipo de certificado en el portal.
+
+```bash
+# 1. Clave privada y petición de firma (una por certificado)
+openssl genrsa -out developer-id.key 2048
+openssl req -new -key developer-id.key -out developer-id.certSigningRequest \
+  -subj "//emailAddress=tucorreo@ejemplo.com/CN=Tu Nombre/C=ES"
+
+# 2. Sube el .certSigningRequest en developer.apple.com y descarga el .cer
+
+# 3. Del .cer de Apple + tu clave, sale el .p12 que quiere la CI
+openssl x509 -in developer-id.cer -inform DER -out developer-id.pem -outform PEM
+openssl pkcs12 -export -inkey developer-id.key -in developer-id.pem \
+  -out developer-id.p12 -name "Developer ID Application"
+
+# 4. El valor del secreto
+base64 -w0 developer-id.p12 > developer-id.p12.base64
+```
+
+En Git Bash la **doble barra** de `-subj` no es una errata: sin ella, MSYS
+convierte el argumento en una ruta de Windows y el `subj` sale mal.
+
+Y el nombre exacto de `APPLE_SIGNING_IDENTITY`, que en un Mac daría
+`security find-identity`, está dentro del propio `.cer`:
+
+```bash
+openssl x509 -in developer-id.cer -inform DER -noout -subject
+# subject=CN = Developer ID Application: Tu Nombre (TEAMID1234), C = ES
+```
+
+El `CN` completo es el valor del secreto, tal cual, sin el `CN = ` de delante.
+
+**Guarda la clave privada** (`.key`) junto al `.p12`: sin ella, el `.cer` que
+descargas del portal no sirve para firmar nada.
+
 ### 3. Clave de API de App Store Connect (para notarizar)
 
 Más robusta que el par Apple ID + contraseña específica: no caduca sola ni se
@@ -225,7 +264,8 @@ entitlement, va solo en el `Info.plist`.
 
 El mismo procedimiento que el *Developer ID Application* de arriba, pero
 eligiendo el tipo **Apple Distribution**. Exportar a `.p12` desde *Mis
-certificados*, igual que allí.
+certificados*, igual que allí — o con OpenSSL desde Windows, siguiendo
+[Sin un Mac a mano](#sin-un-mac-a-mano-windows-o-linux).
 
 No sirve el de escritorio: el de la tienda lo emite Apple con otra cadena de
 confianza, y firmar el IPA con un *Developer ID* produce un rechazo en el
