@@ -496,6 +496,24 @@ git tag -f v<NEW>
 git push origin v<NEW> --force
 ```
 
+### The tag also fires the two iOS workflows
+
+A `v*` tag starts `ios-smoke.yml` (the unsigned AltStore IPA) and
+`ios-release.yml` (the signed App Store build) alongside the desktop release.
+Neither blocks the release, and neither uploads anything to Apple on its own:
+
+- `ios-release.yml` **skips itself with a warning** when the Apple secrets are
+  missing, and when they are present it builds, verifies and validates the IPA
+  but does **not** upload — uploading on a tag is opt-in through the repository
+  variable `IOS_UPLOAD_ON_TAG`.
+- To put the build in TestFlight, run *iOS Release (signed App Store build)*
+  by hand with `upload` ticked. Setup lives in
+  [APPLE_SIGNING.md](./APPLE_SIGNING.md).
+
+Watch them like any other job, but do not move the tag for an iOS failure
+unless the release is meant to ship to the store: the desktop artifacts are
+unaffected.
+
 ## 10. Update the knowledge graph
 
 ```bash

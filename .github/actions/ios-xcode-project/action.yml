@@ -24,8 +24,21 @@ runs:
       shell: bash
       working-directory: apps/desktop
       env:
-        APPLE_DEVELOPMENT_TEAM: ${{ inputs.development-team }}
-      run: npm run tauri -- ios init --ci
+        # NOT named APPLE_DEVELOPMENT_TEAM on purpose: Tauri refuses to
+        # generate the project when that variable is DEFINED BUT EMPTY
+        # ("`apple.development-team` is empty"), which is exactly what a
+        # workflow-level `env:` produces for the unsigned build. It has to stay
+        # unset there, so the export below is conditional.
+        LT_IOS_DEVELOPMENT_TEAM: ${{ inputs.development-team }}
+      run: |
+        set -euo pipefail
+        if [ -n "${LT_IOS_DEVELOPMENT_TEAM:-}" ]; then
+          export APPLE_DEVELOPMENT_TEAM="$LT_IOS_DEVELOPMENT_TEAM"
+          echo "Generating the project for team $APPLE_DEVELOPMENT_TEAM"
+        else
+          echo "Generating the project without a signing team (unsigned build)"
+        fi
+        npm run tauri -- ios init --ci
 
     # `tauri ios init` does NOT read src-tauri/icons/ios: the project is born
     # with cargo-mobile2's template icons, and what writes into
