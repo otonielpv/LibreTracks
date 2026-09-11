@@ -19,10 +19,13 @@ import { isMobileApp } from "../desktopApi";
 
 /**
  * Sitio que hay que dejar libre en el borde inferior: ahi flotan la barra de
- * acciones y, debajo, la barra de desplazamiento lateral. El panel de una
- * pista de abajo tapaba la primera justo cuando ibas a borrar la pista.
+ * acciones y, sobre ella, el panel de mezcla de la seleccion. El panel de una
+ * pista de abajo tapaba la barra justo cuando ibas a borrar la pista.
  *
- * Si `--lt-mobile-float-bottom` sube en styles.css, esto sube con ella.
+ * Va holgado a proposito —pasarse solo hace que una fila de abajo se despliegue
+ * hacia arriba, que no molesta a nadie—, asi que no hay que perseguir cada
+ * cambio de `--lt-mobile-float-bottom` en styles.css; solo si esa variable
+ * SUBIERA por encima de esto.
  */
 const BOTTOM_RESERVED_PX = 140;
 

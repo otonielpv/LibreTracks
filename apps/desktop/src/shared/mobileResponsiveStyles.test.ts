@@ -127,6 +127,21 @@ describe("contrato responsive móvil", () => {
     expect(items).toContain("flex: 0 0 auto");
   });
 
+  // La barra de acciones se apartaba 2.6rem del borde para dejar paso a la
+  // barra de desplazamiento lateral... que en movil no se pinta. Eran 40 px de
+  // timeline regalados a un control que no existe.
+  it("lo que flota abajo solo se aparta del area segura", () => {
+    const scrollbarRow = declarationsFor(".lt-mobile .lt-timeline-bottom-grid");
+    const floating = declarationsFor(".lt-mobile");
+    const offset = /--lt-mobile-float-bottom:\s*calc\(([\d.]+)rem/.exec(
+      floating,
+    )?.[1];
+
+    expect(scrollbarRow).toContain("display: none");
+    expect(Number(offset)).toBeLessThan(1);
+    expect(floating).toContain("var(--lt-safe-area-bottom)");
+  });
+
   // El fader es de 6 px de alto y su pulgar de 9: con el dedo no se coge. Y sin
   // `touch-action: none` el navegador se queda con la parte vertical del
   // arrastre, cancela el puntero y mueve la app entera en vez del fader.

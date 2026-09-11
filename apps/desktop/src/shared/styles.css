@@ -11475,12 +11475,15 @@ html.lt-ios body {
    borde inferior y encima de la barra de transporte: la vista sigue visible,
    que es justo lo que fallaba al hacerlo pantalla completa. Reutiliza
    .lt-icon-button, sin paleta propia. */
-/* Todo lo que flota sobre el timeline arranca por encima de la barra de
-   desplazamiento lateral (22 px), o el dedo que va a arrastrarla acaba
-   pulsando un boton. Una sola variable para que la barra, su pestana y el
-   editor de posicion no se separen. */
+/* A que altura flota todo lo que se apoya en el borde inferior: la barra de
+   acciones, su pestana, el panel de mezcla y el editor de posicion de marcas.
+   Una sola variable para que no se separen.
+   Reservaba 2.6rem para dejar paso a la barra de desplazamiento lateral, que en
+   movil no se pinta (`.lt-mobile .lt-timeline-bottom-grid { display: none }`):
+   eran 40 px de timeline regalados a un control que no existe. Ahora solo se
+   aparta del area segura —el indicador de inicio— con un respiro minimo. */
 .lt-mobile {
-  --lt-mobile-float-bottom: calc(2.6rem + var(--lt-safe-area-bottom));
+  --lt-mobile-float-bottom: calc(0.45rem + var(--lt-safe-area-bottom));
 }
 
 /* Paleta y formas de la app: panel de 2 px como `.lt-context-menu`. Una
