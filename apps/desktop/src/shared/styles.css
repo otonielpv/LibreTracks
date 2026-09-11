@@ -3227,6 +3227,14 @@ html.lt-ios body {
   scrollbar-gutter: stable;
 }
 
+/* WKWebView rebota el contenedor al llegar a los topes: por arriba aparece una
+   franja negra entre la regla y la barra de herramientas, y por abajo se sigue
+   bajando por debajo de la ultima pista. `contain` solo corta el encadenado al
+   documento; hace falta `none` para quitar tambien el rebote. */
+.lt-mobile .lt-timeline-scroll-viewport {
+  overscroll-behavior: none;
+}
+
 /* The mobile timeline owns both axes itself so one pointer can pan diagonally.
    Without this, WebKit may claim the vertical component for native pan-y and
    cancel the pointer stream before the timeline can update both axes. */
@@ -5644,6 +5652,23 @@ html.lt-ios body {
      the viewport even after edge-clamping — scroll the overflow instead. */
   max-height: calc(100vh - 16px);
   overflow-y: auto;
+}
+
+/* Una fila del menu que no es un boton: los faders de una multiseleccion. */
+.lt-context-menu-content {
+  padding: 0.15rem 0.35rem 0.35rem;
+}
+
+.lt-context-menu-mix {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lt-context-menu-mix small {
+  color: rgb(186 202 197 / 0.65);
+  font: 600 9px/1.3 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
 }
 
 .lt-context-menu strong {
@@ -9831,8 +9856,16 @@ html.lt-ios body {
   gap: clamp(0.35rem, 1.5vw, 0.75rem);
 }
 
+/* Ancho FIJO, en cifras del propio tipo monoespaciado. El grupo de transporte
+   de al lado ocupa el hueco que sobra, asi que un compas de dos cifras —"10.1.00"
+   tras "9.1.00"— le robaba sitio y el cuadro negro cambiaba de tamano a ojos
+   vista. Reservado para el texto mas largo, el numero cambia sin mover nada. */
 .lt-mobile .lt-readout-block strong {
-  min-width: 0;
+  min-width: 8ch;
+}
+
+.lt-mobile .lt-readout-block.is-timecode strong {
+  min-width: 9ch;
 }
 
 /* The rail consumes a bounded fraction of landscape width and its buttons
@@ -11272,10 +11305,37 @@ html.lt-ios body {
 .lt-mobile .lt-mobile-track-row-panel .lt-track-volume input[type="range"],
 .lt-mobile .lt-mobile-track-row-panel .lt-track-pan input[type="range"] {
   height: 1.25rem;
-  padding-block: 0.4375rem;
-  margin-block: -0.4375rem;
+  /* Riel de 4 px: el relleno se come el resto de la caja. */
+  padding-block: 0.5rem;
+  margin-block: -0.5rem;
+  border-radius: 2px;
   background-clip: content-box;
   touch-action: none;
+}
+
+/* Pulgar de canto, como el de un mezclador: estrecho, plano y del alto justo
+   para verse sobre el riel. El de escritorio (9x17 sobre 6 px) se veia
+   desproporcionado en el panel. */
+.lt-mobile
+  .lt-mobile-track-row-panel
+  .lt-track-volume
+  input[type="range"]::-webkit-slider-thumb,
+.lt-mobile
+  .lt-mobile-track-row-panel
+  .lt-track-pan
+  input[type="range"]::-webkit-slider-thumb {
+  width: 7px;
+  height: 13px;
+  border-radius: 1px;
+}
+
+/* Etiquetas del panel: mismo color, un punto mas sobrias. */
+.lt-mobile .lt-mobile-track-row-panel .lt-track-mix-label {
+  opacity: 0.72;
+}
+
+.lt-mobile .lt-mobile-track-row-panel .lt-track-mix-value {
+  font-weight: 600;
 }
 
 /* El grupo M/S/T es una rejilla de celdas de 24 px. Agrandar solo los botones

@@ -380,59 +380,6 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     }
   };
 
-  /**
-   * Mix edits over an EXPLICIT list of tracks, for callers with no fader to
-   * drag — the multi-selection menu on a phone, where the headers collapse to
-   * a name and the mute/solo pair.
-   *
-   * The nudges are relative on purpose, exactly like dragging one fader of a
-   * selection: the group keeps its internal balance. The setters are absolute,
-   * for the "reset" entries where making every track equal IS the point.
-   */
-  const applyTrackMixToAll = (
-    trackIds: string[],
-    key: "volume" | "pan",
-    nextValueOf: (current: number) => number,
-  ) => {
-    const applied = trackIds.filter((id) => findTrack(id) !== null);
-    if (!applied.length) {
-      return;
-    }
-
-    for (const id of applied) {
-      const track = findTrack(id);
-      if (!track) {
-        continue;
-      }
-      patchTrackOptimisticMix(id, {
-        [key]: nextValueOf(resolveTrackMix(track, id)[key]),
-      });
-      queueTrackMixLiveUpdate(id, [key]);
-    }
-
-    void runAction(async () => {
-      await Promise.all(applied.map((id) => persistTrackMix(id, [key])));
-    });
-  };
-
-  const nudgeTracksVolumeDb = (trackIds: string[], deltaDb: number) =>
-    applyTrackMixToAll(trackIds, "volume", (current) =>
-      offsetGainByDb(current, deltaDb, maxTrackGain),
-    );
-
-  const setTracksVolume = (trackIds: string[], volume: number) =>
-    applyTrackMixToAll(trackIds, "volume", () =>
-      clamp(volume, 0, maxTrackGain),
-    );
-
-  const nudgeTracksPan = (trackIds: string[], deltaPan: number) =>
-    applyTrackMixToAll(trackIds, "pan", (current) =>
-      clamp(current + deltaPan, -1, 1),
-    );
-
-  const setTracksPan = (trackIds: string[], pan: number) =>
-    applyTrackMixToAll(trackIds, "pan", () => clamp(pan, -1, 1));
-
   const handleTrackHeaderVolumeCommit = (trackId: string) => {
     const targets = editTargets(trackId);
     void runAction(async () => {
@@ -607,13 +554,18 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     handleTrackHeaderPanCommit,
     handleTrackHeaderTransposeToggle,
     handleTrackHeaderAudioToChange,
-    /** Grouped: the multi-selection menu takes the whole set at once. */
+    /**
+     * Los faders de la multiseleccion. Son los MISMOS handlers de la cabecera:
+     * hablarle a una pista de la seleccion ya reparte al resto (relativo en
+     * volumen y paneo, absoluto en salida), que es justo lo que hace arrastrar
+     * su fader en la columna de pistas.
+     */
     multiTrackMix: {
-      nudgeVolumeDb: nudgeTracksVolumeDb,
-      setVolume: setTracksVolume,
-      nudgePan: nudgeTracksPan,
-      setPan: setTracksPan,
-      setAudioTo: setTracksAudioTo,
+      setVolume: handleTrackHeaderVolumeChange,
+      commitVolume: handleTrackHeaderVolumeCommit,
+      setPan: handleTrackHeaderPanChange,
+      commitPan: handleTrackHeaderPanCommit,
+      setAudioTo: handleTrackHeaderAudioToChange,
     },
   };
 }

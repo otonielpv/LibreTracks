@@ -1234,7 +1234,6 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         t,
         routingOptions: d.audioRoutingOptions,
         mix: d.multiTrackMix,
-        openSubMenu,
       }),
     ];
   }

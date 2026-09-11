@@ -863,8 +863,17 @@ export function TimelineTrackCanvas({
     onNativeTrackRowHeightStep,
   };
 
+  // El tope del desplazamiento sale del alto que ESTE componente pinta (regla +
+  // escena), no de `scrollHeight`: ver timelineVerticalScroll. Las medidas se
+  // leen por ref para que cambiar de zoom o anadir pistas no recree el gesto.
+  const contentHeightRef = useRef(rulerHeight + height);
+  contentHeightRef.current = rulerHeight + height;
   const touchVerticalScroller = useMemo(
-    () => createTimelineVerticalScroller(() => scrollViewportRef.current),
+    () =>
+      createTimelineVerticalScroller(
+        () => scrollViewportRef.current,
+        () => contentHeightRef.current,
+      ),
     [scrollViewportRef],
   );
 

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { ClipSummary, MidiBinding } from "@libretracks/shared/models";
 import type { OptimisticMixState } from "./store";
 
@@ -69,6 +71,13 @@ export type ContextMenuAction = {
   swatch?: string;
   /** Display-ready keyboard shortcut shown right-aligned, Reaper-style. */
   shortcut?: string;
+  /**
+   * Fila que NO es un boton: se pinta tal cual dentro del menu. Para controles
+   * de verdad —los faders de una multiseleccion—, donde una lista de escalones
+   * es un sucedaneo de lo que se quiere hacer. Con esto, `onSelect` no se usa y
+   * `label` solo identifica la fila.
+   */
+  content?: ReactNode;
   onSelect: () => void | Promise<void>;
 };
 

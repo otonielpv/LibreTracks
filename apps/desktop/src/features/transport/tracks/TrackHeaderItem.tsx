@@ -10,16 +10,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  TRACK_FADER_SCALE,
-  formatGainDb,
-  gainToPosition,
-  positionToGain,
-} from "@libretracks/shared/faderScale";
-
-import { AudioRouteCombobox } from "./AudioRouteCombobox";
-import { useFineDragRange } from "../timeline/useFineDragRange";
-import { useTouchRangeDrag } from "./useTouchRangeDrag";
+import { TrackMixControls } from "./TrackMixControls";
 import { TrackMeter } from "./TrackMeter";
 import type { TrackKind } from "../desktopApi";
 import { useTransportStore } from "../store";
@@ -35,9 +26,6 @@ import { isMobileApp } from "../desktopApi";
  */
 const BOTTOM_RESERVED_PX = 140;
 
-const PAN_DISPLAY_CENTER_EPSILON = 0.005;
-const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
-
 /**
  * Interactive controls inside the header that own their own pointer gestures:
  * the mute/solo/transpose buttons, the volume and pan faders, and the routing
@@ -49,25 +37,6 @@ const OWN_CONTROL_SELECTOR =
 
 function isOwnControlTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(OWN_CONTROL_SELECTOR) !== null;
-}
-
-/** The stored volume is a linear gain (1.0 = unity); the fader is an
- * Ableton-style dB scale. Show the dB readout (0 dB = unity, +10 dB = top). */
-function formatVolumeValue(volume: number): string {
-  return `${formatGainDb(volume)} dB`;
-}
-
-function formatPanValue(pan: number): string {
-  const clampedPan = Math.max(-1, Math.min(1, pan));
-  if (Math.abs(clampedPan) <= PAN_DISPLAY_CENTER_EPSILON) {
-    return "C";
-  }
-
-  if (clampedPan < 0) {
-    return `L ${Math.round(Math.abs(clampedPan) * 100)}`;
-  }
-
-  return `R ${Math.round(clampedPan * 100)}`;
 }
 
 type TrackHeaderItemProps = {
@@ -200,37 +169,6 @@ function TrackHeaderItemComponent({
   const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
   const effectiveTrackSolo = optimisticMix?.solo ?? trackSolo;
   const effectiveVolumeValue = optimisticMix?.volume ?? volumeValue;
-  const volumePosition = gainToPosition(effectiveVolumeValue, TRACK_FADER_SCALE);
-  const volumeFill = `${(volumePosition * 100).toFixed(2)}%`;
-  // Hold Shift to fine-drag the volume fader for precise dB tweaks.
-  const volumeFineDrag = useFineDragRange({
-    value: volumePosition,
-    onChange: (position) =>
-      onVolumeChange(trackId, positionToGain(position, TRACK_FADER_SCALE)),
-    onCommit: () => onCommitVolume(trackId),
-  });
-  // El dedo no usa el arrastre nativo del `<input type=range>`: ver
-  // useTouchRangeDrag. Con raton no cambia nada.
-  const volumeTouchDrag = useTouchRangeDrag({
-    min: 0,
-    max: 1,
-    step: 0.001,
-    onChange: (position) =>
-      onVolumeChange(trackId, positionToGain(position, TRACK_FADER_SCALE)),
-    onCommit: () => onCommitVolume(trackId),
-  });
-  const panFill = `${(((effectivePanValue + 1) * 0.5) * 100).toFixed(2)}%`;
-  const panTouchDrag = useTouchRangeDrag({
-    min: -1,
-    max: 1,
-    step: 0.01,
-    onChange: (value) =>
-      onPanChange(
-        trackId,
-        Math.abs(value) <= PAN_SNAP_TO_CENTER_EPSILON ? 0 : value,
-      ),
-    onCommit: () => onCommitPan(trackId),
-  });
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (isOwnControlTarget(event.target)) {
       return;
@@ -349,114 +287,19 @@ function TrackHeaderItemComponent({
                 T
               </button>
             </div>
-            <div className="lt-track-mix-controls">
-              <label className="lt-track-volume">
-                <span>
-                  <span className="lt-track-mix-label">
-                    {t("trackHeader.volume")}
-                  </span>
-                  <em className="lt-track-mix-value">
-                    {formatVolumeValue(effectiveVolumeValue)}
-                  </em>
-                </span>
-                <input
-                  aria-label={t("trackHeader.volumeAria", { name: trackName })}
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.001}
-                  value={volumePosition}
-                  style={{
-                    background: `linear-gradient(to right, #3cddc7 ${volumeFill}, #0e0e0e ${volumeFill})`,
-                  }}
-                  onChange={volumeFineDrag.handleChange}
-                  onPointerDown={(event) => {
-                    volumeFineDrag.handlePointerDown();
-                    volumeTouchDrag(event);
-                  }}
-                  onDoubleClick={(event) => {
-                    // Reset to unity (0 dB), the way Reaper resets a fader.
-                    event.stopPropagation();
-                    onVolumeChange(trackId, 1.0);
-                    onCommitVolume(trackId);
-                  }}
-                  onMouseUp={() => {
-                    volumeFineDrag.handleCommit();
-                  }}
-                  onTouchEnd={() => {
-                    volumeFineDrag.handleCommit();
-                  }}
-                  onKeyUp={(event) => {
-                    if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
-                      onCommitVolume(trackId);
-                    }
-                  }}
-                  onBlur={() => {
-                    onCommitVolume(trackId);
-                  }}
-                />
-              </label>
-              <label className="lt-track-pan">
-                <span>
-                  <span className="lt-track-mix-label">
-                    {t("trackHeader.pan", { defaultValue: "Pan" })}
-                  </span>
-                  <em className="lt-track-mix-value">
-                    {formatPanValue(effectivePanValue)}
-                  </em>
-                </span>
-                <input
-                  aria-label={t("trackHeader.panAria", { name: trackName })}
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.01}
-                  value={effectivePanValue}
-                  style={{
-                    background: `linear-gradient(to right, #4d79d8 0%, #74b8ff ${panFill}, #0e0e0e ${panFill}, #0e0e0e 100%)`,
-                  }}
-                  onChange={(event) => {
-                    const rawPanValue = Number(event.target.value);
-                    onPanChange(
-                      trackId,
-                      Math.abs(rawPanValue) <= PAN_SNAP_TO_CENTER_EPSILON ? 0 : rawPanValue,
-                    );
-                  }}
-                  onPointerDown={panTouchDrag}
-                  onDoubleClick={(event) => {
-                    event.stopPropagation();
-                    onPanChange(trackId, 0);
-                    onCommitPan(trackId);
-                  }}
-                  onMouseUp={() => {
-                    onCommitPan(trackId);
-                  }}
-                  onTouchEnd={() => {
-                    onCommitPan(trackId);
-                  }}
-                  onKeyUp={(event) => {
-                    if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
-                      onCommitPan(trackId);
-                    }
-                  }}
-                  onBlur={() => {
-                    onCommitPan(trackId);
-                  }}
-                />
-              </label>
-              <label className="lt-track-audio-to">
-                <span>{t("trackHeader.audioTo", { defaultValue: "Audio To" })}</span>
-                <AudioRouteCombobox
-                  value={audioTo}
-                  options={routeOptions}
-                  ariaLabel={t("trackHeader.audioToAria", {
-                    name: trackName,
-                    defaultValue: `Audio To ${trackName}`,
-                  })}
-                  onChange={(next) => onAudioToChange(trackId, next)}
-                />
-              </label>
-            </div>
+            <TrackMixControls
+              trackId={trackId}
+              trackName={trackName}
+              volumeValue={effectiveVolumeValue}
+              panValue={effectivePanValue}
+              audioTo={audioTo}
+              routeOptions={routeOptions}
+              onVolumeChange={onVolumeChange}
+              onCommitVolume={onCommitVolume}
+              onPanChange={onPanChange}
+              onCommitPan={onCommitPan}
+              onAudioToChange={onAudioToChange}
+            />
           </div>
   );
 

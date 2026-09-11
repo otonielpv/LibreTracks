@@ -3,6 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createTimelineVerticalScroller } from "./timelineVerticalScroll";
 
+/**
+ * Alto logico: regla mas escena de pistas. A proposito MENOR que el
+ * `scrollHeight` del contenedor, que es lo que pasa de verdad en WKWebView
+ * cuando las rebanadas de lienzo se cuelan en el desbordamiento.
+ */
+const CONTENT_HEIGHT = 1000;
+
 function viewport(options: { scrollHeight: number; clientHeight: number }) {
   let scrollTop = 0;
   const reads = vi.fn();
@@ -28,7 +35,10 @@ function viewport(options: { scrollHeight: number; clientHeight: number }) {
 describe("desplazamiento vertical tactil del timeline", () => {
   it("lleva su propio objetivo: no lee el desplazamiento por muestra", () => {
     const v = viewport({ scrollHeight: 1000, clientHeight: 400 });
-    const scroller = createTimelineVerticalScroller(() => v.element);
+    const scroller = createTimelineVerticalScroller(
+      () => v.element,
+      () => CONTENT_HEIGHT,
+    );
 
     scroller.seed();
     const readsAfterSeed = v.reads.mock.calls.length;
@@ -45,7 +55,10 @@ describe("desplazamiento vertical tactil del timeline", () => {
   // lectura rancia se come el recorrido acumulado desde ella.
   it("no pierde recorrido aunque el DOM devuelva un desplazamiento rancio", () => {
     const v = viewport({ scrollHeight: 1000, clientHeight: 400 });
-    const scroller = createTimelineVerticalScroller(() => v.element);
+    const scroller = createTimelineVerticalScroller(
+      () => v.element,
+      () => CONTENT_HEIGHT,
+    );
     scroller.seed();
     scroller.scrollBy(10);
     // El contenedor "se queda atras": la escritura aun no ha aterrizado.
@@ -56,20 +69,45 @@ describe("desplazamiento vertical tactil del timeline", () => {
     expect(v.scrollTopValue).toBe(20);
   });
 
-  it("se queda dentro del recorrido posible", () => {
-    const v = viewport({ scrollHeight: 1000, clientHeight: 400 });
-    const scroller = createTimelineVerticalScroller(() => v.element);
+  // El contenedor dice que se puede bajar hasta 1000 porque las rebanadas de
+  // lienzo se cuelan en su desbordamiento. Si le hacemos caso, el gesto se va
+  // por debajo del final de las pistas: negro, y sin frenar.
+  it("frena al final de la escena, no al final de `scrollHeight`", () => {
+    const v = viewport({ scrollHeight: 1400, clientHeight: 400 });
+    const scroller = createTimelineVerticalScroller(
+      () => v.element,
+      () => CONTENT_HEIGHT,
+    );
     scroller.seed();
 
     scroller.scrollBy(5000);
-    expect(v.scrollTopValue).toBe(600);
+    expect(v.scrollTopValue).toBe(CONTENT_HEIGHT - 400);
     scroller.scrollBy(-5000);
     expect(v.scrollTopValue).toBe(0);
   });
 
+  it("sigue el alto de la escena cuando cambia el numero de pistas", () => {
+    const v = viewport({ scrollHeight: 1400, clientHeight: 400 });
+    let contentHeight = 500;
+    const scroller = createTimelineVerticalScroller(
+      () => v.element,
+      () => contentHeight,
+    );
+    scroller.seed();
+    scroller.scrollBy(5000);
+    expect(v.scrollTopValue).toBe(100);
+
+    contentHeight = 900;
+    scroller.scrollBy(5000);
+    expect(v.scrollTopValue).toBe(500);
+  });
+
   it("vuelve a sincronizarse con el DOM en cada anclaje", () => {
     const v = viewport({ scrollHeight: 1000, clientHeight: 400 });
-    const scroller = createTimelineVerticalScroller(() => v.element);
+    const scroller = createTimelineVerticalScroller(
+      () => v.element,
+      () => CONTENT_HEIGHT,
+    );
     scroller.seed();
     scroller.scrollBy(30);
 
@@ -82,7 +120,10 @@ describe("desplazamiento vertical tactil del timeline", () => {
   });
 
   it("aguanta sin contenedor", () => {
-    const scroller = createTimelineVerticalScroller(() => null);
+    const scroller = createTimelineVerticalScroller(
+      () => null,
+      () => CONTENT_HEIGHT,
+    );
     expect(() => {
       scroller.seed();
       scroller.scrollBy(10);

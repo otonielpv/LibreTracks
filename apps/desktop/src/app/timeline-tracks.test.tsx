@@ -320,26 +320,34 @@ describe("App / timeline-tracks", () => {
 
     const contextMenu = container.querySelector(".lt-context-menu") as HTMLElement | null;
     expect(contextMenu).toBeTruthy();
-    const buttons = within(contextMenu as HTMLElement).getAllByRole("button");
+    const menu = within(contextMenu as HTMLElement);
     // Lo que tiene sentido sobre una seleccion de varias. Borrar entro con el
     // borrado por lotes en movil -donde no hay teclado y eliminar de una en
     // una es insufrible- y va por el MISMO comando batch que ya usaba el
     // atajo: un solo sync del motor y una sola entrada de historial.
-    expect(buttons.map((button) => button.textContent)).toEqual([
+    expect(
+      menu
+        .getAllByRole("button")
+        .map((button) => button.textContent)
+        // El disparador del desplegable de salida es un boton, pero vive
+        // dentro de los faders, no es una entrada del menu.
+        .filter((label) => !label?.includes("▾")),
+    ).toEqual([
       expect.stringContaining("Delete"),
       // Meter varias en una carpeta de un tiron: arrastrando habia que repetir
       // el gesto una por una y acertar el 40% central de la fila de la carpeta.
       expect.stringContaining("Move to folder"),
       expect.stringContaining("Remove From Folder"),
       expect.stringContaining("Select colour"),
-      // Mezcla de la seleccion. Arrastrar un fader ya se repartia entre las
-      // seleccionadas, pero en movil las cabeceras se quedan en nombre +
-      // mute/solo y no habia fader que arrastrar: sin estas tres no existe
-      // ninguna via para tocar volumen, paneo o salida de varias pistas.
-      "Volume: 2 tracks",
-      "Pan: 2 tracks",
-      "Output: 2 tracks",
     ]);
+
+    // La mezcla de la seleccion no son entradas de menu: son los MISMOS faders
+    // de una pista, aplicados al grupo. Antes eran tres submenus de escalones
+    // fijos porque en movil la cabecera se queda en nombre + mute/solo y no hay
+    // fader que arrastrar; el sucedaneo sobra si el fader esta aqui.
+    expect(menu.getByLabelText(/^Volume for /)).toBeTruthy();
+    expect(menu.getByLabelText(/^Pan for /)).toBeTruthy();
+    expect(menu.getByText("Applies to the 2 selected tracks")).toBeTruthy();
   });
 
   // Antes de esto sólo Escape quitaba la selección, así que en móvil -donde no
