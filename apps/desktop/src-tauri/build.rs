@@ -1,10 +1,28 @@
 use std::{env, fs, path::PathBuf};
 
 fn main() {
+    configure_no_link_bundle();
     configure_runtime_library_search_path();
     embed_common_controls_manifest_in_tests();
     copy_native_engine_runtime();
     tauri_build::build()
+}
+
+/// Los tests del crate se compilan sin el motor nativo. En macOS, tauri-build
+/// intenta copiar en tiempo de compilacion cada dylib declarada como framework
+/// aunque el FFI lleve la feature `no-link`; en un checkout limpio de CI esas
+/// librerias aun no existen porque el motor se construye en el job posterior.
+///
+/// El override solo elimina los frameworks del bundle para este artefacto de
+/// test. Una build distribuible nunca activa `no-link` y conserva intacta la
+/// configuracion de firma y empaquetado de tauri.conf.json.
+fn configure_no_link_bundle() {
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_NO_LINK");
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos")
+        && env::var("CARGO_FEATURE_NO_LINK").is_ok()
+    {
+        env::set_var("TAURI_CONFIG", r#"{"bundle":{"macOS":{"frameworks":[]}}}"#);
+    }
 }
 
 /// Da al arnes de tests el mismo manifest de Common Controls 6 que
