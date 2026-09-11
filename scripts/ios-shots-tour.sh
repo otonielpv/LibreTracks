@@ -194,8 +194,15 @@ fi
 
 log "── 04 y 05 Vista compacta, con y sin mixer ─────────────────"
 key 43   # daw → compact
-# On a tablet the mixer band starts open, so this first shot is the mixer one.
+# On a tablet the mixer band starts open, so this first shot is the mixer one
+# and the clean compact view needs the band closed afterwards.
 shot "compact-with-mixer"
+if tap_frac "Hide mixer" 0.520 0.278; then
+  shot "compact"
+else
+  failures=$((failures + 1))
+  shot "compact-FAILED"
+fi
 
 log "── 06 Vista live ───────────────────────────────────────────"
 key 43   # compact → live
