@@ -8,27 +8,25 @@
  * nor contain an alpha channel"). Con el marco dentro, ademas, la pantalla de
  * inicio mostraba una baldosa blanca con el logo pequeno en medio.
  *
- * Si el proyecto de Xcode ya esta generado (`gen/apple`, solo en el Mac), los
- * copia tambien a su catalogo: es de donde salen los iconos del .app, y
- * refrescar `icons/ios` a secas no lo toca.
+ * Solo hay que ejecutarlo cuando cambia el ARTE. Meterlos en el proyecto de
+ * Xcode es otra cosa y la hace scripts/ios-app-icon.mjs, que no necesita
+ * rasterizar nada (la CI lo llama tras generar el proyecto).
  *
  *   node scripts/make-ios-icons.mjs
  */
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import sharp from "sharp";
 
+import { APP_ICON_SET, syncXcodeAppIcon } from "./ios-app-icon.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const iconsDir = resolve(here, "../apps/desktop/src-tauri/icons");
 const source = join(iconsDir, "icon-ios.svg");
 const outDir = join(iconsDir, "ios");
-const appIconSet = resolve(
-  here,
-  "../apps/desktop/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset",
-);
 
 /** Los nombres que espera el catalogo que genera Tauri, con su lado en px. */
 const TARGETS = [
@@ -64,18 +62,12 @@ for (const [name, size] of TARGETS) {
   await writeFile(join(outDir, name), png);
 }
 
-if (existsSync(appIconSet)) {
-  const present = new Set(await readdir(appIconSet));
-  for (const [name] of TARGETS) {
-    if (present.has(name)) {
-      await copyFile(join(outDir, name), join(appIconSet, name));
-    }
-  }
-  console.log(`Copiados al catalogo de Xcode: ${appIconSet}`);
+console.log(`${TARGETS.length} iconos escritos en ${outDir}`);
+
+if (existsSync(APP_ICON_SET)) {
+  console.log(`${await syncXcodeAppIcon()} copiados al catalogo de Xcode`);
 } else {
   console.log(
-    "Sin proyecto de Xcode aqui: al generarlo (`tauri ios init`) tomara estos.",
+    "Sin proyecto de Xcode aqui; la CI los mete con scripts/ios-app-icon.mjs.",
   );
 }
-
-console.log(`${TARGETS.length} iconos escritos en ${outDir}`);

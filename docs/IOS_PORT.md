@@ -37,22 +37,28 @@ nor contain an alpha channel"*). Con el marco dentro, además, la pantalla de
 inicio mostraba una baldosa blanca con el logo pequeño flotando en medio, que
 es lo que se veía en el iPhone y parecía otro icono distinto.
 
-El arte de iOS vive aparte, en `icons/icon-ios.svg`, y se rasteriza con:
+El arte de iOS vive aparte, en `icons/icon-ios.svg`, y se rasteriza con
+`node scripts/make-ios-icons.mjs` (los 18 tamaños, a `icons/ios/`). Solo hay
+que ejecutarlo cuando cambia el dibujo.
+
+Meterlos en el `.app` es otra cosa. `tauri ios init` **no** lee `icons/ios`: el
+proyecto nace con los iconos de relleno de la plantilla de cargo-mobile2, y
+quien escribe en `Assets.xcassets/AppIcon.appiconset` es `tauri icon`, que el
+workflow no ejecuta. Como el proyecto se genera en cada build, el IPA salía
+siempre con el icono de la plantilla. De eso se encarga ahora un paso de la CI,
+justo detrás de `ios init`:
 
 ```bash
-node scripts/make-ios-icons.mjs
+node scripts/ios-app-icon.mjs
 ```
 
-Escribe los 18 tamaños en `icons/ios/` y, **si el proyecto de Xcode ya está
-generado** (`src-tauri/gen/apple`, que solo existe en el Mac), los copia también
-a `Assets.xcassets/AppIcon.appiconset`. Ese catálogo es de donde salen los
-iconos del `.app`: refrescar `icons/ios` a secas no lo toca, así que tras
-cambiar el icono hay que ejecutar el script **en el Mac** (o regenerar el
-proyecto con `tauri ios init`) antes de compilar el IPA.
+Copia por **tamaño**, leyendo el `Contents.json` recién generado, así que no
+depende de cómo llame la plantilla a sus ficheros; y **falla el job** si el
+catálogo se queda sin icono, para que no vuelva a colarse en silencio.
 
-Si alguien vuelve a pasar `tauri icon` por encima, el test
-`src/shared/iosAppIcon.test.ts` falla: comprueba que los 18 siguen siendo
-cuadrados y sin canal alfa.
+El test `src/shared/iosAppIcon.test.ts` cubre las dos mitades: que los 18 PNG
+siguen siendo cuadrados y sin alfa (si alguien vuelve a pasar `tauri icon` por
+encima, falla) y que la copia al catálogo hace lo que dice.
 
 ## Alcance inicial del audio
 

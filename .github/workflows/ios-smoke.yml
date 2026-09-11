@@ -173,6 +173,15 @@ jobs:
         working-directory: apps/desktop
         run: npm run tauri -- ios init --ci
 
+      # `tauri ios init` NO lee src-tauri/icons/ios: el proyecto nace con los
+      # iconos de relleno de la plantilla de cargo-mobile2, y quien escribe en
+      # ese catalogo es `tauri icon`, que aqui no se ejecuta. Como el proyecto
+      # se genera en CADA build, el IPA salia siempre con el icono de la
+      # plantilla. El script falla si el catalogo se queda sin icono, para que
+      # no vuelva a colarse en silencio.
+      - name: Put the app icon in the generated iOS project
+        run: node scripts/ios-app-icon.mjs
+
       # Apple reads the privacy manifest from the ROOT of the app bundle, and
       # bundle.resources cannot put it there: project.yml declares `assets` as
       # a folder reference, so everything Tauri copies ends up under
