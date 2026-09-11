@@ -57,6 +57,7 @@ import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useTouchContextMenu } from "./useTouchContextMenu";
 import { rulerClientXToSeconds } from "../helpers";
 import { useTouchClipSelection } from "../mobile/touchClipSelection";
+import { armLaneTouchDrag, laneMouseDragAllowed } from "./laneDragStart";
 import { MobileEmptyLanes } from "../mobile/MobileEmptyLanes";
 import { useTimelineUIStore } from "../uiStore";
 import { useBoundedTimelineScroll } from "./useBoundedTimelineScroll";
@@ -453,6 +454,8 @@ export function TimelineCanvasPane({
       regionLongPressRef.current = null;
     }
   };
+  // Ultimo toque sobre un carril; ver ./laneDragStart.
+  const laneTouchAtRef = useRef(0);
   const touchClips = useTouchClipSelection(
     clipsByTrack,
     cameraXRef,
@@ -1568,8 +1571,13 @@ export function TimelineCanvasPane({
                     style={{ height: rowHeight }}
                     aria-label={`Lane ${track.name}`}
                     onDragEnter={handleTimelineDragEnter}
+                    onPointerDown={(event) => {
+                      if (!isPendingTrack && armLaneTouchDrag(event, laneTouchAtRef)) {
+                        onTrackLaneMouseDown(event, track, trackClips);
+                      }
+                    }}
                     onMouseDown={(event) => {
-                      if (!isPendingTrack) {
+                      if (!isPendingTrack && laneMouseDragAllowed(laneTouchAtRef)) {
                         onTrackLaneMouseDown(event, track, trackClips);
                       }
                     }}

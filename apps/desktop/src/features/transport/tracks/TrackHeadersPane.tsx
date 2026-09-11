@@ -148,14 +148,15 @@ export function TrackHeadersPane({
         }
       }}
       onClick={(event) => {
-        // El hueco de debajo de la ultima pista es "fuera": soltar ahi la
-        // seleccion es lo que hace cualquier DAW, y con el dedo era el sitio
-        // mas a mano donde tocar no hacia nada. Las filas y la cabecera de la
-        // regla se gestionan solas.
+        // Todo el hueco de esta columna es "fuera": el de debajo de la ultima
+        // pista y el de arriba, junto a los botones de alto. Soltar ahi la
+        // seleccion es lo que hace cualquier DAW, y con el dedo son los dos
+        // sitios mas a mano donde tocar no hacia nada. Las filas se gestionan
+        // solas, y los botones de la cabecera tienen lo suyo que hacer.
         const target = event.target as HTMLElement | null;
         if (
           target?.closest(".lt-track-header-row") ||
-          target?.closest(".lt-ruler-header")
+          target?.closest("button, input, select, label")
         ) {
           return;
         }

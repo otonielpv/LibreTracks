@@ -6520,7 +6520,7 @@ export function TransportPanelContent() {
 
       clipDragRef.current = {
         clipId: hitClip.id,
-        pointerId: 1,
+        pointerId: (event as { pointerId?: number }).pointerId ?? 1,
         originSeconds: hitClip.timelineStartSeconds,
         previewSeconds: hitClip.timelineStartSeconds,
         clickSeekSeconds,

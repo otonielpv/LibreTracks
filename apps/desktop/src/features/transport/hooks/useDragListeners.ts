@@ -596,13 +596,19 @@ export function useDragListeners({
 
     // WebKit and Android WebView do not synthesize the mousemove/mouseup
     // sequence needed by a real touch drag. Keep the established mouse hot
-    // path intact and forward only touch Pointer Events into it.
+    // path intact and forward touch Pointer Events into it.
+    //
+    // Los DOS arrastres, no solo el de pistas: el de un clip se quedaba armado
+    // y sin recibir un solo movimiento, asi que el clip se seleccionaba y
+    // despues no habia forma de moverlo con el dedo.
+    const touchDragPointerId = () =>
+      trackDragRef.current?.pointerId ?? clipDragRef.current?.pointerId ?? null;
+
     const onTouchPointerMove = (event: PointerEvent) => {
       if (event.pointerType !== "touch") {
         return;
       }
-      const activeTrackDrag = trackDragRef.current;
-      if (activeTrackDrag?.pointerId !== event.pointerId) {
+      if (touchDragPointerId() !== event.pointerId) {
         return;
       }
       if (event.cancelable) {
@@ -614,7 +620,7 @@ export function useDragListeners({
     const onTouchPointerUp = (event: PointerEvent) => {
       if (
         event.pointerType !== "touch" ||
-        trackDragRef.current?.pointerId !== event.pointerId
+        touchDragPointerId() !== event.pointerId
       ) {
         return;
       }
@@ -624,10 +630,14 @@ export function useDragListeners({
     const onTouchPointerCancel = (event: PointerEvent) => {
       if (
         event.pointerType !== "touch" ||
-        trackDragRef.current?.pointerId !== event.pointerId
+        touchDragPointerId() !== event.pointerId
       ) {
         return;
       }
+      // Un arrastre cancelado no confirma nada: el clip vuelve a su sitio.
+      clipDragRef.current = null;
+      clipPreviewSecondsRef.current = {};
+      clipPreviewTrackIdRef.current = {};
       trackDragRef.current = null;
       suppressTrackClickRef.current = true;
       stopTrackAutoScroll();
