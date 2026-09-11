@@ -31,6 +31,11 @@ on:
         description: "Seconds to wait after launch before the first screenshot"
         type: string
         default: "25"
+      language:
+        description: "App language for the screenshots (App Store takes one set per language)"
+        type: choice
+        options: ["en", "es"]
+        default: "en"
 
 permissions:
   contents: read
@@ -168,12 +173,22 @@ jobs:
           SIM_UDID: ${{ steps.sim.outputs.udid }}
           APP_PATH: ${{ steps.app.outputs.path }}
           SETTLE: ${{ inputs.settle_seconds }}
+          LANG_CODE: ${{ inputs.language }}
         run: |
           set -euo pipefail
           shots="$GITHUB_WORKSPACE/simulator-shots"
           mkdir -p "$shots"
           xcrun simctl install "$SIM_UDID" "$APP_PATH"
-          xcrun simctl launch "$SIM_UDID" com.libretracks.ios
+          # The runner's simulator is English. These launch arguments are the
+          # standard way to ask for another language per launch (no need to
+          # reconfigure the device), and the store takes a separate screenshot
+          # set per language anyway.
+          case "$LANG_CODE" in
+            es) locale="es_ES" ;;
+            *)  locale="en_US" ;;
+          esac
+          xcrun simctl launch "$SIM_UDID" com.libretracks.ios \
+            -AppleLanguages "($LANG_CODE)" -AppleLocale "$locale"
 
           # A cold first launch does real work: it unpacks the bundled demo
           # session and analyses its waveforms. Take a series rather than one
