@@ -76,6 +76,8 @@ type TimelineUIState = {
    * reemplazarla. Sin esto no hay forma de borrar varias pistas de un tirón
    * con un dedo: no hay Ctrl que mantener. */
   trackMultiSelect: boolean;
+  /** Lo mismo para los clips: cada toque suma o quita el clip que hay debajo. */
+  clipMultiSelect: boolean;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
@@ -107,6 +109,7 @@ type TimelineUIState = {
   setMarkerPositionEditorId: (markerId: string | null) => void;
   toggleExpandedTrackId: (trackId: string) => void;
   setTrackMultiSelect: (enabled: boolean) => void;
+  setClipMultiSelect: (enabled: boolean) => void;
   toggleTrackSelection: (trackId: string) => void;
   setExpandedTrackId: (trackId: string | null) => void;
   setSelectionMixOpen: (open: boolean) => void;
@@ -131,6 +134,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     expandedTrackId: null,
     selectionMixOpen: false,
     trackMultiSelect: false,
+    clipMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);
@@ -229,10 +233,9 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       });
     },
     clearSelection: () => {
-      // Soltar la seleccion sale tambien del modo de sumar pistas: si no,
-      // el siguiente toque en una cabecera volveria a sumar sin que nadie lo
-      // haya pedido.
-      set({ ...EMPTY_SELECTION, trackMultiSelect: false });
+      // Soltar la seleccion sale tambien de los modos de sumar: si no, el
+      // siguiente toque volveria a sumar sin que nadie lo haya pedido.
+      set({ ...EMPTY_SELECTION, trackMultiSelect: false, clipMultiSelect: false });
     },
     /** Como `clearSelection`, pero no toca el estado si no había nada
      * seleccionado. El fondo del timeline llama a esto en CADA clic de salto y
@@ -332,6 +335,9 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     setTrackMultiSelect: (trackMultiSelect) => {
       set({ trackMultiSelect });
+    },
+    setClipMultiSelect: (clipMultiSelect) => {
+      set({ clipMultiSelect });
     },
     toggleTrackSelection: (trackId) => {
       set((state) => ({

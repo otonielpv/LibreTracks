@@ -94,7 +94,11 @@ beforeEach(async () => {
   vi.clearAllMocks();
   window.localStorage.clear();
   useTimelineUIStore.getState().clearSelection();
-  useTimelineUIStore.setState({ selectionMixOpen: false, expandedTrackId: null });
+  useTimelineUIStore.setState({
+    selectionMixOpen: false,
+    expandedTrackId: null,
+    clipMultiSelect: false,
+  });
 });
 afterEach(cleanup);
 
@@ -281,5 +285,33 @@ describe("la mezcla de la seleccion", () => {
     useTimelineUIStore.setState({ selectedClipIds: ["c1"] });
     renderBar();
     expect(screen.queryByRole("button", { name: "Mezcla" })).toBeNull();
+  });
+});
+
+describe("sumar clips desde la barra", () => {
+  // Con un dedo no hay Ctrl que mantener: sin el boton no hay forma de juntar
+  // varios clips para moverlos o borrarlos de un tiron. El de pistas ya
+  // existia; este es el mismo boton para la otra mitad.
+  it("ofrece el modo de sumar cuando lo seleccionado son clips", () => {
+    useTimelineUIStore.setState({ selectedClipIds: ["c1"] });
+    renderBar();
+
+    const button = screen.getByRole("button", {
+      name: "Seleccionar varios clips",
+    });
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(button);
+
+    expect(useTimelineUIStore.getState().clipMultiSelect).toBe(true);
+    // Un modo sin rastro en pantalla es un modo que nadie encuentra.
+    expect(screen.getByText("Toca más clips")).toBeTruthy();
+  });
+
+  it("no lo ofrece sin nada seleccionado", () => {
+    renderBar();
+    expect(
+      screen.queryByRole("button", { name: "Seleccionar varios clips" }),
+    ).toBeNull();
   });
 });

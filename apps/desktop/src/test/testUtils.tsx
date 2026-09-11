@@ -287,6 +287,7 @@ beforeEach(async () => {
     expandedTrackId: null,
     selectionMixOpen: false,
     trackMultiSelect: false,
+    clipMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,
   });
   // La guia interactiva arranca sola la primera vez y su store sobrevive al

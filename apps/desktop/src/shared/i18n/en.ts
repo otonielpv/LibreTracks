@@ -14,6 +14,8 @@ const en = {
     action: "Position…",
   },
   mobileSelectionActions: {
+    multiSelectClips: "Select several clips",
+    multiSelectClipsHint: "Tap more clips",
     mix: "Mix",
     clips_one: "{{count}} clip",
     clips_other: "{{count}} clips",

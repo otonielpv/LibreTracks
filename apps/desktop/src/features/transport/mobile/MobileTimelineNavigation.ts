@@ -111,6 +111,18 @@ export class MobileTimelineNavigation {
     this.syncMode();
   }
 
+  /**
+   * El gesto en curso esta cedido a la edicion (arrastrar algo ya
+   * seleccionado).
+   *
+   * Lo pregunta quien suprima los eventos de raton de compatibilidad: de ese
+   * `mousedown` cuelga el arrastre del clip, y cargarselo deja el clip
+   * seleccionado pero inamovible.
+   */
+  isYielding(): boolean {
+    return this.yielding;
+  }
+
   private syncMode = () => {
     this.cancel();
     this.options.container.classList.toggle("lt-mobile-navigation-surface", this.options.enabled());

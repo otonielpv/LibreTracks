@@ -91,6 +91,7 @@ export function MobileSelectionActionBar({
   const trackMultiSelect = useTimelineUIStore(
     (state) => state.trackMultiSelect,
   );
+  const clipMultiSelect = useTimelineUIStore((state) => state.clipMultiSelect);
 
   if (!isMobileApp || !menus) {
     return null;
@@ -149,6 +150,41 @@ export function MobileSelectionActionBar({
         ? [target.track]
         : [];
   const showMix = mixOpen && mixTracks.length > 0;
+  // Sumar de uno en uno vale para pistas Y para clips: con un dedo no hay Ctrl
+  // que mantener, asi que sin esto no hay forma de juntar varios para moverlos
+  // o borrarlos de un tiron.
+  const multiSelect =
+    target.kind === "clips"
+      ? {
+          active: clipMultiSelect,
+          label: t("mobileSelectionActions.multiSelectClips", {
+            defaultValue: "Seleccionar varios clips",
+          }),
+          hint: t("mobileSelectionActions.multiSelectClipsHint", {
+            defaultValue: "Toca más clips",
+          }),
+          toggle: () =>
+            useTimelineUIStore.getState().setClipMultiSelect(!clipMultiSelect),
+        }
+      : isTrackTarget
+        ? {
+            active: trackMultiSelect,
+            label: t("mobileSelectionActions.multiSelect", {
+              defaultValue: "Seleccionar varias pistas",
+            }),
+            hint: t("mobileSelectionActions.multiSelectHint", {
+              defaultValue: "Toca más pistas",
+            }),
+            toggle: () => {
+              const store = useTimelineUIStore.getState();
+              store.setTrackMultiSelect(!trackMultiSelect);
+              // La pista sigue seleccionada, pero su panel de faders se cierra:
+              // estorba justo cuando vas a ir tocando otras cabeceras, y su
+              // desaparicion es la senal de que el modo ha entrado.
+              store.setExpandedTrackId(null);
+            },
+          }
+        : null;
   const inline = model.actions.slice(0, MAX_INLINE_ACTIONS);
   const hasMore = model.actions.length > inline.length;
 
@@ -178,11 +214,7 @@ export function MobileSelectionActionBar({
         {/* Un modo sin rastro en pantalla es un modo que nadie encuentra:
             activarlo no cambiaba NADA visible, asi que no habia forma de saber
             que tocaba hacer despues. */}
-        {trackMultiSelect && target.kind === "track"
-          ? t("mobileSelectionActions.multiSelectHint", {
-              defaultValue: "Toca más pistas",
-            })
-          : model.title}
+        {multiSelect?.active ? multiSelect.hint : model.title}
       </span>
       {inline.map((action) => (
         <button
@@ -242,25 +274,13 @@ export function MobileSelectionActionBar({
           </span>
         </button>
       ) : null}
-      {isTrackTarget ? (
+      {multiSelect ? (
         <button
           type="button"
-          className={`lt-icon-button ${trackMultiSelect ? "is-active" : ""}`}
-          aria-label={t("mobileSelectionActions.multiSelect", {
-            defaultValue: "Seleccionar varias pistas",
-          })}
-          aria-pressed={trackMultiSelect}
-          // Con un dedo no hay Ctrl que mantener. Activado, cada toque en una
-          // cabecera suma o quita esa pista, y las acciones pasan a ser las de
-          // la seleccion entera —incluido borrarlas de un tiron—.
-          onClick={() => {
-            const store = useTimelineUIStore.getState();
-            store.setTrackMultiSelect(!trackMultiSelect);
-            // La pista sigue seleccionada, pero su panel de faders se cierra:
-            // estorba justo cuando vas a ir tocando otras cabeceras, y su
-            // desaparicion es la senal de que el modo ha entrado.
-            store.setExpandedTrackId(null);
-          }}
+          className={`lt-icon-button ${multiSelect.active ? "is-active" : ""}`}
+          aria-label={multiSelect.label}
+          aria-pressed={multiSelect.active}
+          onClick={multiSelect.toggle}
         >
           <span className="material-symbols-outlined" aria-hidden="true">
             checklist

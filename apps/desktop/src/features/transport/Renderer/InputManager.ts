@@ -603,6 +603,13 @@ export class InputManager {
       if (isNativeTouchControl(event.target)) {
         return;
       }
+      // Gesto cedido a la edicion (arrastrar un clip YA seleccionado): ese
+      // arrastre cuelga del `mousedown` de compatibilidad, y este
+      // `preventDefault` se lo lleva por delante. El `pointerdown` llega antes
+      // que el `touchstart`, asi que aqui ya se sabe.
+      if (this.mobileNavigation?.isYielding()) {
+        return;
+      }
       if (event.cancelable) event.preventDefault();
       return;
     }

@@ -25,9 +25,10 @@ function row() {
   return element;
 }
 
-function setup(selected: string[] = []) {
+function setup(selected: string[] = [], multiSelect = false) {
   const selectClips = vi.fn();
   const clearRegionSelection = vi.fn();
+  const toggleClip = vi.fn();
   const api = createTouchClipSelection({
     // Un clip de 0 a 2 s; a 10 px/s ocupa de x=0 a x=20.
     getClipsByTrack: () => ({ t1: [clip("c1", 0, 2)] }),
@@ -36,8 +37,10 @@ function setup(selected: string[] = []) {
     getPixelsPerSecond: () => 10,
     selectClips,
     clearRegionSelection,
+    isMultiSelect: () => multiSelect,
+    toggleClip,
   });
-  return { api, selectClips, clearRegionSelection, target: row() };
+  return { api, selectClips, clearRegionSelection, toggleClip, target: row() };
 }
 
 describe("reglas de toque de la linea de tiempo", () => {
@@ -102,5 +105,33 @@ describe("un toque en el fondo suelta TODA la seleccion", () => {
 
     expect(selectClips).toHaveBeenCalledWith(["c1"]);
     expect(clearRegionSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe("sumando clips", () => {
+  // Con un dedo no hay Ctrl que mantener: sin este modo no habia forma de
+  // juntar varios clips para moverlos o borrarlos de un tiron.
+  it("cada toque suma o quita el clip que hay debajo", () => {
+    const { api, selectClips, toggleClip, target } = setup(["c1"], true);
+
+    api.onTap(10, 0, target);
+
+    expect(toggleClip).toHaveBeenCalledWith("c1");
+    expect(selectClips).not.toHaveBeenCalled();
+  });
+
+  // Si tocar fuera tambien sumara, no habria manera de salir del modo sin
+  // borrar algo.
+  it("tocar fuera lo suelta todo igual", () => {
+    const { api, selectClips, clearRegionSelection, toggleClip, target } = setup(
+      ["c1"],
+      true,
+    );
+
+    api.onTap(200, 0, target);
+
+    expect(toggleClip).not.toHaveBeenCalled();
+    expect(selectClips).toHaveBeenCalledWith([]);
+    expect(clearRegionSelection).toHaveBeenCalled();
   });
 });

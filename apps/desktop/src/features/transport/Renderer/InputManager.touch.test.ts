@@ -33,7 +33,13 @@ function touchEvent(type: string, touches: Touch[]) {
   return event;
 }
 
-function setup(options?: { canZoom?: boolean; getGestureBounds?: () => DOMRect | null }) {
+function setup(options?: {
+  canZoom?: boolean;
+  getGestureBounds?: () => DOMRect | null;
+  /** Movil: la navegacion tactil se queda el lienzo. */
+  shouldEdit?: (clientX: number, clientY: number, target: EventTarget | null) => boolean;
+  mobile?: boolean;
+}) {
   const container = document.createElement("div");
   Object.defineProperty(container, "offsetWidth", { value: 800 });
   container.getBoundingClientRect = () =>
@@ -73,6 +79,14 @@ function setup(options?: { canZoom?: boolean; getGestureBounds?: () => DOMRect |
     onTrackHeightChange: () => {},
     onScrollVertical: (deltaY) => verticalScroll.push(deltaY),
     getGestureBounds: options?.getGestureBounds,
+    mobileNavigation:
+      options?.mobile || options?.shouldEdit
+        ? {
+            enabled: () => true,
+            subscribe: () => () => {},
+            shouldEdit: options?.shouldEdit,
+          }
+        : undefined,
   });
 
   return { container, manager, state, commits, verticalScroll };
@@ -494,5 +508,42 @@ describe("InputManager: gesto de dos dedos sobre el DOM real", () => {
 
     expect(state.cameraX).toBe(0);
     expect(state.zoomLevel).toBe(1);
+  });
+});
+
+/**
+ * El arrastre de un clip cuelga del `mousedown` de COMPATIBILIDAD que el
+ * WebView emite tras el toque: la navegacion tactil cede el gesto sin tocar el
+ * `pointerdown` justo para no suprimirlo. Pero el `touchstart` del gesto de dos
+ * dedos lo prevenia igual, un paso mas tarde, y ese `preventDefault` se lleva
+ * por delante TODOS los eventos de raton: el clip se seleccionaba y luego no
+ * habia forma de moverlo.
+ */
+describe("gesto cedido a la edicion", () => {
+  function press(container: HTMLElement) {
+    const down = new TestPointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 100,
+      clientY: 100,
+    });
+    container.dispatchEvent(down);
+    const touchStart = touchEvent("touchstart", [touch(1, { x: 100, y: 100 })]);
+    container.dispatchEvent(touchStart);
+    return touchStart;
+  }
+
+  it("deja vivo el raton de compatibilidad sobre algo ya seleccionado", () => {
+    const { container } = setup({ shouldEdit: () => true });
+
+    expect(press(container).defaultPrevented).toBe(false);
+  });
+
+  it("lo sigue suprimiendo cuando el gesto es para navegar", () => {
+    const { container } = setup({ mobile: true, shouldEdit: () => false });
+
+    expect(press(container).defaultPrevented).toBe(true);
   });
 });

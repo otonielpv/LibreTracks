@@ -10,6 +10,9 @@ type TouchClipSelectionDeps = {
   getCameraX: () => number;
   getPixelsPerSecond: () => number;
   selectClips: (clipIds: string[]) => void;
+  /** Sumando: cada toque anade o quita el clip, en vez de reemplazar. */
+  isMultiSelect: () => boolean;
+  toggleClip: (clipId: string) => void;
   /**
    * Soltar la region seleccionada.
    *
@@ -70,6 +73,14 @@ export function createTouchClipSelection(deps: TouchClipSelectionDeps) {
     /** Toque limpio: selecciona lo que haya debajo, o limpia la seleccion. */
     onTap(clientX: number, _clientY: number, target: EventTarget | null) {
       const clip = clipAt(clientX, target);
+      // Sumando, el toque sobre un clip lo anade o lo quita. Es la unica forma
+      // de juntar varios con un dedo: no hay Ctrl que mantener. Fuera de un
+      // clip se sale igual, soltandolo todo: si no, no habria manera de salir
+      // del modo sin borrar algo.
+      if (clip && deps.isMultiSelect()) {
+        deps.toggleClip(clip.id);
+        return;
+      }
       deps.selectClips(clip ? [clip.id] : []);
       if (!clip) {
         deps.clearRegionSelection();
@@ -106,6 +117,9 @@ export function useTouchClipSelection(
         getPixelsPerSecond: () => pixelsPerSecondRef.current,
         selectClips: (clipIds) =>
           useTimelineUIStore.getState().setSelectedClipIds(clipIds),
+        isMultiSelect: () => useTimelineUIStore.getState().clipMultiSelect,
+        toggleClip: (clipId) =>
+          useTimelineUIStore.getState().toggleClipSelection(clipId),
         clearRegionSelection: () => clearRegionRef.current(),
       }),
     [cameraXRef, pixelsPerSecondRef],
