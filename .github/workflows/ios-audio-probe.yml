@@ -1,0 +1,95 @@
+name: iOS Audio Probe (simulator)
+
+# Can a CI machine play audio at all?
+#
+# The iOS audio path has never run on real hardware — the smoke build only
+# proves it links — and buying an audio interface is not always an option. The
+# Simulator is the nearest stand-in, but a GitHub runner is a VM with no sound
+# card, so the first question is whether RemoteIO even starts there. This
+# workflow answers exactly that, cheaply, before any bigger audio test is
+# built on the assumption.
+#
+# Run it by hand; it is a diagnostic, not a gate.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: RemoteIO callbacks inside the simulator
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inventory the runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          echo "── Host audio devices ──────────────────────────────────────"
+          # A runner with no output device is the most likely reason for the
+          # probe to fail, so record it whatever happens.
+          system_profiler SPAudioDataType 2>/dev/null || echo "(system_profiler reported nothing)"
+          echo "── Available simulators ────────────────────────────────────"
+          xcrun simctl list devices available | head -40
+
+      - name: Build the probe for the simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun -sdk iphonesimulator clang -arch arm64 \
+            -mios-simulator-version-min=15.0 -fobjc-arc -O2 \
+            -framework AVFoundation -framework AudioToolbox -framework Foundation \
+            tests/ios/remoteio_probe.m -o "$RUNNER_TEMP/remoteio_probe"
+          file "$RUNNER_TEMP/remoteio_probe"
+
+      - name: Boot a simulator
+        id: sim
+        shell: bash
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | test("iPhone"))] | .[0].udid')"
+          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
+            echo "::error::No iPhone simulator available on this runner."
+            exit 1
+          fi
+          name="$(xcrun simctl list devices available -j \
+            | jq -r --arg u "$udid" '[.devices[][] | select(.udid == $u)] | .[0].name')"
+          echo "Booting $name ($udid)"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Run the probe
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(xcrun simctl spawn "$SIM_UDID" "$RUNNER_TEMP/remoteio_probe" 2>&1)"
+          status=$?
+          set -e
+          echo "$output"
+          echo
+          if [ "$status" -eq 0 ]; then
+            echo "::notice::The simulator delivers real RemoteIO callbacks on this runner — an engine-level audio test is worth building."
+          else
+            echo "::error::The probe failed with exit $status. Read PROBE_RESULT above before assuming the audio code is at fault."
+          fi
+          exit "$status"
+
+      - name: Shut the simulator down
+        if: always()
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: xcrun simctl shutdown "${SIM_UDID:-booted}" || true
