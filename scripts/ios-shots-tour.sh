@@ -84,22 +84,53 @@ read_screen_size() {
   log "  pantalla: ${SCREEN_W}x${SCREEN_H} puntos"
 }
 
-# Tap a point given as a fraction of the screen. The WebView publishes nothing
-# to the accessibility tree — `describe-all` returns the application and
-# nothing else — so labels cannot be looked up and this is what is left.
-# Fractions rather than pixels so the same tour survives a different device.
+screen_hash() {
+  local tmp="$OUT/.probe.png"
+  xcrun simctl io "$UDID" screenshot "$tmp" >/dev/null 2>&1
+  shasum -a 1 "$tmp" 2>/dev/null | cut -d' ' -f1
+}
+
+# Tap a point given as a fraction of the APP's own (landscape) space. The
+# WebView publishes nothing to the accessibility tree — `describe-all` returns
+# the application and nothing else — so labels cannot be looked up and this is
+# what is left. Fractions rather than pixels so the same tour survives a
+# different device.
+#
+# The catch: the app runs landscape but the DEVICE stays portrait, and it is
+# not documented which of the two spaces idb taps in. So this tries the
+# device-space conversion first, checks whether the screen actually changed,
+# and falls back to the app space when it did not. One run settles it instead
+# of a guess that silently taps empty background.
 tap_frac() {
   local what="$1" fx="$2" fy="$3"
   if [ "$SCREEN_W" = "0" ] || [ "$SCREEN_H" = "0" ]; then
     read_screen_size
   fi
-  local x y
-  x="$(awk "BEGIN { printf \"%d\", $SCREEN_W * $fx }")"
-  y="$(awk "BEGIN { printf \"%d\", $SCREEN_H * $fy }")"
-  idb ui tap --udid "$UDID" "$x" "$y" >/dev/null 2>&1 \
-    && log "  👆 $what en ($x, $y)" \
-    || log "  ⚠️  el toque de $what no llegó"
+  local xa ya xd yd before after
+  xa="$(awk "BEGIN { printf \"%d\", $SCREEN_W * $fx }")"
+  ya="$(awk "BEGIN { printf \"%d\", $SCREEN_H * $fy }")"
+  # Landscape app point -> portrait device point.
+  xd="$(( SCREEN_H - ya ))"
+  yd="$xa"
+
+  before="$(screen_hash)"
+  idb ui tap --udid "$UDID" "$xd" "$yd" >/dev/null 2>&1
   sleep 2
+  after="$(screen_hash)"
+  if [ -n "$before" ] && [ "$before" != "$after" ]; then
+    log "  👆 $what en device($xd, $yd) ✔"
+    return 0
+  fi
+
+  idb ui tap --udid "$UDID" "$xa" "$ya" >/dev/null 2>&1
+  sleep 2
+  after="$(screen_hash)"
+  if [ -n "$before" ] && [ "$before" != "$after" ]; then
+    log "  👆 $what en app($xa, $ya) ✔"
+    return 0
+  fi
+  log "  ⚠️  $what: ni device($xd, $yd) ni app($xa, $ya) cambiaron la pantalla"
+  return 1
 }
 
 # Tap the centre of the first element whose label matches, case-insensitively.
@@ -185,6 +216,8 @@ shot "live-empty"
 key 43   # live → daw
 shot "daw-empty"
 
+rm -f "$OUT/.probe.png"
+
 log "────────────────────────────────────────────────────────────"
 log "Etapa de calibración: faltan Configuración, la demo y el mixer,"
-log "que necesitan coordenadas tomadas de 02-home.png"
+log "que necesitan coordenadas tomadas de la portada"
