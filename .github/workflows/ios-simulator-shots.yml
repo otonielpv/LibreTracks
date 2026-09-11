@@ -54,8 +54,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # First, before anything expensive: a typo in the device name must not
-      # cost forty minutes of build to discover.
+      # idb-companion refuses to install against the runner's default Xcode
+      # (16.4): its formula requires a full Xcode 26. The image ships several,
+      # so pick one of those for the whole job rather than swapping toolchains
+      # halfway — idb loads CoreSimulator from whichever Xcode is selected at
+      # RUN time, and a companion built against one while talking to another
+      # is a debugging session nobody needs.
+      - name: Select an Xcode that idb accepts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in /Applications/Xcode_26.0.1.app \
+                           /Applications/Xcode_26.1.1.app \
+                           /Applications/Xcode_26.2.app \
+                           /Applications/Xcode_26.3.app; do
+            if [ -d "$candidate" ]; then
+              sudo xcode-select -s "$candidate"
+              break
+            fi
+          done
+          xcodebuild -version
+
+      # Before anything expensive: a typo in the device name must not cost
+      # forty minutes of build to discover.
       - name: Resolve the simulator
         id: sim
         shell: bash
