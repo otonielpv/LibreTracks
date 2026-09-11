@@ -44,6 +44,11 @@ describe("iOS full-pack build contract", () => {
     // archives are mutually unlinkable and a cache hit would serve the wrong
     // platform to whichever job ran second.
     expect(nativeDeps).toContain('link_dir="native/audio-engine-v2/build-ios-sim-link"');
+    // And build.rs has to pick between them by target triple. Xcode runs cargo
+    // with a stripped environment, so LT_ENGINE_IOS_LIB_DIR does not survive
+    // and this repo-relative choice is what actually links.
+    expect(rustLinker).toContain("native/audio-engine-v2/build-ios-sim-link");
+    expect(rustLinker).toContain('target.ends_with("-sim")');
   });
 
   it("links every static archive required by the iPhone executable", () => {

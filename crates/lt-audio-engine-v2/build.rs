@@ -116,10 +116,24 @@ fn main() {
 }
 
 fn link_ios_static_engine() {
-    // Tauri's Xcode script starts Cargo with a restricted environment. Use a
-    // dedicated override when available, then a deterministic repo-relative
-    // staging directory. Do not consult LT_ENGINE_V2_LIB_DIR here: the shared
-    // workspace .cargo/config.toml sets that to the desktop Bungee build.
+    // The device and the simulator need DIFFERENT archives: same architecture
+    // (arm64), different platform, and the linker refuses to mix them
+    // ("building for iOS Simulator, but linking object file built for iOS").
+    // So each gets its own staging directory, picked from the target triple.
+    let target = std::env::var("TARGET").unwrap_or_default();
+    let simulator = target.ends_with("-sim");
+    let staging = if simulator {
+        "native/audio-engine-v2/build-ios-sim-link"
+    } else {
+        "native/audio-engine-v2/build-ios-link"
+    };
+
+    // Tauri's Xcode script starts Cargo with a restricted environment, so the
+    // override below usually does NOT survive and the repo-relative directory
+    // is what actually gets used — which is why it has to be right per
+    // platform rather than a single well-known name. Do not consult
+    // LT_ENGINE_V2_LIB_DIR here: the shared workspace .cargo/config.toml sets
+    // that to the desktop Bungee build.
     let lib_dir = std::env::var("LT_ENGINE_IOS_LIB_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
@@ -128,7 +142,7 @@ fn link_ios_static_engine() {
                 .ancestors()
                 .nth(2)
                 .expect("engine crate must live below the repository root")
-                .join("native/audio-engine-v2/build-ios-link")
+                .join(staging)
         });
     let engine = lib_dir.join("liblt_audio_engine_v2.a");
     let sndfile = lib_dir.join("libsndfile.a");
@@ -147,10 +161,12 @@ fn link_ios_static_engine() {
             .any(|name| !lib_dir.join(name).is_file())
     {
         panic!(
-            "iOS full audio engine link set is incomplete in {}: expected {}, {}, Bungee and FFmpeg static archives",
+            "iOS full audio engine link set is incomplete in {} (target {target}, \
+             {platform} build): expected {}, {}, Bungee and FFmpeg static archives",
             lib_dir.display(),
             engine.display(),
-            sndfile.display()
+            sndfile.display(),
+            platform = if simulator { "simulator" } else { "device" },
         );
     }
 
