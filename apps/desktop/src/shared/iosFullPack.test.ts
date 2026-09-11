@@ -24,12 +24,26 @@ const rustLinker = read("crates/lt-audio-engine-v2/build.rs");
 
 describe("iOS full-pack build contract", () => {
   it("builds the real Bungee and FFmpeg backends", () => {
-    expect(nativeDeps).toContain("Build Bungee for iPhone");
-    expect(nativeDeps).toContain("Build LGPL FFmpeg for iPhone");
+    expect(nativeDeps).toContain("Build Bungee for iOS");
+    expect(nativeDeps).toContain("Build LGPL FFmpeg for iOS");
     expect(nativeDeps).toContain("-DLT_ENGINE_USE_BUNGEE=ON");
     expect(nativeDeps).toContain("-DLT_ENGINE_USE_FFMPEG=ON");
     expect(nativeDeps).not.toContain("-DLT_ENGINE_USE_BUNGEE=OFF");
     expect(nativeDeps).not.toContain("-DLT_ENGINE_USE_FFMPEG=OFF");
+  });
+
+  it("keeps the iPhone paths stable now that the action serves two SDKs", () => {
+    // Deriving these from the SDK name would be tidier and would silently cost
+    // a 15-minute FFmpeg rebuild plus the repo-relative fallback in build.rs,
+    // which looks for build-ios-link by that exact name.
+    expect(nativeDeps).toContain('bungee_dir="bungee-ios-sdk"');
+    expect(nativeDeps).toContain('ffmpeg_dir="vendor/ffmpeg-ios-arm64"');
+    expect(nativeDeps).toContain('link_dir="native/audio-engine-v2/build-ios-link"');
+    expect(rustLinker).toContain("native/audio-engine-v2/build-ios-link");
+    // The simulator must never share a directory with the device build: the
+    // archives are mutually unlinkable and a cache hit would serve the wrong
+    // platform to whichever job ran second.
+    expect(nativeDeps).toContain('link_dir="native/audio-engine-v2/build-ios-sim-link"');
   });
 
   it("links every static archive required by the iPhone executable", () => {

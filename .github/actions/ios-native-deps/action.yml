@@ -1,13 +1,14 @@
 name: Build iOS native dependencies
 description: >-
   Builds Bungee, the LGPL FFmpeg decoder stack and the LibreTracks audio engine
-  as static arm64 archives for iPhoneOS, and leaves them in one directory ready
-  for the Rust linker.
+  as static arm64 archives for an Apple iOS SDK, and leaves them in one
+  directory ready for the Rust linker.
 
-  Shared by the unsigned smoke build and the signed distribution build. Those
-  two must link byte-for-byte the same engine: if they drift, the IPA that gets
-  tested stops being the IPA that ships, and the guardrails below (no JUCE, no
-  silent stub) would only protect whichever copy still had them.
+  Shared by the unsigned smoke build, the signed distribution build and the
+  simulator build. Those must link byte-for-byte the same engine: if they
+  drift, the IPA that gets tested stops being the IPA that ships, and the
+  guardrails below (no JUCE, no silent stub) would only protect whichever copy
+  still had them.
 
 inputs:
   bungee-version:
@@ -20,6 +21,16 @@ inputs:
     description: Minimum iOS version, matching bundle.iOS.minimumSystemVersion.
     required: false
     default: "15.0"
+  sdk:
+    description: >-
+      Apple SDK to build against: iphoneos (the device build that ships) or
+      iphonesimulator (screenshots and UI checks on a runner, with no device
+      involved). Both are arm64 — what differs is the sysroot and the
+      minimum-version flag, and mixing them up produces archives the linker
+      rejects with a confusing "building for iOS Simulator, but linking object
+      file built for iOS".
+    required: false
+    default: iphoneos
 
 outputs:
   lib-dir:
@@ -29,12 +40,55 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve the SDK layout
+      id: layout
+      shell: bash
+      env:
+        IOS_SDK: ${{ inputs.sdk }}
+      run: |
+        set -euo pipefail
+        # Per-SDK directories throughout: reusing one would silently link the
+        # wrong platform into the archive, and the cache would then serve that
+        # mistake to every later run.
+        #
+        # The iphoneos paths are spelled out rather than derived, so they stay
+        # byte-identical to what they were before this action grew a second
+        # SDK. Changing them would throw away the FFmpeg cache (a 15-minute
+        # rebuild) and break the repo-relative fallback in
+        # crates/lt-audio-engine-v2/build.rs, which looks for build-ios-link.
+        case "$IOS_SDK" in
+          iphoneos)
+            suffix="arm64"
+            bungee_dir="bungee-ios-sdk"
+            ffmpeg_dir="vendor/ffmpeg-ios-arm64"
+            build_dir="native/audio-engine-v2/build-ios-arm64"
+            link_dir="native/audio-engine-v2/build-ios-link"
+            ;;
+          iphonesimulator)
+            suffix="sim-arm64"
+            bungee_dir="bungee-ios-sim-sdk"
+            ffmpeg_dir="vendor/ffmpeg-ios-sim-arm64"
+            build_dir="native/audio-engine-v2/build-ios-sim-arm64"
+            link_dir="native/audio-engine-v2/build-ios-sim-link"
+            ;;
+          *) echo "::error::Unknown sdk '$IOS_SDK'; use iphoneos or iphonesimulator."; exit 1 ;;
+        esac
+        {
+          echo "suffix=$suffix"
+          echo "bungee-dir=$bungee_dir"
+          echo "ffmpeg-dir=$ffmpeg_dir"
+          echo "build-dir=$build_dir"
+          echo "link-dir=$link_dir"
+        } >> "$GITHUB_OUTPUT"
+
     - name: Verify Apple build tools
       shell: bash
+      env:
+        IOS_SDK: ${{ inputs.sdk }}
       run: |
         set -euo pipefail
         xcodebuild -version
-        xcrun --sdk iphoneos --show-sdk-version
+        xcrun --sdk "$IOS_SDK" --show-sdk-version
         if ! command -v pod >/dev/null 2>&1; then
           brew install cocoapods
         fi
@@ -44,69 +98,80 @@ runs:
       id: bungee-cache
       uses: actions/cache@v4
       with:
-        path: bungee-ios-sdk
-        key: bungee-ios-${{ inputs.bungee-version }}-arm64-ios${{ inputs.deployment-target }}
+        path: ${{ steps.layout.outputs.bungee-dir }}
+        key: bungee-ios-${{ inputs.bungee-version }}-${{ steps.layout.outputs.suffix }}-ios${{ inputs.deployment-target }}
 
-    - name: Build Bungee for iPhone
+    - name: Build Bungee for iOS
       if: steps.bungee-cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         BUNGEE_VERSION: ${{ inputs.bungee-version }}
         IOS_DEPLOYMENT_TARGET: ${{ inputs.deployment-target }}
+        IOS_SDK: ${{ inputs.sdk }}
+        BUNGEE_DIR: ${{ steps.layout.outputs.bungee-dir }}
+        ARCH_SUFFIX: ${{ steps.layout.outputs.suffix }}
       run: |
         set -euo pipefail
+        src_dir="bungee-ios-src-$ARCH_SUFFIX"
         git clone --depth 1 --branch "$BUNGEE_VERSION" --recurse-submodules \
-          https://github.com/bungee-audio-stretch/bungee.git bungee-ios-src
-        cmake -S bungee-ios-src -B bungee-ios-src/build -G Ninja \
+          https://github.com/bungee-audio-stretch/bungee.git "$src_dir"
+        cmake -S "$src_dir" -B "$src_dir/build" -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_SYSTEM_NAME=iOS \
-          -DCMAKE_OSX_SYSROOT=iphoneos \
+          -DCMAKE_OSX_SYSROOT="$IOS_SDK" \
           -DCMAKE_OSX_ARCHITECTURES=arm64 \
           -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
           -DBUNGEE_BUILD_SHARED_LIBRARY=OFF \
           -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
           -DBUNGEE_VERSION="${BUNGEE_VERSION#v}"
-        cmake --build bungee-ios-src/build --target bungee_library pffft --parallel 3
-        mkdir -p bungee-ios-sdk/include/bungee bungee-ios-sdk/ios-arm64
-        cp bungee-ios-src/bungee/*.h bungee-ios-sdk/include/bungee/
-        cp bungee-ios-src/build/libbungee.a bungee-ios-src/build/libpffft.a \
-          bungee-ios-sdk/ios-arm64/
-        lipo -info bungee-ios-sdk/ios-arm64/libbungee.a
-        lipo -info bungee-ios-sdk/ios-arm64/libpffft.a
+        cmake --build "$src_dir/build" --target bungee_library pffft --parallel 3
+        mkdir -p "$BUNGEE_DIR/include/bungee" "$BUNGEE_DIR/ios-arm64"
+        cp "$src_dir"/bungee/*.h "$BUNGEE_DIR/include/bungee/"
+        cp "$src_dir/build/libbungee.a" "$src_dir/build/libpffft.a" \
+          "$BUNGEE_DIR/ios-arm64/"
+        lipo -info "$BUNGEE_DIR/ios-arm64/libbungee.a"
+        lipo -info "$BUNGEE_DIR/ios-arm64/libpffft.a"
 
     - name: Cache FFmpeg iOS build
       id: ffmpeg-cache
       uses: actions/cache@v4
       with:
-        path: vendor/ffmpeg-ios-arm64
-        key: ffmpeg-ios-${{ inputs.ffmpeg-version }}-arm64-ios${{ inputs.deployment-target }}-static-lgpl-v1
+        path: ${{ steps.layout.outputs.ffmpeg-dir }}
+        key: ffmpeg-ios-${{ inputs.ffmpeg-version }}-${{ steps.layout.outputs.suffix }}-ios${{ inputs.deployment-target }}-static-lgpl-v1
 
-    - name: Build LGPL FFmpeg for iPhone
+    - name: Build LGPL FFmpeg for iOS
       if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         FFMPEG_VERSION: ${{ inputs.ffmpeg-version }}
         IOS_DEPLOYMENT_TARGET: ${{ inputs.deployment-target }}
-      run: bash scripts/build-ffmpeg-ios.sh "$PWD/vendor/ffmpeg-ios-arm64"
+        IOS_SDK: ${{ inputs.sdk }}
+        FFMPEG_DIR: ${{ steps.layout.outputs.ffmpeg-dir }}
+      run: bash scripts/build-ffmpeg-ios.sh "$PWD/$FFMPEG_DIR"
 
-    - name: Build native audio engine for iPhone
+    - name: Build native audio engine for iOS
       id: link-dir
       shell: bash
       env:
         IOS_DEPLOYMENT_TARGET: ${{ inputs.deployment-target }}
+        IOS_SDK: ${{ inputs.sdk }}
+        BUNGEE_REL_DIR: ${{ steps.layout.outputs.bungee-dir }}
+        FFMPEG_REL_DIR: ${{ steps.layout.outputs.ffmpeg-dir }}
+        BUILD_REL_DIR: ${{ steps.layout.outputs.build-dir }}
+        LINK_REL_DIR: ${{ steps.layout.outputs.link-dir }}
       run: |
         set -euo pipefail
-        build_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-arm64"
-        link_dir="$GITHUB_WORKSPACE/native/audio-engine-v2/build-ios-link"
-        ffmpeg_dir="$GITHUB_WORKSPACE/vendor/ffmpeg-ios-arm64"
-        bungee_dir="$GITHUB_WORKSPACE/bungee-ios-sdk"
+        build_dir="$GITHUB_WORKSPACE/$BUILD_REL_DIR"
+        link_dir="$GITHUB_WORKSPACE/$LINK_REL_DIR"
+        ffmpeg_dir="$GITHUB_WORKSPACE/$FFMPEG_REL_DIR"
+        bungee_dir="$GITHUB_WORKSPACE/$BUNGEE_REL_DIR"
 
         export PKG_CONFIG_PATH="$ffmpeg_dir/lib/pkgconfig"
 
         cmake -S native/audio-engine-v2 -B "$build_dir" -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_SYSTEM_NAME=iOS \
-          -DCMAKE_OSX_SYSROOT=iphoneos \
+          -DCMAKE_OSX_SYSROOT="$IOS_SDK" \
           -DCMAKE_OSX_ARCHITECTURES=arm64 \
           -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
           -DLT_ENGINE_BUILD_TESTS=OFF \

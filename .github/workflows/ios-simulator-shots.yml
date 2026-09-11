@@ -1,0 +1,211 @@
+name: iOS Simulator Shots
+
+# Runs the real app in a simulator and photographs it.
+#
+# Two things at once, and the second is the important one:
+#
+#   * App Store screenshots have to be the EXACT pixel size Apple asks for per
+#     device class. A screenshot taken on a phone and sent through WhatsApp or
+#     Telegram arrives rescaled (2048x946, 1280x591) and is rejected. simctl
+#     writes the device's native framebuffer, so what comes out of here is
+#     already the right size.
+#   * Nobody has ever seen LibreTracks on an iPad, and the IPA declares iPad
+#     support — which means a reviewer WILL open it there. This is the cheapest
+#     way to find out what they will see.
+#
+# First run of a given SDK builds FFmpeg and Bungee from source (~40 min);
+# after that the cache makes it minutes.
+
+env:
+  BUNGEE_VERSION: v2.4.24
+  FFMPEG_VERSION: 7.1.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "Simulator name, exactly as `xcrun simctl list devices` prints it"
+        type: string
+        default: "iPad Pro 13-inch (M4)"
+      settle_seconds:
+        description: "Seconds to wait after launch before the first screenshot"
+        type: string
+        default: "25"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-shots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    name: Screenshot the app in a simulator
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain for the iOS simulator
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target-ios-sim
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Build bundled remote frontend
+        run: npm run build:remote
+
+      - name: Build native audio engine and dependencies
+        uses: ./.github/actions/ios-native-deps
+        with:
+          bungee-version: ${{ env.BUNGEE_VERSION }}
+          ffmpeg-version: ${{ env.FFMPEG_VERSION }}
+          sdk: iphonesimulator
+
+      - name: Generate the Xcode project
+        uses: ./.github/actions/ios-xcode-project
+
+      # Same signing workaround as the smoke build: there is no --no-sign flag,
+      # and a simulator build needs no identity.
+      - name: Build the app for the simulator
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-ios-sim
+        shell: bash
+        run: |
+          set -euo pipefail
+          apple_dir="apps/desktop/src-tauri/gen/apple"
+          pbxproj="$apple_dir/libretracks-desktop.xcodeproj/project.pbxproj"
+
+          perl -0pi -e 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;/g' "$pbxproj"
+          grep -q 'CODE_SIGNING_ALLOWED = NO' "$pbxproj"
+
+          (
+            cd apps/desktop
+            npm run tauri -- ios build --ci --target aarch64-sim
+          )
+
+      - name: Locate the built app
+        id: app
+        shell: bash
+        run: |
+          set -euo pipefail
+          apple_dir="apps/desktop/src-tauri/gen/apple"
+          # Tauri moves the .app out of the xcarchive into build/<arch>/ for
+          # simulator targets; fall back to the archive if that ever changes.
+          app="$(find "$apple_dir/build" -maxdepth 3 -type d -name '*.app' -print -quit 2>/dev/null || true)"
+          if [ -z "$app" ]; then
+            app="$(find "$apple_dir" "$HOME/Library/Developer/Xcode/Archives" \
+              -type d -path '*.xcarchive/Products/Applications/*.app' \
+              -print -quit 2>/dev/null || true)"
+          fi
+          if [ -z "$app" ]; then
+            echo "::error::The simulator build produced no .app"
+            find "$apple_dir" -maxdepth 4 -type d -name '*.app' -print || true
+            exit 1
+          fi
+          echo "Found $app"
+          # Prove it is a simulator binary before spending time on a boot that
+          # would fail with a confusing "incompatible architecture".
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          if ! vtool -show-build "$app/$executable" 2>/dev/null | grep -i 'platform.*simulator' >/dev/null; then
+            echo "::warning::vtool does not report a simulator platform for this binary."
+            vtool -show-build "$app/$executable" 2>&1 | head -20 || true
+          fi
+          echo "path=$app" >> "$GITHUB_OUTPUT"
+
+      - name: Boot the simulator
+        id: sim
+        shell: bash
+        env:
+          DEVICE_NAME: ${{ inputs.device }}
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r --arg name "$DEVICE_NAME" \
+              '[.devices[][] | select(.name == $name)] | .[0].udid')"
+          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
+            echo "::error::No available simulator named '$DEVICE_NAME'. Available devices:"
+            xcrun simctl list devices available | grep -E '^\s+\w' | head -60
+            exit 1
+          fi
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Install and launch
+        id: run
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+          APP_PATH: ${{ steps.app.outputs.path }}
+          SETTLE: ${{ inputs.settle_seconds }}
+        run: |
+          set -euo pipefail
+          shots="$GITHUB_WORKSPACE/simulator-shots"
+          mkdir -p "$shots"
+          xcrun simctl install "$SIM_UDID" "$APP_PATH"
+          xcrun simctl launch "$SIM_UDID" com.libretracks.ios
+
+          # A cold first launch does real work: it unpacks the bundled demo
+          # session and analyses its waveforms. Take a series rather than one
+          # shot, so a slow start is visible instead of being mistaken for a
+          # blank screen.
+          sleep "$SETTLE"
+          xcrun simctl io "$SIM_UDID" screenshot "$shots/01-after-${SETTLE}s.png"
+          sleep 15
+          xcrun simctl io "$SIM_UDID" screenshot "$shots/02-after-$((SETTLE + 15))s.png"
+          sleep 20
+          xcrun simctl io "$SIM_UDID" screenshot "$shots/03-after-$((SETTLE + 35))s.png"
+
+          for shot in "$shots"/*.png; do
+            echo "$(basename "$shot"): $(sips -g pixelWidth -g pixelHeight "$shot" \
+              | awk '/pixel/ {printf "%s ", $2}')"
+          done
+
+      # The app's own log is the difference between "it is still loading" and
+      # "it crashed on launch and the screenshot is of the home screen".
+      - name: Collect the app log
+        if: always()
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          shots="$GITHUB_WORKSPACE/simulator-shots"
+          mkdir -p "$shots"
+          xcrun simctl spawn "$SIM_UDID" log show --last 5m --style compact \
+            --predicate 'processImagePath CONTAINS "LibreTracks"' \
+            > "$shots/app-log.txt" 2>&1 || true
+          tail -60 "$shots/app-log.txt" || true
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreTracks-simulator-shots-${{ github.run_number }}
+          path: simulator-shots
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Shut the simulator down
+        if: always()
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: xcrun simctl shutdown "${SIM_UDID:-booted}" || true
