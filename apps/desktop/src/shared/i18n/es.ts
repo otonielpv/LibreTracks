@@ -802,6 +802,8 @@ const es = {
         "Crea o abre una sesion antes de renombrar carpetas virtuales.",
       virtualFolderRenamed: "Carpeta virtual renombrada: {{from}} -> {{to}}",
       virtualFolderDeleted: "Carpeta virtual eliminada: {{name}}",
+      rulerSeekLocked:
+        "El salto está bloqueado. Toca el candado para desbloquearlo.",
       rangeSelected: "Rango seleccionado: {{start}} - {{end}}.",
       tempoUpdated: "Tempo actualizado a {{bpm}} BPM.",
       tapTempoWaiting: "Tap tempo armado. Toca otra vez para fijar el BPM.",

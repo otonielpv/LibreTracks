@@ -774,6 +774,8 @@ const en = {
         "Create or open a session before renaming virtual folders.",
       virtualFolderRenamed: "Virtual folder renamed: {{from}} -> {{to}}",
       virtualFolderDeleted: "Virtual folder deleted: {{name}}",
+      rulerSeekLocked:
+        "Seek is locked. Tap the padlock to unlock it.",
       rangeSelected: "Range selected: {{start}} - {{end}}.",
       tempoUpdated: "Tempo updated to {{bpm}} BPM.",
       tapTempoWaiting: "Tap tempo armed. Tap again to set the BPM.",

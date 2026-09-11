@@ -50,6 +50,8 @@ type TrackHeadersPaneProps = {
   onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onEmptyAreaContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  /** Tocar el hueco de debajo de la ultima pista suelta la seleccion. */
+  onEmptyAreaClick: () => void;
   onStartTrackDrag: (
     event: ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>,
     trackId: string,
@@ -88,6 +90,7 @@ export function TrackHeadersPane({
   onSelectTrack,
   onOpenContextMenu,
   onEmptyAreaContextMenu,
+  onEmptyAreaClick,
   onStartTrackDrag,
   onToggleFolder,
   onStartRowResize,
@@ -143,6 +146,20 @@ export function TrackHeadersPane({
           event.preventDefault();
           event.stopPropagation();
         }
+      }}
+      onClick={(event) => {
+        // El hueco de debajo de la ultima pista es "fuera": soltar ahi la
+        // seleccion es lo que hace cualquier DAW, y con el dedo era el sitio
+        // mas a mano donde tocar no hacia nada. Las filas y la cabecera de la
+        // regla se gestionan solas.
+        const target = event.target as HTMLElement | null;
+        if (
+          target?.closest(".lt-track-header-row") ||
+          target?.closest(".lt-ruler-header")
+        ) {
+          return;
+        }
+        onEmptyAreaClick();
       }}
       onContextMenu={(event) => {
         // Show the global track-list menu when the right-click hits empty

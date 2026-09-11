@@ -28,6 +28,15 @@ type TimelineRangeSelectionDeps = {
   setRange: (range: TimelineRangeSelection | null) => void;
   seek: (seconds: number) => void;
   announceRange: (range: TimelineRangeSelection) => void;
+  /**
+   * El toque era un salto, pero el candado lo tiene bloqueado.
+   *
+   * Sin esto, tocar el ruler con el bloqueo puesto no hacia absolutamente nada
+   * y era indistinguible de una app rota: el boton es un candado suelto entre
+   * otros tres iconos, y quien lo pulsa sin querer no tiene forma de saber que
+   * lo ha pulsado.
+   */
+  onSeekBlocked?: () => void;
 };
 
 const INTERACTIVE_RULER_SELECTOR = [
@@ -214,7 +223,11 @@ export function useTimelineRangeSelection(
 
         d.clearTimelineSelection();
         d.setRange(null);
-        if (!d.seekLocked) d.seek(startSeconds);
+        if (d.seekLocked) {
+          d.onSeekBlocked?.();
+          return;
+        }
+        d.seek(startSeconds);
         return;
       }
 

@@ -10,6 +10,15 @@ type TouchClipSelectionDeps = {
   getCameraX: () => number;
   getPixelsPerSecond: () => number;
   selectClips: (clipIds: string[]) => void;
+  /**
+   * Soltar la region seleccionada.
+   *
+   * `selectClips([])` limpia clips, pistas y marcas —el store las limpia entre
+   * si—, pero la region vive en un `useState` aparte que nadie tocaba: tras
+   * tocar una region, el toque en el fondo dejaba la barra de acciones
+   * mostrando sus acciones como si siguiera seleccionada.
+   */
+  clearRegionSelection: () => void;
 };
 
 /**
@@ -62,6 +71,9 @@ export function createTouchClipSelection(deps: TouchClipSelectionDeps) {
     onTap(clientX: number, _clientY: number, target: EventTarget | null) {
       const clip = clipAt(clientX, target);
       deps.selectClips(clip ? [clip.id] : []);
+      if (!clip) {
+        deps.clearRegionSelection();
+      }
     },
   };
 }
@@ -77,9 +89,14 @@ export function useTouchClipSelection(
   clipsByTrack: Record<string, ClipSummary[]>,
   cameraXRef: MutableRefObject<number>,
   pixelsPerSecondRef: MutableRefObject<number>,
+  clearRegionSelection: () => void,
 ) {
   const clipsRef = useRef(clipsByTrack);
   clipsRef.current = clipsByTrack;
+  // Espejo: llega como flecha nueva en cada render y el gesto no puede
+  // reconstruirse con el dedo apoyado.
+  const clearRegionRef = useRef(clearRegionSelection);
+  clearRegionRef.current = clearRegionSelection;
   return useMemo(
     () =>
       createTouchClipSelection({
@@ -89,6 +106,7 @@ export function useTouchClipSelection(
         getPixelsPerSecond: () => pixelsPerSecondRef.current,
         selectClips: (clipIds) =>
           useTimelineUIStore.getState().setSelectedClipIds(clipIds),
+        clearRegionSelection: () => clearRegionRef.current(),
       }),
     [cameraXRef, pixelsPerSecondRef],
   );

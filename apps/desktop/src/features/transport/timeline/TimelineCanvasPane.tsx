@@ -145,7 +145,8 @@ type TimelineCanvasPaneProps = {
   selectedClipId: string | null;
   selectedClipIds: string[];
   selectedRegionId: string | null;
-  onSelectRegion: (regionId: string) => void;
+  /** `null` = soltar la region: un toque limpio en el fondo la deselecciona. */
+  onSelectRegion: (regionId: string | null) => void;
   selectedSectionId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
   pendingAutomationCue: PendingAutomationCueSummary | null;
@@ -456,6 +457,7 @@ export function TimelineCanvasPane({
     clipsByTrack,
     cameraXRef,
     livePixelsPerSecondRef,
+    () => onSelectRegion(null),
   );
 
   const rulerTouchContextMenu = useTouchContextMenu({

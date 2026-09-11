@@ -27,6 +27,7 @@ function row() {
 
 function setup(selected: string[] = []) {
   const selectClips = vi.fn();
+  const clearRegionSelection = vi.fn();
   const api = createTouchClipSelection({
     // Un clip de 0 a 2 s; a 10 px/s ocupa de x=0 a x=20.
     getClipsByTrack: () => ({ t1: [clip("c1", 0, 2)] }),
@@ -34,8 +35,9 @@ function setup(selected: string[] = []) {
     getCameraX: () => 0,
     getPixelsPerSecond: () => 10,
     selectClips,
+    clearRegionSelection,
   });
-  return { api, selectClips, target: row() };
+  return { api, selectClips, clearRegionSelection, target: row() };
 }
 
 describe("reglas de toque de la linea de tiempo", () => {
@@ -75,5 +77,30 @@ describe("reglas de toque de la linea de tiempo", () => {
     api.onTap(10, 0, outside);
     expect(selectClips).toHaveBeenCalledWith([]);
     expect(api.shouldEdit(10, 0, null)).toBe(false);
+  });
+});
+
+describe("un toque en el fondo suelta TODA la seleccion", () => {
+  // `selectClips([])` limpia clips, pistas y marcas —el store las limpia entre
+  // si—, pero la region vive en un `useState` aparte que nadie tocaba: tras
+  // tocar una region, el toque en el fondo dejaba la barra de acciones
+  // mostrando sus acciones como si siguiera seleccionada.
+  it("tambien suelta la region", () => {
+    const { api, selectClips, clearRegionSelection, target } = setup();
+
+    // x=200 con 10 px/s son 20 s: fuera del unico clip.
+    api.onTap(200, 0, target);
+
+    expect(selectClips).toHaveBeenCalledWith([]);
+    expect(clearRegionSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("tocar un clip no suelta la region: es la seleccion nueva la que manda", () => {
+    const { api, selectClips, clearRegionSelection, target } = setup();
+
+    api.onTap(10, 0, target);
+
+    expect(selectClips).toHaveBeenCalledWith(["c1"]);
+    expect(clearRegionSelection).not.toHaveBeenCalled();
   });
 });

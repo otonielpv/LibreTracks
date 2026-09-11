@@ -6013,12 +6013,18 @@ export function TransportPanelContent() {
     songBaseTimeSignature,
   ]);
 
-  function clearSelections(message: string) {
+  /**
+   * Soltar TODO lo seleccionado: clips, pistas y marcas —y la region y el
+   * rango, que viven en `useState` aparte y no los toca `clearSelection`—.
+   * La llama cada sitio que cuenta como "fuera"; repetirla inline es como la
+   * region se quedaba seleccionada en unos y en otros no.
+   */
+  function clearSelections(message?: string) {
     clearSelection();
     setSelectedRegionId(null);
     setSelectedTimelineRange(null);
     setContextMenu(null);
-    setStatus(message);
+    if (message) setStatus(message);
   }
 
   // Commit the modal's result: create or update the cue, then refresh.
@@ -6568,8 +6574,7 @@ export function TransportPanelContent() {
       return;
     }
 
-    clearSelection();
-    setSelectedRegionId(null);
+    clearSelections();
     openMenu(
       event,
       t("transport.menu.tracksMenuTitle", { defaultValue: "Tracks" }),
@@ -6769,17 +6774,14 @@ export function TransportPanelContent() {
     previewCameraX: (nextCameraX) =>
       updateCameraX(nextCameraX, { commitToStore: false }),
     prewarmPosition: prewarmTimelinePosition,
-    clearTimelineSelection: () => {
-      clearSelection();
-      setSelectedRegionId(null);
-      setContextMenu(null);
-    },
+    clearTimelineSelection: () => clearSelections(),
     setRange: setSelectedTimelineRange,
     seek: (seconds) => {
       void runAction(async () => {
         await performSeek(seconds);
       });
     },
+    onSeekBlocked: () => setStatus(t("transport.status.rulerSeekLocked")),
     announceRange: (range) => {
       setStatus(
         t("transport.status.rangeSelected", {
@@ -7492,10 +7494,7 @@ export function TransportPanelContent() {
                     onOpenSheet={(title, actions) =>
                       setContextMenu({ x: 0, y: 0, title, actions })
                     }
-                    onClearSelection={() => {
-                      clearSelection();
-                      setSelectedRegionId(null);
-                    }}
+                    onClearSelection={() => clearSelections()}
                     mix={multiTrackMix}
                     audioRoutingOptions={audioRoutingOptions}
                   />
@@ -7673,6 +7672,7 @@ export function TransportPanelContent() {
                           onSelectTrack={handleTrackHeaderSelect}
                           onOpenContextMenu={handleTrackHeaderContextMenu}
                           onEmptyAreaContextMenu={handleEmptyAreaContextMenu}
+                          onEmptyAreaClick={() => clearSelections()}
                           onStartTrackDrag={handleTrackHeaderDragStart}
                           onToggleFolder={handleTrackHeaderFolderToggle}
                           onStartRowResize={handleRowResizeStart}

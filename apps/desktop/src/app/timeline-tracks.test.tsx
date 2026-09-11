@@ -365,6 +365,27 @@ describe("App / timeline-tracks", () => {
     expect(rhythmHeader.className).not.toContain("is-selected");
   });
 
+  // El hueco bajo la ultima cabecera es "fuera" tanto como el fondo del
+  // carril, y con el dedo era el sitio mas a mano donde tocar no hacia nada.
+  it("deselecciona al tocar el hueco bajo la ultima cabecera", async () => {
+    const { container } = await renderApp();
+    const rhythmHeader = getTrackHeader(container, "Rhythm");
+
+    await act(async () => {
+      fireEvent.click(rhythmHeader);
+    });
+    expect(rhythmHeader.className).toContain("is-selected");
+
+    const pane = container.querySelector(
+      ".lt-track-headers-pane",
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.click(pane);
+    });
+
+    expect(rhythmHeader.className).not.toContain("is-selected");
+  });
+
   it("no deselecciona al arrastrar el fondo para mover la vista", async () => {
     const { container } = await renderApp();
     mockTimelineShellMetrics(container, 600);
