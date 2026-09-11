@@ -1,0 +1,306 @@
+name: iOS Release (signed App Store build)
+
+# Builds the IPA that goes to TestFlight and the App Store, and optionally
+# uploads it. Deliberately a second workflow rather than a job inside
+# release.yml: the desktop release must not be blocked by an Apple review
+# credential expiring, and this one must be runnable on its own whenever a
+# build is rejected and has to be resubmitted.
+#
+# Everything about the binary — engine, icon, privacy manifest, IPA checks —
+# is shared with the unsigned smoke build through composite actions and
+# scripts/verify-ios-ipa.sh. What is exclusive to this file is signing,
+# the App Store export and the upload.
+#
+# Setup (certificates, profile, secrets): docs/APPLE_SIGNING.md.
+
+env:
+  BUNGEE_VERSION: v2.4.24
+  FFMPEG_VERSION: 7.1.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Upload to App Store Connect (TestFlight) when the build passes
+        type: boolean
+        default: true
+      build_number:
+        description: "CFBundleVersion for this build; defaults to the run number"
+        type: string
+        required: false
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel in progress: an upload that is interrupted halfway leaves a
+  # half-ingested build in App Store Connect that has to be cleaned up by hand.
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Decide whether this run can sign, and fail EARLY and loudly when the answer
+  # depends on a missing secret. Its own job so the expensive build can be
+  # skipped wholesale, instead of every step carrying the same `if`.
+  preflight:
+    name: Check signing credentials
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      upload: ${{ steps.check.outputs.upload }}
+      build-number: ${{ steps.check.outputs.build-number }}
+    steps:
+      - name: Check Apple credentials
+        id: check
+        shell: bash
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          UPLOAD_INPUT: ${{ inputs.upload }}
+          UPLOAD_ON_TAG: ${{ vars.IOS_UPLOAD_ON_TAG }}
+          BUILD_NUMBER_INPUT: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${IOS_CERTIFICATE:-}" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::IOS_CERTIFICATE is not configured, so this run cannot produce a signed IPA. See docs/APPLE_SIGNING.md."
+              exit 1
+            fi
+            # A tag push is the DESKTOP release; a fork or a repository without
+            # Apple credentials must not see it turn red over an iOS build it
+            # never asked for.
+            echo "::warning::No iOS signing secrets configured; skipping the App Store build. See docs/APPLE_SIGNING.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Partial credentials are always an error: an IPA signed with the
+          # wrong half of the set fails at upload, after 40 minutes of build.
+          for required in IOS_CERTIFICATE_PASSWORD IOS_MOBILE_PROVISION \
+                          APPLE_DEVELOPMENT_TEAM APPLE_API_KEY_BASE64 \
+                          APPLE_API_KEY APPLE_API_ISSUER; do
+            if [ -z "${!required:-}" ]; then
+              echo "::error::IOS_CERTIFICATE is set but $required is missing. See docs/APPLE_SIGNING.md."
+              exit 1
+            fi
+          done
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            upload="${UPLOAD_INPUT:-false}"
+          else
+            # On a tag, uploading is opt-in through the repository variable
+            # IOS_UPLOAD_ON_TAG. Off by default: cutting a desktop release
+            # should not silently push a build to TestFlight reviewers.
+            upload="false"
+            if [ "${UPLOAD_ON_TAG:-}" = "true" ]; then
+              upload="true"
+            fi
+          fi
+
+          # CFBundleVersion must be unique per marketing version and may hold
+          # at most three period-separated integers, which is why the run
+          # number goes in whole instead of being appended to 1.2.3 by
+          # --build-number (that would produce a rejected 1.2.3.45).
+          build_number="${BUILD_NUMBER_INPUT:-}"
+          if [ -z "$build_number" ]; then
+            build_number="${{ github.run_number }}"
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "upload=$upload" >> "$GITHUB_OUTPUT"
+          echo "build-number=$build_number" >> "$GITHUB_OUTPUT"
+          echo "Signing credentials present. upload=$upload build=$build_number"
+
+  signed-ipa:
+    name: Build signed App Store IPA
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain for iPhone
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target-ios-ci
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      # Tauri resolves and validates bundle.resources before it executes the
+      # platform beforeBuildCommand. Build this inherited resource up front;
+      # otherwise a clean runner fails before either frontend build can start.
+      - name: Build bundled remote frontend
+        run: npm run build:remote
+
+      - name: Build native audio engine and dependencies
+        uses: ./.github/actions/ios-native-deps
+        with:
+          bungee-version: ${{ env.BUNGEE_VERSION }}
+          ffmpeg-version: ${{ env.FFMPEG_VERSION }}
+
+      - name: Generate the Xcode project
+        uses: ./.github/actions/ios-xcode-project
+        with:
+          development-team: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+
+      # altool and Tauri both read the App Store Connect key from disk, not
+      # from an environment variable, and altool only looks in a fixed set of
+      # directories.
+      - name: Materialize the App Store Connect key
+        shell: bash
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euo pipefail
+          key_dir="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$key_dir"
+          key_path="$key_dir/AuthKey_${APPLE_API_KEY}.p8"
+          echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          if [ ! -s "$key_path" ]; then
+            echo "::error::APPLE_API_KEY_BASE64 decoded to an empty file."
+            exit 1
+          fi
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      # Tauri does the signing itself from these three secrets: it imports the
+      # certificate into a temporary keychain and installs the provisioning
+      # profile, then drives xcodebuild with the App Store export method.
+      - name: Build and sign the IPA
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-ios-ci
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          BUILD_NUMBER: ${{ needs.preflight.outputs.build-number }}
+        run: |
+          set -euo pipefail
+          # bundleVersion is set whole instead of via --build-number, which
+          # appends to the marketing version and would produce a four-component
+          # CFBundleVersion that App Store Connect rejects.
+          config_override="$RUNNER_TEMP/ios-build-number.json"
+          cat > "$config_override" <<JSON
+          {"bundle":{"iOS":{"bundleVersion":"$BUILD_NUMBER"}}}
+          JSON
+          cat "$config_override"
+          (
+            cd apps/desktop
+            npm run tauri -- ios build --ci \
+              --target aarch64 \
+              --export-method app-store-connect \
+              --config "$config_override"
+          )
+
+      - name: Locate the IPA
+        id: ipa
+        shell: bash
+        run: |
+          set -euo pipefail
+          ipa="$(find apps/desktop/src-tauri/gen/apple/build -name '*.ipa' -print -quit)"
+          if [ -z "$ipa" ]; then
+            echo "::error::The signed build produced no IPA."
+            find apps/desktop/src-tauri/gen/apple/build -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+          echo "path=$ipa" >> "$GITHUB_OUTPUT"
+          echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
+
+      - name: Verify the signed IPA
+        shell: bash
+        run: bash scripts/verify-ios-ipa.sh "${{ steps.ipa.outputs.path }}" --signed
+
+      # Before the upload, and whatever the upload does: a rejected build is
+      # still the artifact you need in hand to understand why.
+      - name: Upload the IPA as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreTracks-iOS-appstore-${{ needs.preflight.outputs.build-number }}
+          path: ${{ steps.ipa.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      # Apple's own validation, which catches the store-side rules no local
+      # check can know about (missing icon sizes, entitlements the profile does
+      # not grant, a build number already used). Cheap, and it runs before the
+      # real upload so a rejection costs seconds instead of an ingestion cycle.
+      - name: Validate with App Store Connect
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          xcrun altool --validate-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APPLE_API_KEY" \
+            --apiIssuer "$APPLE_API_ISSUER"
+
+      - name: Upload to App Store Connect
+        if: needs.preflight.outputs.upload == 'true'
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APPLE_API_KEY" \
+            --apiIssuer "$APPLE_API_ISSUER"
+          echo "Uploaded. App Store Connect still has to finish processing the"
+          echo "build before it appears in TestFlight; that takes a few minutes"
+          echo "and can still fail by email (export compliance, missing icons)."
+
+      - name: Report the skipped upload
+        if: needs.preflight.outputs.upload != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Signed IPA built and validated but NOT uploaded. Re-run this workflow with 'upload' checked, or set the repository variable IOS_UPLOAD_ON_TAG=true to upload on every tag."
+
+      - name: Remove the App Store Connect key
+        if: always()
+        shell: bash
+        run: rm -f "${APPLE_API_KEY_PATH:-}" || true
+
+      - name: Upload generated Apple project on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreTracks-iOS-release-diagnostics-${{ github.run_number }}
+          path: |
+            apps/desktop/src-tauri/gen/apple/project.yml
+            apps/desktop/src-tauri/gen/apple/**/*.plist
+            apps/desktop/src-tauri/gen/apple/**/*.pbxproj
+          if-no-files-found: ignore
+          retention-days: 7

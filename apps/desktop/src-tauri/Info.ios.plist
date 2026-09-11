@@ -14,9 +14,10 @@
        exige AMBAS para conceder audio en segundo plano.
 
        OJO: esto no cubre las INTERRUPCIONES (una llamada entrante). Ahi iOS
-       desactiva la sesion y hace falta observar
-       AVAudioSessionInterruptionNotification para volver a activarla al colgar;
-       eso sigue pendiente. -->
+       desactiva la sesion y hay que volver a activarla al colgar; de eso se
+       encarga el observador de AVAudioSessionInterruptionNotification en
+       ios_audio_session.mm, que al recibir el Ended sube la generacion de ruta
+       y el monitor del device manager reabre el RemoteIO. -->
   <key>UIBackgroundModes</key>
   <array>
     <string>audio</string>

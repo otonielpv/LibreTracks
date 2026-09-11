@@ -1,0 +1,60 @@
+name: Generate the Tauri iOS Xcode project
+description: >-
+  Runs `tauri ios init` and applies the two fixes the generated project always
+  needs: the real app icon and the privacy manifest at the bundle root.
+
+  gen/apple is deliberately NOT in git — it is derived from Cargo.toml,
+  tauri.ios.conf.json and the plugin set, so a committed copy goes stale — which
+  means every build regenerates it and every build needs these two fixes again.
+  Shared by the unsigned smoke build and the signed App Store build so the IPA
+  that gets tested is assembled exactly like the IPA that ships.
+
+inputs:
+  development-team:
+    description: >-
+      Apple Developer Team ID. Only needed for a signed build; the smoke build
+      leaves it empty and turns signing off afterwards.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Generate Tauri iOS project
+      shell: bash
+      working-directory: apps/desktop
+      env:
+        APPLE_DEVELOPMENT_TEAM: ${{ inputs.development-team }}
+      run: npm run tauri -- ios init --ci
+
+    # `tauri ios init` does NOT read src-tauri/icons/ios: the project is born
+    # with cargo-mobile2's template icons, and what writes into
+    # Assets.xcassets/AppIcon.appiconset is `tauri icon`, which no workflow
+    # runs. Because the project is regenerated on every build, the IPA shipped
+    # the template icon until this step existed. The script fails if the
+    # catalogue ends up without an icon, so it cannot regress silently again.
+    - name: Put the app icon in the generated iOS project
+      shell: bash
+      run: node scripts/ios-app-icon.mjs
+
+    # Apple reads the privacy manifest from the ROOT of the app bundle, and
+    # bundle.resources cannot put it there: project.yml declares `assets` as a
+    # folder reference, so everything Tauri copies ends up under .app/assets/.
+    # Copying it into the .app after the build would fix the smoke IPA and
+    # quietly break the signed one — a file added after codesign invalidates
+    # the signature — so it goes in as a real target resource, before the
+    # build.
+    - name: Add privacy manifest to the iOS app target
+      shell: bash
+      run: |
+        set -euo pipefail
+        apple_dir="apps/desktop/src-tauri/gen/apple"
+        cp apps/desktop/src-tauri/PrivacyInfo.xcprivacy \
+           "$apple_dir/PrivacyInfo.xcprivacy"
+        # The runner ships CocoaPods, which depends on this gem; install it
+        # only if that ever stops being true.
+        if ! ruby -e "require 'xcodeproj'" 2>/dev/null; then
+          gem install xcodeproj --no-document
+        fi
+        ruby scripts/ios-add-privacy-manifest.rb \
+          "$apple_dir/libretracks-desktop.xcodeproj" PrivacyInfo.xcprivacy

@@ -1,8 +1,27 @@
-# Firma y notarización del DMG (macOS)
+# Firma de las builds de Apple
+
+Dos caminos que se confunden fácil y **no comparten certificado**:
+
+| | macOS (DMG) | iOS (App Store) |
+| --- | --- | --- |
+| Dónde vive | fuera de la tienda, descarga directa | App Store / TestFlight |
+| Certificado | *Developer ID Application* | *Apple Distribution* |
+| Además | notarización + staple | perfil de aprovisionamiento + revisión |
+| Workflow | [release.yml](../.github/workflows/release.yml) | [ios-release.yml](../.github/workflows/ios-release.yml) |
+
+La primera mitad de este documento cubre el DMG; la sección
+[App Store (iOS)](#app-store-ios) cubre la tienda. La **clave de API de App
+Store Connect es la única credencial compartida** por los dos: notariza el DMG
+y sube el IPA.
+
+macOS no entra en la Mac App Store: el escritorio enlaza JUCE bajo AGPLv3, que
+choca con los términos de la tienda. En iOS no hay tal problema porque JUCE no
+se compila (ver [IOS_PORT.md](./IOS_PORT.md)).
+
+## DMG: de "está dañado" a doble clic
 
 Cómo pasar de "LibreTracks está dañado y no se puede abrir" a un DMG que
-cualquiera instala con doble clic. Cubre **solo distribución fuera de la App
-Store**, que es donde vive LibreTracks en macOS.
+cualquiera instala con doble clic.
 
 ## Por qué hace falta
 
@@ -68,8 +87,11 @@ Más robusta que el par Apple ID + contraseña específica: no caduca sola ni se
 rompe al cambiar la contraseña de la cuenta.
 
 1. [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → *Usuarios y
-   acceso* → *Integraciones* → *Claves de API* → genera una clave. El rol
-   *Developer* es suficiente para notarizar.
+   acceso* → *Integraciones* → *Claves de API* → genera una clave. Para
+   notarizar basta el rol *Developer*, pero **genérala como *App Manager***: la
+   misma clave sube los builds de iOS a TestFlight, y el rol no se puede
+   cambiar después. Una clave por función también vale; entonces son dos juegos
+   de secretos.
 2. Descarga el `AuthKey_XXXXXXXXXX.p8`. **Solo se puede descargar una vez.**
 3. Apunta el **Key ID** (el `XXXXXXXXXX` del nombre) y el **Issuer ID** (el
    UUID que aparece encima de la tabla).
@@ -175,10 +197,156 @@ Lo que se puede esperar en este proyecto concreto:
   (`gatekeeperTitle`) y su estilo `.platform-note` en
   [global.css](../apps/website/src/styles/global.css).
 
-## Lo que este documento NO cubre
+---
 
-Publicar en la **App Store** (iOS o macOS) es otro camino: otros certificados,
-otro proceso de revisión y un conflicto de licencias por resolver antes
-— LibreTracks es AGPL-3.0 y enlaza JUCE bajo la opción AGPLv3, que choca con los
-términos de distribución de la App Store. Nada de eso afecta al DMG: distribuir
-fuera de la tienda es plenamente compatible con la AGPL.
+# App Store (iOS)
+
+El bloqueante de licencia que tuvo parado este camino **ya no existe**: JUCE se
+compila fuera del binario de iOS desde el 1 de septiembre de 2026 y el permiso
+de tienda está escrito en [LICENSE-EXCEPTIONS.md](../LICENSE-EXCEPTIONS.md)
+como permiso adicional del artículo 7 de la AGPL. Lo que queda es mecánico.
+
+## Lo que hay que conseguir una vez
+
+### 1. El App ID
+
+[developer.apple.com/account](https://developer.apple.com/account) →
+*Identifiers* → **+** → *App IDs* → *App* → Bundle ID **explícito**
+`com.libretracks.ios`.
+
+Tiene que ser **exactamente** el `identifier` de
+[tauri.ios.conf.json](../apps/desktop/src-tauri/tauri.ios.conf.json), y no se
+puede cambiar después de publicar. No hace falta marcar ninguna capability:
+*Background Modes* (el audio en segundo plano que declara
+[Info.ios.plist](../apps/desktop/src-tauri/Info.ios.plist)) no lleva
+entitlement, va solo en el `Info.plist`.
+
+### 2. Certificado *Apple Distribution*
+
+El mismo procedimiento que el *Developer ID Application* de arriba, pero
+eligiendo el tipo **Apple Distribution**. Exportar a `.p12` desde *Mis
+certificados*, igual que allí.
+
+No sirve el de escritorio: el de la tienda lo emite Apple con otra cadena de
+confianza, y firmar el IPA con un *Developer ID* produce un rechazo en el
+momento de subir.
+
+### 3. Perfil de aprovisionamiento *App Store*
+
+*Profiles* → **+** → *App Store Connect* → elige el App ID del paso 1 y el
+certificado del paso 2 → descarga el `.mobileprovision`.
+
+Caduca **al año** y hay que renovarlo a mano: el `verify-ios-ipa.sh` imprime la
+fecha de caducidad del perfil en cada build precisamente para que no pille por
+sorpresa.
+
+### 4. La app en App Store Connect
+
+[appstoreconnect.apple.com](https://appstoreconnect.apple.com) → *Apps* → **+**
+→ plataforma iOS, el Bundle ID del paso 1, un SKU cualquiera y el idioma
+principal. Sin esto, la subida se rechaza con "no app with bundle id".
+
+## Secretos del repositorio
+
+Los tres `APPLE_API_*` son los mismos que notarizan el DMG; los cuatro
+primeros son exclusivos de iOS:
+
+| Secreto | Valor |
+| --- | --- |
+| `IOS_CERTIFICATE` | `base64 -i AppleDistribution.p12 \| pbcopy` |
+| `IOS_CERTIFICATE_PASSWORD` | La contraseña del `.p12` |
+| `IOS_MOBILE_PROVISION` | `base64 -i LibreTracks_AppStore.mobileprovision \| pbcopy` |
+| `APPLE_DEVELOPMENT_TEAM` | El Team ID (`TEAMID1234`, el mismo del paréntesis de la identidad) |
+| `APPLE_API_KEY_BASE64` | `base64 -i AuthKey_XXXXXXXXXX.p8 \| pbcopy` |
+| `APPLE_API_KEY` | El Key ID (`XXXXXXXXXX`) |
+| `APPLE_API_ISSUER` | El Issuer ID (UUID) |
+
+Los nombres de los tres primeros no son arbitrarios: son los que **Tauri**
+lee para firmar (importa el certificado en un llavero temporal e instala el
+perfil él mismo).
+
+Sin `IOS_CERTIFICATE` el workflow se salta con un aviso cuando lo dispara una
+etiqueta —un fork no tiene por qué ver rojo— pero **falla** si lo lanzas a
+mano: se lo has pedido explícitamente. Con el certificado puesto, los otros
+seis son obligatorios.
+
+## Sacar un build
+
+*Actions* → **iOS Release (signed App Store build)** → *Run workflow*:
+
+- **upload** marcado sube a TestFlight; desmarcado deja el IPA como artefacto
+  ya validado por Apple, que es lo que quieres la primera vez.
+- **build_number** vacío usa el número de ejecución. Es el `CFBundleVersion`:
+  tiene que ser único y creciente dentro de una misma versión de marketing, y
+  **como mucho tres números separados por puntos** (por eso el workflow lo pone
+  entero en `bundle.iOS.bundleVersion` en vez de usar `--build-number`, que lo
+  pegaría detrás de `1.11.1` y produciría un cuarto componente que Apple
+  rechaza).
+
+También se dispara en cada etiqueta `v*`, pero **solo construye**: para que una
+etiqueta suba a TestFlight hay que poner la variable de repositorio
+`IOS_UPLOAD_ON_TAG` a `true` (*Settings → Secrets and variables → Actions →
+Variables*).
+
+Antes de subir nada, el workflow pasa el IPA por
+[scripts/verify-ios-ipa.sh](../scripts/verify-ios-ipa.sh) —el mismo que usa la
+build sin firmar— y luego por `altool --validate-app`, que es la validación de
+Apple. Un rechazo cuesta segundos en vez de un ciclo de ingesta.
+
+## Qué se comprueba en cada IPA
+
+`verify-ios-ipa.sh` existe para que la build que se prueba y la que se publica
+sean la misma cosa. En ambos modos:
+
+- bundle id, mínimo iOS 15, arquitectura `arm64`;
+- que el motor nativo está enlazado de verdad (`coreaudio-ios` presente, el
+  stub mudo `no-link` ausente, sin JUCE);
+- que el banco de voz guía viaja dentro;
+- que `PrivacyInfo.xcprivacy` está en la **raíz** del bundle (si no, el rechazo
+  es ITMS-91053);
+- que el icono compilado no es el de la plantilla de cargo-mobile2.
+
+Y solo en `--signed`:
+
+- que la identidad es *Apple Distribution* y la firma verifica;
+- que lleva `embedded.mobileprovision`, con su equipo y caducidad;
+- que **no** lleva `get-task-allow` (un perfil de desarrollo colado en un
+  envío es ITMS-90046);
+- que el `CFBundleVersion` tiene un formato que Apple acepta.
+
+## Antes de mandarlo a revisión
+
+Nada de esto lo puede hacer la CI:
+
+1. **TestFlight primero.** Instálalo en un iPhone real desde TestFlight, no
+   desde AltStore: es la única forma de ver el build firmado tal y como lo verá
+   el revisor.
+2. **La ficha**: capturas por tamaño de pantalla, descripción, categoría,
+   clasificación por edades, URL de soporte y la de privacidad
+   (`libretracks.com/privacy`, que ya existe).
+3. **Cuidado con lo que promete el texto.** MIDI no existe en móvil; no debe
+   aparecer en la ficha ni en las capturas.
+4. **Cumplimiento de exportación**: ya está resuelto en el `Info.plist`
+   (`ITSAppUsesNonExemptEncryption = false`), así que App Store Connect no
+   volverá a preguntarlo en cada envío.
+
+## Si Apple rechaza la subida
+
+El correo nombra un código `ITMS-9xxxx`. Los que más probablemente salgan aquí:
+
+- **ITMS-91053** (API sin declarar): el correo dice la categoría exacta. Se
+  añade otro bloque a `NSPrivacyAccessedAPITypes` en
+  [PrivacyInfo.xcprivacy](../apps/desktop/src-tauri/PrivacyInfo.xcprivacy) con
+  su motivo; hay una tabla de lo ya declarado en [IOS_PORT.md](./IOS_PORT.md).
+- **ITMS-90046 / 90034** (firma o perfil equivocados): los caza
+  `verify-ios-ipa.sh` antes de subir, así que si llegan es que el secreto que
+  se cambió fue el del certificado o el del perfil.
+- **Build number repetido**: relanza el workflow; el número de ejecución ya es
+  otro.
+
+## Mantenimiento
+
+El *Apple Distribution* caduca a los **3 años** y el perfil de aprovisionamiento
+**al año** — antes que nada de lo del DMG, y el perfil es el que más
+desprevenido pilla. Cuando toque, se renueva en el portal y se actualiza el
+secreto `IOS_MOBILE_PROVISION`; los builds ya publicados no se ven afectados.

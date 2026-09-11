@@ -1,17 +1,29 @@
-# Port iOS (IPA de pruebas con AltStore)
+# Port iOS
 
 ## Estado actual
 
-El smoke build para iPhone real (`arm64`) ya valida el WebView, el sandbox, la
-interfaz y el selector de carpetas. El siguiente hito, actualmente en
-integración, enlaza el motor C++ estático con JUCE/CoreAudio y activa una
-`AVAudioSession` de reproducción. La CI rechaza el IPA si detecta el stub
-silencioso `no-link`.
+El motor C++ completo (Bungee + FFmpeg + libsndfile + voz guía + pads) se
+enlaza estáticamente en el IPA de `arm64`, con backend de audio propio sobre
+RemoteIO y **sin JUCE**. La CI rechaza el IPA si detecta el stub silencioso
+`no-link` o si JUCE vuelve a entrar.
 
-La CI está aislada de releases en `.github/workflows/ios-smoke.yml` y solo se
-ejecuta manualmente. No usa certificados, perfiles de aprovisionamiento ni
-secretos de Apple. El IPA resultante se firma posteriormente con el Apple ID
-del probador al instalarlo mediante AltStore.
+Hay dos builds, y comparten todo menos la firma:
+
+| | `ios-smoke.yml` | `ios-release.yml` |
+| --- | --- | --- |
+| Sale | IPA sin firmar | IPA firmado para la tienda |
+| Se instala | AltStore, con el Apple ID del probador | TestFlight |
+| Credenciales | ninguna (corre en forks) | certificado + perfil + clave de API |
+
+Lo común vive en `.github/actions/ios-native-deps` (motor y dependencias
+nativas), `.github/actions/ios-xcode-project` (proyecto Xcode, icono y
+manifiesto de privacidad) y `scripts/verify-ios-ipa.sh` (comprobaciones del
+IPA). Esa separación es deliberada: si los dos workflows montaran el bundle por
+su cuenta, el IPA que se prueba dejaría de ser el IPA que se publica en cuanto
+uno de los dos se tocara.
+
+El proceso de publicación —certificados, App ID, perfil, secretos y subida— está
+en [APPLE_SIGNING.md](./APPLE_SIGNING.md).
 
 ## Generar el IPA
 
@@ -124,9 +136,14 @@ comprobar, con build **Release** y la interfaz USB conectada:
 
 ## Manifiesto de privacidad (App Store)
 
-`apps/desktop/src-tauri/PrivacyInfo.xcprivacy` se empaqueta en la raíz del
-bundle vía `bundle.resources` de `tauri.ios.conf.json`, y la CI falla si no
-llega ahí. Sin él, App Store Connect rechaza la subida (**ITMS-91053**).
+`apps/desktop/src-tauri/PrivacyInfo.xcprivacy` tiene que acabar en la **raíz**
+del bundle, y `bundle.resources` no puede ponerlo ahí: el `project.yml` de
+Tauri declara `assets` como referencia de carpeta, así que todo lo que Tauri
+copia acaba bajo `.app/assets/`. Lo añade como recurso del target el paso
+`scripts/ios-add-privacy-manifest.rb`, entre `ios init` y `ios build`; copiarlo
+al `.app` después invalidaría la firma. `verify-ios-ipa.sh` comprueba en cada
+build que llegó a la raíz — sin él, App Store Connect rechaza la subida
+(**ITMS-91053**).
 
 Lo declarado, con el código que lo respalda:
 
