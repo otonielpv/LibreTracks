@@ -230,10 +230,15 @@ jobs:
         run: |
           set -euo pipefail
           brew tap facebook/fb
-          brew install idb-companion
+          # Homebrew refuses formulae from third-party taps until they are
+          # trusted. idb is Meta's own tool and this job handles no Apple
+          # credentials — it builds an unsigned app and photographs it — so
+          # the exposure is a runner that is thrown away minutes later.
+          brew trust --formula facebook/fb/idb-companion || brew trust facebook/fb
+          brew install facebook/fb/idb-companion
           python3 -m pip install --quiet --break-system-packages fb-idb || \
             python3 -m pip install --quiet fb-idb
-          idb --version || true
+          idb --version
           # idb talks to a companion process per simulator; starting it here
           # keeps the first tap from paying for the handshake.
           idb_companion --udid "${{ steps.sim.outputs.udid }}" --only simulator &

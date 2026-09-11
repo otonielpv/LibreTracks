@@ -32,6 +32,12 @@ mkdir -p "$OUT"
 failures=0
 step=0
 
+if ! command -v idb >/dev/null 2>&1; then
+  echo "ios-shots-tour: idb is not installed, so nothing can be tapped." >&2
+  echo "Install it with: brew trust facebook/fb && brew install facebook/fb/idb-companion && pip install fb-idb" >&2
+  exit 1
+fi
+
 log() { printf '%s\n' "$*"; }
 
 shot() {
