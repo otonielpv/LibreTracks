@@ -138,7 +138,62 @@ export function createColorHandlers(deps: ColorHandlerDeps) {
     });
   };
 
-  return { handleSetTrackColor, handleSetTrackColors, handleSetClipColor };
+  /**
+   * El color de una seleccion de clips.
+   *
+   * Igual que `handleSetTrackColors`: uno solo va por el camino de siempre —con
+   * su mensaje de estado— y varios se aplican en una sola accion, para que el
+   * historial guarde UNA entrada y no una por clip.
+   */
+  const handleSetClipColors = async (
+    clips: ClipSummary[],
+    color: string | null,
+  ) => {
+    if (clips.length === 0) {
+      return;
+    }
+    if (clips.length === 1) {
+      await handleSetClipColor(clips[0], color);
+      return;
+    }
+
+    await runAction(async () => {
+      let nextSnapshot: TransportSnapshot | null = null;
+      const clipIds = new Set(clips.map((clip) => clip.id));
+
+      for (const clip of clips) {
+        nextSnapshot = await updateClipColor(clip.id, color);
+      }
+      if (!nextSnapshot) {
+        return;
+      }
+
+      commitSnapshot(nextSnapshot);
+      const snapshot = nextSnapshot;
+      setSong((previous) =>
+        previous
+          ? {
+              ...previous,
+              projectRevision: snapshot.projectRevision,
+              clips: previous.clips.map((candidate) =>
+                clipIds.has(candidate.id)
+                  ? { ...candidate, color }
+                  : candidate,
+              ),
+            }
+          : previous,
+      );
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(`Clip colors updated: ${clips.length}`);
+    });
+  };
+
+  return {
+    handleSetTrackColor,
+    handleSetTrackColors,
+    handleSetClipColor,
+    handleSetClipColors,
+  };
 }
 
 export type ColorHandlers = ReturnType<typeof createColorHandlers>;

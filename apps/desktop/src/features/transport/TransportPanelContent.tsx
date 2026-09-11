@@ -2300,7 +2300,7 @@ export function TransportPanelContent() {
   const {
     handleSetTrackColor,
     handleSetTrackColors,
-    handleSetClipColor,
+    handleSetClipColors,
   } = useMemo(
     () =>
       createColorHandlers({
@@ -5494,7 +5494,7 @@ export function TransportPanelContent() {
       resetTrackRowHeight: resetRowHeight,
       handleSetTrackColor,
       handleSetTrackColors,
-      handleSetClipColor,
+      handleSetClipColors,
       audioRoutingOptions,
     };
   });
