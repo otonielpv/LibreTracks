@@ -9,12 +9,14 @@ name: iOS Simulator Shots
 #     Telegram arrives rescaled (2048x946, 1280x591) and is rejected. simctl
 #     writes the device's native framebuffer, so what comes out of here is
 #     already the right size.
-#   * Nobody has ever seen LibreTracks on an iPad, and the IPA declares iPad
-#     support — which means a reviewer WILL open it there. This is the cheapest
-#     way to find out what they will see.
+#   * The IPA declares iPad support, which means a reviewer WILL open it
+#     there. This is the cheapest way to see what they will see.
 #
-# First run of a given SDK builds FFmpeg and Bungee from source (~40 min);
-# after that the cache makes it minutes.
+# Split into two jobs because the two halves need DIFFERENT Xcodes: the app
+# only builds with the runner's default 16.4 (26 fails in the Swift
+# compatibility libraries), while idb-companion refuses to install against
+# anything below a full Xcode 26. One job each, with the .app handed over as
+# an artifact, beats swapping toolchains mid-job.
 
 env:
   BUNGEE_VERSION: v2.4.24
@@ -45,58 +47,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  shots:
-    name: Screenshot the app in a simulator
+  build-app:
+    name: Build the app for the simulator
     runs-on: macos-15
     timeout-minutes: 90
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # idb-companion refuses to install against the runner's default Xcode
-      # (16.4): its formula requires a full Xcode 26. The image ships several,
-      # so pick one of those for the whole job rather than swapping toolchains
-      # halfway — idb loads CoreSimulator from whichever Xcode is selected at
-      # RUN time, and a companion built against one while talking to another
-      # is a debugging session nobody needs.
-      - name: Select an Xcode that idb accepts
-        shell: bash
-        run: |
-          set -euo pipefail
-          for candidate in /Applications/Xcode_26.0.1.app \
-                           /Applications/Xcode_26.1.1.app \
-                           /Applications/Xcode_26.2.app \
-                           /Applications/Xcode_26.3.app; do
-            if [ -d "$candidate" ]; then
-              sudo xcode-select -s "$candidate"
-              break
-            fi
-          done
-          xcodebuild -version
-
-      # Before anything expensive: a typo in the device name must not cost
-      # forty minutes of build to discover.
-      - name: Resolve the simulator
-        id: sim
-        shell: bash
-        env:
-          DEVICE_NAME: ${{ inputs.device }}
-        run: |
-          set -euo pipefail
-          udid="$(xcrun simctl list devices available -j \
-            | jq -r --arg name "$DEVICE_NAME" \
-              '[.devices[][] | select(.name == $name)] | .[0].udid')"
-          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
-            echo "::error::No available simulator named '$DEVICE_NAME'."
-            echo "iPads on this runner:"
-            xcrun simctl list devices available -j | jq -r '.devices[][].name' | grep -i ipad | sort -u
-            echo "iPhones on this runner:"
-            xcrun simctl list devices available -j | jq -r '.devices[][].name' | grep -i iphone | sort -u
-            exit 1
-          fi
-          echo "Using $DEVICE_NAME ($udid)"
-          echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -123,9 +81,7 @@ jobs:
       # Most runs of this workflow change the TOUR, not the app: the script
       # that taps through the UI is a few lines of bash, and rebuilding the
       # whole app to re-run it costs twenty minutes of runner for nothing. The
-      # key covers everything that ends up inside the bundle and nothing else,
-      # so editing scripts/ios-shots-tour.sh reuses the cached build and
-      # touching the app rebuilds it.
+      # key covers everything that ends up inside the bundle and nothing else.
       - name: Compute the app cache key
         id: appkey
         shell: bash
@@ -149,10 +105,9 @@ jobs:
 
       # restore + save rather than the combined action, because the combined
       # one only writes the cache when the whole job succeeds. This workflow
-      # fails downstream of the build often enough (a tap that will not
-      # install, a control that moved) that throwing away a perfectly good
-      # twenty-minute build every time is the difference between iterating on
-      # the tour and waiting on it.
+      # failed downstream of the build often enough while it was being written
+      # that throwing away a good twenty-minute build each time was the
+      # difference between iterating and waiting.
       - name: Restore the built simulator app
         id: app-cache
         uses: actions/cache/restore@v4
@@ -174,7 +129,7 @@ jobs:
 
       # Same signing workaround as the smoke build: there is no --no-sign flag,
       # and a simulator build needs no identity.
-      - name: Build the app for the simulator
+      - name: Build the app
         if: steps.app-cache.outputs.cache-hit != 'true'
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target-ios-sim
@@ -192,7 +147,7 @@ jobs:
             npm run tauri -- ios build --ci --target aarch64-sim
           )
 
-      - name: Locate the built app
+      - name: Stage the built app
         id: app
         shell: bash
         env:
@@ -209,7 +164,6 @@ jobs:
               exit 1
             fi
             echo "Reusing the cached build: $app"
-            echo "path=$app" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -234,24 +188,104 @@ jobs:
           # the worst thing to cache.
           mkdir -p "$staging"
           ditto "$app" "$staging/$(basename "$app")"
-          app="$staging/$(basename "$app")"
-          # Prove it is a simulator binary before spending time on a boot that
-          # would fail with a confusing "incompatible architecture".
-          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
-          if ! vtool -show-build "$app/$executable" 2>/dev/null | grep -i 'platform.*simulator' >/dev/null; then
+
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$staging/$(basename "$app")/Info.plist")"
+          if ! vtool -show-build "$staging/$(basename "$app")/$executable" 2>/dev/null \
+            | grep -i 'platform.*simulator' >/dev/null; then
             echo "::warning::vtool does not report a simulator platform for this binary."
-            vtool -show-build "$app/$executable" 2>&1 | head -20 || true
           fi
-          echo "path=$app" >> "$GITHUB_OUTPUT"
 
       # Right here, while the .app is known-good and before anything else can
-      # fail: everything after this point is tapping a screen.
+      # fail.
       - name: Save the built simulator app
         if: steps.app-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: simulator-app
           key: ${{ steps.appkey.outputs.key }}
+
+      # tar, because upload-artifact does not preserve symlinks or the
+      # executable bit, and an .app that lost either installs and then fails
+      # to launch.
+      - name: Hand the app to the tour job
+        shell: bash
+        run: tar -czf simulator-app.tar.gz -C simulator-app .
+
+      - name: Upload the app
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-app-${{ github.run_number }}
+          path: simulator-app.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  tour:
+    name: Walk the app and take the shots
+    needs: build-app
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # idb-companion's formula requires a full Xcode 26; the runner defaults
+      # to 16.4. This job does not compile anything, so it can simply use one.
+      - name: Select an Xcode that idb accepts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in /Applications/Xcode_26.0.1.app \
+                           /Applications/Xcode_26.1.1.app \
+                           /Applications/Xcode_26.2.app \
+                           /Applications/Xcode_26.3.app; do
+            if [ -d "$candidate" ]; then
+              sudo xcode-select -s "$candidate"
+              break
+            fi
+          done
+          xcodebuild -version
+
+      - name: Resolve the simulator
+        id: sim
+        shell: bash
+        env:
+          DEVICE_NAME: ${{ inputs.device }}
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r --arg name "$DEVICE_NAME" \
+              '[.devices[][] | select(.name == $name)] | .[0].udid')"
+          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
+            echo "::error::No available simulator named '$DEVICE_NAME'."
+            echo "iPads on this runner:"
+            xcrun simctl list devices available -j | jq -r '.devices[][].name' | grep -i ipad | sort -u
+            echo "iPhones on this runner:"
+            xcrun simctl list devices available -j | jq -r '.devices[][].name' | grep -i iphone | sort -u
+            exit 1
+          fi
+          echo "Using $DEVICE_NAME ($udid)"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Download the app
+        uses: actions/download-artifact@v4
+        with:
+          name: simulator-app-${{ github.run_number }}
+
+      - name: Unpack the app
+        id: app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p simulator-app
+          tar -xzf simulator-app.tar.gz -C simulator-app
+          app="$(find simulator-app -maxdepth 1 -type d -name '*.app' -print -quit)"
+          if [ -z "$app" ]; then
+            echo "::error::The artifact holds no .app"
+            ls -la simulator-app || true
+            exit 1
+          fi
+          echo "path=$GITHUB_WORKSPACE/$app" >> "$GITHUB_OUTPUT"
 
       - name: Boot the simulator
         shell: bash
@@ -263,9 +297,9 @@ jobs:
           xcrun simctl bootstatus "$SIM_UDID" -b
 
       # idb drives the taps. simctl can install, launch and screenshot, but it
-      # cannot touch the screen, and the tour needs to dismiss two dialogs and
-      # open three panels. idb reads the accessibility tree, so the tour can
-      # find controls by label instead of by coordinates.
+      # cannot touch the screen, and the tour has to dismiss two dialogs and
+      # open three panels. idb reads the accessibility tree, so controls are
+      # found by label instead of by coordinates.
       - name: Install idb
         shell: bash
         run: |
@@ -273,21 +307,18 @@ jobs:
           brew tap facebook/fb
           # Homebrew refuses formulae from third-party taps until they are
           # trusted. idb is Meta's own tool and this job handles no Apple
-          # credentials — it builds an unsigned app and photographs it — so
-          # the exposure is a runner that is thrown away minutes later.
+          # credentials — it photographs an unsigned app — so the exposure is
+          # a runner that is thrown away minutes later.
           brew trust --formula facebook/fb/idb-companion || brew trust facebook/fb
           brew install facebook/fb/idb-companion
           python3 -m pip install --quiet --break-system-packages fb-idb || \
             python3 -m pip install --quiet fb-idb
           idb --version
-          # idb talks to a companion process per simulator; starting it here
-          # keeps the first tap from paying for the handshake.
           idb_companion --udid "${{ steps.sim.outputs.udid }}" --only simulator &
           sleep 5
           idb connect "${{ steps.sim.outputs.udid }}" || true
 
       - name: Install and launch
-        id: run
         shell: bash
         env:
           SIM_UDID: ${{ steps.sim.outputs.udid }}
@@ -296,13 +327,10 @@ jobs:
           LANG_CODE: ${{ inputs.language }}
         run: |
           set -euo pipefail
-          shots="$GITHUB_WORKSPACE/simulator-shots"
-          mkdir -p "$shots"
           xcrun simctl install "$SIM_UDID" "$APP_PATH"
           # The runner's simulator is English. These launch arguments are the
-          # standard way to ask for another language per launch (no need to
-          # reconfigure the device), and the store takes a separate screenshot
-          # set per language anyway.
+          # standard way to ask for another language per launch, and the store
+          # takes a separate screenshot set per language anyway.
           case "$LANG_CODE" in
             es) locale="es_ES" ;;
             *)  locale="en_US" ;;
@@ -326,12 +354,11 @@ jobs:
           SIM_UDID: ${{ steps.sim.outputs.udid }}
         run: |
           set -euo pipefail
-          shots="$GITHUB_WORKSPACE/simulator-shots"
-          mkdir -p "$shots"
-          xcrun simctl spawn "$SIM_UDID" log show --last 5m --style compact \
+          mkdir -p "$GITHUB_WORKSPACE/simulator-shots"
+          xcrun simctl spawn "$SIM_UDID" log show --last 10m --style compact \
             --predicate 'processImagePath CONTAINS "LibreTracks"' \
-            > "$shots/app-log.txt" 2>&1 || true
-          tail -60 "$shots/app-log.txt" || true
+            > "$GITHUB_WORKSPACE/simulator-shots/app-log.txt" 2>&1 || true
+          tail -40 "$GITHUB_WORKSPACE/simulator-shots/app-log.txt" || true
 
       - name: Upload the screenshots
         if: always()
