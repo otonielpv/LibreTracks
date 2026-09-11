@@ -19,6 +19,7 @@ import {
 
 import { AudioRouteCombobox } from "./AudioRouteCombobox";
 import { useFineDragRange } from "../timeline/useFineDragRange";
+import { useTouchRangeDrag } from "./useTouchRangeDrag";
 import { TrackMeter } from "./TrackMeter";
 import type { TrackKind } from "../desktopApi";
 import { useTransportStore } from "../store";
@@ -180,7 +181,13 @@ function TrackHeaderItemComponent({
       const target = event.target;
       if (
         target instanceof Element &&
-        target.closest(".lt-mobile-track-row-panel, .lt-track-header-row")
+        target.closest(
+          // `[data-lt-panel-portal]`: lo que el panel abre pero cuelga de
+          // `document.body` —el desplegable de salida—. Sin esto el panel se
+          // cerraba en el `pointerdown` de la opcion, la lista se desmontaba
+          // con el, y el click que aplicaba el enrutado nunca llegaba a pasar.
+          ".lt-mobile-track-row-panel, .lt-track-header-row, [data-lt-panel-portal]",
+        )
       ) {
         return; // dentro del panel, o en la cabecera, que ya alterna sola
       }
@@ -202,7 +209,28 @@ function TrackHeaderItemComponent({
       onVolumeChange(trackId, positionToGain(position, TRACK_FADER_SCALE)),
     onCommit: () => onCommitVolume(trackId),
   });
+  // El dedo no usa el arrastre nativo del `<input type=range>`: ver
+  // useTouchRangeDrag. Con raton no cambia nada.
+  const volumeTouchDrag = useTouchRangeDrag({
+    min: 0,
+    max: 1,
+    step: 0.001,
+    onChange: (position) =>
+      onVolumeChange(trackId, positionToGain(position, TRACK_FADER_SCALE)),
+    onCommit: () => onCommitVolume(trackId),
+  });
   const panFill = `${(((effectivePanValue + 1) * 0.5) * 100).toFixed(2)}%`;
+  const panTouchDrag = useTouchRangeDrag({
+    min: -1,
+    max: 1,
+    step: 0.01,
+    onChange: (value) =>
+      onPanChange(
+        trackId,
+        Math.abs(value) <= PAN_SNAP_TO_CENTER_EPSILON ? 0 : value,
+      ),
+    onCommit: () => onCommitPan(trackId),
+  });
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (isOwnControlTarget(event.target)) {
       return;
@@ -342,7 +370,10 @@ function TrackHeaderItemComponent({
                     background: `linear-gradient(to right, #3cddc7 ${volumeFill}, #0e0e0e ${volumeFill})`,
                   }}
                   onChange={volumeFineDrag.handleChange}
-                  onPointerDown={volumeFineDrag.handlePointerDown}
+                  onPointerDown={(event) => {
+                    volumeFineDrag.handlePointerDown();
+                    volumeTouchDrag(event);
+                  }}
                   onDoubleClick={(event) => {
                     // Reset to unity (0 dB), the way Reaper resets a fader.
                     event.stopPropagation();
@@ -391,6 +422,7 @@ function TrackHeaderItemComponent({
                       Math.abs(rawPanValue) <= PAN_SNAP_TO_CENTER_EPSILON ? 0 : rawPanValue,
                     );
                   }}
+                  onPointerDown={panTouchDrag}
                   onDoubleClick={(event) => {
                     event.stopPropagation();
                     onPanChange(trackId, 0);

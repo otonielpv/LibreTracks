@@ -3,6 +3,28 @@ import { clientXToLocalX, getElementScaleY } from "../timeline/timelineMath";
 type Point = { x: number; y: number };
 
 /**
+ * Un gesto de un dedo desplaza en UN eje, el que se despego primero, y lo
+ * mantiene hasta que se levanta el dedo.
+ *
+ * Es el mismo "un gesto, un trabajo" que ya decide entre desplazar y hacer zoom
+ * con dos dedos (ver InputManager). Sin el, un barrido horizontal —que nunca
+ * sale recto— arrastraba tambien el carril vertical: no solo se iba de sitio,
+ * es que cada pixel vertical obliga a recolocar y REPINTAR entera la rebanada
+ * de lienzo, asi que el desplazamiento horizontal iba a tirones.
+ *
+ * Con dos dedos no se bloquea nada ("both"): ahi manda la pinza.
+ */
+type GestureAxis = "x" | "y" | "both";
+
+/** Cuanto tiene que recorrer el dedo para que el gesto arranque y elija eje. */
+const MOVE_THRESHOLD_PX = 5;
+
+/** Medidas del contenedor. Se toman al anclar y NO por muestra: un
+ * `getBoundingClientRect` despues de haber escrito `scrollTop` fuerza un
+ * reflujo sincrono, y aqui habria uno por cada `pointermove`. */
+type ContainerMetrics = { bounds: DOMRect; width: number; height: number };
+
+/**
  * Controles que se pintan DENTRO del area de carriles y tienen que responder
  * como botones normales.
  *
@@ -31,6 +53,12 @@ export type MobileNavigationOptions = {
   onCommitZoom: (view: { cameraX: number; zoomLevel: number }) => void;
   onScrollVertical?: (delta: number) => void;
   /**
+   * El gesto vuelve a anclarse (aterriza o se levanta un dedo). Quien lleve el
+   * desplazamiento vertical aprovecha para re-sincronizarse con el DOM: durante
+   * el gesto solo recibe deltas, nunca se le pregunta donde esta.
+   */
+  onScrollVerticalSeed?: () => void;
+  /**
    * Si este toque debe EDITAR en vez de navegar. Devuelve true sobre un clip
    * que ya esta seleccionado: entonces la navegacion cede el gesto y corren los
    * handlers de arrastre normales. Asi no hace falta un boton de modo — tocar
@@ -50,7 +78,8 @@ export type MobileNavigationOptions = {
  * se puede devolver (ver Pointer Events, `touch-action`). */
 export class MobileTimelineNavigation {
   private points = new Map<number, Point>();
-  private anchor: { x: number; y: number; distance: number; content: number; zoom: number; moved: boolean } | null = null;
+  private anchor: { x: number; y: number; distance: number; content: number; zoom: number; moved: boolean; axis: GestureAxis } | null = null;
+  private metrics: ContainerMetrics | null = null;
   private zoomView: { cameraX: number; zoomLevel: number } | null = null;
   private camera: number | null = null;
   private lastTouch = -Infinity;
@@ -77,20 +106,32 @@ export class MobileTimelineNavigation {
     this.options.container.classList.toggle("lt-mobile-navigation-surface", this.options.enabled());
   };
 
+  private measure(): ContainerMetrics {
+    const container = this.options.container;
+    this.metrics = {
+      bounds: container.getBoundingClientRect(),
+      width: container.offsetWidth,
+      height: container.offsetHeight,
+    };
+    return this.metrics;
+  }
+
   private sample() {
     const points = [...this.points.values()].slice(0, 2);
     const a = points[0], b = points[1] ?? a;
-    const bounds = this.options.container.getBoundingClientRect();
-    return { x: clientXToLocalX((a.x + b.x) / 2, bounds, this.options.container.offsetWidth),
-      y: (a.y + b.y) / 2 / getElementScaleY(bounds, this.options.container.offsetHeight),
+    const { bounds, width, height } = this.metrics ?? this.measure();
+    return { x: clientXToLocalX((a.x + b.x) / 2, bounds, width),
+      y: (a.y + b.y) / 2 / getElementScaleY(bounds, height),
       distance: points.length > 1 ? Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)) : 1 };
   }
 
   private seed() {
-    if (!this.points.size) { this.anchor = null; return; }
+    if (!this.points.size) { this.anchor = null; this.metrics = null; return; }
+    this.measure();
     const sample = this.sample();
     const state = this.options.getState();
-    this.anchor = { ...sample, zoom: state.zoomLevel, content: (state.cameraX + sample.x) / state.zoomLevel, moved: false };
+    this.anchor = { ...sample, zoom: state.zoomLevel, content: (state.cameraX + sample.x) / state.zoomLevel, moved: false, axis: "both" };
+    this.options.onScrollVerticalSeed?.();
   }
 
   private down = (event: PointerEvent) => {
@@ -120,15 +161,22 @@ export class MobileTimelineNavigation {
     this.points.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const sample = this.sample();
     const anchor = this.anchor;
-    if (!anchor.moved && Math.max(Math.abs(sample.x - anchor.x), Math.abs(sample.y - anchor.y), Math.abs(sample.distance - anchor.distance)) < 5) return;
-    anchor.moved = true;
+    const movedX = Math.abs(sample.x - anchor.x), movedY = Math.abs(sample.y - anchor.y);
+    if (!anchor.moved) {
+      if (Math.max(movedX, movedY, Math.abs(sample.distance - anchor.distance)) < MOVE_THRESHOLD_PX) return;
+      anchor.moved = true;
+      // El eje se elige UNA vez, con el recorrido que acaba de despegar el
+      // gesto, y no se revisa: revisarlo cuadro a cuadro es justo lo que hacia
+      // que el desplazamiento saltara de un eje a otro a media pasada.
+      anchor.axis = this.points.size > 1 ? "both" : movedX >= movedY ? "x" : "y";
+    }
     let zoom = this.options.getState().zoomLevel;
     if (this.points.size > 1 && this.options.getState().canZoom) {
       const view = this.options.onPreviewZoom(anchor.zoom * sample.distance / anchor.distance, sample.x);
       if (view) { zoom = view.zoomLevel; this.zoomView = view; }
     }
-    this.camera = this.options.onPreviewCameraX(anchor.content * zoom - sample.x);
-    this.options.onScrollVertical?.(anchor.y - sample.y);
+    if (anchor.axis !== "y") this.camera = this.options.onPreviewCameraX(anchor.content * zoom - sample.x);
+    if (anchor.axis !== "x") this.options.onScrollVertical?.(anchor.y - sample.y);
     // Horizontal/zoom use a fixed content anchor; vertical scroll uses deltas.
     anchor.y = sample.y;
   };
@@ -164,7 +212,7 @@ export class MobileTimelineNavigation {
 
   private cancel = () => {
     for (const id of this.points.keys()) if (this.options.container.hasPointerCapture?.(id)) this.options.container.releasePointerCapture(id);
-    this.points.clear(); this.anchor = null; this.yielding = false; this.tapTarget = null; this.flush();
+    this.points.clear(); this.anchor = null; this.metrics = null; this.yielding = false; this.tapTarget = null; this.flush();
   };
 
   destroy() {

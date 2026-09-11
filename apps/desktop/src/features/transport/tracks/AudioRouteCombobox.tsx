@@ -29,18 +29,58 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
     top: number;
     left: number;
     width: number;
+    maxHeight: number | undefined;
   } | null>(null);
   const listId = useId();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
+  // El panel se mide DESPUES de pintarse para saber si cabe debajo, asi que
+  // hace falta enterarse de cuando aterriza en el DOM.
+  const [listMounted, setListMounted] = useState(false);
+  const setListNode = useCallback((node: HTMLUListElement | null) => {
+    listRef.current = node;
+    setListMounted(node !== null);
+  }, []);
 
   const selectedIndex = options.findIndex((o) => o.value === value);
   const selectedLabel = selectedIndex >= 0 ? options[selectedIndex].label : value;
 
+  // El desplegable vive en `document.body` con posicion fija, asi que nadie lo
+  // recoloca por el: si el disparador esta abajo —el panel de una pista en un
+  // telefono apaisado lo esta siempre— la lista se pintaba fuera de la pantalla
+  // y sus opciones quedaban inalcanzables. Se abre hacia el lado donde quepa y
+  // se recorta al viewport.
   const updateAnchor = useCallback(() => {
     const rect = buttonRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setAnchor({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    const margin = 4;
+    const listHeight = listRef.current?.offsetHeight ?? 0;
+    const listWidth = listRef.current?.offsetWidth ?? rect.width;
+    const spaceBelow = window.innerHeight - rect.bottom - 2 - margin;
+    const spaceAbove = rect.top - 2 - margin;
+    const openUpwards =
+      listHeight > 0 && listHeight > spaceBelow && spaceAbove > spaceBelow;
+    const available = Math.max(margin, openUpwards ? spaceAbove : spaceBelow);
+    const top = openUpwards
+      ? Math.max(margin, rect.top - 2 - Math.min(listHeight, available))
+      : rect.bottom + 2;
+    const left = Math.max(
+      margin,
+      Math.min(rect.left, window.innerWidth - listWidth - margin),
+    );
+    // Solo se impone un alto cuando el hueco es MENOR que la lista: si cabe,
+    // manda el tope de cinco opciones que pone el CSS.
+    const maxHeight =
+      listHeight > 0 && listHeight > available ? available : undefined;
+    setAnchor((previous) =>
+      previous &&
+      previous.top === top &&
+      previous.left === left &&
+      previous.width === rect.width &&
+      previous.maxHeight === maxHeight
+        ? previous
+        : { top, left, width: rect.width, maxHeight },
+    );
   }, []);
 
   // Close on outside click / Escape, and keep the portalled list anchored
@@ -48,7 +88,10 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
   useEffect(() => {
     if (!open) return;
     updateAnchor();
-    const handlePointer = (event: MouseEvent) => {
+    // `pointerdown`, no `mousedown`: en iOS el raton de compatibilidad llega
+    // DESPUES de levantar el dedo, asi que el menu seguia abierto durante todo
+    // el toque y se cerraba tarde.
+    const handlePointer = (event: Event) => {
       const target = event.target as Node | null;
       if (
         target &&
@@ -65,17 +108,24 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
       }
     };
     const handleReposition = () => updateAnchor();
-    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("pointerdown", handlePointer, true);
     window.addEventListener("keydown", handleKey);
     window.addEventListener("scroll", handleReposition, true);
     window.addEventListener("resize", handleReposition);
     return () => {
-      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("pointerdown", handlePointer, true);
       window.removeEventListener("keydown", handleKey);
       window.removeEventListener("scroll", handleReposition, true);
       window.removeEventListener("resize", handleReposition);
     };
   }, [open, updateAnchor]);
+
+  // Segunda pasada: ya con la lista en el DOM se sabe cuanto ocupa, y solo
+  // entonces se puede decidir si se abre hacia arriba o se recorta.
+  useLayoutEffect(() => {
+    if (!open || !listMounted) return;
+    updateAnchor();
+  }, [open, listMounted, updateAnchor, options.length]);
 
   // When opening, focus the listbox so arrow keys work, and pre-select the
   // currently active route option.
@@ -158,15 +208,23 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
       {open && anchor &&
         createPortal(
           <ul
-            ref={listRef}
+            ref={setListNode}
             id={listId}
             role="listbox"
             tabIndex={-1}
             className="lt-audio-route-list"
+            // Marca para quien cierre paneles al tocar fuera: esto es SUYO
+            // aunque en el DOM cuelgue de `document.body`. Sin ella, el panel
+            // de pista se cerraba en el `pointerdown` de la opcion y el click
+            // que aplicaba el enrutado no llegaba a existir.
+            data-lt-panel-portal=""
             style={{
               position: "fixed",
               top: `${anchor.top}px`,
               left: `${anchor.left}px`,
+              ...(anchor.maxHeight === undefined
+                ? null
+                : { maxHeight: `${anchor.maxHeight}px` }),
               // Use the trigger width as a lower bound; allow the panel to
               // grow with the option labels so "Ext. Out 12-13" doesn't get
               // truncated. Capped to keep narrow tracks from spilling across

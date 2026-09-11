@@ -15,30 +15,31 @@ const managers: MobileTimelineNavigation[] = [];
 function setup(extra: Partial<MobileNavigationOptions> = {}) {
   const container = document.createElement("div"); document.body.append(container);
   Object.defineProperties(container, { offsetWidth: { value: 400 }, offsetHeight: { value: 800 } });
-  container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 800 }) as DOMRect;
+  const measures = vi.fn(() => ({ left: 0, top: 0, width: 400, height: 800 }) as DOMRect);
+  container.getBoundingClientRect = measures;
   let enabled = true;
   let change = () => {};
   const state = { cameraX: 100, zoomLevel: 1, canZoom: true };
-  const commit = vi.fn(), zoomCommit = vi.fn(), vertical = vi.fn();
+  const commit = vi.fn(), zoomCommit = vi.fn(), vertical = vi.fn(), verticalSeed = vi.fn();
   const manager = new MobileTimelineNavigation({ container, enabled: () => enabled,
     subscribe: (callback) => { change = callback; return () => {}; }, getState: () => state,
     onPreviewCameraX: (camera) => (state.cameraX = Math.max(0, camera)), onCommitCameraX: commit,
     onPreviewZoom: (zoom) => ({ cameraX: state.cameraX, zoomLevel: (state.zoomLevel = zoom) }), onCommitZoom: zoomCommit,
-    onScrollVertical: vertical, ...extra,
+    onScrollVertical: vertical, onScrollVerticalSeed: verticalSeed, ...extra,
   });
   managers.push(manager);
-  return { container, state, commit, zoomCommit, vertical, edit: () => { enabled = false; change(); } };
+  return { container, state, commit, zoomCommit, vertical, verticalSeed, measures, edit: () => { enabled = false; change(); } };
 }
 afterEach(() => { managers.splice(0).forEach((manager) => manager.destroy()); document.body.innerHTML = ""; });
 
 describe("mobile timeline navigation", () => {
-  it("pans both axes without starting content editing or a compatibility click", () => {
+  it("pans without starting content editing or a compatibility click", () => {
     const s = setup(); const edit = vi.fn(); s.container.addEventListener("pointerdown", edit); s.container.addEventListener("mousedown", edit); s.container.addEventListener("click", edit);
     expect(s.container.classList.contains("lt-mobile-navigation-surface")).toBe(true);
     pointer(s.container, "pointerdown", 1, 100, 100);
-    pointer(window, "pointermove", 1, 70, 60);
-    expect(s.state.cameraX).toBe(130); expect(s.vertical).toHaveBeenCalledWith(40);
-    pointer(window, "pointerup", 1, 70, 60);
+    pointer(window, "pointermove", 1, 70, 96);
+    expect(s.state.cameraX).toBe(130);
+    pointer(window, "pointerup", 1, 70, 96);
     s.container.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); s.container.click();
     expect(edit).not.toHaveBeenCalled(); expect(s.commit).toHaveBeenLastCalledWith(130);
   });
@@ -111,6 +112,68 @@ describe("tocar selecciona; arrastrar lo ya seleccionado edita", () => {
     pointer(s.container, "pointerdown", 2, 100, 100);
     pointer(window, "pointermove", 2, 70, 100);
     expect(s.state.cameraX).toBe(130);
+  });
+});
+
+describe("un dedo desplaza en un solo eje", () => {
+  it("un barrido horizontal no arrastra el carril vertical", () => {
+    const s = setup();
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    pointer(window, "pointermove", 1, 70, 96);
+    expect(s.state.cameraX).toBe(130);
+    expect(s.vertical).not.toHaveBeenCalled();
+  });
+
+  it("un barrido vertical no arrastra la camara", () => {
+    const s = setup();
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    pointer(window, "pointermove", 1, 96, 60);
+    expect(s.vertical).toHaveBeenCalledWith(40);
+    expect(s.state.cameraX).toBe(100);
+    pointer(window, "pointerup", 1, 96, 60);
+    // Ni se confirma una camara que nadie movio.
+    expect(s.commit).not.toHaveBeenCalled();
+  });
+
+  it("el eje no cambia a media pasada", () => {
+    const s = setup();
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    pointer(window, "pointermove", 1, 96, 60);
+    // El dedo se va ahora en horizontal: el gesto sigue siendo vertical.
+    pointer(window, "pointermove", 1, 20, 40);
+    expect(s.state.cameraX).toBe(100);
+    expect(s.vertical).toHaveBeenLastCalledWith(20);
+  });
+
+  it("la pinza gobierna los dos ejes", () => {
+    const s = setup();
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    pointer(s.container, "pointerdown", 2, 200, 100);
+    pointer(window, "pointermove", 2, 300, 60);
+    expect(s.state.zoomLevel).toBeGreaterThan(1);
+    expect(s.vertical).toHaveBeenCalled();
+  });
+});
+
+describe("el gesto no paga un reflujo por muestra", () => {
+  it("mide el contenedor al anclar, no en cada movimiento", () => {
+    const s = setup();
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    const afterSeed = s.measures.mock.calls.length;
+    pointer(window, "pointermove", 1, 90, 100);
+    pointer(window, "pointermove", 1, 80, 100);
+    pointer(window, "pointermove", 1, 70, 100);
+    expect(s.measures.mock.calls.length).toBe(afterSeed);
+  });
+
+  it("avisa de cada anclaje para que el desplazamiento se re-sincronice", () => {
+    const s = setup();
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    expect(s.verticalSeed).toHaveBeenCalledTimes(1);
+    pointer(s.container, "pointerdown", 2, 200, 100);
+    expect(s.verticalSeed).toHaveBeenCalledTimes(2);
+    pointer(window, "pointermove", 2, 300, 100);
+    expect(s.verticalSeed).toHaveBeenCalledTimes(2);
   });
 });
 

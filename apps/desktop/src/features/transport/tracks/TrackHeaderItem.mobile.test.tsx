@@ -63,6 +63,12 @@ const panel = () => screen.queryByLabelText("Volumen de Voz");
 const tapHeader = () => fireEvent.click(screen.getByText("Voz"));
 
 beforeEach(async () => {
+  // jsdom no lo trae; el desplegable de salida mantiene la opcion activa a la
+  // vista con el.
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: () => {},
+  });
   await i18n.changeLanguage("es");
   platform.mobile = true;
   useTimelineUIStore.setState({
@@ -189,5 +195,28 @@ describe("cabeceras finas y expansion en fila", () => {
     expect(panel).not.toBeNull();
     // `.lt-track-header` tiene overflow: hidden; dentro, el panel se cortaria.
     expect(panel!.closest(".lt-track-header")).toBeNull();
+  });
+  // El desplegable de salida se pinta en `document.body`, fuera del panel. El
+  // cierre "al tocar fuera" escucha en CAPTURA sobre window, asi que llegaba
+  // antes que nada: el panel se cerraba en el `pointerdown` de la opcion, se
+  // llevaba por delante la lista, y el click que aplicaba el enrutado no
+  // llegaba a existir.
+  it("elegir una salida del desplegable no cierra el panel ni pierde el enrutado", () => {
+    const props = renderHeader({
+      audioRoutingOptions: [
+        { value: "master", label: "Master" },
+        { value: "ext-1-2", label: "Ext. Out 1-2" },
+      ],
+    });
+    tapHeader();
+
+    fireEvent.click(screen.getByRole("button", { name: "Audio To Voz" }));
+    const option = screen.getByRole("option", { name: "Ext. Out 1-2" });
+
+    fireEvent.pointerDown(option);
+    expect(useTimelineUIStore.getState().expandedTrackId).toBe("t1");
+
+    fireEvent.click(option);
+    expect(props.onAudioToChange).toHaveBeenCalledWith("t1", "ext-1-2");
   });
 });

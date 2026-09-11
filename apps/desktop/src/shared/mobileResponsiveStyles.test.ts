@@ -102,6 +102,36 @@ describe("contrato responsive móvil", () => {
     expect(transport).toContain("clamp(");
   });
 
+  // El grupo de transporte reservaba 19rem de base y 17rem de suelo: en cuanto
+  // se le sumaron deshacer/rehacer, el reloj BAR/TIMECODE dejo de caber en la
+  // fila y se bajo a una segunda... mientras el grupo se estiraba para ocupar el
+  // hueco que acababa de dejar. La base solo decide el salto de linea; el ancho
+  // real lo pone `flex-grow`, asi que pedir menos no encoge nada cuando hay
+  // sitio.
+  it("el transporte no reserva el ancho que necesita el reloj", () => {
+    const buttons = declarationsFor(".lt-mobile .lt-transport-buttons");
+    const history = declarationsFor(".lt-mobile .lt-topbar-history");
+    const basis = Number(/flex:\s*1\s+1\s+([\d.]+)rem/.exec(buttons)?.[1]);
+
+    expect(basis).toBeLessThanOrEqual(14);
+    expect(buttons).toContain("min-width: 0");
+    expect(history).toContain("margin-right: 0");
+  });
+
+  // El fader es de 6 px de alto y su pulgar de 9: con el dedo no se coge. Y sin
+  // `touch-action: none` el navegador se queda con la parte vertical del
+  // arrastre, cancela el puntero y mueve la app entera en vez del fader.
+  it("los faders del panel de pista son agarrables con el dedo", () => {
+    const faders = declarationsFor(
+      '.lt-mobile .lt-mobile-track-row-panel .lt-track-pan input[type="range"]',
+    );
+
+    expect(faders).toContain("touch-action: none");
+    expect(faders).toContain("padding-block:");
+    // El relleno agranda la zona de agarre, no el riel.
+    expect(faders).toContain("background-clip: content-box");
+  });
+
   it("elige las columnas de la landing desde el espacio disponible", () => {
     const columns = declarationsFor(".lt-mobile .lt-empty-state-columns");
     const card = declarationsFor(".lt-mobile .lt-empty-state-card");

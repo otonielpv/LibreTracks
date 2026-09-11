@@ -29,7 +29,15 @@ type InputManagerState = {
 type InputManagerOptions = {
   mobileNavigation?: Pick<
     MobileNavigationOptions,
-    "enabled" | "subscribe" | "shouldEdit" | "onTap"
+    | "enabled"
+    | "subscribe"
+    | "shouldEdit"
+    | "onTap"
+    // El desplazamiento vertical tactil no es el de la rueda: acumula su propio
+    // objetivo para no leer `scrollTop` por muestra. Si viene aqui, gana al de
+    // arriba (ver el spread del constructor).
+    | "onScrollVertical"
+    | "onScrollVerticalSeed"
   >;
   container: HTMLElement;
   getState: () => InputManagerState;

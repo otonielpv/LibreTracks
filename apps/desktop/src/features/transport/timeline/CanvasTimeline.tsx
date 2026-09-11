@@ -60,6 +60,7 @@ import {
   timelineVisibleTrackHeight,
 } from "../Renderer/canvasPixelRatio";
 import { intersectVisibleBounds } from "../Renderer/gestureBounds";
+import { createTimelineVerticalScroller } from "./timelineVerticalScroll";
 import { isMobileApp } from "../desktopApi";
 import { useTimelineUIStore } from "../uiStore";
 
@@ -814,6 +815,11 @@ export function TimelineTrackCanvas({
   onTouchShouldEditRef.current = onTouchShouldEdit;
   onTouchTapRef.current = onTouchTap;
 
+  const touchVerticalScroller = useMemo(
+    () => createTimelineVerticalScroller(() => scrollViewportRef.current),
+    [scrollViewportRef],
+  );
+
   useEffect(() => {
     const container = interactionContainerRef.current;
     if (!container) {
@@ -861,6 +867,11 @@ export function TimelineTrackCanvas({
           onTouchShouldEditRef.current?.(clientX, clientY, target) ?? false,
         onTap: (clientX, clientY, target) =>
           onTouchTapRef.current?.(clientX, clientY, target),
+        // El dedo no puede pagar un reflujo por muestra: el gesto lleva su
+        // propio objetivo de desplazamiento y solo ESCRIBE (ver
+        // timelineVerticalScroll). La rueda se queda con el `+=` de arriba.
+        onScrollVertical: (deltaY) => touchVerticalScroller.scrollBy(deltaY),
+        onScrollVerticalSeed: () => touchVerticalScroller.seed(),
       } : undefined,
       getGestureBounds: () =>
         intersectVisibleBounds(container, scrollViewportRef.current),
@@ -882,6 +893,7 @@ export function TimelineTrackCanvas({
     onNativeZoomCommit,
     onNativeZoomPreview,
     scrollViewportRef,
+    touchVerticalScroller,
     trackHeightForInput,
   ]);
 
