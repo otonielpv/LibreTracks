@@ -313,10 +313,12 @@ jobs:
           brew install facebook/fb/idb-companion
           python3 -m pip install --quiet --break-system-packages fb-idb || \
             python3 -m pip install --quiet fb-idb
-          idb --version
           idb_companion --udid "${{ steps.sim.outputs.udid }}" --only simulator &
           sleep 5
           idb connect "${{ steps.sim.outputs.udid }}" || true
+          # `idb --version` does not exist. Listing targets is the real check
+          # anyway: it only answers once the companion is up and talking.
+          idb list-targets
 
       - name: Install and launch
         shell: bash
