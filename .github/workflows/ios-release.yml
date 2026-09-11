@@ -167,6 +167,31 @@ jobs:
         with:
           development-team: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
+      # Belt and braces on the build number. `--config` below is the mechanism
+      # that should win, but the Info.plist is written by `ios init`, and a
+      # CFBundleVersion that silently stayed at the marketing version only
+      # fails on the SECOND upload of a version ("build number already used"),
+      # which is the worst moment to find out. Both paths write the same value,
+      # so whichever one Tauri honours, the IPA is right — and
+      # verify-ios-ipa.sh prints what actually landed.
+      - name: Pin the build number in the generated project
+        shell: bash
+        env:
+          BUILD_NUMBER: ${{ needs.preflight.outputs.build-number }}
+        run: |
+          set -euo pipefail
+          pinned=0
+          while IFS= read -r plist; do
+            if /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist" >/dev/null 2>&1; then
+              /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$plist"
+              echo "  $plist -> CFBundleVersion=$BUILD_NUMBER"
+              pinned=$((pinned + 1))
+            fi
+          done < <(find apps/desktop/src-tauri/gen/apple -name 'Info.plist' -not -path '*/build/*')
+          if [ "$pinned" -eq 0 ]; then
+            echo "::warning::No generated Info.plist carried a CFBundleVersion; relying on --config alone."
+          fi
+
       # altool and Tauri both read the App Store Connect key from disk, not
       # from an environment variable, and altool only looks in a fixed set of
       # directories.
