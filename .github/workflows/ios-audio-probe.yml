@@ -13,6 +13,17 @@ name: iOS Audio Probe (simulator)
 
 on:
   workflow_dispatch:
+  # Narrow on purpose. A macOS runner is expensive, but these two jobs take a
+  # few minutes (they compile two sources, not the whole engine), and the code
+  # they cover has no other test: a regression in the device backend would
+  # otherwise surface as "no sound on my iPhone" weeks later.
+  push:
+    paths:
+      - 'native/audio-engine-v2/src/devices/audio_device_manager_ios.mm'
+      - 'native/audio-engine-v2/src/devices/ios_audio_session.mm'
+      - 'native/audio-engine-v2/include/lt_engine/devices/**'
+      - 'tests/ios/**'
+      - '.github/workflows/ios-audio-probe.yml'
 
 permissions:
   contents: read
@@ -94,12 +105,12 @@ jobs:
           SIM_UDID: ${{ steps.sim.outputs.udid }}
         run: xcrun simctl shutdown "${SIM_UDID:-booted}" || true
 
-  # Only worth running if the probe proved the simulator delivers audio: this
-  # job asserts behaviour, and behaviour asserted against a silent device would
-  # be a test that passes by accident or fails for the wrong reason.
+  # Runs alongside the probe rather than after it. The probe already answered
+  # the question it was written for (the simulator does deliver audio), so its
+  # job now is to be the first thing you read when this one fails: a silent
+  # runner and a broken backend look identical from here.
   engine-selftest:
     name: The real device backend, end to end
-    needs: probe
     runs-on: macos-15
     timeout-minutes: 25
 
