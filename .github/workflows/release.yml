@@ -516,6 +516,11 @@ jobs:
             # @rpath dylibs so the .app launches on Macs without that Homebrew
             # prefix (otherwise dyld aborts: Library not loaded .../ffmpeg/...).
             bash scripts/macos-bundle-ffmpeg.sh vendor/bin/native
+            # These binaries are declared as bundle.macOS.frameworks below.
+            # Keep them out of vendor/bin/native/*, which is also copied as a
+            # generic resource; otherwise notarization sees unsigned duplicates
+            # under Contents/Resources.
+            bash -c 'mkdir -p vendor/bin/macos-frameworks && mv vendor/bin/native/*.dylib vendor/bin/native/bungee.framework vendor/bin/macos-frameworks/'
           }
 
       - name: Verify ASIO compiled into release engine (Windows)

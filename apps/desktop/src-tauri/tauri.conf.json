@@ -152,12 +152,12 @@
       "minimumSystemVersion": "12.0",
       "entitlements": "entitlements.plist",
       "frameworks": [
-        "../../../vendor/bin/native/liblt_audio_engine_v2.dylib",
-        "../../../vendor/bin/native/bungee.framework",
-        "../../../vendor/bin/native/libavformat.61.dylib",
-        "../../../vendor/bin/native/libavcodec.61.dylib",
-        "../../../vendor/bin/native/libavutil.59.dylib",
-        "../../../vendor/bin/native/libswresample.5.dylib"
+        "../../../vendor/bin/macos-frameworks/liblt_audio_engine_v2.dylib",
+        "../../../vendor/bin/macos-frameworks/bungee.framework",
+        "../../../vendor/bin/macos-frameworks/libavformat.61.dylib",
+        "../../../vendor/bin/macos-frameworks/libavcodec.61.dylib",
+        "../../../vendor/bin/macos-frameworks/libavutil.59.dylib",
+        "../../../vendor/bin/macos-frameworks/libswresample.5.dylib"
       ]
     },
     "icon": [
