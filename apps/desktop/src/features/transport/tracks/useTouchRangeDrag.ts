@@ -20,6 +20,21 @@ import type { PointerEvent as ReactPointerEvent } from "react";
  * navegador se queda con la parte vertical antes de que llegue el primer
  * `pointermove`.
  */
+/**
+ * Margen muerto en cada punta, en pixeles.
+ *
+ * El pulgar no recorre el riel entero: su CENTRO va de `izquierda + mitad` a
+ * `derecha - mitad`. Repartiendo el ancho completo, tocar el pulgar con el
+ * fader al maximo daba un 98% —el valor bajaba solo por cogerlo— y llegar al
+ * tope pedia una punteria que con el dedo no se tiene. Descontando media
+ * anchura de pulgar en cada punta, tocar el pulgar en el tope da el tope.
+ *
+ * Es media anchura del pulgar mas ancho (9 px en escritorio, 7 en el panel
+ * movil), redondeado hacia arriba: pasarse solo hace que las puntas se
+ * alcancen un pelin antes, que es justo lo que se quiere.
+ */
+const EDGE_INSET_PX = 5;
+
 export function rangeValueAtPointer(
   clientX: number,
   bounds: { left: number; width: number },
@@ -30,7 +45,13 @@ export function rangeValueAtPointer(
   if (!(bounds.width > 0) || !(max > min)) {
     return min;
   }
-  const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
+  // Con un riel diminuto el margen se comeria el recorrido entero.
+  const inset = bounds.width > EDGE_INSET_PX * 4 ? EDGE_INSET_PX : 0;
+  const travel = bounds.width - inset * 2;
+  const ratio = Math.min(
+    1,
+    Math.max(0, (clientX - bounds.left - inset) / travel),
+  );
   const raw = min + ratio * (max - min);
   if (!(step > 0)) {
     return raw;

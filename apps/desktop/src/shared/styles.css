@@ -44,6 +44,15 @@ textarea {
   -webkit-user-select: text;
 }
 
+/* ...menos un fader, que no tiene texto que seleccionar. La regla de arriba se
+   lo daba junto con los campos de escribir, y en iOS dejar el dedo quieto sobre
+   el sacaba la lupa y el menu de seleccion JUSTO mientras se ajustaba. */
+input[type="range"] {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .lt-app-shell {
   width: 100vw;
   height: 100vh;

@@ -135,6 +135,18 @@ describe("contrato responsive móvil", () => {
     expect(faders).toMatch(/margin-block:\s*-/);
   });
 
+  // `input, textarea { user-select: text }` se lo daba tambien a los faders, y
+  // en iOS dejar el dedo quieto sobre uno sacaba la lupa y el menu de seleccion
+  // justo mientras se ajustaba.
+  it("un fader no es texto seleccionable", () => {
+    // El salto de linea ancla la regla suelta, no las de dentro del panel.
+    const range = declarationsFor('\ninput[type="range"]');
+
+    expect(range).toContain("user-select: none");
+    expect(range).toContain("-webkit-user-select: none");
+    expect(range).toContain("-webkit-touch-callout: none");
+  });
+
   // El valor mide por contenido y la etiqueta se lleva lo que ocupe, asi que al
   // pasar de "0.0 dB" a "-12.5 dB" el riel de al lado se encogia a media pasada
   // y el pulgar temblaba bajo el dedo.

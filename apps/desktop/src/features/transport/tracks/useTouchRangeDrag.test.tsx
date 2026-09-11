@@ -47,10 +47,21 @@ function touch(target: Element | Window, type: string, clientX: number, id = 1) 
 }
 
 describe("valor bajo el dedo", () => {
-  it("mapea el ancho del riel al recorrido del fader", () => {
-    expect(rangeValueAtPointer(100, BOUNDS, 0, 1, 0.001)).toBe(0);
+  it("mapea el recorrido del pulgar, no el ancho del riel", () => {
+    // 5 px de margen muerto en cada punta: el CENTRO del pulgar no llega al
+    // borde del riel (ver EDGE_INSET_PX).
+    expect(rangeValueAtPointer(105, BOUNDS, 0, 1, 0.001)).toBe(0);
     expect(rangeValueAtPointer(200, BOUNDS, 0, 1, 0.001)).toBe(0.5);
-    expect(rangeValueAtPointer(300, BOUNDS, 0, 1, 0.001)).toBe(1);
+    expect(rangeValueAtPointer(295, BOUNDS, 0, 1, 0.001)).toBe(1);
+  });
+
+  // Tocar el pulgar con el fader al tope le daba un 98%: bajaba de valor solo
+  // por cogerlo, y volver al 100% pedia una punteria que el dedo no tiene.
+  it("el tope se alcanza tocando el pulgar, no el borde exacto", () => {
+    const thumbAtMax = BOUNDS.left + BOUNDS.width - 4;
+    expect(rangeValueAtPointer(thumbAtMax, BOUNDS, 0, 1, 0.001)).toBe(1);
+    const thumbAtMin = BOUNDS.left + 4;
+    expect(rangeValueAtPointer(thumbAtMin, BOUNDS, 0, 1, 0.001)).toBe(0);
   });
 
   it("llega a los topes exactos aunque el dedo se salga", () => {
@@ -59,12 +70,19 @@ describe("valor bajo el dedo", () => {
   });
 
   it("respeta el paso", () => {
-    // 0.37 del recorrido de [-1, 1] con paso 0.01.
-    expect(rangeValueAtPointer(174, BOUNDS, -1, 1, 0.01)).toBe(-0.26);
+    // Punto medio exacto del recorrido util, desplazado un 10%.
+    expect(rangeValueAtPointer(219, BOUNDS, -1, 1, 0.01)).toBe(0.2);
   });
 
   it("no divide por cero con un riel sin medir", () => {
     expect(rangeValueAtPointer(50, { left: 0, width: 0 }, 0, 1, 0.001)).toBe(0);
+  });
+
+  it("un riel diminuto no se queda sin recorrido", () => {
+    const tiny = { left: 0, width: 12 };
+    expect(rangeValueAtPointer(0, tiny, 0, 1, 0.001)).toBe(0);
+    expect(rangeValueAtPointer(12, tiny, 0, 1, 0.001)).toBe(1);
+    expect(rangeValueAtPointer(6, tiny, 0, 1, 0.001)).toBe(0.5);
   });
 });
 
@@ -76,9 +94,9 @@ describe("arrastre tactil del fader", () => {
       <Fader min={0} max={1} step={0.001} onChange={onChange} onCommit={onCommit} />,
     );
 
-    touch(screen.getByLabelText("fader"), "pointerdown", 250);
+    touch(screen.getByLabelText("fader"), "pointerdown", 200);
 
-    expect(onChange).toHaveBeenCalledWith(0.75);
+    expect(onChange).toHaveBeenCalledWith(0.5);
     expect(onCommit).not.toHaveBeenCalled();
   });
 
@@ -92,9 +110,10 @@ describe("arrastre tactil del fader", () => {
 
     touch(fader, "pointerdown", 150);
     touch(window, "pointermove", 200);
-    touch(window, "pointermove", 260);
-    touch(window, "pointerup", 260);
+    touch(window, "pointermove", 257);
+    touch(window, "pointerup", 257);
 
+    // 5 px de margen muerto en cada punta: (257 - 100 - 5) / 190.
     expect(onChange).toHaveBeenLastCalledWith(0.8);
     expect(onCommit).toHaveBeenCalledTimes(1);
     // Ya soltado: el dedo de otro gesto no mueve este fader.
