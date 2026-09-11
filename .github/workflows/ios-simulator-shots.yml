@@ -99,7 +99,37 @@ jobs:
       - name: Build bundled remote frontend
         run: npm run build:remote
 
+      # Most runs of this workflow change the TOUR, not the app: the script
+      # that taps through the UI is a few lines of bash, and rebuilding the
+      # whole app to re-run it costs twenty minutes of runner for nothing. The
+      # key covers everything that ends up inside the bundle and nothing else,
+      # so editing scripts/ios-shots-tour.sh reuses the cached build and
+      # touching the app rebuilds it.
+      - name: Cache the built simulator app
+        id: app-cache
+        uses: actions/cache@v4
+        with:
+          path: simulator-app
+          key: >-
+            ios-sim-app-v1-${{ hashFiles(
+              'apps/desktop/src/**',
+              'apps/desktop/src-tauri/src/**',
+              'apps/desktop/src-tauri/*.json',
+              'apps/desktop/src-tauri/*.plist',
+              'apps/desktop/src-tauri/Cargo.toml',
+              'apps/desktop/src-tauri/resources/**',
+              'apps/remote/src/**',
+              'packages/*/src/**',
+              'crates/**/src/**',
+              'crates/**/build.rs',
+              'native/audio-engine-v2/src/**',
+              'native/audio-engine-v2/include/**',
+              'native/audio-engine-v2/CMakeLists.txt',
+              'Cargo.lock',
+              'package-lock.json') }}
+
       - name: Build native audio engine and dependencies
+        if: steps.app-cache.outputs.cache-hit != 'true'
         uses: ./.github/actions/ios-native-deps
         with:
           bungee-version: ${{ env.BUNGEE_VERSION }}
@@ -107,11 +137,13 @@ jobs:
           sdk: iphonesimulator
 
       - name: Generate the Xcode project
+        if: steps.app-cache.outputs.cache-hit != 'true'
         uses: ./.github/actions/ios-xcode-project
 
       # Same signing workaround as the smoke build: there is no --no-sign flag,
       # and a simulator build needs no identity.
       - name: Build the app for the simulator
+        if: steps.app-cache.outputs.cache-hit != 'true'
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target-ios-sim
         shell: bash
@@ -131,8 +163,24 @@ jobs:
       - name: Locate the built app
         id: app
         shell: bash
+        env:
+          CACHE_HIT: ${{ steps.app-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
+          staging="$GITHUB_WORKSPACE/simulator-app"
+
+          if [ "$CACHE_HIT" = "true" ]; then
+            app="$(find "$staging" -maxdepth 1 -type d -name '*.app' -print -quit 2>/dev/null || true)"
+            if [ -z "$app" ]; then
+              echo "::error::Cache hit but simulator-app/ holds no .app. Bump the key prefix to force a rebuild."
+              ls -la "$staging" || true
+              exit 1
+            fi
+            echo "Reusing the cached build: $app"
+            echo "path=$app" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           apple_dir="apps/desktop/src-tauri/gen/apple"
           # Tauri moves the .app out of the xcarchive into build/<arch>/ for
           # simulator targets; fall back to the archive if that ever changes.
@@ -148,6 +196,13 @@ jobs:
             exit 1
           fi
           echo "Found $app"
+
+          # ditto, not cp: the bundle carries symlinks and resource forks that
+          # a plain copy flattens, and an app that installs but misbehaves is
+          # the worst thing to cache.
+          mkdir -p "$staging"
+          ditto "$app" "$staging/$(basename "$app")"
+          app="$staging/$(basename "$app")"
           # Prove it is a simulator binary before spending time on a boot that
           # would fail with a confusing "incompatible architecture".
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"

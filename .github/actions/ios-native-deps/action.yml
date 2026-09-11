@@ -149,8 +149,33 @@ runs:
         FFMPEG_DIR: ${{ steps.layout.outputs.ffmpeg-dir }}
       run: bash scripts/build-ffmpeg-ios.sh "$PWD/$FFMPEG_DIR"
 
+    # The engine is ~10 minutes of C++ that changes far less often than the
+    # app around it. The SDK version goes in the key because a cached object
+    # file built against another SDK is exactly the kind of thing that fails
+    # later, somewhere else, in a way nobody connects back to a cache.
+    - name: Read the SDK version
+      id: sdk
+      shell: bash
+      env:
+        IOS_SDK: ${{ inputs.sdk }}
+      run: echo "version=$(xcrun --sdk "$IOS_SDK" --show-sdk-version)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache the engine build
+      id: engine-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ steps.layout.outputs.build-dir }}
+          ${{ steps.layout.outputs.link-dir }}
+        key: >-
+          engine-ios-${{ steps.layout.outputs.suffix }}-sdk${{ steps.sdk.outputs.version }}-bungee${{ inputs.bungee-version }}-ffmpeg${{ inputs.ffmpeg-version }}-${{ hashFiles(
+            'native/audio-engine-v2/src/**',
+            'native/audio-engine-v2/include/**',
+            'native/audio-engine-v2/CMakeLists.txt',
+            'native/audio-engine-v2/**/CMakeLists.txt') }}
+
     - name: Build native audio engine for iOS
-      id: link-dir
+      if: steps.engine-cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         IOS_DEPLOYMENT_TARGET: ${{ inputs.deployment-target }}
@@ -199,11 +224,31 @@ runs:
            "$ffmpeg_dir/lib/libavutil.a" \
            "$ffmpeg_dir/lib/libswresample.a" \
            "$link_dir/"
-        lipo -info "$link_dir/liblt_audio_engine_v2.a"
-        lipo -info "$link_dir/libsndfile.a"
-        for library in libbungee.a libpffft.a libavformat.a libavcodec.a \
-                       libavutil.a libswresample.a; do
-          lipo -info "$link_dir/$library"
+        echo "Engine built into $link_dir"
+
+    # Runs on every build, cached or not. These are the guardrails, and a
+    # guardrail that only fires on a cache miss protects nothing: a cache
+    # entry poisoned by a JUCE build would sail straight through.
+    - name: Verify the link set
+      id: link-dir
+      shell: bash
+      env:
+        BUILD_REL_DIR: ${{ steps.layout.outputs.build-dir }}
+        LINK_REL_DIR: ${{ steps.layout.outputs.link-dir }}
+      run: |
+        set -euo pipefail
+        build_dir="$GITHUB_WORKSPACE/$BUILD_REL_DIR"
+        link_dir="$GITHUB_WORKSPACE/$LINK_REL_DIR"
+
+        for archive in liblt_audio_engine_v2.a libsndfile.a libbungee.a \
+                       libpffft.a libavformat.a libavcodec.a libavutil.a \
+                       libswresample.a; do
+          if [ ! -f "$link_dir/$archive" ]; then
+            echo "::error::$archive is missing from $link_dir. If this was a cache hit, bump the engine cache key."
+            ls -la "$link_dir" || true
+            exit 1
+          fi
+          lipo -info "$link_dir/$archive"
         done
 
         grep -q 'LT_ENGINE_USE_BUNGEE:BOOL=ON' "$build_dir/CMakeCache.txt"
