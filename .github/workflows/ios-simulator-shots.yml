@@ -49,6 +49,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # First, before anything expensive: a typo in the device name must not
+      # cost forty minutes of build to discover.
+      - name: Resolve the simulator
+        id: sim
+        shell: bash
+        env:
+          DEVICE_NAME: ${{ inputs.device }}
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r --arg name "$DEVICE_NAME" \
+              '[.devices[][] | select(.name == $name)] | .[0].udid')"
+          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
+            echo "::error::No available simulator named '$DEVICE_NAME'."
+            echo "iPads on this runner:"
+            xcrun simctl list devices available -j | jq -r '.devices[][].name' | grep -i ipad | sort -u
+            echo "iPhones on this runner:"
+            xcrun simctl list devices available -j | jq -r '.devices[][].name' | grep -i iphone | sort -u
+            exit 1
+          fi
+          echo "Using $DEVICE_NAME ($udid)"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -130,23 +153,13 @@ jobs:
           echo "path=$app" >> "$GITHUB_OUTPUT"
 
       - name: Boot the simulator
-        id: sim
         shell: bash
         env:
-          DEVICE_NAME: ${{ inputs.device }}
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
         run: |
           set -euo pipefail
-          udid="$(xcrun simctl list devices available -j \
-            | jq -r --arg name "$DEVICE_NAME" \
-              '[.devices[][] | select(.name == $name)] | .[0].udid')"
-          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
-            echo "::error::No available simulator named '$DEVICE_NAME'. Available devices:"
-            xcrun simctl list devices available | grep -E '^\s+\w' | head -60
-            exit 1
-          fi
-          xcrun simctl boot "$udid"
-          xcrun simctl bootstatus "$udid" -b
-          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$SIM_UDID"
+          xcrun simctl bootstatus "$SIM_UDID" -b
 
       - name: Install and launch
         id: run
