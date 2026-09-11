@@ -148,12 +148,26 @@ case "$device_family" in
   '[2]')   device_family="iPad only" ;;
 esac
 
+# An iPad build that still allows multitasking has its orientation list
+# ignored by iPadOS, so a landscape-only app gets drawn squashed into the top
+# of a portrait screen. It looks broken, and it is the reviewer's first
+# impression. A warning rather than a failure: dropping iPad support is also a
+# valid answer to this.
+fullscreen="no"
+if /usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' "$plist" 2>/dev/null | grep -q true; then
+  fullscreen="yes"
+fi
+if [ "$fullscreen" = "no" ] && [ "$device_family" != "iPhone only" ]; then
+  echo "::warning::The IPA supports iPad without UIRequiresFullScreen, so iPadOS will ignore the landscape-only orientation list and render the app in portrait." >&2
+fi
+
 echo "IPA:              $ipa_path"
 echo "Bundle:           $bundle_id"
 echo "Version:          $short_version ($build_number)"
 echo "Minimum iOS:      $minimum_ios"
 echo "Architectures:    $archs"
 echo "Device family:    $device_family"
+echo "Full screen:      UIRequiresFullScreen = $fullscreen"
 echo "Background audio: declared"
 echo "Encryption:       ITSAppUsesNonExemptEncryption = $encryption"
 echo "Audio engine:     native static C++ engine linked (RemoteIO, no JUCE)"

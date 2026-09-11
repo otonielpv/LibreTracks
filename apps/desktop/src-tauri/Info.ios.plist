@@ -27,6 +27,19 @@
     <string>UIInterfaceOrientationLandscapeLeft</string>
     <string>UIInterfaceOrientationLandscapeRight</string>
   </array>
+  <!-- En iPHONE la lista de arriba basta. En iPAD no: mientras la app admita
+       multitarea (Split View / Slide Over), iPadOS EXIGE que soporte las
+       cuatro orientaciones y se salta la lista. Sin esto, un iPad en vertical
+       dibuja el panel de transporte apretado contra el borde superior con
+       media pantalla en negro — que es exactamente lo que aparecio en las
+       capturas del simulador del 2026-09-11 (y lo que veria un revisor de
+       Apple, porque el IPA declara iPad).
+
+       Renunciar a la multitarea es el precio, y para un instrumento de
+       directo es el correcto: la app se usa a pantalla completa, igual que
+       Ableton en escritorio. -->
+  <key>UIRequiresFullScreen</key>
+  <true/>
   <!-- Expose the sandbox Documents directory in Files so a tester can send us
        LibreTracks-picker.log without Xcode or a signed development build. -->
   <key>UIFileSharingEnabled</key>

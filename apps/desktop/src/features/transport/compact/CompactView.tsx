@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   memo,
   useCallback,
@@ -281,6 +282,7 @@ function CompactViewComponent({
   collapsedFolders,
   onToggleFolder,
 }: CompactViewProps) {
+  const { t } = useTranslation();
   const isPackageDragOver = dragPreview?.isPackage === true;
 
   // Which column is mid-resize, if any. Lifted here only so the view root can
@@ -472,7 +474,9 @@ function CompactViewComponent({
           <span className="material-symbols-outlined" aria-hidden="true">
             {isMixerVisible ? "expand_more" : "expand_less"}
           </span>
-          {isMixerVisible ? "Ocultar mixer" : "Mixer"}
+          {isMixerVisible
+            ? t("transport.shell.hideMixer")
+            : t("transport.shell.showMixer")}
         </button>
       ) : null}
 

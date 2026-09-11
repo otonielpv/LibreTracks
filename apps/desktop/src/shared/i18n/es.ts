@@ -146,6 +146,8 @@ const es = {
       mobileSessionNameTaken: "Ya existe una sesion con ese nombre.",
       mobileSessionsHeading: "Tus sesiones",
       demoSong: "Cancion de demostracion",
+      showMixer: "Mixer",
+      hideMixer: "Ocultar mixer",
       demoSongHint:
         "Crea una sesion de ejemplo con cuatro pistas para probar la app",
       demoSongFailed: "No se pudo crear la cancion de demostracion",

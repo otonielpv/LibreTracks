@@ -166,6 +166,25 @@ jobs:
           xcrun simctl boot "$SIM_UDID"
           xcrun simctl bootstatus "$SIM_UDID" -b
 
+      # idb drives the taps. simctl can install, launch and screenshot, but it
+      # cannot touch the screen, and the tour needs to dismiss two dialogs and
+      # open three panels. idb reads the accessibility tree, so the tour can
+      # find controls by label instead of by coordinates.
+      - name: Install idb
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew tap facebook/fb
+          brew install idb-companion
+          python3 -m pip install --quiet --break-system-packages fb-idb || \
+            python3 -m pip install --quiet fb-idb
+          idb --version || true
+          # idb talks to a companion process per simulator; starting it here
+          # keeps the first tap from paying for the handshake.
+          idb_companion --udid "${{ steps.sim.outputs.udid }}" --only simulator &
+          sleep 5
+          idb connect "${{ steps.sim.outputs.udid }}" || true
+
       - name: Install and launch
         id: run
         shell: bash
@@ -189,22 +208,13 @@ jobs:
           esac
           xcrun simctl launch "$SIM_UDID" com.libretracks.ios \
             -AppleLanguages "($LANG_CODE)" -AppleLocale "$locale"
-
-          # A cold first launch does real work: it unpacks the bundled demo
-          # session and analyses its waveforms. Take a series rather than one
-          # shot, so a slow start is visible instead of being mistaken for a
-          # blank screen.
           sleep "$SETTLE"
-          xcrun simctl io "$SIM_UDID" screenshot "$shots/01-after-${SETTLE}s.png"
-          sleep 15
-          xcrun simctl io "$SIM_UDID" screenshot "$shots/02-after-$((SETTLE + 15))s.png"
-          sleep 20
-          xcrun simctl io "$SIM_UDID" screenshot "$shots/03-after-$((SETTLE + 35))s.png"
 
-          for shot in "$shots"/*.png; do
-            echo "$(basename "$shot"): $(sips -g pixelWidth -g pixelHeight "$shot" \
-              | awk '/pixel/ {printf "%s ", $2}')"
-          done
+      - name: Walk the app and take the six shots
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: bash scripts/ios-shots-tour.sh "$SIM_UDID" "$GITHUB_WORKSPACE/simulator-shots"
 
       # The app's own log is the difference between "it is still loading" and
       # "it crashed on launch and the screenshot is of the home screen".
