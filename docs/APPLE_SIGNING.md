@@ -364,9 +364,16 @@ Nada de esto lo puede hacer la CI:
 2. **La ficha**: capturas por tamaño de pantalla, descripción, categoría,
    clasificación por edades, URL de soporte y la de privacidad
    (`libretracks.com/privacy`, que ya existe).
-3. **Cuidado con lo que promete el texto.** MIDI no existe en móvil; no debe
+3. **Decidir el iPad.** El IPA que genera Tauri declara hoy **iPhone + iPad**
+   (lo imprime `verify-ios-ipa.sh` en cada build, en *Device family*). Eso
+   significa que un revisor de Apple la abrirá en iPad y que las capturas de
+   iPad pasan a ser obligatorias. Si no quieres mantener iPad de momento, hay
+   que forzar `TARGETED_DEVICE_FAMILY = 1` en el proyecto generado, igual que
+   se hace con el manifiesto de privacidad; si sí lo quieres, hay que probar
+   ahí antes de enviarlo.
+4. **Cuidado con lo que promete el texto.** MIDI no existe en móvil; no debe
    aparecer en la ficha ni en las capturas.
-4. **Cumplimiento de exportación**: ya está resuelto en el `Info.plist`
+5. **Cumplimiento de exportación**: ya está resuelto en el `Info.plist`
    (`ITSAppUsesNonExemptEncryption = false`), así que App Store Connect no
    volverá a preguntarlo en cada envío.
 
