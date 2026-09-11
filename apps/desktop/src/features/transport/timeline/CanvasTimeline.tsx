@@ -436,6 +436,30 @@ export function TimelineRulerCanvas({
     width,
   ]);
 
+  // Espejo en refs de TODO lo que el gesto llama.
+  //
+  // Estas props llegan como funciones nuevas en cada render del panel de
+  // transporte (son flechas escritas en el JSX), asi que un efecto que dependa
+  // de ellas destruye y vuelve a crear el InputManager cada vez que el panel
+  // repinta por cualquier motivo —una onda que termina de cargarse, un medidor—.
+  // Si eso pasa a media pasada, el dedo sigue en la pantalla pero el gesto ya no
+  // existe: el desplazamiento se para en seco hasta levantar el dedo y volver a
+  // empezar. Por eso el efecto NO puede depender de ninguna de ellas.
+  const gestureRef = useRef({
+    onNativeCameraXPreview,
+    onNativeCameraXCommit,
+    onNativeZoomPreview,
+    onNativeZoomCommit,
+    onNativeTrackHeightChange,
+  });
+  gestureRef.current = {
+    onNativeCameraXPreview,
+    onNativeCameraXCommit,
+    onNativeZoomPreview,
+    onNativeZoomCommit,
+    onNativeTrackHeightChange,
+  };
+
   useEffect(() => {
     const container = interactionContainerRef.current;
     if (!container) {
@@ -458,11 +482,15 @@ export function TimelineRulerCanvas({
       trackHeightStep: TRACK_HEIGHT_STEP,
       trackHeightMin: TRACK_HEIGHT_MIN,
       trackHeightMax: TRACK_HEIGHT_MAX,
-      onPreviewCameraX: onNativeCameraXPreview,
-      onCommitCameraX: onNativeCameraXCommit,
-      onPreviewZoom: onNativeZoomPreview,
-      onCommitZoom: onNativeZoomCommit,
-      onTrackHeightChange: onNativeTrackHeightChange,
+      onPreviewCameraX: (cameraX) =>
+        gestureRef.current.onNativeCameraXPreview(cameraX),
+      onCommitCameraX: (cameraX) =>
+        gestureRef.current.onNativeCameraXCommit(cameraX),
+      onPreviewZoom: (zoomLevel, anchorViewportX) =>
+        gestureRef.current.onNativeZoomPreview(zoomLevel, anchorViewportX),
+      onCommitZoom: (view) => gestureRef.current.onNativeZoomCommit(view),
+      onTrackHeightChange: (nextTrackHeight) =>
+        gestureRef.current.onNativeTrackHeightChange(nextTrackHeight),
     });
 
     return () => {
@@ -474,11 +502,6 @@ export function TimelineRulerCanvas({
     interactionContainerRef,
     livePixelsPerSecondRef,
     navigationScheme,
-    onNativeCameraXCommit,
-    onNativeCameraXPreview,
-    onNativeTrackHeightChange,
-    onNativeZoomCommit,
-    onNativeZoomPreview,
     trackHeight,
   ]);
 
@@ -814,6 +837,31 @@ export function TimelineTrackCanvas({
   const onTouchTapRef = useRef(onTouchTap);
   onTouchShouldEditRef.current = onTouchShouldEdit;
   onTouchTapRef.current = onTouchTap;
+  // Espejo en refs de TODO lo que el gesto llama.
+  //
+  // Estas props llegan como funciones nuevas en cada render del panel de
+  // transporte (son flechas escritas en el JSX), asi que un efecto que dependa
+  // de ellas destruye y vuelve a crear el InputManager cada vez que el panel
+  // repinta por cualquier motivo —una onda que termina de cargarse, un medidor—.
+  // Si eso pasa a media pasada, el dedo sigue en la pantalla pero el gesto ya no
+  // existe: el desplazamiento se para en seco hasta levantar el dedo y volver a
+  // empezar. Por eso el efecto NO puede depender de ninguna de ellas.
+  const gestureRef = useRef({
+    onNativeCameraXPreview,
+    onNativeCameraXCommit,
+    onNativeZoomPreview,
+    onNativeZoomCommit,
+    onNativeTrackHeightChange,
+    onNativeTrackRowHeightStep,
+  });
+  gestureRef.current = {
+    onNativeCameraXPreview,
+    onNativeCameraXCommit,
+    onNativeZoomPreview,
+    onNativeZoomCommit,
+    onNativeTrackHeightChange,
+    onNativeTrackRowHeightStep,
+  };
 
   const touchVerticalScroller = useMemo(
     () => createTimelineVerticalScroller(() => scrollViewportRef.current),
@@ -842,16 +890,21 @@ export function TimelineTrackCanvas({
       trackHeightStep: TRACK_HEIGHT_STEP,
       trackHeightMin: TRACK_HEIGHT_MIN,
       trackHeightMax: TRACK_HEIGHT_MAX,
-      onPreviewCameraX: onNativeCameraXPreview,
-      onCommitCameraX: onNativeCameraXCommit,
-      onPreviewZoom: onNativeZoomPreview,
-      onCommitZoom: onNativeZoomCommit,
-      onTrackHeightChange: onNativeTrackHeightChange,
+      onPreviewCameraX: (cameraX) =>
+        gestureRef.current.onNativeCameraXPreview(cameraX),
+      onCommitCameraX: (cameraX) =>
+        gestureRef.current.onNativeCameraXCommit(cameraX),
+      onPreviewZoom: (zoomLevel, anchorViewportX) =>
+        gestureRef.current.onNativeZoomPreview(zoomLevel, anchorViewportX),
+      onCommitZoom: (view) => gestureRef.current.onNativeZoomCommit(view),
+      onTrackHeightChange: (nextTrackHeight) =>
+        gestureRef.current.onNativeTrackHeightChange(nextTrackHeight),
       // Tablets may have a mouse or trackpad attached, but row-specific height
       // is intentionally a desktop-only editing affordance.
       onTrackRowHeightStep: isMobileApp
         ? undefined
-        : onNativeTrackRowHeightStep,
+        : (localY, deltaPx) =>
+            gestureRef.current.onNativeTrackRowHeightStep(localY, deltaPx),
       onScrollVertical: (deltaY) => {
         const viewport = scrollViewportRef.current;
         if (!viewport) return;
@@ -886,12 +939,6 @@ export function TimelineTrackCanvas({
     interactionContainerRef,
     livePixelsPerSecondRef,
     navigationScheme,
-    onNativeCameraXCommit,
-    onNativeCameraXPreview,
-    onNativeTrackHeightChange,
-    onNativeTrackRowHeightStep,
-    onNativeZoomCommit,
-    onNativeZoomPreview,
     scrollViewportRef,
     touchVerticalScroller,
     trackHeightForInput,

@@ -3907,6 +3907,8 @@ html.lt-ios body {
 .lt-track-header.is-condensed .lt-track-mix-value,
 .lt-track-header.is-micro .lt-track-mix-value {
   margin-left: 0;
+  /* El hueco ya lo fija el span (flex: 0 0 1.85rem) y la etiqueta no esta. */
+  min-width: 0;
 }
 
 .lt-track-header.is-compact .lt-track-volume input[type="range"],
@@ -4353,13 +4355,27 @@ html.lt-ios body {
 }
 
 /* Inline value shown next to the VOL/PAN label (Ableton-style readout). */
+/* Ancho FIJO. La etiqueta mide por contenido y el fader se queda el resto, asi
+   que al pasar de "0.0 dB" a "-12.5 dB" el riel se encogia a media pasada: el
+   pulgar temblaba bajo el dedo y el punto que estabas tocando cambiaba de
+   valor. Reservado para el texto mas largo y alineado a la derecha, el numero
+   cambia sin mover nada. */
 .lt-track-mix-value {
+  display: inline-block;
+  min-width: 4.4em;
   margin-left: 0.35rem;
   color: #8bd7cc;
   font-style: normal;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+  text-align: right;
   text-transform: none;
+}
+
+/* "L 100" ocupa bastante menos que "-12.5 dB". */
+.lt-track-pan .lt-track-mix-value {
+  min-width: 2.9em;
 }
 
 .lt-track-volume > span,
@@ -11243,32 +11259,23 @@ html.lt-ios body {
   min-width: 0;
 }
 
-/* El fader se lleva el gesto ENTERO. Sin `touch-action: none`, WKWebView decide
-   a los pocos pixeles que un arrastre torcido era un desplazamiento, cancela el
-   puntero y suelta el fader mientras la app entera se va detras del dedo.
-   El relleno agranda la zona de agarre sin engordar el riel: el degradado se
-   queda dentro con `background-clip: content-box`. El arrastre en si lo lleva
-   useTouchRangeDrag, porque WebKit solo mueve el pulgar si el dedo aterriza
-   justo encima de el. */
+/* Zona de agarre de 20 px que NO se ve y NO ocupa.
+   El riel y el pulgar se quedan como en escritorio —engordarlos quedaba feo—:
+   el relleno agranda la caja que recibe el toque, `background-clip: content-box`
+   deja el degradado en los 6 px de siempre y el margen negativo devuelve el alto
+   que el relleno anadia, asi que la fila del panel no cambia.
+   `touch-action: none` es aparte: sin el, WKWebView decide a los pocos pixeles
+   que un arrastre torcido era un desplazamiento, cancela el puntero y suelta el
+   fader mientras la app entera se va detras del dedo. Y el arrastre en si lo
+   lleva useTouchRangeDrag, porque WebKit solo mueve el pulgar si el dedo
+   aterriza justo encima de el. */
 .lt-mobile .lt-mobile-track-row-panel .lt-track-volume input[type="range"],
 .lt-mobile .lt-mobile-track-row-panel .lt-track-pan input[type="range"] {
-  height: 1.75rem;
-  padding-block: 0.6875rem;
+  height: 1.25rem;
+  padding-block: 0.4375rem;
+  margin-block: -0.4375rem;
   background-clip: content-box;
   touch-action: none;
-}
-
-.lt-mobile
-  .lt-mobile-track-row-panel
-  .lt-track-volume
-  input[type="range"]::-webkit-slider-thumb,
-.lt-mobile
-  .lt-mobile-track-row-panel
-  .lt-track-pan
-  input[type="range"]::-webkit-slider-thumb {
-  width: 14px;
-  height: 24px;
-  border-radius: 3px;
 }
 
 /* El grupo M/S/T es una rejilla de celdas de 24 px. Agrandar solo los botones

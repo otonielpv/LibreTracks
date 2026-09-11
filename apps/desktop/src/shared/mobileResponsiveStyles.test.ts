@@ -128,8 +128,24 @@ describe("contrato responsive móvil", () => {
 
     expect(faders).toContain("touch-action: none");
     expect(faders).toContain("padding-block:");
-    // El relleno agranda la zona de agarre, no el riel.
+    // El relleno agranda la zona de agarre, no el riel...
     expect(faders).toContain("background-clip: content-box");
+    // ...y el margen negativo devuelve el alto que anadia, para que la fila del
+    // panel no engorde. Sin el, el fader se ve el doble de grande.
+    expect(faders).toMatch(/margin-block:\s*-/);
+  });
+
+  // El valor mide por contenido y la etiqueta se lleva lo que ocupe, asi que al
+  // pasar de "0.0 dB" a "-12.5 dB" el riel de al lado se encogia a media pasada
+  // y el pulgar temblaba bajo el dedo.
+  it("el numero del fader no cambia de ancho al arrastrarlo", () => {
+    // El salto de linea ancla la regla BASE, no la que recorta el ancho del
+    // paneo (`.lt-track-pan .lt-track-mix-value`).
+    const value = declarationsFor("\n.lt-track-mix-value");
+
+    expect(value).toContain("min-width:");
+    expect(value).toContain("text-align: right");
+    expect(value).toContain("font-variant-numeric: tabular-nums");
   });
 
   it("elige las columnas de la landing desde el espacio disponible", () => {
