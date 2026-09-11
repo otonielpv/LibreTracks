@@ -629,6 +629,49 @@ TEST_CASE("master fade ramps output gain in the audio callback") {
     CHECK(rms(right_head) > rms(right_tail));
 }
 
+// Repro: an automation cue that jumps to another song with a 2 s fade faded
+// EVERYTHING out — the metronome, the voice guide and the ambient pad went
+// down with the song. Those are cues for the player, not part of the song: the
+// song fades under them and they keep their level. The transition fade now
+// runs where the region master gain runs, on the tracks only.
+TEST_CASE("the jump transition fade does not fade the metronome") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = std::make_shared<Session>(one_track_session(0, 48000 * 4));
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.set_metronome_config(MetronomeConfig{true, 1.0f, "master", true});
+    clock.play();
+
+    // Faded fully out, instantly: whatever is still audible is not the song.
+    mixer.start_master_fade(0.0f, 0.0);
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    constexpr int kBlocks = 200;                 // ~2.1 s at 48k/512
+    float loudest = 0.0f;
+    std::size_t audible_frames = 0;
+    for (int block = 0; block < kBlocks; ++block) {
+        std::fill(left.begin(), left.end(), 0.0f);
+        std::fill(right.begin(), right.end(), 0.0f);
+        mixer.render(out, 2, kBlock, clock.sample_rate());
+        for (float sample : left) {
+            const float magnitude = std::abs(sample);
+            loudest = std::max(loudest, magnitude);
+            if (magnitude > 1.0e-6f)
+                ++audible_frames;
+        }
+    }
+
+    CHECK(mixer.metronome_diagnostics().rendered_clicks_count > 0);
+    CHECK(loudest > 0.01f);   // the click is still there under a full fade-out
+    // …and the song really is gone: only the short clicks survive, not the
+    // continuous sine of the track.
+    CHECK(audible_frames < static_cast<std::size_t>(kBlocks) * kBlock / 4);
+}
+
 // Repro: a song with one empty track (no clips) collapses to
 // end_frame == start_frame. The per-song loop in render() skips it via
 // `continue`, and the metronome render call lives inside that loop — so

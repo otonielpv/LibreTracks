@@ -399,6 +399,10 @@ private:
     float master_gain_target_ = 1.0f;
     int master_fade_total_frames_ = 0;
     int master_fade_processed_frames_ = 0;
+    // Frames of the ramp already consumed when the current callback started.
+    // The fade is resolved once per block and applied per span, so the split
+    // jump path can map each span back to the right point of the ramp.
+    int master_fade_block_start_frames_ = 0;
 
     // When a scheduled jump fires inside the audio callback, the target frame is written here
     // so the control thread can call prepare_for_transport_discontinuity() for pitch.
@@ -426,7 +430,23 @@ private:
                               int num_frames,
                               int output_offset,
                               const std::shared_ptr<const Session>& session) noexcept;
-    void apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept;
+    // Transition fade (the fade-out/fade-in of a jump). Like the region master
+    // gain, it attenuates ONLY the tracks: a song that fades out must not drag
+    // the metronome, the voice guide or the ambient pad down with it — those
+    // are cues for the player, not part of the song.
+    //
+    // The ramp is resolved once per callback (begin_), each render span
+    // multiplies its own window by master_fade_gain_at(), and the block ends by
+    // advancing the ramp (end_) whether or not anything was rendered, so the
+    // fade keeps wall-clock time even with the transport stopped.
+    void begin_master_fade_block() noexcept;
+    float master_fade_gain_at(int frame_in_block) const noexcept;
+    void apply_master_fade_to_tracks(float** output_channels,
+                                     int num_channels,
+                                     int num_frames,
+                                     int output_offset) noexcept;
+    void end_master_fade_block(int num_frames) noexcept;
+    void apply_output_limiter(float** output_channels, int num_channels, int num_frames) noexcept;
     // Multiplies the track bus by the master_gain of whichever region
     // contains `timeline_frame`. Called right after the track render loop and
     // BEFORE the metronome/voice-guide are mixed in, so the song master volume

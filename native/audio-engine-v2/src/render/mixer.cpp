@@ -915,6 +915,8 @@ void Mixer::render_timeline_span(float** output_channels,
     // window before the metronome/voice-guide mix so they keep their own level.
     apply_region_master_gain_to_tracks(output_channels, num_channels, num_frames,
                                        output_offset, session.get(), timeline_frame);
+    // Same for the jump transition fade: the song fades, the cues do not.
+    apply_master_fade_to_tracks(output_channels, num_channels, num_frames, output_offset);
 
     std::array<float*, 64> shifted_channels{};
     float** metronome_channels = output_channels;
@@ -988,6 +990,11 @@ void Mixer::render(float** output_channels,
     Frame timeline_frame = clock_->position().frame;
 
     reset_track_meters();
+
+    // Resolve the transition fade for this block before anything renders: the
+    // track spans below multiply themselves by it, and end_master_fade_block()
+    // advances the ramp once at the end of the callback.
+    begin_master_fade_block();
 
     bool fade_processed_in_split = false;
     if (due_jump) {
@@ -1338,6 +1345,9 @@ void Mixer::render(float** output_channels,
         // level regardless of how low the song is turned down.
         apply_region_master_gain_to_tracks(output_channels, num_channels, num_frames,
                                            /*output_offset=*/0, session.get(), timeline_frame);
+        // Same for the jump transition fade: the song fades, the cues do not.
+        apply_master_fade_to_tracks(output_channels, num_channels, num_frames,
+                                    /*output_offset=*/0);
 
         metronome_.render(output_channels, num_channels, num_frames,
                           clock_->sample_rate(), timeline_frame, session.get(),
@@ -1357,10 +1367,10 @@ void Mixer::render(float** output_channels,
     // enabled, with or without play. The renderer keeps its own read cursor and
     // never consults the clock, so we drive it here — once per callback, on the
     // full block, outside the Playing branch above. It stays after the track
-    // render (so it isn't attenuated by the song master gain, matching the
-    // metronome / voice guide) and before apply_master_gain below. The Playing
-    // and due_jump branches deliberately no longer call it, so it renders
-    // exactly once per callback (no double cursor advance).
+    // render (so it is attenuated neither by the song master gain nor by a
+    // jump's transition fade, matching the metronome / voice guide). The
+    // Playing and due_jump branches deliberately no longer call it, so it
+    // renders exactly once per callback (no double cursor advance).
     // …unless the user opted into "stop with playback", in which case the pad
     // follows the transport through a gate instead of its enabled switch, so it
     // fades out on stop/pause and returns on play with the switch still on.
@@ -1375,7 +1385,11 @@ void Mixer::render(float** output_channels,
     if (!fade_processed_in_split)
         fade_.process(output_channels, num_channels, num_frames);
 
-    apply_master_gain(output_channels, num_channels, num_frames);
+    // The transition fade was already applied to the tracks (and only to them);
+    // here the ramp just moves on by one block's worth of frames, whether or
+    // not the transport rendered anything.
+    end_master_fade_block(num_frames);
+    apply_output_limiter(output_channels, num_channels, num_frames);
 
     update_region_meters(output_channels, num_channels, num_frames,
                          session.get(), timeline_frame);
@@ -1712,10 +1726,7 @@ std::vector<RegionMeterValues> Mixer::region_meters() const {
     return values;
 }
 
-void Mixer::apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept {
-    if (num_channels <= 0 || num_frames <= 0)
-        return;
-
+void Mixer::begin_master_fade_block() noexcept {
     const auto seq = master_fade_request_seq_.load(std::memory_order_acquire);
     if (seq != master_fade_applied_seq_) {
         master_fade_applied_seq_ = seq;
@@ -1740,27 +1751,63 @@ void Mixer::apply_master_gain(float** output_channels, int num_channels, int num
             master_fade_total_frames_);
     }
 
-    for (int f = 0; f < num_frames; ++f) {
-        if (master_fade_processed_frames_ < master_fade_total_frames_) {
-            const float t = master_fade_total_frames_ <= 1
-                ? 1.0f
-                : static_cast<float>(master_fade_processed_frames_)
-                    / static_cast<float>(master_fade_total_frames_ - 1);
-            const float eased = t * t * (3.0f - 2.0f * t);
-            master_gain_current_ =
-                master_gain_start_ + (master_gain_target_ - master_gain_start_) * eased;
-            ++master_fade_processed_frames_;
-            if (master_fade_processed_frames_ >= master_fade_total_frames_)
-                master_gain_current_ = master_gain_target_;
-        }
+    master_fade_block_start_frames_ = master_fade_processed_frames_;
+}
 
-        if (std::abs(master_gain_current_ - 1.0f) <= 0.000001f)
+float Mixer::master_fade_gain_at(int frame_in_block) const noexcept {
+    if (master_fade_processed_frames_ >= master_fade_total_frames_)
+        return master_gain_current_;   // ramp finished (or never started)
+
+    const int index = master_fade_block_start_frames_ + std::max(0, frame_in_block);
+    if (index >= master_fade_total_frames_)
+        return master_gain_target_;
+
+    const float t = master_fade_total_frames_ <= 1
+        ? 1.0f
+        : static_cast<float>(index) / static_cast<float>(master_fade_total_frames_ - 1);
+    const float eased = t * t * (3.0f - 2.0f * t);
+    return master_gain_start_ + (master_gain_target_ - master_gain_start_) * eased;
+}
+
+void Mixer::apply_master_fade_to_tracks(float** output_channels,
+                                        int num_channels,
+                                        int num_frames,
+                                        int output_offset) noexcept {
+    if (num_channels <= 0 || num_frames <= 0)
+        return;
+
+    // Steady unity gain with no ramp running: nothing to do.
+    if (master_fade_processed_frames_ >= master_fade_total_frames_ &&
+        std::abs(master_gain_current_ - 1.0f) <= 0.000001f)
+        return;
+
+    for (int f = 0; f < num_frames; ++f) {
+        const float gain = master_fade_gain_at(output_offset + f);
+        if (std::abs(gain - 1.0f) <= 0.000001f)
             continue;
         for (int ch = 0; ch < num_channels; ++ch) {
             if (output_channels[ch])
-                output_channels[ch][f] *= master_gain_current_;
+                output_channels[ch][output_offset + f] *= gain;
         }
     }
+}
+
+void Mixer::end_master_fade_block(int num_frames) noexcept {
+    if (num_frames <= 0)
+        return;
+
+    if (master_fade_processed_frames_ < master_fade_total_frames_) {
+        master_gain_current_ = master_fade_gain_at(num_frames - 1);
+        master_fade_processed_frames_ =
+            std::min(master_fade_processed_frames_ + num_frames, master_fade_total_frames_);
+        if (master_fade_processed_frames_ >= master_fade_total_frames_)
+            master_gain_current_ = master_gain_target_;
+    }
+}
+
+void Mixer::apply_output_limiter(float** output_channels, int num_channels, int num_frames) noexcept {
+    if (num_channels <= 0 || num_frames <= 0)
+        return;
 
     for (int ch = 0; ch < num_channels; ++ch) {
         if (!output_channels[ch])
