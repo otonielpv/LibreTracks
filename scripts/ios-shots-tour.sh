@@ -10,15 +10,18 @@
 #   05 mixer       the same view with the mixer band open
 #   06 live        the live markers view
 #
-# Taps go through idb, which reads the accessibility tree, so screens are
-# found by their LABEL rather than by hardcoded coordinates — a layout change
-# then moves the tap instead of silently photographing the wrong thing. The
-# three view modes need no tap at all: the app cycles them with Tab.
+# Taps go by COORDINATE, which was not the first choice: idb can look elements
+# up in the accessibility tree, but this app is a WebView and
+# `idb ui describe-all` returns exactly one element — the application — with
+# nothing inside it. There is no label to search for. So the fractions below
+# were measured off real screenshots of this app on this device, and every tap
+# verifies that the screen actually changed instead of assuming it landed.
 #
-# Every step screenshots whatever is on screen, including when a tap failed,
-# and the accessibility tree of a failed lookup is written next to it. A tour
-# that goes wrong should leave evidence of what it saw, not six pictures of
-# the same screen.
+# The three view modes need no tap at all: the app cycles them with Tab.
+#
+# Every step screenshots whatever is on screen, including after a tap that
+# missed. A tour that goes wrong should leave evidence of what it saw, not six
+# pictures of the same screen.
 #
 #   ios-shots-tour.sh <udid> <output-dir>
 # ---------------------------------------------------------------------------
@@ -133,46 +136,6 @@ tap_frac() {
   return 1
 }
 
-# Tap the centre of the first element whose label matches, case-insensitively.
-# Retries: the WebView publishes its tree a beat after the view appears, and a
-# single miss would otherwise derail the whole tour.
-tap_label() {
-  local needle="$1"
-  local tries="${2:-5}"
-  local tree coords
-  for _ in $(seq 1 "$tries"); do
-    tree="$(describe)"
-    coords="$(printf '%s' "$tree" | jq -r --arg n "$needle" '
-        select(type == "object")
-        | select((.AXLabel // .label // "") | ascii_downcase | contains($n | ascii_downcase))
-        | select(.frame != null)
-        | "\(.frame.x + .frame.width / 2) \(.frame.y + .frame.height / 2)"
-      ' 2>/dev/null | head -1)"
-    if [ -n "$coords" ]; then
-      # shellcheck disable=SC2086
-      idb ui tap --udid "$UDID" $coords >/dev/null 2>&1
-      log "  👆 \"$needle\" en ($coords)"
-      sleep 2
-      return 0
-    fi
-    sleep 2
-  done
-  log "  ⚠️  no encontrado: \"$needle\""
-  printf '%s' "$tree" > "$OUT/tree-missing-$(printf '%s' "$needle" | tr -c 'a-zA-Z0-9' '-').json"
-  return 1
-}
-
-# Same, but a miss is expected and fine (a dialog that did not appear).
-tap_label_optional() {
-  tap_label "$1" "${2:-2}" || true
-}
-
-require() {
-  if ! "$@"; then
-    failures=$((failures + 1))
-  fi
-}
-
 key() {
   # HID usage codes: Tab is 43, Escape is 41.
   idb ui key --udid "$UDID" "$1" >/dev/null 2>&1 \
@@ -205,21 +168,44 @@ shot "after-consent"
 log "── 01 Portada ──────────────────────────────────────────────"
 shot "home"
 
-# CALIBRATION STAGE. The three view modes already work (the app cycles them
-# with Tab), but the sidebar, the demo button and the mixer toggle need
-# coordinates measured off a clean screenshot of the landing — which is
-# exactly what "home" above now provides. Until those are measured, walking
-# blind would only produce six pictures of the same screen.
-log "── Vistas, que sí se ciclan con Tab ────────────────────────"
+# Every fraction below was measured off a real screenshot of this app on this
+# device (run 34646454084), not guessed. They are fractions rather than pixels
+# so an iPhone run lands in the same relative place.
+log "── 02 Configuración ────────────────────────────────────────"
+if tap_frac "Ajustes (engranaje de la barra lateral)" 0.019 0.819; then
+  shot "settings"
+  key 41   # Escape closes the panel (nav.cancelOrClear)
+  sleep 2
+else
+  failures=$((failures + 1))
+  shot "settings-FAILED"
+fi
+
+log "── 03 Canción de demostración en la vista DAW ──────────────"
+if tap_frac "Demo song" 0.683 0.341; then
+  # Creating the demo unpacks its audio and analyses the waveforms. The
+  # timeline is not worth photographing until that settles.
+  sleep 30
+  shot "daw"
+else
+  failures=$((failures + 1))
+  shot "daw-FAILED"
+fi
+
+log "── 04 y 05 Vista compacta, con y sin mixer ─────────────────"
 key 43   # daw → compact
-shot "compact-empty"
+# On a tablet the mixer band starts open, so this first shot is the mixer one.
+shot "compact-with-mixer"
+
+log "── 06 Vista live ───────────────────────────────────────────"
 key 43   # compact → live
-shot "live-empty"
-key 43   # live → daw
-shot "daw-empty"
+shot "live"
 
 rm -f "$OUT/.probe.png"
 
 log "────────────────────────────────────────────────────────────"
-log "Etapa de calibración: faltan Configuración, la demo y el mixer,"
-log "que necesitan coordenadas tomadas de la portada"
+if [ "$failures" -gt 0 ]; then
+  log "El recorrido terminó con $failures paso(s) fallidos; mira las capturas -FAILED"
+  exit 1
+fi
+log "Recorrido completo"
