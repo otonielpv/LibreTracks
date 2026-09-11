@@ -465,16 +465,16 @@ jobs:
             $configureArgs += "-DCMAKE_BUILD_TYPE=Release"
           }
           if ("${{ matrix.platform }}" -eq "macos") {
-            # std::atomic::wait/notify_all in the render worker pool requires
-            # macOS 11 or newer in libc++.
-            $env:MACOSX_DEPLOYMENT_TARGET = "11.0"
+            # Bungee's published framework requires macOS 12 (and the render
+            # worker pool requires macOS 11 for atomic wait/notify).
+            $env:MACOSX_DEPLOYMENT_TARGET = "12.0"
             # macos-latest (arm64) ships the real universal artifact;
             # macos-15-intel (Intel, validation-only) builds x86_64 since an
             # Intel host cannot produce/obtain the arm64 FFmpeg slice the
             # universal link needs.
             $osxArchs = if ("${{ matrix.os }}" -eq "macos-latest") { "x86_64;arm64" } else { "x86_64" }
             $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=$osxArchs"
-            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"
+            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0"
             $configureArgs += "-DCMAKE_DISABLE_FIND_PACKAGE_SndFile=ON"
           }
           cmake @configureArgs
@@ -507,7 +507,11 @@ jobs:
             bash scripts/linux-bundle-ffmpeg.sh vendor/bin/native vendor/ffmpeg-linux
           }
           if ("${{ matrix.platform }}" -eq "macos") {
-            Copy-Item vendor/bungee/apple-mac/bungee.framework vendor/bin/native -Recurse -Force
+            # A versioned framework relies on these symlinks. PowerShell's
+            # recursive copy can dereference them, producing a bundle that
+            # codesign rejects as "ambiguous (could be app or framework)".
+            bash -c 'cp -a vendor/bungee/apple-mac/bungee.framework vendor/bin/native/'
+            bash -c 'test -L vendor/bin/native/bungee.framework/bungee && test -L vendor/bin/native/bungee.framework/Resources && test -L vendor/bin/native/bungee.framework/Headers && test -L vendor/bin/native/bungee.framework/Versions/Current'
             # Relocate the engine's Homebrew FFmpeg deps into the bundle as
             # @rpath dylibs so the .app launches on Macs without that Homebrew
             # prefix (otherwise dyld aborts: Library not loaded .../ffmpeg/...).
