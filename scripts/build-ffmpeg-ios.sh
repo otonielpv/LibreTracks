@@ -81,8 +81,8 @@ mkdir -p "$BUILD"
     --enable-cross-compile \
     --cc="$CC" \
     --sysroot="$SDK_PATH" \
-    --extra-cflags="-arch arm64 -miphoneos-version-min=$IOS_DEPLOYMENT_TARGET" \
-    --extra-ldflags="-arch arm64 -miphoneos-version-min=$IOS_DEPLOYMENT_TARGET" \
+    --extra-cflags="-arch arm64 $MIN_VERSION_FLAG" \
+    --extra-ldflags="-arch arm64 $MIN_VERSION_FLAG" \
     --enable-static --disable-shared \
     --disable-gpl --disable-nonfree \
     --disable-programs --disable-doc --disable-debug \

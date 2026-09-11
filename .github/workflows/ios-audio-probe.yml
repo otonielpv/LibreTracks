@@ -93,3 +93,70 @@ jobs:
         env:
           SIM_UDID: ${{ steps.sim.outputs.udid }}
         run: xcrun simctl shutdown "${SIM_UDID:-booted}" || true
+
+  # Only worth running if the probe proved the simulator delivers audio: this
+  # job asserts behaviour, and behaviour asserted against a silent device would
+  # be a test that passes by accident or fails for the wrong reason.
+  engine-selftest:
+    name: The real device backend, end to end
+    needs: probe
+    runs-on: macos-15
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Compiles the two engine sources that own iOS audio, straight from the
+      # tree, with the same flags CMake gives them (ARC, C++20, the same
+      # defines). Not the shipped archive — but the same code, in seconds
+      # instead of the 40 minutes a full iOS engine build costs.
+      - name: Build the device-backend self-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun -sdk iphonesimulator clang++ -arch arm64 \
+            -mios-simulator-version-min=15.0 \
+            -std=c++20 -fobjc-arc -O2 \
+            -DLT_ENGINE_USE_JUCE=0 -DLT_ENGINE_IOS_AUDIO_SESSION=1 \
+            -I native/audio-engine-v2/include \
+            tests/ios/device_manager_selftest.mm \
+            native/audio-engine-v2/src/devices/audio_device_manager_ios.mm \
+            native/audio-engine-v2/src/devices/ios_audio_session.mm \
+            -framework AVFoundation -framework AudioToolbox \
+            -framework CoreAudio -framework Foundation \
+            -o "$RUNNER_TEMP/device_manager_selftest"
+          file "$RUNNER_TEMP/device_manager_selftest"
+
+      - name: Boot a simulator
+        id: sim
+        shell: bash
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | test("iPhone"))] | .[0].udid')"
+          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
+            echo "::error::No iPhone simulator available on this runner."
+            exit 1
+          fi
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Run the self-test
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          # LIBRETRACKS_AUDIO_DIAG turns on the engine's own signal-path probe,
+          # so its diagnostics land in the log next to the assertions.
+          SIMCTL_CHILD_LIBRETRACKS_AUDIO_DIAG=1 \
+            xcrun simctl spawn "$SIM_UDID" "$RUNNER_TEMP/device_manager_selftest"
+
+      - name: Shut the simulator down
+        if: always()
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: xcrun simctl shutdown "${SIM_UDID:-booted}" || true
