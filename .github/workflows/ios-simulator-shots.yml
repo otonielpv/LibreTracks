@@ -126,13 +126,11 @@ jobs:
       # key covers everything that ends up inside the bundle and nothing else,
       # so editing scripts/ios-shots-tour.sh reuses the cached build and
       # touching the app rebuilds it.
-      - name: Cache the built simulator app
-        id: app-cache
-        uses: actions/cache@v4
-        with:
-          path: simulator-app
-          key: >-
-            ios-sim-app-v1-${{ hashFiles(
+      - name: Compute the app cache key
+        id: appkey
+        shell: bash
+        run: |
+          echo "key=ios-sim-app-v1-${{ hashFiles(
               'apps/desktop/src/**',
               'apps/desktop/src-tauri/src/**',
               'apps/desktop/src-tauri/*.json',
@@ -147,7 +145,20 @@ jobs:
               'native/audio-engine-v2/include/**',
               'native/audio-engine-v2/CMakeLists.txt',
               'Cargo.lock',
-              'package-lock.json') }}
+              'package-lock.json') }}" >> "$GITHUB_OUTPUT"
+
+      # restore + save rather than the combined action, because the combined
+      # one only writes the cache when the whole job succeeds. This workflow
+      # fails downstream of the build often enough (a tap that will not
+      # install, a control that moved) that throwing away a perfectly good
+      # twenty-minute build every time is the difference between iterating on
+      # the tour and waiting on it.
+      - name: Restore the built simulator app
+        id: app-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: simulator-app
+          key: ${{ steps.appkey.outputs.key }}
 
       - name: Build native audio engine and dependencies
         if: steps.app-cache.outputs.cache-hit != 'true'
@@ -232,6 +243,15 @@ jobs:
             vtool -show-build "$app/$executable" 2>&1 | head -20 || true
           fi
           echo "path=$app" >> "$GITHUB_OUTPUT"
+
+      # Right here, while the .app is known-good and before anything else can
+      # fail: everything after this point is tapping a screen.
+      - name: Save the built simulator app
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: simulator-app
+          key: ${{ steps.appkey.outputs.key }}
 
       - name: Boot the simulator
         shell: bash

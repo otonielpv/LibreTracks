@@ -160,19 +160,28 @@ runs:
         IOS_SDK: ${{ inputs.sdk }}
       run: echo "version=$(xcrun --sdk "$IOS_SDK" --show-sdk-version)" >> "$GITHUB_OUTPUT"
 
-    - name: Cache the engine build
+    - name: Compute the engine cache key
+      id: enginekey
+      shell: bash
+      run: |
+        echo "key=engine-ios-${{ steps.layout.outputs.suffix }}-sdk${{ steps.sdk.outputs.version }}-bungee${{ inputs.bungee-version }}-ffmpeg${{ inputs.ffmpeg-version }}-${{ hashFiles(
+          'native/audio-engine-v2/src/**',
+          'native/audio-engine-v2/include/**',
+          'native/audio-engine-v2/CMakeLists.txt',
+          'native/audio-engine-v2/**/CMakeLists.txt') }}" >> "$GITHUB_OUTPUT"
+
+    # restore + save, not the combined action: that one only writes when the
+    # whole job succeeds, and these jobs routinely fail well after the engine
+    # is built (a signing secret, a control that moved). Ten minutes of C++
+    # should not be thrown away by a failure that has nothing to do with it.
+    - name: Restore the engine build
       id: engine-cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: |
           ${{ steps.layout.outputs.build-dir }}
           ${{ steps.layout.outputs.link-dir }}
-        key: >-
-          engine-ios-${{ steps.layout.outputs.suffix }}-sdk${{ steps.sdk.outputs.version }}-bungee${{ inputs.bungee-version }}-ffmpeg${{ inputs.ffmpeg-version }}-${{ hashFiles(
-            'native/audio-engine-v2/src/**',
-            'native/audio-engine-v2/include/**',
-            'native/audio-engine-v2/CMakeLists.txt',
-            'native/audio-engine-v2/**/CMakeLists.txt') }}
+        key: ${{ steps.enginekey.outputs.key }}
 
     - name: Build native audio engine for iOS
       if: steps.engine-cache.outputs.cache-hit != 'true'
@@ -225,6 +234,15 @@ runs:
            "$ffmpeg_dir/lib/libswresample.a" \
            "$link_dir/"
         echo "Engine built into $link_dir"
+
+    - name: Save the engine build
+      if: steps.engine-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ${{ steps.layout.outputs.build-dir }}
+          ${{ steps.layout.outputs.link-dir }}
+        key: ${{ steps.enginekey.outputs.key }}
 
     # Runs on every build, cached or not. These are the guardrails, and a
     # guardrail that only fires on a cache miss protects nothing: a cache
