@@ -4963,7 +4963,7 @@ fn a_session_delete_resolves_to_the_folder_holding_the_project_file() {
 
     assert_eq!(
         super::resolve_session_dir_to_delete(&song_file, &[songs]).unwrap(),
-        session_dir
+        Some(session_dir)
     );
 }
 
@@ -4984,7 +4984,7 @@ fn a_session_outside_the_allowed_roots_is_refused() {
     // put them) the same path is accepted.
     assert_eq!(
         super::resolve_session_dir_to_delete(&song_file, &[]).unwrap(),
-        elsewhere
+        Some(elsewhere)
     );
 }
 
@@ -5002,10 +5002,9 @@ fn a_loose_session_file_never_deletes_the_songs_root() {
     assert!(songs.is_dir());
 }
 
-/// Anything that is not an existing session file is refused before we touch
-/// the filesystem: a stale entry, or a path pointing at something else.
+/// Un archivo que no es una sesion se rechaza antes de tocar el disco.
 #[test]
-fn only_an_existing_session_file_can_be_deleted() {
+fn only_a_session_file_can_be_deleted() {
     let root = tempdir().unwrap();
     let songs = root.path().join("songs");
     let session_dir = songs.join("Concierto");
@@ -5013,12 +5012,24 @@ fn only_an_existing_session_file_can_be_deleted() {
     let audio = session_dir.join("pista.wav");
     fs::write(&audio, b"").unwrap();
 
-    assert!(super::resolve_session_dir_to_delete(&audio, &[songs.clone()]).is_err());
-    assert!(super::resolve_session_dir_to_delete(
-        &session_dir.join("Fantasma.ltsession"),
-        &[songs]
-    )
-    .is_err());
+    assert!(super::resolve_session_dir_to_delete(&audio, &[songs]).is_err());
+}
+
+/// Una sesion que ya no esta no es un error: no hay nada que borrar. Es lo que
+/// permite quitar de "recientes" una entrada muerta —en iOS el contenedor de la
+/// app cambia de ruta al reinstalar y la lista se llena de ellas—.
+#[test]
+fn a_session_that_is_already_gone_deletes_cleanly() {
+    let root = tempdir().unwrap();
+    let songs = root.path().join("songs");
+    let session_dir = songs.join("Concierto");
+    fs::create_dir_all(&session_dir).unwrap();
+
+    assert_eq!(
+        super::resolve_session_dir_to_delete(&session_dir.join("Fantasma.ltsession"), &[songs])
+            .unwrap(),
+        None
+    );
 }
 
 /// A legacy root the device never used is the normal case, not an error.

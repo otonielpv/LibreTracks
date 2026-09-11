@@ -14,6 +14,7 @@ const en = {
     action: "Position…",
   },
   mobileSelectionActions: {
+    mix: "Mix",
     clips_one: "{{count}} clip",
     clips_other: "{{count}} clips",
     tracks_one: "{{count}} track",

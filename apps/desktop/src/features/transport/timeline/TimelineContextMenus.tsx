@@ -124,19 +124,7 @@ export function TimelineContextMenus({
       ) : (
         <strong>{contextMenu.title}</strong>
       )}
-      {contextMenu.actions.map((action) =>
-        action.content ? (
-          // Controles de verdad dentro del menu (los faders de una
-          // multiseleccion). No cierran el menu al tocarlos: se esta
-          // ajustando, no eligiendo.
-          <div
-            key={action.label}
-            className="lt-context-menu-content"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {action.content}
-          </div>
-        ) : (
+      {contextMenu.actions.map((action) => (
         <button
           key={action.label}
           type="button"
@@ -158,8 +146,7 @@ export function TimelineContextMenus({
             <kbd className="lt-context-menu-shortcut">{action.shortcut}</kbd>
           ) : null}
         </button>
-        ),
-      )}
+      ))}
     </div>
   );
 }

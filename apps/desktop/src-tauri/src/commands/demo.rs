@@ -64,11 +64,32 @@ fn bundled_demo_dir(app: &AppHandle) -> Option<PathBuf> {
     }
 }
 
+/// The demo session already sitting in the songs folder, if any.
+///
+/// Pressing "canción de demostración" twice means "open the demo", not "make me
+/// another copy": copying it on every press left a trail of `Demo`, `Demo 2`,
+/// `Demo 3`… and a new entry in the recents list each time. To start over from
+/// scratch, delete it from the landing screen and press again.
+fn existing_demo_session(parent: &Path) -> Option<PathBuf> {
+    let dir = parent.join(DEMO_SESSION_NAME);
+    if !dir.is_dir() {
+        return None;
+    }
+    fs::read_dir(&dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("ltsession"))
+        })
+}
+
 /// A folder name inside `parent` that is not taken yet.
 ///
-/// Creating the demo twice is a normal thing to do — someone wrecks the first
-/// copy experimenting, which is exactly what a demo is for — so the second
-/// request must neither fail nor overwrite the first.
+/// Only reached when the demo folder is there but unusable (no `.ltsession`
+/// inside): a half-copied folder must not stop the button from working.
 fn available_session_name(parent: &Path) -> String {
     if !parent.join(DEMO_SESSION_NAME).exists() {
         return DEMO_SESSION_NAME.to_string();
@@ -121,20 +142,26 @@ fn copy_demo_tree(src: &Path, dst: &Path, session_name: &str) -> std::io::Result
     Ok(session_file.unwrap_or_else(|| dst.join(format!("{session_name}.ltsession"))))
 }
 
-/// Create a fresh copy of the demo song in the device's songs folder and return
-/// its `.ltsession` path.
+/// The demo song's `.ltsession` path, copying it into the device's songs folder
+/// the first time.
 ///
-/// Deliberately stops at "created": the caller opens it through the same path
+/// Deliberately stops at "here it is": the caller opens it through the same path
 /// the landing screen already uses for every other session, so the demo cannot
 /// drift into having loading behaviour of its own.
 #[tauri::command(async)]
-pub fn create_demo_session(app: AppHandle) -> Result<String, String> {
+pub fn open_demo_session(app: AppHandle) -> Result<String, String> {
     let demo_dir = bundled_demo_dir(&app)
         .ok_or_else(|| "Esta version no incluye la cancion de demostracion.".to_string())?;
 
     let parent = crate::state::create_song_default_directory(&app);
     fs::create_dir_all(&parent)
         .map_err(|error| format!("no se pudo preparar la carpeta de canciones: {error}"))?;
+
+    // Ya esta: se abre la de siempre. Copiarla en cada pulsacion dejaba un
+    // rastro de "Demo 2", "Demo 3"... y una entrada nueva en recientes.
+    if let Some(existing) = existing_demo_session(&parent) {
+        return Ok(existing.to_string_lossy().into_owned());
+    }
 
     let session_name = available_session_name(&parent);
     let target = parent.join(&session_name);

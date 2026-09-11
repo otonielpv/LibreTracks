@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
-  createDemoSession,
+  openDemoSession,
   deleteSessionAt,
   isAndroidApp,
   isMobileApp,
@@ -109,22 +109,15 @@ export function MobileLanding({
     };
   }, []);
 
-  /**
-   * Delete a session from the device, after confirming. Mobile only: on
-   * desktop the trash icon in the recents list means "forget this entry", and
-   * the user has a real file manager for the rest.
-   *
-   * The MRU entry goes too, but only once the folder is actually gone —
-   * dropping it on a failed delete would hide a session that still exists.
-   */
   // The demo exists so a first run — and an App Store review — has something
   // to press. It is a normal session once created, so it opens through the
-  // same prop the listed sessions use.
-  const openDemoSession = async () => {
+  // same prop the listed sessions use, and pressing again opens the same one
+  // instead of leaving a trail of copies.
+  const handleOpenDemoSession = async () => {
     setSessionError(null);
     setCreatingDemo(true);
     try {
-      onOpenSessionFromPath?.(await createDemoSession());
+      onOpenSessionFromPath?.(await openDemoSession());
     } catch (error: unknown) {
       setSessionError(
         typeof error === "string"
@@ -137,6 +130,16 @@ export function MobileLanding({
     }
   };
 
+  /**
+   * Delete a session from the device, after confirming. Mobile only: on
+   * desktop the trash icon in the recents list means "forget this entry", and
+   * the user has a real file manager for the rest.
+   *
+   * El backend da por buena una sesion que ya no esta (no hay nada que
+   * borrar), asi que la entrada de recientes se va tambien en ese caso: es lo
+   * unico que quedaba de ella, y en iOS la lista se llena de rutas muertas
+   * sola —el contenedor de la app cambia al reinstalar—.
+   */
   const deleteSession = async (path: string, name: string) => {
     setSessionError(null);
     const confirmed = await confirmDialog(
@@ -369,7 +372,7 @@ export function MobileLanding({
                 disabled={creatingDemo}
                 title={t("transport.shell.demoSongHint")}
                 onClick={() => {
-                  void openDemoSession();
+                  void handleOpenDemoSession();
                 }}
               >
                 <span className="material-symbols-outlined">graphic_eq</span>

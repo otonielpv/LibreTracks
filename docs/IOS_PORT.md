@@ -26,6 +26,34 @@ El workflow valida que el paquete contiene `Payload/*.app`, que el bundle id es
 `com.libretracks.ios`, que el mínimo es iOS 15 y que el ejecutable incluye
 `arm64`.
 
+## Icono de la app
+
+Los iconos de iOS **no** salen de `tauri icon`. Ese comando parte de
+`icons/icon.png`, que es el icono de escritorio: lleva un marco de 32 px y la
+esquina ya redondeada, y genera PNG con canal alfa. Apple pide justo lo
+contrario —arte a sangre, cuadrado y opaco, porque la máscara la pone iOS— y
+un icono con alfa tumba la subida a App Store Connect (*"can't be transparent
+nor contain an alpha channel"*). Con el marco dentro, además, la pantalla de
+inicio mostraba una baldosa blanca con el logo pequeño flotando en medio, que
+es lo que se veía en el iPhone y parecía otro icono distinto.
+
+El arte de iOS vive aparte, en `icons/icon-ios.svg`, y se rasteriza con:
+
+```bash
+node scripts/make-ios-icons.mjs
+```
+
+Escribe los 18 tamaños en `icons/ios/` y, **si el proyecto de Xcode ya está
+generado** (`src-tauri/gen/apple`, que solo existe en el Mac), los copia también
+a `Assets.xcassets/AppIcon.appiconset`. Ese catálogo es de donde salen los
+iconos del `.app`: refrescar `icons/ios` a secas no lo toca, así que tras
+cambiar el icono hay que ejecutar el script **en el Mac** (o regenerar el
+proyecto con `tauri ios init`) antes de compilar el IPA.
+
+Si alguien vuelve a pasar `tauri icon` por encima, el test
+`src/shared/iosAppIcon.test.ts` falla: comprueba que los 18 siguen siendo
+cuadrados y sin canal alfa.
+
 ## Alcance inicial del audio
 
 - Motor C++ estático para `aarch64-apple-ios`, sin dylibs externas.

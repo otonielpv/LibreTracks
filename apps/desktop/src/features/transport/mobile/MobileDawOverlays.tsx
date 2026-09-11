@@ -3,6 +3,7 @@ import type { ContextMenuAction } from "../types";
 import { useTimelineUIStore } from "../uiStore";
 import { MarkerPositionEditor } from "../timeline/MarkerPositionEditor";
 import { MobileSelectionActionBar } from "./MobileSelectionActionBar";
+import type { MultiTrackMixActions } from "../tracks/MultiTrackMixControls";
 import type {
   MobileCreationHandlers,
   MobileSelectionMenus,
@@ -17,6 +18,8 @@ type MobileDawOverlaysProps = {
   onCommitMarkerPosition: (markerId: string, startSeconds: number) => void;
   onOpenSheet: (title: string, actions: ContextMenuAction[]) => void;
   onClearSelection: () => void;
+  mix: MultiTrackMixActions;
+  audioRoutingOptions: Array<{ value: string; label: string }>;
 };
 
 /**
@@ -38,6 +41,8 @@ export function MobileDawOverlays({
   onCommitMarkerPosition,
   onOpenSheet,
   onClearSelection,
+  mix,
+  audioRoutingOptions,
 }: MobileDawOverlaysProps) {
   const viewMode = useTimelineUIStore((state) => state.viewMode);
   if (viewMode !== "daw") {
@@ -58,6 +63,8 @@ export function MobileDawOverlays({
         creation={creation}
         onOpenSheet={onOpenSheet}
         onClearSelection={onClearSelection}
+        mix={mix}
+        audioRoutingOptions={audioRoutingOptions}
       />
     </>
   );

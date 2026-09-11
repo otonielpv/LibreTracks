@@ -88,10 +88,6 @@ import { createMidiMenus } from "./midiMenus";
 import { createMarkerKindMenus } from "./markerKindMenus";
 import { createTrackFolderMenus } from "./trackFolderMenus";
 import { colorPickerActions } from "./colorPickerMenu";
-import {
-  multiTrackMixActions,
-  type MultiTrackMixActions,
-} from "./multiTrackMixMenu";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import type { ShortcutActionId } from "../keyboard/actions";
 
@@ -252,8 +248,6 @@ export type TimelineMenuDeps = {
     color: string | null,
   ) => Promise<unknown>;
   audioRoutingOptions: Array<{ value: string; label: string }>;
-  /** Mix edits over an explicit set of tracks - see trackHeaderHandlers. */
-  multiTrackMix: MultiTrackMixActions;
 };
 
 export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
@@ -1229,12 +1223,6 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             (color) => d.handleSetTrackColors(tracks, color).then(() => undefined),
           ),
       },
-      ...multiTrackMixActions({
-        tracks,
-        t,
-        routingOptions: d.audioRoutingOptions,
-        mix: d.multiTrackMix,
-      }),
     ];
   }
 

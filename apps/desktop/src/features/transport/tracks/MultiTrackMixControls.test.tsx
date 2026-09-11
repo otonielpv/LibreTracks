@@ -32,6 +32,7 @@ function mix() {
     setPan: vi.fn(),
     commitPan: vi.fn(),
     setAudioTo: vi.fn(),
+    toggleTranspose: vi.fn(),
   };
 }
 

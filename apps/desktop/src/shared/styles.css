@@ -5654,23 +5654,6 @@ html.lt-ios body {
   overflow-y: auto;
 }
 
-/* Una fila del menu que no es un boton: los faders de una multiseleccion. */
-.lt-context-menu-content {
-  padding: 0.15rem 0.35rem 0.35rem;
-}
-
-.lt-context-menu-mix {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.lt-context-menu-mix small {
-  color: rgb(186 202 197 / 0.65);
-  font: 600 9px/1.3 "Space Grotesk", sans-serif;
-  letter-spacing: 0.06em;
-}
-
 .lt-context-menu strong {
   color: #bacac5;
   font: 600 10px/1 "Space Grotesk", sans-serif;
@@ -11463,6 +11446,30 @@ html.lt-ios body {
 
 /* Paleta y formas de la app: panel de 2 px como `.lt-context-menu`. Una
    pildora redonda aqui se lee como si fuera de otro programa. */
+/* El panel de una pista, pero para la seleccion y flotando justo encima de la
+   barra de acciones. Comparte `.lt-mobile-track-row-panel` para heredar su
+   aspecto y, sobre todo, el tamano de agarre de sus faders; solo cambia de
+   sitio, porque aquel se cuelga de la fila de su cabecera. */
+.lt-mobile .lt-mobile-track-row-panel.lt-mobile-selection-mix {
+  position: absolute;
+  left: 50%;
+  right: auto;
+  top: auto;
+  bottom: calc(var(--lt-mobile-float-bottom) + 2.9rem);
+  transform: translateX(-50%);
+  z-index: 34;
+  border-radius: 2px;
+  max-width: calc(100% - 1.2rem);
+}
+
+.lt-mobile .lt-mobile-selection-mix-hint {
+  display: block;
+  padding-top: 0.3rem;
+  color: rgb(186 202 197 / 0.65);
+  font: 600 9px/1.3 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+}
+
 .lt-mobile .lt-mobile-selection-actions {
   position: absolute;
   left: 50%;

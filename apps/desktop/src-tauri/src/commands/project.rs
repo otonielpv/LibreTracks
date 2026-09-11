@@ -788,7 +788,13 @@ pub fn delete_session_at(
         Vec::new()
     };
 
-    let song_dir = crate::state::resolve_session_dir_to_delete(&song_file, &allowed_roots)?;
+    // `None` = la sesion ya no esta en el dispositivo. Borrar lo que no existe
+    // es justo lo que se ha pedido, asi que se sale bien y quien llamo puede
+    // quitar su entrada de recientes.
+    let Some(song_dir) = crate::state::resolve_session_dir_to_delete(&song_file, &allowed_roots)?
+    else {
+        return Ok(());
+    };
 
     // Read the open session's folder under a brief lock and release it before
     // the delete: removing gigabytes of audio under the session lock is what

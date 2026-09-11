@@ -5496,7 +5496,6 @@ export function TransportPanelContent() {
       handleSetTrackColors,
       handleSetClipColor,
       audioRoutingOptions,
-      multiTrackMix,
     };
   });
   const timelineMenus = useMemo(
@@ -7497,6 +7496,8 @@ export function TransportPanelContent() {
                       clearSelection();
                       setSelectedRegionId(null);
                     }}
+                    mix={multiTrackMix}
+                    audioRoutingOptions={audioRoutingOptions}
                   />
                   {viewMode !== "live" ? (
                   <TimelineToolbar

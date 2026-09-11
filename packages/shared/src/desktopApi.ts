@@ -810,8 +810,8 @@ export async function deleteSessionAt(songFile: string): Promise<void> {
  * Mobile only. Desktop ships no `resources/demo`, and the backend answers with
  * a plain message rather than pretending to succeed.
  */
-export async function createDemoSession(): Promise<string> {
-  return invokeCommand<string>("create_demo_session");
+export async function openDemoSession(): Promise<string> {
+  return invokeCommand<string>("open_demo_session");
 }
 
 /** Open a session whose `.ltsession` path is already known (Android landing). */

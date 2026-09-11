@@ -566,6 +566,7 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
       setPan: handleTrackHeaderPanChange,
       commitPan: handleTrackHeaderPanCommit,
       setAudioTo: handleTrackHeaderAudioToChange,
+      toggleTranspose: handleTrackHeaderTransposeToggle,
     },
   };
 }

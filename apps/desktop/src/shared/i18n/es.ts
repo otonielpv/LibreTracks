@@ -14,6 +14,7 @@ const es = {
     action: "Posición…",
   },
   mobileSelectionActions: {
+    mix: "Mezcla",
     clips_one: "{{count}} clip",
     clips_other: "{{count}} clips",
     tracks_one: "{{count}} pista",

@@ -3955,7 +3955,7 @@ fn dedupe_sessions_by_name(sessions: &mut Vec<SessionSummary>) {
 pub(crate) fn resolve_session_dir_to_delete(
     song_file: &Path,
     allowed_roots: &[PathBuf],
-) -> Result<PathBuf, String> {
+) -> Result<Option<PathBuf>, String> {
     let is_session_file = song_file
         .extension()
         .and_then(|extension| extension.to_str())
@@ -3963,8 +3963,13 @@ pub(crate) fn resolve_session_dir_to_delete(
     if !is_session_file {
         return Err("Eso no es un archivo de sesion .ltsession.".to_string());
     }
+    // Ya no esta: no hay nada que borrar, y eso es EXITO, no un error. La lista
+    // de recientes es lo unico que queda de una sesion que se fue, y en iOS se
+    // llena de ellas sola —el contenedor de la app cambia de ruta al
+    // reinstalar—; fallando aqui, el boton de borrar no conseguia jamas quitar
+    // una entrada muerta de la lista.
     if !song_file.is_file() {
-        return Err("Esa sesion ya no esta en el dispositivo.".to_string());
+        return Ok(None);
     }
 
     let song_dir = song_file
@@ -3988,7 +3993,7 @@ pub(crate) fn resolve_session_dir_to_delete(
         }
     }
 
-    Ok(song_dir)
+    Ok(Some(song_dir))
 }
 
 /// Path equality that survives `.`/`..`, trailing separators and (on Windows)

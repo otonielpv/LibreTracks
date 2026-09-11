@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isMobileApp, type SongView } from "../desktopApi";
+import {
+  MultiTrackMixControls,
+  type MultiTrackMixActions,
+} from "../tracks/MultiTrackMixControls";
 import { useTimelineUIStore } from "../uiStore";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import type { ContextMenuAction } from "../types";
@@ -35,6 +39,9 @@ type MobileSelectionActionBarProps = {
   /** Abre la lista COMPLETA como hoja inferior (el menu contextual de siempre). */
   onOpenSheet: (title: string, actions: ContextMenuAction[]) => void;
   onClearSelection: () => void;
+  /** Volumen, paneo, salida y transposicion de las pistas seleccionadas. */
+  mix: MultiTrackMixActions;
+  audioRoutingOptions: Array<{ value: string; label: string }>;
 };
 
 /**
@@ -60,6 +67,8 @@ export function MobileSelectionActionBar({
   creation,
   onOpenSheet,
   onClearSelection,
+  mix,
+  audioRoutingOptions,
 }: MobileSelectionActionBarProps) {
   const { t } = useTranslation();
   const selectedClipIds = useTimelineUIStore((state) => state.selectedClipIds);
@@ -76,6 +85,7 @@ export function MobileSelectionActionBar({
     (state) => state.selectedTimeSignatureMarkerId,
   );
   const [open, setOpen] = useState(readSelectionBarOpen);
+  const [mixOpen, setMixOpen] = useState(false);
   const trackMultiSelect = useTimelineUIStore(
     (state) => state.trackMultiSelect,
   );
@@ -130,10 +140,30 @@ export function MobileSelectionActionBar({
 
   const hasSelection = target.kind !== "none";
   const isTrackTarget = target.kind === "track" || target.kind === "tracks";
+  const mixTracks =
+    target.kind === "tracks"
+      ? target.tracks
+      : target.kind === "track"
+        ? [target.track]
+        : [];
+  const showMix = mixOpen && mixTracks.length > 0;
   const inline = model.actions.slice(0, MAX_INLINE_ACTIONS);
   const hasMore = model.actions.length > inline.length;
 
   return (
+    <>
+    {showMix ? (
+      // El MISMO panel que despliega una cabecera al tocarla, aplicado a la
+      // seleccion entera. Comparte la clase para heredar su aspecto y, sobre
+      // todo, el tamano de agarre de sus faders.
+      <div className="lt-mobile-track-row-panel lt-mobile-selection-mix">
+        <MultiTrackMixControls
+          tracks={mixTracks}
+          routingOptions={audioRoutingOptions}
+          mix={mix}
+        />
+      </div>
+    ) : null}
     <div
       className="lt-mobile-selection-actions"
       data-lt-tour={TOUR_TARGETS.mobileSelectionBar}
@@ -189,6 +219,22 @@ export function MobileSelectionActionBar({
         >
           <span className="material-symbols-outlined" aria-hidden="true">
             more_horiz
+          </span>
+        </button>
+      ) : null}
+      {mixTracks.length > 0 ? (
+        <button
+          type="button"
+          className={`lt-icon-button ${showMix ? "is-active" : ""}`}
+          aria-label={t("mobileSelectionActions.mix", {
+            defaultValue: "Mezcla",
+          })}
+          title={t("mobileSelectionActions.mix", { defaultValue: "Mezcla" })}
+          aria-pressed={showMix}
+          onClick={() => setMixOpen((value) => !value)}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            tune
           </span>
         </button>
       ) : null}
@@ -248,5 +294,6 @@ export function MobileSelectionActionBar({
         </span>
       </button>
     </div>
+    </>
   );
 }

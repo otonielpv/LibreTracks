@@ -28,8 +28,8 @@ const song = {
   sectionMarkers: [{ id: "m1", name: "Estrofa", startSeconds: 8 }],
   clips: [{ id: "c1", trackId: "t1", timelineStartSeconds: 0, durationSeconds: 4 }],
   tracks: [
-    { id: "t1", name: "Voz", kind: "audio" },
-    { id: "t2", name: "Bajo", kind: "audio" },
+    { id: "t1", name: "Voz", kind: "audio", volume: 1, pan: 0, audioTo: "master" },
+    { id: "t2", name: "Bajo", kind: "audio", volume: 1, pan: 0, audioTo: "master" },
   ],
   projectRevision: 1,
 } as unknown as SongView;
@@ -55,6 +55,15 @@ const menus: MobileSelectionMenus = {
   multiTrackContextMenu: () => [{ label: "Eliminar", onSelect: vi.fn() }],
 };
 
+const mix = {
+  setVolume: vi.fn(),
+  commitVolume: vi.fn(),
+  setPan: vi.fn(),
+  commitPan: vi.fn(),
+  setAudioTo: vi.fn(),
+  toggleTranspose: vi.fn(),
+};
+
 const creation = {
   onCreateSection: vi.fn(),
   onCreateCue: vi.fn(),
@@ -71,6 +80,8 @@ function renderBar(overrides: Partial<Parameters<typeof MobileSelectionActionBar
     creation,
     onOpenSheet: vi.fn(),
     onClearSelection: vi.fn(),
+    mix,
+    audioRoutingOptions: [{ value: "master", label: "Master" }],
     ...overrides,
   };
   render(<MobileSelectionActionBar {...props} />);
@@ -222,5 +233,35 @@ describe("la barra de la seleccion, generalizada", () => {
     const props = renderBar();
     fireEvent.click(screen.getByRole("button", { name: "Quitar selección" }));
     expect(props.onClearSelection).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("la mezcla de la seleccion", () => {
+  // En movil la cabecera de pista se queda en el nombre y el par mute/solo, asi
+  // que sin este boton no hay ninguna via para tocar volumen, paneo o salida de
+  // varias pistas a la vez.
+  it("abre el panel de una pista, aplicado a la seleccion entera", () => {
+    useTimelineUIStore.setState({ selectedTrackIds: ["t1", "t2"] });
+    renderBar();
+
+    expect(screen.queryByLabelText("Volumen de Voz")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mezcla" }));
+
+    expect(screen.getByText("Se aplica a las 2 pistas seleccionadas")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Volumen de Voz"), {
+      target: { value: "0.4" },
+    });
+    // Se le habla a UNA pista: los handlers de la cabecera reparten al resto.
+    expect(mix.setVolume).toHaveBeenCalled();
+    expect(mix.setVolume.mock.calls[0][0]).toBe("t1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Mezcla" }));
+    expect(screen.queryByLabelText("Volumen de Voz")).toBeNull();
+  });
+
+  it("no se ofrece cuando lo seleccionado no son pistas", () => {
+    useTimelineUIStore.setState({ selectedClipIds: ["c1"] });
+    renderBar();
+    expect(screen.queryByRole("button", { name: "Mezcla" })).toBeNull();
   });
 });

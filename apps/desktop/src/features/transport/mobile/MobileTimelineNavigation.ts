@@ -86,6 +86,16 @@ export class MobileTimelineNavigation {
   /** Gesto cedido a la edicion: no lo tocamos ni suprimimos su compat-mouse. */
   private yielding = false;
   private tapTarget: EventTarget | null = null;
+  /**
+   * En este gesto ha habido mas de un dedo.
+   *
+   * Al levantar el primero de una pinza, el gesto se re-ancla con el que queda
+   * —para que la camara no pegue un salto— y ese ancla nace "sin mover". Si ese
+   * segundo dedo se levanta sin arrastrar, lo que se veia como el final de un
+   * zoom salia por la puerta del TOQUE LIMPIO y seleccionaba el clip que
+   * tuviera debajo. Un gesto que ha tenido dos dedos no acaba nunca en toque.
+   */
+  private multiTouch = false;
   private unsubscribe: () => void;
 
   constructor(private options: MobileNavigationOptions) {
@@ -151,6 +161,7 @@ export class MobileTimelineNavigation {
     event.preventDefault(); event.stopImmediatePropagation();
     this.points.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this.points.size === 1) this.tapTarget = event.target;
+    if (this.points.size > 1) this.multiTouch = true;
     this.options.container.setPointerCapture?.(event.pointerId);
     this.flush(); this.seed();
   };
@@ -171,9 +182,20 @@ export class MobileTimelineNavigation {
       anchor.axis = this.points.size > 1 ? "both" : movedX >= movedY ? "x" : "y";
     }
     let zoom = this.options.getState().zoomLevel;
-    if (this.points.size > 1 && this.options.getState().canZoom) {
-      const view = this.options.onPreviewZoom(anchor.zoom * sample.distance / anchor.distance, sample.x);
-      if (view) { zoom = view.zoomLevel; this.zoomView = view; }
+    if (this.points.size > 1) {
+      // La pinza SOLO hace zoom. Dos dedos nunca mantienen su punto medio, asi
+      // que resolver la camara contra el punto medio ACTUAL arrastraba el
+      // material de lado mientras se hacia zoom —y de paso desplazaba en
+      // vertical—. Contra el punto medio ANCLADO, el contenido que habia bajo
+      // los dedos se queda donde estaba y solo cambia la escala. Es el mismo
+      // "un gesto, un trabajo" que ya aplica el gesto de escritorio.
+      if (this.options.getState().canZoom) {
+        const view = this.options.onPreviewZoom(anchor.zoom * sample.distance / anchor.distance, anchor.x);
+        if (view) { zoom = view.zoomLevel; this.zoomView = view; }
+      }
+      this.camera = this.options.onPreviewCameraX(anchor.content * zoom - anchor.x);
+      anchor.y = sample.y;
+      return;
     }
     if (anchor.axis !== "y") this.camera = this.options.onPreviewCameraX(anchor.content * zoom - sample.x);
     if (anchor.axis !== "x") this.options.onScrollVertical?.(anchor.y - sample.y);
@@ -185,11 +207,13 @@ export class MobileTimelineNavigation {
     if (this.yielding && !this.points.size) { this.yielding = false; return; }
     if (!this.points.has(event.pointerId)) return;
     event.preventDefault(); event.stopImmediatePropagation();
-    const tapped = this.anchor?.moved === false && this.points.size === 1;
+    const tapped =
+      this.anchor?.moved === false && this.points.size === 1 && !this.multiTouch;
     const target = this.tapTarget;
     this.points.delete(event.pointerId);
     this.lastTouch = Date.now();
     if (this.options.container.hasPointerCapture?.(event.pointerId)) this.options.container.releasePointerCapture(event.pointerId);
+    if (!this.points.size) this.multiTouch = false;
     this.flush(); this.seed();
     if (tapped) {
       this.tapTarget = null;
@@ -212,7 +236,7 @@ export class MobileTimelineNavigation {
 
   private cancel = () => {
     for (const id of this.points.keys()) if (this.options.container.hasPointerCapture?.(id)) this.options.container.releasePointerCapture(id);
-    this.points.clear(); this.anchor = null; this.metrics = null; this.yielding = false; this.tapTarget = null; this.flush();
+    this.points.clear(); this.anchor = null; this.metrics = null; this.yielding = false; this.multiTouch = false; this.tapTarget = null; this.flush();
   };
 
   destroy() {

@@ -48,7 +48,9 @@ describe("mobile timeline navigation", () => {
     pointer(s.container, "pointerdown", 1, 100, 100); pointer(s.container, "pointerdown", 2, 200, 100);
     pointer(window, "pointermove", 2, 300, 100);
     expect(s.state.zoomLevel).toBe(2);
-    expect((s.state.cameraX + 200) / s.state.zoomLevel).toBe(250);
+    // Contra el punto medio ANCLADO (150), no contra el actual: la pinza no
+    // desplaza.
+    expect((s.state.cameraX + 150) / s.state.zoomLevel).toBe(250);
     pointer(window, "pointerup", 2, 300, 100);
     const camera = s.state.cameraX;
     pointer(window, "pointermove", 1, 80, 100);
@@ -82,6 +84,26 @@ describe("tocar selecciona; arrastrar lo ya seleccionado edita", () => {
     pointer(window, "pointermove", 2, 40, 100);
     pointer(window, "pointerup", 2, 40, 100);
     expect(onTap).not.toHaveBeenCalled();
+  });
+
+  // Al levantar el primer dedo de una pinza el gesto se re-ancla con el que
+  // queda, y ese ancla nace "sin mover": soltarlo salia por la puerta del toque
+  // limpio y seleccionaba el clip que tuviera debajo.
+  it("soltar una pinza no cuenta como toque", () => {
+    const onTap = vi.fn();
+    const s = setup({ onTap });
+    pointer(s.container, "pointerdown", 1, 100, 100);
+    pointer(s.container, "pointerdown", 2, 200, 100);
+    pointer(window, "pointermove", 2, 300, 100);
+    pointer(window, "pointerup", 2, 300, 100);
+    pointer(window, "pointerup", 1, 100, 100);
+
+    expect(onTap).not.toHaveBeenCalled();
+
+    // Y el gesto siguiente vuelve a poder ser un toque.
+    pointer(s.container, "pointerdown", 3, 100, 100);
+    pointer(window, "pointerup", 3, 100, 100);
+    expect(onTap).toHaveBeenCalledTimes(1);
   });
 
   it("cede el gesto entero cuando el toque cae sobre algo ya seleccionado", () => {
@@ -145,13 +167,21 @@ describe("un dedo desplaza en un solo eje", () => {
     expect(s.vertical).toHaveBeenLastCalledWith(20);
   });
 
-  it("la pinza gobierna los dos ejes", () => {
+  // Dos dedos nunca mantienen su punto medio: si la camara se resuelve contra
+  // el punto medio actual, el material se va de lado (y de paso hacia arriba)
+  // mientras se hace zoom.
+  it("la pinza solo hace zoom: ni desplaza de lado ni en vertical", () => {
     const s = setup();
     pointer(s.container, "pointerdown", 1, 100, 100);
     pointer(s.container, "pointerdown", 2, 200, 100);
-    pointer(window, "pointermove", 2, 300, 60);
+    // Los dedos se separan Y se van los dos hacia arriba y a la derecha.
+    pointer(window, "pointermove", 1, 140, 40);
+    pointer(window, "pointermove", 2, 360, 40);
+
     expect(s.state.zoomLevel).toBeGreaterThan(1);
-    expect(s.vertical).toHaveBeenCalled();
+    expect(s.vertical).not.toHaveBeenCalled();
+    // El contenido anclado sigue bajo el punto medio del arranque.
+    expect((s.state.cameraX + 150) / s.state.zoomLevel).toBeCloseTo(250, 6);
   });
 });
 
