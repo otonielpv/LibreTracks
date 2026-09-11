@@ -372,9 +372,9 @@ Nada de esto lo puede hacer la CI:
 1. **TestFlight primero.** Instálalo en un iPhone real desde TestFlight, no
    desde AltStore: es la única forma de ver el build firmado tal y como lo verá
    el revisor.
-2. **La ficha**: capturas por tamaño de pantalla, descripción, categoría,
-   clasificación por edades, URL de soporte y la de privacidad
-   (`libretracks.com/privacy`, que ya existe).
+2. **La ficha**: capturas (ver abajo), descripción, categoría, clasificación
+   por edades, URL de soporte y la de privacidad (`libretracks.com/privacy`,
+   que ya existe).
 3. **Decidir el iPad.** El IPA que genera Tauri declara hoy **iPhone + iPad**
    (lo imprime `verify-ios-ipa.sh` en cada build, en *Device family*). Eso
    significa que un revisor de Apple la abrirá en iPad y que las capturas de
@@ -387,6 +387,34 @@ Nada de esto lo puede hacer la CI:
 5. **Cumplimiento de exportación**: ya está resuelto en el `Info.plist`
    (`ITSAppUsesNonExemptEncryption = false`), así que App Store Connect no
    volverá a preguntarlo en cada envío.
+
+## Capturas para la ficha
+
+**No sirven las capturas hechas con el móvil y enviadas por mensajería.**
+WhatsApp y Telegram reescalan cualquier imagen enviada como foto (llegaron a
+2048×946 y 1280×591 en las pruebas del 2026-09-11) y App Store Connect exige
+tamaños exactos. Para conservar el original hay que mandarlas *como documento*,
+por cable o por AirDrop.
+
+La vía sin depender del móvil es el workflow
+[ios-simulator-shots.yml](../.github/workflows/ios-simulator-shots.yml):
+compila la app contra el SDK del simulador, la arranca en el dispositivo que le
+pidas y guarda las capturas como artefacto. `simctl` escribe el framebuffer
+nativo, así que salen ya con el tamaño correcto — y se pueden repetir cuando
+cambie la interfaz, sin volver a tocar un teléfono.
+
+| Clase | Tamaño que pide Apple (horizontal) | Simulador que lo da |
+| --- | --- | --- |
+| iPad 13" (obligatorio si la app corre en iPad) | 2752×2064 o 2732×2048 | *iPad Pro 13-inch (M4)* |
+| iPhone 6.9" (obligatorio) | consultar la tabla vigente | el modelo de esa fila |
+
+La fila del iPhone se deja sin fijar a propósito: Apple reorganiza esa tabla con
+cada generación de dispositivos, así que hay que mirarla en el momento de subir
+y elegir el simulador que coincida. La fuente es
+[Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications/).
+
+Las imágenes **no pueden llevar canal alfa**, y valen tanto en horizontal como
+en vertical. LibreTracks solo se orienta en horizontal, así que todas irán así.
 
 ## Si Apple rechaza la subida
 
