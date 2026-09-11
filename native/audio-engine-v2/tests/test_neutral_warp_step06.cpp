@@ -89,7 +89,9 @@ std::vector<float> render(const SessionOpts& o, int blocks) {
     Session session = make_session(o, length);
 
     BungeeVoiceManager voices;
+#if LT_ENGINE_HAVE_BUNGEE
     REQUIRE(voices.prepare(kSR, kChannels, kBlock * 4));
+#endif
     voices.rebuild_for_session(session, sm, /*playhead=*/0);
 
     TrackRenderer renderer;
@@ -118,7 +120,9 @@ int voices_for(const SessionOpts& o) {
     add_source(sm, length);
     Session session = make_session(o, length);
     BungeeVoiceManager voices;
+#if LT_ENGINE_HAVE_BUNGEE
     REQUIRE(voices.prepare(kSR, kChannels, kBlock * 4));
+#endif
     voices.rebuild_for_session(session, sm, /*playhead=*/0);
     return voices.diagnostics().active_voice_count;
 }
@@ -173,7 +177,9 @@ TEST_CASE("step06 C4: neutro en ratio pero con transposición SÍ necesita voz")
     CHECK_FALSE(is_neutral_warp(t, t.clips[0], s.songs[0], 0));
     CHECK(resolve_pitch_render_decision(t, t.clips[0], s.songs[0], 0).path
           == ClipPathKind::Stretched);
+#if LT_ENGINE_HAVE_BUNGEE
     CHECK(voices_for(transpuesto) == 1);
+#endif
 }
 
 TEST_CASE("step06 C5: ratio distinto de 1.0 sigue necesitando voz") {
@@ -188,7 +194,9 @@ TEST_CASE("step06 C5: ratio distinto de 1.0 sigue necesitando voz") {
         CHECK_FALSE(is_neutral_warp(t, t.clips[0], s.songs[0], 0));
         CHECK(resolve_pitch_render_decision(t, t.clips[0], s.songs[0], 0).path
               == ClipPathKind::Stretched);
+#if LT_ENGINE_HAVE_BUNGEE
         CHECK(voices_for(warpeado) == 1);
+#endif
     }
 }
 
@@ -217,6 +225,9 @@ TEST_CASE("step06 C6/C7: las dos mitades de la decisión no pueden discrepar") {
     // Cubre a la vez la transición en caliente de C6/C7: cambiar la
     // transposición de la región es exactamente moverse entre estas filas, y lo
     // que hay que garantizar es que en ambas los dos lados están de acuerdo.
+#if !LT_ENGINE_HAVE_BUNGEE
+    return;
+#endif
     for (bool warp : {true, false}) {
         for (double src_bpm : {120.0, 100.0}) {
             for (Semitones semis : {Semitones{0}, Semitones{2}}) {

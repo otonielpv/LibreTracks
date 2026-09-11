@@ -222,8 +222,6 @@ TEST_CASE("step05: el contador sabe distinguir dónde murió la voz") {
     CHECK(BungeePitchVoice::destroyed_on_audio_thread_count() == 0);
 }
 
-#endif // LT_ENGINE_HAVE_BUNGEE
-
 TEST_CASE("step05: la salida con warp sigue siendo bit-exacta y determinista") {
     // Qué puede y qué no puede significar la bit-exactitud en ESTE paso.
     //
@@ -289,3 +287,5 @@ TEST_CASE("step05: la salida con warp sigue siendo bit-exacta y determinista") {
     for (float s : a) peak = std::max(peak, std::abs(s));
     CHECK(peak > 0.001f);
 }
+
+#endif // LT_ENGINE_HAVE_BUNGEE

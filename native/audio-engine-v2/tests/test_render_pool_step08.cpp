@@ -138,6 +138,9 @@ std::vector<float> render_with(int threads, bool automate = false) {
 } // namespace
 
 TEST_CASE("step08 C1: la salida es bit-exacta con 1, 2, 4 y 8 hilos") {
+#if !LT_ENGINE_HAVE_BUNGEE
+    return;
+#endif
     const auto serie = render_with(1);
     REQUIRE(serie.size() > 0);
 
@@ -252,6 +255,9 @@ TEST_CASE("el llamante puede mantener un bloque barato en serie") {
 }
 
 TEST_CASE("el mixer solo paraleliza cuando hay suficientes pistas DSP caras") {
+#if !LT_ENGINE_HAVE_BUNGEE
+    return;
+#endif
     const auto direct = render_pool_diagnostics_for(false, 24);
     CHECK(direct.blocks_serial == 1);
     CHECK(direct.barrier_entries == 0);
@@ -266,6 +272,9 @@ TEST_CASE("el mixer solo paraleliza cuando hay suficientes pistas DSP caras") {
 }
 
 TEST_CASE("render pool remains bit exact through live folder mute and solo changes") {
+#if !LT_ENGINE_HAVE_BUNGEE
+    return;
+#endif
     const auto serial = render_with(1, true);
     const auto parallel = render_with(4, true);
     REQUIRE(serial.size() == parallel.size());
