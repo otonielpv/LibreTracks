@@ -9880,10 +9880,18 @@ html.lt-ios body {
   flex: 0 0 1.1rem;
 }
 
+/* Compás y tiempo APILADOS, como en los DAW de móvil. En fila ocupaban
+   8ch + 9ch + separación; apilados, solo los 9ch del más ancho, y el ancho es
+   justo lo que falta para que la barra de transporte quepa entera. Lo que
+   cuesta es alto, que en la barra sobra: dos líneas a 0.72rem con
+   interlineado 1 caben en la altura que ya marcan los botones. */
 .lt-mobile .lt-transport-readout {
   max-width: 100%;
   margin-left: auto;
-  gap: clamp(0.2rem, 1vw, 0.4rem);
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.05rem;
 }
 
 /* Las etiquetas "BAR" y "TIMECODE" no añaden nada que el formato no diga ya
@@ -9900,7 +9908,8 @@ html.lt-ios body {
    vista. Reservado para el texto mas largo, el numero cambia sin mover nada. */
 .lt-mobile .lt-readout-block strong {
   min-width: 8ch;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
+  line-height: 1;
 }
 
 .lt-mobile .lt-readout-block.is-timecode strong {
