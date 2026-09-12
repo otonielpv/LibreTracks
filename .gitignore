@@ -116,3 +116,6 @@ skills-lock.json
 /CLAUDE.md
 /.claude/
 /.github/prompts/
+
+# Generador del borrador de Reddit: herramienta de marketing, no del producto.
+scripts/announce/

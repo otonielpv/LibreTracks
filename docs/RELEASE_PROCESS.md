@@ -692,6 +692,93 @@ Notes:
 - Download URL is the localized Spanish page: `/es/download/`, not `/downloads`.
 - No closing line, no signature, no hashtags. The template ends at the URL.
 
+### How to publish it in the group
+
+The group composer is where the text gets damaged. These three rules each
+exist because of a specific failure, not as a style preference:
+
+- **No H1, no rich-text formatting.** Applying a heading stops the post being
+  plain text and makes it a block-structured *formatted* post, and entity
+  extraction — hashtags, URLs, mentions — goes down a different path there.
+  The copy does not need it anyway: the first line already *is* the title, and
+  the posts under `marketing/` make theirs stand out with UPPERCASE plus a
+  leading emoji. That reads as a heading everywhere and stays on the plain
+  path.
+- **The download URL stays in the body, last line, with its `https://`.** A
+  URL missing the scheme is not reliably linkified outside the desktop web.
+  Keep it the last thing in the post so no other text can run into it.
+- **Attach the poster as a file; don't paste the bitmap.** Pasting hands
+  Facebook whatever the clipboard happens to hold, which depends on the app it
+  was copied from; attaching hands it the PNG. Step 11 renders at 2x precisely
+  so the app's UI text stays legible, and that is what an extra re-encode
+  costs.
+
+Order: attach the PNG → paste the body → publish. Nothing should need fixing
+by hand afterwards.
+
+If something still does, isolate it instead of guessing: post the same text
+three ways in a throwaway group — plain, with H1, and with the hashtags typed
+instead of pasted — and open all three on a phone. Note that the source files
+are not the suspect; `marketing/*/publicacion-facebook.txt` were checked and
+carry no non-breaking spaces, zero-width characters or smart quotes.
+
+## 13. Hand back a Reddit announcement draft
+
+Same rule as step 12: hand back the text, publish nothing. Generate it with
+
+```bash
+node scripts/announce/reddit-post.mjs --version <NEW>        # English
+node scripts/announce/reddit-post.mjs --version <NEW> --lang es
+node scripts/announce/reddit-post.mjs --version <NEW> --plain    # rich text editor
+```
+
+It prints the title, the poster to attach and the body. It has no network code
+and no credentials: the post goes up by hand.
+
+The generator itself is not in the repo — `scripts/announce/` is gitignored,
+like `marketing/`, because it is marketing tooling rather than product code. If
+this working copy is gone it gets rewritten from the release notes; the shape it
+produces is described below.
+
+Reddit is not the Facebook group and the copy does not carry over:
+
+- **No emojis.** The release notes carry one per bullet for the in-app modal
+  and the Facebook post. The generator strips the *leading* emoji off each
+  bullet; anything that survives into the draft is an emoji mid-sentence, and
+  that one comes out by hand.
+- **No sales voice and no greeting.** Plain statements of what changed.
+- **Markdown, not plain text** — unlike Facebook, Reddit renders it.
+- English by default. The subreddit decides, not the release.
+
+### Poster plus download links
+
+The post is the step 11 poster plus the download links, and on Reddit that is
+not a single format:
+
+- An **image post** is a title and an image. It has no markdown body, so the
+  links cannot ride along with it.
+- A **text post** has the body, and therefore the links, but takes an inline
+  image only if the community allows media in posts.
+
+The poster goes inline in the text post, through the image button in the
+formatting toolbar. If that button is not there, it is almost never the
+subreddit. Check in order:
+
+1. **The tab.** It is the *Post* tab, not *Image & Video*.
+2. **The editor mode.** No formatting toolbar at all means Reddit has you in
+   Markdown mode, and a *Switch to Fancy Pants Editor* button sits under the
+   text box. That is a per-account preference, not a community setting, so it
+   can be off in a sub that allows images perfectly well.
+3. **Then** the community: Mod Tools → Content & Contribution → post types. The
+   types are decoupled, so Text can be on while Images is off. Turn on Images
+   (and galleries, for more than one).
+
+Mind which body you paste. The rich text editor is the one with the image
+button, and it does not necessarily interpret markdown pasted into it — you can
+end up with literal `**` on screen. `--plain` emits the same text without the
+emphasis for that case; the default output is for the markdown editor. Look at
+the preview before submitting, either way.
+
 ---
 
 ## Common pitfalls
@@ -718,6 +805,9 @@ Notes:
 - Publishing a poster without opening the PNG. Overlapping text, a cropped
   app window and a wrapped feature column all render fine and only show up
   when you look.
+- Formatting the group post with H1 or any rich text. It turns the post into a
+  block-structured one and that is where hashtags and URLs stop being detected;
+  the symptom shows up on phones, not on the desktop web where it was written.
 
 ---
 
