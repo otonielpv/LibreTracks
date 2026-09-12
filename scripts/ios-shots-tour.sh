@@ -87,6 +87,51 @@ read_screen_size() {
   log "  pantalla: ${SCREEN_W}x${SCREEN_H} puntos"
 }
 
+# iPad and iPhone lay the same UI out differently — the phone is far narrower
+# in proportion — so a single set of fractions cannot serve both. The profile
+# is read from the aspect ratio rather than from a flag, so running the tour
+# on a new device picks the right one without anybody remembering to pass it.
+#
+#   iPad Pro 13"      1376 x 1032  -> 1.33
+#   iPhone 16 Pro Max  956 x  440  -> 2.17
+PROFILE=""
+read_profile() {
+  if [ "$SCREEN_W" = "0" ] || [ "$SCREEN_H" = "0" ]; then
+    read_screen_size
+  fi
+  local wide
+  wide="$(awk "BEGIN { print ($SCREEN_W / $SCREEN_H > 1.8) ? 1 : 0 }")"
+  if [ "$wide" = "1" ]; then PROFILE="phone"; else PROFILE="tablet"; fi
+  log "  perfil: $PROFILE"
+}
+
+# Fractions of the app's own space, measured off real screenshots of this app
+# on each device. An empty answer means "not calibrated on this device yet":
+# the step then records a miss and moves on, instead of tapping a guess that
+# could hit the wrong button (on the consent card, the neighbour is "Allow").
+coords() {
+  case "$PROFILE:$1" in
+    tablet:skip)     echo "0.437 0.563" ;;
+    phone:skip)      echo "0.345 0.680" ;;
+    tablet:consent)  echo "0.465 0.593" ;;
+    tablet:settings) echo "0.019 0.819" ;;
+    tablet:demo)     echo "0.683 0.341" ;;
+    tablet:mixer)    echo "0.520 0.278" ;;
+    *) echo "" ;;
+  esac
+}
+
+tap_control() {
+  local what="$1" control="$2" fracs
+  fracs="$(coords "$control")"
+  if [ -z "$fracs" ]; then
+    log "  ⚠️  $what: sin calibrar en el perfil $PROFILE"
+    return 1
+  fi
+  # shellcheck disable=SC2086
+  tap_frac "$what" $fracs
+}
+
 screen_hash() {
   local tmp="$OUT/.probe.png"
   xcrun simctl io "$UDID" screenshot "$tmp" >/dev/null 2>&1
@@ -147,7 +192,7 @@ key() {
 log "── Esperando a que la app termine de arrancar ──────────────"
 sleep 20
 describe > "$OUT/tree-at-launch.json" 2>/dev/null || true
-read_screen_size
+read_profile
 shot "launch"
 
 log "── Despachando el tutorial y el aviso de estadísticas ──────"
@@ -155,14 +200,14 @@ log "── Despachando el tutorial y el aviso de estadísticas ─────�
 # tree, so there is nothing to look up. These fractions were measured off the
 # iPad screenshots — both dialogs are centred cards, and "Skip tutorial" sits
 # in the lower-left of the card with the primary button to its right.
-tap_frac "Skip tutorial" 0.437 0.563
+tap_control "Skip tutorial" skip
 # The analytics consent only appears AFTER the tutorial closes, and it takes a
 # moment: tapping its position too early hits the tutorial's backdrop instead.
 sleep 4
 shot "after-skip"
 # Its card is wider than the tutorial's, so "No, thanks" sits elsewhere —
 # measured off 04-home.png of run 34645588357.
-tap_frac "No, thanks" 0.465 0.593
+tap_control "No, thanks" consent
 shot "after-consent"
 
 log "── 01 Portada ──────────────────────────────────────────────"
@@ -172,7 +217,7 @@ shot "home"
 # device (run 34646454084), not guessed. They are fractions rather than pixels
 # so an iPhone run lands in the same relative place.
 log "── 02 Configuración ────────────────────────────────────────"
-if tap_frac "Ajustes (engranaje de la barra lateral)" 0.019 0.819; then
+if tap_control "Ajustes (engranaje de la barra lateral)" settings; then
   shot "settings"
   key 41   # Escape closes the panel (nav.cancelOrClear)
   sleep 2
@@ -182,7 +227,7 @@ else
 fi
 
 log "── 03 Canción de demostración en la vista DAW ──────────────"
-if tap_frac "Demo song" 0.683 0.341; then
+if tap_control "Demo song" demo; then
   # Creating the demo unpacks its audio and analyses the waveforms. The
   # timeline is not worth photographing until that settles.
   sleep 30
@@ -197,7 +242,7 @@ key 43   # daw → compact
 # On a tablet the mixer band starts open, so this first shot is the mixer one
 # and the clean compact view needs the band closed afterwards.
 shot "compact-with-mixer"
-if tap_frac "Hide mixer" 0.520 0.278; then
+if tap_control "Hide mixer" mixer; then
   shot "compact"
 else
   failures=$((failures + 1))
