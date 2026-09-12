@@ -1215,6 +1215,8 @@ const es = {
     folderButton: "Carpeta",
     importAudio: "Importar audio",
     importing: "Importando...",
+    importProgressStaging: "Leyendo archivo {{done}} de {{total}}...",
+    importProgressFinishing: "Añadiendo a la biblioteca...",
     assetsCount: "{{count}} assets",
     foldersCount: "{{count}} carpetas",
     selectedCount: "{{count}} seleccionados",

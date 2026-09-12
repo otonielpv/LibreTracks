@@ -1184,6 +1184,8 @@ const en = {
     folderButton: "Folder",
     importAudio: "Import audio",
     importing: "Importing...",
+    importProgressStaging: "Reading file {{done}} of {{total}}...",
+    importProgressFinishing: "Adding to the library...",
     assetsCount: "{{count}} assets",
     foldersCount: "{{count}} folders",
     selectedCount: "{{count}} selected",

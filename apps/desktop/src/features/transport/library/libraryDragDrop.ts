@@ -3,6 +3,7 @@ import {
   getSongTempoRegionAtPosition,
   type ClipSummary,
   type LibraryAssetSummary,
+  type LibraryImportProgressEvent,
   type SkippedImport,
   type SongView,
   type TransportSnapshot,
@@ -195,6 +196,11 @@ export type LibraryDragDropDeps = {
   formatErrorStatus: (error: unknown) => string;
   selectTrack: (trackIds: string[]) => void;
   mergeLibraryAssets: (assets: LibraryAssetSummary[]) => void;
+  /** Drive the library panel's import spinner (mobile import routes). */
+  setIsImportingLibrary: (importing: boolean) => void;
+  setLibraryImportProgress: (
+    progress: LibraryImportProgressEvent | null,
+  ) => void;
   refreshLibraryState: (options?: {
     preserveAssets?: LibraryAssetSummary[];
   }) => Promise<LibraryAssetSummary[]>;
@@ -1791,6 +1797,8 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
         applyPlaybackSnapshot: deps().applyPlaybackSnapshot,
         getImportPositionSeconds: () =>
           deps().displayPositionSecondsRef.current,
+        setIsImportingLibrary: deps().setIsImportingLibrary,
+        setLibraryImportProgress: deps().setLibraryImportProgress,
       });
       return;
     }
@@ -1808,6 +1816,8 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
         applyPlaybackSnapshot: deps().applyPlaybackSnapshot,
         getImportPositionSeconds: () =>
           deps().displayPositionSecondsRef.current,
+        setIsImportingLibrary: deps().setIsImportingLibrary,
+        setLibraryImportProgress: deps().setLibraryImportProgress,
         reportSkipped: reportSkippedImports,
       });
       return;

@@ -1,5 +1,6 @@
 import type {
   LibraryAssetSummary,
+  LibraryImportProgressEvent,
   SkippedImport,
   TransportSnapshot,
 } from "@libretracks/shared/models";
@@ -42,6 +43,14 @@ export type MobileLibraryImportDeps = {
   applyPlaybackSnapshot: (snapshot: TransportSnapshot) => void;
   /** Where new clips land if the user accepts the timeline prompt. */
   getImportPositionSeconds: () => number;
+  /**
+   * Drives the library panel's spinner. Both routes must set this: a phone
+   * import can run for minutes, and with no indicator the panel looks frozen —
+   * the panel only shows the spinner while `isImporting` AND a progress event
+   * are both present, so the picker itself stays quiet.
+   */
+  setIsImportingLibrary: (importing: boolean) => void;
+  setLibraryImportProgress: (progress: LibraryImportProgressEvent | null) => void;
 };
 
 /** iOS additionally reports files the backend could not read. */
@@ -105,33 +114,64 @@ export async function runIosLibraryImport(
   deps.setStatus(deps.t("transport.status.libraryImportStarting"));
   await nextPaint();
 
+  // Nothing on the backend emits progress for this route — the staging loop
+  // below IS the slow part and it runs here — so this side has to report it, or
+  // the panel sits on "Leyendo archivo…" for minutes and reads as hung.
+  deps.setIsImportingLibrary(true);
+  const reportStagingProgress = (done: number) => {
+    deps.setLibraryImportProgress({
+      // 0..90%: the staged import that follows only renames and probes.
+      percent: files.length === 0 ? 0 : Math.round((done * 90) / files.length),
+      message: deps.t("library.importProgressStaging", {
+        done,
+        total: files.length,
+        defaultValue: "Leyendo archivo {{done}} de {{total}}...",
+      }),
+    });
+  };
+  reportStagingProgress(0);
+
   // Stage sequentially: one in-flight slice at a time keeps the WebView
   // renderer's heap flat — reading whole files into Uint8Arrays here
   // OOM-crashed the renderer on low-RAM phones.
   const stagedPayloads: Array<{ fileName: string; sourcePath: string }> = [];
-  await runAudioImportPipeline({
-    pendingIds: pendingImports.map((item) => item.id),
-    beforeImport: async () => {
-      for (let index = 0; index < files.length; index += 1) {
-        const file = files[index];
-        stagedPayloads.push({
-          fileName: file.name,
-          sourcePath: await stageFileForImport(file, index === 0),
+  try {
+    await runAudioImportPipeline({
+      pendingIds: pendingImports.map((item) => item.id),
+      beforeImport: async () => {
+        for (let index = 0; index < files.length; index += 1) {
+          const file = files[index];
+          stagedPayloads.push({
+            fileName: file.name,
+            sourcePath: await stageFileForImport(file, index === 0),
+          });
+          reportStagingProgress(index + 1);
+        }
+      },
+      importFn: () => {
+        deps.setLibraryImportProgress({
+          percent: 95,
+          message: deps.t("library.importProgressFinishing", {
+            defaultValue: "Añadiendo a la biblioteca...",
+          }),
         });
-      }
-    },
-    importFn: () => importStagedAudioFiles(stagedPayloads),
-    onImported: (importedAssets) =>
-      offerToPlaceOnTimeline(deps, importedAssets),
-    mergeLibraryAssets: deps.mergeLibraryAssets,
-    refreshLibraryState: deps.refreshLibraryState,
-    setStatus: deps.setStatus,
-    reportSkipped: deps.reportSkipped,
-    successMessage: (importedAssets) =>
-      deps.t("transport.status.libraryUpdated", {
-        count: importedAssets.length,
-      }),
-  });
+        return importStagedAudioFiles(stagedPayloads);
+      },
+      onImported: (importedAssets) =>
+        offerToPlaceOnTimeline(deps, importedAssets),
+      mergeLibraryAssets: deps.mergeLibraryAssets,
+      refreshLibraryState: deps.refreshLibraryState,
+      setStatus: deps.setStatus,
+      reportSkipped: deps.reportSkipped,
+      successMessage: (importedAssets) =>
+        deps.t("transport.status.libraryUpdated", {
+          count: importedAssets.length,
+        }),
+    });
+  } finally {
+    deps.setIsImportingLibrary(false);
+    deps.setLibraryImportProgress(null);
+  }
 }
 
 /**
@@ -145,7 +185,19 @@ export async function runAndroidLibraryImport(
   const knownPaths = new Set(deps.libraryAssets.map((asset) => asset.filePath));
   deps.setStatus(deps.t("transport.status.libraryImportStarting"));
 
-  const assets = await importLibraryAssetsFromDialog();
+  // The backend owns the progress here: it emits "Copiando 3/13…" per file as
+  // it streams each document in, and the panel listens for those events. All
+  // this side has to do is arm the indicator and disarm it no matter how the
+  // import ends.
+  deps.setIsImportingLibrary(true);
+  deps.setLibraryImportProgress(null);
+  let assets: LibraryAssetSummary[] | null;
+  try {
+    assets = await importLibraryAssetsFromDialog();
+  } finally {
+    deps.setIsImportingLibrary(false);
+    deps.setLibraryImportProgress(null);
+  }
   if (!assets) {
     return; // user cancelled
   }

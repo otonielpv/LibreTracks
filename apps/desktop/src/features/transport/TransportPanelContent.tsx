@@ -458,6 +458,7 @@ import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
+import { getEffectiveTempoMarkerAt } from "./tempo/tempoMarkers";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
@@ -673,23 +674,6 @@ function TimelineColorPopover({
       </div>
     </div>
   );
-}
-
-function getEffectiveTempoMarkerAt(
-  song: SongView | null | undefined,
-  positionSeconds: number,
-): TempoMarkerSummary | null {
-  if (!song?.tempoMarkers.length) return null;
-  let bestMarker: TempoMarkerSummary | null = null;
-  for (const marker of song.tempoMarkers) {
-    if (
-      marker.startSeconds <= positionSeconds + 0.001 &&
-      (!bestMarker || marker.startSeconds > bestMarker.startSeconds)
-    ) {
-      bestMarker = marker;
-    }
-  }
-  return bestMarker;
 }
 
 // Backward-compatible re-exports (TransportPanelContent.test.ts imports these)
@@ -6692,6 +6676,8 @@ export function TransportPanelContent() {
       formatErrorStatus,
       selectTrack,
       mergeLibraryAssets,
+      setIsImportingLibrary,
+      setLibraryImportProgress,
       refreshLibraryState,
       startOptimisticClipOperation,
       completeOptimisticClipOperation,
