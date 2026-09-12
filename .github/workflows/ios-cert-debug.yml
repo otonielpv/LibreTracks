@@ -1,0 +1,59 @@
+name: iOS cert debug (temporal)
+
+# Diagnostico de un solo uso: el import del .p12 falla en el runner con
+# "MAC verification failed" mientras el MISMO fichero y la MISMA contrasena
+# abren sin problema en local. Esto compara lo que recibe el runner con lo que
+# hay en disco y separa las dos hipotesis que quedan:
+#
+#   * los bytes llegan cambiados  -> los hashes no cuadraran
+#   * los bytes llegan intactos   -> el problema es `security import`
+#
+# No imprime ningun secreto: solo longitudes y hashes.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Compare what the runner receives with what is on disk
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -uo pipefail
+
+          printf '%s' "$IOS_CERTIFICATE" | base64 --decode > cert.p12
+          echo "p12 bytes:        $(wc -c < cert.p12 | tr -d ' ')   (en disco: 3336)"
+          echo "p12 sha256:       $(shasum -a 256 cert.p12 | cut -d' ' -f1)"
+          echo "                  (en disco: 7ba89a5eba11d88cfcb6ac73124040c7b1a01e2dcce532aeaaa79d3ef21cb6fc)"
+          echo "password bytes:   $(printf '%s' "$IOS_CERTIFICATE_PASSWORD" | wc -c | tr -d ' ')   (en disco: 28)"
+          echo "password sha256:  $(printf '%s' "$IOS_CERTIFICATE_PASSWORD" | shasum -a 256 | cut -d' ' -f1)"
+          echo "                  (en disco: 955cf90fde5fc35f1f5255a88714631007cbaae585a6d42e71e0986044c3ea2a)"
+
+          echo "--- openssl del runner: ¿abre el .p12 con esa contraseña? ---"
+          openssl version
+          if openssl pkcs12 -in cert.p12 -nokeys -noout -passin env:IOS_CERTIFICATE_PASSWORD; then
+            echo "RESULTADO: openssl SI abre el .p12 -> los bytes llegan bien"
+          else
+            echo "RESULTADO: openssl NO abre el .p12 -> algo cambia por el camino"
+          fi
+
+          echo "--- security import, tal cual lo hace tauri ---"
+          keychain="$RUNNER_TEMP/probe.keychain-db"
+          security create-keychain -p probepass "$keychain"
+          security unlock-keychain -p probepass "$keychain"
+          security import cert.p12 -P "$IOS_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -k "$keychain" && echo "IMPORT A: ok" || echo "IMPORT A: falla"
+
+          echo "--- security import, con -f pkcs12 explicito (como el DMG) ---"
+          security import cert.p12 -P "$IOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain" && echo "IMPORT B: ok" || echo "IMPORT B: falla"
+
+          echo "--- identidades resultantes ---"
+          security find-identity -v -p codesigning "$keychain" || true
