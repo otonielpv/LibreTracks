@@ -43,7 +43,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-shots-${{ github.ref }}
+  # Por dispositivo: un iPhone y un iPad son dos comprobaciones distintas y
+  # con un grupo comun la segunda cancelaba a la primera.
+  group: ios-shots-${{ github.ref }}-${{ inputs.device }}
   cancel-in-progress: true
 
 jobs:
