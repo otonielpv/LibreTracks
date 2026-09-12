@@ -131,6 +131,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # App Store Connect rechaza cualquier IPA compilado con un SDK anterior al
+      # de iOS 26 ("SDK version issue ... must be built with the iOS 26 SDK or
+      # later"), y la imagen macos-15 sigue arrancando con Xcode 16.4. Se elige
+      # aqui, antes del motor, para que toda la compilacion use el mismo
+      # toolchain; y se falla en seco si la imagen no lo trae, porque la
+      # alternativa es enterarse cuarenta minutos despues y por boca de Apple.
+      - name: Select the Xcode App Store Connect requires
+        run: |
+          set -euo pipefail
+          newest="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -z "$newest" ]; then
+            echo "::error::This runner image has no Xcode 26, and App Store Connect refuses IPAs built with an older SDK."
+            ls -d /Applications/Xcode*.app || true
+            exit 1
+          fi
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
