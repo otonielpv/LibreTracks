@@ -98,7 +98,8 @@ openssl req -new -key developer-id.key -out developer-id.certSigningRequest \
 # 3. Del .cer de Apple + tu clave, sale el .p12 que quiere la CI
 openssl x509 -in developer-id.cer -inform DER -out developer-id.pem -outform PEM
 openssl pkcs12 -export -inkey developer-id.key -in developer-id.pem \
-  -out developer-id.p12 -name "Developer ID Application"
+  -out developer-id.p12 -name "Developer ID Application" \
+  -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1
 
 # 4. El valor del secreto
 base64 -w0 developer-id.p12 > developer-id.p12.base64
@@ -106,6 +107,20 @@ base64 -w0 developer-id.p12 > developer-id.p12.base64
 
 OpenSSL ya viene dentro de Git for Windows
 (`C:\Program Files\Git\usr\bin\openssl.exe`), así que no hay que instalar nada.
+
+Los tres `-...pbe`/`-macalg` **no son opcionales**, y son la trampa más cara de
+esta página. OpenSSL 3 cifra el `.p12` con AES-256-CBC y le pone un MAC SHA-256,
+y el `security import` de macOS **no sabe leer ese formato si no le dicen que es
+PKCS#12**: falla con `MAC verification failed during PKCS12 import (wrong
+password?)`, acusando a la contraseña estando la contraseña bien. El mismo
+fichero lo abre `openssl` sin pestañear, que es lo que hace perder la tarde.
+
+El workflow del DMG sí pasa `-f pkcs12`, así que el certificado de escritorio
+sobrevive a ese formato; `tauri ios build` importa el suyo sin esa pista y no.
+Con estos tres parámetros el `.p12` sale en el formato clásico —el mismo que
+exporta *Acceso a Llaveros* desde un Mac— y sirve para los dos caminos. Si ya
+tienes uno hecho no hay que volver a Apple: la clave privada no está cifrada,
+basta con reexportarlo.
 
 En **Git Bash** la doble barra de `-subj` no es una errata: sin ella, MSYS
 convierte el argumento en una ruta de Windows y el `subj` sale mal. Desde
@@ -276,7 +291,11 @@ entitlement, va solo en el `Info.plist`.
 El mismo procedimiento que el *Developer ID Application* de arriba, pero
 eligiendo el tipo **Apple Distribution**. Exportar a `.p12` desde *Mis
 certificados*, igual que allí — o con OpenSSL desde Windows, siguiendo
-[Sin un Mac a mano](#sin-un-mac-a-mano-windows-o-linux).
+[Sin un Mac a mano](#sin-un-mac-a-mano-windows-o-linux), **incluidos los
+`-certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1`**: aquí el
+certificado lo importa `tauri ios build`, que es justo el camino que no tolera
+el formato de OpenSSL 3. El workflow lo comprueba en los primeros segundos, para
+no gastar cuarenta minutos de compilación antes de decírtelo.
 
 No sirve el de escritorio: el de la tienda lo emite Apple con otra cadena de
 confianza, y firmar el IPA con un *Developer ID* produce un rechazo en el

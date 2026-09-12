@@ -150,6 +150,36 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      # `tauri ios build` imports the certificate with a bare `security import`
+      # and no `-f pkcs12`, which cannot read a PKCS#12 written by OpenSSL 3
+      # with its defaults (AES-256-CBC, SHA-256 MAC). It fails with "MAC
+      # verification failed ... (wrong password?)", which sends you hunting for
+      # a password problem that does not exist: the same file and password open
+      # fine with openssl, and import fine with `-f pkcs12`.
+      #
+      # Two seconds here instead of forty minutes of engine build, and the
+      # message says what to actually do about it.
+      - name: Check the certificate imports the way Tauri imports it
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -uo pipefail
+          certificate="$RUNNER_TEMP/preflight-cert.p12"
+          printf '%s' "$IOS_CERTIFICATE" | base64 --decode > "$certificate"
+          keychain="$RUNNER_TEMP/preflight.keychain-db"
+          security create-keychain -p preflight "$keychain"
+          security unlock-keychain -p preflight "$keychain"
+          if ! security import "$certificate" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -k "$keychain" 2>&1; then
+            echo "::error::The signing certificate cannot be imported the way tauri does it. If openssl opens the .p12 with this password, the password is NOT the problem: re-export it in the format macOS can read without a format hint, with openssl pkcs12 -export -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 (see docs/APPLE_SIGNING.md)."
+            security delete-keychain "$keychain" || true
+            rm -f "$certificate"
+            exit 1
+          fi
+          security find-identity -v -p codesigning "$keychain"
+          security delete-keychain "$keychain"
+          rm -f "$certificate"
+
       # Tauri resolves and validates bundle.resources before it executes the
       # platform beforeBuildCommand. Build this inherited resource up front;
       # otherwise a clean runner fails before either frontend build can start.

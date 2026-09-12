@@ -198,10 +198,32 @@ fi
 # get-task-allow lets a debugger attach. Xcode sets it for development
 # signing, and an IPA that carries it is rejected at upload with ITMS-90046 —
 # after the whole build has already been paid for.
-entitlements="$(codesign --display --entitlements - --xml "$app" 2>/dev/null || true)"
-if printf '%s' "$entitlements" | grep -A1 'get-task-allow' | grep '<true/>' >/dev/null; then
+# Read the plist rather than grepping it: codesign emits the whole dictionary
+# on ONE line, so `grep -A1 get-task-allow` returns the entire entitlement set
+# and matches the <true/> of whatever neighbour happens to be true. Not
+# hypothetical: beta-reports-active sits right next to it in an App Store
+# profile, and it failed a perfectly good IPA the first time this ran.
+entitlements="$work_dir/entitlements.plist"
+codesign --display --entitlements - --xml "$app" > "$entitlements" 2>/dev/null || true
+if [ ! -s "$entitlements" ]; then
+  echo "::error::IPA carries no entitlements at all, so it cannot have been signed with an App Store profile." >&2
+  exit 1
+fi
+
+# The App ID the profile was issued for. A profile for a different bundle id
+# signs and verifies perfectly on disk and is only rejected at upload.
+app_identifier="$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$entitlements" 2>/dev/null || echo '<absent>')"
+case "$app_identifier" in
+  *".$bundle_id") ;;
+  *)
+    echo "::error::Signed as application-identifier=$app_identifier, which is not the bundle id $bundle_id. The provisioning profile belongs to a different App ID." >&2
+    exit 1
+    ;;
+esac
+
+if /usr/libexec/PlistBuddy -c 'Print :get-task-allow' "$entitlements" 2>/dev/null | grep -qx 'true'; then
   echo "::error::IPA is signed with get-task-allow=true (a development profile). App Store Connect rejects this with ITMS-90046." >&2
-  printf '%s\n' "$entitlements" >&2
+  cat "$entitlements" >&2
   exit 1
 fi
 
@@ -216,4 +238,4 @@ profile_expiry="$(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' "$profile_p
 
 echo "Signature:        Apple Distribution, verified"
 echo "Profile:          $profile_name (team $profile_team, expires $profile_expiry)"
-echo "Entitlements:     get-task-allow absent (App Store profile)"
+echo "Entitlements:     $app_identifier, get-task-allow off"
