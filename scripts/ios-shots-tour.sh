@@ -127,7 +127,11 @@ coords() {
   case "$PROFILE:$1" in
     tablet:skip)     echo "0.437 0.563" ;;
     phone:skip)      echo "0.345 0.680" ;;
-    tablet:consent)  echo "0.465 0.617" ;;
+    # Medido por pixeles, no a ojo: el boton teal "Allow usage statistics"
+    # ocupa x 551-806 pt y "No, thanks" queda a su derecha. Las estimaciones
+    # visuales anteriores caian DENTRO del boton de aceptar, a tres puntos de
+    # su borde: de haber acertado habrian activado la telemetria.
+    tablet:consent)  echo "0.627 0.573" ;;
     phone:consent)   echo "0.450 0.760" ;;
     tablet:settings) echo "0.019 0.819" ;;
     phone:settings)  echo "0.090 0.782" ;;
