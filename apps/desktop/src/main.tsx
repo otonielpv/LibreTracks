@@ -52,6 +52,30 @@ if (isMobileApp) {
     console.log(`[LT_VIEWPORT] ${report}`);
     probe.remove();
 
+    // Cuánto se sale la barra de transporte de lo que hay. Recortarla a ojo
+    // es adivinar; esto dice los píxeles exactos que faltan en cada
+    // dispositivo, que es lo único que permite decidir qué encoger.
+    const overflowOf = (selector: string): string => {
+      const el = document.querySelector<HTMLElement>(selector);
+      if (!el) return `${selector}=<no montado>`;
+      const over = el.scrollWidth - el.clientWidth;
+      return `${selector}=${el.clientWidth}/${el.scrollWidth}${over > 0 ? ` DESBORDA ${over}px` : " cabe"}`;
+    };
+    const bars = [".lt-transport", ".lt-topbar-main-row", ".lt-view-toolbar"]
+      .map(overflowOf)
+      .join(" | ");
+    console.log(`[LT_BARS] ${bars}`);
+
+    const banner = document.createElement("div");
+    banner.textContent = `${report}
+${bars}`;
+    banner.style.cssText =
+      "position:fixed;bottom:0;left:0;right:0;z-index:2147483647;" +
+      "background:#b00020;color:#fff;font:11px/1.3 monospace;padding:3px 6px;" +
+      "pointer-events:none;white-space:pre-wrap;";
+    document.body.appendChild(banner);
+    window.setTimeout(() => banner.remove(), 90000);
+
   }, 1500);
 }
 

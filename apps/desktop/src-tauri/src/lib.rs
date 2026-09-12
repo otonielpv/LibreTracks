@@ -233,6 +233,14 @@ pub fn run() {
                 });
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
+
+            // iPhone con notch: sin esto el WebView pierde los insets laterales
+            // y la interfaz deja una franja negra al lado. Ver el modulo.
+            #[cfg(target_os = "ios")]
+            if let Some(window) = app.get_webview_window("main") {
+                platform::ios_webview::stretch_under_safe_area(&window);
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

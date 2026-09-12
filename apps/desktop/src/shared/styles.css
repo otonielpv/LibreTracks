@@ -9883,7 +9883,15 @@ html.lt-ios body {
 .lt-mobile .lt-transport-readout {
   max-width: 100%;
   margin-left: auto;
-  gap: clamp(0.35rem, 1.5vw, 0.75rem);
+  gap: clamp(0.2rem, 1vw, 0.4rem);
+}
+
+/* Las etiquetas "BAR" y "TIMECODE" no añaden nada que el formato no diga ya
+   —1.1.00 es un compás y 00:00.000 un tiempo— y el sitio que ocupan hace
+   falta para que la barra de transporte quepa entera, que es lo que se toca
+   en directo. */
+.lt-mobile .lt-readout-block span {
+  display: none;
 }
 
 /* Ancho FIJO, en cifras del propio tipo monoespaciado. El grupo de transporte
@@ -9892,6 +9900,7 @@ html.lt-ios body {
    vista. Reservado para el texto mas largo, el numero cambia sin mover nada. */
 .lt-mobile .lt-readout-block strong {
   min-width: 8ch;
+  font-size: 0.8rem;
 }
 
 .lt-mobile .lt-readout-block.is-timecode strong {

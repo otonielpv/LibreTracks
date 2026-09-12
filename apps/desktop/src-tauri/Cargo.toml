@@ -67,6 +67,9 @@ tauri-plugin-deep-link = "2"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 libretracks-ios-folder-picker = { path = "plugins/ios-folder-picker" }
+# Para soltar el contentInsetAdjustment del scroll view del WKWebView: sin eso
+# el viewport pierde los insets del notch y queda una franja negra al lado.
+objc2 = "0.6"
 
 # macOS-only. Security-scoped bookmarks let us persist folder access granted
 # by a native open panel, so reopening a saved session (and reading all the

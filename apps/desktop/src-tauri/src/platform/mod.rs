@@ -25,6 +25,8 @@ pub mod resource_monitor;
 
 #[cfg(target_os = "ios")]
 pub mod ios_token_store;
+#[cfg(target_os = "ios")]
+pub mod ios_webview;
 
 #[cfg(target_os = "android")]
 pub mod android_audio_devices;
