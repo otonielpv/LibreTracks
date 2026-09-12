@@ -134,7 +134,9 @@ coords() {
     tablet:demo)     echo "0.683 0.341" ;;
     phone:demo)      echo "0.700 0.597" ;;
     tablet:mixer)    echo "0.520 0.278" ;;
-    phone:mixer)     echo "0.561 0.916" ;;
+    # Pegado al borde inferior, pero no tanto como para caer en la zona del
+    # indicador de inicio: ahi el gesto se lo queda el sistema.
+    phone:mixer)     echo "0.561 0.950" ;;
     *) echo "" ;;
   esac
 }
