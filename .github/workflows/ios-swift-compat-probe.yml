@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Which deployment target stops asking for the compat library
+        shell: bash {0}
         run: |
           set -uo pipefail
           newest="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
