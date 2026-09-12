@@ -125,13 +125,10 @@ read_profile() {
 # could hit the wrong button (on the consent card, the neighbour is "Allow").
 coords() {
   case "$PROFILE:$1" in
-    tablet:skip)     echo "0.437 0.563" ;;
+    tablet:skip)     echo "0.4375 0.587" ;;
     phone:skip)      echo "0.345 0.680" ;;
-    # Medido por pixeles, no a ojo: el boton teal "Allow usage statistics"
-    # ocupa x 551-806 pt y "No, thanks" queda a su derecha. Las estimaciones
-    # visuales anteriores caian DENTRO del boton de aceptar, a tres puntos de
-    # su borde: de haber acertado habrian activado la telemetria.
-    tablet:consent)  echo "0.627 0.573" ;;
+    # Cuidado al remedir: el vecino de "No, thanks" es ACEPTAR la telemetria.
+    tablet:consent)  echo "0.465 0.617" ;;
     phone:consent)   echo "0.450 0.760" ;;
     tablet:settings) echo "0.019 0.819" ;;
     phone:settings)  echo "0.090 0.782" ;;
@@ -224,7 +221,14 @@ log "── Despachando el tutorial y el aviso de estadísticas ─────�
 # tree, so there is nothing to look up. These fractions were measured off the
 # iPad screenshots — both dialogs are centred cards, and "Skip tutorial" sits
 # in the lower-left of the card with the primary button to its right.
-tap_control "Skip tutorial" skip
+# Si el tutorial no se cierra, todo lo que viene despues toca contra el y
+# sale una tanda de capturas del mismo dialogo. Mejor parar aqui.
+if ! tap_control "Skip tutorial" skip; then
+  shot "tutorial-NO-CERRADO"
+  log "El tutorial sigue abierto: sin cerrarlo, el resto del recorrido es ruido."
+  rm -f "$OUT/.probe.png"
+  exit 1
+fi
 # El aviso de estadisticas aparece DESPUES de cerrar el tutorial y tarda un
 # momento en montarse. Tocar antes da en el fondo — y el toque lo daba por
 # bueno, porque "la pantalla cambio" tambien es cierto cuando lo que cambia es
