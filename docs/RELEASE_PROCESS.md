@@ -136,10 +136,30 @@ Update ALL of these to the new version string (use Edit tool on each):
 | `apps/desktop/src-tauri/tauri.conf.json` | `"version"` |
 | `apps/remote/package.json` | `"version"` |
 | `Cargo.lock` | the `libretracks-desktop` `[[package]]` entry's `version` |
+| `apps/desktop/src-tauri/tauri.android.conf.json` | `"versionCode"` — **not** the version string, see below |
 
 `apps/remote/package.json` must be bumped to the new version string along
 with the rest (it historically lagged, but it should now stay in lockstep).
 Don't touch other crates' versions unless something forced a bump there.
+
+### Android's versionCode does not follow the version string
+
+`autoIncrementVersionCode` is `false`, so the number is whatever is written in
+`tauri.android.conf.json` and bumping `version` everywhere else does **not**
+move it. Play rejects an AAB whose `versionCode` it has already seen, and the
+rejection arrives at upload time, after the whole release is cut.
+
+It reads as major · 1000000 + minor · 1000 + a counter: `1.11.1` shipped as
+`1011002`, so `1.12.0` goes out as `1012000`. The only hard rule is that it
+must strictly increase.
+
+### iOS needs nothing here
+
+`tauri.ios.conf.json` carries no version: `CFBundleShortVersionString` comes
+from `tauri.conf.json` like everywhere else, and `CFBundleVersion` is the CI run
+number, pinned by `ios-release.yml` at build time. So a release that is meant to
+land on all three stores at the same number only has to get this table right —
+iOS follows.
 
 ### Custom NSIS template (Windows)
 
@@ -509,6 +529,11 @@ Neither blocks the release, and neither uploads anything to Apple on its own:
 - To put the build in TestFlight, run *iOS Release (signed App Store build)*
   by hand with `upload` ticked. Setup lives in
   [APPLE_SIGNING.md](./APPLE_SIGNING.md).
+
+For a release that goes to the App Store, upload the build made **from the
+tag**, not one from a later commit on `main`: the version App Store Connect
+shows is the one compiled into that IPA, and it is what has to match the DMG
+and the Play listing.
 
 Watch them like any other job, but do not move the tag for an iOS failure
 unless the release is meant to ship to the store: the desktop artifacts are
