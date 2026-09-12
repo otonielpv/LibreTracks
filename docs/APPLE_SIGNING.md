@@ -262,7 +262,7 @@ como permiso adicional del artículo 7 de la AGPL. Lo que queda es mecánico.
 
 [developer.apple.com/account](https://developer.apple.com/account) →
 *Identifiers* → **+** → *App IDs* → *App* → Bundle ID **explícito**
-`com.libretracks.ios`.
+`com.libretracks.app`.
 
 Tiene que ser **exactamente** el `identifier` de
 [tauri.ios.conf.json](../apps/desktop/src-tauri/tauri.ios.conf.json), y no se

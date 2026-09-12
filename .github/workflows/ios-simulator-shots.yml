@@ -347,7 +347,7 @@ jobs:
             es) locale="es_ES" ;;
             *)  locale="en_US" ;;
           esac
-          xcrun simctl launch "$SIM_UDID" com.libretracks.ios \
+          xcrun simctl launch "$SIM_UDID" com.libretracks.app \
             -AppleLanguages "($LANG_CODE)" -AppleLocale "$locale"
           sleep "$SETTLE"
 

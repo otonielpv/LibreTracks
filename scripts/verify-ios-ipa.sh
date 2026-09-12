@@ -47,7 +47,7 @@ short_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 
 build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
 archs="$(lipo -archs "$app/$executable")"
 
-test "$bundle_id" = "com.libretracks.ios"
+test "$bundle_id" = "com.libretracks.app"
 test "$minimum_ios" = "15.0"
 case " $archs " in
   *" arm64 "*) ;;

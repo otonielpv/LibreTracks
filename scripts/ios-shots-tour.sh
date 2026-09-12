@@ -29,7 +29,7 @@ set -uo pipefail
 
 UDID="${1:?usage: ios-shots-tour.sh <udid> <output-dir>}"
 OUT="${2:?usage: ios-shots-tour.sh <udid> <output-dir>}"
-BUNDLE_ID="com.libretracks.ios"
+BUNDLE_ID="com.libretracks.app"
 
 mkdir -p "$OUT"
 failures=0
