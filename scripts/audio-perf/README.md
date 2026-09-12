@@ -1,7 +1,7 @@
 # Herramientas de medida del motor de audio
 
-Todo esto es instrumentación del plan
-[`docs/plans/audio-engine-performance/`](../../docs/plans/audio-engine-performance/README.md).
+Todo esto es instrumentación del plan interno de rendimiento del motor de audio
+(esas notas de diseño no forman parte del repositorio público).
 **No forma parte del producto**: ningún ejecutable de LibreTracks importa nada
 de aquí. Vive junto al repositorio porque cada archivo es el paso de
 reproducción de una medida ya publicada, y borrarlo dejaría esa medida sin

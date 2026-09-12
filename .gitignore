@@ -91,3 +91,28 @@ tests/e2e/specs/marketing-shots.e2e.ts
 samples/perf-setlist/
 .agents/skills
 skills-lock.json
+
+# --- Notas internas de diseño e investigación (fuera del repo público) ---
+# Estos ficheros son el análisis, no el software: planes por pasos, mediciones,
+# diagnósticos y notas de port. La AGPL obliga a publicar el "corresponding
+# source" —el código y lo necesario para construirlo—, no las notas de diseño.
+# Siguen en disco y las sesiones locales los leen igual; simplemente no viajan
+# al repo público. Rutas ancladas con "/" a propósito: un patrón por nombre
+# suelto se traga ficheros homónimos en otras carpetas (ver el caso `build*`).
+/docs/plans/
+/docs/HANDOFF_*.md
+/docs/REDESIGN_*.md
+/docs/audio-engine-v2-*.md
+/docs/PLAN_DESARROLLO_CAMBIO_DE_TONO.md
+/docs/audio-runtime-debug.md
+/docs/audio-runtime-ownership.md
+/docs/import-performance-debug.md
+/docs/deferred-song-model-rename.md
+/docs/ANDROID_PORT.md
+/docs/IOS_PORT.md
+
+# Andamiaje para agentes de IA: el mapa de "cómo trabajar en este repo".
+/AGENTS.md
+/CLAUDE.md
+/.claude/
+/.github/prompts/
