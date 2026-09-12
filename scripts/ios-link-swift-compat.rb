@@ -34,25 +34,27 @@ require 'xcodeproj'
 # Swift in it. Kept as build settings, not literal paths, so the same project
 # links against whichever Xcode and platform the build happens to use —
 # iphoneos for the IPA, iphonesimulator for the screenshot runs.
-# $(TOOLCHAIN_DIR) is NOT the answer, even though the template already uses it
-# and it reads like it should be: under Xcode 26 it expands to the Metal
-# toolchain's cryptex mount, and the link line ends up with
+# No build setting names this directory under Xcode 26, which is why the
+# toolchain path below is resolved instead of written as a variable:
 #
-#   -L/var/run/com.apple.security.cryptexd/.../Metal.xctoolchain/usr/lib/swift/iphoneos
+#   * $(TOOLCHAIN_DIR) — what the template already uses, and what Xcode tells
+#     you to use — expands to the Metal toolchain's cryptex mount, so the link
+#     line gets -L/var/run/com.apple.security.cryptexd/.../Metal.xctoolchain/...
+#     and ld reports a search path that does not exist.
+#   * $(DT_TOOLCHAIN_DIR) is the right directory and Xcode refuses it outright:
+#     "DT_TOOLCHAIN_DIR cannot be used to evaluate LIBRARY_SEARCH_PATHS, use
+#     TOOLCHAIN_DIR instead".
 #
-# which does not exist. $(DT_TOOLCHAIN_DIR) is the developer-tools toolchain,
-# which is the one that actually holds libswiftCompatibility56.a.
+# An absolute path in a generated project is normally a smell. Here it is the
+# only thing left, and it costs nothing: the project is regenerated from
+# scratch on every build, so the path is written and used within the same job.
 SWIFT_LIBRARY_PATHS = [
   '$(inherited)',
-  '$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)',
   '$(SDKROOT)/usr/lib/swift'
 ].freeze
 
-# And a belt to go with those braces: the directory as it resolves right now,
-# from the compiler the build will actually use. A build setting that silently
-# expands to the wrong place is precisely what this script exists to undo, and
-# the generated project is rebuilt from scratch on every run, so an absolute
-# path in it ages out the same day it is written.
+# The toolchain's Swift directory, resolved from the compiler this build will
+# actually use.
 def resolved_swift_library_dirs
   swiftc = `xcrun -f swiftc 2>/dev/null`.strip
   return [] if swiftc.empty?
