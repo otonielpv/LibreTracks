@@ -1789,7 +1789,6 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     // the timeline" prompt, which is the usual mobile intent.
     if (isAndroidApp) {
       await runAndroidLibraryImport({
-        libraryAssets: deps().libraryAssets,
         t: deps().t,
         setStatus: deps().setStatus,
         mergeLibraryAssets: deps().mergeLibraryAssets,
@@ -1799,6 +1798,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
           deps().displayPositionSecondsRef.current,
         setIsImportingLibrary: deps().setIsImportingLibrary,
         setLibraryImportProgress: deps().setLibraryImportProgress,
+        reportSkipped: reportSkippedImports,
       });
       return;
     }
@@ -1808,7 +1808,6 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     // with no awaits before it — see the module.
     if (isMobileApp) {
       await runIosLibraryImport({
-        libraryAssets: deps().libraryAssets,
         t: deps().t,
         setStatus: deps().setStatus,
         mergeLibraryAssets: deps().mergeLibraryAssets,

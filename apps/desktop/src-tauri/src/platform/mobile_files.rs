@@ -111,6 +111,51 @@ impl PickedAudioDocument {
         };
         Self { picked, file_name }
     }
+
+    pub fn file_name(&self) -> &str {
+        &self.file_name
+    }
+}
+
+/// Documents picked but not yet imported.
+///
+/// The mobile library import is split in two commands so the UI can show a
+/// placeholder per file WHILE the copy runs: the picker half returns the names,
+/// the import half does the work. The documents themselves stay here rather
+/// than travelling to the frontend and back, because a `content://` URI is a
+/// permission grant, not a string worth round-tripping through JavaScript.
+///
+/// Only the latest batch is kept: a pick the frontend never imports (it threw,
+/// or the webview reloaded) is replaced by the next one instead of accumulating.
+static PENDING_PICKED_AUDIO: std::sync::Mutex<Option<(String, Vec<PickedAudioDocument>)>> =
+    std::sync::Mutex::new(None);
+
+/// Park a freshly picked batch and return the id the import half will claim it
+/// with. Poisoning is not fatal here — the batch is a handoff, not state we
+/// must protect — so a poisoned lock is recovered rather than propagated.
+pub fn park_picked_audio(documents: Vec<PickedAudioDocument>) -> String {
+    let batch_id = format!("picked-{}", unique_stamp());
+    let mut slot = PENDING_PICKED_AUDIO
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    *slot = Some((batch_id.clone(), documents));
+    batch_id
+}
+
+/// Claim a parked batch by id. Returns `None` if it was already claimed or
+/// replaced, which the caller reports rather than importing the wrong files.
+pub fn claim_picked_audio(batch_id: &str) -> Option<Vec<PickedAudioDocument>> {
+    let mut slot = PENDING_PICKED_AUDIO
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    match slot.take() {
+        Some((id, documents)) if id == batch_id => Some(documents),
+        // Not ours: put it back so the rightful claimant still finds it.
+        other => {
+            *slot = other;
+            None
+        }
+    }
 }
 
 /// Copy picked `content://` documents into `staging_root`, one folder each, and

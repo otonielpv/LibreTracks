@@ -19,6 +19,9 @@
 
 use std::thread;
 
+// Only the Android picker's return type derives it.
+#[cfg(target_os = "android")]
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::commands::events::{
@@ -1507,6 +1510,113 @@ pub fn pick_library_files() -> Vec<String> {
         .into_iter()
         .map(|path| path.to_string_lossy().to_string())
         .collect()
+}
+
+/// What the Android picker hands the frontend: the display names it needs for
+/// the placeholders, plus the id that claims the parked documents. Empty
+/// `file_names` means the user cancelled.
+#[cfg(target_os = "android")]
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickedAudioBatch {
+    pub batch_id: String,
+    pub file_names: Vec<String>,
+}
+
+/// Android: pick audio documents WITHOUT importing them.
+///
+/// First half of a two-step import. Returning the display names lets the
+/// library show a placeholder per file while the copy runs — with the
+/// single-command version the frontend learned the names only once everything
+/// had finished, so the panel showed nothing at all until the end.
+///
+/// The documents stay in the backend (see `park_picked_audio`); only names and
+/// a batch id cross to the frontend.
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub fn pick_library_audio_documents(app: AppHandle) -> PickedAudioBatch {
+    let picked = crate::platform::mobile_files::pick_files(&app, "Importar audio a la libreria");
+    if picked.is_empty() {
+        return PickedAudioBatch::default();
+    }
+    let documents: Vec<_> = picked
+        .into_iter()
+        .map(crate::platform::mobile_files::PickedAudioDocument::new)
+        .collect();
+    let file_names = documents
+        .iter()
+        .map(|document| document.file_name().to_string())
+        .collect();
+    let batch_id = crate::platform::mobile_files::park_picked_audio(documents);
+    PickedAudioBatch {
+        batch_id,
+        file_names,
+    }
+}
+
+/// Android: import a batch parked by [`pick_library_audio_documents`].
+///
+/// Returns the result directly instead of emitting a completion event, so this
+/// slots into the same `runAudioImportPipeline` the iOS route uses and the
+/// per-file placeholders behave identically on both. Progress events still fire
+/// as each document is copied.
+#[cfg(target_os = "android")]
+#[tauri::command(async)]
+pub fn import_picked_library_audio(
+    app: AppHandle,
+    batch_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<crate::models::LibraryImportResult, String> {
+    let Some(documents) = crate::platform::mobile_files::claim_picked_audio(&batch_id) else {
+        return Err("La seleccion de archivos ya no esta disponible. Vuelve a elegirlos.".into());
+    };
+
+    let (song_dir, current_song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?;
+        (song_dir, session.engine.song().cloned())
+    };
+
+    // Copy each content:// document into a staging folder inside the session
+    // (same filesystem as its audio/, so the move that follows is a rename),
+    // then reuse the staged-import core, which owns naming and collisions.
+    let staging_root = song_dir.join("cache").join("saf-import");
+    let payloads = crate::platform::mobile_files::stage_picked_audio_documents(
+        &app,
+        &staging_root,
+        &documents,
+        |done, total| {
+            let percent = if total == 0 {
+                10
+            } else {
+                10 + ((done as u64 * 80) / total as u64) as u8
+            };
+            crate::state::emit_library_import_progress(
+                &app,
+                percent,
+                format!("Copiando {done}/{total}..."),
+            );
+        },
+    )?;
+
+    let outcome = crate::state::import_staged_audio_files_to_library(
+        &song_dir,
+        current_song.as_ref(),
+        &payloads,
+    )
+    .map_err(|error| error.to_string())?;
+    // Whatever the staged import did not move is ours to remove.
+    let _ = std::fs::remove_dir_all(&staging_root);
+
+    crate::state::emit_library_import_progress(&app, 100, "Importacion completada.".into());
+    prepare_library_assets(&state, &song_dir, &outcome.assets);
+    Ok(outcome)
 }
 
 #[tauri::command]

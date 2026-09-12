@@ -933,6 +933,33 @@ export async function importAudioFilesFromPaths(
  * MOVED into the session's audio/ folder (relative-path registration, like
  * the bytes import) instead of referencing the ephemeral staged path.
  */
+/** Android: what the SAF picker returned, without importing anything yet.
+ * Empty `fileNames` means the user cancelled. */
+export type PickedAudioBatch = {
+  batchId: string;
+  fileNames: string[];
+};
+
+/**
+ * Android: open the SAF picker and return the picked documents' NAMES.
+ *
+ * First half of the two-step library import. The documents themselves stay in
+ * the backend; the names come across so the library can show a placeholder per
+ * file while the copy runs, and `importPickedLibraryAudio` claims the batch.
+ */
+export async function pickLibraryAudioDocuments(): Promise<PickedAudioBatch> {
+  return invokeCommand<PickedAudioBatch>("pick_library_audio_documents");
+}
+
+/** Android: import the batch a previous `pickLibraryAudioDocuments` parked. */
+export async function importPickedLibraryAudio(
+  batchId: string,
+): Promise<LibraryImportResult> {
+  return invokeCommand<LibraryImportResult>("import_picked_library_audio", {
+    batchId,
+  });
+}
+
 export async function importStagedAudioFiles(
   files: AudioFilePathImportPayload[],
 ): Promise<LibraryImportResult> {

@@ -6,13 +6,13 @@ import type {
 import {
   runAndroidLibraryImport,
   runIosLibraryImport,
-  type IosLibraryImportDeps,
   type MobileLibraryImportDeps,
 } from "./mobileLibraryImport";
 import {
   createClipsWithAutoTracks,
-  importLibraryAssetsFromDialog,
+  importPickedLibraryAudio,
   importStagedAudioFiles,
+  pickLibraryAudioDocuments,
 } from "../desktopApi";
 import { confirmDialog } from "../../../shared/dialog/dialogService";
 import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
@@ -20,7 +20,11 @@ import { useTransportStore } from "../store";
 
 vi.mock("../desktopApi", () => ({
   createClipsWithAutoTracks: vi.fn(async () => ({})),
-  importLibraryAssetsFromDialog: vi.fn(async () => null),
+  pickLibraryAudioDocuments: vi.fn(async () => ({
+    batchId: "",
+    fileNames: [],
+  })),
+  importPickedLibraryAudio: vi.fn(async () => ({ assets: [], skipped: [] })),
   importStagedAudioFiles: vi.fn(async () => ({ assets: [], skipped: [] })),
   forgetLibraryAssets: vi.fn(async () => []),
 }));
@@ -49,7 +53,7 @@ type SpinnerLog = {
   progress: (LibraryImportProgressEvent | null)[];
 };
 
-function makeDeps(existing: LibraryAssetSummary[] = []): {
+function makeDeps(): {
   deps: MobileLibraryImportDeps;
   log: SpinnerLog;
 } {
@@ -57,7 +61,6 @@ function makeDeps(existing: LibraryAssetSummary[] = []): {
   return {
     log,
     deps: {
-      libraryAssets: existing,
       t: (key, options) => `${key}${options ? JSON.stringify(options) : ""}`,
       setStatus: vi.fn(),
       mergeLibraryAssets: vi.fn(),
@@ -66,8 +69,19 @@ function makeDeps(existing: LibraryAssetSummary[] = []): {
       getImportPositionSeconds: () => 0,
       setIsImportingLibrary: (importing) => log.importing.push(importing),
       setLibraryImportProgress: (progress) => log.progress.push(progress),
+      reportSkipped: vi.fn(),
     },
   };
+}
+
+function pickedBatch(...fileNames: string[]) {
+  return { batchId: "batch-1", fileNames };
+}
+
+function pendingNames(): string[] {
+  return useTransportStore
+    .getState()
+    .pendingAudioImports.map((item) => item.fileName);
 }
 
 beforeEach(() => {
@@ -76,63 +90,96 @@ beforeEach(() => {
 });
 
 describe("import de biblioteca en Android", () => {
+  it("muestra un marcador por fichero en cuanto se eligen, antes de copiar", async () => {
+    vi.mocked(pickLibraryAudioDocuments).mockResolvedValue(
+      pickedBatch("bass.wav", "drums.wav"),
+    );
+    let namesWhileImporting: string[] = [];
+    vi.mocked(importPickedLibraryAudio).mockImplementation(async () => {
+      // Snapshot mid-import: this is the window the user stares at, and the one
+      // that showed an empty library before the picker was split in two.
+      namesWhileImporting = pendingNames();
+      return { assets: [asset("bass.wav"), asset("drums.wav")], skipped: [] };
+    });
+    const { deps } = makeDeps();
+
+    await runAndroidLibraryImport(deps);
+
+    expect(namesWhileImporting).toEqual(["bass.wav", "drums.wav"]);
+  });
+
+  it("reclama el lote que dejo el selector", async () => {
+    vi.mocked(pickLibraryAudioDocuments).mockResolvedValue(
+      pickedBatch("bass.wav"),
+    );
+    const { deps } = makeDeps();
+
+    await runAndroidLibraryImport(deps);
+
+    expect(vi.mocked(importPickedLibraryAudio)).toHaveBeenCalledWith("batch-1");
+  });
+
   it("enciende el indicador mientras importa y lo apaga al terminar", async () => {
-    vi.mocked(importLibraryAssetsFromDialog).mockResolvedValue([
-      asset("bass.wav"),
-    ]);
+    vi.mocked(pickLibraryAudioDocuments).mockResolvedValue(
+      pickedBatch("bass.wav"),
+    );
     const { deps, log } = makeDeps();
 
     await runAndroidLibraryImport(deps);
 
-    // On before the backend call, off after it: the panel shows the spinner for
-    // the whole copy and nothing lingers once it is done.
     expect(log.importing).toEqual([true, false]);
   });
 
-  it("apaga el indicador cuando el usuario cancela el selector", async () => {
-    vi.mocked(importLibraryAssetsFromDialog).mockResolvedValue(null);
+  it("no toca el indicador ni crea marcadores si se cancela el selector", async () => {
+    vi.mocked(pickLibraryAudioDocuments).mockResolvedValue(pickedBatch());
     const { deps, log } = makeDeps();
 
     await runAndroidLibraryImport(deps);
 
-    expect(log.importing).toEqual([true, false]);
+    expect(log.importing).toEqual([]);
+    expect(pendingNames()).toEqual([]);
+    expect(vi.mocked(importPickedLibraryAudio)).not.toHaveBeenCalled();
   });
 
   it("apaga el indicador cuando el import falla", async () => {
-    vi.mocked(importLibraryAssetsFromDialog).mockRejectedValue(
+    vi.mocked(pickLibraryAudioDocuments).mockResolvedValue(
+      pickedBatch("bass.wav"),
+    );
+    vi.mocked(importPickedLibraryAudio).mockRejectedValue(
       new Error("no se pudo leer"),
     );
     const { deps, log } = makeDeps();
 
-    await expect(runAndroidLibraryImport(deps)).rejects.toThrow(
-      "no se pudo leer",
-    );
+    await runAndroidLibraryImport(deps);
+
     // A spinner left spinning after a failure is worse than no spinner: the
     // panel would look busy forever and the import button stays disabled.
     expect(log.importing).toEqual([true, false]);
   });
 
-  it("ofrece llevar al timeline solo lo que no estaba ya en la biblioteca", async () => {
-    vi.mocked(importLibraryAssetsFromDialog).mockResolvedValue([
-      asset("old.wav"),
-      asset("new.wav"),
-    ]);
-    const { deps } = makeDeps([asset("old.wav")]);
+  it("ofrece llevar al timeline lo que acaba de entrar", async () => {
+    vi.mocked(pickLibraryAudioDocuments).mockResolvedValue(
+      pickedBatch("new.wav"),
+    );
+    vi.mocked(importPickedLibraryAudio).mockResolvedValue({
+      assets: [asset("new.wav")],
+      skipped: [],
+    });
+    const { deps } = makeDeps();
 
     await runAndroidLibraryImport(deps);
 
-    // The backend event carries the FULL list; only `new.wav` just arrived.
     expect(vi.mocked(confirmDialog)).toHaveBeenCalledTimes(1);
     const prompt = vi.mocked(confirmDialog).mock.calls[0][0] as string;
     expect(prompt).toContain('"count":1');
+    // The prompt was declined by the default mock, so nothing is placed.
     expect(vi.mocked(createClipsWithAutoTracks)).not.toHaveBeenCalled();
   });
 });
 
 describe("import de biblioteca en iOS", () => {
-  function iosDeps(): { deps: IosLibraryImportDeps; log: SpinnerLog } {
-    const { deps, log } = makeDeps();
-    return { log, deps: { ...deps, reportSkipped: vi.fn() } };
+  function iosDeps(): { deps: MobileLibraryImportDeps; log: SpinnerLog } {
+    return makeDeps();
   }
 
   it("informa del avance fichero a fichero mientras copia", async () => {

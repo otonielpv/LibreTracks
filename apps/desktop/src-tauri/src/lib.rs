@@ -325,6 +325,10 @@ pub fn run() {
             commands::project::start_create_song_from_template_named_at,
             commands::project::start_create_song_from_template_file,
             commands::project::start_import_library_assets_from_dialog,
+            #[cfg(target_os = "android")]
+            commands::project::pick_library_audio_documents,
+            #[cfg(target_os = "android")]
+            commands::project::import_picked_library_audio,
             commands::project::pick_library_files,
             commands::project::import_audio_files_from_bytes,
             commands::project::import_audio_files_from_paths,

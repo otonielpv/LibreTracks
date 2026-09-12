@@ -7,16 +7,22 @@ import type {
 import { confirmDialog } from "../../../shared/dialog/dialogService";
 import {
   createClipsWithAutoTracks,
-  importLibraryAssetsFromDialog,
+  importPickedLibraryAudio,
   importStagedAudioFiles,
+  pickLibraryAudioDocuments,
 } from "../desktopApi";
 import { useTransportStore } from "../store";
-import { createPendingAudioImports, nextPaint } from "./pendingAudioImports";
+import {
+  createPendingAudioImportsFromPaths,
+  createPendingAudioImports,
+  nextPaint,
+} from "./pendingAudioImports";
 import { runAudioImportPipeline } from "./importPipeline";
 import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
 
 /**
  * "Import audio to the library" on phones and tablets — one route per platform,
+ * both showing a placeholder per file plus the library panel's progress spinner,
  * kept out of `libraryDragDrop.ts` because neither shares anything with the
  * drag-and-drop pipeline beyond the store callbacks below.
  *
@@ -32,8 +38,6 @@ import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
  * 119 MB/s — the "Leyendo archivo…" that lasted minutes on a multitrack.
  */
 export type MobileLibraryImportDeps = {
-  /** Assets already in the library, read at call time (not captured). */
-  libraryAssets: LibraryAssetSummary[];
   t: (key: string, options?: Record<string, unknown>) => string;
   setStatus: (status: string) => void;
   mergeLibraryAssets: (assets: LibraryAssetSummary[]) => void;
@@ -51,10 +55,8 @@ export type MobileLibraryImportDeps = {
    */
   setIsImportingLibrary: (importing: boolean) => void;
   setLibraryImportProgress: (progress: LibraryImportProgressEvent | null) => void;
-};
-
-/** iOS additionally reports files the backend could not read. */
-export type IosLibraryImportDeps = MobileLibraryImportDeps & {
+  /** Reports files the backend could not read. The import SUCCEEDED for the
+   * rest, so this is not the error path. */
   reportSkipped: (skipped: SkippedImport[]) => void;
 };
 
@@ -96,7 +98,7 @@ async function offerToPlaceOnTimeline(
  * pick must be the first thing this does — no awaits before it.
  */
 export async function runIosLibraryImport(
-  deps: IosLibraryImportDeps,
+  deps: MobileLibraryImportDeps,
 ): Promise<void> {
   // iOS Files may expose valid audio documents with a generic content type;
   // `audio/*` then greys them out. Leave the native filter unrestricted and let
@@ -175,43 +177,60 @@ export async function runIosLibraryImport(
 }
 
 /**
- * Android route: picker and copy both run backend-side. Resolves when the
- * import (and the optional timeline placement) is done; returns silently if the
- * user cancels the picker.
+ * Android route: the SAF picker runs backend-side, the copy streams each
+ * `content://` descriptor straight into the session.
+ *
+ * Two steps on purpose. A single command that picked AND imported could not
+ * tell the frontend the file names until everything had finished, so the
+ * library showed nothing at all while a multitrack copied — it looked broken.
+ * Picking first means the placeholders appear immediately, and the import that
+ * follows drives them through the same pipeline the iOS route uses.
+ *
+ * NOTE: the picker must be the first thing this does — no awaits before it.
  */
 export async function runAndroidLibraryImport(
   deps: MobileLibraryImportDeps,
 ): Promise<void> {
-  const knownPaths = new Set(deps.libraryAssets.map((asset) => asset.filePath));
-  deps.setStatus(deps.t("transport.status.libraryImportStarting"));
+  const batch = await pickLibraryAudioDocuments();
+  if (!batch.fileNames.length) {
+    return; // user cancelled
+  }
 
-  // The backend owns the progress here: it emits "Copiando 3/13…" per file as
-  // it streams each document in, and the panel listens for those events. All
-  // this side has to do is arm the indicator and disarm it no matter how the
-  // import ends.
+  // The factory takes paths only to derive a display name from each, and these
+  // documents have no path — a SAF id like "msf:28" is not one. The names the
+  // picker resolved are what the placeholders should show, so pass those.
+  const pendingImports = createPendingAudioImportsFromPaths(
+    batch.fileNames,
+    0,
+    false,
+  );
+  useTransportStore.getState().addPendingAudioImports(pendingImports);
+  deps.setStatus(deps.t("transport.status.libraryImportStarting"));
+  await nextPaint();
+
+  // The backend emits "Copiando 3/13…" per file as it copies; the panel listens
+  // for those. All this side does is arm the spinner and disarm it whatever
+  // happens — one left spinning after a failure disables the import button for
+  // good.
   deps.setIsImportingLibrary(true);
   deps.setLibraryImportProgress(null);
-  let assets: LibraryAssetSummary[] | null;
   try {
-    assets = await importLibraryAssetsFromDialog();
+    await runAudioImportPipeline({
+      pendingIds: pendingImports.map((item) => item.id),
+      importFn: () => importPickedLibraryAudio(batch.batchId),
+      onImported: (importedAssets) =>
+        offerToPlaceOnTimeline(deps, importedAssets),
+      mergeLibraryAssets: deps.mergeLibraryAssets,
+      refreshLibraryState: deps.refreshLibraryState,
+      setStatus: deps.setStatus,
+      reportSkipped: deps.reportSkipped,
+      successMessage: (importedAssets) =>
+        deps.t("transport.status.libraryUpdated", {
+          count: importedAssets.length,
+        }),
+    });
   } finally {
     deps.setIsImportingLibrary(false);
     deps.setLibraryImportProgress(null);
   }
-  if (!assets) {
-    return; // user cancelled
-  }
-
-  deps.mergeLibraryAssets(assets);
-  await deps.refreshLibraryState({ preserveAssets: assets });
-
-  // The backend event carries the FULL asset list, so "what just came in" is
-  // whatever was not there before the picker opened.
-  const importedAssets = assets.filter(
-    (asset) => !knownPaths.has(asset.filePath),
-  );
-  deps.setStatus(
-    deps.t("transport.status.libraryUpdated", { count: importedAssets.length }),
-  );
-  await offerToPlaceOnTimeline(deps, importedAssets);
 }

@@ -51,6 +51,10 @@ const EXCEPTIONS: Record<string, string> = {
   open_project_from_dialog: "rfd dialog",
   pick_library_files: "rfd dialog",
   start_import_library_assets_from_dialog: "rfd dialog",
+  // Android's SAF picker. Opens a modal system activity and returns only the
+  // picked names — the copying is a separate `(async)` command
+  // (`import_picked_library_audio`), so nothing heavy runs here either.
+  pick_library_audio_documents: "SAF picker",
   export_session_package: "rfd dialog",
   // Lanza el gestor de archivos del sistema, que en macOS es API de hilo
   // principal.
