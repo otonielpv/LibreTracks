@@ -116,7 +116,9 @@ coords() {
     tablet:consent)  echo "0.465 0.593" ;;
     phone:consent)   echo "0.385 0.738" ;;
     tablet:settings) echo "0.019 0.819" ;;
+    phone:settings)  echo "0.090 0.782" ;;
     tablet:demo)     echo "0.683 0.341" ;;
+    phone:demo)      echo "0.700 0.597" ;;
     tablet:mixer)    echo "0.520 0.278" ;;
     *) echo "" ;;
   esac
