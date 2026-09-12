@@ -29,9 +29,9 @@ jobs:
           set -uo pipefail
 
           printf '%s' "$IOS_CERTIFICATE" | base64 --decode > cert.p12
-          echo "p12 bytes:        $(wc -c < cert.p12 | tr -d ' ')   (en disco: 3336)"
+          echo "p12 bytes:        $(wc -c < cert.p12 | tr -d ' ')   (en disco: 3194)"
           echo "p12 sha256:       $(shasum -a 256 cert.p12 | cut -d' ' -f1)"
-          echo "                  (en disco: 7ba89a5eba11d88cfcb6ac73124040c7b1a01e2dcce532aeaaa79d3ef21cb6fc)"
+          echo "                  (en disco: 57fb494908416a2a350a6659a6648d979ac8d3816796f2199b5bcd87b2349bf6)"
           echo "password bytes:   $(printf '%s' "$IOS_CERTIFICATE_PASSWORD" | wc -c | tr -d ' ')   (en disco: 28)"
           echo "password sha256:  $(printf '%s' "$IOS_CERTIFICATE_PASSWORD" | shasum -a 256 | cut -d' ' -f1)"
           echo "                  (en disco: 955cf90fde5fc35f1f5255a88714631007cbaae585a6d42e71e0986044c3ea2a)"
