@@ -221,13 +221,20 @@ log "── Despachando el tutorial y el aviso de estadísticas ─────�
 # iPad screenshots — both dialogs are centred cards, and "Skip tutorial" sits
 # in the lower-left of the card with the primary button to its right.
 tap_control "Skip tutorial" skip
-# The analytics consent only appears AFTER the tutorial closes, and it takes a
-# moment: tapping its position too early hits the tutorial's backdrop instead.
-sleep 4
+# El aviso de estadisticas aparece DESPUES de cerrar el tutorial y tarda un
+# momento en montarse. Tocar antes da en el fondo — y el toque lo daba por
+# bueno, porque "la pantalla cambio" tambien es cierto cuando lo que cambia es
+# que el dialogo acaba de aparecer. De ahi que el recorrido saliera corrido un
+# paso: la portada con el aviso encima y Ajustes con la portada.
+sleep 10
 shot "after-skip"
 # Its card is wider than the tutorial's, so "No, thanks" sits elsewhere —
 # measured off 04-home.png of run 34645588357.
 tap_control "No, thanks" consent
+# Segundo intento por si el primero llego pronto: si ya se cerro, este cae
+# sobre el texto de la portada y no hace nada.
+sleep 2
+tap_control "No, thanks (2o intento)" consent || true
 shot "after-consent"
 
 log "── 01 Portada ──────────────────────────────────────────────"
