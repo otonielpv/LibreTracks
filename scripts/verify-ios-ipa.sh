@@ -135,6 +135,24 @@ if ! /usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes' "$plist" 2>/dev/null 
   exit 1
 fi
 
+# ── OAuth redirect scheme ──────────────────────────────────────────────────
+# Google hands the authorisation code back through a private URI scheme. With
+# no CFBundleURLTypes declaring it, iOS has nobody to give it to: Safari stops
+# on Google's page and the app waits for a deep link that never arrives. Every
+# other check still passes — it installs, launches and plays audio — so this
+# reached TestFlight once already.
+#
+# tauri-plugin-deep-link writes the same key from plugins.deep-link.mobile, but
+# only when its build script runs; a restored cargo cache skips it while
+# `tauri ios init` regenerates the Info.plist from scratch, and the two
+# together produce a bundle with no scheme at all.
+if ! plutil -extract CFBundleURLTypes json -o - "$plist" 2>/dev/null   | grep 'com.googleusercontent.apps.' >/dev/null; then
+  echo "::error::The IPA declares no com.googleusercontent.apps.* URL scheme, so Google Drive sign-in can never hand the code back to the app." >&2
+  plutil -extract CFBundleURLTypes json -o - "$plist" >&2 2>/dev/null || echo "(no CFBundleURLTypes at all)" >&2
+  exit 1
+fi
+
+
 # Declared once in Info.ios.plist so App Store Connect stops asking about
 # export compliance on every single submission.
 encryption="$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$plist" 2>/dev/null || echo '<absent>')"
@@ -169,6 +187,7 @@ echo "Architectures:    $archs"
 echo "Device family:    $device_family"
 echo "Full screen:      UIRequiresFullScreen = $fullscreen"
 echo "Background audio: declared"
+echo "OAuth scheme:     com.googleusercontent.apps.* declared"
 echo "Encryption:       ITSAppUsesNonExemptEncryption = $encryption"
 echo "Audio engine:     native static C++ engine linked (RemoteIO, no JUCE)"
 echo "Full pack:        Bungee + FFmpeg + voice guide + pads enabled"

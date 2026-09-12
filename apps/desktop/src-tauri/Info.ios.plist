@@ -58,5 +58,27 @@
   <true/>
   <key>LSSupportsOpeningDocumentsInPlace</key>
   <true/>
+  <!-- El esquema por el que Google devuelve el codigo de OAuth. Sin el, iOS no
+       sabe que esta app atiende com.googleusercontent.apps.<id>: Safari se
+       queda en la pagina de Google y la app espera un deep link que no llega.
+
+       Lo escribe tambien el build.rs de tauri-plugin-deep-link a partir de
+       plugins.deep-link.mobile, pero solo si ese build.rs llega a ejecutarse:
+       con la cache de cargo restaurada el crate ya esta compilado, no se
+       reejecuta, y el Info.plist que `tauri ios init` regenera en cada build
+       sale sin esquema. Aqui no depende de eso. El valor es el client id de
+       iOS invertido (crates/libretracks-cloud/src/google/client_config.rs);
+       si ese client id cambia, este esquema cambia con el. -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.googleusercontent.apps.809304051758-ekp6mq7miacmd1qtjej20tqv2grhs68d</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>com.googleusercontent.apps.809304051758-ekp6mq7miacmd1qtjej20tqv2grhs68d</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>
