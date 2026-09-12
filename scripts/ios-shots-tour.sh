@@ -80,11 +80,25 @@ describe() {
 SCREEN_W=0
 SCREEN_H=0
 read_screen_size() {
-  local tree
-  tree="$(describe)"
-  SCREEN_W="$(printf '%s' "$tree" | jq -r '[.[] | select(.type == "Application") | .frame.width] | .[0] // 0' 2>/dev/null)"
-  SCREEN_H="$(printf '%s' "$tree" | jq -r '[.[] | select(.type == "Application") | .frame.height] | .[0] // 0' 2>/dev/null)"
-  log "  pantalla: ${SCREEN_W}x${SCREEN_H} puntos"
+  # Retried: idb's companion sometimes answers nothing on the first ask, and a
+  # run that continues without a screen size taps at empty coordinates and
+  # photographs nine unrotated, useless screens before anyone notices.
+  local tree i
+  for i in 1 2 3 4 5; do
+    tree="$(describe)"
+    SCREEN_W="$(printf '%s' "$tree" | jq -r '[.[] | select(.type == "Application") | .frame.width] | .[0] // empty' 2>/dev/null)"
+    SCREEN_H="$(printf '%s' "$tree" | jq -r '[.[] | select(.type == "Application") | .frame.height] | .[0] // empty' 2>/dev/null)"
+    if [ -n "${SCREEN_W:-}" ] && [ -n "${SCREEN_H:-}" ] && [ "$SCREEN_W" != "0" ]; then
+      log "  pantalla: ${SCREEN_W}x${SCREEN_H} puntos (intento $i)"
+      return 0
+    fi
+    sleep 3
+  done
+  log "  ⚠️  idb no devuelve el tamaño de pantalla tras 5 intentos"
+  printf '%s' "$tree" > "$OUT/tree-sin-tamano.json"
+  xcrun simctl io "$UDID" screenshot "$OUT/00-sin-tamano.png" >/dev/null 2>&1
+  echo "ios-shots-tour: sin tamaño de pantalla no se puede tocar nada; abortando" >&2
+  exit 1
 }
 
 # iPad and iPhone lay the same UI out differently — the phone is far narrower

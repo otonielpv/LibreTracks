@@ -43,14 +43,27 @@ if (isMobileApp) {
     const safe = getComputedStyle(probe);
     const shell = document.querySelector<HTMLElement>(".lt-app-shell");
     const rect = shell?.getBoundingClientRect();
-    console.log(
-      `[LT_VIEWPORT] inner=${window.innerWidth}x${window.innerHeight} ` +
-        `screen=${window.screen.width}x${window.screen.height} ` +
-        `dpr=${window.devicePixelRatio} ` +
-        `safe=L${safe.paddingLeft} R${safe.paddingRight} T${safe.paddingTop} B${safe.paddingBottom} ` +
-        `shell=${rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}@${Math.round(rect.left)},${Math.round(rect.top)}` : "<sin montar>"}`,
-    );
+    const report =
+      `inner=${window.innerWidth}x${window.innerHeight} ` +
+      `screen=${window.screen.width}x${window.screen.height} ` +
+      `dpr=${window.devicePixelRatio} ` +
+      `safe=L${safe.paddingLeft} R${safe.paddingRight} T${safe.paddingTop} B${safe.paddingBottom} ` +
+      `shell=${rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}@${Math.round(rect.left)},${Math.round(rect.top)}` : "<sin montar>"}`;
+    console.log(`[LT_VIEWPORT] ${report}`);
     probe.remove();
+
+    // And on screen, because a WebView's console.log lives in the WebContent
+    // process and never reaches a log filtered by the app's own name — which
+    // is exactly how the first attempt at this measurement came back empty.
+    // A screenshot cannot miss it.
+    const banner = document.createElement("div");
+    banner.textContent = report;
+    banner.style.cssText =
+      "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
+      "background:#b00020;color:#fff;font:12px/1.4 monospace;padding:4px 6px;" +
+      "pointer-events:none;white-space:pre-wrap;";
+    document.body.appendChild(banner);
+    window.setTimeout(() => banner.remove(), 60000);
   }, 1500);
 }
 
