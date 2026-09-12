@@ -127,7 +127,7 @@ coords() {
   case "$PROFILE:$1" in
     tablet:skip)     echo "0.437 0.563" ;;
     phone:skip)      echo "0.345 0.680" ;;
-    tablet:consent)  echo "0.465 0.593" ;;
+    tablet:consent)  echo "0.465 0.617" ;;
     phone:consent)   echo "0.450 0.760" ;;
     tablet:settings) echo "0.019 0.819" ;;
     phone:settings)  echo "0.090 0.782" ;;

@@ -298,6 +298,14 @@ jobs:
           xcrun simctl boot "$SIM_UDID"
           xcrun simctl bootstatus "$SIM_UDID" -b
 
+          # Congelar la barra de estado. Dos motivos, y el segundo es el que
+          # importa: las capturas salen con la hora canonica de Apple y la
+          # bateria llena, y sobre todo el reloj deja de correr — el recorrido
+          # comprueba si un toque acerto comparando el hash de la pantalla
+          # antes y despues, y un cambio de minuto cambiaba el hash aunque la
+          # interfaz fuera identica, dando toques fallidos por buenos.
+          xcrun simctl status_bar "$SIM_UDID" override             --time "9:41"             --batteryState charged --batteryLevel 100             --wifiBars 3 --cellularBars 4 || true
+
       # idb drives the taps. simctl can install, launch and screenshot, but it
       # cannot touch the screen, and the tour has to dismiss two dialogs and
       # open three panels. idb reads the accessibility tree, so controls are
