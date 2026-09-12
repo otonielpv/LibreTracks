@@ -37,6 +37,19 @@ describe("contrato responsive móvil", () => {
     expect(desktopApi).toContain("navigator.maxTouchPoints > 1");
   });
 
+  it("mide el shell con el viewport visible, no con la pantalla", () => {
+    // Con `viewport-fit=cover` y un notch lateral, `100vw` es la PANTALLA y el
+    // viewport visible del WebView ya viene recortado por los insets. Medido en
+    // un iPhone 16 Pro Max: inner=832, safe=L62 R62, y el shell a 100vw daba
+    // 956 — 124 px que se salían por la derecha y, con overflow:hidden,
+    // cortaban la interfaz a media letra. En iPad los insets laterales son 0,
+    // así que esto NO se ve allí ni en escritorio: sin este test vuelve a
+    // colarse sin que nadie lo note.
+    const shell = declarationsFor(".lt-mobile .lt-app-shell");
+    expect(shell).toContain("width: 100%");
+    expect(shell).not.toContain("width: 100vw");
+  });
+
   it("mantiene el shell a pantalla completa y protege controles, no el lienzo", () => {
     const shell = declarationsFor(".lt-mobile .lt-app-shell");
     const topbar = declarationsFor(".lt-mobile .lt-topbar");

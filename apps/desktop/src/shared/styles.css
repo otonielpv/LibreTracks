@@ -70,6 +70,14 @@ input[type="range"] {
   box-sizing: border-box;
   height: 100vh;
   height: 100dvh;
+  /* NO 100vw. Con `viewport-fit=cover` y un notch lateral, `100vw` mide la
+     PANTALLA entera mientras que el viewport visible del WebView ya viene
+     recortado por los insets. Medido en un iPhone 16 Pro Max (2026-09-12):
+     inner=832, safe=L62 R62, y el shell a 100vw daba 956 — 124 px de más que
+     se salían por la derecha y, con overflow:hidden, recortaban la interfaz a
+     media letra. En iPad los insets laterales son 0 y por eso allí nunca se
+     vio. `100%` es el viewport visible en ambos. */
+  width: 100%;
 }
 
 /* Track headers scroll vertically by default. Reorder mode temporarily claims
