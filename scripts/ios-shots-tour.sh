@@ -114,6 +114,7 @@ coords() {
     tablet:skip)     echo "0.437 0.563" ;;
     phone:skip)      echo "0.345 0.680" ;;
     tablet:consent)  echo "0.465 0.593" ;;
+    phone:consent)   echo "0.385 0.738" ;;
     tablet:settings) echo "0.019 0.819" ;;
     tablet:demo)     echo "0.683 0.341" ;;
     tablet:mixer)    echo "0.520 0.278" ;;
