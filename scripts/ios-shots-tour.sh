@@ -120,6 +120,7 @@ coords() {
     tablet:demo)     echo "0.683 0.341" ;;
     phone:demo)      echo "0.700 0.597" ;;
     tablet:mixer)    echo "0.520 0.278" ;;
+    phone:mixer)     echo "0.561 0.916" ;;
     *) echo "" ;;
   esac
 }
@@ -242,14 +243,26 @@ fi
 
 log "── 04 y 05 Vista compacta, con y sin mixer ─────────────────"
 key 43   # daw → compact
-# On a tablet the mixer band starts open, so this first shot is the mixer one
-# and the clean compact view needs the band closed afterwards.
-shot "compact-with-mixer"
-if tap_control "Hide mixer" mixer; then
-  shot "compact"
+# Which of the two comes first depends on the device: CompactView opens the
+# mixer band by default only when the window is at least 1000 points wide, so
+# the iPad starts with it open and the phone with it closed. Same two shots,
+# opposite order, and the toggle sits somewhere different on each.
+if [ "$PROFILE" = "tablet" ]; then
+  shot "compact-with-mixer"
+  if tap_control "Hide mixer" mixer; then
+    shot "compact"
+  else
+    failures=$((failures + 1))
+    shot "compact-FAILED"
+  fi
 else
-  failures=$((failures + 1))
-  shot "compact-FAILED"
+  shot "compact"
+  if tap_control "Show mixer" mixer; then
+    shot "compact-with-mixer"
+  else
+    failures=$((failures + 1))
+    shot "compact-with-mixer-FAILED"
+  fi
 fi
 
 log "── 06 Vista live ───────────────────────────────────────────"
