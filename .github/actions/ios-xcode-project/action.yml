@@ -71,3 +71,14 @@ runs:
         fi
         ruby scripts/ios-add-privacy-manifest.rb \
           "$apple_dir/libretracks-desktop.xcodeproj" PrivacyInfo.xcprivacy
+
+    # El Swift de los plugins de Tauri viaja dentro de libapp.a, asi que Xcode
+    # no ve ningun .swift en el target y no anade al enlazado la carpeta de las
+    # bibliotecas de Swift. Desde Xcode 26 eso tumba el build pidiendo
+    # swiftCompatibility56, que si existe: solo que nadie la buscaba ahi.
+    - name: Point the target at the Swift libraries
+      shell: bash
+      run: |
+        set -euo pipefail
+        ruby scripts/ios-link-swift-compat.rb \
+          "apps/desktop/src-tauri/gen/apple/libretracks-desktop.xcodeproj"
