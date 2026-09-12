@@ -2,5 +2,13 @@
     <!-- Base application theme. -->
     <style name="Theme.libretracks_desktop" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
+        <!-- Dejar que la ventana llegue bajo el notch. Por defecto Android NO
+             extiende la app bajo el recorte y, como esta app va siempre en
+             horizontal (sensorLandscape), el sistema se queda una franja a un
+             lado: menos ancho util y una banda negra, el mismo sintoma que en
+             iPhone aunque el mecanismo sea otro. Apartar los controles del
+             recorte lo hace el CSS con env(safe-area-inset-*), que es donde
+             toca decidirlo; los fondos deben llegar al borde. -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>
