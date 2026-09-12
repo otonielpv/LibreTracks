@@ -33,7 +33,7 @@
 //! |---|---|
 //! | tauri.conf.json identifier / Kotlin namespace | com.libretracks.desktop |
 //! | Android applicationId (what Google matches) | com.libretracks.app |
-//! | iOS CFBundleIdentifier | com.libretracks.ios |
+//! | iOS CFBundleIdentifier | com.libretracks.app |
 
 /// Client IDs are public by design for native apps: they identify the app, they
 /// do not authenticate it. PKCE is what makes the flow safe, which is why these
