@@ -4740,9 +4740,16 @@ fn place_bundled_audio_reuses_existing_original_and_copies_missing_one() {
         color: None,
     });
 
-    let mut bundled = std::collections::HashMap::new();
-    bundled.insert("present.wav".to_string(), b"present-bytes".to_vec());
-    bundled.insert("gone.wav".to_string(), b"gone-bytes".to_vec());
+    // Bundled audio arrives staged on disk (a full package can be gigabytes,
+    // so it is never held in memory); the placing step moves it from there.
+    let bundled = libretracks_project::StagedPackageAudio::from_bytes_for_tests(
+        song_dir.join("cache").join("import-staging-test"),
+        [
+            ("present.wav".to_string(), b"present-bytes".to_vec()),
+            ("gone.wav".to_string(), b"gone-bytes".to_vec()),
+        ],
+    )
+    .expect("stage bundled audio");
 
     place_bundled_audio_and_repoint(song_dir, &mut song, &bundled).expect("place");
 

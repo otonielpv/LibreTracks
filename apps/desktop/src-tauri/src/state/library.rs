@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use libretracks_core::Song;
 use libretracks_project::{
     global_waveform_file_path, import_wav_files_to_library, read_audio_metadata,
-    audio_folder_for_seconds, PackageLibraryAssetEntry,
+    audio_folder_for_seconds, PackageLibraryAssetEntry, StagedPackageAudio,
 };
 
 use serde::{Deserialize, Serialize};
@@ -493,10 +493,31 @@ fn allocate_library_audio_path(
     }
 }
 
+/// Move a staged package file to its final home, falling back to copy+delete.
+///
+/// The staging folder is created under the destination project's `cache/`, so
+/// the rename normally stays inside one filesystem and costs nothing — which is
+/// the point: it replaces a second full write of every stem. The fallback only
+/// fires if the project folder spans a mount the staging dir does not (a
+/// symlinked `cache/`, an external SD card), where `rename` returns `EXDEV`.
+fn move_staged_file(staged: &Path, destination: &Path) -> Result<(), DesktopError> {
+    match fs::rename(staged, destination) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            fs::copy(staged, destination)?;
+            // The staging dir is removed wholesale on drop; failing to unlink
+            // one file early is not worth failing the import over.
+            let _ = fs::remove_file(staged);
+            Ok(())
+        }
+    }
+}
+
 /// Place audio files bundled in a self-contained `.ltpkg` into the destination
 /// project's `audio/` folder and re-point the imported clips to those copies.
 ///
-/// `bundled_audio` maps each original audio file name to its bytes.
+/// `bundled_audio` maps each original audio file name to the staged file the
+/// extraction inflated it into.
 ///
 /// For each clip whose audio is bundled we prefer to REUSE the clip's original
 /// absolute path when that file still exists on this machine: copying it into
@@ -509,7 +530,7 @@ fn allocate_library_audio_path(
 pub(super) fn place_bundled_audio_and_repoint(
     song_dir: &Path,
     song: &mut Song,
-    bundled_audio: &HashMap<String, Vec<u8>>,
+    bundled_audio: &StagedPackageAudio,
 ) -> Result<(), DesktopError> {
     if bundled_audio.is_empty() {
         return Ok(());
@@ -526,6 +547,11 @@ pub(super) fn place_bundled_audio_and_repoint(
     // by original file name so sibling clips of the same source reuse it.
     // file name -> "audio/<final>" relative path of the written copy.
     let mut copied: HashMap<String, String> = HashMap::new();
+    // Where each staged source ended up the FIRST time it was placed. A staged
+    // file is MOVED into place, so a second song folder needing the same source
+    // can no longer take it from staging — it copies from this landing spot
+    // instead. Keyed by original file name, matching `bundled_audio`.
+    let mut placed_by_name: HashMap<String, PathBuf> = HashMap::new();
     // Where each imported clip's audio goes: under the folder of the song it
     // lands in, so `audio/` says whose stems are whose. `song` here is the
     // MERGED session (the destination's regions plus the imported one), which
@@ -551,7 +577,7 @@ pub(super) fn place_bundled_audio_and_repoint(
         else {
             continue;
         };
-        let Some(bytes) = bundled_audio.get(&file_name) else {
+        let Some(staged_path) = bundled_audio.get(&file_name) else {
             // Audio for this clip isn't bundled (light package): leave as-is.
             continue;
         };
@@ -583,7 +609,17 @@ pub(super) fn place_bundled_audio_and_repoint(
             if let Some(parent) = destination.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::write(&destination, bytes)?;
+            match placed_by_name.get(&file_name) {
+                // This source was already moved out of staging for another
+                // song's folder; take a copy from where it landed.
+                Some(landed) => {
+                    fs::copy(landed, &destination)?;
+                }
+                None => {
+                    move_staged_file(staged_path, &destination)?;
+                    placed_by_name.insert(file_name.clone(), destination.clone());
+                }
+            }
             copied.insert(copy_key, relative_path.clone());
             relative_path
         };

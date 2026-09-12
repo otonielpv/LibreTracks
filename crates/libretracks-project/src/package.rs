@@ -140,15 +140,18 @@ pub struct SongPackageExport {
     pub output_path: PathBuf,
 }
 
-#[derive(Debug, Clone)]
+/// Not `Clone`: `bundled_audio` owns a staging folder that is deleted on drop,
+/// so a copy would hand two owners the same files.
+#[derive(Debug)]
 pub struct SongPackageImportResult {
     pub song: Song,
     pub package_title: String,
     pub library_meta: Vec<PackageLibraryAssetEntry>,
-    /// Audio files bundled in a self-contained package, keyed by their original
-    /// file name. Empty for light packages. The caller copies these into the
-    /// destination project's `audio/` folder and re-points the imported clips.
-    pub bundled_audio: std::collections::HashMap<String, Vec<u8>>,
+    /// Audio files bundled in a self-contained package, staged on disk and
+    /// keyed by their original file name. Empty for light packages. The caller
+    /// moves these into the destination project's `audio/` folder and re-points
+    /// the imported clips.
+    pub bundled_audio: StagedPackageAudio,
 }
 
 fn midi_clips_in_region(song: &Song, region: &SongRegion) -> Vec<MidiClip> {
@@ -441,11 +444,86 @@ pub fn export_region_as_package_with_audio(
 /// per entry. This is the expensive, session-independent half of an import —
 /// the caller runs it without holding the session lock so the UI stays
 /// responsive while a large package decompresses.
+/// Audio inflated out of a `.ltpkg`, staged on disk instead of held in RAM.
+///
+/// A full package of a live multitrack is gigabytes. Inflating every stem into
+/// a `HashMap<String, Vec<u8>>` — which is what this used to be — peaked at the
+/// package's entire audio size in heap before a single byte reached the disk,
+/// and that peak is what the Android low-memory killer shot down while
+/// importing a 2 GiB package on a 2.7 GiB phone. Each entry now lands in a
+/// staging folder next to the destination and travels as a path.
+///
+/// Placing the audio is then a rename inside the same filesystem rather than a
+/// second write, so this is also *less* I/O than before, not just less memory.
+///
+/// The staging folder is removed on drop: a failed import, or bundled audio the
+/// merge decided not to use, leaves nothing behind.
+#[derive(Debug, Default)]
+pub struct StagedPackageAudio {
+    /// `None` for a light package (nothing was staged, nothing to clean up).
+    staging_dir: Option<PathBuf>,
+    /// Original file name → the staged file holding its bytes.
+    files: HashMap<String, PathBuf>,
+}
+
+impl StagedPackageAudio {
+    /// Build a payload from in-memory bytes, for tests that exercise the
+    /// PLACING half without going through a real package.
+    ///
+    /// `staging_dir` is created and, as with an extracted payload, removed when
+    /// the value is dropped — so a test gets the same cleanup semantics as
+    /// production rather than a special case that hides them.
+    pub fn from_bytes_for_tests(
+        staging_dir: PathBuf,
+        entries: impl IntoIterator<Item = (String, Vec<u8>)>,
+    ) -> Result<Self, ProjectError> {
+        fs::create_dir_all(&staging_dir)?;
+        let mut staged = Self {
+            staging_dir: Some(staging_dir.clone()),
+            files: HashMap::new(),
+        };
+        for (index, (file_name, bytes)) in entries.into_iter().enumerate() {
+            let path = staging_dir.join(format!("{index}.audio"));
+            fs::write(&path, bytes)?;
+            staged.files.insert(file_name, path);
+        }
+        Ok(staged)
+    }
+
+    /// The staged file for a bundled source, by its original file name.
+    pub fn get(&self, file_name: &str) -> Option<&Path> {
+        self.files.get(file_name).map(PathBuf::as_path)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.files.len()
+    }
+
+    pub fn contains_key(&self, file_name: &str) -> bool {
+        self.files.contains_key(file_name)
+    }
+}
+
+impl Drop for StagedPackageAudio {
+    fn drop(&mut self) {
+        // Best effort: the staging dir lives under the destination project's
+        // cache, so a leftover is untidy rather than dangerous, and there is
+        // nothing useful to do with the error on an unwind.
+        if let Some(dir) = self.staging_dir.take() {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+}
+
 fn extract_package_payload<R: Read + Seek>(
     song_dir: &Path,
     archive: &mut ZipArchive<R>,
     mut on_progress: impl FnMut(usize, usize),
-) -> Result<std::collections::HashMap<String, Vec<u8>>, ProjectError> {
+) -> Result<StagedPackageAudio, ProjectError> {
     // The package still ships its `.ltpeaks`; we extract them into the legacy
     // project staging dir. The waveform loader's lazy migration then copies each
     // into the per-file global cache the first time the clip is loaded (keyed by
@@ -454,8 +532,12 @@ fn extract_package_payload<R: Read + Seek>(
     let waveform_dir = song_dir.join("cache").join("waveforms");
     fs::create_dir_all(&waveform_dir)?;
 
-    let mut bundled_audio: std::collections::HashMap<String, Vec<u8>> =
-        std::collections::HashMap::new();
+    // Under the destination's own cache/, so the staged bytes and their final
+    // home share a filesystem and placing them is a rename.
+    let staging_dir = song_dir
+        .join("cache")
+        .join(format!("import-staging-{}", timestamp_suffix()));
+    let mut bundled_audio = StagedPackageAudio::default();
     let entry_total = archive.len();
     for index in 0..entry_total {
         let mut zip_file = archive
@@ -463,16 +545,29 @@ fn extract_package_payload<R: Read + Seek>(
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
         let entry_name = zip_file.name().to_string();
 
-        // Bundled source audio (full packages): keep the bytes for the caller to
-        // place into the destination project's audio/ folder.
+        // Bundled source audio (full packages): stage it for the caller to place
+        // into the destination project's audio/ folder.
         if let Some(file_name) = entry_name
             .strip_prefix("audio/")
             .filter(|name| !name.is_empty() && !name.contains('/') && !name.contains('\\'))
         {
             let file_name = file_name.to_string();
-            let mut bytes = Vec::new();
-            zip_file.read_to_end(&mut bytes)?;
-            bundled_audio.insert(file_name, bytes);
+            if bundled_audio.staging_dir.is_none() {
+                fs::create_dir_all(&staging_dir)?;
+                // Registered before the first write, so the Drop cleanup covers
+                // a failure partway through this very loop.
+                bundled_audio.staging_dir = Some(staging_dir.clone());
+            }
+            // Named by index, not by `file_name`: a zip is free to carry two
+            // `audio/` entries with the same name, and a staged file that
+            // overwrites its predecessor would silently swap one stem for
+            // another. The map still keys by name, matching the previous
+            // last-one-wins behaviour, but no bytes are lost on the way.
+            let staged_path = staging_dir.join(format!("{index}.audio"));
+            let mut staged = File::create(&staged_path)?;
+            std::io::copy(&mut zip_file, &mut staged)?;
+            drop(staged);
+            bundled_audio.files.insert(file_name, staged_path);
             on_progress(index + 1, entry_total);
             continue;
         }
@@ -498,12 +593,15 @@ fn extract_package_payload<R: Read + Seek>(
 /// that needs the current song). Splitting the two lets the desktop import run
 /// decompression OUTSIDE the session lock, keeping the UI responsive while a
 /// large package inflates.
-#[derive(Debug, Clone)]
+///
+/// Not `Clone`: `bundled_audio` owns a staging folder that is deleted on drop,
+/// so a copy would hand two owners the same files.
+#[derive(Debug)]
 pub struct ExtractedSongPackage {
     manifest: SongPackageManifest,
-    /// Source audio bundled in a full package, keyed by original file name.
-    /// Empty for light packages.
-    pub bundled_audio: std::collections::HashMap<String, Vec<u8>>,
+    /// Source audio bundled in a full package, staged on disk and keyed by
+    /// original file name. Empty for light packages.
+    pub bundled_audio: StagedPackageAudio,
 }
 
 /// How an import resolves a package track whose name and kind already exist in
@@ -550,8 +648,25 @@ pub fn extract_song_package(
     on_extract_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSongPackage, ProjectError> {
     let file = File::open(package_path)?;
+    extract_song_package_from_reader(song_dir, file, on_extract_progress)
+}
+
+/// Same extraction, from any seekable reader rather than a path.
+///
+/// Android hands us a `content://` URI, not a filesystem path, and the only
+/// reason the `.ltpkg` import copied the whole package into private storage
+/// first was to produce something `File::open` would accept — a 2 GiB write at
+/// the ~7 MB/s the WebView base64 bridge sustains, spent purely to satisfy an
+/// argument type. `.ltset` stopped doing this in
+/// docs/plans/android-low-end/04-import-sin-staging.md; this is the same fix
+/// for the song package.
+pub fn extract_song_package_from_reader<R: Read + Seek>(
+    song_dir: &Path,
+    reader: R,
+    on_extract_progress: impl FnMut(usize, usize),
+) -> Result<ExtractedSongPackage, ProjectError> {
     let mut archive =
-        ZipArchive::new(file).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        ZipArchive::new(reader).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
 
     let mut manifest_json = String::new();
     archive
@@ -1171,6 +1286,156 @@ mod tests {
         .expect("import full");
         assert_eq!(result.bundled_audio.len(), 1);
         assert!(result.bundled_audio.contains_key("loop.wav"));
+    }
+
+    /// The point of the staging rewrite: bundled audio reaches the caller as a
+    /// file on disk, not as bytes in a map. Inflating a full multitrack package
+    /// into memory is what the Android low-memory killer shot down.
+    #[test]
+    fn bundled_audio_is_staged_on_disk_not_held_in_memory() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song();
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
+        fs::write(song_dir.join("audio").join("loop.wav"), b"RIFF-the-real-bytes")
+            .expect("write audio");
+
+        let package_path = song_dir.join("verse.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, true)
+            .expect("export full");
+
+        let target = tempdir().expect("target");
+        let extracted = extract_song_package(target.path(), &package_path, |_, _| {})
+            .expect("extract");
+
+        let staged = extracted
+            .bundled_audio
+            .get("loop.wav")
+            .expect("loop.wav staged")
+            .to_path_buf();
+        assert!(
+            staged.is_file(),
+            "bundled audio must live on disk at {}",
+            staged.display()
+        );
+        assert_eq!(
+            fs::read(&staged).expect("read staged"),
+            b"RIFF-the-real-bytes",
+            "the staged file must carry the original bytes"
+        );
+
+        // Dropping the payload takes the staging folder with it, so an import
+        // that fails partway leaves no orphaned gigabytes behind.
+        drop(extracted);
+        assert!(
+            !staged.exists(),
+            "staging must be cleaned up when the payload is dropped"
+        );
+    }
+
+    /// Staged files are named by zip index, not by display name.
+    ///
+    /// A zip is case-SENSITIVE, so `Take.wav` and `take.wav` are two entries
+    /// with two sets of bytes. Windows and FAT-formatted SD cards are not, so
+    /// staging them under their own names would have the second silently
+    /// overwrite the first — one stem playing as another. This project has
+    /// already been bitten by case-folding filesystems once, in the library
+    /// dedup.
+    #[test]
+    fn audio_entries_differing_only_in_case_do_not_overwrite_each_other() {
+        let dir = tempdir().expect("tempdir");
+        let package_path = dir.path().join("dupes.ltpkg");
+
+        // Hand-built around a REAL manifest (exported, then read back): the
+        // exporter will not produce a case-colliding pair, but a package
+        // authored on a case-sensitive machine carries one just fine.
+        let manifest_json = {
+            let source_dir = tempdir().expect("source");
+            let source = song();
+            fs::create_dir_all(source_dir.path().join("audio")).expect("audio dir");
+            fs::write(source_dir.path().join("audio").join("loop.wav"), b"x").expect("audio");
+            let real_package = source_dir.path().join("real.ltpkg");
+            export_region_as_package(
+                source_dir.path(),
+                source_dir.path(),
+                &source,
+                "r1",
+                &real_package,
+                true,
+            )
+            .expect("export");
+            let mut archive = ZipArchive::new(File::open(&real_package).expect("open")).expect("zip");
+            let mut json = String::new();
+            archive
+                .by_name("manifest.json")
+                .expect("manifest")
+                .read_to_string(&mut json)
+                .expect("read manifest");
+            json
+        };
+
+        {
+            let file = File::create(&package_path).expect("create pkg");
+            let mut writer = ZipWriter::new(file);
+            let options = SimpleFileOptions::default();
+            writer.start_file("manifest.json", options).expect("start");
+            writer
+                .write_all(manifest_json.as_bytes())
+                .expect("write manifest");
+            writer.start_file("audio/Take.wav", options).expect("start");
+            writer.write_all(b"upper-copy").expect("write upper");
+            writer.start_file("audio/take.wav", options).expect("start");
+            writer.write_all(b"lower-copy").expect("write lower");
+            writer.finish().expect("finish");
+        }
+
+        let target = tempdir().expect("target");
+        let extracted =
+            extract_song_package(target.path(), &package_path, |_, _| {}).expect("extract");
+
+        // Both entries keep their own bytes. Staging by display name would give
+        // both of these the same content on any case-folding filesystem.
+        let upper = extracted.bundled_audio.get("Take.wav").expect("Take.wav");
+        let lower = extracted.bundled_audio.get("take.wav").expect("take.wav");
+        assert_eq!(fs::read(upper).expect("read upper"), b"upper-copy");
+        assert_eq!(fs::read(lower).expect("read lower"), b"lower-copy");
+    }
+
+    /// Android reads the package straight from a `content://` descriptor. That
+    /// route must produce exactly what the path route does.
+    #[test]
+    fn extracting_from_a_reader_matches_extracting_from_a_path() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song();
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
+        fs::write(song_dir.join("audio").join("loop.wav"), b"identical-bytes")
+            .expect("write audio");
+
+        let package_path = song_dir.join("verse.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, true)
+            .expect("export full");
+
+        let from_path_dir = tempdir().expect("target a");
+        let from_path = extract_song_package(from_path_dir.path(), &package_path, |_, _| {})
+            .expect("extract by path");
+
+        let from_reader_dir = tempdir().expect("target b");
+        let reader = File::open(&package_path).expect("open pkg");
+        let from_reader =
+            extract_song_package_from_reader(from_reader_dir.path(), reader, |_, _| {})
+                .expect("extract from reader");
+
+        assert_eq!(from_path.bundled_audio.len(), from_reader.bundled_audio.len());
+        let by_path = from_path.bundled_audio.get("loop.wav").expect("path staged");
+        let by_reader = from_reader
+            .bundled_audio
+            .get("loop.wav")
+            .expect("reader staged");
+        assert_eq!(
+            fs::read(by_path).expect("read a"),
+            fs::read(by_reader).expect("read b"),
+        );
     }
 
     #[test]
