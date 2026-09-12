@@ -34,11 +34,34 @@ require 'xcodeproj'
 # Swift in it. Kept as build settings, not literal paths, so the same project
 # links against whichever Xcode and platform the build happens to use —
 # iphoneos for the IPA, iphonesimulator for the screenshot runs.
+# $(TOOLCHAIN_DIR) is NOT the answer, even though the template already uses it
+# and it reads like it should be: under Xcode 26 it expands to the Metal
+# toolchain's cryptex mount, and the link line ends up with
+#
+#   -L/var/run/com.apple.security.cryptexd/.../Metal.xctoolchain/usr/lib/swift/iphoneos
+#
+# which does not exist. $(DT_TOOLCHAIN_DIR) is the developer-tools toolchain,
+# which is the one that actually holds libswiftCompatibility56.a.
 SWIFT_LIBRARY_PATHS = [
   '$(inherited)',
-  '$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)',
+  '$(DT_TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)',
   '$(SDKROOT)/usr/lib/swift'
 ].freeze
+
+# And a belt to go with those braces: the directory as it resolves right now,
+# from the compiler the build will actually use. A build setting that silently
+# expands to the wrong place is precisely what this script exists to undo, and
+# the generated project is rebuilt from scratch on every run, so an absolute
+# path in it ages out the same day it is written.
+def resolved_swift_library_dirs
+  swiftc = `xcrun -f swiftc 2>/dev/null`.strip
+  return [] if swiftc.empty?
+
+  toolchain_lib = File.expand_path('../../lib/swift', swiftc)
+  %w[iphoneos iphonesimulator]
+    .map { |platform| File.join(toolchain_lib, platform) }
+    .select { |dir| Dir.exist?(dir) }
+end
 
 project_path = ARGV[0]
 abort 'usage: ios-link-swift-compat.rb <App.xcodeproj>' if project_path.nil?
@@ -52,11 +75,13 @@ abort 'no application target in the generated project' if target.nil?
 
 changed = false
 
+wanted = SWIFT_LIBRARY_PATHS + resolved_swift_library_dirs
+
 target.build_configurations.each do |config|
   existing = config.build_settings['LIBRARY_SEARCH_PATHS']
   existing = [existing].compact unless existing.is_a?(Array)
 
-  missing = SWIFT_LIBRARY_PATHS - existing
+  missing = wanted - existing
   next if missing.empty?
 
   config.build_settings['LIBRARY_SEARCH_PATHS'] = existing + missing
