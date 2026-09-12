@@ -22,6 +22,7 @@ import {
   importExternalProjectFromPathWithProgress,
   importSongPackageFromPathWithProgress,
   importStagedAudioFiles,
+  isAndroidApp,
   isMobileApp,
   isTauriApp,
   pickLibraryFiles,
@@ -41,6 +42,10 @@ import {
   type TimelineTrackSummary,
 } from "./pendingAudioImports";
 import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
+import {
+  runAndroidLibraryImport,
+  runIosLibraryImport,
+} from "./mobileLibraryImport";
 import {
   runAudioImportPipeline,
   skippedImportsMessage,
@@ -1770,77 +1775,40 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       return;
     }
 
-    // Android: no rfd paths — the WebView chooser hands us the file CONTENTS
-    // (Android files live behind content:// URIs the Rust side can't read).
-    // Same placeholder pipeline as below, importing bytes instead of paths,
-    // plus a one-tap "put the imported files on the timeline" prompt (the
-    // usual mobile intent behind importing a song's multitracks). NOTE: the
-    // chooser only opens inside the tap's user-gesture window, so the pick
-    // must be the first thing this function does — no awaits before it.
-    if (isMobileApp) {
-      // iOS Files may expose valid audio documents with a generic content type;
-      // `audio/*` then greys them out. Leave the native filter unrestricted and
-      // let the existing import pipeline validate the selected formats.
-      const files = await pickFilesViaWebView();
-      if (!files.length) {
-        return; // user cancelled
-      }
-
-      const pendingImports = createPendingAudioImports(files, 0).map(
-        (item) => ({ ...item, showInTimeline: false }),
-      );
-      useTransportStore.getState().addPendingAudioImports(pendingImports);
-      deps().setStatus(deps().t("transport.status.libraryImportStarting"));
-      await nextPaint();
-
-      // Stage sequentially: one in-flight slice at a time keeps the WebView
-      // renderer's heap flat — reading whole files into Uint8Arrays here
-      // OOM-crashed the renderer on low-RAM phones.
-      const stagedPayloads: Array<{ fileName: string; sourcePath: string }> =
-        [];
-      await runAudioImportPipeline({
-        pendingIds: pendingImports.map((item) => item.id),
-        beforeImport: async () => {
-          for (let index = 0; index < files.length; index += 1) {
-            const file = files[index];
-            stagedPayloads.push({
-              fileName: file.name,
-              sourcePath: await stageFileForImport(file, index === 0),
-            });
-          }
-        },
-        importFn: () => importStagedAudioFiles(stagedPayloads),
-        onImported: async (importedAssets) => {
-          if (importedAssets.length === 0) {
-            return;
-          }
-          const shouldPlace = await confirmDialog(
-            deps().t("library.addImportedToTimelinePrompt", {
-              count: importedAssets.length,
-              defaultValue:
-                "¿Añadir los {{count}} audios importados al timeline?",
-            }),
-          );
-          if (!shouldPlace) {
-            return;
-          }
-          const startSeconds = deps().displayPositionSecondsRef.current;
-          const snapshot = await createClipsWithAutoTracks(
-            importedAssets.map((asset) => ({
-              filePath: asset.filePath,
-              timelineStartSeconds: startSeconds,
-            })),
-          );
-          deps().applyPlaybackSnapshot(snapshot);
-        },
+    // Android: the SAF picker and the copy both run backend-side, streaming
+    // each content:// descriptor straight into the session. This used to take
+    // the iOS route below and stage every file through the WebView in base64
+    // slices, measured at ~7 MB/s on a phone whose disk does 119 MB/s — the
+    // "Leyendo archivo…" that lasted minutes. Keeps the one-tap "put these on
+    // the timeline" prompt, which is the usual mobile intent.
+    if (isAndroidApp) {
+      await runAndroidLibraryImport({
+        libraryAssets: deps().libraryAssets,
+        t: deps().t,
+        setStatus: deps().setStatus,
         mergeLibraryAssets: deps().mergeLibraryAssets,
         refreshLibraryState: deps().refreshLibraryState,
+        applyPlaybackSnapshot: deps().applyPlaybackSnapshot,
+        getImportPositionSeconds: () =>
+          deps().displayPositionSecondsRef.current,
+      });
+      return;
+    }
+
+    // iOS: no rfd dialog and no SAF, so the WebView chooser stays. NOTE: it
+    // only opens inside the tap's user-gesture window, so the pick must happen
+    // with no awaits before it — see the module.
+    if (isMobileApp) {
+      await runIosLibraryImport({
+        libraryAssets: deps().libraryAssets,
+        t: deps().t,
         setStatus: deps().setStatus,
+        mergeLibraryAssets: deps().mergeLibraryAssets,
+        refreshLibraryState: deps().refreshLibraryState,
+        applyPlaybackSnapshot: deps().applyPlaybackSnapshot,
+        getImportPositionSeconds: () =>
+          deps().displayPositionSecondsRef.current,
         reportSkipped: reportSkippedImports,
-        successMessage: (importedAssets) =>
-          deps().t("transport.status.libraryUpdated", {
-            count: importedAssets.length,
-          }),
       });
       return;
     }

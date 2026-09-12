@@ -416,27 +416,14 @@ export function useProjectActions({
             sourcePath,
             getImportPositionSeconds(),
           );
-        } else if (isMobileApp) {
-          // rfd has no file-dialog implementation on iOS. Use the WebView
-          // document picker while the original tap gesture is still active,
-          // stage its bytes, then feed the normal path-based package importer.
-          // No `accept=.ltpkg`: Files providers often publish custom package
-          // types as generic data and iOS would grey them out.
-          const [packageFile] = await pickFilesViaWebView(undefined, false);
-          if (!packageFile) {
-            return;
-          }
-          if (!packageFile.name.toLowerCase().endsWith(".ltpkg")) {
-            throw new Error(
-              `El archivo "${packageFile.name}" no es una canción .ltpkg de LibreTracks.`,
-            );
-          }
-          const stagedPath = await stageFileForImport(packageFile, true);
-          nextSnapshot = await importSongPackageFromPathWithProgress(
-            stagedPath,
-            getImportPositionSeconds(),
-          );
         } else {
+          // Every platform now picks natively. Mobile used to detour through
+          // the WebView chooser and stage the file in base64 slices over IPC,
+          // because neither rfd (iOS) nor a path (Android content:// URIs)
+          // was available — but the backend grew a native picker for both, and
+          // the detour cost a full extra copy of the package at roughly 7 MB/s:
+          // ~4.7 minutes of a frozen 0% for a 2 GB package on a low-end phone.
+          // See docs/plans/android-low-end/.
           nextSnapshot = await pickAndImportSong();
         }
         if (!nextSnapshot) {

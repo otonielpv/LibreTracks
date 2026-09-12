@@ -36,6 +36,23 @@ pub fn pick_file(app: &AppHandle, title: &str) -> Option<FilePath> {
     rx.recv().ok().flatten()
 }
 
+/// SAF "open documents" picker, multi-select. Blocks until the user picks or
+/// cancels; an empty vec means cancelled.
+///
+/// Extensions are advisory only, as in [`pick_file`] — SAF filters by MIME, and
+/// providers publish audio under types our list would not predict, so we accept
+/// everything and let the importer validate.
+pub fn pick_files(app: &AppHandle, title: &str) -> Vec<FilePath> {
+    let (tx, rx) = mpsc::channel();
+    app.dialog()
+        .file()
+        .set_title(title)
+        .pick_files(move |files| {
+            let _ = tx.send(files);
+        });
+    rx.recv().ok().flatten().unwrap_or_default()
+}
+
 /// SAF "create document" dialog (the system save-as UI: Downloads, Drive,
 /// SD…). Blocks until the user picks a destination or cancels.
 pub fn save_file(app: &AppHandle, title: &str, suggested_name: &str) -> Option<FilePath> {
@@ -71,6 +88,84 @@ pub fn open_picked_file_for_read(
     app.fs()
         .open(picked.clone(), options)
         .map_err(|error| format!("No se pudo abrir el archivo seleccionado: {error}"))
+}
+
+/// A document the user picked for a library audio import, with the display name
+/// resolved once at pick time.
+///
+/// The name has to be captured here: a SAF document id is opaque
+/// (`msf:28`), so asking for it later — after the bytes have been copied
+/// somewhere — yields a name no user would recognise.
+pub struct PickedAudioDocument {
+    picked: FilePath,
+    file_name: String,
+}
+
+impl PickedAudioDocument {
+    pub fn new(picked: FilePath) -> Self {
+        let file_name = picked_file_name(&picked);
+        let file_name = if file_name.trim().is_empty() {
+            "audio".to_string()
+        } else {
+            file_name
+        };
+        Self { picked, file_name }
+    }
+}
+
+/// Copy picked `content://` documents into `staging_root`, one folder each, and
+/// return the payloads the staged-import core consumes.
+///
+/// Streams from the descriptor rather than reading whole files into memory, and
+/// gives each document its own subfolder so two picks sharing a display name do
+/// not overwrite each other before the importer has had a chance to rename
+/// them apart.
+///
+/// A document that cannot be opened or copied is SKIPPED, not fatal: one
+/// unreadable file should not lose the rest of a multitrack the user just
+/// selected. The staged-import core reports anything missing from the payloads.
+pub fn stage_picked_audio_documents(
+    app: &AppHandle,
+    staging_root: &std::path::Path,
+    documents: &[PickedAudioDocument],
+    mut on_progress: impl FnMut(usize, usize),
+) -> Result<Vec<crate::state::AudioFilePathImportPayload>, String> {
+    std::fs::create_dir_all(staging_root).map_err(|error| error.to_string())?;
+
+    let total = documents.len();
+    let mut payloads = Vec::with_capacity(total);
+    for (index, document) in documents.iter().enumerate() {
+        let staged_dir = staging_root.join(index.to_string());
+        let copied = (|| -> Result<PathBuf, String> {
+            std::fs::create_dir_all(&staged_dir).map_err(|error| error.to_string())?;
+            let staged_path = staged_dir.join(&document.file_name);
+            let mut source = open_picked_file_for_read(app, &document.picked)?;
+            let mut destination =
+                std::fs::File::create(&staged_path).map_err(|error| error.to_string())?;
+            std::io::copy(&mut source, &mut destination).map_err(|error| error.to_string())?;
+            Ok(staged_path)
+        })();
+
+        match copied {
+            Ok(staged_path) => payloads.push(crate::state::AudioFilePathImportPayload {
+                file_name: document.file_name.clone(),
+                source_path: staged_path.to_string_lossy().into_owned(),
+            }),
+            Err(error) => {
+                crate::infra::error_log::write_error(&format!(
+                    "could not stage picked audio \"{}\": {error}",
+                    document.file_name
+                ));
+                let _ = std::fs::remove_dir_all(&staged_dir);
+            }
+        }
+        on_progress(index + 1, total);
+    }
+
+    if payloads.is_empty() {
+        return Err("No se pudo leer ninguno de los archivos seleccionados.".to_string());
+    }
+    Ok(payloads)
 }
 
 /// Copy a picked source (usually a `content://` URI) into a private staging

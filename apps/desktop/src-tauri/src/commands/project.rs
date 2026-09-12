@@ -121,13 +121,27 @@ pub fn get_song_view(
         .map_err(|error| error.to_string())
 }
 
+/// Pick a `.ltpkg` and import it.
+///
+/// Split by platform because the picker has different threading needs. Only iOS
+/// awaits (its document picker is async), and only iOS is therefore a
+/// `#[tauri::command(async)]`: rfd's native dialog on desktop MUST open on the
+/// main thread — macOS requires it — which is why the desktop/Android arm stays
+/// a plain synchronous command. See `tauriCommandsOffMainThread.test.ts`.
+#[cfg(not(target_os = "ios"))]
 #[tauri::command]
 pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     {
-        // SAF picker → content:// URI; stage it to a private temp file on the
-        // worker (a big .ltpkg copy shouldn't block the command) and feed the
-        // same import path as desktop.
+        // SAF picker → content:// URI, read STRAIGHT from the descriptor.
+        //
+        // This used to copy the whole package into private storage first, only
+        // so `File::open` had a path to accept. On the phone this work started
+        // from, that copy ran at ~7 MB/s and a 2 GiB package spent ~4.7 minutes
+        // on it before the progress bar left 0%. tauri-plugin-fs hands back a
+        // real std::fs::File over the content:// fd, and a fd is seekable, so
+        // the zip reader can work on it directly — the same fix `.ltset` got in
+        // docs/plans/android-low-end/04-import-sin-staging.md.
         let Some(picked) = crate::platform::mobile_files::pick_file(&app, "Selecciona un paquete .ltpkg")
         else {
             return Ok(false);
@@ -135,13 +149,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
         // No extension check: SAF document URIs from providers like Downloads
         // end in an opaque id ("msf:28"), not the display name. The package
         // reader validates the zip structure and reports a clear error.
-        let picked_name = sanitize_saf_name_hint(
-            &crate::platform::mobile_files::picked_file_name(&picked),
-            "paquete.ltpkg",
-        );
         spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
-            let staged =
-                crate::platform::mobile_files::stage_picked_file_to_temp(worker_app, &picked, &picked_name)?;
             let insert_at = {
                 let session = state
                     .session
@@ -149,9 +157,12 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
                     .map_err(|_| DesktopError::StatePoisoned.to_string())?;
                 session.current_position()
             };
-            let result = import_package_off_lock(worker_app, state, staged.clone(), insert_at);
-            let _ = std::fs::remove_file(&staged);
-            result
+            let handle =
+                crate::platform::mobile_files::open_picked_file_for_read(worker_app, &picked)?;
+            // Dropped by the end of this closure rather than left to the JVM
+            // finalizer — an outlived ParcelFileDescriptor is what produced the
+            // `finalize() timed out` crash on the .ltset path.
+            import_package_from_reader_off_lock(worker_app, state, handle, insert_at)
         });
         return Ok(true);
     }
@@ -180,6 +191,37 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
             import_package_off_lock(worker_app, state, package_file, insert_at)
         });
 
+        Ok(true)
+    }
+}
+
+/// iOS has no rfd dialog, which is why the frontend used to route every mobile
+/// pick through the WebView chooser and its base64 bridge. The document picker
+/// hands back a real sandbox path here (the same call the `.ltset` import
+/// already uses), so the package takes the ordinary path-based route.
+#[cfg(target_os = "ios")]
+#[tauri::command]
+pub async fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, String> {
+    {
+        let Some(picked) = libretracks_ios_folder_picker::pick_file(app.clone()).await? else {
+            return Ok(false);
+        };
+        let package_file = std::path::PathBuf::from(picked);
+        // No extension check. Files providers routinely publish a custom
+        // package type as generic data, so the document that comes back can
+        // carry no `.ltpkg` at all — rejecting on the name would refuse valid
+        // packages. The zip reader validates the structure and says so clearly,
+        // the same reasoning the Android branch above spells out.
+        spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
+            let insert_at = {
+                let session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+                session.current_position()
+            };
+            import_package_off_lock(worker_app, state, package_file.clone(), insert_at)
+        });
         Ok(true)
     }
 }
@@ -216,7 +258,22 @@ fn import_package_off_lock(
     package_file: std::path::PathBuf,
     insert_at_seconds: f64,
 ) -> Result<TransportSnapshot, String> {
-    use libretracks_project::extract_song_package;
+    let file = std::fs::File::open(&package_file).map_err(|error| error.to_string())?;
+    import_package_from_reader_off_lock(app, state, file, insert_at_seconds)
+}
+
+/// Same import, from any seekable reader.
+///
+/// Android picks a `content://` document, which is a file descriptor and not a
+/// path. Reading it directly is what lets the import skip copying the whole
+/// package into private storage first.
+fn import_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
+    app: &AppHandle,
+    state: &DesktopState,
+    reader: R,
+    insert_at_seconds: f64,
+) -> Result<TransportSnapshot, String> {
+    use libretracks_project::extract_song_package_from_reader;
 
     // Resolve the destination dir under a brief lock; release it before the
     // expensive extraction.
@@ -233,7 +290,7 @@ fn import_package_off_lock(
     crate::state::emit_project_load_message(app, 5, "Leyendo paquete...".into());
     // Decompress off-lock, mapping per-entry progress onto the 7..40% band so
     // the bar moves for large packages (the merge/decode phases own 40..100%).
-    let extracted = extract_song_package(&song_dir, &package_file, |done, total| {
+    let extracted = extract_song_package_from_reader(&song_dir, reader, |done, total| {
         let percent = if total == 0 {
             7
         } else {
@@ -1454,13 +1511,34 @@ pub fn pick_library_files() -> Vec<String> {
 
 #[tauri::command]
 pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, String> {
-    let files = FileDialog::new()
-        .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
-        .set_title("Importar audio a la libreria")
-        .pick_files();
+    // Android: the SAF picker returns content:// documents, which the copy
+    // below streams straight from their descriptors. The frontend used to route
+    // this through the WebView chooser, reading each file in 2 MB base64 slices
+    // over IPC — measured at ~7 MB/s on a low-end phone whose disk does 119
+    // MB/s, which is what made "Leyendo archivo…" last minutes.
+    #[cfg(target_os = "android")]
+    let files: Vec<crate::platform::mobile_files::PickedAudioDocument> = {
+        let picked = crate::platform::mobile_files::pick_files(&app, "Importar audio a la libreria");
+        if picked.is_empty() {
+            return Ok(false);
+        }
+        picked
+            .into_iter()
+            .map(crate::platform::mobile_files::PickedAudioDocument::new)
+            .collect()
+    };
 
-    let Some(files) = files else {
-        return Ok(false);
+    #[cfg(not(target_os = "android"))]
+    let files = {
+        let picked = FileDialog::new()
+            .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
+            .set_title("Importar audio a la libreria")
+            .pick_files();
+
+        let Some(picked) = picked else {
+            return Ok(false);
+        };
+        picked
     };
 
     let worker_app = app.clone();
@@ -1491,6 +1569,7 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
 
             // Funnel into the SAME path-based core the drag flow uses
             // (register original paths + probe metadata, no lock).
+            #[cfg(not(target_os = "android"))]
             let payloads: Vec<AudioFilePathImportPayload> = files
                 .iter()
                 .map(|path| AudioFilePathImportPayload {
@@ -1503,12 +1582,52 @@ pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, S
                 })
                 .collect();
 
+            #[cfg(not(target_os = "android"))]
             let outcome = crate::state::import_audio_files_from_paths_to_library(
                 &song_dir,
                 current_song.as_ref(),
                 &payloads,
             )
             .map_err(|error| error.to_string())?;
+
+            // Android cannot register the ORIGINAL path: a content:// URI is
+            // not one, and the engine streams sources off disk by path. Copy
+            // each document into a staging folder inside the session (same
+            // filesystem as its audio/, so the move that follows is a rename),
+            // then reuse the staged-import core, which owns the naming,
+            // collision and metadata rules.
+            #[cfg(target_os = "android")]
+            let outcome = {
+                let staging_root = song_dir.join("cache").join("saf-import");
+                let payloads = crate::platform::mobile_files::stage_picked_audio_documents(
+                    &worker_app,
+                    &staging_root,
+                    &files,
+                    |done, total| {
+                        // 10..90%: the copy is the whole cost here; the staged
+                        // import that follows only renames and probes.
+                        let percent = if total == 0 {
+                            10
+                        } else {
+                            10 + ((done as u64 * 80) / total as u64) as u8
+                        };
+                        crate::state::emit_library_import_progress(
+                            &worker_app,
+                            percent,
+                            format!("Copiando {done}/{total}..."),
+                        );
+                    },
+                )?;
+                let outcome = crate::state::import_staged_audio_files_to_library(
+                    &song_dir,
+                    current_song.as_ref(),
+                    &payloads,
+                )
+                .map_err(|error| error.to_string())?;
+                // Whatever the staged import did not move is ours to remove.
+                let _ = std::fs::remove_dir_all(&staging_root);
+                outcome
+            };
 
             crate::state::emit_library_import_progress(
                 &worker_app,
@@ -1604,15 +1723,78 @@ fn prepare_library_assets(
     song_dir: &std::path::Path,
     assets: &[crate::models::view::LibraryAssetSummary],
 ) {
-    let resolved: Vec<String> = assets
+    let paths: Vec<std::path::PathBuf> = assets
         .iter()
-        .map(|a| {
-            crate::state::resolve_audio_file_path(song_dir, &a.file_path)
-                .to_string_lossy()
-                .to_string()
-        })
+        .map(|a| crate::state::resolve_audio_file_path(song_dir, &a.file_path))
+        .collect();
+    align_engine_rate_for_imported_audio(state, &paths);
+    let resolved: Vec<String> = paths
+        .iter()
+        .map(|path| path.to_string_lossy().to_string())
         .collect();
     let _ = state.audio.prepare_sources(&resolved);
+}
+
+/// Match the engine to the audio about to be prepared, while doing so is free.
+///
+/// A source is converted to the ENGINE's rate as it is prepared, and the
+/// converted copy is written to disk. On the phone this work came from, the
+/// device opened at 48 kHz and the user's multitracks were 44.1 kHz, so every
+/// imported stem produced a 77 MB PCM copy — a gigabyte of writes for a
+/// thirteen-track song that needed none. Aligning first makes the conversion
+/// unnecessary; `plan_sample_rate` only switches when switching converts less.
+///
+/// Deliberately limited to sessions with nothing on the timeline. The timeline
+/// is baked to frames at the engine rate, so changing that rate under placed
+/// clips desynchronises the metronome and the guide voice — the failure mode
+/// recorded for the device-rate switch. That guard still covers the case this
+/// exists for: on mobile, audio is imported into the library BEFORE any clip is
+/// created. An import into a populated session keeps the current rate and pays
+/// the conversion, exactly as before.
+fn align_engine_rate_for_imported_audio(state: &DesktopState, paths: &[std::path::PathBuf]) {
+    use libretracks_project::{plan_sample_rate, profile_sample_rates, SampleRatePlan};
+
+    if paths.is_empty() {
+        return;
+    }
+
+    // try_lock, never lock: this runs on an import worker and aligning is an
+    // optimisation. Blocking here to save a conversion would trade the freeze
+    // we are trying to remove for a different one.
+    let Ok(session) = state.session.try_lock() else {
+        return;
+    };
+    let has_timeline_content = session
+        .engine
+        .song()
+        .map(|song| !song.clips.is_empty() || !song.midi_clips.is_empty())
+        .unwrap_or(true);
+    drop(session);
+    if has_timeline_content {
+        return;
+    }
+
+    let (engine_rate, supported) = state.audio.current_sample_rate_capabilities();
+    if engine_rate == 0 {
+        return;
+    }
+    let user_pinned_rate = state
+        .audio
+        .current_settings()
+        .ok()
+        .and_then(|settings| settings.output_sample_rate);
+
+    let profile = profile_sample_rates(paths);
+    if let SampleRatePlan::SwitchDevice { target_rate, .. } =
+        plan_sample_rate(&profile, engine_rate, &supported, user_pinned_rate)
+    {
+        if let Err(error) = state.audio.set_output_sample_rate(target_rate) {
+            // The driver refused; we simply convert, as before.
+            crate::infra::error_log::write_error(&format!(
+                "could not switch to {target_rate} Hz for imported audio: {error}"
+            ));
+        }
+    }
 }
 
 #[tauri::command]
