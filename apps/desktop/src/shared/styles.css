@@ -554,6 +554,81 @@ html.lt-ios body {
   flex: 0 0 auto;
 }
 
+/* Aviso de cortafuegos del panel Remote. Ambar y no rojo: no es un error de la
+   app, es una configuracion de Windows que el usuario arregla de un clic. Misma
+   caja y anchura que .lt-remote-card para no romper la columna del panel. */
+.lt-remote-firewall {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 34rem;
+  width: min(34rem, 100%);
+  margin-bottom: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgb(240 180 60 / 0.35);
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(46 36 18 / 0.96), rgb(26 21 12 / 0.98));
+}
+
+.lt-remote-firewall p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgb(233 226 214 / 0.9);
+}
+
+.lt-remote-firewall-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.86rem;
+  color: rgb(246 202 116);
+}
+
+.lt-remote-firewall-title .material-symbols-outlined {
+  font-size: 1.05rem;
+}
+
+.lt-remote-firewall-done {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgb(139 226 175);
+}
+
+.lt-remote-firewall-error {
+  color: rgb(240 160 150);
+}
+
+.lt-remote-firewall button {
+  align-self: flex-start;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgb(240 180 60 / 0.45);
+  border-radius: 2px;
+  background: rgb(240 180 60 / 0.12);
+  color: rgb(248 214 146);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.lt-remote-firewall button:hover:not(:disabled) {
+  background: rgb(240 180 60 / 0.2);
+}
+
+.lt-remote-firewall button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.lt-remote-firewall small {
+  font-size: 0.74rem;
+  color: rgb(233 226 214 / 0.55);
+}
+
 .lt-remote-card {
   box-sizing: border-box;
   flex: 0 0 auto;

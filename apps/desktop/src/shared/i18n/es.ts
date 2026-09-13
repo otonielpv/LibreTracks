@@ -1305,6 +1305,23 @@ const es = {
     ipUrl: "URL por IP",
     hostnameUrl: "URL por hostname (.local)",
     qrAlt: "Codigo QR para LibreTracks Remote",
+    firewall: {
+      title: "Windows esta bloqueando el remote",
+      blocked:
+        "El cortafuegos permite LibreTracks en la red {{allowed}}, pero ahora mismo estas en una red {{active}}. El movil no podra conectar hasta que lo permitas.",
+      noRule:
+        "El cortafuegos de Windows no tiene ninguna regla que deje a LibreTracks recibir conexiones en esta red ({{active}}).",
+      unknown:
+        "No se ha podido comprobar el cortafuegos de Windows. Si el movil no conecta, permite el acceso desde aqui.",
+      allow: "Permitir en el cortafuegos",
+      allowHint: "Windows pedira confirmacion de administrador.",
+      applying: "Pidiendo permiso a Windows...",
+      done: "Listo. El movil ya puede conectar.",
+      profilePrivate: "privada",
+      profilePublic: "publica",
+      profileDomain: "de dominio",
+      profileNone: "ninguna",
+    },
   },
   liveView: {
     title: "Vista Live",

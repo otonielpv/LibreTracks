@@ -342,6 +342,26 @@ pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String
     Ok(remote::remote_server_info(&app))
 }
 
+/// Si el cortafuegos de Windows deja que el movil llegue al Remote.
+///
+/// Barato y sin efectos: la interfaz lo consulta al abrir el panel del Remote.
+/// Fuera de Windows responde "no aplica" y el panel no enseña nada.
+#[tauri::command(async)]
+pub fn get_remote_firewall_status() -> crate::platform::windows_firewall::FirewallStatus {
+    crate::platform::windows_firewall::status()
+}
+
+/// Crea la regla de entrada del Remote, con una unica elevacion.
+///
+/// SACA UN AVISO DE UAC, asi que solo se llama desde un boton que el usuario
+/// pulsa a proposito. Devuelve el estado recomprobado, para que el panel diga
+/// si de verdad ha quedado arreglado.
+#[tauri::command(async)]
+pub fn allow_remote_through_firewall(
+) -> Result<crate::platform::windows_firewall::FirewallStatus, String> {
+    crate::platform::windows_firewall::allow()
+}
+
 /// Mobile build: there is no embedded remote-control server (the app itself
 /// is the handheld device), so the command exists for API parity but always
 /// errors. The frontend hides the remote UI on mobile and never calls this.

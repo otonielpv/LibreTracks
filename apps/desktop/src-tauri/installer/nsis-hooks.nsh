@@ -24,17 +24,28 @@
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
   ; Allow LibreTracks Remote (phone control over the LAN) through Windows
-  ; Firewall so users don't have to accept a UAC/firewall prompt or run a
-  ; PowerShell command by hand. This is a per-PROGRAM inbound rule (not a raw
-  ; open port): it only permits the LibreTracks binary to accept inbound
-  ; connections, only while the app is running, and survives us changing the
-  ; remote port later. The installer already runs elevated, so netsh succeeds
-  ; without a further prompt. netsh is present on every supported Windows.
+  ; Firewall. Per-PROGRAM inbound rule (not a raw open port): it only permits
+  ; the LibreTracks binary to accept inbound connections, only while the app is
+  ; running, and survives us changing the remote port later.
+  ;
+  ; ATENCION - esto solo surte efecto en una instalacion ELEVADA. Con el
+  ; `installMode` por defecto (`currentUser`) la plantilla emite
+  ; `RequestExecutionLevel user`, el instalador no se eleva, y ambos netsh
+  ; fallan con "La operacion solicitada requiere elevacion" — nsExec::Exec no
+  ; mira el codigo de salida, asi que el fallo pasa desapercibido. Por eso el
+  ; arreglo de verdad vive en la app: el panel del Remote detecta que la regla
+  ; no cubre la red conectada y la crea con una unica elevacion. Ver
+  ; src/platform/windows_firewall.rs. Esto se queda por si algun dia se
+  ; instala en modo perMachine, donde si corre.
+  ;
+  ; El ejecutable es ${MAINBINARYNAME}.exe (libretracks-desktop.exe), NO el
+  ; productName: durante mucho tiempo esto apunto a "$INSTDIR\LibreTracks.exe",
+  ; que no existe, asi que la regla —cuando llegaba a crearse— no permitia nada.
   ;
   ; Delete any prior rule of the same name first so upgrades/repairs don't
   ; stack duplicate rules, then (re)create it for all profiles.
   nsExec::Exec 'netsh advfirewall firewall delete rule name="LibreTracks Remote"'
-  nsExec::Exec 'netsh advfirewall firewall add rule name="LibreTracks Remote" dir=in action=allow program="$INSTDIR\LibreTracks.exe" enable=yes profile=any description="Permite conectar la app LibreTracks Remote desde el movil en la red local."'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="LibreTracks Remote" dir=in action=allow program="$INSTDIR\${MAINBINARYNAME}.exe" enable=yes profile=any description="Permite conectar la app LibreTracks Remote desde el movil en la red local."'
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL

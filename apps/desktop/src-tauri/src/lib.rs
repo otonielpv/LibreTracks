@@ -277,6 +277,8 @@ pub fn run() {
             commands::system::is_debug_build,
             commands::system::get_telemetry_platform,
             commands::system::get_remote_server_info,
+            commands::system::get_remote_firewall_status,
+            commands::system::allow_remote_through_firewall,
             commands::system::get_midi_inputs,
             commands::system::get_midi_outputs,
             commands::system::send_midi_test_note,

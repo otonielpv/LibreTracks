@@ -1274,6 +1274,23 @@ const en = {
     ipUrl: "IP URL",
     hostnameUrl: "Hostname URL (.local)",
     qrAlt: "QR code for LibreTracks Remote",
+    firewall: {
+      title: "Windows is blocking the remote",
+      blocked:
+        "The firewall allows LibreTracks on the {{allowed}} network, but you are currently on a {{active}} network. Your phone cannot connect until you allow it.",
+      noRule:
+        "Windows Firewall has no rule letting LibreTracks accept connections on this network ({{active}}).",
+      unknown:
+        "Windows Firewall could not be checked. If your phone cannot connect, allow access from here.",
+      allow: "Allow through the firewall",
+      allowHint: "Windows will ask for administrator confirmation.",
+      applying: "Asking Windows for permission...",
+      done: "Done. Your phone can connect now.",
+      profilePrivate: "private",
+      profilePublic: "public",
+      profileDomain: "domain",
+      profileNone: "none",
+    },
   },
   liveView: {
     title: "Live View",

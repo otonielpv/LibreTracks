@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { RemoteServerInfo } from "@libretracks/shared/models";
 import { RemoteAccessCard } from "./RemoteAccessCard";
+import { RemoteFirewallNotice } from "./RemoteFirewallNotice";
 import { recordProductEvent } from "../../telemetry/telemetry";
 
 type RemotePanelProps = {
@@ -48,6 +49,10 @@ export function RemotePanel({ isOpen, onClose, remoteServerInfo }: RemotePanelPr
           </button>
         </header>
         <div className="lt-settings-modal-body">
+          {/* Antes del QR a proposito: de nada sirve escanearlo si Windows
+              va a tirar la conexion del movil. No renderiza nada cuando no hay
+              problema que arreglar. */}
+          <RemoteFirewallNotice />
           <RemoteAccessCard remoteServerInfo={remoteServerInfo} />
         </div>
       </section>

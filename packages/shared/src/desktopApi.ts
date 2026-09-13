@@ -26,6 +26,7 @@ import type {
   MidiRawMessage,
   ProjectLoadProgressEvent,
   RegionMeterLevel,
+  RemoteFirewallStatus,
   RemoteServerInfo,
   SessionExportProgressEvent,
   SongView,
@@ -241,6 +242,27 @@ export async function listenToSettingsUpdated(
   return listen<AppSettings>("settings:updated", (event) => {
     handler(event.payload);
   });
+}
+
+/**
+ * Si el cortafuegos de Windows deja pasar al Remote en la red de ahora mismo.
+ *
+ * Tarda ~1 s (arranca PowerShell y carga sus módulos de red), así que se
+ * consulta al abrir el panel del Remote y no en cada render.
+ */
+export async function getRemoteFirewallStatus(): Promise<RemoteFirewallStatus> {
+  return invokeCommand<RemoteFirewallStatus>("get_remote_firewall_status");
+}
+
+/**
+ * Crea la regla de entrada del Remote. **Saca un aviso de UAC**, así que solo
+ * se llama desde un botón que el usuario pulsa a propósito.
+ *
+ * Devuelve el estado recomprobado, no un booleano: lo que quiere saber quien lo
+ * pulsa es si ahora el móvil va a conectar.
+ */
+export async function allowRemoteThroughFirewall(): Promise<RemoteFirewallStatus> {
+  return invokeCommand<RemoteFirewallStatus>("allow_remote_through_firewall");
 }
 
 /**

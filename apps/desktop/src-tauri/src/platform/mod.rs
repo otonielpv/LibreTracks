@@ -10,6 +10,9 @@
 //! (`android_memory`) and the external-storage lookup that decides where
 //! sessions live (`android_storage`).
 //!
+//! [`windows_firewall`] es el que mira si el cortafuegos deja pasar a
+//! LibreTracks Remote y, si no, crea la regla con una sola elevacion.
+//!
 //! The two mobile credential stores (`android_token_store`, `ios_token_store`)
 //! sit here for the same reason: they hold the cloud refresh token, and the
 //! `keyring` crate that covers every desktop OS has no backend for either.
@@ -22,6 +25,11 @@ pub mod file_dialog;
 pub mod linux_webkit;
 pub mod macos_bookmarks;
 pub mod resource_monitor;
+
+// Compilado en todos los sistemas a proposito: solo el lanzamiento del proceso
+// es de Windows, y dejar el modulo entero tras un `cfg` significaria que ningun
+// `cargo check` de macOS/Linux mira su logica. Ver la cabecera del modulo.
+pub mod windows_firewall;
 
 #[cfg(target_os = "ios")]
 pub mod ios_token_store;

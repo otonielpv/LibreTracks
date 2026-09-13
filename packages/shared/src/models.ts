@@ -825,6 +825,26 @@ export type ProjectLoadCompleteEvent = {
 };
 
 /**
+ * Si el cortafuegos de Windows deja que el móvil llegue a LibreTracks Remote.
+ *
+ * `covered` es la única pregunta que importa: hay una regla de entrada activa
+ * para este ejecutable en TODOS los perfiles de las redes conectadas ahora
+ * mismo. Una regla que solo cubre `Public` mientras estás en una red `Private`
+ * existe pero no sirve, y es el fallo que motiva todo esto — ver
+ * `platform/windows_firewall.rs`.
+ *
+ * `known: false` significa que la consulta falló, no que esté bien: la interfaz
+ * ofrece el arreglo igualmente.
+ */
+export type RemoteFirewallStatus = {
+  supported: boolean;
+  known: boolean;
+  covered: boolean;
+  activeProfiles: string[];
+  allowedProfiles: string[];
+};
+
+/**
  * Qué tipo de fichero nuestro pide abrir el sistema (doble click en el
  * explorador, "Abrir con", arrastrarlo al icono de la app).
  *
