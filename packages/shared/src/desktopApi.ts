@@ -18,6 +18,7 @@ import type {
   MarkerKind,
   MidiClipSummary,
   MixSceneSummary,
+  OpenWithFile,
   PadCatalogEntry,
   PadsCatalog,
   PadDownloadProgressEvent,
@@ -240,6 +241,36 @@ export async function listenToSettingsUpdated(
   return listen<AppSettings>("settings:updated", (event) => {
     handler(event.payload);
   });
+}
+
+/**
+ * Un fichero de LibreTracks que el sistema nos manda abrir con la app YA en
+ * marcha: una segunda instancia que el plugin de instancia única reenvía, o un
+ * `Opened` de macOS.
+ *
+ * El caso de arranque en frío no pasa por aquí — el fichero llega mucho antes
+ * de que exista este oyente y se recoge con {@link takePendingOpenWithFile}.
+ */
+export async function listenToOpenWithFile(
+  handler: (file: OpenWithFile) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<OpenWithFile>("app:open-with-file", (event) => {
+    handler(event.payload);
+  });
+}
+
+/**
+ * El fichero con el que se abrió la app, si lo hubo.
+ *
+ * Devuelve `null` en un arranque normal, y vacía el hueco al leerlo: una
+ * recarga del WebView no debe reabrir la sesión por segunda vez. Llamarlo es
+ * además lo que le dice al backend que ya hay interfaz escuchando, así que
+ * registra antes {@link listenToOpenWithFile} o se perderá un fichero que
+ * llegue entre medias.
+ */
+export async function takePendingOpenWithFile(): Promise<OpenWithFile | null> {
+  return invokeCommand<OpenWithFile | null>("take_pending_open_with_file");
 }
 
 export async function listenToMidiRawMessage(

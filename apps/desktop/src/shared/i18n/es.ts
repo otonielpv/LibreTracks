@@ -755,6 +755,8 @@ const es = {
       markerRenamed: "Marca renombrada: {{name}}",
       markerKindSet: "Tipo de {{name}}: {{kind}}",
       markerDeleted: "Marca eliminada: {{name}}",
+      openWithNeedsSession:
+        "Abre o crea una sesión y después importa “{{name}}” en ella.",
       projectCreated: "Proyecto creado.",
       projectCreatedAt: "Proyecto creado en {{path}}.",
       projectSaved: "Proyecto guardado.",

@@ -91,7 +91,28 @@ pub fn run() {
         .map(|v| v == "cpp-v2")
         .unwrap_or(false);
 
-    let builder = tauri::Builder::default()
+    // El hueco donde espera el fichero con el que arranca la app (doble click
+    // en un .ltsession y compania). Se declara ANTES que el plugin de instancia
+    // unica porque su callback lo consulta, y ese callback puede dispararse en
+    // cuanto el plugin esta en pie.
+    let builder =
+        tauri::Builder::default().manage(commands::open_with::PendingOpenWith::default());
+
+    // Instancia unica, y el primero de todos los plugins como pide el suyo.
+    //
+    // Dos LibreTracks a la vez nunca han funcionado: el segundo muere en
+    // `initialize_remote` al no poder tomar el puerto 3030. Asi que abrir un
+    // fichero con la app ya arrancada tiene que reenviarselo a la que ya corre
+    // en lugar de lanzar un proceso condenado.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        commands::open_with::focus_main_window(app);
+        if let Some(file) = commands::open_with::file_from_args(argv) {
+            commands::open_with::deliver(app, file);
+        }
+    }));
+
+    let builder = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -110,6 +131,14 @@ pub fn run() {
             // acumularia manejadores durante toda la vida del proceso.
             #[cfg(any(target_os = "android", target_os = "ios"))]
             commands::cloud::register_deep_link_handler(app.handle());
+
+            // Doble click en un .ltsession / .ltset / .ltpkg / .lttemplate:
+            // Windows y Linux lo pasan como argumento de arranque. Aqui solo se
+            // aparca — la interfaz lo reclama cuando existe. (macOS no usa
+            // argumentos para esto: llega como `RunEvent::Opened`, mas abajo.)
+            if let Some(file) = commands::open_with::file_from_args(std::env::args()) {
+                commands::open_with::deliver(app.handle(), file);
+            }
 
             // Resolve the error-log directory now that app_data_dir is
             // available; degrade gracefully (no logging) if it can't resolve
@@ -285,6 +314,7 @@ pub fn run() {
             commands::settings::set_decoding_cache_dir,
             commands::settings::set_decoding_cache_max_gb,
             commands::settings::purge_decoding_cache,
+            commands::open_with::take_pending_open_with_file,
             commands::project::get_song_view,
             commands::project::get_project_load_progress_snapshot,
             commands::library::get_library_assets,
@@ -450,6 +480,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to run LibreTracks desktop application")
         .run(|app, event| {
+            // macOS no pasa el fichero por la linea de ordenes: el Finder se lo
+            // manda a la app ya lanzada como `Opened`, tanto si acaba de
+            // arrancar como si llevaba horas abierta. `deliver` decide cual de
+            // los dos casos es segun la interfaz haya reclamado ya o no.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                commands::open_with::deliver_opened_urls(app, urls);
+            }
+
             // Save the open session on the way out. Edits only live in memory
             // until an explicit save (see persist_song_update), so without this
             // quitting the app throws away everything since the last Ctrl+S.

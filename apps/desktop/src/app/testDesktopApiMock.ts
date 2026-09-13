@@ -14,6 +14,7 @@ import type {
   LibraryAssetSummary,
   LibraryImportProgressEvent,
   MarkerKind,
+  OpenWithFile,
   PadDownloadProgressEvent,
   PendingJumpSummary,
   ProjectLoadProgressEvent,
@@ -935,6 +936,10 @@ export const testDesktopApiMock = {
   },
   listenToSettingsUpdated:
     async (_handler: (settings: AppSettings) => void) => () => {},
+  // "Abrir con" del sistema: en los tests la app nunca arranca con un fichero,
+  // así que el hueco está siempre vacío y nadie emite el evento.
+  listenToOpenWithFile: async (_handler: (file: OpenWithFile) => void) => () => {},
+  takePendingOpenWithFile: async (): Promise<OpenWithFile | null> => null,
   listenToMidiRawMessage:
     async (
       _handler: (message: {

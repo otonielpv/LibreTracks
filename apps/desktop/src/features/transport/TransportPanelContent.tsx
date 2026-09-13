@@ -4069,6 +4069,7 @@ export function TransportPanelContent() {
     getImportPositionSeconds: () => snapshotRef.current?.positionSeconds ?? 0,
     beginProjectAudioPreparation,
     cancelProjectAudioPreparation,
+    hasOpenSession: () => Boolean(songRef.current),
   });
 
   const {

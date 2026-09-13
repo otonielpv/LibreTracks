@@ -824,6 +824,20 @@ export type ProjectLoadCompleteEvent = {
   error: string | null;
 };
 
+/**
+ * Qué tipo de fichero nuestro pide abrir el sistema (doble click en el
+ * explorador, "Abrir con", arrastrarlo al icono de la app).
+ *
+ * Lo resuelve Rust a partir de la extensión — ver `commands/open_with.rs` — para
+ * que la lista de extensiones asociadas exista en un solo sitio.
+ */
+export type OpenWithKind = "session" | "set" | "songPackage" | "template";
+
+export type OpenWithFile = {
+  path: string;
+  kind: OpenWithKind;
+};
+
 export type AudioMeterLevel = {
   trackId: string;
   leftPeak: number;

@@ -37,6 +37,7 @@ import {
   recordProductEvent,
   type ProductEventName,
 } from "../../telemetry/telemetry";
+import { useOpenWithFile } from "./useOpenWithFile";
 
 type UseProjectActionsProps = {
   runAction: (
@@ -67,6 +68,12 @@ type UseProjectActionsProps = {
   getImportPositionSeconds: () => number;
   beginProjectAudioPreparation: (startedAtUnixMs: number) => void;
   cancelProjectAudioPreparation: () => void;
+  /**
+   * Si hay una sesion cargada ahora mismo. Solo lo consulta el "abrir con" del
+   * sistema, y como funcion porque su oyente vive todo el proceso: leerlo al
+   * montar congelaria la respuesta al estado del arranque.
+   */
+  hasOpenSession: () => boolean;
 };
 
 export function useProjectActions({
@@ -85,6 +92,7 @@ export function useProjectActions({
   getImportPositionSeconds,
   beginProjectAudioPreparation,
   cancelProjectAudioPreparation,
+  hasOpenSession,
 }: UseProjectActionsProps) {
   function applyProjectProgressFeedback(event: ProjectLoadProgressEvent) {
     const detail =
@@ -645,6 +653,25 @@ export function useProjectActions({
       "project_created",
     );
   }
+
+  // Doble click en un .ltsession / .ltset / .ltpkg / .lttemplate del
+  // explorador. No estrena ningun flujo: reparte entre los cuatro de aqui
+  // arriba (ver ../openWithFile.ts). Se cablea en este hook y no en el panel
+  // porque es donde ya viven los cuatro manejadores, `t` y `setStatus`.
+  useOpenWithFile({
+    hasOpenSession,
+    openSession: handleOpenProjectFromPath,
+    importSet: handleImportSessionClick,
+    createFromTemplate: handleCreateSongFromTemplate,
+    importSongPackage: handleImportSongClick,
+    warnSongPackageNeedsSession: (name) =>
+      setStatus(
+        t("transport.status.openWithNeedsSession", {
+          name,
+          defaultValue: `Abre o crea una sesion y despues importa "${name}" en ella.`,
+        }),
+      ),
+  });
 
   return {
     handleCreateSongClick,

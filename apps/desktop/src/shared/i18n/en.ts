@@ -733,6 +733,8 @@ const en = {
       markerRenamed: "Marker renamed: {{name}}",
       markerKindSet: "{{name}} type: {{kind}}",
       markerDeleted: "Marker deleted: {{name}}",
+      openWithNeedsSession:
+        "Open or create a session first, then import “{{name}}” into it.",
       projectCreated: "Project created.",
       projectCreatedAt: "Project created at {{path}}.",
       projectSaved: "Project saved.",

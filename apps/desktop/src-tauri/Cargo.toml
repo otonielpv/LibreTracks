@@ -51,10 +51,12 @@ path = "../../../crates/libretracks-core"
 # - midir: no mobile backend wired into LibreTracks yet.
 # - rfd: desktop-style native file dialogs don't exist on Android/iOS (see
 #   src/file_dialog.rs for the stub; mobile flows will use tauri-plugin-dialog).
+# - tauri-plugin-single-instance: no hay segundo proceso que reenviar en movil.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
 rfd = "0.15"
+tauri-plugin-single-instance = "2"
 
 # iOS uses the native C++ engine as a static arm64 library. The target-specific
 # plugin below supplies the document picker; the engine dependency itself is
