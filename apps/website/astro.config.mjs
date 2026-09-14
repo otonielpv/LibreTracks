@@ -58,7 +58,7 @@ export default defineConfig({
         { icon: "reddit", label: "Reddit", href: "https://www.reddit.com/r/LibreTracks/" },
         { icon: "youtube", label: "YouTube", href: "https://www.youtube.com/@LibreTracks" },
       ],
-      customCss: ["./src/styles/starlight.css"],
+      customCss: ["./src/styles/fonts.css", "./src/styles/starlight.css"],
       sidebar: [
         {
           label: "Overview & Core",

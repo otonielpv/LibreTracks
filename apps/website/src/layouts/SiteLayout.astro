@@ -1,4 +1,5 @@
 ---
+import "../styles/fonts.css";
 import "../styles/global.css";
 
 interface Props {
@@ -152,6 +153,12 @@ const pageSchemas = structuredData
     <meta name="twitter:image" content={ogImage.href} />
 
     <link rel="icon" href="/icon.svg" />
+    {/* The two faces above the fold on every page: the body copy and the
+        uppercase labels. Preloading them keeps the swap from landing after
+        first paint, which is what makes a swap look like a layout jump. */}
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-400-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-800-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/space-grotesk-700-latin.woff2" crossorigin />
     {schema && !noIndex && (
       <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
     )}
@@ -164,6 +171,9 @@ const pageSchemas = structuredData
   </head>
   <body>
     <div class="site-page">
+      <a class="skip-link" href="#main-content">
+        {isSpanish ? "Saltar al contenido" : "Skip to content"}
+      </a>
       <header class="site-shell site-nav">
         <a class="brand" href={`${prefix}/`}>
           <img src="/icon.svg" alt="" />
@@ -229,7 +239,54 @@ const pageSchemas = structuredData
           </a>
         </nav>
       </header>
-      <slot />
+      <div id="main-content" tabindex="-1">
+        <slot />
+      </div>
+      <footer class="site-footer">
+        <div class="site-shell site-footer-inner">
+          <div class="site-footer-brand">
+            <a class="brand" href={`${prefix}/`}>
+              <img src="/icon.svg" alt="" />
+              <span>LibreTracks</span>
+            </a>
+            <p>
+              {isSpanish
+                ? "Reproductor multitrack libre para directo. Funciona sin cuenta, sin suscripción y sin conexión."
+                : "Free multitrack playback for live performance. No account, no subscription, works offline."}
+            </p>
+          </div>
+          <nav class="site-footer-links" aria-label={isSpanish ? "Enlaces del pie" : "Footer navigation"}>
+            <a href={`${prefix}/download/`}>{isSpanish ? "Descargas" : "Downloads"}</a>
+            <a href={`${prefix}/docs/`}>{isSpanish ? "Documentación" : "Docs"}</a>
+            <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>{isSpanish ? "Guías" : "Guides"}</a>
+            <a href={`${prefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
+              {isSpanish ? "Alternativas" : "Alternatives"}
+            </a>
+            <a href={`${prefix}/privacy/`}>{isSpanish ? "Privacidad" : "Privacy"}</a>
+            <a href="https://github.com/otonielpv/LibreTracks">{isSpanish ? "Código fuente" : "Source code"}</a>
+          </nav>
+        </div>
+        <div class="site-shell site-footer-legal">
+          <p>© {new Date().getFullYear()} LibreTracks</p>
+          <p>
+            {isSpanish ? "Publicado bajo la licencia " : "Released under the "}
+            <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a>.
+          </p>
+        </div>
+      </footer>
     </div>
+    <script is:inline>
+      // `autoplay` on the workflow clip ignores prefers-reduced-motion, so the
+      // looping screen recording has to be stopped here. Reading the query at
+      // runtime (rather than dropping the element at build time) keeps the
+      // poster frame in place for everyone.
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        for (const video of document.querySelectorAll("video[autoplay]")) {
+          video.autoplay = false;
+          video.removeAttribute("loop");
+          video.pause();
+        }
+      }
+    </script>
   </body>
 </html>

@@ -138,7 +138,7 @@ const t = isSpanish
         <div class="feature-grid">
           {strengths.map(([name, body]) => (
             <article class="feature-card">
-              <strong>{name}</strong>
+              <h3>{name}</h3>
               <p>{body}</p>
             </article>
           ))}
@@ -152,7 +152,8 @@ const t = isSpanish
           <p class="eyebrow">{t.compareEyebrow}</p>
           <h2>{t.compareHeading}</h2>
         </div>
-        <table class="compare-table">
+        <div class="table-scroll" role="region" tabindex="0" aria-label={t.compareHeading}>
+          <table class="compare-table">
           <thead>
             <tr><th>{t.need}</th><th>{rival}</th><th>{t.libre}</th></tr>
           </thead>
@@ -161,7 +162,8 @@ const t = isSpanish
               <tr><td>{need}</td><td>{theirs}</td><td>{ours}</td></tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </section>
 

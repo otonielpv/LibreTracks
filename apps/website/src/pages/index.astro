@@ -68,7 +68,7 @@ const fit = [
         <div class="feature-grid">
           {capabilities.map(([title, body]) => (
             <article class="feature-card">
-              <strong>{title}</strong>
+              <h3>{title}</h3>
               <p>{body}</p>
             </article>
           ))}
@@ -93,7 +93,7 @@ const fit = [
                 <img src={image} alt={`${title} workflow in LibreTracks`} loading="lazy" decoding="async" width={image.includes("Proyecto") ? "1000" : "1100"} height={image.includes("Proyecto") ? "556" : "590"} />
               )}
               <div>
-                <strong>{title}</strong>
+                <h3>{title}</h3>
                 <p>{body}</p>
               </div>
             </article>
@@ -116,7 +116,7 @@ const fit = [
         <div class="docs-list">
           {viewHighlights.map(([title, body]) => (
             <article>
-              <strong>{title}</strong>
+              <h3>{title}</h3>
               <p>{body}</p>
             </article>
           ))}
@@ -134,7 +134,7 @@ const fit = [
         <div class="feature-grid">
           {controlHighlights.map(([title, body]) => (
             <article class="feature-card">
-              <strong>{title}</strong>
+              <h3>{title}</h3>
               <p>{body}</p>
             </article>
           ))}
@@ -149,7 +149,8 @@ const fit = [
           <h2>Use your DAW for production. Use LibreTracks for the gig.</h2>
           <p>LibreTracks complements tools like Reaper, Ableton Live, Logic, and Cubase by taking prepared audio into a dedicated live playback workflow.</p>
         </div>
-        <table class="compare-table">
+        <div class="table-scroll" role="region" tabindex="0" aria-label="Feature comparison: studio DAW versus LibreTracks">
+          <table class="compare-table">
           <thead>
             <tr><th>Need</th><th>Studio DAW</th><th>LibreTracks</th></tr>
           </thead>
@@ -158,7 +159,8 @@ const fit = [
               <tr><td>{need}</td><td>{daw}</td><td>{libretracks}</td></tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
         <div class="hero-actions" style="margin-top:1.75rem">
           <a class="button-link primary" href="/alternatives/">Explore free alternatives</a>
           <a class="button-link" href="/ableton-live-alternative/">vs Ableton Live</a>

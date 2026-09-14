@@ -26,24 +26,191 @@
   --sl-color-gray-6: #201f1f;
   --sl-color-black: #131313;
   --sl-font: Inter, ui-sans-serif, system-ui, sans-serif;
-  --sl-font-mono: "Space Grotesk", ui-monospace, SFMono-Regular, monospace;
+  /* Space Grotesk is a proportional grotesque, not a monospace: using it here
+     rendered every code block in the docs with variable-width characters. */
+  --sl-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* ── Typography ────────────────────────────────────────────────────────
+     Display type needs its line-height to shrink as the size grows, but never
+     below ~1.05: Inter's ink spans about 1.21em (ascender + descender), so a
+     tighter line box lets an accented capital (Ó, Í — common in the Spanish
+     copy) collide with the descender of the line above. The headings used to
+     sit at 0.88/1.0, which is where that collision happened.
+     Tracking goes negative as the size grows for the usual optical reason:
+     letter spacing that reads correct at 16px reads loose at 60px. */
+  --lt-font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --lt-font-label: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --lt-heading: #f3f0ef;
+
+  --lt-display: clamp(2.35rem, 1.6rem + 2.35vw, 3.25rem); /* hero h1: 37 → 52px */
+  --lt-h1: clamp(2.25rem, 1.45rem + 2.5vw, 3.5rem);       /* page h1: 36 → 56px */
+  --lt-h2: clamp(1.75rem, 1.25rem + 1.6vw, 2.5rem);       /* section: 28 → 40px */
+  --lt-h3: 1.0625rem;
+
+  --lt-leading-display: 1.08;
+  --lt-leading-heading: 1.18;
+  --lt-leading-body: 1.65;
+  --lt-tracking-display: -0.022em;
+  --lt-tracking-heading: -0.016em;
+  --lt-tracking-label: 0.08em; /* uppercase micro-type needs positive tracking */
+
+  /* Comfortable reading measure. Anything long-form is capped at this. */
+  --lt-measure: 68ch;
+
+  --lt-radius: 3px;
+  --lt-radius-lg: 5px;
 }
 
 body {
   margin: 0;
   background: var(--lt-surface);
   color: var(--lt-text);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--lt-font-sans);
+  font-size: 1rem;
+  line-height: var(--lt-leading-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
   color: inherit;
 }
 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+/* Keyboard focus. Only two components used to declare one, so tabbing through
+   the header, the download cards or the primary CTA moved an invisible caret.
+   `:where()` keeps the specificity at 0 so the richer per-component rules
+   further down still win. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--lt-primary);
+  outline-offset: 3px;
+  border-radius: var(--lt-radius);
+}
+
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: var(--lt-radius);
+  background: var(--lt-primary);
+  color: #003731;
+  font: 700 0.85rem/1 var(--lt-font-label);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* The home page autoplays a looping screen recording and several cards animate
+   on hover. Both are decoration, so both stop when the reader asks for less
+   motion (the video is also paused from SiteLayout, which `autoplay` needs). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .guide-card:hover {
+    transform: none;
+  }
+}
+
 .site-page {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background: var(--lt-surface);
   color: var(--lt-text);
+}
+
+.site-page > #main-content {
+  flex: 1;
+}
+
+/* The skip-link target is focused programmatically; a ring around the entire
+   page is noise, and the landing position is obvious from the scroll. */
+#main-content:focus,
+#main-content:focus-visible {
+  outline: none;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────
+   The site had no footer at all: no licence, no copyright, no second chance
+   at the primary links after a long page. */
+.site-footer {
+  margin-top: 4rem;
+  padding-top: 3rem;
+  border-top: 1px solid color-mix(in srgb, var(--lt-muted) 12%, transparent);
+  background: var(--lt-surface-low);
+}
+
+.site-footer-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2rem;
+  align-items: start;
+  padding-bottom: 2.5rem;
+}
+
+.site-footer-brand p {
+  max-width: 42ch;
+  margin: 0.85rem 0 0;
+  color: color-mix(in srgb, var(--lt-text) 62%, transparent);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.site-footer-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 2rem;
+}
+
+.site-footer-links a {
+  color: color-mix(in srgb, var(--lt-text) 72%, transparent);
+  font-size: 0.88rem;
+  text-decoration: none;
+  padding-block: 0.2rem;
+}
+
+.site-footer-links a:hover {
+  color: var(--lt-primary);
+}
+
+.site-footer-legal {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.15rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--lt-muted) 10%, transparent);
+}
+
+.site-footer-legal p {
+  margin: 0;
+  color: color-mix(in srgb, var(--lt-text) 55%, transparent);
+  font-size: 0.8rem;
+}
+
+.site-footer-legal a {
+  color: color-mix(in srgb, var(--lt-primary) 85%, transparent);
 }
 
 .site-shell {
@@ -64,8 +231,9 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--lt-primary);
+  letter-spacing: -0.01em;
   text-decoration: none;
 }
 
@@ -89,13 +257,15 @@ a {
   justify-content: center;
   gap: 0.4rem;
   min-height: 2.4rem;
-  border-radius: 2px;
-  padding: 0 0.8rem;
+  border-radius: var(--lt-radius);
+  padding: 0 0.85rem;
   color: var(--lt-muted);
   background: transparent;
   text-decoration: none;
-  font: 700 0.78rem/1 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.78rem/1 var(--lt-font-label);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .nav-links a:hover,
@@ -127,7 +297,9 @@ a {
 }
 
 .hero {
-  min-height: min(760px, calc(100vh - 4.25rem));
+  /* svh rather than vh: on mobile browsers vh counts the space under the
+     retracting URL bar, which pushed the CTA below the fold on first paint. */
+  min-height: min(620px, calc(100svh - 4.25rem));
   display: grid;
   align-items: center;
   padding: 3rem 0 5rem;
@@ -135,35 +307,44 @@ a {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  gap: clamp(2rem, 4vw, 3.5rem);
   align-items: center;
 }
 
 .eyebrow {
   color: var(--lt-primary);
-  font: 800 0.75rem/1.2 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.75rem/1.2 var(--lt-font-label);
+  letter-spacing: var(--lt-tracking-label);
   text-transform: uppercase;
 }
 
 h1 {
-  max-width: 12ch;
-  margin: 0.85rem 0;
-  color: #f3f0ef;
-  font-size: clamp(3.2rem, 8vw, 6.8rem);
-  line-height: 0.88;
+  /* 12ch forced even a short headline into five or six lines, which is what
+     made the hero read as a wall of type. 22ch keeps a display measure while
+     letting a sentence-length page title (e.g. /download/) run three lines. */
+  max-width: 22ch;
+  margin: 0.75rem 0 1.1rem;
+  color: var(--lt-heading);
+  font-size: var(--lt-h1);
+  font-weight: 800;
+  line-height: var(--lt-leading-display);
+  letter-spacing: var(--lt-tracking-display);
+  text-wrap: balance;
 }
 
 .hero h1 {
-  font-size: clamp(3rem, 5.2vw, 5.25rem);
+  max-width: 17ch;
+  font-size: var(--lt-display);
 }
 
 .hero p {
-  max-width: 58ch;
-  margin: 0;
+  max-width: 56ch;
+  margin: 1.25rem 0 0;
   color: color-mix(in srgb, var(--lt-text) 78%, transparent);
-  font-size: 1.08rem;
-  line-height: 1.65;
+  font-size: 1.05rem;
+  line-height: var(--lt-leading-body);
+  text-wrap: pretty;
 }
 
 .hero-actions {
@@ -173,10 +354,13 @@ h1 {
   margin-top: 1.5rem;
 }
 
+/* The frame used to force 16/10 and `object-fit: cover` over a 16/8.6 asset,
+   so the right edge of the app window was sliced off mid-control — it read as
+   a broken image rather than a deliberate crop. Let the screenshot set its own
+   height instead. */
 .product-shot {
-  aspect-ratio: 16 / 10;
   border: 1px solid color-mix(in srgb, var(--lt-muted) 18%, transparent);
-  border-radius: 4px;
+  border-radius: var(--lt-radius-lg);
   background: var(--lt-surface-low);
   overflow: hidden;
   box-shadow: 0 28px 80px rgb(0 0 0 / 0.34);
@@ -184,9 +368,7 @@ h1 {
 
 .product-shot img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: left top;
+  height: auto;
   display: block;
 }
 
@@ -197,22 +379,33 @@ h1 {
 
 .section-heading {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.65rem;
   max-width: 52rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+/* The grid gap already separates the eyebrow / title / lead, so the base h1
+   margin would double it. */
+.section-heading h1 {
+  margin: 0;
 }
 
 .section-heading h2 {
   margin: 0;
-  color: #f3f0ef;
-  font-size: clamp(2rem, 4vw, 3.2rem);
-  line-height: 1;
+  color: var(--lt-heading);
+  font-size: var(--lt-h2);
+  font-weight: 800;
+  line-height: var(--lt-leading-heading);
+  letter-spacing: var(--lt-tracking-heading);
+  text-wrap: balance;
 }
 
 .section-heading p {
+  max-width: var(--lt-measure);
   margin: 0;
   color: color-mix(in srgb, var(--lt-text) 72%, transparent);
   line-height: 1.6;
+  text-wrap: pretty;
 }
 
 .feature-grid {
@@ -226,17 +419,23 @@ h1 {
 .workflow-card,
 .docs-list article {
   border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
-  border-radius: 4px;
-  background: linear-gradient(180deg, #201f1f, #161515);
-  padding: 1rem;
+  border-radius: var(--lt-radius-lg);
+  background: linear-gradient(180deg, var(--lt-surface-container), #161515);
+  padding: 1.15rem;
 }
 
-.feature-card strong,
-.workflow-card strong,
-.docs-list strong {
-  display: block;
-  color: #f3f0ef;
-  margin-bottom: 0.55rem;
+/* Card titles are headings, not emphasis. The old rule matched every <strong>
+   inside a card, so the inline "Good fit:" labels on /alternatives/ were
+   turned into block elements too. */
+.feature-card > h3,
+.workflow-card h3,
+.docs-list h3 {
+  margin: 0 0 0.55rem;
+  color: var(--lt-heading);
+  font-size: var(--lt-h3);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.008em;
 }
 
 .feature-card p,
@@ -244,8 +443,9 @@ h1 {
 .workflow-card p,
 .docs-list p {
   margin: 0;
-  color: color-mix(in srgb, var(--lt-text) 70%, transparent);
-  line-height: 1.55;
+  color: color-mix(in srgb, var(--lt-text) 72%, transparent);
+  line-height: 1.6;
+  text-wrap: pretty;
 }
 
 .alternative-grid .feature-card {
@@ -256,8 +456,9 @@ h1 {
 
 .alternative-grid h3 {
   margin: 0;
-  color: #f3f0ef;
-  font-size: 1.05rem;
+  color: var(--lt-heading);
+  font-size: var(--lt-h3);
+  font-weight: 700;
   line-height: 1.35;
 }
 
@@ -290,7 +491,7 @@ h1 {
 .usage-summary strong {
   display: block;
   color: var(--lt-primary);
-  font: 800 clamp(1.75rem, 4vw, 2.75rem)/1 "Space Grotesk", sans-serif;
+  font: 700 clamp(1.75rem, 4vw, 2.75rem)/1 var(--lt-font-label);
 }
 
 .usage-summary-period,
@@ -436,9 +637,10 @@ h1 {
   background: color-mix(in srgb, var(--lt-muted) 38%, transparent);
 }
 
+/* 48% over the panel background came out at 4.1:1, under AA for 10px text. */
 .usage-chart-column > span {
   overflow: visible;
-  color: color-mix(in srgb, var(--lt-text) 48%, transparent);
+  color: color-mix(in srgb, var(--lt-text) 62%, transparent);
   font-size: 0.62rem;
   white-space: nowrap;
   transform: translateY(0.35rem);
@@ -452,7 +654,10 @@ h1 {
 
 .usage-breakdown-card h3,
 .legal-page h3 {
-  color: #f3f0ef;
+  color: var(--lt-heading);
+  font-size: var(--lt-h3);
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .usage-breakdown-card > .stats-muted {
@@ -495,15 +700,18 @@ h1 {
 
 .legal-page section {
   max-width: 54rem;
+  padding: clamp(1rem, 2.5vw, 1.75rem);
 }
 
 .legal-page section p {
+  max-width: var(--lt-measure);
+  margin: 0.5rem 0 0;
   color: color-mix(in srgb, var(--lt-text) 78%, transparent);
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
 .legal-page section h3:not(:first-child) {
-  margin-top: 1.6rem;
+  margin-top: 1.9rem;
 }
 
 .product-analytics {
@@ -730,7 +938,7 @@ h1 {
 .analytics-summary strong {
   display: block;
   color: var(--lt-primary);
-  font: 800 clamp(2rem, 5vw, 3rem)/1 "Space Grotesk", sans-serif;
+  font: 700 clamp(2rem, 5vw, 3rem)/1 var(--lt-font-label);
 }
 
 .analytics-summary span {
@@ -743,7 +951,7 @@ h1 {
   display: block;
   margin-top: 0.7rem;
   color: color-mix(in srgb, var(--lt-text) 52%, transparent);
-  font: 700 0.68rem/1.35 "Space Grotesk", sans-serif;
+  font: 700 0.68rem/1.35 var(--lt-font-label);
   text-transform: uppercase;
 }
 
@@ -847,7 +1055,7 @@ h1 {
 .analytics-map-layout li::before {
   content: counter(country, decimal-leading-zero);
   color: color-mix(in srgb, var(--lt-text) 36%, transparent);
-  font: 700 0.65rem/1 "Space Grotesk", sans-serif;
+  font: 700 0.65rem/1 var(--lt-font-label);
 }
 
 .analytics-map-layout li strong {
@@ -1271,17 +1479,26 @@ button.analytics-ranked-row:hover span,
 
 .faq-list h3 {
   margin: 0 0 0.55rem;
-  color: #f3f0ef;
-  font-size: 1rem;
+  color: var(--lt-heading);
+  font-size: var(--lt-h3);
+  font-weight: 700;
   line-height: 1.35;
+  text-wrap: balance;
+}
+
+/* The table used to become `display: block` on narrow screens to get a
+   horizontal scrollbar. That drops the table role for assistive tech and
+   leaves a scroll container no keyboard user can reach. The scrolling now
+   happens on a labelled, focusable wrapper and the table stays a table. */
+.table-scroll {
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
+  border-radius: var(--lt-radius-lg);
+  overflow: auto;
 }
 
 .compare-table {
   width: 100%;
   border-collapse: collapse;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
-  border-radius: 4px;
 }
 
 .compare-table th,
@@ -1295,14 +1512,20 @@ button.analytics-ranked-row:hover span,
 .compare-table th {
   color: var(--lt-primary);
   background: var(--lt-surface-low);
-  font: 800 0.82rem/1.2 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.82rem/1.2 var(--lt-font-label);
+  letter-spacing: var(--lt-tracking-label);
   text-transform: uppercase;
 }
 
 .compare-table td {
   background: var(--lt-surface-container);
   color: color-mix(in srgb, var(--lt-text) 82%, transparent);
-  line-height: 1.5;
+  line-height: 1.6;
+}
+
+.compare-table tr:last-child th,
+.compare-table tr:last-child td {
+  border-bottom: 0;
 }
 
 .download-list {
@@ -1469,7 +1692,7 @@ button.analytics-ranked-row:hover span,
 
 .stats-release-card header a {
   color: var(--lt-primary);
-  font: 800 0.78rem/1.2 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.78rem/1.2 var(--lt-font-label);
   text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1574,9 +1797,13 @@ button.analytics-ranked-row:hover span,
 }
 
 .release-version {
-  font-size: clamp(2.7rem, 7vw, 5rem) !important;
-  max-width: 100% !important;
-  margin-bottom: 0.5rem !important;
+  margin: 0.25rem 0 0.5rem;
+  color: var(--lt-heading);
+  font-size: clamp(2.25rem, 1.45rem + 2.5vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: var(--lt-tracking-display);
+  font-variant-numeric: tabular-nums;
 }
 
 .release-date {
@@ -1590,7 +1817,7 @@ button.analytics-ranked-row:hover span,
   margin-left: 0.6rem;
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
-  font: 800 0.72rem/1 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.72rem/1 var(--lt-font-label);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -1665,7 +1892,7 @@ button.analytics-ranked-row:hover span,
   background: linear-gradient(180deg, #201f1f, #161515);
   color: var(--lt-text, #e9e6e1);
   text-decoration: none;
-  font: 700 0.9rem/1 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.9rem/1 var(--lt-font-label);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
@@ -1705,7 +1932,8 @@ button.analytics-ranked-row:hover span,
 
 .release-section-title {
   color: var(--lt-primary);
-  font: 800 0.78rem/1.2 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.78rem/1.2 var(--lt-font-label);
+  letter-spacing: var(--lt-tracking-label);
   text-transform: uppercase;
   margin: 0 0 0.85rem;
 }
@@ -1760,17 +1988,21 @@ button.analytics-ranked-row:hover span,
   border-radius: 4px;
 }
 
-.release-notes-body h1,
-.release-notes-body h2,
-.release-notes-body h3 {
-  color: #f3f0ef;
+/* Release bodies are authored as Markdown and every heading in them is
+   demoted to #### before rendering, so h4 has to be covered too — it was the
+   level actually being emitted, and it had no rule at all. */
+.release-notes-body :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--lt-heading);
   margin: 1.5rem 0 0.5rem;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
   max-width: 100%;
 }
 
-.release-notes-body h2 { font-size: 1.05rem; }
-.release-notes-body h3 { font-size: 0.95rem; }
+.release-notes-body > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
 
 .release-notes-body p {
   margin: 0.5rem 0;
@@ -1858,9 +2090,9 @@ button.analytics-ranked-row:hover span,
 
 .guide-hub-hero h1,
 .guide-hero h1 {
-  max-width: 13ch;
-  font-size: clamp(2.8rem, 5.8vw, 5.75rem);
-  line-height: 0.94;
+  max-width: 16ch;
+  font-size: var(--lt-display);
+  line-height: var(--lt-leading-display);
 }
 
 .guide-hub-hero p,
@@ -1934,16 +2166,19 @@ button.analytics-ranked-row:hover span,
 .guide-card-meta,
 .guide-next > span {
   color: var(--lt-muted);
-  font: 800 0.7rem/1.2 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.7rem/1.2 var(--lt-font-label);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .guide-card h2 {
   margin: 0.65rem 0;
-  color: #f3f0ef;
-  font-size: clamp(1.4rem, 2.4vw, 2rem);
-  line-height: 1.08;
+  color: var(--lt-heading);
+  font-size: clamp(1.3rem, 0.95rem + 1.1vw, 1.75rem);
+  font-weight: 800;
+  line-height: 1.22;
+  letter-spacing: var(--lt-tracking-heading);
+  text-wrap: balance;
 }
 
 .guide-card p {
@@ -1957,7 +2192,7 @@ button.analytics-ranked-row:hover span,
   gap: 0.4rem;
   margin-top: 0.8rem;
   color: var(--lt-primary);
-  font: 800 0.78rem/1.2 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.78rem/1.2 var(--lt-font-label);
   text-transform: uppercase;
 }
 
@@ -1967,7 +2202,7 @@ button.analytics-ranked-row:hover span,
 
 .guide-breadcrumb a {
   color: var(--lt-primary);
-  font: 800 0.78rem/1.2 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.78rem/1.2 var(--lt-font-label);
   text-decoration: none;
   text-transform: uppercase;
 }
@@ -2002,7 +2237,7 @@ button.analytics-ranked-row:hover span,
 .guide-toc a span,
 .guide-step-number {
   color: var(--lt-primary);
-  font: 900 0.78rem/1 "Space Grotesk", ui-sans-serif, sans-serif;
+  font: 700 0.78rem/1 var(--lt-font-label);
 }
 
 .guide-sections {
@@ -2031,9 +2266,12 @@ button.analytics-ranked-row:hover span,
 
 .guide-step h2 {
   margin: 0.45rem 0 1rem;
-  color: #f3f0ef;
-  font-size: clamp(1.55rem, 3vw, 2.4rem);
-  line-height: 1.08;
+  color: var(--lt-heading);
+  font-size: clamp(1.45rem, 1.05rem + 1.3vw, 2.1rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: var(--lt-tracking-heading);
+  text-wrap: balance;
 }
 
 .guide-step p,
@@ -2076,7 +2314,7 @@ button.analytics-ranked-row:hover span,
   content: "✓";
   flex: 0 0 auto;
   color: var(--lt-primary);
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .guide-actions-panel {
@@ -2092,11 +2330,14 @@ button.analytics-ranked-row:hover span,
 }
 
 .guide-actions-panel h2 {
-  max-width: 13ch;
+  max-width: 16ch;
   margin: 0.5rem 0;
-  color: #f3f0ef;
-  font-size: clamp(2rem, 4vw, 3.5rem);
-  line-height: 0.98;
+  color: var(--lt-heading);
+  font-size: var(--lt-h2);
+  font-weight: 800;
+  line-height: var(--lt-leading-heading);
+  letter-spacing: var(--lt-tracking-heading);
+  text-wrap: balance;
 }
 
 .guide-action-links {
@@ -2148,13 +2389,11 @@ button.analytics-ranked-row:hover span,
     justify-content: flex-start;
   }
 
-  .hero h1 {
-    max-width: 100%;
-  }
-
-  .compare-table {
-    display: block;
-    overflow-x: auto;
+  .hero h1,
+  .guide-hub-hero h1,
+  .guide-hero h1,
+  .guide-actions-panel h2 {
+    max-width: 20ch;
   }
 }
 
@@ -2197,7 +2436,15 @@ button.analytics-ranked-row:hover span,
   }
 
   .product-shot {
+    /* At phone width the whole app window is illegible anyway, so crop to the
+       transport/mixer corner that actually carries the message. */
     aspect-ratio: 4 / 3;
+  }
+
+  .product-shot img {
+    height: 100%;
+    object-fit: cover;
+    object-position: left top;
   }
 
   .band {
@@ -2215,9 +2462,18 @@ button.analytics-ranked-row:hover span,
     flex-direction: column;
   }
 
+  .site-footer-inner {
+    grid-template-columns: 1fr;
+    gap: 1.75rem;
+  }
+
+  .site-footer-links {
+    gap: 0.35rem 1rem;
+  }
+
   .guide-hub-hero h1,
   .guide-hero h1 {
-    font-size: clamp(2.65rem, 13vw, 4rem);
+    max-width: 100%;
   }
 
   .guide-toc {
