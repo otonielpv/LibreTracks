@@ -22,9 +22,10 @@ Donations do not unlock extra features, priority support, early access, roadmap 
 ## Screenshots
 | Screenshot | Screenshot |
 | --- | --- |
-| Startup<br>![Startup screen](./screenshots/Inicio.png) | Empty Session<br>![Empty session](./screenshots/Vacio.png) |
-| Project View<br>![Project view](./screenshots/Proyecto.png) | Remote Connection<br>![Remote connection](./screenshots/Remote.png) |
-| Remote Mixer<br>![Remote mixer](./screenshots/Remote_Mixer.png) |  |
+| Startup<br>![Startup screen](./screenshots/en/Inicio.png) | Empty Session<br>![Empty session](./screenshots/en/Vacio.png) |
+| Arrangement View<br>![Arrangement view](./screenshots/en/Proyecto.png) | Compact View<br>![Compact view](./screenshots/en/Compacta.png) |
+| Live View<br>![Live view](./screenshots/en/Live.png) | Mobile Remote<br>![Mobile remote](./screenshots/en/Remote.png) |
+| Remote Mixer<br>![Remote mixer](./screenshots/en/Remote_Mixer.png) |  |
 
 ## Architecture Overview
 

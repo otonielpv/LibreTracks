@@ -216,6 +216,23 @@ when a release lands a feature the docs describe but cannot show, and name
 files after the FEATURE, not the release, so a re-shoot overwrites the same
 filename and every page referencing it stays current.
 
+The two READMEs have their own harness, `tests/e2e/specs/readme-shots.e2e.ts`,
+because those images are shot in BOTH languages from one session load — it
+switches the app language through Settings > General between passes and puts
+the original back afterwards:
+
+```bash
+LT_README_SHOTS=1 LT_SHOTS_SESSION="/path/to/copy/song.ltsession" \
+  npx wdio run tests/e2e/wdio.conf.ts --spec tests/e2e/specs/readme-shots.e2e.ts
+```
+
+The Spanish set overwrites `screenshots/*.png` in place (README.es.md and both
+user manuals already point there) and the English set lands in
+`screenshots/en/` for README.md. The two Remote images come from headless
+Chrome driven over CDP, because the Mixer sits behind a tab that has to be
+pressed — Chrome's one-shot `--screenshot` flag can only ever photograph the
+Controls tab.
+
 Rules learned the hard way — a bad screenshot is worse than none:
 
 - **Look at every image before committing it.** Several failure modes only
@@ -293,9 +310,10 @@ Notes:
 - **Windows only.** `tauri-driver` has no macOS support (WKWebView exposes no
   WebDriver), so on macOS/Linux this tier simply cannot run — say so in the
   release summary instead of pretending it passed.
-- The screenshot harnesses (`doc-shots.e2e.ts`, `marketing-shots.e2e.ts`) match
-  the spec glob but skip themselves unless `LT_DOCSHOTS=1` / `LT_SHOTS=1`.
-  Seeing them skipped is correct.
+- The screenshot harnesses (`doc-shots.e2e.ts`, `marketing-shots.e2e.ts`,
+  `readme-shots.e2e.ts`) match the spec glob but skip themselves unless
+  `LT_DOCSHOTS=1` / `LT_SHOTS=1` / `LT_README_SHOTS=1`. Seeing them skipped is
+  correct.
 - A single spec: `npx wdio run tests/e2e/wdio.conf.ts --spec tests/e2e/specs/<name>.e2e.ts`.
 - **A leftover `libretracks-desktop.exe` breaks everything downstream.** An
   orphaned app process from an aborted run holds the binary (so

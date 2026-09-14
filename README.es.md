@@ -21,7 +21,8 @@ La donacion no desbloquea funciones extra, soporte prioritario, acceso anticipad
 | Captura | Captura |
 | --- | --- |
 | Inicio<br>![Pantalla de inicio](./screenshots/Inicio.png) | Sesion vacia<br>![Sesion vacia](./screenshots/Vacio.png) |
-| Proyecto<br>![Vista del proyecto](./screenshots/Proyecto.png) | Conexion remote<br>![Conexion remote](./screenshots/Remote.png) |
+| Vista de arreglo<br>![Vista de arreglo](./screenshots/Proyecto.png) | Vista compacta<br>![Vista compacta](./screenshots/Compacta.png) |
+| Vista Live<br>![Vista Live](./screenshots/Live.png) | Remote en el movil<br>![Remote en el movil](./screenshots/Remote.png) |
 | Mixer remote<br>![Mixer remote](./screenshots/Remote_Mixer.png) |  |
 
 
