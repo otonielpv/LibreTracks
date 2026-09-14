@@ -75,6 +75,9 @@ export function createTokenPanel(options: Options): TokenPanel {
   labelText.textContent = copy.tokensLabel;
   const labelInput = document.createElement("input");
   labelInput.type = "text";
+  labelInput.name = "token-label";
+  // Not a credential field: without this, password managers offer to fill it.
+  labelInput.autocomplete = "off";
   labelInput.required = true;
   labelInput.maxLength = 60;
   labelInput.placeholder = copy.tokensLabelPlaceholder;
@@ -102,6 +105,8 @@ export function createTokenPanel(options: Options): TokenPanel {
 
   const feedback = document.createElement("p");
   feedback.className = "analytics-token-feedback";
+  // Failures arrive from fetch callbacks, so they need announcing.
+  feedback.setAttribute("role", "alert");
   feedback.hidden = true;
 
   const reveal = document.createElement("div");

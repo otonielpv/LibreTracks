@@ -87,25 +87,25 @@ try {
 }
 
 const labels = {
-  currentVersion: isSpanish ? "Version actual" : "Current version",
+  currentVersion: isSpanish ? "Versión actual" : "Current version",
   latestBadge: isSpanish ? "Última" : "Latest",
   prereleaseBadge: isSpanish ? "Preliminar" : "Pre-release",
   published: isSpanish ? "Publicado" : "Published",
   assets: isSpanish ? "Instaladores" : "Installers",
-  notes: isSpanish ? "Notas de la version" : "Release notes",
+  notes: isSpanish ? "Notas de la versión" : "Release notes",
   olderTitle: isSpanish ? "Versiones anteriores" : "Older versions",
   olderHint: isSpanish ? "Abre una versión en GitHub para ver sus instaladores y notas." : "Open a version on GitHub to see its installers and release notes.",
   supportTitle: isSpanish ? "Apoya LibreTracks" : "Support LibreTracks",
   supportText: isSpanish
-    ? "LibreTracks es gratuito. Las donaciones voluntarias ayudan con mantenimiento, pruebas, documentacion, releases y desarrollo continuo."
+    ? "LibreTracks es gratuito. Las donaciones voluntarias ayudan con mantenimiento, pruebas, documentación, releases y desarrollo continuo."
     : "LibreTracks is free. Voluntary donations help with maintenance, testing, documentation, releases, and ongoing development.",
   supportDisclaimer: isSpanish
-    ? "La donacion no desbloquea funciones, soporte prioritario, acceso anticipado ni compromisos de desarrollo."
+    ? "La donación no desbloquea funciones, soporte prioritario, acceso anticipado ni compromisos de desarrollo."
     : "Donations do not unlock features, priority support, early access, or development commitments.",
-  supportAction: isSpanish ? "☕ Apoyar en Ko-fi" : "☕ Support on Ko-fi",
+  supportAction: isSpanish ? "Apoyar en Ko-fi" : "Support on Ko-fi",
   downloadThanks: isSpanish ? "Gracias por descargar LibreTracks." : "Thanks for downloading LibreTracks.",
   downloadSupportText: isSpanish
-    ? "Si el proyecto te resulta util, puedes apoyarlo con una donacion voluntaria en Ko-fi."
+    ? "Si el proyecto te resulta útil, puedes apoyarlo con una donación voluntaria en Ko-fi."
     : "If the project is useful to you, you can support it with a voluntary donation on Ko-fi.",
   downloadClose: isSpanish ? "Ahora no, gracias" : "Not now, thanks",
   fallback: isSpanish
@@ -133,6 +133,8 @@ function formatDate(value: string | null): string | null {
   if (!value) return null;
   return new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(value));
 }
+
+const sizeFormatter = new Intl.NumberFormat(isSpanish ? "es" : "en");
 
 function iconForAsset(name: string): string {
   if (/\.msi$|\.exe$/i.test(name)) return "🪟";
@@ -193,19 +195,19 @@ const panels = await Promise.all(
                 <div class="download-list">
                   {panel.release.assets.map((asset) => (
                     <a class="download-card" href={asset.browser_download_url} target="_blank" rel="noopener noreferrer" data-download-asset>
-                      <span class="download-icon">{iconForAsset(asset.name)}</span>
+                      <span class="download-icon" aria-hidden="true">{iconForAsset(asset.name)}</span>
                       <span class="download-info">
                         <strong>{asset.name}</strong>
-                        <span class="download-size">{Math.max(1, Math.round(asset.size / 1024 / 1024))} MB</span>
+                        <span class="download-size">{`${sizeFormatter.format(Math.max(1, Math.round(asset.size / 1024 / 1024)))}\u00a0MB`}</span>
                       </span>
-                      <span class="download-arrow">↓</span>
+                      <span class="download-arrow" aria-hidden="true">↓</span>
                     </a>
                   ))}
                 </div>
               ) : <p>{labels.noAssets}</p>}
               {panel.release.assets.some((asset) => /\.dmg$/i.test(asset.name)) ? (
                 <aside class="platform-note">
-                  <strong>🍎 {labels.gatekeeperTitle}</strong>
+                  <strong><span aria-hidden="true">🍎</span> {labels.gatekeeperTitle}</strong>
                   <p>{labels.gatekeeperBody}</p>
                   <p>{labels.gatekeeperDamaged}</p>
                   <code>xattr -dr com.apple.quarantine /Applications/LibreTracks.app</code>
@@ -253,7 +255,7 @@ const panels = await Promise.all(
         <h3 id="support-title">{labels.supportTitle}</h3>
         <p>{labels.supportText}</p>
         <p class="support-disclaimer">{labels.supportDisclaimer}</p>
-        <a class="button-link primary" href={donationUrl} target="_blank" rel="noreferrer">{labels.supportAction}</a>
+        <a class="button-link primary" href={donationUrl} target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span> {labels.supportAction}</a>
       </aside>
     </>
   ) : (
@@ -273,7 +275,7 @@ const panels = await Promise.all(
     <p>{labels.downloadSupportText}</p>
     <p class="support-disclaimer">{labels.supportDisclaimer}</p>
     <div class="donation-dialog-actions">
-      <a class="button-link primary" href={donationUrl} target="_blank" rel="noreferrer" data-donation-close>{labels.supportAction}</a>
+      <a class="button-link primary" href={donationUrl} target="_blank" rel="noopener noreferrer" data-donation-close><span aria-hidden="true">☕</span> {labels.supportAction}</a>
       <button type="button" class="button-link" data-donation-close>{labels.downloadClose}</button>
     </div>
   </div>

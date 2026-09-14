@@ -23,7 +23,15 @@ const copy = analyticsCopy(lang);
     <h3>{copy.access}</h3>
     <label>
       <span>{copy.token}</span>
-      <input type="password" data-analytics-token autocomplete="current-password" minlength="15" required />
+      <input
+        type="password"
+        name="analytics-token"
+        data-analytics-token
+        autocomplete="current-password"
+        spellcheck="false"
+        minlength="15"
+        required
+      />
     </label>
     <button class="button-link" type="button" data-analytics-submit>{copy.enter}</button>
   </div>
@@ -46,13 +54,13 @@ const copy = analyticsCopy(lang);
           <h4>{copy.absoluteRange}</h4>
           <label>
             <span>{copy.rangeFrom}</span>
-            <input type="datetime-local" data-range-from />
+            <input type="datetime-local" name="range-from" data-range-from />
           </label>
           <label>
             <span>{copy.rangeTo}</span>
-            <input type="datetime-local" data-range-to />
+            <input type="datetime-local" name="range-to" data-range-to />
           </label>
-          <p class="analytics-range-error" data-range-error hidden></p>
+          <p class="analytics-range-error" data-range-error role="alert" hidden></p>
           <button type="button" class="button-link" data-range-apply>{copy.rangeApply}</button>
           <p class="stats-muted">{copy.retentionNote}</p>
         </div>
@@ -66,7 +74,7 @@ const copy = analyticsCopy(lang);
   <p class="stats-muted analytics-filters-hint" data-analytics-hint hidden>{copy.filtersHint}</p>
   <div class="analytics-filters" data-analytics-filters role="group" aria-label={copy.filtersTitle} hidden></div>
   <div data-analytics-tokens-host></div>
-  <p class="stats-muted" data-analytics-status></p>
+  <p class="stats-muted" data-analytics-status role="status" aria-live="polite"></p>
   <div data-analytics-content></div>
 </section>
 

@@ -86,9 +86,37 @@ const fit = [
           {workflow.map(([title, body, image]) => (
             <article class="workflow-card">
               {image.endsWith(".webm") ? (
-                <video autoplay loop muted playsinline preload="none" poster="/screenshots/Library-Assets-Import-poster.webp" width="820" height="442" aria-label={`${title} workflow in LibreTracks`}>
-                  <source src={image} type="video/webm" />
-                </video>
+                <div class="media-frame">
+                  <video
+                    autoplay
+                    loop
+                    muted
+                    playsinline
+                    preload="none"
+                    poster="/screenshots/Library-Assets-Import-poster.webp"
+                    width="820"
+                    height="442"
+                    aria-label={`${title} workflow in LibreTracks`}
+                    data-decorative-loop
+                  >
+                    {/* Safari could not play the VP9 WebM and fell back to the
+                        poster; the H.264 build is also the smaller file. */}
+                    <source src={image.replace(".webm", ".mp4")} type="video/mp4" />
+                    <source src={image} type="video/webm" />
+                  </video>
+                  {/* WCAG 2.2.2: motion that plays for more than five seconds
+                      next to other content needs a way to stop it. */}
+                  <button
+                    type="button"
+                    class="media-toggle"
+                    data-media-toggle
+                    data-label-pause="Pause animation"
+                    data-label-play="Play animation"
+                    aria-label="Pause animation"
+                  >
+                    <span class="media-toggle-glyph" aria-hidden="true">❚❚</span>
+                  </button>
+                </div>
               ) : (
                 <img src={image} alt={`${title} workflow in LibreTracks`} loading="lazy" decoding="async" width={image.includes("Proyecto") ? "1000" : "1100"} height={image.includes("Proyecto") ? "556" : "590"} />
               )}

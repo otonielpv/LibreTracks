@@ -76,6 +76,17 @@ a {
   color: inherit;
 }
 
+/* `manipulation` drops the 300ms wait mobile browsers keep in case a tap turns
+   into a double-tap-to-zoom, and the highlight is set on purpose rather than
+   left as the platform's translucent grey block. */
+a,
+button,
+summary,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: color-mix(in srgb, var(--lt-primary) 18%, transparent);
+}
+
 h1,
 h2,
 h3,
@@ -216,6 +227,9 @@ h6 {
 .site-shell {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
+  /* Landscape on a notched phone puts the cutout over the side gutter. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .site-nav {
@@ -1444,8 +1458,39 @@ button.analytics-ranked-row:hover span,
   padding: 0;
 }
 
+.media-frame {
+  position: relative;
+  display: block;
+}
+
+.media-toggle {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #0b0b0b 72%, transparent);
+  color: var(--lt-text);
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.media-toggle:hover {
+  border-color: var(--lt-primary);
+  color: var(--lt-primary);
+  background: color-mix(in srgb, #0b0b0b 88%, transparent);
+}
+
 .workflow-card img,
-.workflow-card video {
+.workflow-card video,
+.media-frame video {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
@@ -1560,6 +1605,8 @@ button.analytics-ranked-row:hover span,
 
 .donation-dialog {
   width: min(31rem, calc(100% - 2rem));
+  /* Keep a scroll gesture inside the modal from chaining to the page behind. */
+  overscroll-behavior: contain;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--lt-primary) 28%, transparent);
   border-radius: 4px;
@@ -2136,6 +2183,9 @@ button.analytics-ranked-row:hover span,
   color: var(--lt-text);
   text-decoration: none;
   box-shadow: 0 16px 40px rgb(0 0 0 / 0.18);
+  /* box-shadow is not compositor-friendly, but the alternative (an opacity
+     pseudo-element) is clipped by the `overflow: hidden` this card needs for
+     its image corners. Two cards on hover is not worth restructuring for. */
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 

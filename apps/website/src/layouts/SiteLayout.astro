@@ -126,6 +126,7 @@ const pageSchemas = structuredData
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#131313" />
     {/* Ownership proof for Google Search Console. Must stay on every page and
         outside the noIndex guard: Google reads it wherever it lands, and
         removing it un-verifies the property. */}
@@ -176,8 +177,8 @@ const pageSchemas = structuredData
       </a>
       <header class="site-shell site-nav">
         <a class="brand" href={`${prefix}/`}>
-          <img src="/icon.svg" alt="" />
-          <span>LibreTracks</span>
+          <img src="/icon.svg" alt="" width="32" height="32" />
+          <span translate="no">LibreTracks</span>
         </a>
         <nav class="nav-links" aria-label={isSpanish ? "Navegación principal" : "Primary navigation"}>
           <a href={`${prefix}/download/`}>{isSpanish ? "Descargas" : "Downloads"}</a>
@@ -246,8 +247,8 @@ const pageSchemas = structuredData
         <div class="site-shell site-footer-inner">
           <div class="site-footer-brand">
             <a class="brand" href={`${prefix}/`}>
-              <img src="/icon.svg" alt="" />
-              <span>LibreTracks</span>
+              <img src="/icon.svg" alt="" width="32" height="32" />
+              <span translate="no">LibreTracks</span>
             </a>
             <p>
               {isSpanish
@@ -267,7 +268,7 @@ const pageSchemas = structuredData
           </nav>
         </div>
         <div class="site-shell site-footer-legal">
-          <p>© {new Date().getFullYear()} LibreTracks</p>
+          <p>© {new Date().getFullYear()} <span translate="no">LibreTracks</span></p>
           <p>
             {isSpanish ? "Publicado bajo la licencia " : "Released under the "}
             <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a>.
@@ -276,17 +277,51 @@ const pageSchemas = structuredData
       </footer>
     </div>
     <script is:inline>
-      // `autoplay` on the workflow clip ignores prefers-reduced-motion, so the
-      // looping screen recording has to be stopped here. Reading the query at
-      // runtime (rather than dropping the element at build time) keeps the
-      // poster frame in place for everyone.
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        for (const video of document.querySelectorAll("video[autoplay]")) {
-          video.autoplay = false;
-          video.removeAttribute("loop");
-          video.pause();
+      (() => {
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+        // `autoplay` ignores prefers-reduced-motion, so the looping screen
+        // recording has to be stopped here. Reading the query at runtime
+        // (rather than dropping the element at build time) keeps the poster
+        // frame in place for everyone.
+        if (reduced.matches) {
+          for (const video of document.querySelectorAll("video[autoplay]")) {
+            video.autoplay = false;
+            video.removeAttribute("loop");
+            video.pause();
+          }
         }
-      }
+
+        // WCAG 2.2.2: any motion running past five seconds beside other
+        // content needs a control to stop it — for every visitor, not only
+        // the ones who set a reduced-motion preference.
+        for (const button of document.querySelectorAll("[data-media-toggle]")) {
+          const video = button.parentElement?.querySelector("video");
+          if (!video) continue;
+
+          const sync = () => {
+            const paused = video.paused;
+            button.setAttribute(
+              "aria-label",
+              paused ? button.dataset.labelPlay : button.dataset.labelPause,
+            );
+            const glyph = button.querySelector(".media-toggle-glyph");
+            if (glyph) glyph.textContent = paused ? "▶" : "❚❚";
+          };
+
+          button.addEventListener("click", () => {
+            if (video.paused) {
+              const played = video.play();
+              if (played) played.catch(() => {});
+            } else {
+              video.pause();
+            }
+          });
+          video.addEventListener("play", sync);
+          video.addEventListener("pause", sync);
+          sync();
+        }
+      })();
     </script>
   </body>
 </html>

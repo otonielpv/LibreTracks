@@ -926,9 +926,14 @@ function syncRangeUi(): void {
 }
 
 function closePopover(): void {
+  // Only pull focus back if it is still inside the panel being hidden —
+  // otherwise closing on an outside click would yank focus from whatever the
+  // user just reached for.
+  const hadFocus = rangePopover?.contains(document.activeElement) ?? false;
   if (rangePopover) rangePopover.hidden = true;
   rangeTrigger?.setAttribute("aria-expanded", "false");
   if (rangeError) rangeError.hidden = true;
+  if (hadFocus) rangeTrigger?.focus();
 }
 
 function applySelection(value: RangeSelection): void {
@@ -1047,9 +1052,19 @@ PRESETS.forEach((preset) => {
 rangeTrigger?.addEventListener("click", () => {
   if (!rangePopover) return;
   const open = rangePopover.hidden;
-  rangePopover.hidden = !open;
-  rangeTrigger.setAttribute("aria-expanded", String(open));
-  if (open) syncRangeUi();
+  if (!open) {
+    closePopover();
+    return;
+  }
+  rangePopover.hidden = false;
+  rangeTrigger.setAttribute("aria-expanded", "true");
+  syncRangeUi();
+  // A role="dialog" that never receives focus leaves keyboard users tabbing
+  // through the whole page to reach it.
+  const first = rangePopover.querySelector<HTMLElement>(
+    "button, input, select, [tabindex]:not([tabindex='-1'])",
+  );
+  first?.focus();
 });
 
 rangeApply?.addEventListener("click", () => {

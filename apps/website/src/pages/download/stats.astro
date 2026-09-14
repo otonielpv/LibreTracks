@@ -3,14 +3,14 @@ import SiteLayout from "../../layouts/SiteLayout.astro";
 ---
 
 {/* The counters are fetched from the GitHub API in the browser, so what a
-    crawler sees is a heading and "Loading current counters...". There is
+    crawler sees is a heading and "Loading current counters…". There is
     nothing here worth a search result, and leaving it indexable only means it
     sits in Search Console for ever as a page Google declines to index. */}
 <SiteLayout title="LibreTracks Release Stats" description="Fresh GitHub release download counters for LibreTracks." lang="en" noIndex>
   <main class="site-shell band">
     <div class="section-heading">
       <p class="eyebrow">Release stats</p>
-      <h2>Download counters.</h2>
+      <h1>Download counters.</h1>
       <p>This view fetches GitHub release data in the browser each time the page opens, so counters are not fixed at deploy time.</p>
     </div>
 
@@ -18,7 +18,7 @@ import SiteLayout from "../../layouts/SiteLayout.astro";
       <div class="stats-toolbar">
         <div>
           <p class="eyebrow">GitHub Releases</p>
-          <p class="stats-muted" data-stats-status>Loading current counters...</p>
+          <p class="stats-muted" data-stats-status role="status" aria-live="polite">Loading current counters…</p>
         </div>
         <button class="button-link" type="button" data-refresh-stats>Refresh</button>
       </div>
@@ -54,7 +54,7 @@ import SiteLayout from "../../layouts/SiteLayout.astro";
 
     function formatBytes(bytes: number): string {
       const mib = bytes / 1024 / 1024;
-      return `${Math.max(1, Math.round(mib))} MB`;
+      return `${Math.max(1, Math.round(mib))}\u00a0MB`;
     }
 
     function escapeHtml(value: string): string {
@@ -142,7 +142,7 @@ import SiteLayout from "../../layouts/SiteLayout.astro";
 
     async function loadStats(): Promise<void> {
       setLoading(true);
-      renderError("Loading current counters...");
+      renderError("Loading current counters…");
 
       try {
         const response = await fetch(`${endpoint}&_=${Date.now()}`, {
