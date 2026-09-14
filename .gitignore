@@ -116,6 +116,10 @@ skills-lock.json
 /CLAUDE.md
 /.claude/
 /.github/prompts/
+/.mcp.json
+/.serena/
+/.graphifyignore
+/docs/AGENT_TOOLING.md
 
 # Generador del borrador de Reddit: herramienta de marketing, no del producto.
 scripts/announce/
