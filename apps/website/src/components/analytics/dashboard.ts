@@ -1,0 +1,1132 @@
+import * as echarts from "echarts/core";
+import { BarChart, FunnelChart, LineChart, MapChart } from "echarts/charts";
+import {
+  AriaComponent,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+  VisualMapComponent,
+} from "echarts/components";
+import { SVGRenderer } from "echarts/renderers";
+import { feature } from "topojson-client";
+import type { Topology } from "topojson-specification";
+import * as countryLookup from "country-code-lookup";
+import worldTopology from "world-atlas/countries-110m.json";
+
+import {
+  type FilterKey,
+  type FilterState,
+  activeCount,
+  adoptFilters,
+  appendToQuery,
+  emptyFilters,
+  isSelected,
+  persistFilters,
+  removeFilter,
+  restoreFilters,
+  toggleFilter,
+  FILTER_KEYS,
+} from "./filters";
+import { createTokenPanel, type TokenPanel } from "./tokens";
+
+echarts.use([
+  AriaComponent,
+  BarChart,
+  FunnelChart,
+  GridComponent,
+  LegendComponent,
+  LineChart,
+  MapChart,
+  SVGRenderer,
+  TooltipComponent,
+  VisualMapComponent,
+]);
+
+type Metric = { key: string; devices: number; rate: number };
+type Feature = { key: string; devices: number; events: number; adoptionRate: number };
+type Quality = { key: string; successes: number; failures: number; successRate: number };
+type Bucket = { label: string; devices: number };
+type Daily = { day: string; activeDevices: number; activatedDevices: number; featureDevices: number };
+type Breakdown = { label: string; sessions: number; devices: number };
+type Hourly = { hour: string; sessions: number; devices: number };
+type Weekday = { weekday: number; sessions: number; devices: number };
+type Access = {
+  id: string;
+  label: string;
+  createdAt: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  useCount: number;
+  expired: boolean;
+};
+type ProductStats = {
+  generatedAt: string;
+  from: string;
+  to: string;
+  retentionDays: number;
+  clamped: boolean;
+  role: "admin" | "guest";
+  access: Access | null;
+  filters: Partial<Record<FilterKey, string[]>>;
+  appStarts: number;
+  activeDeviceDays: number;
+  comparison: { appStarts: number; activeDeviceDays: number; from: string; to: string } | null;
+  activation: Metric[];
+  deepSessionRate: number;
+  features: Feature[];
+  quality: Quality[];
+  engagement: Array<{ minutes: number; devices: number; rate: number }>;
+  maturity: { installationAge: Bucket[]; activeDays: Bucket[] };
+  daily: Daily[];
+  hourly: Hourly[];
+  weekly: { weekdays: Weekday[]; sundayShare: number };
+  breakdown: {
+    countries: Breakdown[];
+    versions: Breakdown[];
+    operatingSystems: Breakdown[];
+    deviceClasses: Breakdown[];
+  };
+};
+
+const root = document.querySelector<HTMLElement>("[data-product-analytics]");
+const form = root?.querySelector<HTMLElement>("[data-analytics-login]");
+const tokenInput = root?.querySelector<HTMLInputElement>("[data-analytics-token]");
+const submit = root?.querySelector<HTMLButtonElement>("[data-analytics-submit]");
+const toolbar = root?.querySelector<HTMLElement>("[data-analytics-toolbar]");
+const status = root?.querySelector<HTMLElement>("[data-analytics-status]");
+const content = root?.querySelector<HTMLElement>("[data-analytics-content]");
+const lock = root?.querySelector<HTMLButtonElement>("[data-analytics-lock]");
+const filterBar = root?.querySelector<HTMLElement>("[data-analytics-filters]");
+const filterHint = root?.querySelector<HTMLElement>("[data-analytics-hint]");
+const tokensButton = root?.querySelector<HTMLButtonElement>("[data-analytics-tokens]");
+const tokensHost = root?.querySelector<HTMLElement>("[data-analytics-tokens-host]");
+const copy = JSON.parse(root?.dataset.copy ?? "{}") as Record<string, string>;
+const locale = root?.dataset.lang ?? "es";
+const numbers = new Intl.NumberFormat(locale);
+const TOKEN_KEY = "libretracks.analytics.admin-token";
+const RANGE_KEY = "libretracks.analytics.range";
+
+const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+const DEFAULT_PRESET = "last30d";
+// Mirrors the pruning window in functions/api/telemetry/events.ts. The server
+// is the authority and overwrites this from every response; it only has to be
+// right before the first one lands.
+let retentionDays = 90;
+
+// Every range is expressed in UTC. The tables bucket devices per utc_day and
+// the hourly chart is labelled UTC, so anchoring the picker to the browser's
+// timezone would make the selection and the axes disagree.
+const startOfUtcDay = (ms: number) => Math.floor(ms / DAY_MS) * DAY_MS;
+const startOfUtcWeek = (ms: number) => startOfUtcDay(ms) - new Date(ms).getUTCDay() * DAY_MS;
+const startOfUtcMonth = (ms: number) => {
+  const date = new Date(ms);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+};
+
+type RangeValue = { from: number; to: number };
+type RangeSelection = { preset: string | null; from: number; to: number };
+
+const PRESETS: Array<{ key: string; resolve: (now: number) => RangeValue }> = [
+  // "Today" is the running UTC day rather than the last 24 hours, matching
+  // how the server counts a device once per utc_day.
+  { key: "today", resolve: (now) => ({ from: startOfUtcDay(now), to: now }) },
+  { key: "yesterday", resolve: (now) => ({ from: startOfUtcDay(now) - DAY_MS, to: startOfUtcDay(now) }) },
+  { key: "last6h", resolve: (now) => ({ from: now - 6 * HOUR_MS, to: now }) },
+  { key: "last24h", resolve: (now) => ({ from: now - DAY_MS, to: now }) },
+  { key: "last7d", resolve: (now) => ({ from: now - 7 * DAY_MS, to: now }) },
+  { key: "last14d", resolve: (now) => ({ from: now - 14 * DAY_MS, to: now }) },
+  { key: "last30d", resolve: (now) => ({ from: now - 30 * DAY_MS, to: now }) },
+  { key: "last90d", resolve: (now) => ({ from: now - 90 * DAY_MS, to: now }) },
+  // Weeks start on Sunday so "this week" lines up with the Sunday-first
+  // weekday chart and with the services the Sunday share is measuring.
+  { key: "thisWeek", resolve: (now) => ({ from: startOfUtcWeek(now), to: now }) },
+  { key: "lastWeek", resolve: (now) => ({ from: startOfUtcWeek(now) - 7 * DAY_MS, to: startOfUtcWeek(now) }) },
+  { key: "thisMonth", resolve: (now) => ({ from: startOfUtcMonth(now), to: now }) },
+  { key: "lastMonth", resolve: (now) => ({ from: startOfUtcMonth(startOfUtcMonth(now) - 1), to: startOfUtcMonth(now) }) },
+];
+
+function presetRange(key: string): RangeValue | null {
+  const preset = PRESETS.find((item) => item.key === key);
+  return preset ? preset.resolve(Date.now()) : null;
+}
+
+function persistRange(value: RangeSelection): void {
+  try {
+    sessionStorage.setItem(RANGE_KEY, JSON.stringify(value));
+  } catch {
+    // Private browsing denies sessionStorage; the picker still works, it just
+    // forgets the range on reload.
+  }
+}
+
+function restoreRange(): RangeSelection {
+  try {
+    const stored = sessionStorage.getItem(RANGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<RangeSelection>;
+      // A stored preset is resolved again rather than replayed, so "last 7
+      // days" still means the last seven days on a tab left open overnight.
+      if (typeof parsed.preset === "string") {
+        const value = presetRange(parsed.preset);
+        if (value) return { preset: parsed.preset, ...value };
+      }
+      if (
+        typeof parsed.from === "number" &&
+        typeof parsed.to === "number" &&
+        Number.isFinite(parsed.from) &&
+        Number.isFinite(parsed.to) &&
+        parsed.from < parsed.to
+      ) {
+        return { preset: null, from: parsed.from, to: parsed.to };
+      }
+    }
+  } catch {
+    // Unreadable or malformed state falls back to the default window.
+  }
+  return { preset: DEFAULT_PRESET, ...(presetRange(DEFAULT_PRESET) as RangeValue) };
+}
+
+let selection = restoreRange();
+let filters: FilterState = restoreFilters();
+let role: "admin" | "guest" = "guest";
+let tokenPanel: TokenPanel | null = null;
+
+const rangeTrigger = root?.querySelector<HTMLButtonElement>("[data-range-trigger]");
+const rangeLabelText = root?.querySelector<HTMLElement>("[data-range-label]");
+const rangePopover = root?.querySelector<HTMLElement>("[data-range-popover]");
+const rangePresets = root?.querySelector<HTMLElement>("[data-range-presets]");
+const rangeFrom = root?.querySelector<HTMLInputElement>("[data-range-from]");
+const rangeTo = root?.querySelector<HTMLInputElement>("[data-range-to]");
+const rangeError = root?.querySelector<HTMLElement>("[data-range-error]");
+const rangeApply = root?.querySelector<HTMLButtonElement>("[data-range-apply]");
+const rangeRefresh = root?.querySelector<HTMLButtonElement>("[data-range-refresh]");
+
+const instantFormat = new Intl.DateTimeFormat(locale, {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+const rangeText = (value: RangeSelection) =>
+  `${instantFormat.format(value.from)} → ${instantFormat.format(value.to)} UTC`;
+const rangeLabel = (value: RangeSelection) =>
+  value.preset ? copy[`range_${value.preset}`] ?? value.preset : rangeText(value);
+
+// datetime-local speaks wall-clock time with no zone, so the conversion is
+// done by hand against UTC instead of through the browser's local offset.
+const toInputValue = (ms: number) => new Date(ms).toISOString().slice(0, 16);
+const fromInputValue = (value: string): number => {
+  if (!value) return Number.NaN;
+  // Some browsers append seconds once the field has been stepped.
+  return Date.parse(value.length === 16 ? `${value}:00Z` : `${value}Z`);
+};
+
+const names: Record<string, Record<string, string>> = {
+  es: {
+    app_started: "Aplicacion iniciada",
+    project_ready: "Proyecto creado o abierto",
+    audio_imported: "Audio importado",
+    playback_started: "Reproduccion iniciada",
+    work_completed: "Proyecto guardado o exportado",
+    feature_daw_view: "Vista DAW",
+    feature_compact_view: "Vista compacta",
+    feature_live_view: "Vista en vivo",
+    feature_metronome: "Metronomo",
+    feature_voice_guide: "Guia de voz",
+    feature_ambient_pads: "Pads ambientales",
+    feature_automation: "Automatizaciones",
+    feature_warp: "Warp",
+    feature_midi: "MIDI",
+    feature_remote_panel: "Control remoto",
+    audio_import: "Importacion de audio",
+    project_open: "Apertura de proyecto",
+    session_export: "Exportacion de sesion",
+    active_5m: "Sesiones de 5+ min",
+    active_15m: "Sesiones de 15+ min",
+    active_30m: "Sesiones de 30+ min",
+    active_60m: "Sesiones de 60+ min",
+    windows: "Windows",
+    macos: "macOS",
+    linux: "Linux",
+    android: "Android",
+    ios: "iOS",
+    desktop: "Escritorio",
+    mobile: "Movil",
+    tablet: "Tablet",
+    unknown: "Desconocido",
+    day_0: "Primer dia",
+    days_1_7: "1–7 dias",
+    days_8_30: "8–30 dias",
+    days_31_90: "31–90 dias",
+    days_91_plus: "91+ dias",
+    "1": "1 dia",
+    "2_3": "2–3 dias",
+    "4_7": "4–7 dias",
+    "8_30": "8–30 dias",
+    "31_plus": "31+ dias",
+  },
+  en: {
+    app_started: "App started",
+    project_ready: "Project created or opened",
+    audio_imported: "Audio imported",
+    playback_started: "Playback started",
+    work_completed: "Project saved or exported",
+    feature_daw_view: "DAW view",
+    feature_compact_view: "Compact view",
+    feature_live_view: "Live view",
+    feature_metronome: "Metronome",
+    feature_voice_guide: "Voice guide",
+    feature_ambient_pads: "Ambient pads",
+    feature_automation: "Automation",
+    feature_warp: "Warp",
+    feature_midi: "MIDI",
+    feature_remote_panel: "Remote control",
+    audio_import: "Audio import",
+    project_open: "Project open",
+    session_export: "Session export",
+    active_5m: "5+ min sessions",
+    active_15m: "15+ min sessions",
+    active_30m: "30+ min sessions",
+    active_60m: "60+ min sessions",
+    windows: "Windows",
+    macos: "macOS",
+    linux: "Linux",
+    android: "Android",
+    ios: "iOS",
+    desktop: "Desktop",
+    mobile: "Mobile",
+    tablet: "Tablet",
+    unknown: "Unknown",
+    day_0: "First day",
+    days_1_7: "1–7 days",
+    days_8_30: "8–30 days",
+    days_31_90: "31–90 days",
+    days_91_plus: "91+ days",
+    "1": "1 day",
+    "2_3": "2–3 days",
+    "4_7": "4–7 days",
+    "8_30": "8–30 days",
+    "31_plus": "31+ days",
+  },
+};
+const label = (key: string) => names[locale]?.[key] ?? key;
+const regionNames = new Intl.DisplayNames([locale], { type: "region" });
+// 2024-01-07 is a Sunday, so index 0 lines up with Date.getDay() and the
+// local_weekday column without hardcoding day names per language.
+const weekdayFormat = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
+const weekdayName = (weekday: number) =>
+  weekdayFormat.format(new Date(Date.UTC(2024, 0, 7 + weekday)));
+
+/** Human wording for one selected filter value, used by the chip bar. */
+function valueLabel(key: FilterKey, value: string): string {
+  if (key === "country") return regionNames.of(value) ?? value;
+  if (key === "hour") return `${value}:00 UTC`;
+  if (key === "weekday") return weekdayName(Number(value));
+  if (key === "version") return value;
+  return label(value);
+}
+
+const chartInstances: Array<ReturnType<typeof echarts.init>> = [];
+const isoByNumericCode = new Map(
+  countryLookup.countries
+    .filter((country) => country.isoNo)
+    .map((country) => [Number(country.isoNo), country.iso2]),
+);
+const worldGeoJson = feature(worldTopology as unknown as Topology, "countries");
+worldGeoJson.features.forEach((country) => {
+  const rawId = country.id;
+  const numericId =
+    typeof rawId === "number"
+      ? rawId
+      : typeof rawId === "string" && /^\d{1,3}$/.test(rawId)
+        ? Number(rawId)
+        : null;
+  const iso = numericId === null ? undefined : isoByNumericCode.get(numericId);
+  country.properties = { ...country.properties, name: iso ?? `_${country.id}` };
+});
+echarts.registerMap("libretracks-world", worldGeoJson);
+
+// ---------------------------------------------------------------------------
+// Filtering
+// ---------------------------------------------------------------------------
+
+function applyFilters(next: FilterState): void {
+  filters = next;
+  persistFilters(filters);
+  renderFilterBar();
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (token) void load(token);
+}
+
+function toggle(key: FilterKey, value: string): void {
+  applyFilters(toggleFilter(filters, key, value));
+}
+
+/**
+ * Toggles a group of event names as one unit, for the funnel stages that stand
+ * for more than one event (a project becoming ready is either a creation or an
+ * open). Partially selected counts as selected so a second click always clears.
+ */
+function toggleEventGroup(events: string[]): void {
+  const anySelected = events.some((event) => isSelected(filters, "event", event));
+  let next = filters;
+  events.forEach((event) => {
+    const selected = isSelected(next, "event", event);
+    if (anySelected && selected) next = removeFilter(next, "event", event);
+    if (!anySelected && !selected) next = toggleFilter(next, "event", event);
+  });
+  applyFilters(next);
+}
+
+function renderFilterBar(): void {
+  if (!filterBar) return;
+  filterBar.replaceChildren();
+  const total = activeCount(filters);
+  if (total === 0) {
+    filterBar.hidden = true;
+    return;
+  }
+  filterBar.hidden = false;
+
+  const heading = document.createElement("span");
+  heading.className = "analytics-filter-title";
+  heading.textContent = copy.filtersTitle;
+  filterBar.append(heading);
+
+  for (const key of FILTER_KEYS) {
+    for (const value of filters[key]) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "analytics-filter-chip";
+      chip.title = copy.filterRemove;
+      const dimension = document.createElement("i");
+      dimension.textContent = copy[`dim_${key}`] ?? key;
+      const text = document.createElement("span");
+      text.textContent = valueLabel(key, value);
+      const close = document.createElement("b");
+      close.textContent = "×";
+      close.setAttribute("aria-hidden", "true");
+      chip.append(dimension, text, close);
+      chip.addEventListener("click", () => applyFilters(removeFilter(filters, key, value)));
+      filterBar.append(chip);
+    }
+  }
+
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "analytics-filter-clear";
+  clear.textContent = copy.filtersClear;
+  clear.addEventListener("click", () => applyFilters(emptyFilters()));
+  filterBar.append(clear);
+}
+
+// ---------------------------------------------------------------------------
+// Cards
+// ---------------------------------------------------------------------------
+
+function heading(title: string): HTMLHeadingElement {
+  const element = document.createElement("h3");
+  element.textContent = title;
+  return element;
+}
+
+type RankedRow = { key: string; devices: number; rate: number; value?: string };
+
+/**
+ * A ranked list. Rows that carry a `value` become buttons that toggle the
+ * matching filter; the rest render as plain text, which is what keeps a
+ * dimension the server cannot filter on from looking clickable.
+ */
+function ranked(title: string, rows: RankedRow[], filterKey?: FilterKey): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "analytics-card analytics-ranked";
+  card.append(heading(title));
+  const max = Math.max(1, ...rows.map((row) => row.devices));
+  rows.forEach((row) => {
+    const clickable = filterKey !== undefined && row.value !== undefined;
+    const line = document.createElement(clickable ? "button" : "div");
+    line.className = "analytics-ranked-row";
+    if (clickable) {
+      (line as HTMLButtonElement).type = "button";
+      const selected = isSelected(filters, filterKey, row.value as string);
+      line.classList.toggle("is-selected", selected);
+      line.setAttribute("aria-pressed", String(selected));
+      line.addEventListener("click", () => toggle(filterKey, row.value as string));
+    }
+    line.innerHTML = `<span></span><strong>${numbers.format(row.devices)} · ${row.rate.toFixed(1)}%</strong><i style="width:${(row.devices / max) * 100}%"></i>`;
+    // The label is user-visible data (a version string comes from the wire), so
+    // it goes in as text rather than through innerHTML.
+    (line.querySelector("span") as HTMLElement).textContent = label(row.key);
+    card.append(line);
+  });
+  return card;
+}
+
+function maturity(title: string, rows: Bucket[], filterKey: FilterKey): HTMLElement {
+  const total = rows.reduce((sum, row) => sum + row.devices, 0);
+  return ranked(
+    title,
+    rows.map((row) => ({
+      key: row.label,
+      value: row.label,
+      devices: row.devices,
+      rate: total ? (row.devices / total) * 100 : 0,
+    })),
+    filterKey,
+  );
+}
+
+function trend(): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "analytics-card analytics-chart-card analytics-wide";
+  card.append(heading(copy.dailyTrend));
+  const plot = document.createElement("div");
+  plot.className = "analytics-echart analytics-echart-wide";
+  plot.dataset.chart = "daily";
+  card.append(plot);
+  return card;
+}
+
+function chartCard(title: string, chart: string, wide = false, note?: string): HTMLElement {
+  const card = document.createElement("article");
+  card.className = `analytics-card analytics-chart-card${wide ? " analytics-wide" : ""}`;
+  card.append(heading(title));
+  if (note) {
+    const hint = document.createElement("p");
+    hint.className = "stats-muted";
+    hint.textContent = note;
+    card.append(hint);
+  }
+  const plot = document.createElement("div");
+  plot.className = "analytics-echart";
+  plot.dataset.chart = chart;
+  card.append(plot);
+  return card;
+}
+
+function comparison(current: number, previous: number): string {
+  if (!previous) return current ? "NEW" : "—";
+  const value = ((current - previous) / previous) * 100;
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function metric(
+  value: string,
+  title: string,
+  change?: string,
+  changeNote: string = copy.previousPeriod,
+): HTMLElement {
+  const card = document.createElement("article");
+  const number = document.createElement("strong");
+  number.textContent = value;
+  const text = document.createElement("span");
+  text.textContent = title;
+  card.append(number, text);
+  if (change) {
+    const detail = document.createElement("small");
+    detail.className = change.startsWith("-") ? "is-negative" : "is-positive";
+    detail.textContent = `${change} ${changeNote}`;
+    card.append(detail);
+  }
+  return card;
+}
+
+function dimension(title: string, rows: Breakdown[], filterKey: FilterKey): HTMLElement {
+  const total = rows.reduce((sum, row) => sum + row.devices, 0);
+  // Selected values are pinned into view: filtering by a version outside the
+  // top eight would otherwise leave a chip with nothing on screen to unclick.
+  const visible = rows.slice(0, 8);
+  rows.forEach((row) => {
+    if (isSelected(filters, filterKey, row.label) && !visible.includes(row)) visible.push(row);
+  });
+  return ranked(
+    title,
+    visible.map((row) => ({
+      key: row.label,
+      value: row.label,
+      devices: row.devices,
+      rate: total ? (row.devices / total) * 100 : 0,
+    })),
+    filterKey,
+  );
+}
+
+function countryMap(rows: Breakdown[]): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "analytics-card analytics-map-card analytics-wide";
+  const note = document.createElement("p");
+  note.className = "stats-muted";
+  note.textContent = copy.geographyNote;
+  card.append(heading(copy.geography), note);
+  const layout = document.createElement("div");
+  layout.className = "analytics-map-layout";
+  const map = document.createElement("div");
+  map.className = "analytics-echart analytics-map-visual";
+  map.dataset.chart = "countries";
+  const rankingScroller = document.createElement("div");
+  rankingScroller.className = "analytics-map-ranking";
+  const ranking = document.createElement("ol");
+  rows.filter((row) => row.label !== "XX").forEach((row) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    const selected = isSelected(filters, "country", row.label);
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    const name = document.createElement("span");
+    name.textContent = regionNames.of(row.label) ?? row.label;
+    const value = document.createElement("strong");
+    value.textContent = numbers.format(row.devices);
+    button.append(name, value);
+    button.addEventListener("click", () => toggle("country", row.label));
+    item.append(button);
+    ranking.append(item);
+  });
+  rankingScroller.append(ranking);
+  layout.append(map, rankingScroller);
+  card.append(layout);
+  return card;
+}
+
+function weeklyCard(): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "analytics-card analytics-chart-card";
+  const note = document.createElement("p");
+  note.className = "stats-muted";
+  note.textContent = copy.weeklyNote;
+  card.append(heading(copy.weekly), note);
+  const plot = document.createElement("div");
+  plot.className = "analytics-echart";
+  plot.dataset.chart = "weekly";
+  card.append(plot);
+  return card;
+}
+
+// ---------------------------------------------------------------------------
+// Charts
+// ---------------------------------------------------------------------------
+
+const chartTheme = {
+  text: "#bacac5",
+  grid: "rgba(186, 202, 197, 0.10)",
+  teal: "#57f1db",
+  blue: "#78a9ff",
+  green: "#72d6a5",
+  amber: "#ffe2ab",
+  dim: "#3c4744",
+};
+
+function createChart(
+  element: HTMLElement,
+  option: Parameters<ReturnType<typeof echarts.init>["setOption"]>[0],
+  onPick?: (params: { dataIndex: number; name: string }) => void,
+): void {
+  const chart = echarts.init(element, undefined, { renderer: "svg" });
+  chart.setOption(option);
+  if (onPick) {
+    element.classList.add("is-pickable");
+    chart.on("click", (params) => {
+      onPick(params as unknown as { dataIndex: number; name: string });
+    });
+  }
+  chartInstances.push(chart);
+}
+
+/**
+ * Colour for one bar of a dimension the dashboard can filter on.
+ *
+ * With nothing selected every bar keeps its own colour. With a selection, the
+ * chosen bars stay lit and the rest are muted rather than hidden: the chart is
+ * still filtered by every other dimension, so the unselected bars are real data
+ * and the comparison they offer is the reason to keep them on screen.
+ */
+function pickedColor(key: FilterKey, value: string, base: string): string {
+  if (filters[key].length === 0) return base;
+  return isSelected(filters, key, value) ? chartTheme.amber : chartTheme.dim;
+}
+
+function renderCharts(data: ProductStats): void {
+  chartInstances.splice(0).forEach((chart) => chart.dispose());
+  const axis = {
+    axisLine: { lineStyle: { color: chartTheme.grid } },
+    axisTick: { show: false },
+    axisLabel: { color: chartTheme.text, fontSize: 10 },
+    splitLine: { lineStyle: { color: chartTheme.grid } },
+  };
+  const tooltip = { trigger: "axis" as const, backgroundColor: "#111", borderColor: chartTheme.grid, textStyle: { color: "#e5e2e1" } };
+
+  const daily = root?.querySelector<HTMLElement>('[data-chart="daily"]');
+  if (daily) createChart(daily, {
+    aria: { enabled: true },
+    color: [chartTheme.teal, chartTheme.blue, chartTheme.green],
+    tooltip,
+    legend: { bottom: 0, textStyle: { color: chartTheme.text } },
+    grid: { left: 42, right: 18, top: 20, bottom: 54 },
+    xAxis: { ...axis, type: "category", data: data.daily.map((row) => row.day.slice(5)), boundaryGap: false },
+    yAxis: { ...axis, type: "value", minInterval: 1 },
+    series: [
+      { name: copy.devices, type: "line", smooth: 0.25, showSymbol: false, areaStyle: { opacity: 0.08 }, data: data.daily.map((row) => row.activeDevices) },
+      { name: copy.activation, type: "line", smooth: 0.25, showSymbol: false, data: data.daily.map((row) => row.activatedDevices) },
+      { name: copy.features, type: "line", smooth: 0.25, showSymbol: false, data: data.daily.map((row) => row.featureDevices) },
+    ],
+  });
+
+  const hourly = root?.querySelector<HTMLElement>('[data-chart="hourly"]');
+  if (hourly) createChart(
+    hourly,
+    {
+      aria: { enabled: true }, tooltip,
+      grid: { left: 42, right: 14, top: 16, bottom: 34 },
+      xAxis: { ...axis, type: "category", data: data.hourly.map((row) => row.hour) },
+      yAxis: { ...axis, type: "value", minInterval: 1 },
+      series: [{
+        name: copy.starts,
+        type: "bar",
+        barMaxWidth: 20,
+        itemStyle: { borderRadius: [3, 3, 0, 0] },
+        data: data.hourly.map((row) => ({
+          value: row.sessions,
+          itemStyle: { color: pickedColor("hour", row.hour, chartTheme.teal) },
+        })),
+      }],
+    },
+    ({ dataIndex }) => {
+      const row = data.hourly[dataIndex];
+      if (row) toggle("hour", row.hour);
+    },
+  );
+
+  const weekly = root?.querySelector<HTMLElement>('[data-chart="weekly"]');
+  if (weekly) createChart(
+    weekly,
+    {
+      aria: { enabled: true }, tooltip,
+      grid: { left: 42, right: 14, top: 16, bottom: 34 },
+      xAxis: { ...axis, type: "category", data: data.weekly.weekdays.map((row) => weekdayName(row.weekday)) },
+      yAxis: { ...axis, type: "value", minInterval: 1 },
+      series: [{
+        name: copy.devices,
+        type: "bar",
+        barMaxWidth: 26,
+        itemStyle: { borderRadius: [3, 3, 0, 0] },
+        // Sunday carries the answer, so it never blends into the other bars.
+        data: data.weekly.weekdays.map((row) => ({
+          value: row.devices,
+          itemStyle: {
+            color: pickedColor(
+              "weekday",
+              String(row.weekday),
+              row.weekday === 0 ? chartTheme.amber : chartTheme.teal,
+            ),
+          },
+        })),
+      }],
+    },
+    ({ dataIndex }) => {
+      const row = data.weekly.weekdays[dataIndex];
+      if (row) toggle("weekday", String(row.weekday));
+    },
+  );
+
+  const funnel = root?.querySelector<HTMLElement>('[data-chart="funnel"]');
+  // Stages that stand for more than one event name, so a click on the funnel
+  // selects the same cohort the stage was counted from.
+  const funnelEvents: Record<string, string[]> = {
+    project_ready: ["project_created", "project_opened"],
+    audio_imported: ["audio_imported"],
+    playback_started: ["playback_started"],
+    work_completed: ["project_saved", "session_exported"],
+  };
+  if (funnel) createChart(
+    funnel,
+    {
+      aria: { enabled: true }, color: [chartTheme.teal, chartTheme.blue, chartTheme.green, chartTheme.amber, "#ad8cff"],
+      tooltip: { trigger: "item", formatter: "{b}: {c}%" },
+      series: [{ type: "funnel", left: "8%", right: "8%", top: 10, bottom: 10, minSize: "18%", maxSize: "100%", sort: "none", gap: 3,
+        label: { color: "#e5e2e1", formatter: "{b}  {c}%" },
+        data: data.activation.map((item) => ({ name: label(item.key), value: item.rate })) }],
+    },
+    ({ dataIndex }) => {
+      // The first stage is every reporting device-day by definition, so there
+      // is no cohort it could narrow to.
+      const stage = data.activation[dataIndex];
+      const events = stage ? funnelEvents[stage.key] : undefined;
+      if (events) toggleEventGroup(events);
+    },
+  );
+
+  const features = root?.querySelector<HTMLElement>('[data-chart="features"]');
+  if (features) createChart(
+    features,
+    {
+      aria: { enabled: true }, tooltip,
+      grid: { left: 132, right: 34, top: 12, bottom: 24 },
+      xAxis: { ...axis, type: "value", axisLabel: { ...axis.axisLabel, formatter: "{value}%" } },
+      yAxis: { ...axis, type: "category", inverse: true, data: data.features.map((item) => label(item.key)), splitLine: { show: false } },
+      series: [{
+        name: copy.adoption,
+        type: "bar",
+        barMaxWidth: 16,
+        itemStyle: { borderRadius: [0, 3, 3, 0] },
+        data: data.features.map((item) => ({
+          value: item.adoptionRate,
+          itemStyle: { color: pickedColor("event", item.key, chartTheme.blue) },
+        })),
+      }],
+    },
+    ({ dataIndex }) => {
+      const item = data.features[dataIndex];
+      if (item) toggle("event", item.key);
+    },
+  );
+
+  const countries = root?.querySelector<HTMLElement>('[data-chart="countries"]');
+  if (countries) {
+    const countryRows = data.breakdown.countries.filter((row) => row.label !== "XX");
+    const maximum = Math.max(1, ...countryRows.map((row) => row.devices));
+    createChart(
+      countries,
+      {
+        aria: { enabled: true },
+        tooltip: {
+          trigger: "item",
+          backgroundColor: "#111",
+          borderColor: chartTheme.grid,
+          textStyle: { color: "#e5e2e1" },
+          formatter: (item: { name: string; value?: number }) =>
+            `${regionNames.of(item.name) ?? item.name}: ${numbers.format(item.value ?? 0)}`,
+        },
+        visualMap: {
+          min: 0,
+          max: maximum,
+          left: "center",
+          bottom: 4,
+          orient: "horizontal",
+          calculable: false,
+          text: [numbers.format(maximum), "0"],
+          textStyle: { color: chartTheme.text },
+          inRange: { color: ["#263330", "#287f73", chartTheme.teal] },
+        },
+        series: [{
+          type: "map",
+          map: "libretracks-world",
+          roam: true,
+          scaleLimit: { min: 1, max: 8 },
+          selectedMode: false,
+          itemStyle: { areaColor: "#242b29", borderColor: "#53615d", borderWidth: 0.7 },
+          emphasis: { label: { show: false }, itemStyle: { areaColor: chartTheme.amber } },
+          data: countryRows.map((row) => ({
+            name: row.label,
+            value: row.devices,
+            // A selected country keeps its heat colour and gains an outline:
+            // overriding areaColor would take it off the scale the legend
+            // explains, which is the only way to read the map.
+            ...(isSelected(filters, "country", row.label)
+              ? { itemStyle: { borderColor: chartTheme.amber, borderWidth: 2 } }
+              : {}),
+          })),
+        }],
+      },
+      ({ name }) => {
+        if (/^[A-Z]{2}$/.test(name)) toggle("country", name);
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+function render(data: ProductStats): void {
+  if (!content) return;
+  content.replaceChildren();
+  const summary = document.createElement("section");
+  summary.className = "analytics-summary";
+  const activationRate = data.activation.find((item) => item.key === "project_ready")?.rate ?? 0;
+  const from = Date.parse(data.from);
+  const to = Date.parse(data.to);
+  const span = to - from;
+  // A range confined to one UTC day is one weekday and one point on the daily
+  // line, so the cards that only say something across days are left out.
+  const multiDay = startOfUtcDay(to - 1) > startOfUtcDay(from);
+  const changeNote = span < DAY_MS ? copy.previousDay : copy.previousPeriod;
+  summary.append(
+    metric(numbers.format(data.appStarts), copy.starts, data.comparison ? comparison(data.appStarts, data.comparison.appStarts) : undefined, changeNote),
+    metric(numbers.format(data.activeDeviceDays), copy.devices, data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined, changeNote),
+    metric(`${activationRate.toFixed(1)}%`, copy.activationRate),
+    metric(`${data.deepSessionRate.toFixed(1)}%`, copy.deepSessions),
+  );
+  if (multiDay) {
+    summary.append(metric(`${data.weekly.sundayShare.toFixed(1)}%`, copy.sundayShare));
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "analytics-grid";
+  if (multiDay) grid.append(trend());
+  grid.append(
+    chartCard(copy.utcActivity, "hourly", !multiDay, span < DAY_MS ? copy.partialDayNote : undefined),
+  );
+  if (multiDay) grid.append(weeklyCard());
+  grid.append(
+    chartCard(copy.activation, "funnel"),
+    countryMap(data.breakdown.countries),
+    dimension(copy.versions, data.breakdown.versions, "version"),
+    dimension(copy.platforms, data.breakdown.operatingSystems, "os"),
+    dimension(copy.devicesTitle, data.breakdown.deviceClasses, "device"),
+    chartCard(copy.features, "features"),
+  );
+
+  const quality = document.createElement("article");
+  quality.className = "analytics-card";
+  quality.append(heading(copy.quality));
+  data.quality.forEach((row) => {
+    const line = document.createElement("p");
+    line.className = "analytics-quality-row";
+    line.innerHTML = `<span></span><strong>${row.successRate.toFixed(1)}%</strong><small>${row.successes} ${copy.successes} · ${row.failures} ${copy.failures}</small>`;
+    (line.querySelector("span") as HTMLElement).textContent = label(row.key);
+    quality.append(line);
+  });
+  grid.append(quality);
+
+  grid.append(
+    ranked(
+      copy.engagement,
+      data.engagement.map((row) => ({
+        key: `active_${row.minutes}m`,
+        value: `active_${row.minutes}m`,
+        devices: row.devices,
+        rate: row.rate,
+      })),
+      "event",
+    ),
+    maturity(copy.installationAge, data.maturity.installationAge, "installAge"),
+    maturity(copy.activeDays, data.maturity.activeDays, "activeDays"),
+  );
+  content.append(summary, grid);
+  renderCharts(data);
+}
+
+function syncRangeUi(): void {
+  if (rangeLabelText) rangeLabelText.textContent = rangeLabel(selection);
+  if (rangeTrigger) rangeTrigger.title = rangeText(selection);
+  rangePresets?.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.preset === selection.preset);
+  });
+  if (rangeFrom) rangeFrom.value = toInputValue(selection.from);
+  if (rangeTo) rangeTo.value = toInputValue(selection.to);
+  const now = Date.now();
+  const floor = now - retentionDays * DAY_MS;
+  // Stepping past either edge only returns the window it is already showing,
+  // so the arrow says so instead of pretending to move.
+  const back = root?.querySelector<HTMLButtonElement>('[data-range-step="-1"]');
+  const forward = root?.querySelector<HTMLButtonElement>('[data-range-step="1"]');
+  if (back) back.disabled = selection.from <= floor;
+  if (forward) forward.disabled = selection.to >= now - 5 * 60_000;
+}
+
+function closePopover(): void {
+  if (rangePopover) rangePopover.hidden = true;
+  rangeTrigger?.setAttribute("aria-expanded", "false");
+  if (rangeError) rangeError.hidden = true;
+}
+
+function applySelection(value: RangeSelection): void {
+  selection = value;
+  persistRange(selection);
+  syncRangeUi();
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (token) void load(token);
+}
+
+function mountTokenPanel(): void {
+  if (tokenPanel || !tokensHost) return;
+  tokenPanel = createTokenPanel({
+    copy,
+    locale,
+    adminToken: () => sessionStorage.getItem(TOKEN_KEY),
+  });
+  tokensHost.append(tokenPanel.element);
+  tokensButton?.addEventListener("click", () => tokenPanel?.toggle());
+}
+
+function renderStatus(data: ProductStats): void {
+  if (!status) return;
+  status.replaceChildren();
+  const generated = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
+    new Date(data.generatedAt),
+  );
+  status.append(`${copy.updated}: ${generated} · ${copy.rangeShown}: ${rangeText(selection)}`);
+  if (data.clamped) {
+    const warning = document.createElement("em");
+    warning.className = "analytics-range-clamped";
+    warning.textContent = ` · ${copy.clampedNote}`;
+    status.append(warning);
+  }
+  // A guest is told what they are holding and when it stops working, so an
+  // expiry never arrives as a dashboard that mysteriously fails to load.
+  if (data.role === "guest" && data.access) {
+    const badge = document.createElement("em");
+    badge.className = "analytics-guest-badge";
+    const expiry =
+      data.access.expiresAt === null
+        ? copy.guestNeverExpires
+        : copy.guestExpires.replace(
+            "{date}",
+            new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
+              Date.parse(data.access.expiresAt),
+            ),
+          );
+    badge.textContent = ` · ${copy.guestBadge}: ${data.access.label} — ${expiry}`;
+    status.append(badge);
+  }
+}
+
+async function load(token: string): Promise<void> {
+  if (status) status.textContent = copy.loading;
+  try {
+    const query = new URLSearchParams({
+      from: String(selection.from),
+      to: String(selection.to),
+    });
+    appendToQuery(filters, query);
+    const response = await fetch(`/api/telemetry/product-stats?${query}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (response.status === 401) throw new Error("unauthorized");
+    if (response.status === 503) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error === "migration_required" ? "migrationRequired" : "notConfigured");
+    }
+    if (!response.ok) throw new Error("unavailable");
+    const data = (await response.json()) as ProductStats;
+    sessionStorage.setItem(TOKEN_KEY, token);
+    if (form) form.hidden = true;
+    if (toolbar) toolbar.hidden = false;
+    if (filterHint) filterHint.hidden = false;
+    retentionDays = data.retentionDays ?? retentionDays;
+    role = data.role === "admin" ? "admin" : "guest";
+    if (tokensButton) tokensButton.hidden = role !== "admin";
+    if (role === "admin") mountTokenPanel();
+    else tokenPanel?.close();
+    // The server drops filter values it no longer recognises, so adopting its
+    // echo is what retires a selection whose data aged out of retention.
+    filters = adoptFilters(data.filters);
+    persistFilters(filters);
+    renderFilterBar();
+    // The server trims the request to what retention actually holds; adopting
+    // its answer keeps the arrows and the inputs stepping over real data.
+    selection = { preset: selection.preset, from: Date.parse(data.from), to: Date.parse(data.to) };
+    persistRange(selection);
+    syncRangeUi();
+    render(data);
+    renderStatus(data);
+  } catch (error) {
+    const key = error instanceof Error ? error.message : "unavailable";
+    if (status) status.textContent = copy[key] ?? copy.unavailable;
+    if (key === "unauthorized") sessionStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+PRESETS.forEach((preset) => {
+  const item = document.createElement("li");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.preset = preset.key;
+  button.textContent = copy[`range_${preset.key}`] ?? preset.key;
+  button.addEventListener("click", () => {
+    const value = preset.resolve(Date.now());
+    closePopover();
+    applySelection({ preset: preset.key, ...value });
+  });
+  item.append(button);
+  rangePresets?.append(item);
+});
+
+rangeTrigger?.addEventListener("click", () => {
+  if (!rangePopover) return;
+  const open = rangePopover.hidden;
+  rangePopover.hidden = !open;
+  rangeTrigger.setAttribute("aria-expanded", String(open));
+  if (open) syncRangeUi();
+});
+
+rangeApply?.addEventListener("click", () => {
+  const from = fromInputValue(rangeFrom?.value ?? "");
+  const to = fromInputValue(rangeTo?.value ?? "");
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
+    if (rangeError) {
+      rangeError.textContent = copy.rangeInvalid;
+      rangeError.hidden = false;
+    }
+    return;
+  }
+  closePopover();
+  applySelection({ preset: null, from, to });
+});
+
+root?.querySelectorAll<HTMLButtonElement>("[data-range-step]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const direction = Number(button.dataset.rangeStep);
+    const span = selection.to - selection.from;
+    const now = Date.now();
+    const floor = now - retentionDays * DAY_MS;
+    let from = selection.from + direction * span;
+    let to = selection.to + direction * span;
+    // The window keeps its width when it hits an edge; sliding it back inside
+    // beats silently shrinking the period being compared.
+    if (to > now) {
+      to = now;
+      from = now - span;
+    }
+    if (from < floor) {
+      from = floor;
+      to = Math.min(now, floor + span);
+    }
+    applySelection({ preset: null, from, to });
+  });
+});
+
+rangeRefresh?.addEventListener("click", () => {
+  // A preset is re-resolved so "last 7 days" moves with the clock; an
+  // absolute range just re-queries the same window.
+  const value = selection.preset ? presetRange(selection.preset) : null;
+  applySelection(value ? { preset: selection.preset, ...value } : { ...selection });
+});
+
+document.addEventListener("click", (event) => {
+  if (!rangePopover || rangePopover.hidden) return;
+  const target = event.target as Node;
+  if (rangePopover.contains(target) || rangeTrigger?.contains(target)) return;
+  closePopover();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closePopover();
+});
+
+const submitToken = () => {
+  if (!tokenInput?.reportValidity()) return;
+  void load(tokenInput.value.trim());
+};
+submit?.addEventListener("click", submitToken);
+tokenInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") submitToken();
+});
+lock?.addEventListener("click", () => {
+  sessionStorage.removeItem(TOKEN_KEY);
+  content?.replaceChildren();
+  closePopover();
+  tokenPanel?.close();
+  if (tokensButton) tokensButton.hidden = true;
+  if (form) form.hidden = false;
+  if (toolbar) toolbar.hidden = true;
+  if (filterHint) filterHint.hidden = true;
+  if (filterBar) filterBar.hidden = true;
+  if (status) status.textContent = "";
+});
+window.addEventListener("resize", () => chartInstances.forEach((chart) => chart.resize()));
+syncRangeUi();
+renderFilterBar();
+const savedToken = sessionStorage.getItem(TOKEN_KEY);
+if (savedToken) void load(savedToken);

@@ -1,9 +1,20 @@
 /// <reference types="@cloudflare/workers-types" />
 
-interface Env {
-  TELEMETRY_DB: D1Database;
-  ANALYTICS_ADMIN_TOKEN?: string;
-}
+import {
+  type AnalyticsEnv,
+  authFailure,
+  authenticate,
+  noteTokenUse,
+  serialiseToken,
+} from "./_auth";
+import {
+  type FilterKey,
+  type Filters,
+  type Window,
+  FILTER_KEYS,
+  filterClause,
+  parseFilters,
+} from "./_filters";
 
 type EventRow = { event: string; events: number; devices: number };
 type SignalRow = { signal: string; devices: number };
@@ -31,7 +42,15 @@ const FEATURE_EVENTS = [
   "feature_remote_panel",
 ] as const;
 
-const MIN_ADMIN_TOKEN_LENGTH = 15;
+const ACTIVATION_EVENTS = [
+  "project_created",
+  "project_opened",
+  "audio_imported",
+  "playback_started",
+  "project_saved",
+  "session_exported",
+] as const;
+
 const DAY_MS = 86_400_000;
 // Every telemetry insert prunes both tables past this age (see events.ts), so
 // no query can reach further back however wide a range the dashboard asks for.
@@ -42,40 +61,70 @@ const PRESET_DAYS = new Set([1, 7, 30, 90]);
 // Only a trim wider than that counts as the range having been cut short.
 const CLAMP_TOLERANCE_MS = 60_000;
 
-type Range = { from: number; to: number; clamped: boolean };
+type Range = Window & { clamped: boolean };
 
-async function breakdown(
+function all<T>(db: D1Database, sql: string, params: unknown[]) {
+  const statement = db.prepare(sql);
+  return (params.length ? statement.bind(...params) : statement).all<T>();
+}
+
+function first<T>(db: D1Database, sql: string, params: unknown[]) {
+  const statement = db.prepare(sql);
+  return (params.length ? statement.bind(...params) : statement).first<T>();
+}
+
+const inList = (values: readonly string[]) => values.map((value) => `'${value}'`).join(", ");
+
+/**
+ * A ranking over one column of the app-start table.
+ *
+ * `exclude` is always the dimension being ranked: the ranking doubles as the
+ * picker for its own filter, so narrowing to Spain must not reduce the country
+ * list to Spain — otherwise the only way to look at the next country is to
+ * clear the filter first.
+ */
+function breakdown(
   db: D1Database,
   column: "app_version" | "os" | "device_class" | "country_code",
+  exclude: FilterKey,
+  filters: Filters,
   range: Range,
   // Countries are shown as a scrollable ranking next to the map, so the whole
   // ISO 3166-1 range has to fit; the other dimensions stay capped at a top 20.
   limit = 20,
-): Promise<BreakdownRow[]> {
-  const result = await db
-    .prepare(
-      `SELECT ${column} AS label, COUNT(*) AS sessions,
-              COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-         FROM telemetry_events
-        WHERE received_at >= ?1 AND received_at < ?2
-        GROUP BY ${column}
-        ORDER BY devices DESC, sessions DESC
-        LIMIT ?3`,
-    )
-    .bind(range.from, range.to, limit)
-    .all<BreakdownRow>();
-  return result.results;
+): Promise<D1Result<BreakdownRow>> {
+  const clause = filterClause("starts", "e", filters, range, exclude);
+  return all<BreakdownRow>(
+    db,
+    `SELECT e.${column} AS label, COUNT(*) AS sessions,
+            COUNT(DISTINCT e.utc_day || ':' || e.daily_device_token) AS devices
+       FROM telemetry_events e
+      WHERE e.received_at >= ? AND e.received_at < ?${clause.sql}
+      GROUP BY e.${column}
+      ORDER BY devices DESC, sessions DESC
+      LIMIT ?`,
+    [range.from, range.to, ...clause.params, limit],
+  );
 }
 
-function tokenMatches(request: Request, expected?: string): boolean {
-  if (!expected || expected.length < MIN_ADMIN_TOKEN_LENGTH) return false;
-  const supplied = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (supplied.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < supplied.length; index += 1) {
-    difference |= supplied.charCodeAt(index) ^ expected.charCodeAt(index);
-  }
-  return difference === 0;
+function bucketRanking(
+  db: D1Database,
+  column: "installation_age_bucket" | "active_days_bucket",
+  exclude: FilterKey,
+  filters: Filters,
+  range: Range,
+): Promise<D1Result<BucketRow>> {
+  const clause = filterClause("starts", "e", filters, range, exclude);
+  return all<BucketRow>(
+    db,
+    `SELECT e.${column} AS label,
+            COUNT(DISTINCT e.utc_day || ':' || e.daily_device_token) AS devices
+       FROM telemetry_events e
+      WHERE e.received_at >= ? AND e.received_at < ?
+        AND e.${column} != 'unknown'${clause.sql}
+      GROUP BY e.${column}`,
+    [range.from, range.to, ...clause.params],
+  );
 }
 
 function rate(value: number, total: number): number {
@@ -115,38 +164,45 @@ function resolveRange(params: URLSearchParams, now: number): Range {
   return { from, to: now, clamped: false };
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
-  if (
-    !env.ANALYTICS_ADMIN_TOKEN ||
-    env.ANALYTICS_ADMIN_TOKEN.length < MIN_ADMIN_TOKEN_LENGTH
-  ) {
-    return Response.json({ error: "admin_token_not_configured" }, { status: 503 });
-  }
-  if (!tokenMatches(request, env.ANALYTICS_ADMIN_TOKEN)) {
-    return Response.json(
-      { error: "unauthorized" },
-      { status: 401, headers: { "Cache-Control": "no-store" } },
-    );
+export const onRequestGet: PagesFunction<AnalyticsEnv> = async (context) => {
+  const { env, request } = context;
+  const auth = await authenticate(request, env);
+  if (auth.role === "none") return authFailure(auth.reason);
+  if (auth.role === "guest") {
+    // Bookkeeping the reader must not wait on; see noteTokenUse.
+    context.waitUntil(noteTokenUse(env, auth.token));
   }
 
   const generatedAt = Date.now();
-  const range = resolveRange(new URL(request.url).searchParams, generatedAt);
+  const params = new URL(request.url).searchParams;
+  const range = resolveRange(params, generatedAt);
+  const filters = parseFilters(params);
   const { from, to } = range;
   const span = to - from;
   // The comparison window is the same span immediately before, snapped up to
   // whole days: a partial day (Today, Last 6 hours) then lands on the same
   // clock hours yesterday instead of on the hours right before it.
   const shift = Math.ceil(span / DAY_MS) * DAY_MS;
-  const previousFrom = from - shift;
-  const previousTo = to - shift;
+  const previous: Range = { from: from - shift, to: to - shift, clamped: false };
   // Retention would only feed a truncated previous window, and an invented
   // drop is worse than no comparison at all.
-  const comparable = previousFrom >= generatedAt - RETENTION_DAYS * DAY_MS;
+  const comparable = previous.from >= generatedAt - RETENTION_DAYS * DAY_MS;
+
+  const db = env.TELEMETRY_DB;
+  const starts = filterClause("starts", "e", filters, range);
+  const product = filterClause("product", "p", filters, range);
+  const startsPrevious = filterClause("starts", "e", filters, previous);
+  // Only worth a second round trip when an event cohort is actually selected;
+  // with none active the self-excluded ranking is the unfiltered one.
+  const eventFilterActive = filters.event.length > 0;
+  const productPicker = filterClause("product", "p", filters, range, "event");
 
   const [
     totals,
     previousTotals,
+    pickerTotals,
     eventsResult,
+    pickerEventsResult,
     signalsResult,
     ageResult,
     activeDaysResult,
@@ -157,129 +213,139 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     versions,
     operatingSystems,
     deviceClasses,
-  ] =
-    await Promise.all([
-      env.TELEMETRY_DB.prepare(
-        `SELECT COUNT(*) AS appStarts,
-                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-           FROM telemetry_events
-          WHERE received_at >= ?1 AND received_at < ?2`,
-      )
-        .bind(from, to)
-        .first<{ appStarts: number; devices: number }>(),
-      comparable
-        ? env.TELEMETRY_DB.prepare(
-            `SELECT COUNT(*) AS appStarts,
-                    COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-               FROM telemetry_events
-              WHERE received_at >= ?1 AND received_at < ?2`,
-          )
-            .bind(previousFrom, previousTo)
-            .first<{ appStarts: number; devices: number }>()
-        : Promise.resolve(null),
-      env.TELEMETRY_DB.prepare(
-        `SELECT event_name AS event, COUNT(*) AS events,
-                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-           FROM telemetry_product_events
-          WHERE received_at >= ?1 AND received_at < ?2
-          GROUP BY event_name`,
-      )
-        .bind(from, to)
-        .all<EventRow>(),
-      env.TELEMETRY_DB.prepare(
-        `WITH signals AS (
-           SELECT utc_day, daily_device_token, 'app_started' AS signal
-             FROM telemetry_events
-            WHERE received_at >= ?1 AND received_at < ?2
-           UNION ALL
-           SELECT utc_day, daily_device_token,
-             CASE
-               WHEN event_name IN ('project_created', 'project_opened') THEN 'project_ready'
-               WHEN event_name = 'audio_imported' THEN 'audio_imported'
-               WHEN event_name = 'playback_started' THEN 'playback_started'
-               WHEN event_name IN ('project_saved', 'session_exported') THEN 'work_completed'
-             END AS signal
-             FROM telemetry_product_events
-            WHERE received_at >= ?1 AND received_at < ?2 AND event_name IN (
-              'project_created', 'project_opened', 'audio_imported',
-              'playback_started', 'project_saved', 'session_exported'
-            )
-         )
-         SELECT signal, COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-           FROM signals WHERE signal IS NOT NULL GROUP BY signal`,
-      )
-        .bind(from, to)
-        .all<SignalRow>(),
-      env.TELEMETRY_DB.prepare(
-        `SELECT installation_age_bucket AS label,
-                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-           FROM telemetry_events
-          WHERE received_at >= ?1 AND received_at < ?2
-            AND installation_age_bucket != 'unknown'
-          GROUP BY installation_age_bucket`,
-      )
-        .bind(from, to)
-        .all<BucketRow>(),
-      env.TELEMETRY_DB.prepare(
-        `SELECT active_days_bucket AS label,
-                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-           FROM telemetry_events
-          WHERE received_at >= ?1 AND received_at < ?2
-            AND active_days_bucket != 'unknown'
-          GROUP BY active_days_bucket`,
-      )
-        .bind(from, to)
-        .all<BucketRow>(),
-      env.TELEMETRY_DB.prepare(
-        `WITH starts AS (
-           SELECT utc_day AS day, COUNT(DISTINCT daily_device_token) AS activeDevices
-             FROM telemetry_events
-            WHERE received_at >= ?1 AND received_at < ?2 GROUP BY utc_day
-         ), product AS (
-           SELECT utc_day AS day,
-             COUNT(DISTINCT CASE WHEN event_name IN (
-               'project_created', 'project_opened', 'audio_imported',
-               'playback_started', 'project_saved', 'session_exported'
-             ) THEN daily_device_token END) AS activatedDevices,
-             COUNT(DISTINCT CASE WHEN event_name LIKE 'feature_%'
-               THEN daily_device_token END) AS featureDevices
-             FROM telemetry_product_events
-            WHERE received_at >= ?1 AND received_at < ?2 GROUP BY utc_day
-         )
-         SELECT starts.day, starts.activeDevices,
-                COALESCE(product.activatedDevices, 0) AS activatedDevices,
-                COALESCE(product.featureDevices, 0) AS featureDevices
-           FROM starts LEFT JOIN product ON product.day = starts.day
-          ORDER BY starts.day`,
-      )
-        .bind(from, to)
-        .all<DailyRow>(),
-      env.TELEMETRY_DB.prepare(
-        `SELECT strftime('%H', received_at / 1000, 'unixepoch') AS hour,
+  ] = await Promise.all([
+    first<{ appStarts: number; devices: number }>(
+      db,
+      `SELECT COUNT(*) AS appStarts,
+              COUNT(DISTINCT e.utc_day || ':' || e.daily_device_token) AS devices
+         FROM telemetry_events e
+        WHERE e.received_at >= ? AND e.received_at < ?${starts.sql}`,
+      [from, to, ...starts.params],
+    ),
+    comparable
+      ? first<{ appStarts: number; devices: number }>(
+          db,
+          `SELECT COUNT(*) AS appStarts,
+                  COUNT(DISTINCT e.utc_day || ':' || e.daily_device_token) AS devices
+             FROM telemetry_events e
+            WHERE e.received_at >= ? AND e.received_at < ?${startsPrevious.sql}`,
+          [previous.from, previous.to, ...startsPrevious.params],
+        )
+      : Promise.resolve(null),
+    eventFilterActive
+      ? (() => {
+          const clause = filterClause("starts", "e", filters, range, "event");
+          return first<{ devices: number }>(
+            db,
+            `SELECT COUNT(DISTINCT e.utc_day || ':' || e.daily_device_token) AS devices
+               FROM telemetry_events e
+              WHERE e.received_at >= ? AND e.received_at < ?${clause.sql}`,
+            [from, to, ...clause.params],
+          );
+        })()
+      : Promise.resolve(null),
+    all<EventRow>(
+      db,
+      `SELECT p.event_name AS event, COUNT(*) AS events,
+              COUNT(DISTINCT p.utc_day || ':' || p.daily_device_token) AS devices
+         FROM telemetry_product_events p
+        WHERE p.received_at >= ? AND p.received_at < ?${product.sql}
+        GROUP BY p.event_name`,
+      [from, to, ...product.params],
+    ),
+    eventFilterActive
+      ? all<EventRow>(
+          db,
+          `SELECT p.event_name AS event, COUNT(*) AS events,
+                  COUNT(DISTINCT p.utc_day || ':' || p.daily_device_token) AS devices
+             FROM telemetry_product_events p
+            WHERE p.received_at >= ? AND p.received_at < ?${productPicker.sql}
+            GROUP BY p.event_name`,
+          [from, to, ...productPicker.params],
+        )
+      : Promise.resolve(null),
+    all<SignalRow>(
+      db,
+      `WITH signals AS (
+         SELECT e.utc_day AS utc_day, e.daily_device_token AS daily_device_token,
+                'app_started' AS signal
+           FROM telemetry_events e
+          WHERE e.received_at >= ? AND e.received_at < ?${starts.sql}
+         UNION ALL
+         SELECT p.utc_day, p.daily_device_token,
+           CASE
+             WHEN p.event_name IN ('project_created', 'project_opened') THEN 'project_ready'
+             WHEN p.event_name = 'audio_imported' THEN 'audio_imported'
+             WHEN p.event_name = 'playback_started' THEN 'playback_started'
+             WHEN p.event_name IN ('project_saved', 'session_exported') THEN 'work_completed'
+           END AS signal
+           FROM telemetry_product_events p
+          WHERE p.received_at >= ? AND p.received_at < ?
+            AND p.event_name IN (${inList(ACTIVATION_EVENTS)})${product.sql}
+       )
+       SELECT signal, COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
+         FROM signals WHERE signal IS NOT NULL GROUP BY signal`,
+      [from, to, ...starts.params, from, to, ...product.params],
+    ),
+    bucketRanking(db, "installation_age_bucket", "installAge", filters, range),
+    bucketRanking(db, "active_days_bucket", "activeDays", filters, range),
+    all<DailyRow>(
+      db,
+      `WITH starts AS (
+         SELECT e.utc_day AS day, COUNT(DISTINCT e.daily_device_token) AS activeDevices
+           FROM telemetry_events e
+          WHERE e.received_at >= ? AND e.received_at < ?${starts.sql}
+          GROUP BY e.utc_day
+       ), product AS (
+         SELECT p.utc_day AS day,
+           COUNT(DISTINCT CASE WHEN p.event_name IN (${inList(ACTIVATION_EVENTS)})
+             THEN p.daily_device_token END) AS activatedDevices,
+           COUNT(DISTINCT CASE WHEN p.event_name LIKE 'feature_%'
+             THEN p.daily_device_token END) AS featureDevices
+           FROM telemetry_product_events p
+          WHERE p.received_at >= ? AND p.received_at < ?${product.sql}
+          GROUP BY p.utc_day
+       )
+       SELECT starts.day, starts.activeDevices,
+              COALESCE(product.activatedDevices, 0) AS activatedDevices,
+              COALESCE(product.featureDevices, 0) AS featureDevices
+         FROM starts LEFT JOIN product ON product.day = starts.day
+        ORDER BY starts.day`,
+      [from, to, ...starts.params, from, to, ...product.params],
+    ),
+    (() => {
+      const clause = filterClause("starts", "e", filters, range, "hour");
+      return all<HourlyRow>(
+        db,
+        `SELECT strftime('%H', e.received_at / 1000, 'unixepoch') AS hour,
                 COUNT(*) AS sessions,
-                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-           FROM telemetry_events
-          WHERE received_at >= ?1 AND received_at < ?2
+                COUNT(DISTINCT e.utc_day || ':' || e.daily_device_token) AS devices
+           FROM telemetry_events e
+          WHERE e.received_at >= ? AND e.received_at < ?${clause.sql}
           GROUP BY hour ORDER BY hour`,
-      )
-        .bind(from, to)
-        .all<HourlyRow>(),
-      // Grouped on the device-reported local weekday, never on utc_day: a
-      // Sunday evening service in the Americas is already Monday in UTC.
-      env.TELEMETRY_DB.prepare(
-        `SELECT local_weekday AS weekday, COUNT(*) AS sessions,
-                COUNT(DISTINCT utc_day || ':' || daily_device_token) AS devices
-           FROM telemetry_events
-          WHERE received_at >= ?1 AND received_at < ?2 AND local_weekday != 'unknown'
-          GROUP BY local_weekday ORDER BY weekday`,
-      )
-        .bind(from, to)
-        .all<WeekdayRow>(),
-      breakdown(env.TELEMETRY_DB, "country_code", range, 300),
-      breakdown(env.TELEMETRY_DB, "app_version", range),
-      breakdown(env.TELEMETRY_DB, "os", range),
-      breakdown(env.TELEMETRY_DB, "device_class", range),
-    ]);
+        [from, to, ...clause.params],
+      );
+    })(),
+    // Grouped on the device-reported local weekday, never on utc_day: a
+    // Sunday evening service in the Americas is already Monday in UTC.
+    (() => {
+      const clause = filterClause("starts", "e", filters, range, "weekday");
+      return all<WeekdayRow>(
+        db,
+        `SELECT e.local_weekday AS weekday, COUNT(*) AS sessions,
+                COUNT(DISTINCT e.utc_day || ':' || e.daily_device_token) AS devices
+           FROM telemetry_events e
+          WHERE e.received_at >= ? AND e.received_at < ?
+            AND e.local_weekday != 'unknown'${clause.sql}
+          GROUP BY e.local_weekday ORDER BY weekday`,
+        [from, to, ...clause.params],
+      );
+    })(),
+    breakdown(db, "country_code", "country", filters, range, 300),
+    breakdown(db, "app_version", "version", filters, range),
+    breakdown(db, "os", "os", filters, range),
+    breakdown(db, "device_class", "device", filters, range),
+  ]);
 
   const activeDeviceDays = totals?.devices ?? 0;
   // Index 0 is Sunday, matching Date.getDay() on the client.
@@ -294,6 +360,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     };
   });
   const byEvent = new Map(eventsResult.results.map((row) => [row.event, row]));
+  // The feature and session-depth rankings are the picker for the event
+  // dimension, so they read the self-excluded counts; every other number on the
+  // page reads the fully filtered ones.
+  const byPickerEvent = pickerEventsResult
+    ? new Map(pickerEventsResult.results.map((row) => [row.event, row]))
+    : byEvent;
+  // Their percentages need the matching denominator: the device-days that pass
+  // every filter except the event cohort. Reusing activeDeviceDays would divide
+  // a cohort-free numerator by a cohort-restricted total and print adoption
+  // rates above 100%.
+  const pickerDeviceDays = pickerTotals?.devices ?? activeDeviceDays;
   const bySignal = new Map(signalsResult.results.map((row) => [row.signal, row.devices]));
   const signalKeys = [
     "app_started",
@@ -317,27 +394,37 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       // True when the request reached outside the retained data, so the
       // dashboard can say the answer covers less than what was asked for.
       clamped: range.clamped,
+      role: auth.role,
+      // A guest sees whose token they are holding and when it stops working,
+      // so an expiry is never a dashboard that silently stops loading.
+      access: auth.role === "guest" ? serialiseToken(auth.token) : null,
+      // Echo of what the server accepted. Values it rejected are absent, so a
+      // stale bookmark drops the dead filter instead of the whole dashboard.
+      filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, filters[key]])),
       appStarts: totals?.appStarts ?? 0,
       activeDeviceDays,
       comparison: previousTotals
         ? {
             appStarts: previousTotals.appStarts,
             activeDeviceDays: previousTotals.devices,
-            from: new Date(previousFrom).toISOString(),
-            to: new Date(previousTo).toISOString(),
+            from: new Date(previous.from).toISOString(),
+            to: new Date(previous.to).toISOString(),
           }
         : null,
       activation: signalKeys.map((key) => {
         const devices = bySignal.get(key) ?? 0;
         return { key, devices, rate: rate(devices, activeDeviceDays) };
       }),
+      // Reported separately from `engagement` because that array is the picker
+      // and stops being filtered by itself the moment a milestone is selected.
+      deepSessionRate: rate(byEvent.get("active_30m")?.devices ?? 0, activeDeviceDays),
       features: FEATURE_EVENTS.map((key) => {
-        const row = byEvent.get(key);
+        const row = byPickerEvent.get(key);
         return {
           key,
           devices: row?.devices ?? 0,
           events: row?.events ?? 0,
-          adoptionRate: rate(row?.devices ?? 0, activeDeviceDays),
+          adoptionRate: rate(row?.devices ?? 0, pickerDeviceDays),
         };
       }).sort((left, right) => right.devices - left.devices),
       quality: qualityPairs.map(([key, successEvent, failureEvent]) => {
@@ -351,8 +438,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
         };
       }),
       engagement: [5, 15, 30, 60].map((minutes) => {
-        const devices = byEvent.get(`active_${minutes}m`)?.devices ?? 0;
-        return { minutes, devices, rate: rate(devices, activeDeviceDays) };
+        const devices = byPickerEvent.get(`active_${minutes}m`)?.devices ?? 0;
+        return { minutes, devices, rate: rate(devices, pickerDeviceDays) };
       }),
       maturity: {
         installationAge: ageResult.results,
@@ -379,7 +466,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
           }
         );
       }),
-      breakdown: { countries, versions, operatingSystems, deviceClasses },
+      breakdown: {
+        countries: countries.results,
+        versions: versions.results,
+        operatingSystems: operatingSystems.results,
+        deviceClasses: deviceClasses.results,
+      },
     },
     { headers: { "Cache-Control": "private, no-store" } },
   );
