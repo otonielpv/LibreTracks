@@ -29,9 +29,14 @@ const pickerBridge = readFileSync(
 
 describe("diagnóstico del selector de carpetas iOS", () => {
   it("expone Documents en Archivos para recuperar el registro", () => {
-    expect(plist).toContain("UIFileSharingEnabled");
-    expect(plist).toContain("LSSupportsOpeningDocumentsInPlace");
-    expect(plist.match(/<true\/>/g)).toHaveLength(2);
+    // Cada clave con SU valor. Esto se comprobaba contando los <true/> del
+    // fichero entero, así que cualquier clave nueva sin relación con el
+    // selector —UIRequiresFullScreen, del arreglo de orientación del iPad—
+    // tumbaba la suite aunque Documents siguiera expuesto en Archivos igual.
+    expect(plist).toMatch(/<key>UIFileSharingEnabled<\/key>\s*<true\/>/);
+    expect(plist).toMatch(
+      /<key>LSSupportsOpeningDocumentsInPlace<\/key>\s*<true\/>/,
+    );
   });
 
   it("Rust y Swift escriben el mismo archivo sin registrar rutas elegidas", () => {
