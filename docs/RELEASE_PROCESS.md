@@ -451,7 +451,7 @@ Jobs and what each one gates (as of v1.10.0):
 | `test` | Yes — unit suites (JS + Rust + native ctest) on all three OSes. |
 | `e2e-windows` | **Disabled** (`if: false`) — see below. |
 | `build-release-assets` | Yes, except the `macos-15-intel` leg (`publish: false`). |
-| `build-android` | Yes — signed APK. |
+| `build-android` | Yes — signed AAB + APK, as workflow artifacts (neither is attached to the release). |
 | `publish-release` | Needs all of the above green. |
 
 `e2e-windows` is a **separate job on purpose**. It used to be two steps at the
@@ -710,6 +710,29 @@ Notes:
 - Download URL is the localized Spanish page: `/es/download/`, not `/downloads`.
 - No closing line, no signature, no hashtags. The template ends at the URL.
 
+### The store launch is a separate post
+
+The desktop release and the Google Play / App Store listings do not go out on
+the same day, and the release post must not pretend otherwise. Store review is
+days of waiting — Play production access alone can take a week — and a post
+that announces both holds the release hostage to whichever store is slowest.
+
+So: the release post covers what is downloadable the minute it goes up
+(Windows, macOS, Linux). The store post is its own piece, lives in
+`marketing/post-tiendas-moviles/`, and goes out once **both** listings are
+public. Two rules keep them from tangling:
+
+- **Never announce a store that is still in review.** "Ya está en la App Store"
+  with a listing under review is the one mistake this group notices.
+- **The APK-migration warning belongs to the store post only.** It is the post
+  that sends people to the Play listing, so it is the post that has to tell
+  them to export their sessions first. Don't duplicate it in the release post,
+  and don't drop it from the store post to save length.
+
+The store post may mention the desktop release in passing, but the desktop
+release announcement should not carry a store section — by the time the stores
+are live, that release is old news and needs its own headline anyway.
+
 ### How to publish it in the group
 
 The group composer is where the text gets damaged. These three rules each
@@ -838,23 +861,37 @@ matters when cutting a release:
   ID identity, notarizes, staples the DMG, and verifies Gatekeeper's own verdict
   before uploading. Any of those failing fails the release — on purpose.
 - **Without them**, the DMG still builds but ships UNSIGNED and macOS blocks it
-  on download. The job prints a warning instead of failing, and the download
-  page shows a temporary first-launch note (`.platform-note`).
-- A signed release means the note on the download page can go. It is marked as
-  temporary in `GithubReleases.astro`.
+  on download. The job prints a warning instead of failing — and the download
+  page no longer explains the block, because that note came out once releases
+  were signed. An accidentally unsigned DMG is therefore a silent trap: read
+  the job's warning.
 
 ---
 
-## Android APK (distribution)
+## Android (distribution)
 
-The download page (`GithubReleases.astro`) lists each GitHub Release's
-assets, so distributing Android is: **attach the signed `.apk` to the
-release** and the page shows it automatically (🤖 icon). No Google Play,
-no store fee.
+Android ships through **Google Play only**, and neither the APK nor the AAB is
+attached to the GitHub Release. The download page lists whatever the release
+carries, so an APK sitting there is a trap: Play App Signing re-signs the AAB
+with Google's own key, the store build cannot update a hand-installed APK, and
+moving to the store costs that user their sessions (see "Moving a user from the
+GitHub APK to Google Play" below). Three places enforce it — the publish job
+filters both extensions out of the asset list, `GithubReleases.astro` filters
+them again so the older releases that still carry them stay off the page, and
+the page shows an Android note pointing at Play instead.
+
+CI still builds, signs and verifies both files; they are uploaded as workflow
+artifacts (`libretracks-android-assets`). The **AAB** is what you upload to Play
+Console, the **APK** is for installing on a device by hand while testing.
+
+> **Play production access is not on the release's critical path.** A new
+> developer account has to request it, and Google can take a week to grant it.
+> Cut and announce the desktop release when it is ready; the store gets its own
+> announcement once the listing is actually public (step 12).
 
 ### Signing — back up the upload keystore
 
-The Play Store AAB and distributable APK must be signed with a stable upload
+The Play Store AAB and the hand-install APK must be signed with a stable upload
 key you own and must NOT be debuggable. Signing config lives in
 `apps/desktop/src-tauri/gen/android/keystore.properties` (gitignored),
 which points at a `.jks` kept OUTSIDE the repo
@@ -862,8 +899,8 @@ which points at a `.jks` kept OUTSIDE the repo
 
 **Back up that .jks somewhere safe (not just this machine).** Enrol in Google
 Play App Signing: Google then protects the app-signing key and this `.jks` is
-the upload key. Play can reset a lost upload key, but APKs distributed directly
-still need the same signing key for in-place updates.
+the upload key. Play can reset a lost upload key, but the APKs already out
+there still need that same key for an in-place update.
 
 `keystore.properties` format:
 ```
@@ -877,25 +914,51 @@ When the file is absent (fresh clone, no keystore) the release build falls
 back to debug signing + `isDebuggable=true` — those builds are for local
 testing only, never for distribution.
 
-### Build + verify + attach
+### Build + verify + upload
 
 ```bash
 # arm64 covers all modern phones/tablets. Add --target x86_64 only for the
 # emulator; don't ship x86_64. The AAB goes to Play Console; the APK is for
-# direct device testing/downloads.
+# installing on a device by hand while testing.
 cd apps/desktop && npx tauri android build --aab --apk --target aarch64 --ci
 
-# Verify BEFORE attaching:
+# Verify BEFORE uploading:
 apksigner verify --print-certs <apk>   # Signer #1 DN must be CN=LibreTracks
 aapt dump badging <apk> | grep debuggable   # must print nothing
 keytool -printcert -jarfile <aab>      # Owner must be CN=LibreTracks
 zipalign -c -P 16 -v 4 <apk>          # required for Android 15+ / Play
 
-# Upload the .aab to Play Console. Attach the APK to the GitHub Release
-# (renamed with the version so the download card reads clearly). versionCode
-# must increase every release or devices refuse the update; it derives from
-# tauri.android.versionCode.
+# Upload the .aab to Play Console. Neither file goes on the GitHub Release —
+# see "Android (distribution)" above. versionCode must increase every release
+# or Play refuses the upload; it derives from tauri.android.versionCode.
 ```
 
 Changing from a debug-signed test build to the release-signed APK requires
 `adb uninstall` first (Android rejects an update with a different signature).
+
+### Moving a user from the GitHub APK to Google Play
+
+The same signature rule bites users, not just the dev machine. Play App Signing
+re-signs the AAB with Google's app-signing key, so the store build and the APKs
+that earlier GitHub Releases carried have different certificates: **Android
+refuses the in-place update and the user must uninstall first**. That
+uninstall deletes `/Android/data/com.libretracks.app/files`, which is where
+sessions live (`platform/android_storage.rs`) — so it takes their sessions with
+it.
+
+The APK is not published any more, so this is a closed population: whoever
+installed one of the APKs that earlier releases attached. It does not grow, it
+does not shrink by itself, and nothing in the app tells them any of this.
+
+Two things follow, and both are easy to forget:
+
+- **The app will not warn them.** The update modal is disabled on mobile on
+  purpose (`App.tsx`: `enabled: … && !isMobileApp`), because the stores own
+  updating there. Whoever installed the APK gets no in-app notice at all.
+- **So the announcement has to carry the warning.** Any post that sends people
+  to the Play listing must tell them to export every session they want to keep
+  BEFORE uninstalling — "Archivo" > "Exportar sesión…" > **Completo**, saved
+  outside the app (Downloads, Drive). A Ligero `.ltset` only references audio
+  by path and those paths die with the uninstall, so it is an empty backup.
+  The wording lives in `marketing/post-tiendas-moviles/` and
+  `marketing/post-testers-android/`; keep it there.

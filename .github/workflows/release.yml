@@ -1240,8 +1240,10 @@ jobs:
             exit 1
           fi
 
-          # Rename to clear, versioned assets. The AAB is the file uploaded to
-          # Play Console; the APK remains useful for direct device testing.
+          # Rename to clear, versioned assets. Neither one is attached to the
+          # GitHub Release (see the publish job): Android ships through Google
+          # Play only. The AAB is what gets uploaded to Play Console and the
+          # APK is for direct device testing; both live as workflow artifacts.
           VER=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
           cp "$APK" "LibreTracks-${VER}-android-arm64.apk"
           cp "$AAB" "LibreTracks-${VER}-play-store.aab"
@@ -1298,6 +1300,13 @@ jobs:
             NOTES_ARGS=(--notes-file "$NOTES_FILE")
           fi
 
+          # No '*.apk' / '*.aab' here on purpose. The android job uploads both
+          # as workflow artifacts and they land in this directory, but they must
+          # not reach the release: the download page lists whatever the release
+          # carries, and an APK next to the installers strands whoever takes it
+          # — a Play build is signed with Google's key and cannot update it, so
+          # moving to the store means uninstalling, which wipes their sessions.
+          # The AAB for Play Console is downloaded from the run's artifacts.
           mapfile -d '' ASSETS < <(
             find dist/release-assets -type f \( \
               -name '*.AppImage' -o \
@@ -1308,8 +1317,6 @@ jobs:
               -name '*.msi' -o \
               -name '*.tar.gz' -o \
               -name '*.zip' -o \
-              -name '*.apk' -o \
-              -name '*.aab' -o \
               -name '*.sig' \
             \) -print0
           )
