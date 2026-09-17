@@ -62,11 +62,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          # `npm test` also compiles the desktop crate. Its GTK/rfd dependency
-          # uses pkg-config to locate GLib and WebKitGTK (including
-          # javascriptcoregtk-4.1), neither of which is in the base Ubuntu
-          # runner image.
-          sudo apt-get install -y build-essential cmake ninja-build libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          # `npm test` compiles libretracks-desktop as well as the native
+          # engine. Keep its development dependencies aligned with the Linux
+          # release job, excluding packaging-only tools (rpm, patchelf, fuse).
+          # WebKitGTK supplies javascriptcoregtk-4.1 for Tauri/wry.
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config \
+            libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev librsvg2-dev \
+            libasound2-dev libjack-jackd2-dev libsndfile1-dev
 
       - name: Install dependencies
         run: npm ci
