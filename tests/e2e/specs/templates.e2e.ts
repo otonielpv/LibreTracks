@@ -1,8 +1,9 @@
 import { browser, expect } from "@wdio/globals";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { writeToneWav } from "./session/support.js";
 
 /**
@@ -57,9 +58,7 @@ describe("Session templates (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before template teardown" },
       );
     }
-    if (workDir && existsSync(workDir)) {
-      rmSync(workDir, { recursive: true, force: true });
-    }
+    removeWorkDir(workDir);
   });
 
   it("saves a session as a template and creates a new session from it", async () => {

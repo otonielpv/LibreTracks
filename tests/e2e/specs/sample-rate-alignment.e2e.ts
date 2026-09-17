@@ -1,8 +1,9 @@
 import { browser, expect } from "@wdio/globals";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { writeToneWav } from "./session/support.js";
 
 /**
@@ -55,9 +56,7 @@ describe("Sample rate alignment (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before sample-rate teardown" },
       );
     }
-    if (workDir && existsSync(workDir)) {
-      rmSync(workDir, { recursive: true, force: true });
-    }
+    removeWorkDir(workDir);
   });
 
   it("runs the engine at a rate consistent with the session's audio", async () => {

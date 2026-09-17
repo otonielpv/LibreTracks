@@ -1,8 +1,9 @@
 import { browser, expect } from "@wdio/globals";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { writeToneWav } from "./session/support.js";
 
 /**
@@ -47,9 +48,7 @@ describe("Region package export (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before export teardown" },
       );
     }
-    if (workDir && existsSync(workDir)) {
-      rmSync(workDir, { recursive: true, force: true });
-    }
+    removeWorkDir(workDir);
   });
 
   it("exports a region as a .ltpkg, with and without bundled audio", async () => {

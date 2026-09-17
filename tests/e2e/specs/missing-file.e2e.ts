@@ -1,8 +1,9 @@
 import { browser, expect } from "@wdio/globals";
-import { existsSync, mkdtempSync, rmSync, unlinkSync } from "node:fs";
+import { mkdtempSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { writeToneWav } from "./session/support.js";
 
 /**
@@ -49,9 +50,7 @@ describe("Missing audio file resolution (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before missing-file teardown" },
       );
     }
-    if (sessionParentDir && existsSync(sessionParentDir)) {
-      rmSync(sessionParentDir, { recursive: true, force: true });
-    }
+    removeWorkDir(sessionParentDir);
   });
 
   it("flags a clip whose audio is gone, then resolves it to a new path", async () => {

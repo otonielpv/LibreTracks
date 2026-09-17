@@ -1,8 +1,9 @@
 import { browser, expect, $ } from "@wdio/globals";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { writeToneWav } from "./session/support.js";
 
 /**
@@ -52,9 +53,7 @@ describe("Deferred audio preparation (isolated session)", () => {
     if (snapshot.playbackState !== "stopped") {
       await (await AppPage.stopButton).click();
     }
-    if (workDir && existsSync(workDir)) {
-      rmSync(workDir, { recursive: true, force: true });
-    }
+    removeWorkDir(workDir);
   });
 
   it("opens the session before the audio finishes decoding, and says so", async function () {

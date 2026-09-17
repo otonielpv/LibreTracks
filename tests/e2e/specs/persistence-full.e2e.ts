@@ -1,8 +1,9 @@
 import { browser, expect } from "@wdio/globals";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { writeToneWav } from "./session/support.js";
 
 /**
@@ -74,9 +75,7 @@ describe("Full-model persistence (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before persist teardown" },
       );
     }
-    if (workDir && existsSync(workDir)) {
-      rmSync(workDir, { recursive: true, force: true });
-    }
+    removeWorkDir(workDir);
   });
 
   it("round-trips a rich song model through save, switch and reopen", async () => {

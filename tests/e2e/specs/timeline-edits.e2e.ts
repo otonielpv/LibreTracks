@@ -1,8 +1,9 @@
 import { browser } from "@wdio/globals";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { registerSessionTimelineEditFlows } from "./session/timelineEdits.flows.js";
 import {
   AUDIO_FILE_NAME,
@@ -71,9 +72,7 @@ describe("Timeline edits (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before edits-session teardown" },
       );
     }
-    if (fixture.sessionParentDir && existsSync(fixture.sessionParentDir)) {
-      rmSync(fixture.sessionParentDir, { recursive: true, force: true });
-    }
+    removeWorkDir(fixture.sessionParentDir);
   });
 
   registerSessionTimelineEditFlows(fixture);

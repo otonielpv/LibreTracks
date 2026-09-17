@@ -1,8 +1,9 @@
 import { browser } from "@wdio/globals";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
+import { removeWorkDir } from "../utils/workdir.js";
 import { registerSessionTempoFlows } from "./session/tempo.flows.js";
 
 /**
@@ -39,9 +40,7 @@ describe("Tempo & time signature (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before tempo-session teardown" },
       );
     }
-    if (sessionParentDir && existsSync(sessionParentDir)) {
-      rmSync(sessionParentDir, { recursive: true, force: true });
-    }
+    removeWorkDir(sessionParentDir);
   });
 
   registerSessionTempoFlows();
