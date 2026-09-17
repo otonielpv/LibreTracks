@@ -32,6 +32,8 @@ Typical routing:
 - Cue outputs kept independent from the Master fader.
 - Folder bus on an external output, with child tracks left on `Inherited (Folder)` for faster setup.
 
+See [Multitrack Audio Routing for Live Shows](/guides/multitrack-audio-routing/) for a step-by-step plan that turns those stems into labelled channels at the mixer, including how to set levels and run a repeatable soundcheck.
+
 ## Routing Strings
 
 Internally, tracks store their destination in `audioTo`.

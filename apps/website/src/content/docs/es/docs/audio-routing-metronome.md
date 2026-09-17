@@ -32,6 +32,8 @@ Routing habitual:
 - Salidas de cue independientes del fader de Master.
 - Carpeta enviada a una salida externa y pistas hijas en `Inherited (Folder)` para un setup mas rapido.
 
+Consulta [Cómo rutear audio multitrack en directo](/es/guias/salidas-audio-multitrack/) para un plan paso a paso que lleve esos stems a canales identificados en la mesa, con el ajuste de niveles y una prueba de sonido repetible.
+
 ## Rutas Internas
 
 Internamente, las pistas guardan su destino en `audioTo`.

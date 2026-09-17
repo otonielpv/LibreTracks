@@ -1,7 +1,51 @@
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import sitemap from "@astrojs/sitemap";
 import tailwind from "@astrojs/tailwind";
+
+// `<lastmod>` only helps while Google trusts it, and stamping every URL with the
+// build date is the fastest way to lose that trust: one typo fix would claim all
+// 48 pages changed. The honest date is the last commit that touched the page's
+// own source. Shared layout and CSS churn is deliberately not counted — the
+// signal is meant to say when the *content* changed, not when the chrome moved.
+const lastCommitCache = new Map();
+
+const lastCommitDate = (relativePath) => {
+  if (lastCommitCache.has(relativePath)) return lastCommitCache.get(relativePath);
+  let iso;
+  try {
+    iso =
+      execFileSync("git", ["log", "-1", "--format=%cI", "--", relativePath], {
+        cwd: new URL(".", import.meta.url),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim() || undefined;
+  } catch {
+    // No git binary, a shallow clone with no commit for this path, or a build
+    // from a tarball. Dropping lastmod is valid and leaves the sitemap exactly
+    // as it was before, so a build host without history degrades quietly.
+    iso = undefined;
+  }
+  lastCommitCache.set(relativePath, iso);
+  return iso;
+};
+
+// Maps a built URL back to the file an author would edit. Astro pages follow
+// `src/pages/`, but Starlight docs are a content collection and live outside it.
+const pageSource = (pathname) => {
+  const clean = pathname.replace(/^\/+|\/+$/g, "");
+  const candidates =
+    clean === ""
+      ? ["src/pages/index.astro"]
+      : [`src/pages/${clean}.astro`, `src/pages/${clean}/index.astro`];
+  const docs = clean.match(/^(?:(es)\/)?docs(?:\/(.+))?$/);
+  if (docs) {
+    candidates.push(`src/content/docs/${docs[1] ? "es/docs" : "docs"}/${docs[2] ?? "index"}.md`);
+  }
+  return candidates.find((candidate) => existsSync(new URL(candidate, import.meta.url)));
+};
 
 export default defineConfig({
   site: "https://libretracks.com",
@@ -25,6 +69,11 @@ export default defineConfig({
     // contradiction the coverage report would keep reminding us about.
     sitemap({
       filter: (page) => !/^\/(es\/)?(admin\/|download\/stats\/)/.test(new URL(page).pathname),
+      serialize: (item) => {
+        const source = pageSource(new URL(item.url).pathname);
+        const lastmod = source && lastCommitDate(source);
+        return lastmod ? { ...item, lastmod } : item;
+      },
     }),
     tailwind({ applyBaseStyles: false }),
     starlight({
