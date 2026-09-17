@@ -6,10 +6,16 @@ on:
       - 'v*'
     branches:
       - 'test/macos-audio-dropout'
-  # Any manual/non-tag run is intentionally a private macOS test build only. It
-  # uploads an Actions artifact, but cannot create a GitHub Release, build
-  # Android, or notify the website. Official publishing remains tag-push-only.
+  # Manual runs are normally private macOS test builds. Android is opt-in so a
+  # Play artifact can be built deliberately without making every desktop tag
+  # release wait for (or fail on) the Android toolchain.
   workflow_dispatch:
+    inputs:
+      build_android:
+        description: Build signed Android AAB/APK artifacts (does not publish to Google Play)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -1058,7 +1064,9 @@ jobs:
 
   build-android:
     name: Build Android Play bundle + APK
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Android distribution has its own Play cadence. Keep the costly NDK build
+    # opt-in; its result must never block a desktop GitHub Release.
+    if: github.event_name == 'workflow_dispatch' && inputs.build_android
     needs: test
     runs-on: ubuntu-22.04
     env:
@@ -1280,7 +1288,7 @@ jobs:
     # test. Until that is understood it must not gate publishing; it is being
     # diagnosed on the `ci/e2e-runner-debug` branch via workflow_dispatch, and
     # goes back in this list once it is green on CI hardware.
-    needs: [build-release-assets, build-android]
+    needs: build-release-assets
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1322,10 +1330,7 @@ jobs:
               -name '*.rpm' -o \
               -name '*.dmg' -o \
               -name '*.exe' -o \
-              -name '*.msi' -o \
-              -name '*.tar.gz' -o \
-              -name '*.zip' -o \
-              -name '*.sig' \
+              -name '*.msi' \
             \) -print0
           )
 

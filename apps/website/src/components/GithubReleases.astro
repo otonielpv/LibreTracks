@@ -129,7 +129,7 @@ const labels = {
 // install channel any more (see `androidTitle` above), and the AAB is the
 // file that goes to Play Console — a visitor cannot install it at all.
 // Filtering here also covers the older releases that still carry both.
-const STORE_ONLY_ASSET = /\.(apk|aab)$/i;
+const INSTALLER_ASSET = /\.(msi|exe|dmg|deb|appimage|rpm)$/i;
 
 const releaseUrl = `https://github.com/${owner}/${repo}/releases`;
 const donationUrl = "https://ko-fi.com/otonielpv";
@@ -154,7 +154,7 @@ function iconForAsset(name: string): string {
 // versions link to their permanent GitHub release pages.
 const panels = await Promise.all(
   releases.slice(0, 1).map(async (release, index) => {
-    const assets = release.assets.filter((asset) => !STORE_ONLY_ASSET.test(asset.name));
+    const assets = release.assets.filter((asset) => INSTALLER_ASSET.test(asset.name));
     const localizedBody = release.body
       ? extractReleaseNotesForLanguage(release.body, isSpanish ? "es" : "en")
       : "";

@@ -451,8 +451,8 @@ Jobs and what each one gates (as of v1.10.0):
 | `test` | Yes — unit suites (JS + Rust + native ctest) on all three OSes. |
 | `e2e-windows` | **Disabled** (`if: false`) — see below. |
 | `build-release-assets` | Yes, except the `macos-15-intel` leg (`publish: false`). |
-| `build-android` | Yes — signed AAB + APK, as workflow artifacts (neither is attached to the release). |
-| `publish-release` | Needs all of the above green. |
+| `build-android` | No — opt-in from `workflow_dispatch`; it produces signed Play artifacts but does not gate a desktop release. |
+| `publish-release` | Needs `test` and the publishable `build-release-assets` legs green. |
 
 `e2e-windows` is a **separate job on purpose**. It used to be two steps at the
 end of `test`, both pinned behind `continue-on-error` because that job has no
@@ -887,9 +887,10 @@ filters both extensions out of the asset list, `GithubReleases.astro` filters
 them again so the older releases that still carry them stay off the page, and
 the page shows an Android note pointing at Play instead.
 
-CI still builds, signs and verifies both files; they are uploaded as workflow
-artifacts (`libretracks-android-assets`). The **AAB** is what you upload to Play
-Console, the **APK** is for installing on a device by hand while testing.
+Run the Android job explicitly from `workflow_dispatch` with **Build signed
+Android AAB/APK artifacts** enabled. It builds, signs and verifies both files,
+then uploads them as `libretracks-android-assets`. The **AAB** is what you
+upload to Play Console; the **APK** is only for installing on a test device.
 
 > **Play production access is not on the release's critical path.** A new
 > developer account has to request it, and Google can take a week to grant it.
