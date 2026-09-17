@@ -28,9 +28,6 @@ on:
         description: "CFBundleVersion for this build; defaults to the run number"
         type: string
         required: false
-  push:
-    tags:
-      - 'v*'
 
 permissions:
   contents: read
