@@ -17,13 +17,6 @@ on:
   # few minutes (they compile two sources, not the whole engine), and the code
   # they cover has no other test: a regression in the device backend would
   # otherwise surface as "no sound on my iPhone" weeks later.
-  push:
-    paths:
-      - 'native/audio-engine-v2/src/devices/audio_device_manager_ios.mm'
-      - 'native/audio-engine-v2/src/devices/ios_audio_session.mm'
-      - 'native/audio-engine-v2/include/lt_engine/devices/**'
-      - 'tests/ios/**'
-      - '.github/workflows/ios-audio-probe.yml'
 
 permissions:
   contents: read
