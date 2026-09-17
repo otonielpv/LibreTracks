@@ -33,6 +33,13 @@ function motifCss(theme) {
         radial-gradient(58% 42% at 22% 8%, ${theme.accent}1c 0%, transparent 70%),
         radial-gradient(52% 38% at 82% 4%, ${theme.accent}16 0%, transparent 72%),
         repeating-linear-gradient(90deg, ${theme.accent}0e 0 1px, transparent 1px 96px);`;
+    case 'aurora':
+      // Two blooms in the theme's two hues plus fine rules, so the background
+      // carries colour of its own instead of tinting everything one accent.
+      return `background-image:
+        radial-gradient(46% 34% at 8% 4%, ${theme.accent}30 0%, transparent 72%),
+        radial-gradient(52% 40% at 96% 96%, ${theme.accentSoft}26 0%, transparent 74%),
+        repeating-linear-gradient(180deg, ${theme.accent}10 0 1px, transparent 1px 46px);`;
     case 'dots':
       return `background-image:radial-gradient(${theme.accent}26 1.6px, transparent 1.7px);background-size:26px 26px;`;
     case 'grid':
@@ -125,6 +132,18 @@ export function renderPoster(spec, theme, assets) {
         <div class="art-figure">${art.html}</div>
       </div>
       <div class="feats-row">${featureBlocks(features)}</div>
+    </div>`;
+  } else if (layout === 'cover-top') {
+    body = `<div class="l-cover">
+      <div class="cover-shot"><img class="shot" src="${shotUri}" alt=""></div>
+      <div class="cover-copy">
+        <div class="cover-text">
+          ${versionChip}
+          ${headlineHtml}
+          <p class="sub">${esc(sub)}</p>
+        </div>
+        <div class="feats-grid">${featureBlocks(features)}</div>
+      </div>
     </div>`;
   } else if (layout === 'split') {
     body = `<div class="l-split">
@@ -249,6 +268,29 @@ h1{font-size:96px;font-weight:${theme.headlineWeight};line-height:.96;letter-spa
 .bleed-shot .shot{width:100%;max-height:100%;object-fit:cover;object-position:top left;
   transform:perspective(1900px) rotateY(-9deg);}
 .l-bleed .feats-row{flex:0 0 auto;margin-top:auto;}
+
+/* cover-top — the screenshot first, edge to edge. The band breaks the frame
+   padding on both sides so the app reads as the cover image of the poster
+   rather than a card sitting on it; everything else hangs underneath. The
+   band is a fixed height on purpose: it crops whatever shot it is given to the
+   same strip, which is what keeps the format recognisable release to release. */
+.l-cover{flex:1;display:flex;flex-direction:column;padding-top:34px;overflow:hidden;}
+/* The accent rule under the band is what stops the cover reading as a plain
+   photograph with text below it. */
+.cover-shot{flex:0 0 auto;margin:0 -64px;height:378px;border-bottom:6px solid ${theme.accent};}
+/* The only layout that crops from the CENTRE. The others keep the top left
+   because that is where an app window carries its toolbar and track headers;
+   here the band is the whole picture, and a full window shot has its subject
+   in the middle — a dialog, the song being edited — not in the corner. */
+.cover-shot .shot{width:100%;height:100%;object-fit:cover;object-position:center;
+  border-radius:0;border-left:0;border-right:0;border-color:${theme.accent}2e;
+  box-shadow:0 34px 70px #000000aa;}
+.cover-copy{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);
+  gap:46px;align-items:center;padding-top:44px;}
+.l-cover h1{font-size:74px;}
+.l-cover .sub{font-size:23px;max-width:21ch;}
+.feats-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px 30px;}
+.feats-grid .feat{border-left:3px solid ${theme.accent};padding-left:15px;}
 
 /* split — the right column is wide and the shot overhangs the frame, because
    the screenshots are ~2:1: fitted inside a narrow column the app renders too

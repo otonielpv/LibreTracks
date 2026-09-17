@@ -82,6 +82,23 @@ export const THEMES = [
     motif: 'grid',
     headlineWeight: 700,
   },
+  {
+    id: 'aurora',
+    // Violet on a two-hue background — the only theme whose backdrop travels
+    // from one colour to another instead of glowing in a single one — and the
+    // only layout that leads with the screenshot: the app runs edge to edge
+    // across the top like a magazine cover, the copy sits underneath it and
+    // the features fall into a 2x2 block beside the headline. Added because
+    // the six above had started to rhyme: the donation poster and a release
+    // were reading as the same picture.
+    layout: 'cover-top',
+    accent: '#c084fc',
+    accentSoft: '#5eead4',
+    bg: '#0c0718',
+    bgGlow: 'linear-gradient(158deg, #2e1163 0%, #16092c 38%, #0c0718 62%, #072a30 100%)',
+    motif: 'aurora',
+    headlineWeight: 900,
+  },
 ];
 
 /**

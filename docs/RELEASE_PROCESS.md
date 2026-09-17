@@ -590,9 +590,9 @@ under `scripts/poster/` is versioned, so any release can be re-rendered.
 ### Every poster must look different
 
 This is the point of the tool, not a nice-to-have: a feed of identical posters
-stops being read. `scripts/poster/themes.mjs` holds six themes, each with its
+stops being read. `scripts/poster/themes.mjs` holds seven themes, each with its
 own palette, background motif AND layout (`spotlight`, `bleed-right`, `split`,
-`tilt`, `devices`, `list`). `pickTheme()` derives one from the version number —
+`tilt`, `devices`, `list`, `cover-top`). `pickTheme()` derives one from the version number —
 weighted so consecutive releases never land on the same theme — so the default
 already varies release to release and re-running for the same version reproduces
 the same poster.
@@ -605,7 +605,14 @@ the same poster.
   what `pickTheme()` returns for every version, since it indexes into the list.)
 - `showcase` (layout `devices`) is the odd one out: it stacks THREE screenshots
   — desktop behind, tablet and phone in front — for a release whose headline is
-  the same feature on every screen size. It reads the extra ones from the
+  the same feature on every screen size.
+- `aurora` (layout `cover-top`) is the only one that leads with the screenshot:
+  a full-bleed band across the top, copy underneath, features in a 2x2 block.
+  It is also the only layout that crops from the CENTRE, so give it a whole
+  window with its subject in the middle — a dialog, the song being edited — not
+  a strip cropped by hand. The copy column is half the usual width there: keep
+  each feature `body` to ~16 characters and typeset the headline in three short
+  lines, or they wrap. It reads the extra ones from the
   optional `shots` array in the spec, mid-size device first, phone second.
 
 ### The copy file
