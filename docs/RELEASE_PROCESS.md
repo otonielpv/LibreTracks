@@ -566,10 +566,12 @@ graphify update .
 (AST-only, no API cost. Per the project CLAUDE.md, run this after touching
 code so future sessions stay in sync.)
 
-## 11. Make the release poster (mandatory, one per release)
+## 11. Make the release posters (mandatory, Spanish and English per release)
 
-Every release gets its own square announcement image, generated with the
-poster tool and handed back together with the Facebook draft (step 12).
+Every release gets two matching square announcement images, generated with the
+poster tool: the Spanish one goes with the Facebook draft (step 12), and the
+English one goes with the default Reddit draft (step 13). They share the same
+theme, screenshot and layout; only the visible copy changes.
 
 The layout is 1080x1080 but the capture runs at 2x, so the PNG lands at
 2160x2160 (~1.2 MB). That density is for the SCREENSHOTS, not the type: an app
@@ -580,8 +582,9 @@ away more than half of every UI label and the app photographed as mush. Pass
 ```bash
 mkdir -p marketing/poster-<NEW>
 cp <a real screenshot> marketing/poster-<NEW>/shot.png
-# write marketing/poster-<NEW>/poster.json (see below), then:
+# write marketing/poster-<NEW>/poster.json and poster-en.json (see below), then:
 node scripts/poster/make-poster.mjs --spec marketing/poster-<NEW>/poster.json
+node scripts/poster/make-poster.mjs --spec marketing/poster-<NEW>/poster-en.json
 ```
 
 `marketing/` is gitignored, so the PNGs stay out of the repo; the generator
@@ -617,12 +620,15 @@ the same poster.
 
 ### The copy file
 
-`poster.json` is the only thing written per release:
+Write `poster.json` for Spanish, then copy it to `poster-en.json` and translate
+the visible copy. Keep the same `theme`, `shot`, `shots`, layout and features;
+set `out` on the English copy so it ends in `-en`.
 
 ```json
 {
   "version": "1.10.1",
   "badge": "GRATIS Y OPEN SOURCE",
+  "brandTag": "MULTITRACK PARA DIRECTO",
   "headline": "Mezcla varias
 pistas a la vez",
   "headlineAccent": ".",
@@ -655,7 +661,11 @@ pistas a la vez",
   `docs/releases/v<NEW>.md`. Keep each `body` to ~4 words AND each `title` to
   ~2 so the four columns stay on one line; a 2-line wrap in one column and not
   the others looks broken.
-- Spanish, same voice as the Facebook post. Check the accents.
+- Spanish uses the Facebook post's voice; check its accents. English mirrors
+  its meaning in natural English for Reddit. Translate `badge`, `brandTag`,
+  `headline`, `sub` and the feature copy; use
+  `"out": "cartel-<NEW>-<theme>-en"` in `poster-en.json` so the Reddit
+  generator can select it unambiguously.
 
 Working examples of all of the above: `marketing/post-donaciones`,
 `marketing/post-tiendas-moviles` and `marketing/post-testers-android`. All

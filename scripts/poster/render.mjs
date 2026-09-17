@@ -79,7 +79,7 @@ function numberedFeatures(features) {
  * pile of conditionals inside one.
  */
 export function renderPoster(spec, theme, assets) {
-  const { version, chip, headline, headlineAccent, sub, badge, features, shot, shots = [] } =
+  const { version, chip, headline, headlineAccent, sub, badge, brandTag, features, shot, shots = [] } =
     spec;
 
   // A poster that draws its subject instead of screenshotting it picks its
@@ -106,7 +106,7 @@ export function renderPoster(spec, theme, assets) {
 
   const brand = `<div class="brand">
       <div class="brand-name">LIBRETRACKS</div>
-      <div class="brand-tag">MULTITRACK PARA DIRECTO</div>
+      <div class="brand-tag">${esc(brandTag ?? 'MULTITRACK PARA DIRECTO')}</div>
     </div>`;
   const badgeHtml = badge ? `<div class="badge">${esc(badge)}</div>` : '';
   // The pill above the headline is the version for a release announcement.
