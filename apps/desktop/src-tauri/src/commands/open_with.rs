@@ -193,6 +193,12 @@ pub fn file_from_opened_urls(urls: &[tauri::Url]) -> Option<OpenWithFile> {
 }
 
 /// Reparte el fichero de un `RunEvent::Opened` de macOS.
+///
+/// Solo escritorio, por el mismo motivo que [`focus_main_window`], a quien
+/// llama: en movil no compilaria. Su unico llamante esta bajo
+/// `cfg(target_os = "macos")`, de ahi el `allow(dead_code)` en el resto de
+/// escritorios.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn deliver_opened_urls(app: &AppHandle, urls: &[tauri::Url]) {
     let Some(file) = file_from_opened_urls(urls) else {
@@ -208,6 +214,12 @@ pub fn deliver_opened_urls(app: &AppHandle, urls: &[tauri::Url]) {
 /// nosotros (la segunda instancia muere antes de tener ventana), asi que sin
 /// esto el usuario hace doble click y no ve pasar nada: la sesion se carga
 /// detras de la ventana que tuviera delante.
+///
+/// Solo escritorio. `unminimize`, `show` y `set_focus` no existen en la
+/// `WebviewWindow` de movil, asi que en Android e iOS esto ni siquiera
+/// compila; y alli no hay ventanas que enfocar ni instancia unica que
+/// reenvie nada. Su unico llamante vive bajo el mismo `cfg`.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn focus_main_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
