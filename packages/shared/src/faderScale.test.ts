@@ -10,6 +10,8 @@ import {
   gainToDb,
   gainToPosition,
   positionToDb,
+  snapPositionToUnity,
+  FADER_UNITY_SNAP_THRESHOLD,
   positionToGain,
 } from "./faderScale";
 
@@ -120,5 +122,46 @@ describe("formatGainDb", () => {
 
   it("shows -inf for silence", () => {
     expect(formatGainDb(0)).toBe("-inf");
+  });
+});
+
+describe("snapPositionToUnity", () => {
+  const unity = TRACK_FADER_SCALE.unityPosition;
+
+  it("pulls a position just under unity all the way to unity", () => {
+    const justUnder = unity - FADER_UNITY_SNAP_THRESHOLD / 2;
+    expect(snapPositionToUnity(justUnder, TRACK_FADER_SCALE)).toBe(unity);
+  });
+
+  it("pulls a position just over unity all the way to unity", () => {
+    const justOver = unity + FADER_UNITY_SNAP_THRESHOLD / 2;
+    expect(snapPositionToUnity(justOver, TRACK_FADER_SCALE)).toBe(unity);
+  });
+
+  it("leaves a position outside the magnet untouched", () => {
+    const outside = unity - FADER_UNITY_SNAP_THRESHOLD * 2;
+    expect(snapPositionToUnity(outside, TRACK_FADER_SCALE)).toBe(outside);
+  });
+
+  it("bypasses the magnet when asked (Shift during a drag)", () => {
+    const justUnder = unity - FADER_UNITY_SNAP_THRESHOLD / 2;
+    expect(snapPositionToUnity(justUnder, TRACK_FADER_SCALE, true)).toBe(
+      justUnder,
+    );
+  });
+
+  it("snapping lands on exactly 0 dB, which is the point of the magnet", () => {
+    const nudged = unity + FADER_UNITY_SNAP_THRESHOLD / 3;
+    const snapped = snapPositionToUnity(nudged, TRACK_FADER_SCALE);
+    expect(positionToDb(snapped, TRACK_FADER_SCALE)).toBeCloseTo(0, 9);
+    // Y sin iman el mismo gesto NO cae en 0 dB: si esto dejara de ser cierto,
+    // las pruebas de arriba pasarian sin que el iman existiera.
+    expect(positionToDb(nudged, TRACK_FADER_SCALE)).not.toBeCloseTo(0, 2);
+  });
+
+  it("works for the aux scale too, which has its own headroom", () => {
+    const unityAux = AUX_FADER_SCALE.unityPosition;
+    const nudged = unityAux - FADER_UNITY_SNAP_THRESHOLD / 2;
+    expect(snapPositionToUnity(nudged, AUX_FADER_SCALE)).toBe(unityAux);
   });
 });

@@ -156,6 +156,37 @@ export function gainToPosition(gain: number, scale: FaderScale): number {
   return dbToPosition(gainToDb(gain), scale);
 }
 
+/**
+ * Anchura del imán de la unidad (0 dB), como fracción del recorrido del fader.
+ *
+ * Es el mismo 3 % que usa el imán del paneo en el centro, y la zona
+ * "magnética" que se espera de un DAW. Vive aquí, y no en cada mezclador, para
+ * que las dos vistas de faders —el mezclador compacto y la fila de la cabecera
+ * de pista— se comporten igual: que una tuviera imán y la otra no fue un fallo
+ * reportado por un tester.
+ *
+ * En dB la zona no es simétrica, porque la curva no lo es: con
+ * `TRACK_FADER_SCALE` cubre de unos −2,4 dB a +1,2 dB. Con ratón se puentea
+ * manteniendo Shift; con el dedo no hay modificador, así que ahí el imán manda
+ * y el ajuste fino de ese entorno se hace con el ratón.
+ */
+export const FADER_UNITY_SNAP_THRESHOLD = 0.03;
+
+/**
+ * Lleva a la unidad exacta una posición de fader que caiga dentro del imán.
+ * `bypass` lo desactiva (Shift durante el arrastre).
+ */
+export function snapPositionToUnity(
+  position: number,
+  scale: FaderScale,
+  bypass = false,
+): number {
+  if (bypass) return position;
+  return Math.abs(position - scale.unityPosition) <= FADER_UNITY_SNAP_THRESHOLD
+    ? scale.unityPosition
+    : position;
+}
+
 export type FaderTick = {
   /** dB the tick marks; `null` for the silent floor (labelled −inf). */
   db: number | null;

@@ -5,6 +5,7 @@ import {
   formatGainDb,
   gainToPosition,
   positionToGain,
+  snapPositionToUnity,
 } from "@libretracks/shared/faderScale";
 
 import { AudioRouteCombobox } from "./AudioRouteCombobox";
@@ -74,11 +75,25 @@ export function TrackMixControls({
   const volumeFill = `${(volumePosition * 100).toFixed(2)}%`;
   const panFill = `${(((panValue + 1) * 0.5) * 100).toFixed(2)}%`;
 
+  // El iman de la unidad (0 dB). Vivia solo en el mezclador compacto, asi que
+  // el mismo fader tenia iman en una vista y no en la otra —y el paneo, al
+  // lado, si lo tenia—: un tester lo reporto como "cuesta dejarlo en 0".
+  // Shift lo puentea, igual que alli; con el dedo no hay Shift, y el ajuste
+  // fino de ese entorno se hace con raton.
+  const applyVolumePosition = (position: number, bypassSnap = false) =>
+    onVolumeChange(
+      trackId,
+      positionToGain(
+        snapPositionToUnity(position, TRACK_FADER_SCALE, bypassSnap),
+        TRACK_FADER_SCALE,
+      ),
+    );
   // Hold Shift to fine-drag the volume fader for precise dB tweaks.
   const volumeFineDrag = useFineDragRange({
     value: volumePosition,
-    onChange: (position) =>
-      onVolumeChange(trackId, positionToGain(position, TRACK_FADER_SCALE)),
+    // Shift ya esta puesto cuando el arrastre fino emite, y arrastrarse a paso
+    // de tortuga no quiere el iman peleando: se puentea.
+    onChange: (position, isFineDrag) => applyVolumePosition(position, isFineDrag),
     onCommit: () => onCommitVolume(trackId),
   });
   // El dedo no usa el arrastre nativo del `<input type=range>`: ver
@@ -87,8 +102,7 @@ export function TrackMixControls({
     min: 0,
     max: 1,
     step: 0.001,
-    onChange: (position) =>
-      onVolumeChange(trackId, positionToGain(position, TRACK_FADER_SCALE)),
+    onChange: (position) => applyVolumePosition(position),
     onCommit: () => onCommitVolume(trackId),
   });
   const applyPan = (value: number) =>

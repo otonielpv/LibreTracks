@@ -19,6 +19,7 @@ import {
   gainToPosition,
   positionToDb,
   positionToGain,
+  snapPositionToUnity,
 } from "@libretracks/shared/faderScale";
 
 // Tick marks positioned at their true travel offset (0 dB is ~30% down, not
@@ -342,10 +343,9 @@ type CompactMixerStripProps = {
 // snap target, the value pulls to the target. 3% of the slider range
 // matches the "feels-magnetic" zone in Ableton and most other DAWs.
 // The fader now runs in *position* space [0,1] with an Ableton-style dB curve;
-// unity (0 dB) lives at `unityPosition`, so that's where the fader snaps.
-const VOLUME_SNAP_TARGET = TRACK_FADER_SCALE.unityPosition;
-const VOLUME_SNAP_RANGE = 1.0; // fader position runs 0..1
-const VOLUME_SNAP_THRESHOLD = VOLUME_SNAP_RANGE * 0.03;
+// unity (0 dB) lives at `unityPosition`, so that's where the fader snaps — eso
+// lo lleva `snapPositionToUnity`, compartido con la fila de faders de la
+// cabecera de pista para que las dos vistas se comporten igual.
 const PAN_SNAP_TARGET = 0.0;
 const PAN_SNAP_RANGE = 2.0; // slider runs -1..1
 const PAN_SNAP_THRESHOLD = PAN_SNAP_RANGE * 0.03;
@@ -685,10 +685,9 @@ function CompactMixerStripComponent({
             handlers.onVolumeChange(
               track.id,
               positionToGain(
-                applySnap(
+                snapPositionToUnity(
                   nextPosition,
-                  VOLUME_SNAP_TARGET,
-                  VOLUME_SNAP_THRESHOLD,
+                  TRACK_FADER_SCALE,
                   shiftPressedRef.current,
                 ),
                 TRACK_FADER_SCALE,

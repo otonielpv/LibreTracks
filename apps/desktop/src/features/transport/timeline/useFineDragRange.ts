@@ -28,7 +28,13 @@ export const FINE_DRAG_FACTOR = 0.25;
 export function useFineDragRange(options: {
   /** Current fader position [0,1] (the controlled `value`). */
   value: number;
-  onChange: (nextPosition: number) => void;
+  /**
+   * `isFineDrag` dice si el valor sale del arrastre fino (Shift). El llamante
+   * lo usa para puentear imanes: un arrastre a paso de tortuga no quiere un
+   * iman tirando de el, y es ademas como se alcanza a mano el entorno de la
+   * unidad que el iman se traga.
+   */
+  onChange: (nextPosition: number, isFineDrag: boolean) => void;
   onCommit: () => void;
 }) {
   const { onChange, onCommit } = options;
@@ -78,7 +84,7 @@ export function useFineDragRange(options: {
       if (!shiftPressedRef.current) {
         // Normal drag: pass the value straight through, drop any baseline.
         lastNativeRef.current = null;
-        onChange(clamp01(nativeValue));
+        onChange(clamp01(nativeValue), false);
         return;
       }
 
@@ -92,7 +98,7 @@ export function useFineDragRange(options: {
       const nativeDelta = nativeValue - lastNativeRef.current;
       lastNativeRef.current = nativeValue;
       const next = valueRef.current + nativeDelta * FINE_DRAG_FACTOR;
-      onChange(clamp01(next));
+      onChange(clamp01(next), true);
     },
     [onChange],
   );
