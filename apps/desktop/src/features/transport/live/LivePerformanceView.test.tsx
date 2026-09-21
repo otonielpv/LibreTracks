@@ -172,4 +172,50 @@ describe("LivePerformanceView", () => {
     expect(container.querySelector(".lt-live-cue-row.is-vamp")?.textContent)
       .toContain("liveView.vampBarsBadge");
   });
+  it("pone la cuenta atras en la linea del nombre, no al final de la fila", () => {
+    // La cancion de prueba tiene una sola marca por region, asi que nunca hay
+    // una "siguiente" a la que contarle el tiempo: la primera region gana una.
+    const songWithTwoMarkersInFirstRegion: SongView = {
+      ...song,
+      sectionMarkers: [
+        ...song.sectionMarkers,
+        { id: "prechorus", name: "Preestribillo", startSeconds: 25, kind: "verse" },
+      ],
+    };
+
+    // La lista se desplaza para centrar la marca ACTIVA, asi que la SIGUIENTE
+    // -la que lleva la cuenta atras- suele quedar a medias contra el borde
+    // inferior del scroll, y lo ultimo de la fila es lo primero que se corta.
+    // Reportado como "el texto de siguiente se mete por debajo del boton" y
+    // reproducido en un iPhone 13 en horizontal. En la linea del nombre se lee
+    // aunque la fila salga a medias.
+    const { container } = render(
+      <LivePerformanceView
+        song={songWithTwoMarkersInFirstRegion}
+        positionSecondsRef={{ current: 10 }}
+        settings={DEFAULT_APP_SETTINGS}
+        pendingMarkerId={null}
+        pendingMarkerName={null}
+        activeVamp={null}
+        onViewModeChange={vi.fn()}
+        onMarkerAction={vi.fn()}
+        onSongAction={vi.fn()}
+        onToggleVamp={vi.fn()}
+        onCancelPendingJump={vi.fn()}
+        onGlobalJumpModeChange={vi.fn()}
+        onGlobalJumpBarsChange={vi.fn()}
+        onSongJumpTriggerChange={vi.fn()}
+        onSongJumpBarsChange={vi.fn()}
+        onSongTransitionModeChange={vi.fn()}
+        onVampModeChange={vi.fn()}
+        onVampBarsChange={vi.fn()}
+      />,
+    );
+
+    const countdown = container.querySelector("em.is-countdown");
+    expect(countdown).not.toBeNull();
+    expect(countdown?.textContent).toContain("liveView.nextIn");
+    // Lo que se fija es DONDE vive, que es todo el arreglo.
+    expect(countdown?.parentElement?.className).toBe("lt-live-cue-name-line");
+  });
 });

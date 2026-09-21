@@ -374,6 +374,19 @@ function LivePerformanceViewComponent({
                     {group.category === "cue" ? <em>{t("liveView.warning")}</em> : null}
                     {isActive ? <em className="is-now">{t("liveView.now")}</em> : null}
                     {isPending ? <em className="is-queued">{t("liveView.queued")}</em> : null}
+                    {/* La cuenta atras va en la LINEA DEL NOMBRE, no en una
+                        linea propia al final de la fila. La lista se desplaza
+                        para centrar la marca ACTIVA, asi que la SIGUIENTE
+                        -que es la que lleva la cuenta atras- suele quedar a
+                        medias por el borde inferior del scroll: lo ultimo de
+                        la fila es justamente lo que se corta. Arriba se lee
+                        aunque la fila salga a medias, y de paso se mira de un
+                        vistazo junto al nombre, que es como se usa en directo. */}
+                    {isNext && selectedPlayback.secondsToNextGroup !== null ? (
+                      <em className="is-countdown">
+                        {t("liveView.nextIn", { time: formatLiveClock(selectedPlayback.secondsToNextGroup) })}
+                      </em>
+                    ) : null}
                     {isVampAnchor ? (
                       <em
                         className="is-vamp"
@@ -391,9 +404,6 @@ function LivePerformanceViewComponent({
                     <span className="lt-live-cue-warnings">
                       {group.cues.map((cue) => <span key={cue.id}>{t("liveView.warning")}: {cue.name}</span>)}
                     </span>
-                  ) : null}
-                  {isNext && selectedPlayback.secondsToNextGroup !== null ? (
-                    <span className="lt-live-cue-countdown">{t("liveView.nextIn", { time: formatLiveClock(selectedPlayback.secondsToNextGroup) })}</span>
                   ) : null}
                   <span
                     className={`lt-live-cue-progress${isActive ? " is-active" : ""}`}

@@ -390,18 +390,41 @@
   white-space: nowrap;
 }
 
-.lt-live-cue-countdown {
+/* La cuenta atras de la marca siguiente: una insignia mas de la linea del
+   nombre (ver el comentario en LivePerformanceView.tsx sobre por que no va al
+   final de la fila). Hereda tamano y caja de `.lt-live-cue-name-line em`; aqui
+   solo cambia el color, porque no es un aviso sino un reloj. */
+.lt-live-cue-name-line em.is-countdown {
+  border-style: solid;
+  border-color: rgb(217 186 95 / 0.5);
   color: #d9ba5f;
-  font: 650 9px/1 "Space Grotesk", sans-serif;
 }
 
 .lt-live-cue-progress {
-  width: min(100%, 10rem);
-  height: 3px;
+  /* Ancho FIJO, no `min(100%, 10rem)`: si la barra se encoge con el texto de
+     al lado, el mismo relleno significa una fraccion distinta en cada fila y
+     deja de poderse comparar de un vistazo. */
+  width: 10rem;
+  max-width: 100%;
+  /* 3px era casi invisible en un movil, y es el unico indicador de cuanto
+     queda de la seccion en curso: se mira de reojo, desde lejos y tocando.
+     Ademas es el ultimo hijo de una columna flex, asi que sin `flex: 0 0 auto`
+     es lo primero que flexbox comprime cuando la fila va apretada — justo el
+     caso denso en el que hace falta verla. Reportado en un Oppo Reno 11. */
+  height: 5px;
+  flex: 0 0 auto;
+  margin-block: 0.1rem;
   visibility: hidden;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(0 0 0 / 0.45);
+  /* El carril tiene que VERSE ENTERO, lleno o no. Era `rgb(0 0 0 / 0.45)`:
+     negro sobre un fondo casi negro (#0d100f, y la fila activa encima), asi que
+     solo se distinguia el trozo lleno y no habia forma de saber donde acaba el
+     recorrido — es decir, cuanto queda. Un gris claro translucido funciona
+     sobre la fila normal y sobre la activa sin tener que dar un color a cada
+     una. */
+  background: rgb(255 255 255 / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
 }
 
 .lt-live-cue-progress.is-active {
@@ -472,7 +495,12 @@
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(0 0 0 / 0.5);
+  /* Mismo problema y mismo arreglo que `.lt-live-cue-progress`: en negro sobre
+     un fondo casi negro solo se veia el trozo lleno, asi que no habia forma de
+     saber donde acaba el recorrido. Las dos barras de la vista comparten ahora
+     carril claro, 5 px y filo interior, y se leen igual. */
+  background: rgb(255 255 255 / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
 }
 
 .lt-live-song-progress-track > span {
