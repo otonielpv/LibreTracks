@@ -73,6 +73,20 @@ std::string source_cache_directory();
 // Total bytes occupied by .rf64 PCM cache files currently on disk.
 unsigned long long source_cache_dir_size_bytes();
 
+// May the LRU eviction sweep delete this file?
+//
+// True only for paths INSIDE the cache directory. It matters because a source
+// that is already PCM at the engine rate is streamed in place
+// (`SourceManager::try_install_native_file`), so an entry's `cache_file_path`
+// can be the user's own recording — and the disk budget must never be reason
+// enough to delete that. The sweep asks this before every unlink.
+//
+// Declared here rather than left inside the .cpp so the invariant is testable:
+// it is the one piece of the eviction path whose failure mode is destroying
+// somebody's audio, and "we only ever list our own directory" is an implicit
+// guarantee, the kind that breaks the day someone passes a different one.
+bool cache_eviction_may_delete(const std::string& path);
+
 // Delete all .rf64 PCM cache files; returns bytes freed. Best-effort.
 // `out_failed` (optional) receives the number of files that could NOT be
 // deleted — on Windows that is what happens to every cache file of a loaded

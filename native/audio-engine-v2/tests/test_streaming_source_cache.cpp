@@ -961,6 +961,89 @@ TEST_CASE("LRU eviction removes oldest .rf64 files when the budget is exceeded")
     CHECK(stats.total_bytes <= 2u * 1024u * 1024u); // slack: latest write is ~1 MiB
 }
 
+// ---------------------------------------------------------------------------
+// El riesgo del paso 06, y no es negociable: una fuente que ya es PCM a la
+// frecuencia del motor se reproduce EN SITIO (`try_install_native_file`), asi
+// que el `cache_file_path` de una entrada puede ser el audio del usuario. El
+// desalojo por presupuesto no puede borrarlo jamas.
+//
+// `protected_paths` no vale como garantia: protege lo que alguien se acordo de
+// meter en una lista, y olvidarse de una entrada cuesta una grabacion. La
+// garantia es esta: lo que no vive dentro del directorio de cache no es
+// nuestro.
+// ---------------------------------------------------------------------------
+TEST_CASE("el desalojo no puede borrar nada fuera del directorio de cache") {
+    ScopedCacheDir scope("eviction_scope");
+    const std::string cache_dir = source_cache_directory();
+    const char sep = kTestPathSep;
+
+    // Dentro: un fichero de cache normal, desalojable.
+    CHECK(cache_eviction_may_delete(cache_dir + sep + "123456.wav"));
+    CHECK(cache_eviction_may_delete(cache_dir + sep + "sub" + sep + "789.wav"));
+
+    // Fuera: el audio del usuario, venga de donde venga.
+    CHECK_FALSE(cache_eviction_may_delete(
+        scope.path() + sep + "songs" + sep + "Directo" + sep + "audio" +
+        sep + "bateria.wav"));
+    CHECK_FALSE(cache_eviction_may_delete("/sdcard/Music/multitrack/voz.wav"));
+    CHECK_FALSE(cache_eviction_may_delete("C:\\Users\\yo\\Music\\voz.wav"));
+
+    // El propio directorio no es un fichero, y una ruta vacia tampoco.
+    CHECK_FALSE(cache_eviction_may_delete(cache_dir));
+    CHECK_FALSE(cache_eviction_may_delete(""));
+
+    // Y un hermano cuyo nombre EMPIEZA igual no cuenta como "dentro": sin la
+    // comprobacion del separador, "<cache>-del-usuario/voz.wav" pasaria.
+    CHECK_FALSE(cache_eviction_may_delete(cache_dir + "-del-usuario" + sep + "voz.wav"));
+}
+
+TEST_CASE("con el presupuesto rebasado, el audio del usuario sobrevive") {
+    ScopedCacheDir scope("eviction_user_audio");
+    // 1 MiB: cualquier fuente que se escriba ya rebasa el presupuesto.
+    ScopedEnv limit("LIBRETRACKS_SOURCE_DISK_CACHE_MB", "1");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = 65536 * 3;
+    const auto samples = make_reference_audio(kFrames, kChannels);
+
+    // El WAV del usuario, fuera del directorio de cache. Se reproduce en sitio,
+    // asi que su `cache_file_path` apunta a ESTE fichero.
+    const auto user_wav = make_temp_wav_path("eviction_user_audio");
+    REQUIRE(write_wav_pcm_float(user_wav, samples, kChannels, kSampleRate));
+
+    SourceManager manager;
+    manager.register_source("del-usuario", user_wav);
+    REQUIRE(manager.try_install_native_file("del-usuario", kSampleRate));
+
+    // Ahora dos fuentes que SI escriben cache, de sobra para rebasar el
+    // presupuesto y disparar el barrido.
+    for (const char* id : {"cache-a", "cache-b", "cache-c"}) {
+        manager.register_source(id, std::string(id) + ".flac");
+        REQUIRE(manager.store_decoded_source(
+            id, samples, kChannels, kSampleRate, kFrames).is_ok());
+    }
+
+    // El fichero del usuario sigue ahi...
+    SF_INFO check_info{};
+    SNDFILE* check = sf_open(user_wav.c_str(), SFM_READ, &check_info);
+    CHECK_MESSAGE(check != nullptr,
+                  "el desalojo por presupuesto ha borrado el audio del usuario");
+    if (check) sf_close(check);
+
+    // ...y se sigue pudiendo reproducir.
+    require_ready_range(manager, "del-usuario", 0, kDefaultBlockFrames);
+    const auto source = manager.get_shared("del-usuario");
+    REQUIRE(static_cast<bool>(source));
+    const auto audio = read_planar(*source, 0, kDefaultBlockFrames);
+    CHECK(std::any_of(audio.begin(), audio.end(), [](float sample) {
+        return std::abs(sample) > 0.001f;
+    }));
+
+    std::remove(user_wav.c_str());
+}
+
 TEST_CASE("disk LRU never removes caches referenced by the active session") {
     ScopedCacheDir scope("lru_active_session");
     ScopedEnv limit("LIBRETRACKS_SOURCE_DISK_CACHE_MB", "1");

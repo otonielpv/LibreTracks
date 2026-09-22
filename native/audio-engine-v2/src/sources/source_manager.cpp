@@ -440,6 +440,12 @@ void evict_cache_lru(const std::string& dir,
     const size_t limit = source_disk_cache_limit_bytes();
     if (limit == 0)
         return; // user-disabled (LIBRETRACKS_SOURCE_DISK_CACHE_MB=0)
+    // Never sweep anywhere but our own cache directory. Callers pass
+    // `source_cache_dir()` today; this makes a future caller that passes
+    // something else (the parent of a file we stream in place, say) a no-op
+    // instead of a file shredder.
+    if (!dir.empty() && dir != source_cache_dir())
+        return;
     auto entries = list_cache_entries(dir);
     long long total = static_cast<long long>(projected_new_bytes);
     for (const auto& e : entries) total += e.size_bytes;
@@ -453,6 +459,11 @@ void evict_cache_lru(const std::string& dir,
     for (const auto& e : entries) {
         if (total <= static_cast<long long>(limit))
             break;
+        // Belt and braces: even listing our own directory, a path that is not
+        // under it (a symlink target, a directory entry that resolved oddly)
+        // is not something we are allowed to unlink.
+        if (!cache_eviction_may_delete(e.path))
+            continue;
         if (protected_paths.find(e.path) != protected_paths.end())
             continue;
         if (std::remove(e.path.c_str()) == 0)
@@ -503,6 +514,19 @@ FileStat stat_file(const std::string& path) {
 // what the cache machinery uses, so a host can display the effective path.
 std::string source_cache_directory() {
     return source_cache_dir();
+}
+
+// May the LRU eviction sweep delete this file? See the header for why this is
+// the guarantee and `protected_paths` is not.
+bool cache_eviction_may_delete(const std::string& path) {
+    const std::string root = source_cache_dir();
+    if (root.empty() || path.size() <= root.size())
+        return false;
+    if (path.compare(0, root.size(), root) != 0)
+        return false;
+    // "<root>x/y" must not pass as "inside <root>": the byte after the prefix
+    // has to be the separator.
+    return is_path_separator(path[root.size()]);
 }
 
 // Total size in bytes of every .rf64 PCM cache file currently on disk.
@@ -887,7 +911,10 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
                 if (!entry.cache_file_path.empty())
                     protected_paths.insert(entry.cache_file_path);
             }
-            evict_cache_lru(parent_path_compat(cache_file), projected_bytes,
+            // The cache directory, not `parent_path_compat(cache_file)`: with
+            // sources streamed in place the two are not always the same thing,
+            // and only one of them is ours to delete from.
+            evict_cache_lru(source_cache_dir(), projected_bytes,
                             protected_paths);
         }
 #if LT_ENGINE_USE_LIBSNDFILE
@@ -1057,7 +1084,9 @@ Result<void> SourceManager::decode_and_store_streaming(
             if (!entry.cache_file_path.empty())
                 protected_paths.insert(entry.cache_file_path);
         }
-        evict_cache_lru(parent_path_compat(cache_file), projected_bytes,
+        // See the sibling writer: the cache directory, never the parent of
+        // whatever `cache_file_path` happens to point at.
+        evict_cache_lru(source_cache_dir(), projected_bytes,
                         protected_paths);
     }
 
@@ -2325,9 +2354,16 @@ bool SourceManager::try_install_native_file(const Id& source_id,
     // engine's working rate. Mismatched SR → resample → still need decode.
     // Channel counts beyond 2 go through the decode path so the existing
     // downmix logic in the worker handles them.
+    //
+    // `seekable` matters as much as the rate: the fill worker reads arbitrary
+    // blocks with sf_seek, so a container libsndfile can open but only read
+    // start-to-finish (some compressed payloads inside WAV) would play the
+    // head and then stutter. Those keep the decode route, which turns them
+    // into a cache file that IS seekable.
     const bool eligible =
         info.samplerate == engine_sample_rate &&
         info.frames > 0 &&
+        info.seekable != 0 &&
         (info.channels == 1 || info.channels == 2);
     if (!eligible) {
         sf_close(sf);
