@@ -233,6 +233,7 @@ std::string session_to_json(const Session& session) {
             jtrack["audio_to"]            = track.audio_to;
             jtrack["mute"]                = track.mute;
             jtrack["solo"]                = track.solo;
+            jtrack["mono_downmix"]        = track.mono_downmix;
             jtrack["transpose_behavior"]  = transpose_behavior_str(track.transpose_behavior);
             jtrack["role"]                = track_role_str(track.role);
 

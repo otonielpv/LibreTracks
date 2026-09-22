@@ -55,6 +55,10 @@ type TrackHeaderItemProps = {
   trackMuted: boolean;
   trackSolo: boolean;
   trackTransposeEnabled: boolean;
+  /** Pista sumada a mono: se marca en la cabecera para que se vea sin abrir
+   * el menu. Una pista sumada suena distinto; el usuario tiene que poder
+   * saber por que. */
+  trackMonoDownmix: boolean;
   volumeValue: number;
   audioTo: string;
   audioRoutingOptions: Array<{ value: string; label: string }>;
@@ -94,6 +98,7 @@ function TrackHeaderItemComponent({
   trackMuted,
   trackSolo,
   trackTransposeEnabled,
+  trackMonoDownmix,
   volumeValue,
   audioTo,
   audioRoutingOptions,
@@ -289,6 +294,16 @@ function TrackHeaderItemComponent({
               >
                 T
               </button>
+              {trackMonoDownmix ? (
+                <span
+                  className="lt-track-mono-badge"
+                  title={t("trackHeader.monoDownmix", {
+                    defaultValue: "Sumada a mono",
+                  })}
+                >
+                  M
+                </span>
+              ) : null}
             </div>
             <TrackMixControls
               trackId={trackId}
@@ -399,6 +414,7 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
     previous.trackMuted === next.trackMuted &&
     previous.trackSolo === next.trackSolo &&
     previous.trackTransposeEnabled === next.trackTransposeEnabled &&
+    previous.trackMonoDownmix === next.trackMonoDownmix &&
     previous.volumeValue === next.volumeValue &&
     previous.audioTo === next.audioTo &&
     previous.audioRoutingOptions === next.audioRoutingOptions &&

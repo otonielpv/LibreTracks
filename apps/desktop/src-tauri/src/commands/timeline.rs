@@ -1036,6 +1036,22 @@ pub fn update_track_transpose_enabled(
 }
 
 #[tauri::command(async)]
+pub fn update_track_mono_downmix(
+    track_id: String,
+    mono_downmix: bool,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_track_mono_downmix(&track_id, mono_downmix, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command(async)]
 pub fn update_track_mix_realtime(
     track_id: String,
     volume: Option<f64>,

@@ -29,6 +29,7 @@ function renderHeader(overrides: Overrides = {}) {
     trackMuted: false,
     trackSolo: false,
     trackTransposeEnabled: false,
+    trackMonoDownmix: false,
     volumeValue: 1,
     audioTo: "master",
     audioRoutingOptions: [{ value: "master", label: "Master" }],
@@ -196,6 +197,26 @@ describe("cabeceras finas y expansion en fila", () => {
     // `.lt-track-header` tiene overflow: hidden; dentro, el panel se cortaria.
     expect(panel!.closest(".lt-track-header")).toBeNull();
   });
+  // Paso 10 del plan de feedback de testers: una pista sumada a mono suena
+  // distinto, asi que tiene que notarse en la cabecera sin abrir el menu.
+  it("marca en la cabecera la pista sumada a mono", () => {
+    renderHeader({ trackMonoDownmix: true });
+    tapHeader();
+
+    expect(
+      screen.getByTitle(i18n.t("trackHeader.monoDownmix")),
+    ).toBeTruthy();
+  });
+
+  it("no marca nada cuando la pista esta en estereo", () => {
+    renderHeader({ trackMonoDownmix: false });
+    tapHeader();
+
+    expect(
+      screen.queryByTitle(i18n.t("trackHeader.monoDownmix")),
+    ).toBeNull();
+  });
+
   // El desplegable de salida se pinta en `document.body`, fuera del panel. El
   // cierre "al tocar fuera" escucha en CAPTURA sobre window, asi que llegaba
   // antes que nada: el panel se cerraba en el `pointerdown` de la opcion, se

@@ -304,6 +304,7 @@ mod tests {
             solo: false,
             transpose_enabled: true,
             audio_to: "master".into(),
+            mono_downmix: false,
             color: None,
             auto_created: false,
             midi_port: port.map(str::to_string),

@@ -468,6 +468,7 @@ pub fn run() {
             commands::timeline::update_track,
             commands::timeline::update_track_color,
             commands::timeline::update_track_transpose_enabled,
+            commands::timeline::update_track_mono_downmix,
             commands::timeline::update_track_collapsed,
             commands::timeline::update_track_height_offset,
             commands::timeline::delete_track,

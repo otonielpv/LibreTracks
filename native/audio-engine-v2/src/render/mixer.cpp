@@ -875,6 +875,18 @@ void Mixer::render_timeline_span(float** output_channels,
             const int   left_channel = st.left_channel, right_channel = st.right_channel;
             const bool left_only_source = st.peak_l > 1.0e-7f && st.peak_r <= 1.0e-7f;
             const bool right_only_source = st.peak_r > 1.0e-7f && st.peak_l <= 1.0e-7f;
+            // Pista sumada a mono: los dos canales se funden en uno y ese uno
+            // se coloca con el paneo, como el boton de mono de un canal de
+            // mezcla. Va ANTES de las ganancias de paneo a proposito, para que
+            // "mono + paneo a la izquierda" haga lo que dice.
+            //
+            // LEY DE SUMA: (L+R)/2. Sumar sin atenuar puede pasar de +-1.0 y
+            // es exactamente lo que investiga el paso 11; la mitad no satura
+            // nunca y deja una senal correlacionada (lo normal en un estereo
+            // que alguien quiere en mono) exactamente al mismo nivel. Es lo
+            // que hace el Utility de Ableton, que es la referencia del
+            // proyecto.
+            const bool mono_downmix = track.mono_downmix;
 
             for (int f = 0; f < num_frames; ++f) {
                 const float t = static_cast<float>(f + 1) / static_cast<float>(std::max(1, num_frames));
@@ -887,10 +899,15 @@ void Mixer::render_timeline_span(float** output_channels,
                 const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
                 float source_l = mix_l[f];
                 float source_r = mix_r[f];
-                if (left_only_source)
+                if (mono_downmix) {
+                    const float summed = 0.5f * (source_l + source_r);
+                    source_l = summed;
+                    source_r = summed;
+                } else if (left_only_source) {
                     source_r = source_l;
-                else if (right_only_source)
+                } else if (right_only_source) {
                     source_l = source_r;
+                }
 
                 float out_l = source_l * effective_gain * left_gain;
                 float out_r = source_r * effective_gain * right_gain;
@@ -1305,6 +1322,10 @@ void Mixer::render(float** output_channels,
                 const int   left_channel = st.left_channel, right_channel = st.right_channel;
                 const bool left_only_source = st.peak_l > 1.0e-7f && st.peak_r <= 1.0e-7f;
                 const bool right_only_source = st.peak_r > 1.0e-7f && st.peak_l <= 1.0e-7f;
+                // El MISMO downmix que el camino de arriba. Son dos caminos de
+                // mezcla (uno por ruta de salida, otro no) y una pista no puede
+                // sonar distinto segun por cual entre.
+                const bool mono_downmix = track.mono_downmix;
 
                 // Accumulate into selected output route.
                 for (int f = 0; f < num_frames; ++f) {
@@ -1318,10 +1339,15 @@ void Mixer::render(float** output_channels,
                     const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
                     float source_l = mix_l[f];
                     float source_r = mix_r[f];
-                    if (left_only_source)
+                    if (mono_downmix) {
+                        const float summed = 0.5f * (source_l + source_r);
+                        source_l = summed;
+                        source_r = summed;
+                    } else if (left_only_source) {
                         source_r = source_l;
-                    else if (right_only_source)
+                    } else if (right_only_source) {
                         source_l = source_r;
+                    }
 
                     float out_l = source_l * effective_gain * left_gain;
                     float out_r = source_r * effective_gain * right_gain;

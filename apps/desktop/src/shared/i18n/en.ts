@@ -451,6 +451,8 @@ const en = {
       insertTrack: "Insert Track",
       insertFolderTrack: "Insert Folder Track",
       indentIntoPreviousFolder: "Indent Into Previous Folder",
+      trackMonoOn: "Sum to mono",
+      trackMonoOff: "Back to stereo",
       selectColor: "Select colour…",
       colorOfClips: "Colour of {{count}} clips",
       colorOf: "Colour: {{name}}",
@@ -1277,6 +1279,7 @@ const en = {
     laneFolderEmpty: "Empty folder",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    monoDownmix: "Summed to mono",
     resetRowHeight: "Reset track height",
     resizeRow: "Resize track height",
     resizeRowHint:

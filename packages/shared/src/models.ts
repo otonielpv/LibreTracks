@@ -398,6 +398,13 @@ export type TrackSummary = {
   solo: boolean;
   audioTo: string;
   transposeEnabled: boolean;
+  /**
+   * Sumar los dos canales de la pista a uno y colocarlo por el paneo, como el
+   * botón de mono de un canal de mezcla. No toca el fichero: es reversible.
+   * Opcional y por defecto `false` para las sesiones anteriores, que se abren
+   * en estéreo como estaban.
+   */
+  monoDownmix?: boolean;
   color?: string | null;
   /** True for tracks the system conjured because a clip needed a home (e.g.
    * drop into the compact view's song column). Auto-tracks are removed

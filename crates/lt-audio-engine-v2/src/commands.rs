@@ -336,6 +336,9 @@ pub struct TrackUpsert {
     pub pan: f32,
     #[serde(default = "default_audio_route")]
     pub audio_to: String,
+    /// Sumar los dos canales de la pista a uno y colocarlo por el paneo.
+    #[serde(default)]
+    pub mono_downmix: bool,
     #[serde(default)]
     pub mute: bool,
     #[serde(default)]

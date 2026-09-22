@@ -355,6 +355,7 @@ EngineCommand command_from_json(const std::string& raw) {
             track.gain = t.value("gain", 1.0f);
             track.pan  = t.value("pan", 0.0f);
             track.audio_to = t.value("audio_to", std::string{"master"});
+            track.mono_downmix = t.value("mono_downmix", false);
             track.mute = t.value("mute", false);
             track.solo = t.value("solo", false);
             track.transpose_behavior = t.value("transpose_behavior", std::string{});

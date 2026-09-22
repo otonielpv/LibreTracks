@@ -281,6 +281,113 @@ TEST_CASE("mixer_pan_override_changes_output_balance") {
     CHECK(peak(left) < 0.001f);
 }
 
+// ── Paso 10 del plan de feedback de testers: sumar una pista a mono ──────
+//
+// Fuente con los dos canales OPUESTOS (L = +x, R = -x). Es el material que
+// distingue las tres cosas que podrian estar pasando:
+//   - sin downmix, el estereo suena en los dos lados;
+//   - con downmix y ley (L+R)/2, se cancela a silencio;
+//   - con downmix y "quedarse con un canal", NO se cancelaria.
+// Es decir: el test no solo comprueba que hace algo, comprueba QUE ley de suma
+// se aplico.
+namespace {
+std::vector<float> make_opposed_stereo(Frame frames, float amplitude) {
+    std::vector<float> samples(static_cast<std::size_t>(frames) * 2, 0.0f);
+    for (Frame f = 0; f < frames; ++f) {
+        const float value =
+            amplitude * std::sin(2.0f * 3.14159265358979f * 440.0f
+                                 * static_cast<float>(f)
+                                 / static_cast<float>(test::kFixtureSampleRate));
+        samples[static_cast<std::size_t>(f) * 2] = value;
+        samples[static_cast<std::size_t>(f) * 2 + 1] = -value;
+    }
+    return samples;
+}
+
+void add_opposed_source(SourceManager& sources, const Id& id, Frame duration = 48000 * 4) {
+    sources.register_source(id, "");
+    REQUIRE(sources.store_decoded_source(id, make_opposed_stereo(duration, 0.5f),
+                                         2, test::kFixtureSampleRate, duration).is_ok());
+}
+} // namespace
+
+TEST_CASE("una pista sumada a mono funde los dos canales en uno") {
+    SourceManager sources;
+    add_opposed_source(sources, "source");
+    auto session = std::make_shared<Session>(one_track_session());
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+
+    // Sin mono: los canales opuestos suenan, cada uno por su lado.
+    {
+        Mixer mixer(session, &sources, &clock, &scheduler);
+        clock.play();
+        std::vector<float> left, right;
+        render_blocks(mixer, clock, 8, left, right);
+        CHECK(peak(left) > 0.01f);
+        CHECK(peak(right) > 0.01f);
+    }
+
+    // Con mono y ley (L+R)/2, un material en contrafase se cancela.
+    {
+        auto mono_session = std::make_shared<Session>(one_track_session());
+        mono_session->songs[0].tracks[0].mono_downmix = true;
+        TransportClock mono_clock(test::kFixtureSampleRate);
+        Mixer mixer(mono_session, &sources, &mono_clock, &scheduler);
+        mono_clock.play();
+        std::vector<float> left, right;
+        render_blocks(mixer, mono_clock, 8, left, right);
+        CHECK_MESSAGE(peak(left) < 0.001f,
+                      "con (L+R)/2 un estereo en contrafase tiene que cancelarse");
+        CHECK(peak(right) < 0.001f);
+    }
+}
+
+TEST_CASE("sumar a mono no sube el nivel: la ley es (L+R)/2") {
+    // Material identico en los dos canales, que es lo normal en un estereo que
+    // alguien quiere en mono. Sumar sin atenuar lo dejaria al doble y podria
+    // pasar de +-1.0 (ver el paso 11); con la mitad se queda igual.
+    SourceManager sources;
+    add_source(sources, "source", /*amplitude=*/0.5f);
+
+    auto stereo = std::make_shared<Session>(one_track_session());
+    TransportClock stereo_clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer stereo_mixer(stereo, &sources, &stereo_clock, &scheduler);
+    stereo_clock.play();
+    std::vector<float> stereo_left, stereo_right;
+    render_blocks(stereo_mixer, stereo_clock, 8, stereo_left, stereo_right);
+    const float stereo_peak = peak(stereo_left);
+    REQUIRE(stereo_peak > 0.01f);
+
+    auto mono = std::make_shared<Session>(one_track_session());
+    mono->songs[0].tracks[0].mono_downmix = true;
+    TransportClock mono_clock(test::kFixtureSampleRate);
+    Mixer mono_mixer(mono, &sources, &mono_clock, &scheduler);
+    mono_clock.play();
+    std::vector<float> mono_left, mono_right;
+    render_blocks(mono_mixer, mono_clock, 8, mono_left, mono_right);
+
+    CHECK(peak(mono_left) == doctest::Approx(stereo_peak).epsilon(0.02));
+    CHECK(peak(mono_right) == doctest::Approx(stereo_peak).epsilon(0.02));
+}
+
+TEST_CASE("quitar el mono devuelve la pista a estereo, sin perdida") {
+    SourceManager sources;
+    add_opposed_source(sources, "source");
+    auto session = std::make_shared<Session>(one_track_session());
+    session->songs[0].tracks[0].mono_downmix = false;
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    clock.play();
+
+    std::vector<float> left, right;
+    render_blocks(mixer, clock, 8, left, right);
+    CHECK(peak(left) > 0.01f);
+    CHECK(peak(right) > 0.01f);
+}
+
 TEST_CASE("mixer_mute_override_mutes_track") {
     SourceManager sources;
     add_source(sources, "source");

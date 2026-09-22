@@ -344,6 +344,8 @@ pub struct TrackSummary {
     pub solo: bool,
     pub transpose_enabled: bool,
     pub audio_to: String,
+    /// Sumar los dos canales de la pista a uno y colocarlo por el paneo.
+    pub mono_downmix: bool,
     pub color: Option<String>,
     pub auto_created: bool,
     /// MIDI routing, meaningful only on `kind == "midi"` tracks. `midi_port`
@@ -681,6 +683,7 @@ pub(crate) fn song_to_view(
                 solo: track.solo,
                 transpose_enabled: track.transpose_enabled,
                 audio_to: track.audio_to.clone(),
+                mono_downmix: track.mono_downmix,
                 color: track.color.clone(),
                 auto_created: track.auto_created,
                 midi_port: track.midi_port.clone(),
@@ -1327,6 +1330,7 @@ mod tests {
             solo: false,
             transpose_enabled: true,
             audio_to: "master".into(),
+            mono_downmix: false,
             color: None,
             auto_created: false,
             midi_port: None,

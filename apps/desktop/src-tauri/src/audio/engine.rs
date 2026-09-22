@@ -1147,6 +1147,7 @@ impl AudioController {
                     gain: track.volume as f32,
                     pan: track.pan as f32,
                     audio_to: track.audio_to.clone(),
+                    mono_downmix: track.mono_downmix,
                     mute: track.muted,
                     solo: track.solo,
                     // transpose_enabled=false maps to NeverTranspose; default
@@ -3246,6 +3247,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".into(),
+                mono_downmix: false,
                 color: None,
                 auto_created: false,
                 midi_port: None,

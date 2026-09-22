@@ -470,6 +470,8 @@ const es = {
       insertTrack: "Insertar track",
       insertFolderTrack: "Insertar carpeta",
       indentIntoPreviousFolder: "Meter en la carpeta anterior",
+      trackMonoOn: "Sumar a mono",
+      trackMonoOff: "Volver a estéreo",
       selectColor: "Seleccionar color…",
       colorOfClips: "Color de {{count}} clips",
       colorOf: "Color: {{name}}",
@@ -1309,6 +1311,7 @@ const es = {
     laneFolderEmpty: "Carpeta vacia",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    monoDownmix: "Sumada a mono",
     resetRowHeight: "Restablecer alto de la pista",
     resizeRow: "Ajustar alto de la pista",
     resizeRowHint:

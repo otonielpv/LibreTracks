@@ -45,6 +45,7 @@ import {
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
+  updateTrackMonoDownmix,
   upsertAutomationCue,
   upsertSongTempoMarker,
   upsertSongTimeSignatureMarker,
@@ -1089,6 +1090,31 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             d.handleSetTrackColor(track, color).then(() => undefined),
           ),
       },
+      // Sumar a mono: solo pistas de audio (una carpeta no tiene canales
+      // propios que sumar). No toca el fichero, asi que es reversible.
+      ...(isFolder
+        ? []
+        : [
+            {
+              label: track.monoDownmix
+                ? t("transport.menu.trackMonoOff", {
+                    defaultValue: "Volver a estereo",
+                  })
+                : t("transport.menu.trackMonoOn", {
+                    defaultValue: "Sumar a mono",
+                  }),
+              onSelect: async () => {
+                await d.runAction(async () => {
+                  const nextSnapshot = await updateTrackMonoDownmix({
+                    trackId: track.id,
+                    monoDownmix: !track.monoDownmix,
+                  });
+                  d.applyPlaybackSnapshot(nextSnapshot);
+                  await d.refreshSongView({ includeWaveforms: false });
+                });
+              },
+            } satisfies ContextMenuAction,
+          ]),
       {
         label: t("common.delete"),
         onSelect: async () => {

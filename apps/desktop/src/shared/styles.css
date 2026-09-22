@@ -4461,6 +4461,24 @@ html.lt-ios body {
   grid-column: 1 / span 2;
 }
 
+/* Pista sumada a mono. Una marca, no un boton: quitarlo se hace desde el menu
+   de la pista, igual que ponerlo. Lo que tiene que resolver es que una pista
+   sumada suena distinto y el usuario pueda saber por que sin abrir nada. */
+.lt-track-mono-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  grid-column: 1 / span 2;
+  min-width: 1.2rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.18);
+  color: #57f1db;
+  font: 700 9px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+}
+
 .lt-track-volume,
 .lt-track-pan,
 .lt-track-audio-to {

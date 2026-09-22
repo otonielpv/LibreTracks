@@ -1883,6 +1883,20 @@ export async function updateTrackTransposeEnabled(args: {
   return invokeCommand<TransportSnapshot>("update_track_transpose_enabled", args);
 }
 
+/**
+ * Sumar (o dejar de sumar) los dos canales de una pista a uno solo.
+ *
+ * Suma con ley (L+R)/2: no sube el nivel, así que no puede saturar por sí
+ * sola, y una señal correlacionada —lo normal en un estéreo que alguien quiere
+ * en mono— queda exactamente igual de alta.
+ */
+export async function updateTrackMonoDownmix(args: {
+  trackId: string;
+  monoDownmix: boolean;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_track_mono_downmix", args);
+}
+
 export async function updateTrackMixRealtime(args: {
   trackId: string;
   volume?: number;

@@ -134,6 +134,14 @@ pub struct Track {
     pub transpose_enabled: bool,
     #[serde(default = "default_audio_to", alias = "outputBusId")]
     pub audio_to: String,
+    /// Sumar los dos canales de la pista a uno solo y colocarlo por el paneo,
+    /// como el botón de mono de un canal de mezcla.
+    ///
+    /// **No toca el fichero**: es reversible y no hay nada destructivo. Por
+    /// defecto `false`, así que las sesiones creadas antes de que esto
+    /// existiera se abren en estéreo, que es como estaban.
+    #[serde(default)]
+    pub mono_downmix: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     /// Tracks marked auto_created are removed automatically the moment they

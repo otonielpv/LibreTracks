@@ -428,6 +428,7 @@ impl DesktopSession {
             solo: false,
             transpose_enabled: true,
             audio_to,
+            mono_downmix: false,
             color,
             auto_created: false,
             midi_port: None,
@@ -447,6 +448,39 @@ impl DesktopSession {
         )?;
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
+        Ok(self.snapshot())
+    }
+
+    /// Sumar (o dejar de sumar) los dos canales de una pista a uno solo.
+    ///
+    /// `StructureRebuild` y no `MixerOnly` a propósito: el motor lee
+    /// `mono_downmix` de su `Track`, y lo que lo actualiza es el camino de
+    /// sesión (`UpsertSongTracks` / carga). No hay comando en tiempo real para
+    /// esto porque no es un mando que se arrastre: es un interruptor que se
+    /// pulsa una vez.
+    pub fn update_track_mono_downmix(
+        &mut self,
+        track_id: &str,
+        mono_downmix: bool,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let track = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        if track.mono_downmix == mono_downmix {
+            return Ok(self.snapshot());
+        }
+        track.mono_downmix = mono_downmix;
+
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
         Ok(self.snapshot())
     }
 
@@ -553,6 +587,7 @@ impl DesktopSession {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
+                mono_downmix: false,
                 color,
                 auto_created: true,
                 midi_port: None,
@@ -631,6 +666,7 @@ impl DesktopSession {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
+                mono_downmix: false,
                 color,
                 auto_created: false,
                 midi_port: None,

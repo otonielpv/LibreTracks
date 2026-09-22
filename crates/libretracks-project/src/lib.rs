@@ -95,6 +95,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "ext:2-3".to_string(),
+                mono_downmix: false,
                 color: None,
                 auto_created: false,
                 midi_port: None,
