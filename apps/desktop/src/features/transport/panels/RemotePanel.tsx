@@ -4,6 +4,7 @@ import type { RemoteServerInfo } from "@libretracks/shared/models";
 import { RemoteAccessCard } from "./RemoteAccessCard";
 import { RemoteFirewallNotice } from "./RemoteFirewallNotice";
 import { recordProductEvent } from "../../telemetry/telemetry";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 type RemotePanelProps = {
   isOpen: boolean;
@@ -12,6 +13,8 @@ type RemotePanelProps = {
 };
 
 export function RemotePanel({ isOpen, onClose, remoteServerInfo }: RemotePanelProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onClose, isOpen);
   const { t } = useTranslation();
 
   useEffect(() => {

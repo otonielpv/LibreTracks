@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { MixSceneSummary, SongView } from "../desktopApi";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 type MixSceneModalProps = {
   open: boolean;
@@ -33,6 +34,8 @@ export function MixSceneModal({
   onUpsert,
   onDelete,
 }: MixSceneModalProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onCancel, open);
   const { t } = useTranslation();
   const scenes = song?.mixScenes ?? [];
   const tracks = (song?.tracks ?? []).filter((t) => t.kind !== "folder");

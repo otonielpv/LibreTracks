@@ -8813,6 +8813,28 @@ html.lt-ios body {
   background: #0e0e0e;
 }
 
+/* ── Aviso "pulsa atras otra vez para salir" (Android) ───────────────── */
+/* Sale cuando el boton atras llega con la reproduccion en curso y no hay nada
+   abierto que cerrar. Es el aviso, no un dialogo: no roba el foco ni tapa los
+   controles, y se va solo. Ver mobile/backNavigation.ts. */
+.lt-back-exit-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 4.5rem;
+  z-index: 200;
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 0.6rem 1rem;
+  transform: translateX(-50%);
+  border: 1px solid rgb(87 241 219 / 0.3);
+  border-radius: 4px;
+  background: #101312;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.55);
+  color: #e6f4f1;
+  font: 600 0.85rem/1.3 "Space Grotesk", sans-serif;
+  text-align: center;
+  pointer-events: none;
+}
+
 /* ── File-actions submenu, anchored to the side rail (Android) ───────── */
 /* Opened by the rail's "Archivo" button: the in-session file operations
    (import song, export session). Import session lives on the landing. */

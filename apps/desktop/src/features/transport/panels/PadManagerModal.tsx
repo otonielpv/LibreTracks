@@ -22,6 +22,7 @@ import {
   pickFilesViaWebView,
   stageFileForImport,
 } from "../library/mobileFilePicker";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 type Props = {
   open: boolean;
@@ -50,6 +51,8 @@ const KEY_LABELS = [
 const AUDIO_EXTENSIONS = ["wav", "flac", "mp3", "ogg", "m4a", "aac"];
 
 function PadManagerModalImpl({ open: isOpen, onClose, onCatalogChanged }: Props) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onClose, isOpen);
   const { t } = useTranslation();
   const [pads, setPads] = useState<PadCatalogEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");

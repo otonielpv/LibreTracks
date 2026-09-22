@@ -458,6 +458,8 @@ import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
+import { AndroidBackGuard } from "./mobile/AndroidBackGuard";
+import { DismissOnBack } from "./mobile/DismissOnBack";
 import { getEffectiveTempoMarkerAt } from "./tempo/tempoMarkers";
 
 const MIN_SESSION_BPM = 20;
@@ -6972,6 +6974,7 @@ export function TransportPanelContent() {
         ref={panelRef}
         onContextMenu={(event) => event.preventDefault()}
       >
+        <AndroidBackGuard />
         <BusyOverlay visible={isShellBusy} feedback={busyFeedback} displayPercent={displayPercent} />
         <MissingMidiWarningModal deviceName={missingMidiDeviceWarning} onDismiss={handleDismissMissingMidiDeviceWarning} onDontShowAgain={handleHideMissingMidiDeviceWarning} />
 
@@ -7196,6 +7199,7 @@ export function TransportPanelContent() {
               className="lt-mobile-file-menu-backdrop"
               onClick={() => setIsMobileFileActionsOpen(false)}
             >
+              <DismissOnBack close={() => setIsMobileFileActionsOpen(false)} />
               <div
                 className="lt-mobile-file-menu"
                 role="menu"
@@ -8237,6 +8241,9 @@ export function TransportPanelContent() {
                 className="lt-modal-backdrop"
                 onClick={() => setIsMobileSessionsModalOpen(false)}
               >
+                <DismissOnBack
+                  close={() => setIsMobileSessionsModalOpen(false)}
+                />
                 <section
                   className="lt-settings-modal lt-sessions-modal"
                   role="dialog"

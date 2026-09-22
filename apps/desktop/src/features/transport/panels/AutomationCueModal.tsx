@@ -18,6 +18,7 @@ import {
 } from "../desktopApi";
 import { formatClock, formatCompactTime } from "../helpers";
 import { duplicateMarkerNames, groupMarkersBySong } from "./jumpTargetGroups";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 /**
  * What the modal is operating on. `cueId`/`name` are present when editing an
@@ -134,6 +135,8 @@ export function AutomationCueModal({
   onCancel,
   onConfirm,
 }: AutomationCueModalProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onCancel);
   const { t } = useTranslation();
   const [actions, setActions] = useState<AutomationActionSummary[]>(
     () => draft?.actions ?? [],

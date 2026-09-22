@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 /**
  * Editor for a MIDI track's routing.
@@ -34,6 +35,8 @@ export function MidiRouteModal({
   onCancel,
   onConfirm,
 }: MidiRouteModalProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onCancel);
   const { t } = useTranslation();
   const [port, setPort] = useState<string>(() => draft?.port ?? "");
   const [channel, setChannel] = useState<number>(() => draft?.channel ?? 1);

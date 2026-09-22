@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useDismissOnBack } from "../mobile/backNavigation";
 import {
   calculatePopoverAnchor,
   type PopoverAnchor,
@@ -26,6 +27,8 @@ export function PopoverShell({
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
+  // En Android, atras cierra el popover en vez de salir de la aplicacion.
+  useDismissOnBack(onClose, open);
 
   const updateAnchor = useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();

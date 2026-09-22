@@ -9,6 +9,7 @@ import type {
 } from "../desktopApi";
 import { formatClock } from "../helpers";
 import { MidiEventFields, describeEvent } from "./MidiEventFields";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 /**
  * What the modal is editing. `clipId` is present when editing an existing clip.
@@ -106,6 +107,8 @@ export function MidiClipModal({
   onTest,
   onConfirm,
 }: MidiClipModalProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onCancel);
   const { t } = useTranslation();
   const [events, setEvents] = useState<MidiEventSummary[]>(
     () => draft?.events ?? [],

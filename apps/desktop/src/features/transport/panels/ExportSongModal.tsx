@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 export type ExportSongTarget = {
   regionId: string;
@@ -26,6 +27,8 @@ export function ExportSongModal({
   onCancel,
   onConfirm,
 }: ExportSongModalProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onCancel);
   const { t } = useTranslation();
   const [includeAudio, setIncludeAudio] = useState(true);
 

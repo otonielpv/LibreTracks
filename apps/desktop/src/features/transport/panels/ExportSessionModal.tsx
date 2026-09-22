@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 /** Which of the three shapes the exported `.ltset` takes. */
 export type SessionExportMode = "full" | "optimized" | "light";
@@ -32,6 +33,8 @@ export function ExportSessionModal({
   onCancel,
   onConfirm,
 }: ExportSessionModalProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onCancel, isOpen);
   const { t } = useTranslation();
   const [mode, setMode] = useState<SessionExportMode>("full");
 

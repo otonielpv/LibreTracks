@@ -18,6 +18,7 @@ import {
 } from "@libretracks/shared/meterBallistics";
 
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
+import { useDismissOnBack } from "../mobile/backNavigation";
 import {
   regionEffectiveKey,
   SONG_KEY_OPTIONS,
@@ -85,12 +86,16 @@ export function CompactSongHeaderComponent({
   } | null>(null);
   // When true the menu shows the 24-key picker instead of the root actions.
   const [keyMenuOpen, setKeyMenuOpen] = useState(false);
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+    setKeyMenuOpen(false);
+  }, []);
+  // En Android, atras cierra el menu contextual en vez de salir.
+  useDismissOnBack(closeContextMenu, contextMenu !== null);
+
   useEffect(() => {
     if (!contextMenu) return;
-    const close = () => {
-      setContextMenu(null);
-      setKeyMenuOpen(false);
-    };
+    const close = closeContextMenu;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
@@ -100,7 +105,7 @@ export function CompactSongHeaderComponent({
       window.removeEventListener("pointerdown", close);
       window.removeEventListener("keydown", onKey);
     };
-  }, [contextMenu]);
+  }, [contextMenu, closeContextMenu]);
   const openMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();

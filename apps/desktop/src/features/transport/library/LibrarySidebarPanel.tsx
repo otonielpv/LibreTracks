@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 import { isMobileApp, type LibraryImportProgressEvent } from "../desktopApi";
+import { useDismissOnBack } from "../mobile/backNavigation";
 import { DRAG_THRESHOLD_PX } from "../constants";
 import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
@@ -186,6 +187,10 @@ export function LibrarySidebarPanel({
       window.removeEventListener("blur", handleBlur);
     };
   }, [contextMenu]);
+
+  // En Android, atras cierra el menu contextual en vez de salir.
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  useDismissOnBack(closeContextMenu, contextMenu !== null);
 
   const selectedAssetPathSet = useMemo(() => new Set(selectedAssetPaths), [selectedAssetPaths]);
   const selectedAssets = useMemo(

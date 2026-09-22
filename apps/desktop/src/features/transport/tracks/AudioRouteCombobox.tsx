@@ -10,6 +10,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { useDismissOnBack } from "../mobile/backNavigation";
+
 type RouteOption = { value: string; label: string };
 
 type Props = {
@@ -21,6 +23,9 @@ type Props = {
 
 function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  const closeRouteList = useCallback(() => setOpen(false), []);
+  useDismissOnBack(closeRouteList, open);
   const [activeIndex, setActiveIndex] = useState(-1);
   // Anchor rect for the portalled listbox. Recomputed on open and on scroll
   // / resize so the dropdown stays under the trigger even when the surrounding

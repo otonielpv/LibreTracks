@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { getUiZoom } from "../../../shared/uiZoom";
 import { isMobileApp } from "../desktopApi";
+import { useDismissOnBack } from "../mobile/backNavigation";
 import type { ContextMenuState } from "../types";
 
 type TimelineContextMenusProps = {
@@ -14,6 +15,8 @@ export function TimelineContextMenus({
   contextMenu,
   onDismiss,
 }: TimelineContextMenusProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onDismiss, contextMenu !== null);
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const anchorX = contextMenu?.x ?? 0;

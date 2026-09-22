@@ -31,6 +31,7 @@ import {
   MidiSettingsTab,
   type MidiOutputSettings,
 } from "./MidiSettingsTab";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 type AudioRoutingOption = { value: string; label: string };
 
@@ -178,6 +179,8 @@ export function SettingsPanel({
   onDynamicMidiLearnJump,
   onMidiLearnTarget,
 }: SettingsPanelProps) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onClose, isOpen);
   const { t } = useTranslation();
 
   if (!isOpen) {

@@ -24,6 +24,7 @@ import {
 import { getPadsCatalog } from "../desktopApi";
 import { AudioRouteCombobox } from "../tracks/AudioRouteCombobox";
 import { PadManagerModal } from "./PadManagerModal";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 type RouteOption = { value: string; label: string };
 
@@ -69,6 +70,8 @@ function PadsPopoverImpl({
   onVolumeDraftChange,
   onCommitVolume,
 }: Props) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onClose, open);
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);

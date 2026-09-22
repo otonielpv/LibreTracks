@@ -179,6 +179,10 @@ const es = {
       contextTimelineTitle: "Timeline {{time}}",
       horizontalScroll: "Desplazamiento horizontal del timeline",
     },
+    backGuard: {
+      pressAgainToExit:
+        "Se está reproduciendo. Pulsa atrás otra vez para salir.",
+    },
     settingsModal: {
       eyebrow: "Audio",
       title: "Configuracion",
