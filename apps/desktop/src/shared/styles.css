@@ -480,13 +480,21 @@ html.lt-ios body {
   box-shadow: none;
 }
 
+/* En reposo el boton de reproducir sigue siendo el mas grande de la barra,
+   pero va apagado: encendido significa "esta sonando" (ver `.is-active` mas
+   abajo). Antes iba siempre encendido y no se distinguia parado de sonando. */
 .lt-transport-buttons button.is-play {
   width: 2rem;
   height: 2rem;
   border-radius: 2px;
-  background: linear-gradient(to bottom, #57f1db, #2dd4bf);
-  color: #003731;
-  box-shadow: 0 0 12px rgb(87 241 219 / 0.3);
+  background: transparent;
+  color: #57f1db;
+  box-shadow: none;
+}
+
+.lt-transport-buttons button.is-play:not(:disabled):hover {
+  background: rgb(87 241 219 / 0.18);
+  color: #57f1db;
 }
 
 .lt-transport-buttons button.is-play .material-symbols-outlined {
@@ -503,6 +511,14 @@ html.lt-ios body {
 .lt-transport-buttons button.is-active:not(:disabled) {
   background: rgb(87 241 219 / 0.18);
   color: #57f1db;
+}
+
+/* Sonando. Cuatro clases para ganarle a la regla generica de `.is-active` de
+   arriba, que si no la pisa por venir despues en el fichero. */
+.lt-transport-buttons button.is-play.is-active:not(:disabled) {
+  background: linear-gradient(to bottom, #57f1db, #2dd4bf);
+  color: #003731;
+  box-shadow: 0 0 12px rgb(87 241 219 / 0.3);
 }
 
 /* Split control: a main toggle (Click / Guía / Pads) with a caret button that

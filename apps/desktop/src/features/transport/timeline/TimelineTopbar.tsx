@@ -150,6 +150,11 @@ export function TimelineTopbar({
   const fallbackBpm = useSongStore((state) => getSongBaseBpm(state.song));
   const hasSong = useSongStore((state) => state.song !== null);
   const playbackStateLabel = t(`transport.playbackState.${playbackState}`);
+  // Reproducir y pausa se encienden como el resto de la barra (`is-active`):
+  // encendido = ese es el estado en el que estas. El estado sale del snapshot
+  // que ya llega por props; aqui no se guarda nada.
+  const isPlaying = playbackState === "playing";
+  const isPaused = playbackState === "paused";
   const learnModeActive = midiLearnMode !== null;
   const canOpenFileMenu = canPersistProject;
   // Recents live in localStorage; re-read on every FILE-menu open so sessions
@@ -552,7 +557,8 @@ export function TimelineTopbar({
             <button
               type="button"
               aria-label={t("timelineTopbar.play")}
-              className="is-play"
+              className={isPlaying ? "is-play is-active" : "is-play"}
+              aria-pressed={isPlaying}
               disabled={isProjectEmpty && !learnModeActive}
               onClick={() => {
                 if (learnModeActive) {
@@ -568,6 +574,8 @@ export function TimelineTopbar({
             <button
               type="button"
               aria-label={t("timelineTopbar.pause")}
+              className={isPaused ? "is-active" : undefined}
+              aria-pressed={isPaused}
               disabled={isProjectEmpty && !learnModeActive}
               onClick={() => {
                 if (learnModeActive) {
