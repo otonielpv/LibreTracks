@@ -154,7 +154,11 @@ fn is_waveform_duration_consistent(summary: &WaveformSummary, source_path: &Path
     let Ok(metadata) = crate::importer::read_audio_metadata(source_path) else {
         return true;
     };
-    !is_duration_significantly_shorter(summary.duration_seconds, metadata.duration_seconds)
+    // Los dos sentidos: así una caché escrita por la versión con el fallo del
+    // conteo de canales (el doble de larga) se detecta rancia y se vuelve a
+    // analizar sola, sin tener que subir la versión del formato y tirar a la
+    // basura las cachés correctas de todo el mundo.
+    is_duration_consistent(summary.duration_seconds, metadata.duration_seconds)
 }
 
 fn codec_duration_seconds(codec_params: &CodecParameters) -> Option<f64> {
@@ -177,6 +181,48 @@ fn is_duration_significantly_shorter(actual_seconds: f64, expected_seconds: f64)
         && actual_seconds >= 0.0
         && expected_seconds - actual_seconds > WAVEFORM_DURATION_MISMATCH_GRACE_SECONDS
         && actual_seconds < expected_seconds * WAVEFORM_DURATION_MISMATCH_RATIO
+}
+
+/// Lo mismo por el otro lado: la onda dura CLARAMENTE MÁS que el contenedor.
+///
+/// Existe porque sólo se miraba el defecto, y el fallo que este chequeo habría
+/// cazado solo es exactamente el contrario: tomar un estéreo por mono trocea
+/// las muestras intercaladas de una en una, así que cada muestra cuenta como
+/// un frame y la onda sale con **el doble** de duración. Una onda más larga
+/// que su fichero no es un caso raro que tolerar, es una cuenta mal hecha.
+fn is_duration_significantly_longer(actual_seconds: f64, expected_seconds: f64) -> bool {
+    expected_seconds.is_finite()
+        && actual_seconds.is_finite()
+        && expected_seconds > 0.0
+        && actual_seconds >= 0.0
+        && actual_seconds - expected_seconds > WAVEFORM_DURATION_MISMATCH_GRACE_SECONDS
+        && actual_seconds > expected_seconds / WAVEFORM_DURATION_MISMATCH_RATIO
+}
+
+/// ¿La duración decodificada cuadra con la del contenedor, por arriba y por
+/// abajo?
+fn is_duration_consistent(actual_seconds: f64, expected_seconds: f64) -> bool {
+    !is_duration_significantly_shorter(actual_seconds, expected_seconds)
+        && !is_duration_significantly_longer(actual_seconds, expected_seconds)
+}
+
+/// Cuántos canales tiene esto de verdad.
+///
+/// `probed` es lo que dijo el SONDEO del contenedor, que Symphonia rellena
+/// antes de decodificar nada y que en algunos formatos y ficheros sale `None`
+/// (aquí llega ya como 1, su valor por defecto). `decoded` es lo que trae el
+/// primer paquete decodificado, que sí es el real.
+///
+/// Gana el decodificado, siempre que sea válido. Fiarse del sondeo es lo que
+/// hacía que un estéreo se analizara como mono: sin canal derecho, y con el
+/// bucle troceando las muestras INTERCALADAS de una en una, de modo que cada
+/// muestra contaba como un frame y la onda salía con el doble de duración.
+fn effective_channel_count(probed: u16, decoded: usize) -> u16 {
+    let decoded = u16::try_from(decoded).unwrap_or(u16::MAX);
+    if decoded == 0 {
+        return probed.max(1);
+    }
+    decoded
 }
 
 fn resolve_audio_source_path(song_dir: &Path, audio_path: &Path) -> PathBuf {
@@ -274,23 +320,31 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
     let sample_rate = track.codec_params.sample_rate.ok_or_else(|| {
         ProjectError::AudioDecode(format!("missing sample rate for {}", path.display()))
     })?;
-    let channels = track
+    // Provisional: lo que diga el SONDEO del contenedor. En algunos formatos y
+    // ficheros sale `None`, y asumir mono a partir de ahí es lo que hacía que
+    // un estéreo se analizara como mono Y con el doble de duración. El valor
+    // bueno se toma del primer paquete decodificado, más abajo.
+    let probed_channels = track
         .codec_params
         .channels
         .map(|channels| channels.count() as u16)
         .unwrap_or(1)
         .max(1);
+    let mut channels = probed_channels;
     let codec_params = track.codec_params.clone();
     let expected_duration_seconds = codec_duration_seconds(&codec_params);
     let mut decoder = symphonia::default::get_codecs()
         .make(&codec_params, &DecoderOptions::default())
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-    let track_right = channels >= 2;
+    let mut track_right = channels >= 2;
+    let bucket_frame_hint = codec_params.n_frames.unwrap_or(sample_rate as u64) as usize;
     let mut buckets = WaveformBuckets::new(
-        codec_params.n_frames.unwrap_or(sample_rate as u64) as usize,
+        bucket_frame_hint,
         WAVEFORM_LOD_RESOLUTIONS[0],
         track_right,
     );
+    // El sondeo sólo es una pista; el primer paquete decodificado es la verdad.
+    let mut channels_confirmed = false;
     let mut frame_index = 0usize;
     let mut seek_index = Vec::new();
     let mut packet_offset = 0u64;
@@ -330,6 +384,25 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
             }
             Err(error) => return Err(ProjectError::AudioDecode(error.to_string())),
         };
+        // El número de canales REAL, del primer paquete que se ha decodificado.
+        // Se corrige aquí y no antes porque `decoded.spec()` no existe hasta
+        // que hay algo decodificado; en este punto `frame_index` sigue en 0, así
+        // que rehacer los cubos no pierde ni una muestra.
+        if !channels_confirmed {
+            channels_confirmed = true;
+            let decoded_channels =
+                effective_channel_count(probed_channels, decoded.spec().channels.count());
+            if decoded_channels != channels {
+                channels = decoded_channels;
+                track_right = channels >= 2;
+                buckets = WaveformBuckets::new(
+                    bucket_frame_hint,
+                    WAVEFORM_LOD_RESOLUTIONS[0],
+                    track_right,
+                );
+            }
+        }
+
         let mut sample_buffer =
             SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
         sample_buffer.copy_interleaved_ref(decoded);
@@ -353,10 +426,10 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
     buckets.truncate(frame_index);
     let duration_seconds = frame_index as f64 / f64::from(sample_rate.max(1));
     if expected_duration_seconds
-        .is_some_and(|expected| is_duration_significantly_shorter(duration_seconds, expected))
+        .is_some_and(|expected| !is_duration_consistent(duration_seconds, expected))
     {
         return Err(ProjectError::AudioDecode(format!(
-            "decoded waveform for {} is shorter than the container duration ({duration_seconds:.3}s decoded vs {:.3}s expected)",
+            "decoded waveform for {} does not match the container duration ({duration_seconds:.3}s decoded vs {:.3}s expected)",
             path.display(),
             expected_duration_seconds.unwrap_or_default()
         )));
@@ -1144,6 +1217,23 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    /// Un WAV estéreo con las dos mitades distintas, para poder afirmar que el
+    /// canal derecho se guardó y no es una copia del izquierdo.
+    fn write_stereo_wav(path: &Path, sample_rate: u32, frames: &[(i16, i16)]) {
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).expect("create wav");
+        for &(left, right) in frames {
+            writer.write_sample(left).expect("write L");
+            writer.write_sample(right).expect("write R");
+        }
+        writer.finalize().expect("finalize wav");
+    }
+
     fn write_mono_wav(path: &Path, sample_rate: u32, samples: &[i16]) {
         let spec = hound::WavSpec {
             channels: 1,
@@ -1551,6 +1641,85 @@ mod tests {
         assert!((analyzed.duration_seconds - 1.0).abs() < 0.05);
         assert!(!analyzed.waveform.lods.is_empty());
         assert!(validate_waveform_summary(&analyzed.waveform, "<t>").is_ok());
+    }
+
+    // ── Paso 09: un estéreo deja de analizarse como mono ──────────────────
+
+    /// La regla que estaba mal: el conteo de canales sale del paquete
+    /// DECODIFICADO, no del sondeo del contenedor.
+    #[test]
+    fn the_decoded_packet_wins_over_the_container_probe() {
+        // El caso del fallo: el sondeo no resolvió los canales (llega como su
+        // valor por defecto, 1) y el fichero es estéreo de verdad.
+        assert_eq!(effective_channel_count(1, 2), 2);
+        // Y al revés: un mono de verdad sigue siendo mono.
+        assert_eq!(effective_channel_count(1, 1), 1);
+        assert_eq!(effective_channel_count(2, 2), 2);
+        // Un decodificador que no diga nada no puede empeorar el sondeo.
+        assert_eq!(effective_channel_count(2, 0), 2);
+        assert_eq!(effective_channel_count(0, 0), 1);
+    }
+
+    #[test]
+    fn a_stereo_file_is_analysed_as_stereo_with_the_right_duration() {
+        let dir = tempdir().expect("tempdir");
+        let wav_path = dir.path().join("stereo.wav");
+        // 1 s a 8 kHz, con el canal derecho invertido para que no pueda
+        // confundirse con el izquierdo.
+        let frames: Vec<(i16, i16)> = (0..8_000)
+            .map(|i| {
+                let value = ((i as f32 / 8_000.0 - 0.5) * 2.0 * i16::MAX as f32) as i16;
+                (value, -value)
+            })
+            .collect();
+        write_stereo_wav(&wav_path, 8_000, &frames);
+
+        let analyzed = analyze_wav_file(&wav_path).expect("analyze");
+
+        assert_eq!(analyzed.channels, 2);
+        // La prueba de que NO se troceó de una en una: con el fallo, la
+        // duración salía el doble (2 s) porque cada muestra contaba como frame.
+        assert!(
+            (analyzed.duration_seconds - 1.0).abs() < 0.05,
+            "duracion {} s; con el fallo salia ~2 s",
+            analyzed.duration_seconds
+        );
+        assert!(
+            !analyzed.waveform.lods[0].min_peaks_right.is_empty(),
+            "un estereo tiene que guardar picos del canal derecho"
+        );
+    }
+
+    #[test]
+    fn a_mono_file_stays_mono_without_a_right_channel() {
+        let dir = tempdir().expect("tempdir");
+        let wav_path = dir.path().join("mono.wav");
+        let samples: Vec<i16> = (0..8_000).map(|i| (i % 1000) as i16).collect();
+        write_mono_wav(&wav_path, 8_000, &samples);
+
+        let analyzed = analyze_wav_file(&wav_path).expect("analyze");
+
+        assert_eq!(analyzed.channels, 1);
+        assert!((analyzed.duration_seconds - 1.0).abs() < 0.05);
+        assert!(analyzed.waveform.lods[0].min_peaks_right.is_empty());
+    }
+
+    /// El chequeo de duración sólo miraba el defecto, así que no habría cazado
+    /// el fallo por sí solo: una onda con el DOBLE de duración pasaba.
+    #[test]
+    fn the_duration_check_now_catches_the_excess_too() {
+        // Corto de más: ya se detectaba.
+        assert!(is_duration_significantly_shorter(10.0, 60.0));
+        assert!(!is_duration_consistent(10.0, 60.0));
+
+        // Largo de más: lo nuevo. 120 s decodificados para un fichero de 60.
+        assert!(is_duration_significantly_longer(120.0, 60.0));
+        assert!(!is_duration_consistent(120.0, 60.0));
+
+        // Y una diferencia normal de redondeo sigue valiendo, por los dos lados.
+        assert!(is_duration_consistent(60.0, 60.0));
+        assert!(is_duration_consistent(60.5, 60.0));
+        assert!(is_duration_consistent(59.5, 60.0));
     }
 
     /// A progressive waveform update must describe the WHOLE source even though
