@@ -11,6 +11,7 @@ use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 
+use super::track_colors::auto_color_for_new_track;
 use super::{
     append_clip_to_song, apply_clip_moves_with_region_reshape, delete_track_and_repair_hierarchy,
     ensure_region_covers_clip, file_stem_for_auto_track, insert_track,
@@ -25,6 +26,18 @@ use super::{
 /// pixels. Only a sanity bound on what the frontend sends: the real clamp is
 /// the effective row height, which only the view knows.
 const TRACK_HEIGHT_OFFSET_LIMIT: i32 = 400;
+
+/// Lee el ajuste "colorear las pistas nuevas automáticamente".
+///
+/// Si el almacén de ajustes no está disponible (arranque muy temprano) cae al
+/// valor por defecto, que es el mismo que el del propio ajuste: colorear. Un
+/// fallo de lectura no debe cambiar en silencio el aspecto de lo que se crea.
+fn auto_color_enabled(audio: &AudioController) -> bool {
+    audio
+        .current_settings()
+        .map(|settings| settings.auto_color_new_tracks)
+        .unwrap_or(true)
+}
 
 impl DesktopSession {
     pub fn move_clip(
@@ -402,6 +415,8 @@ impl DesktopSession {
             "master".to_string()
         };
 
+        let color = auto_color_for_new_track(&song.tracks, kind, auto_color_enabled(audio));
+
         let track = Track {
             id: format!("track_{}", timestamp_suffix()),
             name: trimmed_name.to_string(),
@@ -413,7 +428,7 @@ impl DesktopSession {
             solo: false,
             transpose_enabled: true,
             audio_to,
-            color: None,
+            color,
             auto_created: false,
             midi_port: None,
             midi_channel: 1,
@@ -513,6 +528,7 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let locale = ui_locale(audio);
+        let auto_color = auto_color_enabled(audio);
         for (offset, request) in requests.iter().enumerate() {
             let source_start_seconds =
                 source_seconds_at_view(&song, request.timeline_start_seconds);
@@ -522,6 +538,10 @@ impl DesktopSession {
                 timestamp_suffix(),
                 song.tracks.len() + offset,
             );
+            // El color se pide dentro del bucle a propósito: `song.tracks` ya
+            // lleva las pistas de las vueltas anteriores, así que un lote de
+            // diez sale con diez colores, no diez veces el mismo.
+            let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
             song.tracks.push(libretracks_core::Track {
                 id: track_id.clone(),
                 name: track_name,
@@ -533,7 +553,7 @@ impl DesktopSession {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
-                color: None,
+                color,
                 auto_created: true,
                 midi_port: None,
                 midi_channel: 1,
@@ -580,6 +600,7 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let locale = ui_locale(audio);
+        let auto_color = auto_color_enabled(audio);
         for (offset, request) in requests.iter().enumerate() {
             let trimmed_name = request.track_name.trim();
             if trimmed_name.is_empty() {
@@ -596,6 +617,9 @@ impl DesktopSession {
                 timestamp_suffix(),
                 song.tracks.len() + offset
             );
+            // Dentro del bucle, igual que arriba: soltar un multitrack entero
+            // en la línea de tiempo tiene que dar una pista de cada color.
+            let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
             song.tracks.push(Track {
                 id: track_id.clone(),
                 name: trimmed_name.to_string(),
@@ -607,7 +631,7 @@ impl DesktopSession {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
-                color: None,
+                color,
                 auto_created: false,
                 midi_port: None,
                 midi_channel: 1,

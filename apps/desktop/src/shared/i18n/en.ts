@@ -274,6 +274,9 @@ const en = {
         "Saves the open session every so often so an unexpected failure doesn't take your work with it. It only saves when something changed, and never during playback.",
       autoSaveInterval: "Save every",
       autoSaveIntervalMinutes: "{{count}} min",
+      autoColorNewTracks: "Colour new tracks automatically",
+      autoColorNewTracksHint:
+        "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
       importMergeMatchingTracks: "Merge tracks with the same name on import",
       importMergeMatchingTracksHint:
         "When importing a song, its clips are added to the existing track that already has that name. Turn it off so each song brings its own tracks.",
@@ -764,6 +767,7 @@ const en = {
       timelineNavigationSchemeUpdated: "Timeline navigation scheme updated.",
       timelinePlayheadFollowModeUpdated: "Playhead follow mode updated.",
       importMergeMatchingTracksUpdated: "Import track behaviour updated.",
+      autoColorNewTracksUpdated: "Automatic track colours updated.",
       autoSaveUpdated: "Autosave updated.",
       projectAutoSaved: "Project autosaved.",
       trackRoutingUpdated: "Track routing updated.",

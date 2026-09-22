@@ -1871,6 +1871,89 @@ fn create_audio_tracks_with_clips_adds_tracks_and_clips_in_one_update() {
 }
 
 #[test]
+fn a_batch_of_new_tracks_comes_out_in_different_colours() {
+    // Paso 02 del plan de feedback de testers: "cada track tiene que tener un
+    // color diferente". Soltar un multitrack entero es el caso que lo hace
+    // evidente, y era donde todas salian del mismo gris.
+    let mut session = session_with_song_dir("auto-colour-batch", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+    let requests: Vec<CreateAudioTrackWithClipRequest> = (0..5)
+        .map(|index| {
+            let name = format!("loop-{index}.wav");
+            write_silent_test_wav(&song_dir.join("audio").join(&name), 3);
+            CreateAudioTrackWithClipRequest {
+                track_name: format!("Loop {index}"),
+                file_path: format!("audio/{name}"),
+                timeline_start_seconds: 0.0,
+            }
+        })
+        .collect();
+
+    session
+        .create_audio_tracks_with_clips(&requests, &audio)
+        .expect("batch track+clip creation should succeed");
+
+    let song_view = session
+        .song_view()
+        .expect("song view should build")
+        .expect("song should exist");
+    let colours: Vec<String> = song_view
+        .tracks
+        .iter()
+        .filter(|track| track.name.starts_with("Loop "))
+        .map(|track| {
+            track
+                .color
+                .clone()
+                .expect("una pista nueva del lote tiene que traer color")
+        })
+        .collect();
+    assert_eq!(colours.len(), 5);
+    let unique: std::collections::HashSet<&String> = colours.iter().collect();
+    assert_eq!(
+        unique.len(),
+        5,
+        "las cinco pistas del mismo lote salieron con colores repetidos: {colours:?}"
+    );
+}
+
+#[test]
+fn new_tracks_keep_the_historical_grey_when_the_setting_is_off() {
+    // Quien colorea a mano no quiere que le pinten nada: con el interruptor
+    // apagado la pista nueva sale sin color, como antes del paso 02.
+    let mut session = session_with_song_dir("auto-colour-off", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let mut settings = audio.current_settings().expect("settings");
+    settings.auto_color_new_tracks = false;
+    audio.replace_settings(settings).expect("replace settings");
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+    write_silent_test_wav(&song_dir.join("audio").join("loop-a.wav"), 3);
+
+    session
+        .create_audio_tracks_with_clips(
+            &[CreateAudioTrackWithClipRequest {
+                track_name: "Loop A".into(),
+                file_path: "audio/loop-a.wav".into(),
+                timeline_start_seconds: 0.0,
+            }],
+            &audio,
+        )
+        .expect("batch track+clip creation should succeed");
+
+    let song_view = session
+        .song_view()
+        .expect("song view should build")
+        .expect("song should exist");
+    let track = song_view
+        .tracks
+        .iter()
+        .find(|track| track.name == "Loop A")
+        .expect("la pista existe");
+    assert!(track.color.is_none());
+}
+
+#[test]
 fn create_audio_tracks_with_clips_rejects_empty_track_name() {
     let mut session = session_with_song_dir("create-audio-tracks-empty", demo_song());
     let audio = crate::audio::engine::AudioController::default();

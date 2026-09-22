@@ -1002,6 +1002,14 @@ export type AppSettings = {
    */
   importMergeMatchingTracks: boolean;
   /**
+   * When true (default) a track created without an explicit colour gets one
+   * from the timeline palette, cycling through it so two tracks made in a row
+   * never share a colour. Off, new tracks keep the historical single grey.
+   * Either way the colour is written into the track like any manual one, so
+   * turning the switch off later repaints nothing.
+   */
+  autoColorNewTracks: boolean;
+  /**
    * When true (default) the loaded session is saved on its own every
    * `autoSaveIntervalMinutes`, so an unexpected crash or power cut loses at most
    * one interval of work. The timer only fires when the project actually changed
@@ -1088,6 +1096,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   timelineNavigationScheme: "ableton",
   timelinePlayheadFollowMode: "ahead",
   importMergeMatchingTracks: true,
+  autoColorNewTracks: true,
   autoSaveEnabled: true,
   autoSaveIntervalMinutes: 5,
   midiMappings: {},
@@ -1319,6 +1328,9 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     // Defaults to true when absent (older settings files) so existing users
     // keep the historical merge-on-import behaviour.
     importMergeMatchingTracks: settings.importMergeMatchingTracks ?? true,
+    // Absent in settings files written before automatic track colours shipped:
+    // default to on, matching DEFAULT_APP_SETTINGS and the Rust side.
+    autoColorNewTracks: settings.autoColorNewTracks ?? true,
     // Absent in settings files written before autosave shipped: default to on,
     // matching DEFAULT_APP_SETTINGS.
     autoSaveEnabled: settings.autoSaveEnabled ?? true,

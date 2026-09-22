@@ -290,6 +290,15 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleAutoColorNewTracksChange(nextValue: boolean) {
+      persistAudioPatch(
+        { autoColorNewTracks: nextValue },
+        t("transport.status.autoColorNewTracksUpdated", {
+          defaultValue: "Colores automáticos actualizados.",
+        }),
+      );
+    },
+
     handleAutoSaveEnabledChange(nextValue: boolean) {
       persistAudioPatch(
         { autoSaveEnabled: nextValue },

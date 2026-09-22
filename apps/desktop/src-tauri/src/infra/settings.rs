@@ -116,6 +116,10 @@ fn default_import_merge_matching_tracks() -> bool {
     true
 }
 
+fn default_auto_color_new_tracks() -> bool {
+    true
+}
+
 fn default_auto_save_enabled() -> bool {
     true
 }
@@ -277,6 +281,14 @@ pub struct AppSettings {
     /// "Bateria" — what users who order their set song by song expect.
     #[serde(default = "default_import_merge_matching_tracks")]
     pub import_merge_matching_tracks: bool,
+    /// When true (default), a track created without an explicit colour gets one
+    /// from the timeline palette, cycling through it so two tracks made in a
+    /// row never share a colour. Off, new tracks keep the historical single
+    /// grey — for the user who colours by hand and does not want to be painted
+    /// over. Either way the colour is written into the track like any manual
+    /// one: turning the switch off later repaints nothing.
+    #[serde(default = "default_auto_color_new_tracks")]
+    pub auto_color_new_tracks: bool,
     /// When true (default) the frontend saves the loaded session on its own
     /// every `auto_save_interval_minutes`, so a crash or power cut costs at most
     /// one interval of work. The timer lives in the UI (it needs the project
@@ -354,6 +366,7 @@ impl Default for AppSettings {
             timeline_navigation_scheme: default_timeline_navigation_scheme(),
             timeline_playhead_follow_mode: default_timeline_playhead_follow_mode(),
             import_merge_matching_tracks: default_import_merge_matching_tracks(),
+            auto_color_new_tracks: default_auto_color_new_tracks(),
             auto_save_enabled: default_auto_save_enabled(),
             auto_save_interval_minutes: default_auto_save_interval_minutes(),
             midi_mappings: HashMap::new(),
@@ -631,6 +644,7 @@ mod tests {
         assert_eq!(settings.vamp_mode, "section");
         assert_eq!(settings.timeline_navigation_scheme, "ableton");
         assert!(settings.import_merge_matching_tracks);
+        assert!(settings.auto_color_new_tracks);
         assert!(settings.midi_mappings.is_empty());
     }
 
@@ -645,6 +659,19 @@ mod tests {
         let settings: AppSettings =
             serde_json::from_str(r#"{ "importMergeMatchingTracks": false }"#).expect("explicit");
         assert!(!settings.import_merge_matching_tracks);
+    }
+
+    #[test]
+    fn auto_color_new_tracks_defaults_to_on_for_older_settings_files() {
+        // El ajuste llega después de las instalaciones existentes: un fichero
+        // sin el campo tiene que quedarse en el comportamiento nuevo (colorear),
+        // que es el que el propietario del producto eligió por defecto.
+        let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
+        assert!(settings.auto_color_new_tracks);
+
+        let settings: AppSettings =
+            serde_json::from_str(r#"{ "autoColorNewTracks": false }"#).expect("explicit");
+        assert!(!settings.auto_color_new_tracks);
     }
 
     #[test]

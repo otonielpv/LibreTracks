@@ -68,6 +68,7 @@ mod regions;
 mod session;
 mod song_edit;
 mod timeline_math;
+mod track_colors;
 mod track_tree;
 
 use library::*;

@@ -276,6 +276,9 @@ const es = {
         "Guarda la sesión abierta cada cierto tiempo para que un fallo inesperado no se lleve tu trabajo. Solo guarda si has cambiado algo, y nunca durante la reproducción.",
       autoSaveInterval: "Guardar cada",
       autoSaveIntervalMinutes: "{{count}} min",
+      autoColorNewTracks: "Colorear las pistas nuevas automáticamente",
+      autoColorNewTracksHint:
+        "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
       importMergeMatchingTracks: "Unir pistas con el mismo nombre al importar",
       importMergeMatchingTracksHint:
         "Al importar una canción, sus clips se añaden a la pista existente que ya tenga ese nombre. Desactívalo para que cada canción traiga sus propias pistas.",
@@ -791,6 +794,7 @@ const es = {
         "Modo de seguimiento del cursor actualizado.",
       importMergeMatchingTracksUpdated:
         "Comportamiento de pistas al importar actualizado.",
+      autoColorNewTracksUpdated: "Colores automáticos de pista actualizados.",
       autoSaveUpdated: "Autoguardado actualizado.",
       projectAutoSaved: "Proyecto guardado automáticamente.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",

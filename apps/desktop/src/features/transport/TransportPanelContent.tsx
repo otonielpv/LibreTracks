@@ -2061,6 +2061,7 @@ export function TransportPanelContent() {
     handleTimelineNavigationSchemeChange,
     handleTimelinePlayheadFollowModeChange,
     handleImportMergeMatchingTracksChange,
+    handleAutoColorNewTracksChange,
     handleAutoSaveEnabledChange,
     handleAutoSaveIntervalMinutesChange,
     handleLocaleChange,
@@ -8204,6 +8205,7 @@ export function TransportPanelContent() {
               onImportMergeMatchingTracksChange={
                 handleImportMergeMatchingTracksChange
               }
+              onAutoColorNewTracksChange={handleAutoColorNewTracksChange}
               onAutoSaveEnabledChange={handleAutoSaveEnabledChange}
               onAutoSaveIntervalMinutesChange={
                 handleAutoSaveIntervalMinutesChange
