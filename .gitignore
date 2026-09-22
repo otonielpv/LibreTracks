@@ -99,6 +99,12 @@ skills-lock.json
 # Siguen en disco y las sesiones locales los leen igual; simplemente no viajan
 # al repo público. Rutas ancladas con "/" a propósito: un patrón por nombre
 # suelto se traga ficheros homónimos en otras carpetas (ver el caso `build*`).
+#
+# Cajón para lo nuevo: cualquier nota interna que no exista todavía va a
+# /docs/internal/ y queda ignorada sin tocar este fichero. Las rutas sueltas de
+# abajo son anteriores a esa carpeta y se quedan donde están porque CLAUDE.md y
+# las skills de los planes las referencian por su ruta actual.
+/docs/internal/
 /docs/plans/
 /docs/HANDOFF_*.md
 /docs/REDESIGN_*.md
